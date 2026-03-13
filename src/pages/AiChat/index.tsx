@@ -1,18 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check, Zap } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import { CustomerStore, PaymentStore, ProductStore } from '../../lib/store';
 import { mockReservations, mockStaff, mockServices, mockTreatments } from '../../data/mockData';
-import { format, subDays, subMonths, parseISO, differenceInDays } from 'date-fns';
+import { format, subMonths, parseISO, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
-
-type AiProvider = 'openai' | 'gemini';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  usedProvider?: 'openai' | 'gemini'; // 어떤 AI가 답변했는지 표시
 }
 
 const QUICK_QUESTIONS = [
@@ -26,6 +25,22 @@ const QUICK_QUESTIONS = [
   '이번 달 신규 고객은 몇 명이야?',
 ];
 
+// 질문 유형에 따라 AI 자동 선택
+function selectProvider(question: string, openaiKey: string, geminiKey: string): 'openai' | 'gemini' {
+  // 둘 다 없으면 openai 시도 (에러 유도)
+  if (!openaiKey && !geminiKey) return 'openai';
+  // 하나만 있으면 그것 사용
+  if (openaiKey && !geminiKey) return 'openai';
+  if (!openaiKey && geminiKey) return 'gemini';
+
+  // 둘 다 있을 때: 질문 복잡도로 자동 선택
+  const complexKeywords = ['분석', '추이', '예측', '전략', '비교', '원인', '이유', '왜', '어떻게', '개선', '리포트', '인사이트', 'TOP', '순위'];
+  const isComplex = complexKeywords.some(k => question.includes(k));
+
+  // 복잡한 분석 → GPT / 단순 조회 → Gemini(무료)
+  return isComplex ? 'openai' : 'gemini';
+}
+
 function buildCrmContext(): string {
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
@@ -36,25 +51,16 @@ function buildCrmContext(): string {
   );
   const products = ProductStore.getAll();
 
-  // 이탈 고객 분석 (3개월 이상 미방문)
   const churned = customers.filter(c => {
     if (!c.lastVisitDate) return false;
-    const daysSince = differenceInDays(today, parseISO(c.lastVisitDate));
-    return daysSince > 90;
+    return differenceInDays(today, parseISO(c.lastVisitDate)) > 90;
   });
 
-  // 이번 달 매출
   const thisMonthStr = format(today, 'yyyy-MM');
   const thisMonthPayments = payments.filter(p => p.paymentDate.startsWith(thisMonthStr) && p.status === 'completed');
   const thisMonthRevenue = thisMonthPayments.reduce((sum, p) => sum + p.totalAmount, 0);
-
-  // 신규 고객
   const newThisMonth = customers.filter(c => c.registeredAt.startsWith(thisMonthStr));
-
-  // VIP 고객
   const vipCustomers = customers.filter(c => c.grade === 'VIP');
-
-  // 재고 부족
   const lowStock = products.filter(p => p.stock <= p.minStock);
 
   return `
@@ -106,42 +112,29 @@ ${mockTreatments.map(t => `- ${t.date} | ${t.customerName} | ${t.services.map(s 
 async function callOpenAI(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        {
-          role: 'system',
-          content: `당신은 트로이아르케 에스테틱 CRM의 AI 분석 어시스턴트입니다. 아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요. 숫자는 구체적으로, 분석은 실용적으로 해주세요.\n\n${crmContext}`,
-        },
+        { role: 'system', content: `당신은 트로이아르케 에스테틱 CRM의 AI 분석 어시스턴트입니다. 아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요.\n\n${crmContext}` },
         ...messages,
       ],
       temperature: 0.7,
       max_tokens: 2000,
     }),
   });
-
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(err.error?.message || 'OpenAI API 오류');
+    throw new Error(err.error?.message || 'OpenAI 오류');
   }
-  const data = await response.json();
-  return data.choices[0].message.content;
+  return (await response.json()).choices[0].message.content;
 }
 
 async function callGemini(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
-  const contents = messages.map(m => ({
+  const contents = messages.map((m, i) => ({
     role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
+    parts: [{ text: i === 0 && m.role === 'user' ? `[CRM 데이터]\n${crmContext}\n\n[질문]\n${m.content}` : m.content }],
   }));
-
-  // Prepend system context to first user message
-  if (contents.length > 0 && contents[0].role === 'user') {
-    contents[0].parts[0].text = `[CRM 데이터]\n${crmContext}\n\n[질문]\n${contents[0].parts[0].text}`;
-  }
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
@@ -150,20 +143,16 @@ async function callGemini(apiKey: string, messages: { role: string; content: str
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents,
-        systemInstruction: {
-          parts: [{ text: '당신은 트로이아르케 에스테틱 CRM의 AI 분석 어시스턴트입니다. CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요. 숫자는 구체적으로, 분석은 실용적으로 해주세요.' }],
-        },
+        systemInstruction: { parts: [{ text: '당신은 트로이아르케 에스테틱 CRM AI 어시스턴트입니다. CRM 데이터를 바탕으로 한국어로 친절하고 정확하게 답변해주세요.' }] },
         generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
       }),
     }
   );
-
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(err.error?.message || 'Gemini API 오류');
+    throw new Error(err.error?.message || 'Gemini 오류');
   }
-  const data = await response.json();
-  return data.candidates[0].content.parts[0].text;
+  return (await response.json()).candidates[0].content.parts[0].text;
 }
 
 export default function AiChat() {
@@ -171,31 +160,21 @@ export default function AiChat() {
     {
       id: '0',
       role: 'assistant',
-      content: '안녕하세요! 트로이아르케 에스테틱 CRM AI 어시스턴트입니다. 🌸\n\nCRM 데이터를 분석하여 고객 현황, 매출, 이탈 고객, 재고 등 다양한 질문에 답변해드립니다.\n\nOpenAI 또는 Gemini API 키를 설정 후 질문해주세요!',
+      content: '안녕하세요! 트로이아르케 에스테틱 CRM AI 어시스턴트입니다. 🌸\n\nCRM 데이터를 분석하여 고객 현황, 매출, 이탈 고객, 재고 등 다양한 질문에 답변해드립니다.\n\nAPI 키를 설정하면 질문 유형에 따라 AI가 자동으로 선택됩니다!',
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [provider, setProvider] = useState<AiProvider>('openai');
-  const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem(`ai_key_${provider}`) || '';
-  });
   const [showSettings, setShowSettings] = useState(false);
   const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem('ai_key_openai') || '');
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('ai_key_gemini') || '');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  useEffect(() => {
-    const key = provider === 'openai' ? openaiKey : geminiKey;
-    setApiKey(key);
-  }, [provider, openaiKey, geminiKey]);
 
   const saveKeys = () => {
     localStorage.setItem('ai_key_openai', openaiKey);
@@ -203,23 +182,14 @@ export default function AiChat() {
     setShowSettings(false);
   };
 
+  const hasAnyKey = !!(openaiKey || geminiKey);
+
   const sendMessage = async (text?: string) => {
     const userText = (text || input).trim();
     if (!userText || isLoading) return;
+    if (!hasAnyKey) { setShowSettings(true); return; }
 
-    const currentKey = provider === 'openai' ? openaiKey : geminiKey;
-    if (!currentKey) {
-      setShowSettings(true);
-      return;
-    }
-
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: userText,
-      timestamp: new Date(),
-    };
-
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: userText, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
@@ -230,28 +200,38 @@ export default function AiChat() {
         .filter(m => m.id !== '0')
         .map(m => ({ role: m.role, content: m.content }));
 
+      // 자동 AI 선택
+      const provider = selectProvider(userText, openaiKey, geminiKey);
       let responseText: string;
-      if (provider === 'openai') {
-        responseText = await callOpenAI(currentKey, history, crmContext);
-      } else {
-        responseText = await callGemini(currentKey, history, crmContext);
+
+      try {
+        responseText = provider === 'openai'
+          ? await callOpenAI(openaiKey, history, crmContext)
+          : await callGemini(geminiKey, history, crmContext);
+      } catch {
+        // 선택된 AI 실패 시 다른 AI로 자동 폴백
+        const fallback = provider === 'openai' ? 'gemini' : 'openai';
+        const fallbackKey = fallback === 'openai' ? openaiKey : geminiKey;
+        if (!fallbackKey) throw new Error('API 키를 확인해주세요.');
+        responseText = fallback === 'openai'
+          ? await callOpenAI(fallbackKey, history, crmContext)
+          : await callGemini(fallbackKey, history, crmContext);
       }
 
-      const assistantMsg: Message = {
+      setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: responseText,
         timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, assistantMsg]);
+        usedProvider: provider,
+      }]);
     } catch (err: any) {
-      const errMsg: Message = {
+      setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `❌ 오류가 발생했습니다: ${err.message}\n\nAPI 키를 확인해주세요.`,
+        content: `❌ 오류: ${err.message}\n\nAPI 키 설정을 확인해주세요.`,
         timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errMsg]);
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -264,59 +244,44 @@ export default function AiChat() {
   };
 
   const clearChat = () => {
-    setMessages([{
-      id: '0',
-      role: 'assistant',
-      content: '대화가 초기화되었습니다. 새로운 질문을 해주세요! 🌸',
-      timestamp: new Date(),
-    }]);
+    setMessages([{ id: '0', role: 'assistant', content: '대화가 초기화되었습니다. 새로운 질문을 해주세요! 🌸', timestamp: new Date() }]);
   };
 
-  const currentKey = provider === 'openai' ? openaiKey : geminiKey;
+  // 설정된 AI 상태 표시
+  const aiStatus = () => {
+    if (openaiKey && geminiKey) return { label: 'AI 자동 선택 (GPT + Gemini)', color: 'green' };
+    if (openaiKey) return { label: 'ChatGPT 연결됨', color: 'green' };
+    if (geminiKey) return { label: 'Gemini 연결됨', color: 'green' };
+    return { label: 'API 키 미설정', color: 'red' };
+  };
+  const status = aiStatus();
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header
-        title="AI 분석 챗봇"
-        subtitle="CRM 데이터를 AI가 분석해드립니다"
-      />
+      <Header title="AI 분석 챗봇" subtitle="질문 유형에 따라 AI가 자동으로 선택됩니다" />
 
       <div className="flex-1 flex flex-col p-6 gap-4 max-w-4xl mx-auto w-full">
-        {/* Controls */}
+        {/* 상단 컨트롤 */}
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Provider Select */}
-          <div className="flex bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-            <button
-              onClick={() => setProvider('openai')}
-              className={`px-4 py-2 text-sm font-medium transition-all flex items-center gap-2 ${provider === 'openai' ? 'bg-[#1a3a8f] text-white' : 'text-gray-600 hover:bg-gray-50'}`}
-            >
-              <span className="w-4 h-4 rounded-full bg-emerald-400 flex-shrink-0" />
-              ChatGPT
-            </button>
-            <button
-              onClick={() => setProvider('gemini')}
-              className={`px-4 py-2 text-sm font-medium transition-all flex items-center gap-2 ${provider === 'gemini' ? 'bg-[#1a3a8f] text-white' : 'text-gray-600 hover:bg-gray-50'}`}
-            >
-              <span className="w-4 h-4 rounded-full bg-blue-400 flex-shrink-0" />
-              Gemini
-            </button>
+          {/* AI 자동 선택 상태 */}
+          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border ${status.color === 'green' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+            <Zap size={12} className={status.color === 'green' ? 'text-green-500' : 'text-red-400'} />
+            {status.label}
           </div>
 
-          {/* API Key Status */}
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium ${currentKey ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
-            <span className={`w-2 h-2 rounded-full ${currentKey ? 'bg-green-500' : 'bg-red-400'}`} />
-            {currentKey ? 'API 키 연결됨' : 'API 키 미설정'}
-          </div>
+          {/* AI 자동 선택 안내 */}
+          {openaiKey && geminiKey && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-500 bg-gray-50 border border-gray-100">
+              복잡한 분석 → GPT &nbsp;|&nbsp; 빠른 조회 → Gemini
+            </div>
+          )}
 
           <div className="flex-1" />
 
-          {/* Clear */}
           <button onClick={clearChat} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-            <Trash2 size={14} />
-            초기화
+            <Trash2 size={14} /> 초기화
           </button>
 
-          {/* Settings */}
           <button
             onClick={() => setShowSettings(!showSettings)}
             className="flex items-center gap-1.5 px-3 py-2 text-sm bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl transition-all shadow-sm"
@@ -327,107 +292,84 @@ export default function AiChat() {
           </button>
         </div>
 
-        {/* API Key Settings Panel */}
+        {/* API 키 설정 패널 */}
         {showSettings && (
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-gray-800">🔑 AI API 키 설정</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-gray-800">🔑 AI API 키 설정</h3>
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">둘 다 입력하면 자동 선택</span>
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-emerald-400 inline-block" />
-                  OpenAI (ChatGPT) API 키
-                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">키 발급받기 →</a>
+                  OpenAI (ChatGPT) — 복잡한 분석에 사용
+                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline ml-auto">키 발급 →</a>
                 </label>
-                <input
-                  type="password"
-                  value={openaiKey}
-                  onChange={e => setOpenaiKey(e.target.value)}
-                  placeholder="sk-..."
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono"
-                />
+                <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)}
+                  placeholder="sk-..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono" />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-blue-400 inline-block" />
-                  Google Gemini API 키
-                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">키 발급받기 →</a>
+                  Google Gemini — 빠른 조회에 사용 (무료 한도 있음)
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline ml-auto">키 발급 →</a>
                 </label>
-                <input
-                  type="password"
-                  value={geminiKey}
-                  onChange={e => setGeminiKey(e.target.value)}
-                  placeholder="AIza..."
-                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono"
-                />
+                <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)}
+                  placeholder="AIza..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono" />
               </div>
             </div>
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={saveKeys}
-                className="px-5 py-2 bg-[#1a3a8f] text-white text-sm font-semibold rounded-xl hover:bg-[#0d2260] transition-all"
-              >
-                저장하기
-              </button>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="px-5 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-200 transition-all"
-              >
-                닫기
-              </button>
+
+            {/* 자동 선택 로직 안내 */}
+            <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700 space-y-1">
+              <p className="font-semibold">⚡ AI 자동 선택 방식</p>
+              <p>• 분석·추이·예측·전략 등 복잡한 질문 → <strong>ChatGPT</strong></p>
+              <p>• 고객 조회·현황 확인 등 간단한 질문 → <strong>Gemini</strong></p>
+              <p>• 한쪽만 설정하면 해당 AI만 사용</p>
+              <p>• 오류 발생 시 다른 AI로 자동 전환</p>
             </div>
-            <p className="text-xs text-gray-400">🔒 API 키는 이 기기의 브라우저에만 저장되며 외부로 전송되지 않습니다.</p>
+
+            <div className="flex gap-2">
+              <button onClick={saveKeys} className="px-5 py-2 bg-[#1a3a8f] text-white text-sm font-semibold rounded-xl hover:bg-[#0d2260] transition-all">저장하기</button>
+              <button onClick={() => setShowSettings(false)} className="px-5 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-200 transition-all">닫기</button>
+            </div>
+            <p className="text-xs text-gray-400">🔒 API 키는 이 기기 브라우저에만 저장됩니다.</p>
           </div>
         )}
 
-        {/* Quick Questions */}
+        {/* 빠른 질문 */}
         <div className="flex gap-2 flex-wrap">
           {QUICK_QUESTIONS.map(q => (
-            <button
-              key={q}
-              onClick={() => sendMessage(q)}
-              disabled={isLoading || !currentKey}
-              className="px-3 py-1.5 text-xs bg-white border border-gray-200 text-gray-600 rounded-full hover:border-[#1a3a8f] hover:text-[#1a3a8f] hover:bg-blue-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-            >
+            <button key={q} onClick={() => sendMessage(q)} disabled={isLoading || !hasAnyKey}
+              className="px-3 py-1.5 text-xs bg-white border border-gray-200 text-gray-600 rounded-full hover:border-[#1a3a8f] hover:text-[#1a3a8f] hover:bg-blue-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
               {q}
             </button>
           ))}
         </div>
 
-        {/* Chat Messages */}
+        {/* 채팅 영역 */}
         <div className="flex-1 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden flex flex-col" style={{ minHeight: '400px', maxHeight: '500px' }}>
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             {messages.map(msg => (
               <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                {/* Avatar */}
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#1a3a8f] to-blue-400 shadow-md shadow-blue-200' : 'bg-gray-100'}`}>
-                  {msg.role === 'assistant'
-                    ? <Sparkles size={14} className="text-white" />
-                    : <User size={14} className="text-gray-500" />
-                  }
+                  {msg.role === 'assistant' ? <Sparkles size={14} className="text-white" /> : <User size={14} className="text-gray-500" />}
                 </div>
-
-                {/* Bubble */}
                 <div className={`flex flex-col gap-1 max-w-[75%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                    msg.role === 'user'
-                      ? 'bg-[#1a3a8f] text-white rounded-tr-sm'
-                      : 'bg-gray-50 text-gray-800 border border-gray-100 rounded-tl-sm'
-                  }`}>
+                  <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? 'bg-[#1a3a8f] text-white rounded-tr-sm' : 'bg-gray-50 text-gray-800 border border-gray-100 rounded-tl-sm'}`}>
                     {msg.content}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-300">
-                      {format(msg.timestamp, 'HH:mm')}
-                    </span>
+                    <span className="text-[10px] text-gray-300">{format(msg.timestamp, 'HH:mm')}</span>
+                    {/* 어떤 AI가 답했는지 표시 */}
+                    {msg.usedProvider && (
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${msg.usedProvider === 'openai' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {msg.usedProvider === 'openai' ? 'GPT' : 'Gemini'}
+                      </span>
+                    )}
                     {msg.role === 'assistant' && msg.id !== '0' && (
-                      <button
-                        onClick={() => copyMessage(msg.id, msg.content)}
-                        className="text-gray-300 hover:text-gray-500 transition-colors"
-                      >
-                        {copiedId === msg.id
-                          ? <Check size={11} className="text-green-500" />
-                          : <Copy size={11} />
-                        }
+                      <button onClick={() => copyMessage(msg.id, msg.content)} className="text-gray-300 hover:text-gray-500 transition-colors">
+                        {copiedId === msg.id ? <Check size={11} className="text-green-500" /> : <Copy size={11} />}
                       </button>
                     )}
                   </div>
@@ -435,7 +377,6 @@ export default function AiChat() {
               </div>
             ))}
 
-            {/* Loading */}
             {isLoading && (
               <div className="flex gap-3">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-200">
@@ -443,54 +384,42 @@ export default function AiChat() {
                 </div>
                 <div className="px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl rounded-tl-sm flex items-center gap-2">
                   <Loader2 size={14} className="animate-spin text-[#1a3a8f]" />
-                  <span className="text-sm text-gray-500">분석 중...</span>
+                  <span className="text-sm text-gray-500">AI 분석 중...</span>
                 </div>
               </div>
             )}
             <div ref={bottomRef} />
           </div>
 
-          {/* Input */}
+          {/* 입력 */}
           <div className="border-t border-gray-100 p-4">
             <div className="flex gap-3 items-end">
               <textarea
-                ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-                placeholder={currentKey ? '질문을 입력하세요... (Enter로 전송, Shift+Enter 줄바꿈)' : '먼저 API 키를 설정해주세요 →'}
-                disabled={isLoading || !currentKey}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                placeholder={hasAnyKey ? '질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)' : '먼저 API 키를 설정해주세요 →'}
+                disabled={isLoading || !hasAnyKey}
                 rows={1}
                 className="flex-1 px-4 py-3 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-400"
                 style={{ maxHeight: '120px' }}
               />
-              <button
-                onClick={() => sendMessage()}
-                disabled={isLoading || !input.trim() || !currentKey}
-                className="w-10 h-10 bg-[#1a3a8f] text-white rounded-xl flex items-center justify-center hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 shadow-md shadow-blue-200"
-              >
+              <button onClick={() => sendMessage()} disabled={isLoading || !input.trim() || !hasAnyKey}
+                className="w-10 h-10 bg-[#1a3a8f] text-white rounded-xl flex items-center justify-center hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 shadow-md shadow-blue-200">
                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
             <p className="text-[10px] text-gray-300 mt-2 text-center">
-              AI가 CRM 데이터를 직접 분석합니다 · 현재 모델: {provider === 'openai' ? 'GPT-4o mini' : 'Gemini 1.5 Flash'}
+              ⚡ 질문 유형에 따라 ChatGPT · Gemini 자동 선택 · CRM 데이터 실시간 분석
             </p>
           </div>
         </div>
 
-        {/* Info */}
+        {/* 하단 요약 카드 */}
         <div className="grid grid-cols-3 gap-3 text-center">
           {[
             { label: '전체 고객', value: `${CustomerStore.getAll().length}명`, color: 'blue' },
-            { label: '이탈 위험', value: `${CustomerStore.getAll().filter(c => {
-              if (!c.lastVisitDate) return false;
-              return differenceInDays(new Date(), parseISO(c.lastVisitDate)) > 90;
-            }).length}명`, color: 'red' },
+            { label: '이탈 위험', value: `${CustomerStore.getAll().filter(c => { if (!c.lastVisitDate) return false; return differenceInDays(new Date(), parseISO(c.lastVisitDate)) > 90; }).length}명`, color: 'red' },
             { label: '재고 부족', value: `${ProductStore.getAll().filter(p => p.stock <= p.minStock).length}개`, color: 'orange' },
           ].map(item => (
             <div key={item.label} className="bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
