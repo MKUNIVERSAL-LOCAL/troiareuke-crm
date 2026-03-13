@@ -58,7 +58,7 @@ function buildCrmContext(): string {
 
   const thisMonthStr = format(today, 'yyyy-MM');
   const thisMonthPayments = payments.filter(p => p.paymentDate.startsWith(thisMonthStr) && p.status === 'completed');
-  const thisMonthRevenue = thisMonthPayments.reduce((sum, p) => sum + p.totalAmount, 0);
+  const thisMonthRevenue = thisMonthPayments.reduce((sum, p) => sum + p.amount, 0);
   const newThisMonth = customers.filter(c => c.registeredAt.startsWith(thisMonthStr));
   const vipCustomers = customers.filter(c => c.grade === 'VIP');
   const lowStock = products.filter(p => p.stock <= p.minStock);
@@ -78,7 +78,7 @@ ${customers.map(c => `- ${c.name} (${c.phone}) | 등급:${c.grade} | 피부타�
 
 【이탈 고객 상세 (3개월 이상 미방문)】
 ${churned.length === 0 ? '해당 없음' : churned.map(c => {
-    const days = differenceInDays(today, parseISO(c.lastVisitDate));
+    const days = differenceInDays(today, parseISO(c.lastVisitDate!));
     return `- ${c.name} (${c.phone}) | ${days}일 미방문 | 등급:${c.grade} | 총방문:${c.totalVisits}회 | 마지막방문:${c.lastVisitDate}`;
   }).join('\n')}
 
@@ -87,7 +87,7 @@ ${churned.length === 0 ? '해당 없음' : churned.map(c => {
 - 결제 건수: ${thisMonthPayments.length}건
 
 【전체 결제 내역 (최근 12개월)】
-${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${p.customerName} | ${p.totalAmount.toLocaleString()}원 | ${p.paymentMethod} | ${p.status}`).join('\n')}
+${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${p.customerName} | ${p.amount.toLocaleString()}원 | ${p.paymentMethod} | ${p.status}`).join('\n')}
 
 【직원 현황】
 ${mockStaff.map(s => `- ${s.name} (${s.role}) | 전문: ${s.specialty.join(', ')}`).join('\n')}

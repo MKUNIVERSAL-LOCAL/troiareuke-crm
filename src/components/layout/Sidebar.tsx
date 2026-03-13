@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar, ClipboardList,
   UserCog, Package, TrendingUp, MessageSquare,
-  Settings, ChevronRight, Link2, LogOut, Sparkles, Tag, Bot
+  Settings, ChevronRight, Link2, LogOut, Sparkles, Tag, Bot, X
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,7 +23,12 @@ const navItems = [
   { to: '/settings', label: '설정', icon: Settings, badge: null },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ open = false, onClose }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
 
@@ -31,10 +36,21 @@ export default function Sidebar() {
     ? differenceInDays(parseISO(user.trialEndsAt), new Date())
     : null;
 
+  const handleNavClick = () => {
+    // 모바일에서 메뉴 클릭 시 사이드바 닫기
+    if (onClose) onClose();
+  };
+
   return (
-    <aside className="w-64 h-screen bg-white border-r border-gray-100 flex flex-col fixed left-0 top-0 z-30 shadow-sm">
+    <aside className={clsx(
+      'w-64 h-screen bg-white border-r border-gray-100 flex flex-col fixed left-0 top-0 z-30 shadow-sm transition-transform duration-300',
+      // 데스크탑: 항상 표시
+      'lg:translate-x-0',
+      // 모바일: open 상태에 따라
+      open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+    )}>
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-100">
+      <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-[#1a3a8f] rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 flex-shrink-0">
             <Sparkles size={18} className="text-white" />
@@ -44,6 +60,13 @@ export default function Sidebar() {
             <p className="text-[10px] text-gray-400 font-medium tracking-wide">에스테틱 전용 CRM</p>
           </div>
         </div>
+        {/* 모바일 닫기 버튼 */}
+        <button
+          onClick={onClose}
+          className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
+        >
+          <X size={16} />
+        </button>
       </div>
 
       {/* Navigation */}
@@ -57,6 +80,7 @@ export default function Sidebar() {
               <li key={to}>
                 <NavLink
                   to={to}
+                  onClick={handleNavClick}
                   className={clsx(
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group',
                     isActive
@@ -81,7 +105,6 @@ export default function Sidebar() {
 
       {/* Bottom */}
       <div className="px-4 py-4 border-t border-gray-100 space-y-3">
-        {/* Trial banner */}
         {user?.plan === 'trial' && trialDaysLeft !== null && trialDaysLeft >= 0 && (
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl px-4 py-3">
             <p className="text-[11px] font-bold text-blue-700">🎁 무료 체험 중</p>
@@ -91,7 +114,6 @@ export default function Sidebar() {
             </div>
           </div>
         )}
-        {/* Shop info */}
         <div className="bg-gray-50 rounded-xl px-4 py-3">
           <p className="text-[11px] font-bold text-gray-700 truncate">{user?.shopName || '샵 정보 미설정'}</p>
           <p className="text-[10px] text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
@@ -100,7 +122,6 @@ export default function Sidebar() {
             <span className="text-[10px] text-green-600 font-medium">네이버 예약 연동 중</span>
           </div>
         </div>
-        {/* Logout */}
         <button
           onClick={logout}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
