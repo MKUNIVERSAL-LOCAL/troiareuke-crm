@@ -11,8 +11,15 @@ const steps = [
   { icon: <CheckCircle size={20} />, label: '완료', desc: '시작 준비' },
 ];
 
-const shopTypes = ['피부관리실', '네일샵', '헤어샵', '복합샵 (피부+네일)', '복합샵 (피부+헤어)', '기타'];
-const defaultServices = ['기본 피부관리 (90분 / 80,000원)', '프리미엄 피부관리 (120분 / 120,000원)', '젤네일 손 (60분 / 45,000원)', '림프 마사지 (60분 / 70,000원)'];
+const shopTypes = ['피부관리실', '에스테틱샵', '메디컬 에스테틱', '홈케어 에스테틱', '스파 에스테틱', '기타'];
+const defaultServices = [
+  '기본 피부관리 (90분 / 80,000원)',
+  '프리미엄 피부관리 (120분 / 120,000원)',
+  '메디컬 스킨케어 (90분 / 150,000원)',
+  '림프 마사지 (60분 / 70,000원)',
+  '등·어깨 마사지 (60분 / 65,000원)',
+  '각질 관리 (45분 / 50,000원)',
+];
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -48,11 +55,15 @@ export default function Onboarding() {
             </div>
             <div className="text-left">
               <p className="text-sm font-black tracking-wider text-[#1a3a8f] leading-tight">TROIAREUKE</p>
-              <p className="text-[10px] text-gray-400">CRM</p>
+              <p className="text-[10px] text-gray-400">에스테틱 전용 CRM</p>
             </div>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">안녕하세요, {user?.name}님! 👋</h1>
-          <p className="text-sm text-gray-400 mt-1">샵 정보를 설정하고 CRM을 시작해보세요</p>
+          <p className="text-sm text-gray-400 mt-1">에스테틱 샵 정보를 설정하고 CRM을 시작해보세요</p>
+          <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
+            <Sparkles size={12} className="text-[#1a3a8f]" />
+            <span className="text-xs font-semibold text-[#1a3a8f]">에스테틱 전용 CRM 솔루션</span>
+          </div>
         </div>
 
         {/* Step Indicator */}
@@ -75,11 +86,11 @@ export default function Onboarding() {
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
           {/* Step 0: 샵 기본 정보 */}
           {step === 0 && (
-            <StepWrapper title="샵 기본 정보" subtitle="운영하시는 샵의 정보를 입력해주세요">
+            <StepWrapper title="에스테틱 샵 기본 정보" subtitle="운영하시는 에스테틱 샵의 정보를 입력해주세요">
               <div className="space-y-4">
                 <div>
                   <label className="ob-label">샵 이름 *</label>
-                  <input value={shopName} onChange={e => setShopName(e.target.value)} className="ob-input" placeholder="예: 트로이아르케 피부관리실" />
+                  <input value={shopName} onChange={e => setShopName(e.target.value)} className="ob-input" placeholder="예: 트로이아르케 에스테틱" />
                 </div>
                 <div>
                   <label className="ob-label">샵 유형 *</label>
@@ -118,7 +129,7 @@ export default function Onboarding() {
                       placeholder={`직원 ${i + 1} 이름`} />
                     <select value={s.role} onChange={e => updateStaff(i, 'role', e.target.value)}
                       className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300">
-                      {['원장', '피부관리사', '네일아티스트', '스타일리스트', '매니저'].map(r => <option key={r}>{r}</option>)}
+                      {['원장', '피부관리사', '에스테티션', '테라피스트', '매니저'].map(r => <option key={r}>{r}</option>)}
                     </select>
                   </div>
                 ))}
@@ -132,7 +143,7 @@ export default function Onboarding() {
 
           {/* Step 2: 시술 항목 */}
           {step === 2 && (
-            <StepWrapper title="시술 항목 선택" subtitle="주요 시술 항목을 선택해주세요 (나중에 수정 가능)">
+            <StepWrapper title="에스테틱 시술 항목" subtitle="주요 시술 항목을 선택해주세요 (나중에 수정 가능)">
               <div className="space-y-2">
                 {defaultServices.map(s => (
                   <label key={s} onClick={() => toggleService(s)}
@@ -156,9 +167,9 @@ export default function Onboarding() {
             <StepWrapper title="외부 서비스 연동" subtitle="나중에 설정 > 연동 설정에서도 할 수 있습니다">
               <div className="space-y-3">
                 {[
-                  { name: '네이버 예약', desc: '스마트플레이스 예약을 자동으로 받아옵니다', color: 'bg-green-500', required: false },
-                  { name: '카카오 채널', desc: '카카오톡으로 예약 확인·마케팅 메시지를 보냅니다', color: 'bg-yellow-400', required: false },
-                  { name: '엔포+ SMS', desc: 'SMS·LMS 문자 발송에 필요합니다', color: 'bg-blue-500', required: false },
+                  { name: '네이버 예약', desc: '스마트플레이스 예약을 자동으로 받아옵니다', color: 'bg-green-500' },
+                  { name: '카카오 채널', desc: '카카오톡으로 예약 확인·마케팅 메시지를 보냅니다', color: 'bg-yellow-400' },
+                  { name: '엔포+ SMS', desc: 'SMS·LMS 문자 발송에 필요합니다', color: 'bg-blue-500' },
                 ].map(item => (
                   <div key={item.name} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
                     <div className={`w-10 h-10 rounded-xl ${item.color} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
@@ -186,17 +197,17 @@ export default function Onboarding() {
                 <CheckCircle size={36} className="text-white" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">설정 완료! 🎉</h2>
-              <p className="text-gray-400 mb-2 text-sm">{shopName} 의 CRM이 준비되었습니다</p>
+              <p className="text-gray-400 mb-2 text-sm">{shopName} 의 에스테틱 CRM이 준비되었습니다</p>
               <p className="text-xs text-blue-500 mb-8 font-medium">14일 무료 체험이 시작됩니다</p>
               <div className="grid grid-cols-2 gap-3 mb-8 text-sm">
-                {['고객 관리 시작', '예약 등록', '직원 스케줄', 'API 연동 가이드'].map(f => (
+                {['고객 관리 시작', '예약 등록', '직원 스케줄', 'AI 분석 챗봇'].map(f => (
                   <div key={f} className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl text-[#1a3a8f] font-medium">
                     <ChevronRight size={14} /> {f}
                   </div>
                 ))}
               </div>
               <button onClick={finish} className="w-full py-3.5 bg-[#1a3a8f] text-white font-bold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 text-base">
-                트로이아르케 CRM 시작하기 →
+                트로이아르케 에스테틱 CRM 시작하기 →
               </button>
             </div>
           )}

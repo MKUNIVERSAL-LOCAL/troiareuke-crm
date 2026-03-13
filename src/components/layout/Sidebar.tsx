@@ -2,24 +2,25 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar, ClipboardList,
   UserCog, Package, TrendingUp, MessageSquare,
-  Settings, ChevronRight, Link2, LogOut, Sparkles, Tag
+  Settings, ChevronRight, Link2, LogOut, Sparkles, Tag, Bot
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { differenceInDays, parseISO } from 'date-fns';
 
 const navItems = [
-  { to: '/', label: '대시보드', icon: LayoutDashboard },
-  { to: '/customers', label: '고객 관리', icon: Users },
-  { to: '/programs', label: '시술 프로그램', icon: Tag },
-  { to: '/reservations', label: '예약 관리', icon: Calendar },
-  { to: '/treatments', label: '시술 기록', icon: ClipboardList },
-  { to: '/staff', label: '직원 관리', icon: UserCog },
-  { to: '/products', label: '제품/재고', icon: Package },
-  { to: '/sales', label: '매출 관리', icon: TrendingUp },
-  { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare },
-  { to: '/api-guide', label: 'API 연동 가이드', icon: Link2 },
-  { to: '/settings', label: '설정', icon: Settings },
+  { to: '/', label: '대시보드', icon: LayoutDashboard, badge: null },
+  { to: '/customers', label: '고객 관리', icon: Users, badge: null },
+  { to: '/programs', label: '시술 프로그램', icon: Tag, badge: null },
+  { to: '/reservations', label: '예약 관리', icon: Calendar, badge: null },
+  { to: '/treatments', label: '시술 기록', icon: ClipboardList, badge: null },
+  { to: '/staff', label: '직원 관리', icon: UserCog, badge: null },
+  { to: '/products', label: '제품/재고', icon: Package, badge: null },
+  { to: '/sales', label: '매출 관리', icon: TrendingUp, badge: null },
+  { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, badge: null },
+  { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, badge: 'NEW' },
+  { to: '/api-guide', label: 'API 연동 가이드', icon: Link2, badge: null },
+  { to: '/settings', label: '설정', icon: Settings, badge: null },
 ];
 
 export default function Sidebar() {
@@ -40,7 +41,7 @@ export default function Sidebar() {
           </div>
           <div>
             <p className="text-[12px] font-black tracking-widest text-[#1a3a8f] leading-tight">TROIAREUKE</p>
-            <p className="text-[10px] text-gray-400 font-medium tracking-wide">CRM Solution</p>
+            <p className="text-[10px] text-gray-400 font-medium tracking-wide">에스테틱 전용 CRM</p>
           </div>
         </div>
       </div>
@@ -48,7 +49,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
         <ul className="space-y-0.5">
-          {navItems.map(({ to, label, icon: Icon }) => {
+          {navItems.map(({ to, label, icon: Icon, badge }) => {
             const isActive = to === '/'
               ? location.pathname === '/'
               : location.pathname.startsWith(to);
@@ -65,6 +66,11 @@ export default function Sidebar() {
                 >
                   <Icon size={16} className={clsx('flex-shrink-0', isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-600')} />
                   <span className="flex-1 truncate">{label}</span>
+                  {badge && !isActive && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">
+                      {badge}
+                    </span>
+                  )}
                   {isActive && <ChevronRight size={13} className="text-white/60" />}
                 </NavLink>
               </li>
@@ -88,7 +94,7 @@ export default function Sidebar() {
         {/* Shop info */}
         <div className="bg-gray-50 rounded-xl px-4 py-3">
           <p className="text-[11px] font-bold text-gray-700 truncate">{user?.shopName || '샵 정보 미설정'}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5 truncate">{user?.shopType || ''}</p>
+          <p className="text-[10px] text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
           <div className="flex items-center gap-1.5 mt-2">
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
             <span className="text-[10px] text-green-600 font-medium">네이버 예약 연동 중</span>

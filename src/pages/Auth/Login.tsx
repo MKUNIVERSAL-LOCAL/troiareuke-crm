@@ -8,7 +8,7 @@ const features = [
   '네이버 예약 자동 연동',
   'SMS · 카카오 채널 자동 발송',
   '매출 분석 · 재고 관리',
-  '피부관리실 · 네일샵 · 복합샵 지원',
+  'AI 챗봇으로 데이터 분석 (ChatGPT · Gemini)',
 ];
 
 export default function Login() {
@@ -42,14 +42,14 @@ export default function Login() {
         </div>
         <div className="relative">
           <TroiareukeLogo white />
-          <p className="text-blue-200 mt-2 text-sm">Beauty & Care Management Solution</p>
+          <p className="text-blue-200 mt-2 text-sm">에스테틱 전용 CRM 솔루션</p>
         </div>
         <div className="relative space-y-4">
           <h2 className="text-3xl font-bold leading-tight">
-            뷰티 샵 운영의<br />모든 것을 한 곳에서
+            에스테틱 샵 운영의<br />모든 것을 한 곳에서
           </h2>
           <p className="text-blue-200 text-sm leading-relaxed">
-            피부관리실, 네일샵, 복합샵을 위한<br />1:1 맞춤 CRM 솔루션
+            피부관리실 · 에스테틱샵 전용<br />AI 분석 탑재 CRM 솔루션
           </p>
           <div className="space-y-3 pt-4">
             {features.map(f => (
@@ -149,7 +149,7 @@ export function TroiareukeLogo({ white = false }: { white?: boolean }) {
       </div>
       <div>
         <p className={`text-sm font-black tracking-wider leading-tight ${white ? 'text-white' : 'text-[#1a3a8f]'}`}>TROIAREUKE</p>
-        <p className={`text-[10px] font-medium tracking-wide ${white ? 'text-blue-200' : 'text-gray-400'}`}>CRM</p>
+        <p className={`text-[10px] font-medium tracking-wide ${white ? 'text-blue-200' : 'text-gray-400'}`}>에스테틱 전용 CRM</p>
       </div>
     </div>
   );

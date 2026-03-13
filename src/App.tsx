@@ -15,6 +15,7 @@ import Programs from './pages/Programs/index';
 import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
 import Onboarding from './pages/Onboarding/index';
+import AiChat from './pages/AiChat/index';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="messaging" element={<Messaging />} />
         <Route path="api-guide" element={<ApiGuide />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="ai-chat" element={<AiChat />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -57,7 +57,7 @@ export default function Settings() {
                   </FormRow>
                   <FormRow label="샵 유형">
                     <select defaultValue={s.type} className="form-input">
-                      {['피부관리실', '네일샵', '헤어샵', '복합샵'].map(t => <option key={t} value={t}>{t}</option>)}
+                      {['피부관리실', '에스테틱샵', '메디컬 에스테틱', '홈케어 에스테틱', '스파 에스테틱', '기타'].map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </FormRow>
                   <FormRow label="대표 전화">
@@ -241,7 +241,7 @@ export default function Settings() {
                   + 시술 추가
                 </button>
                 <div className="space-y-2">
-                  {['피부관리', '마사지', '네일', '왁싱'].map(cat => (
+                  {['피부관리', '마사지', '왁싱', '각질관리'].map(cat => (
                     <div key={cat}>
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wider px-2 py-2">{cat}</p>
                       <div className="space-y-1">
