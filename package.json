@@ -1,0 +1,77 @@
+{
+  "name": "troiareuke-crm",
+  "productName": "트로이아르케 CRM",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\"",
+    "electron:build": "npm run build && electron-builder --win",
+    "electron:build:portable": "npm run build && electron-builder --win portable",
+    "electron:build:dir": "npm run build && electron-builder --win --dir",
+    "electron:zip": "npm run electron:build:dir && powershell -Command \"Remove-Item -Path 'release\\트로이아르케-CRM.zip' -ErrorAction SilentlyContinue; Compress-Archive -Path 'release\\win-unpacked\\*' -DestinationPath 'release\\트로이아르케-CRM.zip'; Write-Host '✅ ZIP 완료: release/트로이아르케-CRM.zip'\""
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3",
+    "lucide-react": "^0.344.0",
+    "recharts": "^2.12.2",
+    "date-fns": "^3.3.1",
+    "clsx": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.1.4",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "concurrently": "^9.0.0",
+    "wait-on": "^8.0.0",
+    "cross-env": "^7.0.3"
+  },
+  "build": {
+    "appId": "com.troiareuke.crm",
+    "productName": "트로이아르케 CRM",
+    "copyright": "Copyright © 2024 TROIAREUKE",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "트로이아르케 CRM",
+      "installerLanguages": ["ko_KR"],
+      "language": "1042"
+    }
+  }
+}
