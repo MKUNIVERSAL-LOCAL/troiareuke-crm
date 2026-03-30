@@ -1,8 +1,9 @@
 /**
- * 트로이아르케 CRM — 데이터 저장소 (localStorage 기반)
+ * 트로이아르케 CRM — 데이터 저장소 (Supabase + localStorage 폴백)
  *
- * Supabase 연동 시 각 함수를 Supabase 쿼리로 교체하세요.
- * 모든 데이터는 shopId 기준으로 분리됩니다.
+ * Supabase가 설정되어 있으면 DB를 사용하고,
+ * 아니면 localStorage로 폴백합니다.
+ * 동기 인터페이스를 유지하기 위해 메모리 캐시 레이어를 사용합니다.
  */
 
 import type {
@@ -11,13 +12,15 @@ import type {
   Service, Reservation, ShopSettings, MessageTemplate, MessageHistory
 } from '../types';
 
-// ─── 현재 샵 ID 가져오기 ───────────────────────────────────────
+import { supabase, isSupabaseConfigured } from './supabase';
+
+// ─── 현재 브랜치(샵) ID 가져오기 ──────────────────────────────
 export function getShopId(): string {
   try {
     const auth = localStorage.getItem('troiareuke_auth_user');
     if (auth) {
       const user = JSON.parse(auth);
-      return user.id || 'default_shop';
+      return user.branchId || user.id || 'default_shop';
     }
   } catch {}
   return 'default_shop';
@@ -53,15 +56,673 @@ function shopKey(table: string): string {
   return `crm_${getShopId()}_${table}`;
 }
 
+// ─── camelCase ↔ snake_case 변환 유틸 ──────────────────────────
+function toSnakeCase(str: string): string {
+  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
+function toCamelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+function objectToSnake(obj: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const snakeKey = toSnakeCase(key);
+    result[snakeKey] = value;
+  }
+  return result;
+}
+
+function objectToCamel(obj: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = toCamelCase(key);
+    result[camelKey] = value;
+  }
+  return result;
+}
+
+// ─── Supabase ↔ App 필드 매핑 ──────────────────────────────────
+// shopId → branch_id 변환을 포함한 매핑
+
+function toDbCustomer(c: Partial<Customer>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (c.id !== undefined) db.id = c.id;
+  if (c.shopId !== undefined) db.branch_id = c.shopId;
+  if (c.name !== undefined) db.name = c.name;
+  if (c.phone !== undefined) db.phone = c.phone;
+  if (c.email !== undefined) db.email = c.email;
+  if (c.birthDate !== undefined) db.birth_date = c.birthDate;
+  if (c.gender !== undefined) db.gender = c.gender;
+  if (c.grade !== undefined) db.grade = c.grade;
+  if (c.memo !== undefined) db.memo = c.memo;
+  if (c.skinType !== undefined) db.skin_type = c.skinType;
+  if (c.allergies !== undefined) db.allergies = c.allergies;
+  if (c.totalVisits !== undefined) db.total_visits = c.totalVisits;
+  if (c.totalSpent !== undefined) db.total_spent = c.totalSpent;
+  if (c.lastVisitDate !== undefined) db.last_visit_date = c.lastVisitDate;
+  if (c.registeredAt !== undefined) db.registered_at = c.registeredAt;
+  if (c.tags !== undefined) db.tags = c.tags;
+  if (c.isActive !== undefined) db.is_active = c.isActive;
+  if (c.referralSource !== undefined) db.referral_source = c.referralSource;
+  return db;
+}
+
+function fromDbCustomer(row: Record<string, any>): Customer {
+  return {
+    id: row.id,
+    shopId: row.branch_id,
+    name: row.name,
+    phone: row.phone || '',
+    email: row.email,
+    birthDate: row.birth_date,
+    gender: row.gender || '미입력',
+    grade: row.grade || '일반',
+    memo: row.memo,
+    skinType: row.skin_type,
+    allergies: row.allergies,
+    totalVisits: row.total_visits || 0,
+    totalSpent: row.total_spent || 0,
+    lastVisitDate: row.last_visit_date,
+    registeredAt: row.registered_at || row.created_at || now(),
+    tags: row.tags || [],
+    isActive: row.is_active ?? true,
+    referralSource: row.referral_source,
+  };
+}
+
+function toDbStaff(s: Partial<Staff>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (s.id !== undefined) db.id = s.id;
+  if (s.shopId !== undefined) db.branch_id = s.shopId;
+  if (s.name !== undefined) db.name = s.name;
+  if (s.role !== undefined) db.role = s.role;
+  if (s.phone !== undefined) db.phone = s.phone;
+  if (s.email !== undefined) db.email = s.email;
+  if (s.specialty !== undefined) db.specialty = s.specialty;
+  if (s.color !== undefined) db.color = s.color;
+  if (s.isActive !== undefined) db.is_active = s.isActive;
+  if (s.hireDate !== undefined) db.hire_date = s.hireDate;
+  return db;
+}
+
+function fromDbStaff(row: Record<string, any>): Staff {
+  return {
+    id: row.id,
+    shopId: row.branch_id,
+    name: row.name,
+    role: row.role || '',
+    phone: row.phone || '',
+    email: row.email,
+    specialty: row.specialty || [],
+    color: row.color || '#1a3a8f',
+    isActive: row.is_active ?? true,
+    hireDate: row.hire_date || '',
+  };
+}
+
+function toDbService(s: Partial<Service> & { shopId?: string }): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (s.id !== undefined) db.id = s.id;
+  if ((s as any).shopId !== undefined) db.branch_id = (s as any).shopId;
+  if (s.name !== undefined) db.name = s.name;
+  if (s.category !== undefined) db.category = s.category;
+  if (s.duration !== undefined) db.duration = s.duration;
+  if (s.price !== undefined) db.price = s.price;
+  if (s.description !== undefined) db.description = s.description;
+  if (s.isActive !== undefined) db.is_active = s.isActive;
+  return db;
+}
+
+function fromDbService(row: Record<string, any>): Service {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category || '',
+    duration: row.duration || 0,
+    price: row.price || 0,
+    description: row.description,
+    isActive: row.is_active ?? true,
+  };
+}
+
+function toDbReservation(r: Partial<Reservation> & { shopId?: string }): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (r.id !== undefined) db.id = r.id;
+  if ((r as any).shopId !== undefined) db.branch_id = (r as any).shopId;
+  if (r.customerId !== undefined) db.customer_id = r.customerId;
+  if (r.customerName !== undefined) db.customer_name = r.customerName;
+  if (r.customerPhone !== undefined) db.customer_phone = r.customerPhone;
+  if (r.staffId !== undefined) db.staff_id = r.staffId;
+  if (r.staffName !== undefined) db.staff_name = r.staffName;
+  if (r.services !== undefined) db.services = r.services;
+  if (r.date !== undefined) db.date = r.date;
+  if (r.startTime !== undefined) db.start_time = r.startTime;
+  if (r.endTime !== undefined) db.end_time = r.endTime;
+  if (r.status !== undefined) db.status = r.status;
+  if (r.source !== undefined) db.source = r.source;
+  if (r.memo !== undefined) db.memo = r.memo;
+  if (r.totalPrice !== undefined) db.total_price = r.totalPrice;
+  if (r.naverBookingId !== undefined) db.naver_booking_id = r.naverBookingId;
+  return db;
+}
+
+function fromDbReservation(row: Record<string, any>): Reservation {
+  return {
+    id: row.id,
+    customerId: row.customer_id || '',
+    customerName: row.customer_name || '',
+    customerPhone: row.customer_phone || '',
+    staffId: row.staff_id || '',
+    staffName: row.staff_name || '',
+    services: row.services || [],
+    date: row.date || '',
+    startTime: row.start_time || '',
+    endTime: row.end_time || '',
+    status: row.status || 'pending',
+    source: row.source || 'manual',
+    memo: row.memo,
+    totalPrice: row.total_price || 0,
+    naverBookingId: row.naver_booking_id,
+  };
+}
+
+function toDbProgram(p: Partial<Program>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (p.id !== undefined) db.id = p.id;
+  if (p.shopId !== undefined) db.branch_id = p.shopId;
+  if (p.name !== undefined) db.name = p.name;
+  if (p.category !== undefined) db.category = p.category;
+  if (p.totalSessions !== undefined) db.total_sessions = p.totalSessions;
+  if (p.validityDays !== undefined) db.validity_days = p.validityDays;
+  if (p.price !== undefined) db.price = p.price;
+  if (p.costPrice !== undefined) db.cost_price = p.costPrice;
+  if (p.description !== undefined) db.description = p.description;
+  if (p.color !== undefined) db.color = p.color;
+  if (p.isActive !== undefined) db.is_active = p.isActive;
+  if (p.createdAt !== undefined) db.created_at = p.createdAt;
+  return db;
+}
+
+function fromDbProgram(row: Record<string, any>): Program {
+  return {
+    id: row.id,
+    shopId: row.branch_id,
+    name: row.name,
+    category: row.category || '',
+    totalSessions: row.total_sessions,
+    validityDays: row.validity_days,
+    price: row.price || 0,
+    costPrice: row.cost_price || 0,
+    description: row.description,
+    color: row.color || '#1a3a8f',
+    isActive: row.is_active ?? true,
+    createdAt: row.created_at || now(),
+  };
+}
+
+function toDbCustomerProgram(cp: Partial<CustomerProgram>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (cp.id !== undefined) db.id = cp.id;
+  if (cp.shopId !== undefined) db.branch_id = cp.shopId;
+  if (cp.customerId !== undefined) db.customer_id = cp.customerId;
+  if (cp.customerName !== undefined) db.customer_name = cp.customerName;
+  if (cp.programId !== undefined) db.program_id = cp.programId;
+  if (cp.programName !== undefined) db.program_name = cp.programName;
+  if (cp.category !== undefined) db.category = cp.category;
+  if (cp.totalSessions !== undefined) db.total_sessions = cp.totalSessions;
+  if (cp.usedSessions !== undefined) db.used_sessions = cp.usedSessions;
+  if (cp.pricePaid !== undefined) db.price_paid = cp.pricePaid;
+  if (cp.paymentMethod !== undefined) db.payment_method = cp.paymentMethod;
+  if (cp.purchaseDate !== undefined) db.purchase_date = cp.purchaseDate;
+  if (cp.expiryDate !== undefined) db.expiry_date = cp.expiryDate;
+  if (cp.isCompleted !== undefined) db.is_completed = cp.isCompleted;
+  if (cp.notes !== undefined) db.notes = cp.notes;
+  if (cp.createdAt !== undefined) db.created_at = cp.createdAt;
+  return db;
+}
+
+function fromDbCustomerProgram(row: Record<string, any>): CustomerProgram {
+  return {
+    id: row.id,
+    shopId: row.branch_id,
+    customerId: row.customer_id || '',
+    customerName: row.customer_name || '',
+    programId: row.program_id,
+    programName: row.program_name || '',
+    category: row.category || '',
+    totalSessions: row.total_sessions,
+    usedSessions: row.used_sessions || 0,
+    pricePaid: row.price_paid || 0,
+    paymentMethod: row.payment_method || '카드',
+    purchaseDate: row.purchase_date || '',
+    expiryDate: row.expiry_date,
+    isCompleted: row.is_completed ?? false,
+    notes: row.notes,
+    createdAt: row.created_at || now(),
+  };
+}
+
+function toDbTreatmentLog(t: Partial<TreatmentLog>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (t.id !== undefined) db.id = t.id;
+  if (t.shopId !== undefined) db.branch_id = t.shopId;
+  if (t.customerId !== undefined) db.customer_id = t.customerId;
+  if (t.customerName !== undefined) db.customer_name = t.customerName;
+  if (t.customerProgramId !== undefined) db.customer_program_id = t.customerProgramId;
+  if (t.programName !== undefined) db.program_name = t.programName;
+  if (t.staffName !== undefined) db.staff_name = t.staffName;
+  if (t.treatmentDate !== undefined) db.treatment_date = t.treatmentDate;
+  if (t.treatmentTime !== undefined) db.treatment_time = t.treatmentTime;
+  if (t.sessionsUsed !== undefined) db.sessions_used = t.sessionsUsed;
+  if (t.treatmentDetails !== undefined) db.treatment_details = t.treatmentDetails;
+  if (t.skinCondition !== undefined) db.skin_condition = t.skinCondition;
+  if (t.staffNotes !== undefined) db.staff_notes = t.staffNotes;
+  if (t.nextAppointment !== undefined) db.next_appointment = t.nextAppointment;
+  if (t.createdAt !== undefined) db.created_at = t.createdAt;
+  return db;
+}
+
+function fromDbTreatmentLog(row: Record<string, any>): TreatmentLog {
+  return {
+    id: row.id,
+    shopId: row.branch_id,
+    customerId: row.customer_id || '',
+    customerName: row.customer_name || '',
+    customerProgramId: row.customer_program_id,
+    programName: row.program_name,
+    staffName: row.staff_name,
+    treatmentDate: row.treatment_date || '',
+    treatmentTime: row.treatment_time,
+    sessionsUsed: row.sessions_used || 1,
+    treatmentDetails: row.treatment_details,
+    skinCondition: row.skin_condition,
+    staffNotes: row.staff_notes,
+    nextAppointment: row.next_appointment,
+    createdAt: row.created_at || now(),
+  };
+}
+
+function toDbProduct(p: Partial<Product>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (p.id !== undefined) db.id = p.id;
+  if (p.shopId !== undefined) db.branch_id = p.shopId;
+  if (p.name !== undefined) db.name = p.name;
+  if (p.category !== undefined) db.category = p.category;
+  if (p.brand !== undefined) db.brand = p.brand;
+  if (p.price !== undefined) db.price = p.price;
+  if (p.cost !== undefined) db.cost = p.cost;
+  if (p.stock !== undefined) db.stock = p.stock;
+  if (p.minStock !== undefined) db.min_stock = p.minStock;
+  if (p.unit !== undefined) db.unit = p.unit;
+  if (p.description !== undefined) db.description = p.description;
+  if (p.isActive !== undefined) db.is_active = p.isActive;
+  return db;
+}
+
+function fromDbProduct(row: Record<string, any>): Product {
+  return {
+    id: row.id,
+    shopId: row.branch_id,
+    name: row.name,
+    category: row.category || '',
+    brand: row.brand,
+    price: row.price || 0,
+    cost: row.cost || 0,
+    stock: row.stock || 0,
+    minStock: row.min_stock || 0,
+    unit: row.unit || '개',
+    description: row.description,
+    isActive: row.is_active ?? true,
+  };
+}
+
+function toDbProductSale(s: Partial<ProductSale>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (s.id !== undefined) db.id = s.id;
+  if (s.shopId !== undefined) db.branch_id = s.shopId;
+  if (s.customerId !== undefined) db.customer_id = s.customerId;
+  if (s.customerName !== undefined) db.customer_name = s.customerName;
+  if (s.productId !== undefined) db.product_id = s.productId;
+  if (s.productName !== undefined) db.product_name = s.productName;
+  if (s.quantity !== undefined) db.quantity = s.quantity;
+  if (s.unitPrice !== undefined) db.unit_price = s.unitPrice;
+  if (s.totalPrice !== undefined) db.total_price = s.totalPrice;
+  if (s.paymentMethod !== undefined) db.payment_method = s.paymentMethod;
+  if (s.saleDate !== undefined) db.sale_date = s.saleDate;
+  if (s.staffName !== undefined) db.staff_name = s.staffName;
+  if (s.notes !== undefined) db.notes = s.notes;
+  if (s.createdAt !== undefined) db.created_at = s.createdAt;
+  return db;
+}
+
+function fromDbProductSale(row: Record<string, any>): ProductSale {
+  return {
+    id: row.id,
+    shopId: row.branch_id,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    productId: row.product_id,
+    productName: row.product_name || '',
+    quantity: row.quantity || 0,
+    unitPrice: row.unit_price || 0,
+    totalPrice: row.total_price || 0,
+    paymentMethod: row.payment_method || '카드',
+    saleDate: row.sale_date || '',
+    staffName: row.staff_name,
+    notes: row.notes,
+    createdAt: row.created_at || now(),
+  };
+}
+
+function toDbPayment(p: Partial<Payment>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (p.id !== undefined) db.id = p.id;
+  if (p.shopId !== undefined) db.branch_id = p.shopId;
+  if (p.customerId !== undefined) db.customer_id = p.customerId;
+  if (p.customerName !== undefined) db.customer_name = p.customerName;
+  if (p.paymentDate !== undefined) db.payment_date = p.paymentDate;
+  if (p.type !== undefined) db.type = p.type;
+  if (p.typeLabel !== undefined) db.type_label = p.typeLabel;
+  if (p.referenceId !== undefined) db.reference_id = p.referenceId;
+  if (p.amount !== undefined) db.amount = p.amount;
+  if (p.paymentMethod !== undefined) db.payment_method = p.paymentMethod;
+  if (p.discountAmount !== undefined) db.discount_amount = p.discountAmount;
+  if (p.status !== undefined) db.status = p.status;
+  if (p.memo !== undefined) db.memo = p.memo;
+  if (p.createdAt !== undefined) db.created_at = p.createdAt;
+  return db;
+}
+
+function fromDbPayment(row: Record<string, any>): Payment {
+  return {
+    id: row.id,
+    shopId: row.branch_id,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    paymentDate: row.payment_date || '',
+    type: row.type || 'other',
+    typeLabel: row.type_label || '',
+    referenceId: row.reference_id,
+    amount: row.amount || 0,
+    paymentMethod: row.payment_method || '카드',
+    discountAmount: row.discount_amount || 0,
+    status: row.status || 'completed',
+    memo: row.memo,
+    createdAt: row.created_at || now(),
+  };
+}
+
+function toDbSettings(s: Partial<ShopSettings>): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (s.id !== undefined) db.id = s.id;
+  if (s.name !== undefined) db.name = s.name;
+  if (s.type !== undefined) db.type = s.type;
+  if (s.phone !== undefined) db.phone = s.phone;
+  if (s.address !== undefined) db.address = s.address;
+  if (s.businessHours !== undefined) db.business_hours = s.businessHours;
+  if (s.holidays !== undefined) db.holidays = s.holidays;
+  if (s.naverBooking !== undefined) db.naver_booking = s.naverBooking;
+  if (s.kakao !== undefined) db.kakao = s.kakao;
+  if (s.smsApiKey !== undefined) db.sms_api_key = s.smsApiKey;
+  if (s.smsCallerId !== undefined) db.sms_caller_id = s.smsCallerId;
+  if (s.pointRate !== undefined) db.point_rate = s.pointRate;
+  if (s.notificationSettings !== undefined) db.notification_settings = s.notificationSettings;
+  return db;
+}
+
+function fromDbSettings(row: Record<string, any>): ShopSettings {
+  return {
+    id: row.id,
+    name: row.name || '',
+    type: row.type || '피부관리실',
+    phone: row.phone || '',
+    address: row.address || '',
+    businessHours: row.business_hours || getDefaultSettings().businessHours,
+    holidays: row.holidays || [],
+    naverBooking: row.naver_booking || { isConnected: false },
+    kakao: row.kakao || { channelConnected: false, openchatConnected: false },
+    smsApiKey: row.sms_api_key,
+    smsCallerId: row.sms_caller_id,
+    pointRate: row.point_rate ?? 1,
+    notificationSettings: row.notification_settings || getDefaultSettings().notificationSettings,
+  };
+}
+
+function toDbMessageTemplate(t: Partial<MessageTemplate> & { shopId?: string }): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (t.id !== undefined) db.id = t.id;
+  if ((t as any).shopId !== undefined) db.branch_id = (t as any).shopId;
+  if (t.name !== undefined) db.name = t.name;
+  if (t.type !== undefined) db.type = t.type;
+  if (t.title !== undefined) db.title = t.title;
+  if (t.content !== undefined) db.content = t.content;
+  if (t.variables !== undefined) db.variables = t.variables;
+  if (t.category !== undefined) db.category = t.category;
+  return db;
+}
+
+function fromDbMessageTemplate(row: Record<string, any>): MessageTemplate {
+  return {
+    id: row.id,
+    name: row.name || '',
+    type: row.type || 'sms',
+    title: row.title,
+    content: row.content || '',
+    variables: row.variables || [],
+    category: row.category || '',
+  };
+}
+
+function toDbMessageHistory(h: Partial<MessageHistory> & { shopId?: string }): Record<string, any> {
+  const db: Record<string, any> = {};
+  if (h.id !== undefined) db.id = h.id;
+  if ((h as any).shopId !== undefined) db.branch_id = (h as any).shopId;
+  if (h.type !== undefined) db.type = h.type;
+  if (h.templateId !== undefined) db.template_id = h.templateId;
+  if (h.templateName !== undefined) db.template_name = h.templateName;
+  if (h.title !== undefined) db.title = h.title;
+  if (h.content !== undefined) db.content = h.content;
+  if (h.recipients !== undefined) db.recipients = h.recipients;
+  if (h.successCount !== undefined) db.success_count = h.successCount;
+  if (h.failCount !== undefined) db.fail_count = h.failCount;
+  if (h.sentAt !== undefined) db.sent_at = h.sentAt;
+  if (h.status !== undefined) db.status = h.status;
+  if (h.cost !== undefined) db.cost = h.cost;
+  return db;
+}
+
+function fromDbMessageHistory(row: Record<string, any>): MessageHistory {
+  return {
+    id: row.id,
+    type: row.type || 'sms',
+    templateId: row.template_id,
+    templateName: row.template_name,
+    title: row.title,
+    content: row.content || '',
+    recipients: row.recipients || 0,
+    successCount: row.success_count || 0,
+    failCount: row.fail_count || 0,
+    sentAt: row.sent_at || now(),
+    status: row.status || 'sent',
+    cost: row.cost,
+  };
+}
+
+// ─── 메모리 캐시 ───────────────────────────────────────────────
+let _customers: Customer[] | null = null;
+let _programs: Program[] | null = null;
+let _customerPrograms: CustomerProgram[] | null = null;
+let _treatmentLogs: TreatmentLog[] | null = null;
+let _products: Product[] | null = null;
+let _productSales: ProductSale[] | null = null;
+let _payments: Payment[] | null = null;
+let _staff: Staff[] | null = null;
+let _services: Service[] | null = null;
+let _reservations: Reservation[] | null = null;
+let _settings: ShopSettings | null = null;
+let _messageTemplates: MessageTemplate[] | null = null;
+let _messageHistory: MessageHistory[] | null = null;
+
+let _initPromise: Promise<void> | null = null;
+let _initialized = false;
+
+// ─── Supabase 데이터 로드 함수들 ────────────────────────────────
+async function loadFromSupabase<T>(
+  table: string,
+  fromDb: (row: Record<string, any>) => T,
+): Promise<T[] | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const branchId = getShopId();
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .eq('branch_id', branchId);
+    if (error) {
+      console.error(`[Store] ${table} 로드 실패:`, error.message);
+      return null;
+    }
+    return (data || []).map(fromDb);
+  } catch (e) {
+    console.error(`[Store] ${table} 로드 예외:`, e);
+    return null;
+  }
+}
+
+async function loadSettingsFromSupabase(): Promise<ShopSettings | null> {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const branchId = getShopId();
+    const { data, error } = await supabase
+      .from('shop_settings')
+      .select('*')
+      .eq('branch_id', branchId)
+      .single();
+    if (error || !data) return null;
+    return fromDbSettings(data);
+  } catch {
+    return null;
+  }
+}
+
+// ─── 초기화 (앱 시작 시 호출) ──────────────────────────────────
+export async function initializeStores(): Promise<void> {
+  if (_initialized) return;
+  if (_initPromise) return _initPromise;
+
+  _initPromise = (async () => {
+    if (!isSupabaseConfigured) {
+      _initialized = true;
+      return;
+    }
+
+    try {
+      const [
+        customers, programs, customerPrograms, treatmentLogs,
+        products, productSales, payments, staff,
+        services, reservations, settings,
+        messageTemplates, messageHistory,
+      ] = await Promise.all([
+        loadFromSupabase('customers', fromDbCustomer),
+        loadFromSupabase('programs', fromDbProgram),
+        loadFromSupabase('customer_programs', fromDbCustomerProgram),
+        loadFromSupabase('treatment_logs', fromDbTreatmentLog),
+        loadFromSupabase('products', fromDbProduct),
+        loadFromSupabase('product_sales', fromDbProductSale),
+        loadFromSupabase('payments', fromDbPayment),
+        loadFromSupabase('staff', fromDbStaff),
+        loadFromSupabase('services', fromDbService),
+        loadFromSupabase('reservations', fromDbReservation),
+        loadSettingsFromSupabase(),
+        loadFromSupabase('message_templates', fromDbMessageTemplate),
+        loadFromSupabase('message_history', fromDbMessageHistory),
+      ]);
+
+      if (customers !== null) _customers = customers;
+      if (programs !== null) _programs = programs;
+      if (customerPrograms !== null) _customerPrograms = customerPrograms;
+      if (treatmentLogs !== null) _treatmentLogs = treatmentLogs;
+      if (products !== null) _products = products;
+      if (productSales !== null) _productSales = productSales;
+      if (payments !== null) _payments = payments;
+      if (staff !== null) _staff = staff;
+      if (services !== null) _services = services;
+      if (reservations !== null) _reservations = reservations;
+      if (settings !== null) _settings = settings;
+      if (messageTemplates !== null) _messageTemplates = messageTemplates;
+      if (messageHistory !== null) _messageHistory = messageHistory;
+
+      console.log('[Store] Supabase에서 데이터 로드 완료');
+    } catch (e) {
+      console.error('[Store] 초기화 실패, localStorage 폴백:', e);
+    }
+
+    _initialized = true;
+  })();
+
+  return _initPromise;
+}
+
+/** 캐시 초기화 (로그아웃/브랜치 전환 시) */
+export function resetStoreCache(): void {
+  _customers = null;
+  _programs = null;
+  _customerPrograms = null;
+  _treatmentLogs = null;
+  _products = null;
+  _productSales = null;
+  _payments = null;
+  _staff = null;
+  _services = null;
+  _reservations = null;
+  _settings = null;
+  _messageTemplates = null;
+  _messageHistory = null;
+  _initialized = false;
+  _initPromise = null;
+}
+
+// ─── Supabase 비동기 쓰기 헬퍼 (fire-and-forget) ───────────────
+function sbInsert(table: string, row: Record<string, any>): void {
+  if (!isSupabaseConfigured) return;
+  supabase.from(table).insert(row).then(({ error }) => {
+    if (error) console.error(`[Store] ${table} insert 실패:`, error.message);
+  });
+}
+
+function sbUpdate(table: string, id: string, updates: Record<string, any>): void {
+  if (!isSupabaseConfigured) return;
+  supabase.from(table).update(updates).eq('id', id).then(({ error }) => {
+    if (error) console.error(`[Store] ${table} update 실패:`, error.message);
+  });
+}
+
+function sbDelete(table: string, id: string): void {
+  if (!isSupabaseConfigured) return;
+  supabase.from(table).delete().eq('id', id).then(({ error }) => {
+    if (error) console.error(`[Store] ${table} delete 실패:`, error.message);
+  });
+}
+
+function sbUpsert(table: string, row: Record<string, any>): void {
+  if (!isSupabaseConfigured) return;
+  supabase.from(table).upsert(row).then(({ error }) => {
+    if (error) console.error(`[Store] ${table} upsert 실패:`, error.message);
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
 // CUSTOMERS
 // ═══════════════════════════════════════════════════════════════
 export const CustomerStore = {
   getAll(): Customer[] {
+    if (_customers !== null) return _customers;
+    // 캐시 미로드 → localStorage 폴백
     const stored = getList<Customer>(shopKey('customers'));
-    // 저장된 데이터가 없으면 샘플 데이터 반환
-    if (stored.length === 0) return getSampleCustomers();
-    return stored;
+    if (stored.length > 0) return stored;
+    return getSampleCustomers();
   },
 
   getById(id: string): Customer | undefined {
@@ -80,7 +741,10 @@ export const CustomerStore = {
       tags: data.tags ?? [],
       isActive: data.isActive ?? true,
     };
-    saveList(shopKey('customers'), [...all, customer]);
+    const updated = [...all, customer];
+    _customers = updated;
+    saveList(shopKey('customers'), updated);
+    sbInsert('customers', toDbCustomer(customer));
     return customer;
   },
 
@@ -89,13 +753,17 @@ export const CustomerStore = {
     const idx = all.findIndex(c => c.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _customers = all;
     saveList(shopKey('customers'), all);
+    sbUpdate('customers', id, toDbCustomer(updates));
     return all[idx];
   },
 
   delete(id: string): void {
     const all = this.getAll().filter(c => c.id !== id && !c.id.startsWith('sample_'));
+    _customers = all;
     saveList(shopKey('customers'), all);
+    sbDelete('customers', id);
   },
 
   incrementVisit(id: string, amount: number): void {
@@ -114,9 +782,10 @@ export const CustomerStore = {
 // ═══════════════════════════════════════════════════════════════
 export const ProgramStore = {
   getAll(): Program[] {
+    if (_programs !== null) return _programs;
     const stored = getList<Program>(shopKey('programs'));
-    if (stored.length === 0) return getSamplePrograms();
-    return stored;
+    if (stored.length > 0) return stored;
+    return getSamplePrograms();
   },
 
   getById(id: string): Program | undefined {
@@ -131,7 +800,10 @@ export const ProgramStore = {
       createdAt: now(),
       ...data,
     };
-    saveList(shopKey('programs'), [...all, program]);
+    const updated = [...all, program];
+    _programs = updated;
+    saveList(shopKey('programs'), updated);
+    sbInsert('programs', toDbProgram(program));
     return program;
   },
 
@@ -140,13 +812,17 @@ export const ProgramStore = {
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _programs = all;
     saveList(shopKey('programs'), all);
+    sbUpdate('programs', id, toDbProgram(updates));
     return all[idx];
   },
 
   delete(id: string): void {
     const all = this.getAll().filter(p => p.id !== id && !p.id.startsWith('sample_'));
+    _programs = all;
     saveList(shopKey('programs'), all);
+    sbDelete('programs', id);
   },
 };
 
@@ -155,6 +831,7 @@ export const ProgramStore = {
 // ═══════════════════════════════════════════════════════════════
 export const CustomerProgramStore = {
   getAll(): CustomerProgram[] {
+    if (_customerPrograms !== null) return _customerPrograms;
     return getList<CustomerProgram>(shopKey('customer_programs'));
   },
 
@@ -180,7 +857,10 @@ export const CustomerProgramStore = {
       createdAt: now(),
       ...data,
     };
-    saveList(shopKey('customer_programs'), [...all, cp]);
+    const updated = [...all, cp];
+    _customerPrograms = updated;
+    saveList(shopKey('customer_programs'), updated);
+    sbInsert('customer_programs', toDbCustomerProgram(cp));
 
     // 결제 기록도 자동 생성
     PaymentStore.save({
@@ -208,7 +888,9 @@ export const CustomerProgramStore = {
     const newUsed = cp.usedSessions + sessionsUsed;
     const isCompleted = cp.totalSessions !== null && newUsed >= cp.totalSessions;
     all[idx] = { ...cp, usedSessions: newUsed, isCompleted };
+    _customerPrograms = all;
     saveList(shopKey('customer_programs'), all);
+    sbUpdate('customer_programs', id, { used_sessions: newUsed, is_completed: isCompleted });
     return all[idx];
   },
 
@@ -217,13 +899,17 @@ export const CustomerProgramStore = {
     const idx = all.findIndex(cp => cp.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _customerPrograms = all;
     saveList(shopKey('customer_programs'), all);
+    sbUpdate('customer_programs', id, toDbCustomerProgram(updates));
     return all[idx];
   },
 
   delete(id: string): void {
     const all = this.getAll().filter(cp => cp.id !== id);
+    _customerPrograms = all;
     saveList(shopKey('customer_programs'), all);
+    sbDelete('customer_programs', id);
   },
 };
 
@@ -232,6 +918,7 @@ export const CustomerProgramStore = {
 // ═══════════════════════════════════════════════════════════════
 export const TreatmentLogStore = {
   getAll(): TreatmentLog[] {
+    if (_treatmentLogs !== null) return _treatmentLogs;
     return getList<TreatmentLog>(shopKey('treatment_logs'));
   },
 
@@ -253,7 +940,10 @@ export const TreatmentLogStore = {
       createdAt: now(),
       ...data,
     };
-    saveList(shopKey('treatment_logs'), [...all, log]);
+    const updated = [...all, log];
+    _treatmentLogs = updated;
+    saveList(shopKey('treatment_logs'), updated);
+    sbInsert('treatment_logs', toDbTreatmentLog(log));
 
     // 프로그램에서 회차 차감
     if (data.customerProgramId) {
@@ -268,7 +958,9 @@ export const TreatmentLogStore = {
 
   delete(id: string): void {
     const all = this.getAll().filter(t => t.id !== id);
+    _treatmentLogs = all;
     saveList(shopKey('treatment_logs'), all);
+    sbDelete('treatment_logs', id);
   },
 };
 
@@ -277,9 +969,10 @@ export const TreatmentLogStore = {
 // ═══════════════════════════════════════════════════════════════
 export const ProductStore = {
   getAll(): Product[] {
+    if (_products !== null) return _products;
     const stored = getList<Product>(shopKey('products'));
-    if (stored.length === 0) return getSampleProducts();
-    return stored;
+    if (stored.length > 0) return stored;
+    return getSampleProducts();
   },
 
   getById(id: string): Product | undefined {
@@ -293,7 +986,10 @@ export const ProductStore = {
       shopId: getShopId(),
       ...data,
     };
-    saveList(shopKey('products'), [...all, product]);
+    const updated = [...all, product];
+    _products = updated;
+    saveList(shopKey('products'), updated);
+    sbInsert('products', toDbProduct(product));
     return product;
   },
 
@@ -302,7 +998,9 @@ export const ProductStore = {
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _products = all;
     saveList(shopKey('products'), all);
+    sbUpdate('products', id, toDbProduct(updates));
     return all[idx];
   },
 
@@ -314,7 +1012,9 @@ export const ProductStore = {
 
   delete(id: string): void {
     const all = this.getAll().filter(p => p.id !== id && !p.id.startsWith('sample_'));
+    _products = all;
     saveList(shopKey('products'), all);
+    sbDelete('products', id);
   },
 };
 
@@ -323,6 +1023,7 @@ export const ProductStore = {
 // ═══════════════════════════════════════════════════════════════
 export const ProductSaleStore = {
   getAll(): ProductSale[] {
+    if (_productSales !== null) return _productSales;
     return getList<ProductSale>(shopKey('product_sales'));
   },
 
@@ -342,7 +1043,10 @@ export const ProductSaleStore = {
       createdAt: now(),
       ...data,
     };
-    saveList(shopKey('product_sales'), [...all, sale]);
+    const updated = [...all, sale];
+    _productSales = updated;
+    saveList(shopKey('product_sales'), updated);
+    sbInsert('product_sales', toDbProductSale(sale));
 
     // 재고 차감
     if (data.productId) {
@@ -369,7 +1073,9 @@ export const ProductSaleStore = {
 
   delete(id: string): void {
     const all = this.getAll().filter(s => s.id !== id);
+    _productSales = all;
     saveList(shopKey('product_sales'), all);
+    sbDelete('product_sales', id);
   },
 };
 
@@ -378,9 +1084,10 @@ export const ProductSaleStore = {
 // ═══════════════════════════════════════════════════════════════
 export const PaymentStore = {
   getAll(): Payment[] {
+    if (_payments !== null) return _payments;
     const stored = getList<Payment>(shopKey('payments'));
-    if (stored.length === 0) return getSamplePayments();
-    return stored;
+    if (stored.length > 0) return stored;
+    return getSamplePayments();
   },
 
   getByDate(date: string): Payment[] {
@@ -403,7 +1110,10 @@ export const PaymentStore = {
       createdAt: now(),
       ...data,
     };
-    saveList(shopKey('payments'), [...all, payment]);
+    const updated = [...all, payment];
+    _payments = updated;
+    saveList(shopKey('payments'), updated);
+    sbInsert('payments', toDbPayment(payment));
     return payment;
   },
 
@@ -412,7 +1122,9 @@ export const PaymentStore = {
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _payments = all;
     saveList(shopKey('payments'), all);
+    sbUpdate('payments', id, toDbPayment(updates));
     return all[idx];
   },
 
@@ -457,15 +1169,19 @@ export const PaymentStore = {
 // ═══════════════════════════════════════════════════════════════
 export const StaffStore = {
   getAll(): Staff[] {
+    if (_staff !== null) return _staff;
     const stored = getList<Staff>(shopKey('staff'));
-    if (stored.length === 0) return getSampleStaff();
-    return stored;
+    if (stored.length > 0) return stored;
+    return getSampleStaff();
   },
 
   save(data: Omit<Staff, 'id' | 'shopId'>): Staff {
     const all = this.getAll().filter(s => !s.id.startsWith('sample_'));
     const staff: Staff = { id: genId(), shopId: getShopId(), ...data };
-    saveList(shopKey('staff'), [...all, staff]);
+    const updated = [...all, staff];
+    _staff = updated;
+    saveList(shopKey('staff'), updated);
+    sbInsert('staff', toDbStaff(staff));
     return staff;
   },
 
@@ -474,13 +1190,17 @@ export const StaffStore = {
     const idx = all.findIndex(s => s.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _staff = all;
     saveList(shopKey('staff'), all);
+    sbUpdate('staff', id, toDbStaff(updates));
     return all[idx];
   },
 
   delete(id: string): void {
     const all = this.getAll().filter(s => s.id !== id && !s.id.startsWith('sample_'));
+    _staff = all;
     saveList(shopKey('staff'), all);
+    sbDelete('staff', id);
   },
 };
 
@@ -489,9 +1209,10 @@ export const StaffStore = {
 // ═══════════════════════════════════════════════════════════════
 export const ServiceStore = {
   getAll(): Service[] {
+    if (_services !== null) return _services;
     const stored = getList<Service>(shopKey('services'));
-    if (stored.length === 0) return getSampleServices();
-    return stored;
+    if (stored.length > 0) return stored;
+    return getSampleServices();
   },
 
   getById(id: string): Service | undefined {
@@ -501,7 +1222,10 @@ export const ServiceStore = {
   save(data: Omit<Service, 'id'>): Service {
     const all = this.getAll().filter(s => !s.id.startsWith('sample_'));
     const service: Service = { id: genId(), ...data };
-    saveList(shopKey('services'), [...all, service]);
+    const updated = [...all, service];
+    _services = updated;
+    saveList(shopKey('services'), updated);
+    sbInsert('services', toDbService({ ...service, shopId: getShopId() } as any));
     return service;
   },
 
@@ -510,13 +1234,17 @@ export const ServiceStore = {
     const idx = all.findIndex(s => s.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _services = all;
     saveList(shopKey('services'), all);
+    sbUpdate('services', id, toDbService(updates));
     return all[idx];
   },
 
   delete(id: string): void {
     const all = this.getAll().filter(s => s.id !== id && !s.id.startsWith('sample_'));
+    _services = all;
     saveList(shopKey('services'), all);
+    sbDelete('services', id);
   },
 };
 
@@ -525,9 +1253,10 @@ export const ServiceStore = {
 // ═══════════════════════════════════════════════════════════════
 export const ReservationStore = {
   getAll(): Reservation[] {
+    if (_reservations !== null) return _reservations;
     const stored = getList<Reservation>(shopKey('reservations'));
-    if (stored.length === 0) return getSampleReservations();
-    return stored;
+    if (stored.length > 0) return stored;
+    return getSampleReservations();
   },
 
   getByDate(date: string): Reservation[] {
@@ -541,7 +1270,10 @@ export const ReservationStore = {
   save(data: Omit<Reservation, 'id'>): Reservation {
     const all = this.getAll().filter(r => !r.id.startsWith('sample_'));
     const reservation: Reservation = { id: genId(), ...data };
-    saveList(shopKey('reservations'), [...all, reservation]);
+    const updated = [...all, reservation];
+    _reservations = updated;
+    saveList(shopKey('reservations'), updated);
+    sbInsert('reservations', toDbReservation({ ...reservation, shopId: getShopId() } as any));
     return reservation;
   },
 
@@ -550,7 +1282,9 @@ export const ReservationStore = {
     const idx = all.findIndex(r => r.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _reservations = all;
     saveList(shopKey('reservations'), all);
+    sbUpdate('reservations', id, toDbReservation(updates));
     return all[idx];
   },
 
@@ -560,7 +1294,9 @@ export const ReservationStore = {
 
   delete(id: string): void {
     const all = this.getAll().filter(r => r.id !== id && !r.id.startsWith('sample_'));
+    _reservations = all;
     saveList(shopKey('reservations'), all);
+    sbDelete('reservations', id);
   },
 };
 
@@ -569,6 +1305,7 @@ export const ReservationStore = {
 // ═══════════════════════════════════════════════════════════════
 export const SettingsStore = {
   get(): ShopSettings {
+    if (_settings !== null) return _settings;
     try {
       const raw = localStorage.getItem(shopKey('settings'));
       if (raw) return JSON.parse(raw);
@@ -579,7 +1316,14 @@ export const SettingsStore = {
   save(updates: Partial<ShopSettings>): ShopSettings {
     const current = this.get();
     const updated = { ...current, ...updates };
+    _settings = updated;
     localStorage.setItem(shopKey('settings'), JSON.stringify(updated));
+
+    if (isSupabaseConfigured) {
+      const dbRow = { ...toDbSettings(updated), branch_id: getShopId() };
+      sbUpsert('shop_settings', dbRow);
+    }
+
     return updated;
   },
 };
@@ -589,15 +1333,19 @@ export const SettingsStore = {
 // ═══════════════════════════════════════════════════════════════
 export const MessageTemplateStore = {
   getAll(): MessageTemplate[] {
+    if (_messageTemplates !== null) return _messageTemplates;
     const stored = getList<MessageTemplate>(shopKey('msg_templates'));
-    if (stored.length === 0) return getSampleMessageTemplates();
-    return stored;
+    if (stored.length > 0) return stored;
+    return getSampleMessageTemplates();
   },
 
   save(data: Omit<MessageTemplate, 'id'>): MessageTemplate {
     const all = this.getAll().filter(t => !t.id.startsWith('sample_'));
     const template: MessageTemplate = { id: genId(), ...data };
-    saveList(shopKey('msg_templates'), [...all, template]);
+    const updated = [...all, template];
+    _messageTemplates = updated;
+    saveList(shopKey('msg_templates'), updated);
+    sbInsert('message_templates', toDbMessageTemplate({ ...template, shopId: getShopId() } as any));
     return template;
   },
 
@@ -606,13 +1354,17 @@ export const MessageTemplateStore = {
     const idx = all.findIndex(t => t.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
+    _messageTemplates = all;
     saveList(shopKey('msg_templates'), all);
+    sbUpdate('message_templates', id, toDbMessageTemplate(updates));
     return all[idx];
   },
 
   delete(id: string): void {
     const all = this.getAll().filter(t => t.id !== id && !t.id.startsWith('sample_'));
+    _messageTemplates = all;
     saveList(shopKey('msg_templates'), all);
+    sbDelete('message_templates', id);
   },
 };
 
@@ -621,13 +1373,17 @@ export const MessageTemplateStore = {
 // ═══════════════════════════════════════════════════════════════
 export const MessageHistoryStore = {
   getAll(): MessageHistory[] {
+    if (_messageHistory !== null) return _messageHistory;
     return getList<MessageHistory>(shopKey('msg_history'));
   },
 
   save(data: Omit<MessageHistory, 'id'>): MessageHistory {
     const all = this.getAll();
     const history: MessageHistory = { id: genId(), ...data };
-    saveList(shopKey('msg_history'), [history, ...all]);
+    const updated = [history, ...all];
+    _messageHistory = updated;
+    saveList(shopKey('msg_history'), updated);
+    sbInsert('message_history', toDbMessageHistory({ ...history, shopId: getShopId() } as any));
     return history;
   },
 };
@@ -676,13 +1432,12 @@ function getSampleStaff(): Staff[] {
 function getSamplePayments(): Payment[] {
   const shopId = getShopId();
   const payments: Payment[] = [];
-  // 최근 30일 샘플 매출 데이터
   for (let i = 29; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
     const dayOfWeek = d.getDay();
-    if (dayOfWeek === 0) continue; // 일요일 제외
+    if (dayOfWeek === 0) continue;
 
     const count = Math.floor(Math.random() * 4) + 1;
     for (let j = 0; j < count; j++) {

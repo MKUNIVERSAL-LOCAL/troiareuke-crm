@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { recordLoginLog } from '../lib/loginLog';
+import { initializeStores, resetStoreCache } from '../lib/store';
 
 // ── 슈퍼어드민 계정 (Supabase 미설정 시 로컬 폴백용) ────────────
 const SUPERADMIN_EMAIL = 'mkclub21@gmail.com';
@@ -156,6 +157,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const saveUser = (u: AuthUser) => {
     setUser(u);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    // Supabase에서 데이터 미리 로드
+    initializeStores().catch(() => {});
   };
 
   // ── 어드민 이메일 체크 (로그인 전 리다이렉트 판단용) ────────
@@ -278,6 +281,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
+    resetStoreCache();
   };
 
   // ── 온보딩 완료 ──────────────────────────────────────────────
