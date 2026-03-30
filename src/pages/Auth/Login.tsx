@@ -13,7 +13,7 @@ const features = [
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isAdminEmail } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -23,13 +23,6 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { setError('이메일과 비밀번호를 입력해주세요.'); return; }
-
-    // 어드민 이메일이면 어드민 로그인 페이지로 자동 리다이렉트
-    if (isAdminEmail(email)) {
-      navigate('/admin/login');
-      return;
-    }
-
     setLoading(true); setError('');
     try {
       await login(email, password);
