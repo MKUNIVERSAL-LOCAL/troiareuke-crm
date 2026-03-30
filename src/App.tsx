@@ -17,9 +17,17 @@ import Signup from './pages/Auth/Signup';
 import Onboarding from './pages/Onboarding/index';
 import AiChat from './pages/AiChat/index';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, user } = useAuth();
-  if (isLoading) return (
+// Admin
+import AdminLayout from './pages/Admin/Layout';
+import AdminDashboard from './pages/Admin/Dashboard';
+import Branches from './pages/Admin/Branches';
+import LoginLogs from './pages/Admin/LoginLogs';
+import AdminUsers from './pages/Admin/Users';
+import Subscriptions from './pages/Admin/Subscriptions';
+
+// ── 로딩 스피너 ─────────────────────────────────────────────────
+function LoadingScreen() {
+  return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
         <div className="w-12 h-12 rounded-xl bg-[#1a3a8f] flex items-center justify-center mx-auto mb-4 animate-pulse">
@@ -29,15 +37,36 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </div>
     </div>
   );
+}
+
+// ── 보호 라우트 (일반 사용자) ────────────────────────────────────
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) return <LoadingScreen />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (isAuthenticated && !user?.isOnboarded) return <Navigate to="/onboarding" replace />;
+  // 슈퍼어드민은 항상 관리자 콘솔로
+  if (user?.role === 'superadmin') return <Navigate to="/admin/dashboard" replace />;
+  if (!user?.isOnboarded) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
 }
 
+// ── 관리자 전용 라우트 ───────────────────────────────────────────
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  if (isLoading) return <LoadingScreen />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user?.role !== 'superadmin') return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+// ── 퍼블릭 라우트 ────────────────────────────────────────────────
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   if (isLoading) return null;
-  if (isAuthenticated && user?.isOnboarded) return <Navigate to="/" replace />;
+  if (isAuthenticated) {
+    if (user?.role === 'superadmin') return <Navigate to="/admin/dashboard" replace />;
+    if (user?.isOnboarded) return <Navigate to="/" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -49,7 +78,17 @@ function AppRoutes() {
       <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
       <Route path="/onboarding" element={<Onboarding />} />
 
-      {/* Protected routes */}
+      {/* Admin routes */}
+      <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
+        <Route index element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="dashboard" element={<AdminDashboard />} />
+        <Route path="branches" element={<Branches />} />
+        <Route path="subscriptions" element={<Subscriptions />} />
+        <Route path="login-logs" element={<LoginLogs />} />
+        <Route path="users" element={<AdminUsers />} />
+      </Route>
+
+      {/* Protected CRM routes */}
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="customers" element={<Customers />} />
