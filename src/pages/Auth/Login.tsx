@@ -13,7 +13,7 @@ const features = [
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAdminEmail } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -23,6 +23,13 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { setError('이메일과 비밀번호를 입력해주세요.'); return; }
+
+    // 어드민 이메일이면 어드민 로그인 페이지로 자동 리다이렉트
+    if (isAdminEmail(email)) {
+      navigate('/admin/login');
+      return;
+    }
+
     setLoading(true); setError('');
     try {
       await login(email, password);
@@ -131,8 +138,11 @@ export default function Login() {
               </p>
             </div>
 
-            <div className="mt-4 text-center">
+            <div className="mt-4 text-center space-y-2">
               <p className="text-xs text-gray-300">데모 계정: 아무 이메일/비밀번호로 로그인 가능</p>
+              <Link to="/admin/login" className="text-[11px] text-gray-400 hover:text-blue-500 transition-colors">
+                관리자 로그인 →
+              </Link>
             </div>
           </div>
         </div>

@@ -26,6 +26,7 @@ import AdminUsers from './pages/Admin/Users';
 import Subscriptions from './pages/Admin/Subscriptions';
 import Announcements from './pages/Admin/Announcements';
 import Statistics from './pages/Admin/Statistics';
+import AdminLogin from './pages/Admin/Login';
 
 // ── 로딩 스피너 ─────────────────────────────────────────────────
 function LoadingScreen() {
@@ -56,7 +57,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   if (isLoading) return <LoadingScreen />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/admin/login" replace />;
   if (user?.role !== 'superadmin') return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -79,6 +80,7 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/admin/login" element={<PublicRoute><AdminLogin /></PublicRoute>} />
 
       {/* Admin routes */}
       <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>

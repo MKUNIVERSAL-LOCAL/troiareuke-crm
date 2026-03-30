@@ -7,7 +7,8 @@
 
 import type {
   Customer, Program, CustomerProgram, TreatmentLog,
-  Product, ProductSale, Payment, Staff
+  Product, ProductSale, Payment, Staff,
+  Service, Reservation, ShopSettings, MessageTemplate, MessageHistory
 } from '../types';
 
 // ─── 현재 샵 ID 가져오기 ───────────────────────────────────────
@@ -476,6 +477,159 @@ export const StaffStore = {
     saveList(shopKey('staff'), all);
     return all[idx];
   },
+
+  delete(id: string): void {
+    const all = this.getAll().filter(s => s.id !== id && !s.id.startsWith('sample_'));
+    saveList(shopKey('staff'), all);
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// SERVICES (시술 항목)
+// ═══════════════════════════════════════════════════════════════
+export const ServiceStore = {
+  getAll(): Service[] {
+    const stored = getList<Service>(shopKey('services'));
+    if (stored.length === 0) return getSampleServices();
+    return stored;
+  },
+
+  getById(id: string): Service | undefined {
+    return this.getAll().find(s => s.id === id);
+  },
+
+  save(data: Omit<Service, 'id'>): Service {
+    const all = this.getAll().filter(s => !s.id.startsWith('sample_'));
+    const service: Service = { id: genId(), ...data };
+    saveList(shopKey('services'), [...all, service]);
+    return service;
+  },
+
+  update(id: string, updates: Partial<Service>): Service | null {
+    const all = this.getAll().filter(s => !s.id.startsWith('sample_'));
+    const idx = all.findIndex(s => s.id === id);
+    if (idx === -1) return null;
+    all[idx] = { ...all[idx], ...updates };
+    saveList(shopKey('services'), all);
+    return all[idx];
+  },
+
+  delete(id: string): void {
+    const all = this.getAll().filter(s => s.id !== id && !s.id.startsWith('sample_'));
+    saveList(shopKey('services'), all);
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// RESERVATIONS (예약)
+// ═══════════════════════════════════════════════════════════════
+export const ReservationStore = {
+  getAll(): Reservation[] {
+    const stored = getList<Reservation>(shopKey('reservations'));
+    if (stored.length === 0) return getSampleReservations();
+    return stored;
+  },
+
+  getByDate(date: string): Reservation[] {
+    return this.getAll().filter(r => r.date === date);
+  },
+
+  getByDateRange(start: string, end: string): Reservation[] {
+    return this.getAll().filter(r => r.date >= start && r.date <= end);
+  },
+
+  save(data: Omit<Reservation, 'id'>): Reservation {
+    const all = this.getAll().filter(r => !r.id.startsWith('sample_'));
+    const reservation: Reservation = { id: genId(), ...data };
+    saveList(shopKey('reservations'), [...all, reservation]);
+    return reservation;
+  },
+
+  update(id: string, updates: Partial<Reservation>): Reservation | null {
+    const all = this.getAll().filter(r => !r.id.startsWith('sample_'));
+    const idx = all.findIndex(r => r.id === id);
+    if (idx === -1) return null;
+    all[idx] = { ...all[idx], ...updates };
+    saveList(shopKey('reservations'), all);
+    return all[idx];
+  },
+
+  updateStatus(id: string, status: Reservation['status']): Reservation | null {
+    return this.update(id, { status });
+  },
+
+  delete(id: string): void {
+    const all = this.getAll().filter(r => r.id !== id && !r.id.startsWith('sample_'));
+    saveList(shopKey('reservations'), all);
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// SETTINGS (매장 설정)
+// ═══════════════════════════════════════════════════════════════
+export const SettingsStore = {
+  get(): ShopSettings {
+    try {
+      const raw = localStorage.getItem(shopKey('settings'));
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return getDefaultSettings();
+  },
+
+  save(updates: Partial<ShopSettings>): ShopSettings {
+    const current = this.get();
+    const updated = { ...current, ...updates };
+    localStorage.setItem(shopKey('settings'), JSON.stringify(updated));
+    return updated;
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// MESSAGE TEMPLATES (메시지 템플릿)
+// ═══════════════════════════════════════════════════════════════
+export const MessageTemplateStore = {
+  getAll(): MessageTemplate[] {
+    const stored = getList<MessageTemplate>(shopKey('msg_templates'));
+    if (stored.length === 0) return getSampleMessageTemplates();
+    return stored;
+  },
+
+  save(data: Omit<MessageTemplate, 'id'>): MessageTemplate {
+    const all = this.getAll().filter(t => !t.id.startsWith('sample_'));
+    const template: MessageTemplate = { id: genId(), ...data };
+    saveList(shopKey('msg_templates'), [...all, template]);
+    return template;
+  },
+
+  update(id: string, updates: Partial<MessageTemplate>): MessageTemplate | null {
+    const all = this.getAll().filter(t => !t.id.startsWith('sample_'));
+    const idx = all.findIndex(t => t.id === id);
+    if (idx === -1) return null;
+    all[idx] = { ...all[idx], ...updates };
+    saveList(shopKey('msg_templates'), all);
+    return all[idx];
+  },
+
+  delete(id: string): void {
+    const all = this.getAll().filter(t => t.id !== id && !t.id.startsWith('sample_'));
+    saveList(shopKey('msg_templates'), all);
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// MESSAGE HISTORY (발송 이력)
+// ═══════════════════════════════════════════════════════════════
+export const MessageHistoryStore = {
+  getAll(): MessageHistory[] {
+    return getList<MessageHistory>(shopKey('msg_history'));
+  },
+
+  save(data: Omit<MessageHistory, 'id'>): MessageHistory {
+    const all = this.getAll();
+    const history: MessageHistory = { id: genId(), ...data };
+    saveList(shopKey('msg_history'), [history, ...all]);
+    return history;
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -550,4 +704,76 @@ function getSamplePayments(): Payment[] {
     }
   }
   return payments;
+}
+
+function getSampleServices(): Service[] {
+  return [
+    { id: 'sample_sv1', name: '기본 피부관리', category: '피부관리', duration: 90, price: 80000, description: '클렌징 + 각질 + 수분케어', isActive: true },
+    { id: 'sample_sv2', name: '프리미엄 피부관리', category: '피부관리', duration: 120, price: 120000, description: '기본관리 + 앰플 + 마스크팩', isActive: true },
+    { id: 'sample_sv3', name: '메디컬 스킨케어', category: '피부관리', duration: 90, price: 150000, description: '의료기기 활용 피부케어', isActive: true },
+    { id: 'sample_sv4', name: '림프 마사지', category: '마사지', duration: 60, price: 70000, isActive: true },
+    { id: 'sample_sv5', name: '등·어깨 마사지', category: '마사지', duration: 60, price: 65000, isActive: true },
+    { id: 'sample_sv6', name: '젤네일 (손)', category: '네일', duration: 60, price: 45000, isActive: true },
+    { id: 'sample_sv7', name: '젤네일 (발)', category: '네일', duration: 60, price: 40000, isActive: true },
+    { id: 'sample_sv8', name: '네일아트 추가', category: '네일', duration: 30, price: 15000, isActive: true },
+    { id: 'sample_sv9', name: '왁싱 (눈썹)', category: '왁싱', duration: 30, price: 20000, isActive: true },
+    { id: 'sample_sv10', name: '왁싱 (팔/다리)', category: '왁싱', duration: 45, price: 35000, isActive: true },
+  ];
+}
+
+function getSampleReservations(): Reservation[] {
+  const staff = getSampleStaff();
+  const customers = getSampleCustomers();
+  const services = getSampleServices();
+  const todayStr = today();
+  const d = new Date();
+  const tomorrowStr = new Date(d.getTime() + 86400000).toISOString().split('T')[0];
+
+  return [
+    { id: 'sample_r1', customerId: customers[0].id, customerName: customers[0].name, customerPhone: customers[0].phone, staffId: staff[0].id, staffName: staff[0].name, services: [{ serviceId: services[1].id, serviceName: services[1].name, price: services[1].price, duration: services[1].duration }], date: todayStr, startTime: '10:00', endTime: '12:00', status: 'confirmed', source: 'naver', totalPrice: 120000 },
+    { id: 'sample_r2', customerId: customers[1].id, customerName: customers[1].name, customerPhone: customers[1].phone, staffId: staff[1].id, staffName: staff[1].name, services: [{ serviceId: services[2].id, serviceName: services[2].name, price: services[2].price, duration: services[2].duration }], date: todayStr, startTime: '11:00', endTime: '12:30', status: 'confirmed', source: 'manual', totalPrice: 150000 },
+    { id: 'sample_r3', customerId: customers[2].id, customerName: customers[2].name, customerPhone: customers[2].phone, staffId: staff[0].id, staffName: staff[0].name, services: [{ serviceId: services[5].id, serviceName: services[5].name, price: services[5].price, duration: services[5].duration }], date: todayStr, startTime: '13:00', endTime: '14:00', status: 'pending', source: 'kakao', totalPrice: 45000 },
+    { id: 'sample_r4', customerId: customers[3].id, customerName: customers[3].name, customerPhone: customers[3].phone, staffId: staff[1].id, staffName: staff[1].name, services: [{ serviceId: services[0].id, serviceName: services[0].name, price: services[0].price, duration: services[0].duration }], date: todayStr, startTime: '14:00', endTime: '15:30', status: 'confirmed', source: 'phone', totalPrice: 80000 },
+    { id: 'sample_r5', customerId: customers[0].id, customerName: customers[0].name, customerPhone: customers[0].phone, staffId: staff[1].id, staffName: staff[1].name, services: [{ serviceId: services[3].id, serviceName: services[3].name, price: services[3].price, duration: services[3].duration }], date: tomorrowStr, startTime: '10:00', endTime: '11:00', status: 'confirmed', source: 'naver', totalPrice: 70000 },
+    { id: 'sample_r6', customerId: customers[2].id, customerName: customers[2].name, customerPhone: customers[2].phone, staffId: staff[0].id, staffName: staff[0].name, services: [{ serviceId: services[0].id, serviceName: services[0].name, price: services[0].price, duration: services[0].duration }], date: tomorrowStr, startTime: '13:00', endTime: '14:30', status: 'confirmed', source: 'manual', totalPrice: 80000 },
+  ];
+}
+
+function getDefaultSettings(): ShopSettings {
+  return {
+    id: 'default',
+    name: '내 에스테틱 샵',
+    type: '피부관리실',
+    phone: '',
+    address: '',
+    businessHours: {
+      월: { open: '10:00', close: '20:00', isOff: false },
+      화: { open: '10:00', close: '20:00', isOff: false },
+      수: { open: '10:00', close: '20:00', isOff: false },
+      목: { open: '10:00', close: '20:00', isOff: false },
+      금: { open: '10:00', close: '21:00', isOff: false },
+      토: { open: '10:00', close: '18:00', isOff: false },
+      일: { open: '10:00', close: '18:00', isOff: true },
+    },
+    holidays: [],
+    naverBooking: { isConnected: false },
+    kakao: { channelConnected: false, openchatConnected: false },
+    pointRate: 1,
+    notificationSettings: {
+      reservationConfirm: true,
+      reservationReminder: true,
+      birthdayMessage: false,
+      novisitMessage: false,
+    },
+  };
+}
+
+function getSampleMessageTemplates(): MessageTemplate[] {
+  return [
+    { id: 'sample_mt1', name: '예약 확인', type: 'sms', content: '[뷰티샵] {고객명}님, {날짜} {시간} 예약이 확인되었습니다. 문의: {전화번호}', variables: ['고객명', '날짜', '시간', '전화번호'], category: '예약' },
+    { id: 'sample_mt2', name: '예약 리마인더', type: 'sms', content: '[뷰티샵] {고객명}님, 내일 {시간} 예약 잊지 마세요! 변경/취소: {전화번호}', variables: ['고객명', '시간', '전화번호'], category: '예약' },
+    { id: 'sample_mt3', name: '생일 축하', type: 'kakao-channel', content: '{고객명}님, 생일을 진심으로 축하드립니다!\n이번 달 방문 시 10% 할인 혜택을 드립니다.', variables: ['고객명'], category: '이벤트' },
+    { id: 'sample_mt4', name: '미방문 고객 케어', type: 'kakao-channel', content: '{고객명}님, 마지막 방문 후 {기간}이 지났네요.\n다시 뵙고 싶습니다! 재방문 시 5,000포인트 드립니다.', variables: ['고객명', '기간'], category: '리텐션' },
+    { id: 'sample_mt5', name: '시술 후 케어 안내', type: 'sms', content: '[뷰티샵] {고객명}님, 오늘 시술 감사합니다. 귀가 후 수분크림을 충분히 발라주세요.', variables: ['고객명'], category: '케어' },
+  ];
 }

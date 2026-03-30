@@ -37,6 +37,7 @@ interface AuthContextType {
   signup: (data: SignupData) => Promise<void>;
   logout: () => void;
   completeOnboarding: (shopData: { shopName: string; shopType: string }) => void;
+  isAdminEmail: (email: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -68,13 +69,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // 앱 시작 시 세션 복원
   useEffect(() => {
+    // localStorage에 저장된 세션이 있으면 먼저 복원 (로딩 속도 개선)
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try { setUser(JSON.parse(stored)); } catch { localStorage.removeItem(STORAGE_KEY); }
+    }
+
     if (isSupabaseConfigured) {
+      // 5초 타임아웃: Supabase 연결 실패 시 localStorage 폴백
+      const timeout = setTimeout(() => {
+        setIsLoading(false);
+      }, 5000);
+
       // Supabase 세션 복원
       supabase.auth.getSession().then(async ({ data: { session } }) => {
+        clearTimeout(timeout);
         if (session?.user) {
           const profile = await loadProfile(session.user.id, session.user.email!);
-          setUser(profile);
+          saveUser(profile);
         }
+        setIsLoading(false);
+      }).catch(() => {
+        clearTimeout(timeout);
+        // Supabase 연결 실패 — localStorage 데이터로 계속 진행
         setIsLoading(false);
       });
 
@@ -82,19 +99,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
           const profile = await loadProfile(session.user.id, session.user.email!);
-          setUser(profile);
+          saveUser(profile);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
+          localStorage.removeItem(STORAGE_KEY);
         }
       });
 
       return () => subscription.unsubscribe();
     } else {
-      // localStorage 폴백
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        try { setUser(JSON.parse(stored)); } catch { localStorage.removeItem(STORAGE_KEY); }
-      }
       setIsLoading(false);
     }
   }, []);
@@ -144,6 +157,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
   };
+
+  // ── 어드민 이메일 체크 (로그인 전 리다이렉트 판단용) ────────
+  const isAdminEmail = (email: string) => email === SUPERADMIN_EMAIL;
 
   // ── 로그인 ───────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
@@ -271,7 +287,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, isAuthenticated: !!user, isLoading, login, signup, logout, completeOnboarding,
+      user, isAuthenticated: !!user, isLoading, login, signup, logout, completeOnboarding, isAdminEmail,
     }}>
       {children}
     </AuthContext.Provider>

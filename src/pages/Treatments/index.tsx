@@ -1,26 +1,37 @@
-import { useState } from 'react';
-import { Search, ClipboardList, Camera, ChevronRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, ClipboardList, Camera, ChevronRight, Trash2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
-import { mockTreatments, mockCustomers, mockStaff, mockServices } from '../../data/mockData';
-import type { TreatmentRecord } from '../../types';
+import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore } from '../../lib/store';
+import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
-
-const paymentColors: Record<string, string> = {
-  '카드': 'bg-blue-100 text-blue-700',
-  '현금': 'bg-green-100 text-green-700',
-  '계좌이체': 'bg-orange-100 text-orange-700',
-  '혼합': 'bg-purple-100 text-purple-700',
-};
 
 export default function Treatments() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [selected, setSelected] = useState<TreatmentRecord | null>(null);
+  const [selected, setSelected] = useState<TreatmentLog | null>(null);
+  const [treatmentLogs, setTreatmentLogs] = useState<TreatmentLog[]>([]);
 
-  const filtered = mockTreatments.filter(t =>
-    t.customerName.includes(search) || t.staffName.includes(search) || t.services.some(s => s.serviceName.includes(search))
+  const loadLogs = () => {
+    setTreatmentLogs(TreatmentLogStore.getAll());
+  };
+
+  useEffect(() => {
+    loadLogs();
+  }, []);
+
+  const filtered = treatmentLogs.filter(t =>
+    t.customerName.includes(search) ||
+    (t.staffName && t.staffName.includes(search)) ||
+    (t.treatmentDetails && t.treatmentDetails.includes(search)) ||
+    (t.programName && t.programName.includes(search))
   );
+
+  const handleDelete = (id: string) => {
+    TreatmentLogStore.delete(id);
+    setSelected(null);
+    loadLogs();
+  };
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -49,6 +60,11 @@ export default function Treatments() {
             <p className="text-sm font-bold text-gray-700">총 {filtered.length}건</p>
           </div>
           <div className="divide-y divide-gray-50">
+            {filtered.length === 0 && (
+              <div className="px-6 py-12 text-center text-sm text-gray-400">
+                시술 기록이 없습니다. 새 기록을 추가해 주세요.
+              </div>
+            )}
             {filtered.map(t => (
               <button
                 key={t.id}
@@ -61,20 +77,24 @@ export default function Treatments() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 flex-wrap">
                     <p className="text-sm font-bold text-gray-900">{t.customerName}</p>
-                    <span className={clsx('px-2 py-0.5 rounded-full text-[11px] font-medium', paymentColors[t.paymentMethod])}>
-                      {t.paymentMethod}
-                    </span>
+                    {t.programName && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-100 text-purple-700">
+                        {t.programName}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">{t.services.map(s => s.serviceName).join(', ')}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{t.date} · {t.staffName}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {t.treatmentDetails || t.programName || '시술 내역 없음'}
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
+                  </p>
                   {t.skinCondition && (
                     <p className="text-[11px] text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
                   )}
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-bold text-gray-900">{t.totalAmount.toLocaleString()}원</p>
-                  {t.usedPoints > 0 && <p className="text-[11px] text-orange-500">-{t.usedPoints.toLocaleString()}P 사용</p>}
-                  <p className="text-[11px] text-green-500">+{t.earnedPoints.toLocaleString()}P 적립</p>
+                  <p className="text-sm font-medium text-gray-600">{t.sessionsUsed}회차</p>
                 </div>
                 <ChevronRight size={16} className="text-gray-300 mt-1 flex-shrink-0" />
               </button>
@@ -83,29 +103,97 @@ export default function Treatments() {
         </div>
       </div>
 
-      {showAddModal && <AddTreatmentModal onClose={() => setShowAddModal(false)} />}
-      {selected && <TreatmentDetailModal treatment={selected} onClose={() => setSelected(null)} />}
+      {showAddModal && (
+        <AddTreatmentModal
+          onClose={() => setShowAddModal(false)}
+          onSave={() => {
+            setShowAddModal(false);
+            loadLogs();
+          }}
+        />
+      )}
+      {selected && (
+        <TreatmentDetailModal
+          treatment={selected}
+          onClose={() => setSelected(null)}
+          onDelete={handleDelete}
+        />
+      )}
     </div>
   );
 }
 
-function AddTreatmentModal({ onClose }: { onClose: () => void }) {
+function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+  const customers = CustomerStore.getAll();
+  const staff = StaffStore.getAll();
+  const services = ServiceStore.getAll();
+
+  const [customerId, setCustomerId] = useState('');
+  const [staffName, setStaffName] = useState('');
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [treatmentDetails, setTreatmentDetails] = useState('');
+  const [skinCondition, setSkinCondition] = useState('');
+  const [staffNotes, setStaffNotes] = useState('');
+  const [nextAppointment, setNextAppointment] = useState('');
+
+  const toggleService = (name: string) => {
+    setSelectedServices(prev =>
+      prev.includes(name) ? prev.filter(s => s !== name) : [...prev, name]
+    );
+  };
+
+  const handleSave = () => {
+    if (!customerId) return;
+
+    const customer = customers.find(c => c.id === customerId);
+    if (!customer) return;
+
+    const details = treatmentDetails || selectedServices.join(', ') || undefined;
+
+    TreatmentLogStore.save({
+      customerId,
+      customerName: customer.name,
+      staffName: staffName || undefined,
+      treatmentDate: new Date().toISOString().slice(0, 10),
+      treatmentTime: new Date().toTimeString().slice(0, 5),
+      sessionsUsed: 1,
+      treatmentDetails: details,
+      skinCondition: skinCondition || undefined,
+      staffNotes: staffNotes || undefined,
+      nextAppointment: nextAppointment || undefined,
+    });
+
+    onSave();
+  };
+
   return (
     <Modal isOpen={true} onClose={onClose} title="시술 기록 추가" size="xl">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
-            <select className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300">
+            <select
+              value={customerId}
+              onChange={e => setCustomerId(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            >
               <option value="">고객 선택</option>
-              {mockCustomers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
+              {customers.map(c => (
+                <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+              ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원 *</label>
-            <select className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300">
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원</label>
+            <select
+              value={staffName}
+              onChange={e => setStaffName(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            >
               <option value="">직원 선택</option>
-              {mockStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {staff.map(s => (
+                <option key={s.id} value={s.name}>{s.name}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -113,9 +201,14 @@ function AddTreatmentModal({ onClose }: { onClose: () => void }) {
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 항목</label>
           <div className="space-y-2">
-            {mockServices.slice(0, 4).map(s => (
+            {services.map(s => (
               <label key={s.id} className="flex items-center gap-3 p-2.5 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">
-                <input type="checkbox" className="rounded text-purple-500" />
+                <input
+                  type="checkbox"
+                  checked={selectedServices.includes(s.name)}
+                  onChange={() => toggleService(s.name)}
+                  className="rounded text-purple-500"
+                />
                 <span className="text-sm text-gray-700 flex-1">{s.name}</span>
                 <span className="text-sm font-medium text-gray-800">{s.price.toLocaleString()}원</span>
               </label>
@@ -123,35 +216,47 @@ function AddTreatmentModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">결제 수단</label>
-            <select className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300">
-              <option value="카드">카드</option>
-              <option value="현금">현금</option>
-              <option value="계좌이체">계좌이체</option>
-              <option value="혼합">혼합</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">포인트 사용</label>
-            <input type="number" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300" placeholder="0" />
-          </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 상세 내용</label>
+          <textarea
+            rows={2}
+            value={treatmentDetails}
+            onChange={e => setTreatmentDetails(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            placeholder="시술 내용을 상세히 기록하세요 (비워두면 선택한 시술 항목으로 자동 기록)"
+          />
         </div>
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">피부 상태</label>
-          <input type="text" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300" placeholder="예: 건조함, 트러블, 모공 확장 등" />
+          <input
+            type="text"
+            value={skinCondition}
+            onChange={e => setSkinCondition(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            placeholder="예: 건조함, 트러블, 모공 확장 등"
+          />
         </div>
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">다음 방문 권장일</label>
-          <input type="date" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300" />
+          <input
+            type="date"
+            value={nextAppointment}
+            onChange={e => setNextAppointment(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+          />
         </div>
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">메모</label>
-          <textarea rows={3} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" placeholder="시술 특이사항, 다음 방문 시 주의사항 등" />
+          <textarea
+            rows={3}
+            value={staffNotes}
+            onChange={e => setStaffNotes(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            placeholder="시술 특이사항, 다음 방문 시 주의사항 등"
+          />
         </div>
 
         <div>
@@ -164,14 +269,35 @@ function AddTreatmentModal({ onClose }: { onClose: () => void }) {
 
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
-          <button className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-md">저장</button>
+          <button
+            onClick={handleSave}
+            disabled={!customerId}
+            className={clsx(
+              'flex-1 py-2.5 text-sm font-medium text-white rounded-xl transition-all shadow-md',
+              customerId
+                ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
+                : 'bg-gray-300 cursor-not-allowed'
+            )}
+          >
+            저장
+          </button>
         </div>
       </div>
     </Modal>
   );
 }
 
-function TreatmentDetailModal({ treatment: t, onClose }: { treatment: TreatmentRecord; onClose: () => void }) {
+function TreatmentDetailModal({
+  treatment: t,
+  onClose,
+  onDelete,
+}: {
+  treatment: TreatmentLog;
+  onClose: () => void;
+  onDelete: (id: string) => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   return (
     <Modal isOpen={true} onClose={onClose} title="시술 기록 상세" size="lg">
       <div className="space-y-4">
@@ -179,34 +305,31 @@ function TreatmentDetailModal({ treatment: t, onClose }: { treatment: TreatmentR
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
             <span className="text-white text-lg font-bold">{t.customerName[0]}</span>
           </div>
-          <div>
+          <div className="flex-1">
             <p className="font-bold text-gray-900 text-base">{t.customerName}</p>
-            <p className="text-xs text-gray-400">{t.date} · {t.staffName}</p>
+            <p className="text-xs text-gray-400">
+              {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
+            </p>
           </div>
         </div>
 
-        <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">시술 내역</p>
-          {t.services.map((s, i) => (
-            <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-              <span className="text-sm text-gray-700">{s.serviceName}</span>
-              <span className="text-sm font-semibold text-gray-800">{s.price.toLocaleString()}원</span>
+        {(t.treatmentDetails || t.programName) && (
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">시술 내역</p>
+            <div className="bg-gray-50 rounded-xl p-3">
+              <p className="text-sm text-gray-700">{t.treatmentDetails || t.programName}</p>
             </div>
-          ))}
-          <div className="flex items-center justify-between py-2 mt-1 bg-purple-50 rounded-xl px-3">
-            <span className="text-sm font-bold text-gray-800">합계</span>
-            <span className="text-sm font-bold text-purple-600">{t.totalAmount.toLocaleString()}원</span>
           </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-[11px] text-gray-400 mb-0.5">결제 수단</p>
-            <p className="text-sm font-semibold text-gray-800">{t.paymentMethod}</p>
+            <p className="text-[11px] text-gray-400 mb-0.5">사용 회차</p>
+            <p className="text-sm font-semibold text-gray-800">{t.sessionsUsed}회</p>
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-[11px] text-gray-400 mb-0.5">포인트</p>
-            <p className="text-sm font-semibold text-gray-800">사용 {t.usedPoints.toLocaleString()}P · 적립 {t.earnedPoints.toLocaleString()}P</p>
+            <p className="text-[11px] text-gray-400 mb-0.5">시술일</p>
+            <p className="text-sm font-semibold text-gray-800">{t.treatmentDate}</p>
           </div>
         </div>
 
@@ -217,19 +340,41 @@ function TreatmentDetailModal({ treatment: t, onClose }: { treatment: TreatmentR
           </div>
         )}
 
-        {t.memo && (
+        {t.staffNotes && (
           <div>
             <p className="text-xs font-medium text-gray-500 mb-1">메모</p>
-            <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">{t.memo}</p>
+            <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">{t.staffNotes}</p>
           </div>
         )}
 
-        {t.nextVisitRecommended && (
+        {t.nextAppointment && (
           <div className="flex items-center gap-2 bg-green-50 rounded-xl p-3">
             <ClipboardList size={14} className="text-green-600" />
-            <p className="text-sm text-green-700">다음 방문 권장: <strong>{t.nextVisitRecommended}</strong></p>
+            <p className="text-sm text-green-700">다음 방문 권장: <strong>{t.nextAppointment}</strong></p>
           </div>
         )}
+
+        <div className="flex gap-3 pt-2">
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
+            >
+              <Trash2 size={14} />
+              삭제
+            </button>
+          ) : (
+            <button
+              onClick={() => onDelete(t.id)}
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors"
+            >
+              <Trash2 size={14} />
+              정말 삭제
+            </button>
+          )}
+          <div className="flex-1" />
+          <button onClick={onClose} className="px-6 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">닫기</button>
+        </div>
       </div>
     </Modal>
   );

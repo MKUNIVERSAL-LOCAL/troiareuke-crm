@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock } from 'lucide-react';
-import { format, addDays, subDays, startOfWeek, addWeeks, subWeeks, isSameDay, parseISO } from 'date-fns';
+import { useState, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2 } from 'lucide-react';
+import { format, addDays, subDays, startOfWeek, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
-import { mockReservations, mockStaff, mockServices, mockCustomers } from '../../data/mockData';
-import type { Reservation } from '../../types';
+import { ReservationStore, StaffStore, ServiceStore, CustomerStore } from '../../lib/store';
+import type { Reservation, Staff, Service, Customer } from '../../types';
 import clsx from 'clsx';
 
 const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
@@ -15,9 +15,15 @@ type ViewMode = 'week' | 'day' | 'list';
 
 export default function Reservations() {
   const [viewMode, setViewMode] = useState<ViewMode>('week');
-  const [currentDate, setCurrentDate] = useState(new Date('2026-03-06'));
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+  const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
+  const [staffList] = useState<Staff[]>(() => StaffStore.getAll());
+
+  const reloadReservations = useCallback(() => {
+    setReservations(ReservationStore.getAll());
+  }, []);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -28,6 +34,21 @@ export default function Reservations() {
     } else {
       setCurrentDate(dir === 'prev' ? subDays(currentDate, 1) : addDays(currentDate, 1));
     }
+  };
+
+  const handleSaveReservation = () => {
+    reloadReservations();
+    setShowAddModal(false);
+  };
+
+  const handleUpdateReservation = () => {
+    reloadReservations();
+    setSelectedReservation(null);
+  };
+
+  const handleDeleteReservation = () => {
+    reloadReservations();
+    setSelectedReservation(null);
   };
 
   return (
@@ -45,7 +66,7 @@ export default function Reservations() {
             <button onClick={() => navigate('prev')} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
               <ChevronLeft size={18} className="text-gray-600" />
             </button>
-            <button onClick={() => setCurrentDate(new Date('2026-03-06'))} className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2">
+            <button onClick={() => setCurrentDate(new Date())} className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2">
               <RefreshCw size={14} /> 오늘
             </button>
             <button onClick={() => navigate('next')} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
@@ -88,30 +109,39 @@ export default function Reservations() {
 
         {/* Calendar Views */}
         {viewMode === 'week' && (
-          <WeekView weekDays={weekDays} reservations={mockReservations} onSelect={setSelectedReservation} />
+          <WeekView weekDays={weekDays} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} />
         )}
         {viewMode === 'day' && (
-          <DayView date={currentDate} reservations={mockReservations} onSelect={setSelectedReservation} />
+          <DayView date={currentDate} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} />
         )}
         {viewMode === 'list' && (
-          <ListView reservations={mockReservations} onSelect={setSelectedReservation} />
+          <ListView reservations={reservations} onSelect={setSelectedReservation} />
         )}
       </div>
 
-      {showAddModal && <AddReservationModal onClose={() => setShowAddModal(false)} />}
+      {showAddModal && (
+        <AddReservationModal onClose={() => setShowAddModal(false)} onSave={handleSaveReservation} />
+      )}
       {selectedReservation && (
-        <ReservationDetailModal reservation={selectedReservation} onClose={() => setSelectedReservation(null)} />
+        <ReservationDetailModal
+          reservation={selectedReservation}
+          onClose={() => setSelectedReservation(null)}
+          onUpdate={handleUpdateReservation}
+          onDelete={handleDeleteReservation}
+        />
       )}
     </div>
   );
 }
 
-function WeekView({ weekDays, reservations, onSelect }: {
+function WeekView({ weekDays, reservations, staffList, onSelect }: {
   weekDays: Date[];
   reservations: Reservation[];
+  staffList: Staff[];
   onSelect: (r: Reservation) => void;
 }) {
   const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+  const today = new Date();
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -119,7 +149,7 @@ function WeekView({ weekDays, reservations, onSelect }: {
       <div className="grid grid-cols-8 border-b border-gray-100">
         <div className="py-3 px-3 text-xs text-gray-400 text-center border-r border-gray-100">시간</div>
         {weekDays.map((day, i) => {
-          const isToday = isSameDay(day, new Date('2026-03-06'));
+          const isToday = isSameDay(day, today);
           const dayReservations = reservations.filter(r => isSameDay(parseISO(r.date), day));
           return (
             <div key={i} className={clsx('py-3 px-2 text-center border-r border-gray-100 last:border-r-0', isToday && 'bg-purple-50')}>
@@ -145,7 +175,7 @@ function WeekView({ weekDays, reservations, onSelect }: {
               {time}
             </div>
             {weekDays.map((day, di) => {
-              const isToday = isSameDay(day, new Date('2026-03-06'));
+              const isToday = isSameDay(day, today);
               const slotReservations = reservations.filter(r =>
                 isSameDay(parseISO(r.date), day) && r.startTime === time
               );
@@ -155,7 +185,7 @@ function WeekView({ weekDays, reservations, onSelect }: {
                   isToday && 'bg-purple-50/30'
                 )}>
                   {slotReservations.map(r => {
-                    const staff = mockStaff.find(s => s.id === r.staffId);
+                    const staff = staffList.find(s => s.id === r.staffId);
                     return (
                       <button
                         key={r.id}
@@ -178,9 +208,10 @@ function WeekView({ weekDays, reservations, onSelect }: {
   );
 }
 
-function DayView({ date, reservations, onSelect }: {
+function DayView({ date, reservations, staffList, onSelect }: {
   date: Date;
   reservations: Reservation[];
+  staffList: Staff[];
   onSelect: (r: Reservation) => void;
 }) {
   const dayReservations = reservations.filter(r => isSameDay(parseISO(r.date), date));
@@ -190,7 +221,7 @@ function DayView({ date, reservations, onSelect }: {
       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
         <p className="text-sm font-bold text-gray-800">{dayReservations.length}건의 예약</p>
         <div className="flex items-center gap-3">
-          {mockStaff.map(s => (
+          {staffList.map(s => (
             <div key={s.id} className="flex items-center gap-1.5 text-xs text-gray-600">
               <span className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }}></span>
               {s.name}
@@ -208,7 +239,7 @@ function DayView({ date, reservations, onSelect }: {
               </div>
               <div className="flex-1 p-2 flex gap-2 flex-wrap">
                 {slotRes.map(r => {
-                  const staff = mockStaff.find(s => s.id === r.staffId);
+                  const staff = staffList.find(s => s.id === r.staffId);
                   return (
                     <button
                       key={r.id}
@@ -270,62 +301,148 @@ function ListView({ reservations, onSelect }: { reservations: Reservation[]; onS
   );
 }
 
-function AddReservationModal({ onClose }: { onClose: () => void }) {
+function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+  const customers = CustomerStore.getAll();
+  const staffList = StaffStore.getAll();
+  const services = ServiceStore.getAll().filter(s => s.isActive);
+
+  const [customerId, setCustomerId] = useState('');
+  const [staffId, setStaffId] = useState('');
+  const [serviceId, setServiceId] = useState('');
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startTime, setStartTime] = useState('10:00');
+  const [source, setSource] = useState<Reservation['source']>('manual');
+  const [memo, setMemo] = useState('');
+
+  const handleSave = () => {
+    if (!customerId || !staffId || !serviceId) return;
+
+    const customer = customers.find(c => c.id === customerId);
+    const staff = staffList.find(s => s.id === staffId);
+    const service = services.find(s => s.id === serviceId);
+    if (!customer || !staff || !service) return;
+
+    // Calculate endTime from service duration
+    const [h, m] = startTime.split(':').map(Number);
+    const startDate = new Date(2000, 0, 1, h, m);
+    const endDate = addMinutes(startDate, service.duration);
+    const endTime = format(endDate, 'HH:mm');
+
+    const reservation: Omit<Reservation, 'id'> = {
+      customerId: customer.id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      staffId: staff.id,
+      staffName: staff.name,
+      services: [{
+        serviceId: service.id,
+        serviceName: service.name,
+        price: service.price,
+        duration: service.duration,
+      }],
+      date,
+      startTime,
+      endTime,
+      status: 'confirmed',
+      source,
+      memo: memo || undefined,
+      totalPrice: service.price,
+    };
+
+    ReservationStore.save(reservation);
+    onSave();
+  };
+
   return (
     <Modal isOpen={true} onClose={onClose} title="예약 추가" size="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
-            <select className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300">
+            <select
+              value={customerId}
+              onChange={e => setCustomerId(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            >
               <option value="">고객 선택</option>
-              {mockCustomers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
+              {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원 *</label>
-            <select className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300">
+            <select
+              value={staffId}
+              onChange={e => setStaffId(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            >
               <option value="">직원 선택</option>
-              {mockStaff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
+              {staffList.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
             </select>
           </div>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 *</label>
-          <select className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300">
+          <select
+            value={serviceId}
+            onChange={e => setServiceId(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+          >
             <option value="">시술 선택</option>
-            {mockServices.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {s.price.toLocaleString()}원)</option>)}
+            {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {s.price.toLocaleString()}원)</option>)}
           </select>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">날짜 *</label>
-            <input type="date" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300" defaultValue="2026-03-06" />
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">시작 시간 *</label>
-            <select className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300">
+            <select
+              value={startTime}
+              onChange={e => setStartTime(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            >
               {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">예약 경로</label>
-            <select className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300">
+            <select
+              value={source}
+              onChange={e => setSource(e.target.value as Reservation['source'])}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            >
               <option value="manual">직접등록</option>
               <option value="naver">네이버</option>
               <option value="kakao">카카오</option>
               <option value="phone">전화</option>
               <option value="walk-in">워크인</option>
+              <option value="app">앱</option>
             </select>
           </div>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">메모</label>
-          <textarea rows={2} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none" placeholder="특이사항" />
+          <textarea
+            rows={2}
+            value={memo}
+            onChange={e => setMemo(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            placeholder="특이사항"
+          />
         </div>
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
-          <button className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-md">
+          <button
+            onClick={handleSave}
+            className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-md"
+          >
             예약 저장
           </button>
         </div>
@@ -334,7 +451,29 @@ function AddReservationModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ReservationDetailModal({ reservation: r, onClose }: { reservation: Reservation; onClose: () => void }) {
+function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete }: {
+  reservation: Reservation;
+  onClose: () => void;
+  onUpdate: () => void;
+  onDelete: () => void;
+}) {
+  const handleCancel = () => {
+    ReservationStore.updateStatus(r.id, 'cancelled');
+    onUpdate();
+  };
+
+  const handleComplete = () => {
+    ReservationStore.updateStatus(r.id, 'completed');
+    onUpdate();
+  };
+
+  const handleDelete = () => {
+    if (window.confirm('이 예약을 삭제하시겠습니까?')) {
+      ReservationStore.delete(r.id);
+      onDelete();
+    }
+  };
+
   return (
     <Modal isOpen={true} onClose={onClose} title="예약 상세" size="md">
       <div className="space-y-4">
@@ -388,8 +527,24 @@ function ReservationDetailModal({ reservation: r, onClose }: { reservation: Rese
         )}
 
         <div className="flex gap-2 pt-2">
-          <button className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소처리</button>
-          <button className="flex-1 py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors">완료처리</button>
+          <button
+            onClick={handleCancel}
+            className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+          >
+            취소처리
+          </button>
+          <button
+            onClick={handleComplete}
+            className="flex-1 py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
+          >
+            완료처리
+          </button>
+          <button
+            onClick={handleDelete}
+            className="py-2.5 px-3 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors flex items-center gap-1"
+          >
+            <Trash2 size={14} /> 삭제
+          </button>
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl">수정</button>
         </div>
       </div>
