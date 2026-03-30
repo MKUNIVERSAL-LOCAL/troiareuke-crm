@@ -20,10 +20,22 @@ export function getShopId(): string {
     const auth = localStorage.getItem('troiareuke_auth_user');
     if (auth) {
       const user = JSON.parse(auth);
+      if (user.role === 'superadmin') return 'superadmin';
       return user.branchId || user.id || 'default_shop';
     }
   } catch {}
   return 'default_shop';
+}
+
+function isSuperadmin(): boolean {
+  try {
+    const auth = localStorage.getItem('troiareuke_auth_user');
+    if (auth) {
+      const user = JSON.parse(auth);
+      return user.role === 'superadmin';
+    }
+  } catch {}
+  return false;
 }
 
 // ─── 유틸리티 ─────────────────────────────────────────────────
@@ -576,10 +588,12 @@ async function loadFromSupabase<T>(
   if (!isSupabaseConfigured) return null;
   try {
     const branchId = getShopId();
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .eq('branch_id', branchId);
+    let query = supabase.from(table).select('*');
+    // 슈퍼어드민이거나 branchId가 default_shop이면 전체 조회
+    if (branchId !== 'superadmin' && branchId !== 'default_shop') {
+      query = query.eq('branch_id', branchId);
+    }
+    const { data, error } = await query;
     if (error) {
       console.error(`[Store] ${table} 로드 실패:`, error.message);
       return null;
@@ -595,11 +609,11 @@ async function loadSettingsFromSupabase(): Promise<ShopSettings | null> {
   if (!isSupabaseConfigured) return null;
   try {
     const branchId = getShopId();
-    const { data, error } = await supabase
-      .from('shop_settings')
-      .select('*')
-      .eq('branch_id', branchId)
-      .single();
+    let query = supabase.from('shop_settings').select('*');
+    if (branchId !== 'superadmin' && branchId !== 'default_shop') {
+      query = query.eq('branch_id', branchId);
+    }
+    const { data, error } = await query.limit(1).single();
     if (error || !data) return null;
     return fromDbSettings(data);
   } catch {
@@ -687,7 +701,11 @@ export function resetStoreCache(): void {
 // ─── Supabase 비동기 쓰기 헬퍼 (fire-and-forget) ───────────────
 function sbInsert(table: string, row: Record<string, any>): void {
   if (!isSupabaseConfigured) return;
-  supabase.from(table).insert(row).then(({ error }) => {
+  // 슈퍼어드민이면 branch_id를 null로 처리
+  const insertRow = isSuperadmin() && row.branch_id === 'superadmin'
+    ? { ...row, branch_id: null }
+    : row;
+  supabase.from(table).insert(insertRow).then(({ error }) => {
     if (error) console.error(`[Store] ${table} insert 실패:`, error.message);
   });
 }

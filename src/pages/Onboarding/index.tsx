@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { StaffStore, ServiceStore } from '../../lib/store';
 
 const steps = [
   { icon: <Store size={20} />, label: '샵 정보', desc: '기본 정보 입력' },
@@ -40,6 +41,39 @@ export default function Onboarding() {
     setSelectedServices(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]);
 
   const finish = () => {
+    // 직원 목록 저장
+    staffList
+      .filter(s => s.name.trim() !== '')
+      .forEach(s => {
+        StaffStore.save({
+          name: s.name,
+          role: s.role,
+          phone: '',
+          specialty: [],
+          color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+          isActive: true,
+          hireDate: new Date().toISOString().split('T')[0],
+        });
+      });
+
+    // 선택된 시술 항목 파싱 후 저장
+    // 형식: '기본 피부관리 (90분 / 80,000원)'
+    selectedServices.forEach(s => {
+      const match = s.match(/^(.+?)\s*\((\d+)분\s*\/\s*([\d,]+)원\)$/);
+      if (match) {
+        const name = match[1].trim();
+        const duration = parseInt(match[2], 10);
+        const price = parseInt(match[3].replace(/,/g, ''), 10);
+        ServiceStore.save({
+          name,
+          category: '에스테틱',
+          duration,
+          price,
+          isActive: true,
+        });
+      }
+    });
+
     completeOnboarding({ shopName, shopType });
     navigate('/');
   };

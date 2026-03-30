@@ -216,7 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status: 'success',
       });
 
-      setUser(profile);
+      saveUser(profile);
     } else {
       // ── 로컬 폴백 로그인 ──
       await new Promise(r => setTimeout(r, 600));
