@@ -24,6 +24,8 @@ import Branches from './pages/Admin/Branches';
 import LoginLogs from './pages/Admin/LoginLogs';
 import AdminUsers from './pages/Admin/Users';
 import Subscriptions from './pages/Admin/Subscriptions';
+import Announcements from './pages/Admin/Announcements';
+import Statistics from './pages/Admin/Statistics';
 
 // ── 로딩 스피너 ─────────────────────────────────────────────────
 function LoadingScreen() {
@@ -84,8 +86,10 @@ function AppRoutes() {
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="branches" element={<Branches />} />
         <Route path="subscriptions" element={<Subscriptions />} />
+        <Route path="announcements" element={<Announcements />} />
         <Route path="login-logs" element={<LoginLogs />} />
         <Route path="users" element={<AdminUsers />} />
+        <Route path="statistics" element={<Statistics />} />
       </Route>
 
       {/* Protected CRM routes */}

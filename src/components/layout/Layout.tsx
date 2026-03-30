@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import UpdateBanner from '../ui/UpdateBanner';
+import AnnouncementBanner from '../ui/AnnouncementBanner';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -23,6 +24,8 @@ export default function Layout() {
       <main className="flex-1 lg:ml-64 min-h-screen overflow-x-hidden">
         {/* 업데이트 배너 */}
         <UpdateBanner />
+        {/* 공지사항 배너 */}
+        <AnnouncementBanner />
         {/* 모바일 상단 헤더 */}
         <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
           <button

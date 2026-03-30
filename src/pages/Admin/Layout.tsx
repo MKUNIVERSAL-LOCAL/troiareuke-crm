@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard } from 'lucide-react';
+import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -7,8 +7,10 @@ const adminNav = [
   { to: '/admin/dashboard', label: '관리자 대시보드', icon: LayoutDashboard },
   { to: '/admin/branches', label: '지점 관리', icon: Building2 },
   { to: '/admin/subscriptions', label: '구독/플랜 관리', icon: CreditCard },
+  { to: '/admin/announcements', label: '공지사항', icon: Megaphone },
   { to: '/admin/login-logs', label: '로그인 기록', icon: LogIn },
   { to: '/admin/users', label: '사용자 관리', icon: Users },
+  { to: '/admin/statistics', label: '통계 / 분석', icon: BarChart2 },
 ];
 
 export default function AdminLayout() {
