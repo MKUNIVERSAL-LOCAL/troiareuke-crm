@@ -14,7 +14,8 @@
     "electron:build:portable": "npm run build && electron-builder --win portable",
     "electron:build:dir": "npm run build && electron-builder --win --dir",
     "electron:zip": "npm run electron:build:dir && powershell -Command \"Remove-Item -Path 'release\\트로이아르케-CRM.zip' -ErrorAction SilentlyContinue; Compress-Archive -Path 'release\\win-unpacked\\*' -DestinationPath 'release\\트로이아르케-CRM.zip'; Write-Host '✅ ZIP 완료: release/트로이아르케-CRM.zip'\"",
-    "electron:release": "npm run build && electron-builder --win --publish always"
+    "electron:release": "npm run build && electron-builder --win --publish always",
+    "deploy": "cross-env DEPLOY_TARGET=ghpages npm run build && gh-pages -d dist"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",
@@ -36,6 +37,7 @@
     "cross-env": "^7.0.3",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
+    "gh-pages": "^6.3.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.2.2",
