@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles } from 'lucide-react';
+import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { StaffStore, ServiceStore } from '../../lib/store';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
+import type { SubscriptionPlan } from '../../types';
 
 const steps = [
   { icon: <Store size={20} />, label: '샵 정보', desc: '기본 정보 입력' },
   { icon: <Users size={20} />, label: '직원 설정', desc: '직원 등록' },
   { icon: <Scissors size={20} />, label: '시술 항목', desc: '메뉴 등록' },
   { icon: <Link2 size={20} />, label: '연동 설정', desc: '외부 서비스 연결' },
+  { icon: <CreditCard size={20} />, label: '플랜 선택', desc: '요금제 선택' },
   { icon: <CheckCircle size={20} />, label: '완료', desc: '시작 준비' },
 ];
 
@@ -22,6 +26,13 @@ const defaultServices = [
   '각질 관리 (45분 / 50,000원)',
 ];
 
+const planIcons: Record<string, React.ReactNode> = {
+  trial: <Star size={24} />,
+  starter: <Zap size={24} />,
+  pro: <Crown size={24} />,
+  enterprise: <Sparkles size={24} />,
+};
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const { completeOnboarding, user } = useAuth();
@@ -32,6 +43,9 @@ export default function Onboarding() {
   const [shopAddress, setShopAddress] = useState('');
   const [staffList, setStaffList] = useState([{ name: '', role: '원장' }]);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('trial');
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const addStaff = () => setStaffList(p => [...p, { name: '', role: '피부관리사' }]);
   const updateStaff = (i: number, k: string, v: string) =>
@@ -40,7 +54,83 @@ export default function Onboarding() {
   const toggleService = (s: string) =>
     setSelectedServices(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]);
 
-  const finish = () => {
+  // 구독 정보를 Supabase에 저장
+  const saveSubscription = async (plan: SubscriptionPlan, impUid?: string, merchantUid?: string, amount?: number) => {
+    if (!user) return;
+
+    const now = new Date();
+    const expiresAt = new Date(now);
+
+    if (plan === 'trial') {
+      expiresAt.setDate(expiresAt.getDate() + 14); // 14일 무료 체험
+    } else {
+      expiresAt.setMonth(expiresAt.getMonth() + 1); // 1개월
+    }
+
+    const subscriptionData = {
+      branch_id: user.branchId || user.id,
+      plan,
+      status: 'active',
+      started_at: now.toISOString(),
+      expires_at: expiresAt.toISOString(),
+      payment_method: plan === 'trial' ? null : 'card',
+      amount: amount || 0,
+      currency: 'KRW',
+      imp_uid: impUid || null,
+      merchant_uid: merchantUid || null,
+      notes: plan === 'trial' ? '14일 무료 체험' : `${plan} 플랜 결제`,
+    };
+
+    if (isSupabaseConfigured) {
+      const { error } = await supabase.from('subscriptions').insert(subscriptionData);
+      if (error) {
+        console.error('구독 저장 실패:', error);
+      }
+    }
+
+    // 로컬에도 저장
+    localStorage.setItem('troiareuke_subscription', JSON.stringify({
+      ...subscriptionData,
+      id: `sub_${Date.now()}`,
+      createdAt: now.toISOString(),
+    }));
+  };
+
+  // 플랜 선택 후 결제 처리
+  const handlePlanSelect = async (plan: PlanInfo) => {
+    setSelectedPlan(plan.id);
+    setPaymentError(null);
+
+    if (plan.id === 'trial' || plan.id === 'enterprise') {
+      // 무료 체험 또는 Enterprise는 바로 진행
+      setStep(5);
+      return;
+    }
+
+    // 유료 플랜: 결제 진행
+    setPaymentLoading(true);
+    try {
+      const result = await requestPayment({
+        planName: plan.name,
+        amount: plan.price,
+        buyerEmail: user?.email || '',
+        buyerName: user?.name || '',
+      });
+
+      if (result.success) {
+        await saveSubscription(plan.id, result.impUid, result.merchantUid, plan.price);
+        setStep(5);
+      } else {
+        setPaymentError(result.error || '결제에 실패했습니다. 다시 시도해주세요.');
+      }
+    } catch {
+      setPaymentError('결제 처리 중 오류가 발생했습니다.');
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const finish = async () => {
     // 직원 목록 저장
     staffList
       .filter(s => s.name.trim() !== '')
@@ -57,7 +147,6 @@ export default function Onboarding() {
       });
 
     // 선택된 시술 항목 파싱 후 저장
-    // 형식: '기본 피부관리 (90분 / 80,000원)'
     selectedServices.forEach(s => {
       const match = s.match(/^(.+?)\s*\((\d+)분\s*\/\s*([\d,]+)원\)$/);
       if (match) {
@@ -74,7 +163,12 @@ export default function Onboarding() {
       }
     });
 
-    completeOnboarding({ shopName, shopType });
+    // 구독 정보 저장 (무료 체험인 경우)
+    if (selectedPlan === 'trial' || selectedPlan === 'enterprise') {
+      await saveSubscription(selectedPlan);
+    }
+
+    await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
     navigate('/');
   };
 
@@ -92,7 +186,7 @@ export default function Onboarding() {
               <p className="text-[10px] text-gray-400">에스테틱 전용 CRM</p>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">안녕하세요, {user?.name}님! 👋</h1>
+          <h1 className="text-2xl font-bold text-gray-900">안녕하세요, {user?.name}님!</h1>
           <p className="text-sm text-gray-400 mt-1">에스테틱 샵 정보를 설정하고 CRM을 시작해보세요</p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
             <Sparkles size={12} className="text-[#1a3a8f]" />
@@ -111,7 +205,7 @@ export default function Onboarding() {
                 <p className={`text-[10px] font-medium hidden sm:block ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400'}`}>{s.label}</p>
               </div>
               {i < steps.length - 1 && (
-                <div className={`w-8 sm:w-16 h-0.5 mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />
+                <div className={`w-8 sm:w-12 h-0.5 mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />
               )}
             </div>
           ))}
@@ -217,22 +311,93 @@ export default function Onboarding() {
                   </div>
                 ))}
                 <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-600">
-                  💡 API 연동 가이드를 메뉴에서 확인하세요. 순서대로 따라하면 됩니다.
+                  API 연동 가이드를 메뉴에서 확인하세요. 순서대로 따라하면 됩니다.
                 </div>
               </div>
               <StepNav onPrev={() => setStep(2)} onNext={() => setStep(4)} />
             </StepWrapper>
           )}
 
-          {/* Step 4: 완료 */}
+          {/* Step 4: 플랜 선택 */}
           {step === 4 && (
+            <StepWrapper title="요금제 선택" subtitle="에스테틱 샵에 맞는 플랜을 선택하세요">
+              <div className="space-y-3">
+                {PLANS.filter(p => p.id !== 'enterprise').map(plan => (
+                  <button
+                    key={plan.id}
+                    onClick={() => handlePlanSelect(plan)}
+                    disabled={paymentLoading}
+                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                      selectedPlan === plan.id
+                        ? 'border-[#1a3a8f] bg-blue-50'
+                        : 'border-gray-100 hover:border-gray-200'
+                    } ${paymentLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        plan.id === 'trial' ? 'bg-gray-100 text-gray-500' :
+                        plan.id === 'starter' ? 'bg-blue-100 text-blue-600' :
+                        'bg-purple-100 text-purple-600'
+                      }`}>
+                        {planIcons[plan.id]}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-bold text-gray-900">{plan.name}</h3>
+                          <p className="text-sm font-bold text-[#1a3a8f]">
+                            {plan.price === 0 ? '무료' : `${plan.price.toLocaleString()}원/월`}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {plan.features.map(f => (
+                            <span key={f} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{f}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+
+                {paymentLoading && (
+                  <div className="flex items-center justify-center gap-2 py-4">
+                    <div className="w-5 h-5 border-2 border-[#1a3a8f] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm text-gray-500">결제 처리 중...</span>
+                  </div>
+                )}
+
+                {paymentError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                    {paymentError}
+                  </div>
+                )}
+
+                <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-600">
+                  모든 유료 플랜은 언제든지 변경하거나 취소할 수 있습니다. 무료 체험 기간 중에는 결제되지 않습니다.
+                </div>
+              </div>
+              <StepNav onPrev={() => setStep(3)} />
+            </StepWrapper>
+          )}
+
+          {/* Step 5: 완료 */}
+          {step === 5 && (
             <div className="p-8 text-center">
               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-200">
                 <CheckCircle size={36} className="text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">설정 완료! 🎉</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">설정 완료!</h2>
               <p className="text-gray-400 mb-2 text-sm">{shopName} 의 에스테틱 CRM이 준비되었습니다</p>
-              <p className="text-xs text-blue-500 mb-8 font-medium">14일 무료 체험이 시작됩니다</p>
+              <p className="text-xs text-blue-500 mb-2 font-medium">
+                {selectedPlan === 'trial'
+                  ? '14일 무료 체험이 시작됩니다'
+                  : `${PLANS.find(p => p.id === selectedPlan)?.name || ''} 플랜이 활성화되었습니다`}
+              </p>
+              {selectedPlan !== 'trial' && (
+                <p className="text-xs text-green-600 mb-6 font-medium flex items-center justify-center gap-1">
+                  <CheckCircle size={12} /> 결제가 성공적으로 완료되었습니다
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-3 mb-8 text-sm">
                 {['고객 관리 시작', '예약 등록', '직원 스케줄', 'AI 분석 챗봇'].map(f => (
                   <div key={f} className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl text-[#1a3a8f] font-medium">
@@ -241,7 +406,7 @@ export default function Onboarding() {
                 ))}
               </div>
               <button onClick={finish} className="w-full py-3.5 bg-[#1a3a8f] text-white font-bold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 text-base">
-                트로이아르케 에스테틱 CRM 시작하기 →
+                트로이아르케 에스테틱 CRM 시작하기
               </button>
             </div>
           )}

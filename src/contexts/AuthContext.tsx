@@ -37,7 +37,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (data: SignupData) => Promise<void>;
   logout: () => void;
-  completeOnboarding: (shopData: { shopName: string; shopType: string }) => void;
+  completeOnboarding: (shopData: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) => void;
   isAdminEmail: (email: string) => boolean;
 }
 
@@ -285,21 +285,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ── 온보딩 완료 ──────────────────────────────────────────────
-  const completeOnboarding = async (shopData: { shopName: string; shopType: string }) => {
+  const completeOnboarding = async (shopData: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) => {
     if (!user) return;
-    const updated = { ...user, ...shopData, isOnboarded: true };
+
+    let branchId = user.branchId;
 
     if (isSupabaseConfigured) {
-      await supabase.from('user_profiles').update({ is_onboarded: true }).eq('id', user.id);
-      // 지점 정보 업데이트 (branch_id가 있는 경우)
-      if (user.branchId) {
+      // 1) branches 테이블에 지점 생성 (없으면 새로 만듦)
+      if (!branchId) {
+        const { data: branchData, error: branchErr } = await supabase.from('branches').insert({
+          name: shopData.shopName,
+          owner_id: user.id,
+          phone: shopData.shopPhone || null,
+          address: shopData.shopAddress || null,
+          is_active: true,
+        }).select('id').single();
+
+        if (!branchErr && branchData) {
+          branchId = branchData.id;
+        }
+      } else {
+        // 이미 있으면 업데이트
         await supabase.from('branches').update({
           name: shopData.shopName,
-          shop_type: shopData.shopType,
-        }).eq('id', user.branchId);
+          phone: shopData.shopPhone || null,
+          address: shopData.shopAddress || null,
+        }).eq('id', branchId);
       }
+
+      // 2) user_profiles에 branch_id + is_onboarded 연결
+      await supabase.from('user_profiles').update({
+        is_onboarded: true,
+        branch_id: branchId,
+      }).eq('id', user.id);
     }
 
+    const updated = {
+      ...user,
+      ...shopData,
+      isOnboarded: true,
+      branchId: branchId || user.id,
+      branchName: shopData.shopName,
+    };
     saveUser(updated);
   };
 
