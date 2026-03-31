@@ -5,9 +5,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { TroiareukeLogo } from './Login';
 
 const plans = [
-  { key: 'trial', label: '14일 무료 체험', price: '무료', desc: '모든 기능 체험 가능', highlight: false },
-  { key: 'starter', label: 'Starter', price: '29,000원/월', desc: '1개 샵 · 직원 3명', highlight: true },
-  { key: 'pro', label: 'Pro', price: '59,000원/월', desc: '2개 샵 · 직원 무제한', highlight: false },
+  { key: 'trial', label: '14일 무료 체험', price: '무료', desc: '모든 기능 체험 가능', highlight: true, disabled: false },
+  { key: 'starter', label: 'Starter', price: '29,000원/월', desc: '1개 샵 · 직원 3명', highlight: false, disabled: true },
+  { key: 'pro', label: 'Pro', price: '59,000원/월', desc: '2개 샵 · 직원 무제한', highlight: false, disabled: true },
 ];
 
 export default function Signup() {
@@ -93,20 +93,21 @@ export default function Signup() {
               <h2 className="text-xl font-bold text-gray-900 mb-6">플랜 선택 및 약관 동의</h2>
               <div className="space-y-3 mb-6">
                 {plans.map(p => (
-                  <div key={p.key} className={`p-4 rounded-2xl border-2 transition-all ${p.highlight ? 'border-[#1a3a8f] bg-blue-50' : 'border-gray-100'}`}>
+                  <div key={p.key} className={`p-4 rounded-2xl border-2 transition-all ${p.highlight ? 'border-[#1a3a8f] bg-blue-50' : 'border-gray-100'} ${p.disabled ? 'opacity-50' : ''}`}>
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-bold text-gray-900">{p.label}</p>
-                          {p.highlight && <span className="px-2 py-0.5 bg-[#1a3a8f] text-white rounded-full text-[10px] font-bold">추천</span>}
+                          {p.highlight && <span className="px-2 py-0.5 bg-[#1a3a8f] text-white rounded-full text-[10px] font-bold">선택됨</span>}
+                          {p.disabled && <span className="px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full text-[10px] font-bold">준비 중</span>}
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">{p.desc}</p>
                       </div>
-                      <p className="text-sm font-bold text-[#1a3a8f]">{p.price}</p>
+                      <p className={`text-sm font-bold ${p.disabled ? 'text-gray-400' : 'text-[#1a3a8f]'}`}>{p.price}</p>
                     </div>
                   </div>
                 ))}
-                <p className="text-xs text-gray-400 text-center">체험 종료 후 플랜을 선택하시면 됩니다</p>
+                <p className="text-xs text-gray-400 text-center">14일 무료 체험 후 유료 플랜으로 전환할 수 있습니다</p>
               </div>
               <div className="space-y-3 mb-6">
                 {['이용약관에 동의합니다 (필수)', '개인정보 처리방침에 동의합니다 (필수)', '마케팅 정보 수신에 동의합니다 (선택)'].map((t, i) => (
