@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2 } from 'lucide-react';
+import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore } from '../../lib/store';
-import type { ShopSettings, Service } from '../../types';
+import type { ShopSettings, Service, Subscription } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import clsx from 'clsx';
 
-type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours';
+type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription';
 
 const tabs = [
   { key: 'shop' as SettingTab, label: '샵 정보', icon: <Store size={16} /> },
@@ -13,6 +16,7 @@ const tabs = [
   { key: 'integrations' as SettingTab, label: '연동 설정', icon: <Link2 size={16} /> },
   { key: 'notifications' as SettingTab, label: '알림 설정', icon: <Bell size={16} /> },
   { key: 'services' as SettingTab, label: '시술 관리', icon: <Palette size={16} /> },
+  { key: 'subscription' as SettingTab, label: '구독/플랜', icon: <CreditCard size={16} /> },
 ];
 
 const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
@@ -22,10 +26,178 @@ const shopTypeOptions = ['피부관리실', '에스테틱샵', '메디컬 에스
 const emptyServiceForm = { name: '', category: '', duration: 60, price: 0, description: '' };
 
 export default function Settings() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<SettingTab>('shop');
   const [settings, setSettings] = useState<ShopSettings>(() => SettingsStore.get());
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
   const [saved, setSaved] = useState<string | null>(null);
+
+  // Subscription state
+  const [currentSubscription, setCurrentSubscription] = useState<Subscription | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [planChangeLoading, setPlanChangeLoading] = useState(false);
+  const [planChangeError, setPlanChangeError] = useState<string | null>(null);
+
+  // Load subscription data
+  useEffect(() => {
+    loadSubscription();
+  }, []);
+
+  const loadSubscription = async () => {
+    setSubscriptionLoading(true);
+    try {
+      if (isSupabaseConfigured && user?.branchId) {
+        const { data } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('branch_id', user.branchId)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (data) {
+          setCurrentSubscription({
+            id: data.id,
+            branchId: data.branch_id,
+            plan: data.plan,
+            status: data.status,
+            startedAt: data.started_at,
+            expiresAt: data.expires_at,
+            paymentMethod: data.payment_method,
+            amount: data.amount,
+            currency: data.currency,
+            impUid: data.imp_uid,
+            merchantUid: data.merchant_uid,
+            customerUid: data.customer_uid,
+            notes: data.notes,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+          });
+        }
+      }
+
+      // 로컬 스토리지 폴백
+      if (!currentSubscription) {
+        const stored = localStorage.getItem('troiareuke_subscription');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            setCurrentSubscription({
+              id: parsed.id || 'local',
+              branchId: parsed.branch_id || user?.branchId || '',
+              plan: parsed.plan || user?.plan || 'trial',
+              status: parsed.status || 'active',
+              startedAt: parsed.started_at || new Date().toISOString(),
+              expiresAt: parsed.expires_at || new Date(Date.now() + 14 * 86400000).toISOString(),
+              paymentMethod: parsed.payment_method,
+              amount: parsed.amount,
+              currency: parsed.currency,
+              impUid: parsed.imp_uid,
+              merchantUid: parsed.merchant_uid,
+              notes: parsed.notes,
+            });
+          } catch { /* ignore */ }
+        }
+      }
+    } catch {
+      // 에러 시 user 정보에서 기본값
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  };
+
+  const handlePlanChange = async (plan: PlanInfo) => {
+    if (plan.id === currentSubscription?.plan) return;
+    if (plan.id === 'enterprise') return; // Enterprise는 문의 필요
+    setPlanChangeError(null);
+
+    if (plan.id === 'trial') {
+      // 유료 → 무료로의 다운그레이드
+      setPlanChangeLoading(true);
+      try {
+        const now = new Date();
+        const expiresAt = new Date(now);
+        expiresAt.setDate(expiresAt.getDate() + 14);
+
+        const subData = {
+          branch_id: user?.branchId || user?.id || '',
+          plan: plan.id,
+          status: 'active' as const,
+          started_at: now.toISOString(),
+          expires_at: expiresAt.toISOString(),
+          amount: 0,
+          currency: 'KRW',
+          notes: '무료 체험 전환',
+        };
+
+        if (isSupabaseConfigured && user?.branchId) {
+          // 기존 구독 만료 처리
+          if (currentSubscription?.id) {
+            await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
+          }
+          await supabase.from('subscriptions').insert(subData);
+        }
+
+        localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
+        await loadSubscription();
+        flash('플랜이 변경되었습니다');
+      } catch {
+        setPlanChangeError('플랜 변경에 실패했습니다.');
+      } finally {
+        setPlanChangeLoading(false);
+      }
+      return;
+    }
+
+    // 유료 플랜 결제
+    setPlanChangeLoading(true);
+    try {
+      const result = await requestPayment({
+        planName: plan.name,
+        amount: plan.price,
+        buyerEmail: user?.email || '',
+        buyerName: user?.name || '',
+      });
+
+      if (result.success) {
+        const now = new Date();
+        const expiresAt = new Date(now);
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+
+        const subData = {
+          branch_id: user?.branchId || user?.id || '',
+          plan: plan.id,
+          status: 'active' as const,
+          started_at: now.toISOString(),
+          expires_at: expiresAt.toISOString(),
+          payment_method: 'card',
+          amount: plan.price,
+          currency: 'KRW',
+          imp_uid: result.impUid,
+          merchant_uid: result.merchantUid,
+          notes: `${plan.name} 플랜 결제`,
+        };
+
+        if (isSupabaseConfigured && user?.branchId) {
+          if (currentSubscription?.id) {
+            await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
+          }
+          await supabase.from('subscriptions').insert(subData);
+        }
+
+        localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
+        await loadSubscription();
+        flash('플랜이 변경되었습니다');
+      } else {
+        setPlanChangeError(result.error || '결제에 실패했습니다.');
+      }
+    } catch {
+      setPlanChangeError('결제 처리 중 오류가 발생했습니다.');
+    } finally {
+      setPlanChangeLoading(false);
+    }
+  };
 
   // Service modal
   const [showServiceModal, setShowServiceModal] = useState(false);
@@ -570,6 +742,142 @@ export default function Settings() {
                   ))}
                 </div>
               </SettingCard>
+            )}
+
+            {tab === 'subscription' && (
+              <div className="space-y-4">
+                {/* 현재 플랜 */}
+                <SettingCard title="현재 구독 플랜">
+                  {subscriptionLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100">
+                        <div className="w-12 h-12 rounded-xl bg-purple-500 text-white flex items-center justify-center">
+                          {currentSubscription?.plan === 'pro' ? <Crown size={24} /> :
+                           currentSubscription?.plan === 'starter' ? <Zap size={24} /> :
+                           <Star size={24} />}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-base font-bold text-gray-900">
+                            {PLANS.find(p => p.id === (currentSubscription?.plan || user?.plan))?.name || '무료 체험'}
+                          </h3>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {currentSubscription?.plan === 'trial'
+                              ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? new Date(currentSubscription.expiresAt).toLocaleDateString('ko-KR') : '알 수 없음'})`
+                              : currentSubscription?.amount
+                                ? `${currentSubscription.amount.toLocaleString()}원/월`
+                                : '활성 상태'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                          <CheckCircle size={12} />
+                          {currentSubscription?.status === 'active' ? '활성' : currentSubscription?.status || '활성'}
+                        </div>
+                      </div>
+
+                      {currentSubscription && (
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="p-3 bg-gray-50 rounded-xl">
+                            <p className="text-xs text-gray-400">시작일</p>
+                            <p className="font-medium text-gray-700">
+                              {currentSubscription.startedAt ? new Date(currentSubscription.startedAt).toLocaleDateString('ko-KR') : '-'}
+                            </p>
+                          </div>
+                          <div className="p-3 bg-gray-50 rounded-xl">
+                            <p className="text-xs text-gray-400">만료일</p>
+                            <p className="font-medium text-gray-700">
+                              {currentSubscription.expiresAt ? new Date(currentSubscription.expiresAt).toLocaleDateString('ko-KR') : '-'}
+                            </p>
+                          </div>
+                          {currentSubscription.paymentMethod && (
+                            <div className="p-3 bg-gray-50 rounded-xl">
+                              <p className="text-xs text-gray-400">결제 수단</p>
+                              <p className="font-medium text-gray-700">{currentSubscription.paymentMethod === 'card' ? '신용카드' : currentSubscription.paymentMethod}</p>
+                            </div>
+                          )}
+                          {currentSubscription.impUid && (
+                            <div className="p-3 bg-gray-50 rounded-xl">
+                              <p className="text-xs text-gray-400">결제 ID</p>
+                              <p className="font-medium text-gray-700 text-xs truncate">{currentSubscription.impUid}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </SettingCard>
+
+                {/* 플랜 변경 */}
+                <SettingCard title="플랜 변경">
+                  <p className="text-sm text-gray-500 mb-4">필요에 맞는 플랜으로 변경하세요.</p>
+                  <div className="space-y-3">
+                    {PLANS.filter(p => p.id !== 'enterprise').map(plan => {
+                      const isCurrent = plan.id === (currentSubscription?.plan || user?.plan || 'trial');
+                      return (
+                        <div
+                          key={plan.id}
+                          className={clsx(
+                            'p-4 rounded-xl border-2 transition-all',
+                            isCurrent ? 'border-purple-300 bg-purple-50' : 'border-gray-100 hover:border-gray-200'
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={clsx(
+                              'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
+                              plan.id === 'trial' ? 'bg-gray-100 text-gray-500' :
+                              plan.id === 'starter' ? 'bg-blue-100 text-blue-600' :
+                              'bg-purple-100 text-purple-600'
+                            )}>
+                              {plan.id === 'pro' ? <Crown size={20} /> :
+                               plan.id === 'starter' ? <Zap size={20} /> :
+                               <Star size={20} />}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-bold text-gray-900">
+                                  {plan.name}
+                                  {isCurrent && <span className="ml-2 text-xs font-medium text-purple-600">(현재 플랜)</span>}
+                                </h4>
+                                <p className="text-sm font-bold text-purple-700">
+                                  {plan.price === 0 ? '무료' : `${plan.price.toLocaleString()}원/월`}
+                                </p>
+                              </div>
+                              <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {plan.features.map(f => (
+                                  <span key={f} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{f}</span>
+                                ))}
+                              </div>
+                            </div>
+                            {!isCurrent && (
+                              <button
+                                onClick={() => handlePlanChange(plan)}
+                                disabled={planChangeLoading}
+                                className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                              >
+                                {planChangeLoading ? '처리 중...' : plan.price > 0 ? '결제하기' : '변경하기'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {planChangeError && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                      {planChangeError}
+                    </div>
+                  )}
+
+                  <div className="mt-4 p-3 bg-blue-50 rounded-xl text-xs text-blue-600">
+                    Enterprise 플랜은 별도 문의가 필요합니다. support@troiareuke.com 으로 문의해주세요.
+                  </div>
+                </SettingCard>
+              </div>
             )}
           </div>
         </div>

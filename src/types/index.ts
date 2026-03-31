@@ -279,3 +279,28 @@ export interface DailySales {
   totalRevenue: number;
   paymentCount: number;
 }
+
+// =============================================
+// 구독/결제 타입
+// =============================================
+
+export type SubscriptionPlan = 'trial' | 'starter' | 'pro' | 'enterprise';
+export type SubscriptionStatus = 'active' | 'expired' | 'cancelled' | 'pending';
+
+export interface Subscription {
+  id: string;
+  branchId: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  startedAt: string;
+  expiresAt: string;
+  paymentMethod?: string;
+  amount?: number;
+  currency?: string;
+  impUid?: string;
+  merchantUid?: string;
+  customerUid?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
