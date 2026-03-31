@@ -318,65 +318,52 @@ export default function Onboarding() {
             </StepWrapper>
           )}
 
-          {/* Step 4: 플랜 선택 */}
+          {/* Step 4: 플랜 선택 (현재 무료 체험만 가능) */}
           {step === 4 && (
-            <StepWrapper title="요금제 선택" subtitle="에스테틱 샵에 맞는 플랜을 선택하세요">
+            <StepWrapper title="요금제 선택" subtitle="14일 무료 체험으로 시작합니다">
               <div className="space-y-3">
-                {PLANS.filter(p => p.id !== 'enterprise').map(plan => (
-                  <button
-                    key={plan.id}
-                    onClick={() => handlePlanSelect(plan)}
-                    disabled={paymentLoading}
-                    className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                      selectedPlan === plan.id
-                        ? 'border-[#1a3a8f] bg-blue-50'
-                        : 'border-gray-100 hover:border-gray-200'
-                    } ${paymentLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
+                {/* 무료 체험 - 선택됨 */}
+                <div className="w-full text-left p-4 rounded-xl border-2 border-[#1a3a8f] bg-blue-50">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#1a3a8f] text-white">
+                      {planIcons.trial}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-gray-900">14일 무료 체험</h3>
+                        <p className="text-sm font-bold text-[#1a3a8f]">무료</p>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">모든 기능 체험 가능 · 신용카드 불필요</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 유료 플랜 - 준비 중 표시 */}
+                {PLANS.filter(p => p.id !== 'enterprise' && p.id !== 'trial').map(plan => (
+                  <div key={plan.id} className="w-full text-left p-4 rounded-xl border-2 border-gray-100 opacity-50">
                     <div className="flex items-start gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        plan.id === 'trial' ? 'bg-gray-100 text-gray-500' :
-                        plan.id === 'starter' ? 'bg-blue-100 text-blue-600' :
-                        'bg-purple-100 text-purple-600'
+                        plan.id === 'starter' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
                       }`}>
                         {planIcons[plan.id]}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-bold text-gray-900">{plan.name}</h3>
-                          <p className="text-sm font-bold text-[#1a3a8f]">
-                            {plan.price === 0 ? '무료' : `${plan.price.toLocaleString()}원/월`}
-                          </p>
+                          <p className="text-sm font-bold text-gray-400">{plan.price.toLocaleString()}원/월</p>
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {plan.features.map(f => (
-                            <span key={f} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{f}</span>
-                          ))}
-                        </div>
+                        <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">결제 기능 준비 중</span>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 ))}
 
-                {paymentLoading && (
-                  <div className="flex items-center justify-center gap-2 py-4">
-                    <div className="w-5 h-5 border-2 border-[#1a3a8f] border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm text-gray-500">결제 처리 중...</span>
-                  </div>
-                )}
-
-                {paymentError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-                    {paymentError}
-                  </div>
-                )}
-
                 <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-600">
-                  모든 유료 플랜은 언제든지 변경하거나 취소할 수 있습니다. 무료 체험 기간 중에는 결제되지 않습니다.
+                  14일 무료 체험 후 유료 플랜으로 전환할 수 있습니다. 체험 기간 중 모든 기능을 사용할 수 있습니다.
                 </div>
               </div>
-              <StepNav onPrev={() => setStep(3)} />
+              <StepNav onPrev={() => setStep(3)} onNext={() => { setSelectedPlan('trial'); setStep(5); }} />
             </StepWrapper>
           )}
 
