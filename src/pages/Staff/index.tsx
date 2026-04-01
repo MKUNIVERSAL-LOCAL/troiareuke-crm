@@ -225,11 +225,18 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
               onChange={e => setRole(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
             >
+              <option value="대표">대표</option>
               <option value="원장">원장</option>
+              <option value="부원장">부원장</option>
+              <option value="실장">실장</option>
               <option value="피부관리사">피부관리사</option>
-              <option value="네일아티스트">네일아티스트</option>
-              <option value="스타일리스트">스타일리스트</option>
+              <option value="에스테티션">에스테티션</option>
+              <option value="테라피스트">테라피스트</option>
+              <option value="상담팀">상담팀</option>
+              <option value="마케팅팀">마케팅팀</option>
               <option value="매니저">매니저</option>
+              <option value="네일아티스트">네일아티스트</option>
+              <option value="인턴">인턴</option>
             </select>
           </div>
         </div>
@@ -385,11 +392,18 @@ function StaffDetailModal({
                 onChange={e => setRole(e.target.value)}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
               >
+                <option value="대표">대표</option>
                 <option value="원장">원장</option>
+                <option value="부원장">부원장</option>
+                <option value="실장">실장</option>
                 <option value="피부관리사">피부관리사</option>
-                <option value="네일아티스트">네일아티스트</option>
-                <option value="스타일리스트">스타일리스트</option>
+                <option value="에스테티션">에스테티션</option>
+                <option value="테라피스트">테라피스트</option>
+                <option value="상담팀">상담팀</option>
+                <option value="마케팅팀">마케팅팀</option>
                 <option value="매니저">매니저</option>
+                <option value="네일아티스트">네일아티스트</option>
+                <option value="인턴">인턴</option>
               </select>
             </div>
           </div>
