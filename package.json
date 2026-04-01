@@ -50,8 +50,8 @@
     "copyright": "Copyright © 2024 TROIAREUKE",
     "publish": {
       "provider": "github",
-      "owner": "YOUR_GITHUB_USERNAME",
-      "repo": "troiareuke-crm-releases"
+      "owner": "MKUNIVERSAL-LOCAL",
+      "repo": "troiareuke-crm"
     },
     "directories": {
       "output": "release"
