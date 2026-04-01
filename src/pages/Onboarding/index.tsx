@@ -274,34 +274,29 @@ export default function Onboarding() {
       });
     });
 
-    // 구독 정보 저장 (무료 체험인 경우)
+    // ── 무조건 로컬에 isOnboarded=true 먼저 저장 (이게 핵심) ──
+    const STORAGE_KEY = 'troiareuke_auth_user';
+    const currentUser = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const updatedUser = {
+      ...currentUser,
+      shopName, shopType, shopPhone, shopAddress,
+      isOnboarded: true,
+      branchId: currentUser.branchId || currentUser.id,
+      branchName: shopName,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+
+    // Supabase 저장은 백그라운드 (실패해도 무시)
     try {
       if (selectedPlan === 'trial' || selectedPlan === 'enterprise') {
         await saveSubscription(selectedPlan);
       }
-    } catch (e) {
-      console.error('구독 저장 실패 (무시하고 진행):', e);
-    }
-
-    try {
       await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
-    } catch (e) {
-      console.error('온보딩 완료 저장 실패 (무시하고 진행):', e);
-      // Supabase 실패해도 로컬에는 저장
-      const STORAGE_KEY = 'troiareuke_auth_user';
-      const currentUser = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      if (currentUser.id) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          ...currentUser,
-          shopName, shopType, shopPhone, shopAddress,
-          isOnboarded: true,
-          branchId: currentUser.branchId || currentUser.id,
-          branchName: shopName,
-        }));
-      }
-    }
+    } catch { /* 무시 */ }
 
-    navigate('/');
+    // ── 강제 페이지 리로드로 대시보드 이동 (React 상태 무관하게 확실히 이동) ──
+    window.location.hash = '#/admin/dashboard';
+    window.location.reload();
   };
 
   return (
