@@ -288,9 +288,10 @@ export default function Onboarding() {
     } catch (e) {
       console.error('온보딩 완료 저장 실패 (무시하고 진행):', e);
       // Supabase 실패해도 로컬에는 저장
-      const currentUser = JSON.parse(localStorage.getItem('troiareuke_user') || '{}');
+      const STORAGE_KEY = 'troiareuke_auth_user';
+      const currentUser = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
       if (currentUser.id) {
-        localStorage.setItem('troiareuke_user', JSON.stringify({
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
           ...currentUser,
           shopName, shopType, shopPhone, shopAddress,
           isOnboarded: true,
