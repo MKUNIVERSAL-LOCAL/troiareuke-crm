@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -73,6 +74,7 @@ function getDashboardData() {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [data] = useState(() => getDashboardData());
 
   const {
@@ -91,41 +93,49 @@ export default function Dashboard() {
       <div className="p-8 space-y-6 flex-1">
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="이번 달 총 매출"
-            value={`${Math.round(thisMonth.totalRevenue / 10000)}만원`}
-            subtitle={`전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}
-            icon={<TrendingUp size={20} />}
-            trend={{ value: revenueGrowth, label: '전월 대비' }}
-            accent="purple"
-          />
-          <StatCard
-            title="오늘 예약"
-            value={`${todayReservations.length}건`}
-            subtitle={`완료 ${todayReservations.filter(r => r.status === 'completed').length}건 · 대기 ${todayReservations.filter(r => r.status === 'pending').length}건`}
-            icon={<Calendar size={20} />}
-            accent="pink"
-          />
-          <StatCard
-            title="전체 고객"
-            value={`${totalCustomers}명`}
-            subtitle={`이번 달 신규 ${newThisMonth}명`}
-            icon={<Users size={20} />}
-            trend={{ value: newThisMonth, label: '이번 달 신규' }}
-            accent="blue"
-          />
-          <StatCard
-            title="VIP 고객"
-            value={`${vipCount}명`}
-            subtitle={`전체의 ${totalPercent}%`}
-            icon={<Star size={20} />}
-            accent="orange"
-          />
+          <div className="cursor-pointer" onClick={() => navigate('/sales')}>
+            <StatCard
+              title="이번 달 총 매출"
+              value={`${Math.round(thisMonth.totalRevenue / 10000)}만원`}
+              subtitle={`전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}
+              icon={<TrendingUp size={20} />}
+              trend={{ value: revenueGrowth, label: '전월 대비' }}
+              accent="purple"
+            />
+          </div>
+          <div className="cursor-pointer" onClick={() => navigate('/reservations')}>
+            <StatCard
+              title="오늘 예약"
+              value={`${todayReservations.length}건`}
+              subtitle={`완료 ${todayReservations.filter(r => r.status === 'completed').length}건 · 대기 ${todayReservations.filter(r => r.status === 'pending').length}건`}
+              icon={<Calendar size={20} />}
+              accent="pink"
+            />
+          </div>
+          <div className="cursor-pointer" onClick={() => navigate('/customers')}>
+            <StatCard
+              title="전체 고객"
+              value={`${totalCustomers}명`}
+              subtitle={`이번 달 신규 ${newThisMonth}명`}
+              icon={<Users size={20} />}
+              trend={{ value: newThisMonth, label: '이번 달 신규' }}
+              accent="blue"
+            />
+          </div>
+          <div className="cursor-pointer" onClick={() => navigate('/customers')}>
+            <StatCard
+              title="VIP 고객"
+              value={`${vipCount}명`}
+              subtitle={`전체의 ${totalPercent}%`}
+              icon={<Star size={20} />}
+              accent="orange"
+            />
+          </div>
         </div>
 
         {/* Revenue Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>
             <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
               <ShoppingBag size={22} className="text-purple-500" />
             </div>
@@ -134,7 +144,7 @@ export default function Dashboard() {
               <p className="text-xl font-black text-gray-900">{Math.round(thisMonth.treatmentRevenue / 10000)}만원</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/products')}>
             <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
               <Package size={22} className="text-[#1a3a8f]" />
             </div>
@@ -143,7 +153,7 @@ export default function Dashboard() {
               <p className="text-xl font-black text-gray-900">{Math.round(thisMonth.productRevenue / 10000)}만원</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>
             <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
               <TrendingUp size={22} className="text-green-500" />
             </div>
@@ -183,9 +193,9 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-gray-900">최근 결제</h3>
-              <a href="/sales" className="flex items-center gap-1 text-xs text-[#1a3a8f] hover:text-[#152d6e] font-medium">
+              <button onClick={() => navigate('/sales')} className="flex items-center gap-1 text-xs text-[#1a3a8f] hover:text-[#152d6e] font-medium">
                 전체보기 <ChevronRight size={13} />
-              </a>
+              </button>
             </div>
             {recentPayments.length === 0 ? (
               <div className="py-8 text-center text-gray-400 text-xs">결제 기록이 없습니다</div>
@@ -213,9 +223,9 @@ export default function Dashboard() {
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
               <h3 className="text-sm font-bold text-gray-900">오늘 예약 현황</h3>
-              <a href="/reservations" className="flex items-center gap-1 text-xs text-[#1a3a8f] hover:text-[#152d6e] font-medium">
+              <button onClick={() => navigate('/reservations')} className="flex items-center gap-1 text-xs text-[#1a3a8f] hover:text-[#152d6e] font-medium">
                 전체보기 <ChevronRight size={13} />
-              </a>
+              </button>
             </div>
             <div className="divide-y divide-gray-50">
               {todayReservations.length === 0 ? (

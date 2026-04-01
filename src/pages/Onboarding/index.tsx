@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { StaffStore, ServiceStore } from '../../lib/store';
+import { StaffStore, ServiceStore, ProgramStore } from '../../lib/store';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import type { SubscriptionPlan } from '../../types';
@@ -239,11 +239,24 @@ export default function Onboarding() {
 
     // 1) 직접 입력한 시술 항목 저장
     customServices.filter(s => s.name.trim()).forEach(s => {
+      const svcPrice = parseInt(s.price.replace(/,/g, ''), 10) || 0;
+      const svcDuration = parseInt(s.duration, 10) || 60;
       ServiceStore.save({
         name: s.name.trim(),
         category: '직접 입력',
-        duration: parseInt(s.duration, 10) || 60,
-        price: parseInt(s.price.replace(/,/g, ''), 10) || 0,
+        duration: svcDuration,
+        price: svcPrice,
+        isActive: true,
+      });
+      ProgramStore.save({
+        name: s.name.trim(),
+        category: '직접 입력',
+        totalSessions: null,
+        validityDays: null,
+        price: svcPrice,
+        costPrice: 0,
+        description: undefined,
+        color: '#1a3a8f',
         isActive: true,
       });
     });
@@ -259,6 +272,17 @@ export default function Onboarding() {
             price: p.price,
             isActive: true,
           });
+          ProgramStore.save({
+            name: p.name,
+            category: `트로이아르케 ${cat.label}`,
+            totalSessions: null,
+            validityDays: null,
+            price: p.price,
+            costPrice: 0,
+            description: p.desc,
+            color: '#1a3a8f',
+            isActive: true,
+          });
         }
       });
     });
@@ -270,6 +294,17 @@ export default function Onboarding() {
         category: '엑셀 업로드',
         duration: s.duration,
         price: s.price,
+        isActive: true,
+      });
+      ProgramStore.save({
+        name: s.name,
+        category: '엑셀 업로드',
+        totalSessions: null,
+        validityDays: null,
+        price: s.price,
+        costPrice: 0,
+        description: undefined,
+        color: '#1a3a8f',
         isActive: true,
       });
     });

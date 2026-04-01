@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
-import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore } from '../../lib/store';
+import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 
@@ -129,12 +129,16 @@ function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: (
   const services = ServiceStore.getAll();
 
   const [customerId, setCustomerId] = useState('');
+  const [customerProgramId, setCustomerProgramId] = useState('');
   const [staffName, setStaffName] = useState('');
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [treatmentDetails, setTreatmentDetails] = useState('');
   const [skinCondition, setSkinCondition] = useState('');
   const [staffNotes, setStaffNotes] = useState('');
   const [nextAppointment, setNextAppointment] = useState('');
+
+  // Get active programs for the selected customer
+  const activePrograms = customerId ? CustomerProgramStore.getActive(customerId) : [];
 
   const toggleService = (name: string) => {
     setSelectedServices(prev =>
@@ -149,10 +153,13 @@ function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: (
     if (!customer) return;
 
     const details = treatmentDetails || selectedServices.join(', ') || undefined;
+    const linkedProgram = customerProgramId ? activePrograms.find(cp => cp.id === customerProgramId) : undefined;
 
     TreatmentLogStore.save({
       customerId,
       customerName: customer.name,
+      customerProgramId: customerProgramId || undefined,
+      programName: linkedProgram?.programName || undefined,
       staffName: staffName || undefined,
       treatmentDate: new Date().toISOString().slice(0, 10),
       treatmentTime: new Date().toTimeString().slice(0, 5),
@@ -197,6 +204,25 @@ function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: (
             </select>
           </div>
         </div>
+
+        {/* 프로그램 연결 (회차 차감) */}
+        {customerId && activePrograms.length > 0 && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">프로그램 연결 (회차 차감)</label>
+            <select
+              value={customerProgramId}
+              onChange={e => setCustomerProgramId(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            >
+              <option value="">프로그램 미연결 (단건 시술)</option>
+              {activePrograms.map(cp => (
+                <option key={cp.id} value={cp.id}>
+                  {cp.programName} ({cp.usedSessions}/{cp.totalSessions ?? '무제한'}회)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 항목</label>

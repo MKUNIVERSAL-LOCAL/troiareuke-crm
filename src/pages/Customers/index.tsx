@@ -4,7 +4,7 @@ import {
   User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus
 } from 'lucide-react';
-import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore } from '../../lib/store';
+import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore } from '../../lib/store';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod } from '../../types';
 
 const GRADE_COLORS: Record<CustomerGrade, string> = {
@@ -74,7 +74,28 @@ export default function Customers() {
 
   function loadAll() {
     setCustomers(CustomerStore.getAll());
-    setPrograms(ProgramStore.getAll().filter(p => p.isActive));
+    // Pull from ProgramStore first; if empty, create Program-like entries from ServiceStore
+    const storePrograms = ProgramStore.getAll().filter(p => p.isActive);
+    if (storePrograms.length > 0) {
+      setPrograms(storePrograms);
+    } else {
+      // Fallback: convert ServiceStore entries to Program-compatible objects
+      const services = ServiceStore.getAll().filter(s => s.isActive);
+      const serviceAsPrograms: Program[] = services.map(s => ({
+        id: s.id,
+        shopId: '',
+        name: s.name,
+        category: s.category || '',
+        totalSessions: null,
+        validityDays: null,
+        price: s.price,
+        costPrice: 0,
+        color: '#1a3a8f',
+        isActive: true,
+        createdAt: '',
+      }));
+      setPrograms(serviceAsPrograms);
+    }
   }
 
   // 필터링

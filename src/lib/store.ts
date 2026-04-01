@@ -1132,6 +1132,17 @@ export const PaymentStore = {
     _payments = updated;
     saveList(shopKey('payments'), updated);
     sbInsert('payments', toDbPayment(payment));
+
+    // Update customer totalSpent
+    if (data.customerId && data.status === 'completed') {
+      const customer = CustomerStore.getById(data.customerId);
+      if (customer && !customer.id.startsWith('sample_')) {
+        CustomerStore.update(data.customerId, {
+          totalSpent: (customer.totalSpent || 0) + data.amount,
+        });
+      }
+    }
+
     return payment;
   },
 
@@ -1307,7 +1318,21 @@ export const ReservationStore = {
   },
 
   updateStatus(id: string, status: Reservation['status']): Reservation | null {
-    return this.update(id, { status });
+    const reservation = this.getAll().find(r => r.id === id);
+    const result = this.update(id, { status });
+
+    // When reservation is completed, update customer's lastVisitDate
+    if (status === 'completed' && reservation?.customerId) {
+      const customer = CustomerStore.getById(reservation.customerId);
+      if (customer && !customer.id.startsWith('sample_')) {
+        CustomerStore.update(reservation.customerId, {
+          lastVisitDate: reservation.date || today(),
+          totalVisits: (customer.totalVisits || 0) + 1,
+        });
+      }
+    }
+
+    return result;
   },
 
   delete(id: string): void {
