@@ -275,11 +275,31 @@ export default function Onboarding() {
     });
 
     // 구독 정보 저장 (무료 체험인 경우)
-    if (selectedPlan === 'trial' || selectedPlan === 'enterprise') {
-      await saveSubscription(selectedPlan);
+    try {
+      if (selectedPlan === 'trial' || selectedPlan === 'enterprise') {
+        await saveSubscription(selectedPlan);
+      }
+    } catch (e) {
+      console.error('구독 저장 실패 (무시하고 진행):', e);
     }
 
-    await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
+    try {
+      await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
+    } catch (e) {
+      console.error('온보딩 완료 저장 실패 (무시하고 진행):', e);
+      // Supabase 실패해도 로컬에는 저장
+      const currentUser = JSON.parse(localStorage.getItem('troiareuke_user') || '{}');
+      if (currentUser.id) {
+        localStorage.setItem('troiareuke_user', JSON.stringify({
+          ...currentUser,
+          shopName, shopType, shopPhone, shopAddress,
+          isOnboarded: true,
+          branchId: currentUser.branchId || currentUser.id,
+          branchName: shopName,
+        }));
+      }
+    }
+
     navigate('/');
   };
 

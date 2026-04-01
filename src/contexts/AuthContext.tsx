@@ -291,33 +291,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let branchId = user.branchId;
 
     if (isSupabaseConfigured) {
-      // 1) branches 테이블에 지점 생성 (없으면 새로 만듦)
-      if (!branchId) {
-        const { data: branchData, error: branchErr } = await supabase.from('branches').insert({
-          name: shopData.shopName,
-          owner_id: user.id,
-          phone: shopData.shopPhone || null,
-          address: shopData.shopAddress || null,
-          is_active: true,
-        }).select('id').single();
+      try {
+        // 1) branches 테이블에 지점 생성 (없으면 새로 만듦)
+        if (!branchId) {
+          const { data: branchData, error: branchErr } = await supabase.from('branches').insert({
+            name: shopData.shopName,
+            owner_id: user.id,
+            phone: shopData.shopPhone || null,
+            address: shopData.shopAddress || null,
+            is_active: true,
+          }).select('id').single();
 
-        if (!branchErr && branchData) {
-          branchId = branchData.id;
+          if (!branchErr && branchData) {
+            branchId = branchData.id;
+          }
+        } else {
+          // 이미 있으면 업데이트
+          await supabase.from('branches').update({
+            name: shopData.shopName,
+            phone: shopData.shopPhone || null,
+            address: shopData.shopAddress || null,
+          }).eq('id', branchId);
         }
-      } else {
-        // 이미 있으면 업데이트
-        await supabase.from('branches').update({
-          name: shopData.shopName,
-          phone: shopData.shopPhone || null,
-          address: shopData.shopAddress || null,
-        }).eq('id', branchId);
-      }
 
-      // 2) user_profiles에 branch_id + is_onboarded 연결
-      await supabase.from('user_profiles').update({
-        is_onboarded: true,
-        branch_id: branchId,
-      }).eq('id', user.id);
+        // 2) user_profiles에 branch_id + is_onboarded 연결
+        await supabase.from('user_profiles').update({
+          is_onboarded: true,
+          branch_id: branchId,
+        }).eq('id', user.id);
+      } catch (e) {
+        console.error('Supabase 온보딩 저장 실패 (로컬로 진행):', e);
+      }
     }
 
     const updated = {
