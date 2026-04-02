@@ -69,6 +69,52 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
+// ── IPC 핸들러: Claude API 호출 (CORS 우회) ──
+ipcMain.handle('call-claude-api', async (_event, { apiKey, messages, systemPrompt }) => {
+  try {
+    const https = require('https');
+    const data = JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      system: systemPrompt,
+      messages: messages,
+    });
+
+    return new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: 'api.anthropic.com',
+        path: '/v1/messages',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(body);
+            if (result.error) {
+              reject(new Error(result.error.message));
+            } else {
+              resolve(result.content[0].text);
+            }
+          } catch (e) {
+            reject(new Error('응답 파싱 실패'));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.write(data);
+      req.end();
+    });
+  } catch (err) {
+    throw new Error(err.message || 'Claude API 호출 실패');
+  }
+});
+
 // ─── 윈도우 생성 ─────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({

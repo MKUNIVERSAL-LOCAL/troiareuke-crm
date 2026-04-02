@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── 업데이트 설치 (앱 재시작) ──
   installUpdate: () => ipcRenderer.send('install-update'),
 
+  // ── Claude API 호출 (CORS 우회) ──
+  callClaudeApi: (params) => ipcRenderer.invoke('call-claude-api', params),
+
   // ── 리스너 정리 (메모리 누수 방지) ──
   removeUpdateListeners: () => {
     ipcRenderer.removeAllListeners('update-available');

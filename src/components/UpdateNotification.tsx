@@ -10,6 +10,7 @@ interface ElectronAPI {
   onUpdateError?: (cb: (err: { message: string }) => void) => void;
   installUpdate?: () => void;
   removeUpdateListeners?: () => void;
+  callClaudeApi?: (params: { apiKey: string; messages: { role: string; content: string }[]; systemPrompt: string }) => Promise<string>;
 }
 
 declare global {
