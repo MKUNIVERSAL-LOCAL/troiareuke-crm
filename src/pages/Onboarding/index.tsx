@@ -222,6 +222,21 @@ export default function Onboarding() {
   };
 
   const finish = async () => {
+    // ★ 1단계: branchId를 먼저 확정한 후 localStorage에 저장
+    // 이렇게 해야 이후 모든 Store.save()가 올바른 shopKey를 사용함
+    const STORAGE_KEY = 'troiareuke_auth_user';
+    const currentUser = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const fixedBranchId = currentUser.branchId || currentUser.id;
+    const updatedUser = {
+      ...currentUser,
+      shopName, shopType, shopPhone, shopAddress,
+      isOnboarded: true,
+      branchId: fixedBranchId,
+      branchName: shopName,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+
+    // ★ 2단계: 이제 getShopId()가 fixedBranchId를 반환하므로 안전하게 데이터 저장
     // 직원 목록 저장
     staffList
       .filter(s => s.name.trim() !== '')
@@ -237,7 +252,7 @@ export default function Onboarding() {
         });
       });
 
-    // 1) 직접 입력한 시술 항목 저장
+    // 직접 입력한 시술 항목 저장
     customServices.filter(s => s.name.trim()).forEach(s => {
       const svcPrice = parseInt(s.price.replace(/,/g, ''), 10) || 0;
       const svcDuration = parseInt(s.duration, 10) || 60;
@@ -261,7 +276,7 @@ export default function Onboarding() {
       });
     });
 
-    // 2) 트로이아르케 프로그램 저장
+    // 트로이아르케 프로그램 저장
     TROIAREUKE_PROGRAMS.forEach(cat => {
       cat.programs.forEach(p => {
         if (selectedTroiPrograms.has(p.name)) {
@@ -287,7 +302,7 @@ export default function Onboarding() {
       });
     });
 
-    // 3) 엑셀 업로드 시술 항목 저장
+    // 엑셀 업로드 시술 항목 저장
     excelServices.forEach(s => {
       ServiceStore.save({
         name: s.name,
@@ -309,19 +324,7 @@ export default function Onboarding() {
       });
     });
 
-    // ── 무조건 로컬에 isOnboarded=true 먼저 저장 (이게 핵심) ──
-    const STORAGE_KEY = 'troiareuke_auth_user';
-    const currentUser = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    const updatedUser = {
-      ...currentUser,
-      shopName, shopType, shopPhone, shopAddress,
-      isOnboarded: true,
-      branchId: currentUser.branchId || currentUser.id,
-      branchName: shopName,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
-
-    // Supabase 저장은 백그라운드 (실패해도 무시)
+    // ★ 3단계: Supabase 저장은 백그라운드 (실패해도 무시)
     try {
       if (selectedPlan === 'trial' || selectedPlan === 'enterprise') {
         await saveSubscription(selectedPlan);
@@ -329,8 +332,8 @@ export default function Onboarding() {
       await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
     } catch { /* 무시 */ }
 
-    // ── 강제 페이지 리로드로 대시보드 이동 (React 상태 무관하게 확실히 이동) ──
-    window.location.hash = '#/admin/dashboard';
+    // ★ 4단계: 강제 리로드로 대시보드 이동
+    window.location.hash = '#/';
     window.location.reload();
   };
 

@@ -288,33 +288,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const completeOnboarding = async (shopData: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) => {
     if (!user) return;
 
-    let branchId = user.branchId;
+    // ★ branchId는 localStorage에서 이미 확정된 값을 사용 (finish()에서 먼저 설정함)
+    const stored = localStorage.getItem(STORAGE_KEY);
+    const storedUser = stored ? JSON.parse(stored) : null;
+    const branchId = storedUser?.branchId || user.branchId || user.id;
 
     if (isSupabaseConfigured) {
       try {
-        // 1) branches 테이블에 지점 생성 (없으면 새로 만듦)
-        if (!branchId) {
-          const { data: branchData, error: branchErr } = await supabase.from('branches').insert({
-            name: shopData.shopName,
-            owner_id: user.id,
-            phone: shopData.shopPhone || null,
-            address: shopData.shopAddress || null,
-            is_active: true,
-          }).select('id').single();
+        // branches 테이블에 지점 생성/업데이트
+        const { error: branchErr } = await supabase.from('branches').upsert({
+          id: branchId,
+          name: shopData.shopName,
+          owner_id: user.id,
+          phone: shopData.shopPhone || null,
+          address: shopData.shopAddress || null,
+          is_active: true,
+        }, { onConflict: 'id' });
 
-          if (!branchErr && branchData) {
-            branchId = branchData.id;
-          }
-        } else {
-          // 이미 있으면 업데이트
-          await supabase.from('branches').update({
-            name: shopData.shopName,
-            phone: shopData.shopPhone || null,
-            address: shopData.shopAddress || null,
-          }).eq('id', branchId);
-        }
+        if (branchErr) console.error('Branch upsert 실패:', branchErr.message);
 
-        // 2) user_profiles에 branch_id + is_onboarded 연결
+        // user_profiles에 branch_id + is_onboarded 연결
         await supabase.from('user_profiles').update({
           is_onboarded: true,
           branch_id: branchId,
@@ -328,7 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...user,
       ...shopData,
       isOnboarded: true,
-      branchId: branchId || user.id,
+      branchId,
       branchName: shopData.shopName,
     };
     saveUser(updated);

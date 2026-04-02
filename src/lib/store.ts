@@ -767,7 +767,7 @@ export const CustomerStore = {
   },
 
   update(id: string, updates: Partial<Customer>): Customer | null {
-    let all = this.getAll().filter(c => !c.id.startsWith('sample_'));
+    let all = this.getAll();
     const idx = all.findIndex(c => c.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
@@ -778,7 +778,7 @@ export const CustomerStore = {
   },
 
   delete(id: string): void {
-    const all = this.getAll().filter(c => c.id !== id && !c.id.startsWith('sample_'));
+    const all = this.getAll().filter(c => c.id !== id);
     _customers = all;
     saveList(shopKey('customers'), all);
     sbDelete('customers', id);
@@ -826,7 +826,7 @@ export const ProgramStore = {
   },
 
   update(id: string, updates: Partial<Program>): Program | null {
-    let all = this.getAll().filter(p => !p.id.startsWith('sample_'));
+    let all = this.getAll();
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
@@ -837,7 +837,7 @@ export const ProgramStore = {
   },
 
   delete(id: string): void {
-    const all = this.getAll().filter(p => p.id !== id && !p.id.startsWith('sample_'));
+    const all = this.getAll().filter(p => p.id !== id);
     _programs = all;
     saveList(shopKey('programs'), all);
     sbDelete('programs', id);
@@ -1012,7 +1012,7 @@ export const ProductStore = {
   },
 
   update(id: string, updates: Partial<Product>): Product | null {
-    let all = this.getAll().filter(p => !p.id.startsWith('sample_'));
+    let all = this.getAll();
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
@@ -1029,7 +1029,7 @@ export const ProductStore = {
   },
 
   delete(id: string): void {
-    const all = this.getAll().filter(p => p.id !== id && !p.id.startsWith('sample_'));
+    const all = this.getAll().filter(p => p.id !== id);
     _products = all;
     saveList(shopKey('products'), all);
     sbDelete('products', id);
@@ -1147,7 +1147,7 @@ export const PaymentStore = {
   },
 
   update(id: string, updates: Partial<Payment>): Payment | null {
-    const all = this.getAll().filter(p => !p.id.startsWith('sample_'));
+    const all = this.getAll();
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
@@ -1215,7 +1215,7 @@ export const StaffStore = {
   },
 
   update(id: string, updates: Partial<Staff>): Staff | null {
-    const all = this.getAll().filter(s => !s.id.startsWith('sample_'));
+    const all = this.getAll();
     const idx = all.findIndex(s => s.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
@@ -1226,7 +1226,7 @@ export const StaffStore = {
   },
 
   delete(id: string): void {
-    const all = this.getAll().filter(s => s.id !== id && !s.id.startsWith('sample_'));
+    const all = this.getAll().filter(s => s.id !== id);
     _staff = all;
     saveList(shopKey('staff'), all);
     sbDelete('staff', id);
@@ -1259,7 +1259,7 @@ export const ServiceStore = {
   },
 
   update(id: string, updates: Partial<Service>): Service | null {
-    const all = this.getAll().filter(s => !s.id.startsWith('sample_'));
+    const all = this.getAll();
     const idx = all.findIndex(s => s.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
@@ -1270,7 +1270,7 @@ export const ServiceStore = {
   },
 
   delete(id: string): void {
-    const all = this.getAll().filter(s => s.id !== id && !s.id.startsWith('sample_'));
+    const all = this.getAll().filter(s => s.id !== id);
     _services = all;
     saveList(shopKey('services'), all);
     sbDelete('services', id);
@@ -1307,7 +1307,7 @@ export const ReservationStore = {
   },
 
   update(id: string, updates: Partial<Reservation>): Reservation | null {
-    const all = this.getAll().filter(r => !r.id.startsWith('sample_'));
+    const all = this.getAll();
     const idx = all.findIndex(r => r.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
@@ -1336,7 +1336,7 @@ export const ReservationStore = {
   },
 
   delete(id: string): void {
-    const all = this.getAll().filter(r => r.id !== id && !r.id.startsWith('sample_'));
+    const all = this.getAll().filter(r => r.id !== id);
     _reservations = all;
     saveList(shopKey('reservations'), all);
     sbDelete('reservations', id);
@@ -1393,7 +1393,7 @@ export const MessageTemplateStore = {
   },
 
   update(id: string, updates: Partial<MessageTemplate>): MessageTemplate | null {
-    const all = this.getAll().filter(t => !t.id.startsWith('sample_'));
+    const all = this.getAll();
     const idx = all.findIndex(t => t.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
@@ -1404,7 +1404,7 @@ export const MessageTemplateStore = {
   },
 
   delete(id: string): void {
-    const all = this.getAll().filter(t => t.id !== id && !t.id.startsWith('sample_'));
+    const all = this.getAll().filter(t => t.id !== id);
     _messageTemplates = all;
     saveList(shopKey('msg_templates'), all);
     sbDelete('message_templates', id);
