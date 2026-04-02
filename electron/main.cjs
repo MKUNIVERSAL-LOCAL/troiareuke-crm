@@ -1,5 +1,6 @@
 const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
+const http = require('http');
 const { autoUpdater } = require('electron-updater');
 
 // 개발 모드 판별: 패키징된 앱이면 false, 소스 실행이면 true
@@ -113,6 +114,76 @@ ipcMain.handle('call-claude-api', async (_event, { apiKey, messages, systemPromp
   } catch (err) {
     throw new Error(err.message || 'Claude API 호출 실패');
   }
+});
+
+// ── IPC 핸들러: Google OAuth 로컬 콜백 서버 ──
+let googleOAuthServer = null;
+
+ipcMain.handle('start-google-oauth', async (_event, { authUrl }) => {
+  return new Promise((resolve) => {
+    // 이전 서버가 있으면 닫기
+    if (googleOAuthServer) {
+      try { googleOAuthServer.close(); } catch {}
+    }
+
+    googleOAuthServer = http.createServer((req, res) => {
+      if (req.url.startsWith('/google-callback')) {
+        // HTML 페이지: URL fragment(#access_token=...)를 서버에 다시 POST
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<!DOCTYPE html><html><head><title>트로이아르케 CRM - Google 연결</title></head>
+<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0f9ff;">
+<div style="text-align:center;">
+  <h2 style="color:#1a3a8f;">✅ Google 캘린더 연결 완료!</h2>
+  <p style="color:#666;">이 창을 닫아도 됩니다.</p>
+  <script>
+    const hash = window.location.hash;
+    if (hash) {
+      fetch('http://127.0.0.1:19876/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hash: hash })
+      });
+    }
+  </script>
+</div></body></html>`);
+      } else if (req.url === '/token' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+          res.writeHead(200);
+          res.end('ok');
+          try {
+            const { hash } = JSON.parse(body);
+            // 토큰을 렌더러에 전달
+            mainWindow?.webContents.send('google-oauth-token', hash);
+            resolve({ success: true, hash });
+          } catch {}
+          // 서버 종료
+          setTimeout(() => {
+            try { googleOAuthServer.close(); } catch {}
+            googleOAuthServer = null;
+          }, 1000);
+        });
+      } else {
+        res.writeHead(404);
+        res.end('Not found');
+      }
+    });
+
+    googleOAuthServer.listen(19876, '127.0.0.1', () => {
+      // 시스템 브라우저에서 Google OAuth 열기
+      shell.openExternal(authUrl);
+    });
+
+    // 60초 타임아웃
+    setTimeout(() => {
+      if (googleOAuthServer) {
+        try { googleOAuthServer.close(); } catch {}
+        googleOAuthServer = null;
+        resolve({ success: false, error: 'timeout' });
+      }
+    }, 60000);
+  });
 });
 
 // ─── 윈도우 생성 ─────────────────────────────────────────────────

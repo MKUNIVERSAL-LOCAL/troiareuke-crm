@@ -10,7 +10,11 @@ import type { Reservation } from '../types';
 
 // ─── 상수 ─────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
-const REDIRECT_URI = 'https://mkuniversal-local.github.io/troiareuke-crm/auth/google/callback';
+// Electron에서는 로컬 리디렉트, 웹에서는 GitHub Pages 리디렉트
+const IS_ELECTRON = typeof window !== 'undefined' && navigator.userAgent.includes('Electron');
+const REDIRECT_URI = IS_ELECTRON
+  ? 'http://127.0.0.1:19876/google-callback'
+  : 'https://mkuniversal-local.github.io/troiareuke-crm/auth/google/callback';
 const SCOPE = 'https://www.googleapis.com/auth/calendar';
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
@@ -70,7 +74,23 @@ export function startGoogleOAuth(): void {
     prompt: 'consent',
   });
 
-  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+  // Electron: IPC를 통해 시스템 브라우저로 열고 로컬 서버에서 콜백 받기
+  const electronAPI = (window as any).electronAPI;
+  if (electronAPI?.startGoogleOAuth) {
+    electronAPI.startGoogleOAuth({ authUrl });
+    // 토큰 콜백 수신
+    electronAPI.onGoogleOAuthToken((hash: string) => {
+      if (saveTokenFromHash(hash)) {
+        window.location.hash = '#/settings';
+        window.location.reload();
+      }
+    });
+  } else {
+    // 웹 브라우저: 직접 리디렉트
+    window.location.href = authUrl;
+  }
 }
 
 // ─── API 헬퍼 ─────────────────────────────────────────────────

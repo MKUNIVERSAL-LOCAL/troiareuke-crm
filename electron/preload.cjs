@@ -28,11 +28,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Claude API 호출 (CORS 우회) ──
   callClaudeApi: (params) => ipcRenderer.invoke('call-claude-api', params),
 
+  // ── Google OAuth ──
+  startGoogleOAuth: (params) => ipcRenderer.invoke('start-google-oauth', params),
+  onGoogleOAuthToken: (callback) => {
+    ipcRenderer.on('google-oauth-token', (_event, hash) => callback(hash));
+  },
+
   // ── 리스너 정리 (메모리 누수 방지) ──
   removeUpdateListeners: () => {
     ipcRenderer.removeAllListeners('update-available');
     ipcRenderer.removeAllListeners('update-download-progress');
     ipcRenderer.removeAllListeners('update-downloaded');
     ipcRenderer.removeAllListeners('update-error');
+    ipcRenderer.removeAllListeners('google-oauth-token');
   },
 });
