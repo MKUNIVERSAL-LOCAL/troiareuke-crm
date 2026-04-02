@@ -10,8 +10,7 @@ import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
-import { mockReservations } from '../data/mockData';
-import { PaymentStore, CustomerStore, ProductStore, CustomerProgramStore } from '../lib/store';
+import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 
 const todayStr = format(new Date(), 'yyyy-MM-dd');
 const thisMonthStr = format(new Date(), 'yyyy-MM');
@@ -52,7 +51,7 @@ function getDashboardData() {
   const lowStockProducts = products.filter(p => p.stock <= p.minStock);
 
   // Today's reservations
-  const todayReservations = mockReservations.filter(r => r.date === todayStr || r.date === '2026-03-06');
+  const todayReservations = ReservationStore.getByDate(todayStr);
 
   // Recent payments (last 5)
   const recentPayments = PaymentStore.getByDateRange(
