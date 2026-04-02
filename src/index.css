@@ -48,3 +48,12 @@ input:focus, select:focus, textarea:focus {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* 업데이트 알림 슬라이드 다운 애니메이션 */
+@keyframes slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-down {
+  animation: slide-down 0.4s ease-out;
+}

@@ -27,6 +27,7 @@ import Subscriptions from './pages/Admin/Subscriptions';
 import Announcements from './pages/Admin/Announcements';
 import Statistics from './pages/Admin/Statistics';
 import AdminLogin from './pages/Admin/Login';
+import UpdateNotification from './components/UpdateNotification';
 
 // ── 로딩 스피너 ─────────────────────────────────────────────────
 function LoadingScreen() {
@@ -119,6 +120,7 @@ export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
+        <UpdateNotification />
         <AppRoutes />
       </AuthProvider>
     </HashRouter>
