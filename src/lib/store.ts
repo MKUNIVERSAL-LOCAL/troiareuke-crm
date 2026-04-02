@@ -598,7 +598,8 @@ async function loadFromSupabase<T>(
       console.error(`[Store] ${table} 로드 실패:`, error.message);
       return null;
     }
-    return (data || []).map(fromDb);
+    if (!data || data.length === 0) return null; // 빈 데이터면 null → 샘플 데이터 폴백
+    return data.map(fromDb);
   } catch (e) {
     console.error(`[Store] ${table} 로드 예외:`, e);
     return null;
@@ -739,8 +740,10 @@ export const CustomerStore = {
     if (_customers !== null) return _customers;
     // 캐시 미로드 → localStorage 폴백
     const stored = getList<Customer>(shopKey('customers'));
-    if (stored.length > 0) return stored;
-    return getSampleCustomers();
+    if (stored.length > 0) { _customers = stored; return stored; }
+    const samples = getSampleCustomers();
+    _customers = samples;
+    return samples;
   },
 
   getById(id: string): Customer | undefined {
@@ -802,8 +805,10 @@ export const ProgramStore = {
   getAll(): Program[] {
     if (_programs !== null) return _programs;
     const stored = getList<Program>(shopKey('programs'));
-    if (stored.length > 0) return stored;
-    return getSamplePrograms();
+    if (stored.length > 0) { _programs = stored; return stored; }
+    const samples = getSamplePrograms();
+    _programs = samples;
+    return samples;
   },
 
   getById(id: string): Program | undefined {
@@ -850,7 +855,9 @@ export const ProgramStore = {
 export const CustomerProgramStore = {
   getAll(): CustomerProgram[] {
     if (_customerPrograms !== null) return _customerPrograms;
-    return getList<CustomerProgram>(shopKey('customer_programs'));
+    const stored = getList<CustomerProgram>(shopKey('customer_programs'));
+    if (stored.length > 0) { _customerPrograms = stored; return stored; }
+    return [];
   },
 
   getByCustomer(customerId: string): CustomerProgram[] {
@@ -937,7 +944,9 @@ export const CustomerProgramStore = {
 export const TreatmentLogStore = {
   getAll(): TreatmentLog[] {
     if (_treatmentLogs !== null) return _treatmentLogs;
-    return getList<TreatmentLog>(shopKey('treatment_logs'));
+    const stored = getList<TreatmentLog>(shopKey('treatment_logs'));
+    if (stored.length > 0) { _treatmentLogs = stored; return stored; }
+    return [];
   },
 
   getByCustomer(customerId: string): TreatmentLog[] {
@@ -989,8 +998,10 @@ export const ProductStore = {
   getAll(): Product[] {
     if (_products !== null) return _products;
     const stored = getList<Product>(shopKey('products'));
-    if (stored.length > 0) return stored;
-    return getSampleProducts();
+    if (stored.length > 0) { _products = stored; return stored; }
+    const samples = getSampleProducts();
+    _products = samples;
+    return samples;
   },
 
   getById(id: string): Product | undefined {
@@ -1042,7 +1053,9 @@ export const ProductStore = {
 export const ProductSaleStore = {
   getAll(): ProductSale[] {
     if (_productSales !== null) return _productSales;
-    return getList<ProductSale>(shopKey('product_sales'));
+    const stored = getList<ProductSale>(shopKey('product_sales'));
+    if (stored.length > 0) { _productSales = stored; return stored; }
+    return [];
   },
 
   getByDate(date: string): ProductSale[] {
@@ -1104,8 +1117,10 @@ export const PaymentStore = {
   getAll(): Payment[] {
     if (_payments !== null) return _payments;
     const stored = getList<Payment>(shopKey('payments'));
-    if (stored.length > 0) return stored;
-    return getSamplePayments();
+    if (stored.length > 0) { _payments = stored; return stored; }
+    const samples = getSamplePayments();
+    _payments = samples;
+    return samples;
   },
 
   getByDate(date: string): Payment[] {
@@ -1200,8 +1215,10 @@ export const StaffStore = {
   getAll(): Staff[] {
     if (_staff !== null) return _staff;
     const stored = getList<Staff>(shopKey('staff'));
-    if (stored.length > 0) return stored;
-    return getSampleStaff();
+    if (stored.length > 0) { _staff = stored; return stored; }
+    const samples = getSampleStaff();
+    _staff = samples;
+    return samples;
   },
 
   save(data: Omit<Staff, 'id' | 'shopId'>): Staff {
@@ -1240,8 +1257,10 @@ export const ServiceStore = {
   getAll(): Service[] {
     if (_services !== null) return _services;
     const stored = getList<Service>(shopKey('services'));
-    if (stored.length > 0) return stored;
-    return getSampleServices();
+    if (stored.length > 0) { _services = stored; return stored; }
+    const samples = getSampleServices();
+    _services = samples;
+    return samples;
   },
 
   getById(id: string): Service | undefined {
@@ -1284,8 +1303,10 @@ export const ReservationStore = {
   getAll(): Reservation[] {
     if (_reservations !== null) return _reservations;
     const stored = getList<Reservation>(shopKey('reservations'));
-    if (stored.length > 0) return stored;
-    return getSampleReservations();
+    if (stored.length > 0) { _reservations = stored; return stored; }
+    const samples = getSampleReservations();
+    _reservations = samples;
+    return samples;
   },
 
   getByDate(date: string): Reservation[] {
@@ -1351,9 +1372,15 @@ export const SettingsStore = {
     if (_settings !== null) return _settings;
     try {
       const raw = localStorage.getItem(shopKey('settings'));
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        _settings = parsed;
+        return parsed;
+      }
     } catch {}
-    return getDefaultSettings();
+    const defaults = getDefaultSettings();
+    _settings = defaults;
+    return defaults;
   },
 
   save(updates: Partial<ShopSettings>): ShopSettings {
@@ -1378,8 +1405,10 @@ export const MessageTemplateStore = {
   getAll(): MessageTemplate[] {
     if (_messageTemplates !== null) return _messageTemplates;
     const stored = getList<MessageTemplate>(shopKey('msg_templates'));
-    if (stored.length > 0) return stored;
-    return getSampleMessageTemplates();
+    if (stored.length > 0) { _messageTemplates = stored; return stored; }
+    const samples = getSampleMessageTemplates();
+    _messageTemplates = samples;
+    return samples;
   },
 
   save(data: Omit<MessageTemplate, 'id'>): MessageTemplate {
@@ -1417,7 +1446,9 @@ export const MessageTemplateStore = {
 export const MessageHistoryStore = {
   getAll(): MessageHistory[] {
     if (_messageHistory !== null) return _messageHistory;
-    return getList<MessageHistory>(shopKey('msg_history'));
+    const stored = getList<MessageHistory>(shopKey('msg_history'));
+    if (stored.length > 0) { _messageHistory = stored; return stored; }
+    return [];
   },
 
   save(data: Omit<MessageHistory, 'id'>): MessageHistory {
