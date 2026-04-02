@@ -61,7 +61,7 @@ function setupAutoUpdater() {
 
 // ── IPC 핸들러: 렌더러에서 "지금 설치" 버튼 클릭 시 ──
 ipcMain.on('install-update', () => {
-  autoUpdater.quitAndInstall();
+  autoUpdater.quitAndInstall(true, true); // silent install + auto restart
 });
 
 // ── IPC 핸들러: 현재 앱 버전 조회 ──
