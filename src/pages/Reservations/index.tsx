@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2 } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
@@ -7,11 +7,26 @@ import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore } from '../../lib/store';
 import type { Reservation, Staff, Service, Customer } from '../../types';
+import {
+  isGoogleCalendarConnected,
+  fetchCalendarEventsAsReservations,
+  createCalendarEvent,
+} from '../../lib/googleCalendar';
 import clsx from 'clsx';
 
 const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
 
 type ViewMode = 'week' | 'day' | 'list';
+
+interface GoogleEventLike {
+  id: string;
+  summary: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  isGoogleEvent: true;
+  htmlLink?: string;
+}
 
 export default function Reservations() {
   const [viewMode, setViewMode] = useState<ViewMode>('week');
@@ -20,10 +35,30 @@ export default function Reservations() {
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
   const [staffList] = useState<Staff[]>(() => StaffStore.getAll());
+  const [googleEvents, setGoogleEvents] = useState<GoogleEventLike[]>([]);
+  const googleConnected = isGoogleCalendarConnected();
 
   const reloadReservations = useCallback(() => {
     setReservations(ReservationStore.getAll());
   }, []);
+
+  // Google Calendar 이벤트 로드
+  const loadGoogleEvents = useCallback(async () => {
+    if (!googleConnected) { setGoogleEvents([]); return; }
+    try {
+      const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+      const start = viewMode === 'day' ? new Date(currentDate) : weekStart;
+      const end = viewMode === 'day' ? addDays(currentDate, 1) : addDays(weekStart, 7);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      const { asReservationLike } = await fetchCalendarEventsAsReservations(start, end);
+      setGoogleEvents(asReservationLike);
+    } catch {
+      setGoogleEvents([]);
+    }
+  }, [googleConnected, currentDate, viewMode]);
+
+  useEffect(() => { loadGoogleEvents(); }, [loadGoogleEvents]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -81,6 +116,13 @@ export default function Reservations() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Google Calendar sync badge */}
+            {googleConnected && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs font-medium text-blue-700">
+                <Calendar size={12} />
+                Google 캘린더 연동
+              </div>
+            )}
             {/* Naver sync badge */}
             <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-xs font-medium text-green-700">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
@@ -109,13 +151,13 @@ export default function Reservations() {
 
         {/* Calendar Views */}
         {viewMode === 'week' && (
-          <WeekView weekDays={weekDays} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} />
+          <WeekView weekDays={weekDays} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'day' && (
-          <DayView date={currentDate} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} />
+          <DayView date={currentDate} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'list' && (
-          <ListView reservations={reservations} onSelect={setSelectedReservation} />
+          <ListView reservations={reservations} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
       </div>
 
@@ -134,11 +176,12 @@ export default function Reservations() {
   );
 }
 
-function WeekView({ weekDays, reservations, staffList, onSelect }: {
+function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = [] }: {
   weekDays: Date[];
   reservations: Reservation[];
   staffList: Staff[];
   onSelect: (r: Reservation) => void;
+  googleEvents?: GoogleEventLike[];
 }) {
   const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
   const today = new Date();
@@ -179,6 +222,9 @@ function WeekView({ weekDays, reservations, staffList, onSelect }: {
               const slotReservations = reservations.filter(r =>
                 isSameDay(parseISO(r.date), day) && r.startTime === time
               );
+              const slotGoogleEvents = googleEvents.filter(ge =>
+                ge.date === format(day, 'yyyy-MM-dd') && ge.startTime === time
+              );
               return (
                 <div key={di} className={clsx(
                   'border-r border-gray-50 last:border-r-0 p-1 relative',
@@ -198,6 +244,20 @@ function WeekView({ weekDays, reservations, staffList, onSelect }: {
                       </button>
                     );
                   })}
+                  {slotGoogleEvents.map(ge => (
+                    <a
+                      key={`g-${ge.id}`}
+                      href={ge.htmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full text-left rounded-lg p-1.5 text-[10px] font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm block mt-0.5"
+                    >
+                      <p className="font-bold truncate flex items-center gap-0.5">
+                        <Calendar size={9} className="flex-shrink-0" />
+                        {ge.summary}
+                      </p>
+                    </a>
+                  ))}
                 </div>
               );
             })}
@@ -208,18 +268,23 @@ function WeekView({ weekDays, reservations, staffList, onSelect }: {
   );
 }
 
-function DayView({ date, reservations, staffList, onSelect }: {
+function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }: {
   date: Date;
   reservations: Reservation[];
   staffList: Staff[];
   onSelect: (r: Reservation) => void;
+  googleEvents?: GoogleEventLike[];
 }) {
   const dayReservations = reservations.filter(r => isSameDay(parseISO(r.date), date));
+  const dayGoogleEvents = googleEvents.filter(ge => ge.date === format(date, 'yyyy-MM-dd'));
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-        <p className="text-sm font-bold text-gray-800">{dayReservations.length}건의 예약</p>
+        <p className="text-sm font-bold text-gray-800">
+          {dayReservations.length}건의 예약
+          {dayGoogleEvents.length > 0 && <span className="text-blue-500 ml-2">+ Google {dayGoogleEvents.length}건</span>}
+        </p>
         <div className="flex items-center gap-3">
           {staffList.map(s => (
             <div key={s.id} className="flex items-center gap-1.5 text-xs text-gray-600">
@@ -232,6 +297,7 @@ function DayView({ date, reservations, staffList, onSelect }: {
       <div className="overflow-y-auto max-h-[600px]">
         {TIME_SLOTS.map(time => {
           const slotRes = dayReservations.filter(r => r.startTime === time);
+          const slotGoogle = dayGoogleEvents.filter(ge => ge.startTime === time);
           return (
             <div key={time} className="flex border-b border-gray-50 min-h-[60px]">
               <div className="w-20 flex-shrink-0 py-3 px-4 text-xs text-gray-400 border-r border-gray-100 font-medium">
@@ -253,6 +319,19 @@ function DayView({ date, reservations, staffList, onSelect }: {
                     </button>
                   );
                 })}
+                {slotGoogle.map(ge => (
+                  <a
+                    key={`g-${ge.id}`}
+                    href={ge.htmlLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white bg-blue-500 transition-all hover:scale-[1.02] shadow-sm"
+                  >
+                    <Calendar size={14} className="flex-shrink-0" />
+                    <span className="font-bold">{ge.summary}</span>
+                    <span className="text-white/80 text-xs">{ge.startTime}~{ge.endTime}</span>
+                  </a>
+                ))}
               </div>
             </div>
           );
@@ -262,7 +341,7 @@ function DayView({ date, reservations, staffList, onSelect }: {
   );
 }
 
-function ListView({ reservations, onSelect }: { reservations: Reservation[]; onSelect: (r: Reservation) => void }) {
+function ListView({ reservations, onSelect, googleEvents = [] }: { reservations: Reservation[]; onSelect: (r: Reservation) => void; googleEvents?: GoogleEventLike[] }) {
   const sorted = [...reservations].sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
 
   return (
@@ -296,6 +375,36 @@ function ListView({ reservations, onSelect }: { reservations: Reservation[]; onS
             <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
           </button>
         ))}
+        {/* Google Calendar 이벤트 */}
+        {googleEvents.map(ge => (
+          <a
+            key={`g-${ge.id}`}
+            href={ge.htmlLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-4 px-6 py-4 hover:bg-blue-50/50 transition-colors text-left"
+          >
+            <div className="text-center w-20 flex-shrink-0">
+              <p className="text-xs font-medium text-gray-500">{ge.date.slice(5).replace('-', '/')}</p>
+              <p className="text-sm font-bold text-blue-600 mt-0.5">{ge.startTime}</p>
+            </div>
+            <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+              <Calendar size={16} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-bold text-gray-900">{ge.summary}</p>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-medium rounded-full">
+                  <Calendar size={10} /> Google
+                </span>
+              </div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className="text-xs text-gray-400">{ge.startTime} ~ {ge.endTime}</p>
+            </div>
+            <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
+          </a>
+        ))}
       </div>
     </div>
   );
@@ -313,6 +422,8 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
   const [startTime, setStartTime] = useState('10:00');
   const [source, setSource] = useState<Reservation['source']>('manual');
   const [memo, setMemo] = useState('');
+  const [addToGoogle, setAddToGoogle] = useState(isGoogleCalendarConnected());
+  const googleAvailable = isGoogleCalendarConnected();
 
   const handleSave = () => {
     if (!customerId || !staffId || !serviceId) return;
@@ -349,7 +460,13 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
       totalPrice: service.price,
     };
 
-    ReservationStore.save(reservation);
+    const saved = ReservationStore.save(reservation);
+    // Google Calendar에도 추가
+    if (addToGoogle && googleAvailable && saved) {
+      createCalendarEvent({ ...reservation, id: saved.id }).catch(() => {
+        // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
+      });
+    }
     onSave();
   };
 
@@ -437,6 +554,18 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
             placeholder="특이사항"
           />
         </div>
+        {googleAvailable && (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={addToGoogle}
+              onChange={e => setAddToGoogle(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-300"
+            />
+            <Calendar size={14} className="text-blue-500" />
+            <span className="text-sm text-gray-700">Google 캘린더에도 추가</span>
+          </label>
+        )}
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
           <button

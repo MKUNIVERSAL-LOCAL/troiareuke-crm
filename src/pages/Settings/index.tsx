@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar } from 'lucide-react';
+import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore } from '../../lib/store';
 import type { ShopSettings, Service, Subscription } from '../../types';
@@ -198,6 +199,18 @@ export default function Settings() {
       setPlanChangeLoading(false);
     }
   };
+
+  // Google Calendar
+  const [googleConnected, setGoogleConnected] = useState(() => isGoogleCalendarConnected());
+  const refreshGoogleStatus = useCallback(() => {
+    setGoogleConnected(isGoogleCalendarConnected());
+  }, []);
+
+  // 페이지 포커스 시 Google Calendar 연결 상태 갱신 (토큰 만료 감지)
+  useEffect(() => {
+    window.addEventListener('focus', refreshGoogleStatus);
+    return () => window.removeEventListener('focus', refreshGoogleStatus);
+  }, [refreshGoogleStatus]);
 
   // Service modal
   const [showServiceModal, setShowServiceModal] = useState(false);
@@ -624,6 +637,48 @@ export default function Settings() {
                         저장하기
                       </button>
                     </div>
+                  </div>
+                </SettingCard>
+
+                {/* Google Calendar */}
+                <SettingCard title="Google 캘린더 연동">
+                  <div className="space-y-4">
+                    <div className={clsx(
+                      'flex items-center gap-3 p-4 rounded-xl border',
+                      googleConnected ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+                    )}>
+                      <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center text-white', googleConnected ? 'bg-blue-500' : 'bg-gray-300')}>
+                        <Calendar size={20} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-gray-900">Google Calendar</p>
+                        {googleConnected ? (
+                          <p className="text-xs text-blue-600 mt-0.5">연결됨 - 예약이 캘린더에 표시됩니다</p>
+                        ) : (
+                          <p className="text-xs text-gray-400 mt-0.5">연결되지 않음</p>
+                        )}
+                      </div>
+                      {googleConnected ? (
+                        <button
+                          onClick={() => { clearGoogleTokens(); setGoogleConnected(false); flash('Google 캘린더 연결이 해제되었습니다'); }}
+                          className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        >
+                          연결 해제
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => startGoogleOAuth()}
+                          className="px-4 py-2 text-sm font-medium rounded-xl bg-blue-500 text-white hover:bg-blue-600"
+                        >
+                          Google 캘린더 연결
+                        </button>
+                      )}
+                    </div>
+                    {googleConnected && (
+                      <p className="text-xs text-gray-400">
+                        예약 페이지에서 Google Calendar 이벤트가 함께 표시됩니다. 새 예약 생성 시 캘린더에도 자동 추가할 수 있습니다.
+                      </p>
+                    )}
                   </div>
                 </SettingCard>
 
