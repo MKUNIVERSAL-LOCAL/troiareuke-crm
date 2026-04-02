@@ -21,12 +21,12 @@ function setupAutoUpdater() {
     });
   }, 5000);
 
-  // 주기적 업데이트 확인 (2시간마다)
+  // 주기적 업데이트 확인 (10분마다)
   setInterval(() => {
     autoUpdater.checkForUpdates().catch(err => {
       console.log('업데이트 확인 실패:', err.message);
     });
-  }, 2 * 60 * 60 * 1000);
+  }, 10 * 60 * 1000);
 
   // ── 이벤트 핸들러 ──
   autoUpdater.on('update-available', (info) => {
