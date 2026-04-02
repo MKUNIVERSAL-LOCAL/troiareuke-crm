@@ -741,9 +741,8 @@ export const CustomerStore = {
     // 캐시 미로드 → localStorage 폴백
     const stored = getList<Customer>(shopKey('customers'));
     if (stored.length > 0) { _customers = stored; return stored; }
-    const samples = getSampleCustomers();
-    _customers = samples;
-    return samples;
+    _customers = [];
+    return [];
   },
 
   getById(id: string): Customer | undefined {
@@ -806,9 +805,8 @@ export const ProgramStore = {
     if (_programs !== null) return _programs;
     const stored = getList<Program>(shopKey('programs'));
     if (stored.length > 0) { _programs = stored; return stored; }
-    const samples = getSamplePrograms();
-    _programs = samples;
-    return samples;
+    _programs = [];
+    return [];
   },
 
   getById(id: string): Program | undefined {
@@ -999,9 +997,8 @@ export const ProductStore = {
     if (_products !== null) return _products;
     const stored = getList<Product>(shopKey('products'));
     if (stored.length > 0) { _products = stored; return stored; }
-    const samples = getSampleProducts();
-    _products = samples;
-    return samples;
+    _products = [];
+    return [];
   },
 
   getById(id: string): Product | undefined {
@@ -1118,9 +1115,8 @@ export const PaymentStore = {
     if (_payments !== null) return _payments;
     const stored = getList<Payment>(shopKey('payments'));
     if (stored.length > 0) { _payments = stored; return stored; }
-    const samples = getSamplePayments();
-    _payments = samples;
-    return samples;
+    _payments = [];
+    return [];
   },
 
   getByDate(date: string): Payment[] {
@@ -1216,9 +1212,8 @@ export const StaffStore = {
     if (_staff !== null) return _staff;
     const stored = getList<Staff>(shopKey('staff'));
     if (stored.length > 0) { _staff = stored; return stored; }
-    const samples = getSampleStaff();
-    _staff = samples;
-    return samples;
+    _staff = [];
+    return [];
   },
 
   save(data: Omit<Staff, 'id' | 'shopId'>): Staff {
@@ -1258,9 +1253,8 @@ export const ServiceStore = {
     if (_services !== null) return _services;
     const stored = getList<Service>(shopKey('services'));
     if (stored.length > 0) { _services = stored; return stored; }
-    const samples = getSampleServices();
-    _services = samples;
-    return samples;
+    _services = [];
+    return [];
   },
 
   getById(id: string): Service | undefined {
@@ -1304,9 +1298,8 @@ export const ReservationStore = {
     if (_reservations !== null) return _reservations;
     const stored = getList<Reservation>(shopKey('reservations'));
     if (stored.length > 0) { _reservations = stored; return stored; }
-    const samples = getSampleReservations();
-    _reservations = samples;
-    return samples;
+    _reservations = [];
+    return [];
   },
 
   getByDate(date: string): Reservation[] {
@@ -1406,9 +1399,8 @@ export const MessageTemplateStore = {
     if (_messageTemplates !== null) return _messageTemplates;
     const stored = getList<MessageTemplate>(shopKey('msg_templates'));
     if (stored.length > 0) { _messageTemplates = stored; return stored; }
-    const samples = getSampleMessageTemplates();
-    _messageTemplates = samples;
-    return samples;
+    _messageTemplates = [];
+    return [];
   },
 
   save(data: Omit<MessageTemplate, 'id'>): MessageTemplate {
