@@ -2,7 +2,7 @@
   "name": "troiareuke-crm",
   "productName": "트로이아르케 CRM",
   "private": true,
-  "version": "1.0.14",
+  "version": "1.0.15",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
