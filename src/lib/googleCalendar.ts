@@ -10,11 +10,14 @@ import type { Reservation } from '../types';
 
 // ─── 상수 ─────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
-// Electron에서는 로컬 리디렉트, 웹에서는 GitHub Pages 리디렉트
+
+// Electron 앱에서는 로컬 콜백 서버(127.0.0.1:19876)를 기본 사용.
+// 웹 배포 경로가 필요하면 .env 에 VITE_GOOGLE_REDIRECT_URI 를 설정하고
+// Google Cloud Console > OAuth 승인된 리디렉션 URI 에도 동일한 값을 등록한다.
 const IS_ELECTRON = typeof window !== 'undefined' && navigator.userAgent.includes('Electron');
-const REDIRECT_URI = IS_ELECTRON
-  ? 'http://127.0.0.1:19876/google-callback'
-  : 'https://mkuniversal-local.github.io/troiareuke-crm/auth/google/callback';
+const REDIRECT_URI =
+  (import.meta.env.VITE_GOOGLE_REDIRECT_URI as string | undefined) ||
+  'http://127.0.0.1:19876/google-callback';
 const SCOPE = 'https://www.googleapis.com/auth/calendar';
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
@@ -60,8 +63,21 @@ export function clearTokens(): void {
 
 // ─── OAuth Flow ───────────────────────────────────────────────
 
+/** 비-Electron 환경에서 VITE_GOOGLE_REDIRECT_URI 가 설정되지 않은 경우의 가드 */
+export function isGoogleCalendarAvailable(): boolean {
+  return IS_ELECTRON || !!import.meta.env.VITE_GOOGLE_REDIRECT_URI;
+}
+
 export function startGoogleOAuth(): void {
-  const state = Math.random().toString(36).substring(2);
+  if (!isGoogleCalendarAvailable()) {
+    alert(
+      'Google 캘린더 연동은 데스크톱 앱(Windows/Mac)에서만 지원됩니다.\n' +
+      '브라우저에서 연동이 필요하면 관리자에게 문의해주세요.'
+    );
+    return;
+  }
+
+  const state = crypto.randomUUID();
   sessionStorage.setItem('google_oauth_state', state);
 
   const params = new URLSearchParams({

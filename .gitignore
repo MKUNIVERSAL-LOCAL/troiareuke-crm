@@ -24,3 +24,6 @@ Thumbs.db
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Local materials (대용량 자료, 회사 자산)
+상품,교육,이미지등 자료/

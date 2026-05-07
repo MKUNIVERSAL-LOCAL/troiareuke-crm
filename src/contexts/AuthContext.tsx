@@ -3,9 +3,8 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { recordLoginLog } from '../lib/loginLog';
 import { initializeStores, resetStoreCache } from '../lib/store';
 
-// ── 슈퍼어드민 계정 (Supabase 미설정 시 로컬 폴백용) ────────────
-const SUPERADMIN_EMAIL = 'mkclub21@gmail.com';
-const SUPERADMIN_PASSWORD = 'Dlalrud681207@@';
+// 슈퍼어드민 권한은 오직 Supabase의 user_profiles.role === 'superadmin' 로만 판정한다.
+// 자격증명을 클라이언트에 절대 하드코딩하지 않는다 (번들에 노출되어 공개되기 때문).
 
 export interface AuthUser {
   id: string;
@@ -38,7 +37,6 @@ interface AuthContextType {
   signup: (data: SignupData) => Promise<void>;
   logout: () => void;
   completeOnboarding: (shopData: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) => void;
-  isAdminEmail: (email: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -161,36 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeStores().catch(() => {});
   };
 
-  // ── 어드민 이메일 체크 (로그인 전 리다이렉트 판단용) ────────
-  const isAdminEmail = (email: string) => email === SUPERADMIN_EMAIL;
-
-  // ── 슈퍼어드민 로컬 로그인 헬퍼 ─────────────────────────────
-  const loginSuperadminLocal = async (email: string): Promise<boolean> => {
-    const adminUser: AuthUser = {
-      id: 'superadmin',
-      email: SUPERADMIN_EMAIL,
-      name: '관리자',
-      shopName: 'TROIAREUKE 본사',
-      shopType: '관리자',
-      plan: 'enterprise',
-      trialEndsAt: new Date(Date.now() + 365 * 86400000).toISOString(),
-      isOnboarded: true,
-      role: 'superadmin',
-      createdAt: new Date().toISOString(),
-    };
-    await recordLoginLog({ userId: 'superadmin', email, status: 'success', branchName: '본사' });
-    saveUser(adminUser);
-    return true;
-  };
-
   // ── 로그인 ───────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
-    // 슈퍼어드민 계정은 항상 로컬에서 처리 (Supabase 설정 여부 무관)
-    if (email === SUPERADMIN_EMAIL && password === SUPERADMIN_PASSWORD) {
-      await loginSuperadminLocal(email);
-      return;
-    }
-
     if (isSupabaseConfigured) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -329,7 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, isAuthenticated: !!user, isLoading, login, signup, logout, completeOnboarding, isAdminEmail,
+      user, isAuthenticated: !!user, isLoading, login, signup, logout, completeOnboarding,
     }}>
       {children}
     </AuthContext.Provider>
