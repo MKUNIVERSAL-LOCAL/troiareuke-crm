@@ -252,6 +252,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
     resetStoreCache();
+    // crm_* 캐시 키 전체 제거 (QA 1순위: 타 계정 데이터 노출 방지)
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('crm_'))
+      .forEach(k => localStorage.removeItem(k));
   };
 
   // ── 온보딩 완료 ──────────────────────────────────────────────

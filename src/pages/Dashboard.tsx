@@ -89,7 +89,99 @@ export default function Dashboard() {
     <div className="flex flex-col min-h-screen">
       <Header title="대시보드" subtitle="오늘의 현황을 확인하세요" />
 
-      <div className="p-8 space-y-6 flex-1">
+      {/* ── 모바일 뷰 (< lg) ─────────────────────────────────── */}
+      <div className="block lg:hidden px-4 py-3 space-y-4">
+        {/* StatCards 2열 */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <p className="text-xs text-gray-500">이번 달 총 매출</p>
+            <p className="text-lg font-black text-gray-900 mt-1">{Math.round(thisMonth.totalRevenue / 10000)}만원</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <p className="text-xs text-gray-500">오늘 예약</p>
+            <p className="text-lg font-black text-gray-900 mt-1">{todayReservations.length}건</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <p className="text-xs text-gray-500">전체 고객</p>
+            <p className="text-lg font-black text-gray-900 mt-1">{totalCustomers}명</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <p className="text-xs text-gray-500">VIP 고객</p>
+            <p className="text-lg font-black text-gray-900 mt-1">{vipCount}명</p>
+          </div>
+        </div>
+
+        {/* 오늘 예약 현황 */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-bold text-gray-900">오늘 예약 현황</p>
+            <button
+              onClick={() => navigate('/reservations')}
+              className="text-xs text-[#1a3a8f] font-medium"
+            >
+              전체 &rsaquo;
+            </button>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-gray-50">
+            {todayReservations.length === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-400">
+                <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
+                오늘 예약이 없습니다
+                <p className="text-xs text-slate-400 mt-1">PC에서 예약을 추가하세요</p>
+              </div>
+            ) : (
+              todayReservations.slice(0, 5).map(r => (
+                <div key={r.id} className="flex items-center gap-3 px-4 py-3 min-h-[52px]">
+                  <div className="text-center w-12 flex-shrink-0">
+                    <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{r.customerName}</p>
+                    <p className="text-xs text-gray-400 truncate">{r.services.map(s => s.serviceName).join(', ')} · {r.staffName}</p>
+                  </div>
+                  <StatusBadge status={r.status} />
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 주간 매출 차트 */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+          <p className="text-sm font-bold text-gray-900 mb-3">주간 매출 현황</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={weeklyData} barSize={12}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} unit="만" />
+              <Tooltip
+                formatter={(v, name) => [`${v}만원`, name === '시술' ? '시술 매출' : '홈케어']}
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px' }}
+              />
+              <Bar dataKey="시술" stackId="a" fill="#1a3a8f" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="제품" stackId="a" fill="#60a5fa" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 재고 부족 알림 */}
+        {lowStockProducts.length > 0 && (
+          <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+            <p className="text-sm font-bold text-amber-800 mb-2">재고 부족 알림</p>
+            <div className="space-y-1.5">
+              {lowStockProducts.slice(0, 3).map(p => (
+                <div key={p.id} className="flex items-center justify-between">
+                  <p className="text-xs text-amber-900">{p.name}</p>
+                  <p className="text-xs font-bold text-red-600">{p.stock}{p.unit}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 데스크톱 뷰 (lg+) ────────────────────────────────── */}
+      <div className="hidden lg:block p-8 space-y-6 flex-1">
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="cursor-pointer" onClick={() => navigate('/sales')}>

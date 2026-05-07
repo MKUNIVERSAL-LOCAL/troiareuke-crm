@@ -41,7 +41,68 @@ export default function Treatments() {
         action={{ label: '시술 기록 추가', onClick: () => setShowAddModal(true) }}
       />
 
-      <div className="p-8 flex-1">
+      {/* ── 모바일 뷰 (< lg) ── 타임라인 카드 */}
+      <div className="block lg:hidden flex-1 flex flex-col">
+        {/* 검색바 */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="고객명, 시술명, 직원명 검색..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full h-10 pl-9 pr-4 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {filtered.length === 0 ? (
+            <div className="py-16 text-center">
+              <ClipboardList size={32} className="text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">시술 기록이 없습니다</p>
+              <p className="text-xs text-slate-400 mt-1">PC에서 시술 기록을 추가하세요</p>
+            </div>
+          ) : (
+            filtered.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setSelected(t)}
+                className="w-full bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-left"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-sm font-bold">{t.customerName[0]}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-gray-900">{t.customerName}</p>
+                      {t.programName && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                          {t.programName}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                      {t.treatmentDetails || t.programName || '시술 내역 없음'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
+                    </p>
+                    {t.skinCondition && (
+                      <p className="text-xs text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ── 데스크톱 뷰 (lg+) ── 기존 테이블 그대로 */}
+      <div className="hidden lg:block p-8 flex-1">
         <div className="flex gap-3 mb-6">
           <div className="relative flex-1 max-w-sm">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />

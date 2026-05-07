@@ -49,6 +49,16 @@ input:focus, select:focus, textarea:focus {
   overflow: hidden;
 }
 
+/* PWA safe-area 탭바용 */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: constant(safe-area-inset-bottom);
+}
+
+/* 스크롤바 숨김 (모바일 필터 칩 가로 스크롤 등) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* 업데이트 알림 슬라이드 다운 애니메이션 */
 @keyframes slide-down {
   from { transform: translateY(-100%); opacity: 0; }

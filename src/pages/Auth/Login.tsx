@@ -84,7 +84,9 @@ export default function Login() {
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">이메일</label>
                 <input
                   type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                  inputMode="email"
+                  autoComplete="email"
+                  className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
                   placeholder="example@email.com"
                 />
               </div>
@@ -93,7 +95,8 @@ export default function Login() {
                 <div className="relative">
                   <input
                     type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
-                    className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all pr-11"
+                    autoComplete="current-password"
+                    className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all pr-11"
                     placeholder="비밀번호 입력"
                   />
                   <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -110,7 +113,7 @@ export default function Login() {
               </div>
               <button
                 type="submit" disabled={loading}
-                className="w-full py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+                className="w-full min-h-[48px] py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">

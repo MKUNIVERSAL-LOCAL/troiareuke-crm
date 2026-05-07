@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/layout/Layout';
@@ -156,14 +156,22 @@ function SystemListeners() {
   );
 }
 
+// Electron 환경 감지 — HashRouter 사용 (file:// 프로토콜 필요)
+// 웹/PWA 환경 — BrowserRouter 사용
+const IS_ELECTRON =
+  typeof navigator !== 'undefined' &&
+  navigator.userAgent.includes('Electron');
+
+const Router = IS_ELECTRON ? HashRouter : BrowserRouter;
+
 export default function App() {
   return (
-    <HashRouter>
+    <Router>
       <AuthProvider>
         <UpdateNotification />
         <SystemListeners />
         <AppRoutes />
       </AuthProvider>
-    </HashRouter>
+    </Router>
   );
 }

@@ -182,7 +182,179 @@ export default function Customers() {
   const selectedProgForForm = programs.find(p => p.id === progForm.programId);
 
   return (
-    <div className="flex h-full">
+    <div className="flex flex-col h-full">
+
+      {/* ── 모바일 뷰 (< lg) ── 카드 리스트 */}
+      <div className="flex flex-col lg:hidden flex-1">
+        {/* 검색바 + 필터 */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 pt-3 pb-2 shadow-sm">
+          <div className="relative mb-2">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="고객명, 전화번호 검색"
+              className="w-full h-10 pl-9 pr-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            {(['전체', ...GRADES] as const).map(g => (
+              <button
+                key={g}
+                onClick={() => setGradeFilter(g)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  gradeFilter === g ? 'bg-[#1a3a8f] text-white' : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 카드 목록 */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {filtered.length === 0 ? (
+            <div className="py-16 text-center">
+              <User size={32} className="text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">고객이 없습니다</p>
+              <p className="text-xs text-slate-400 mt-1">PC에서 고객을 추가하세요</p>
+            </div>
+          ) : (
+            filtered.map(customer => {
+              const daysSince = getDaysSince(customer.lastVisitDate);
+              return (
+                <button
+                  key={customer.id}
+                  onClick={() => {
+                    setSelected(customer);
+                    setCustomerPrograms(CustomerProgramStore.getByCustomer(customer.id));
+                  }}
+                  className="w-full bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-left min-h-[72px]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                      {customer.name[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900">{customer.name}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium flex-shrink-0 ${GRADE_COLORS[customer.grade]}`}>
+                          {customer.grade}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {customer.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3')}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {daysSince !== null ? `${daysSince}일 전 방문` : '방문 기록 없음'} · 방문 {customer.totalVisits}회
+                      </p>
+                    </div>
+                    <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {/* 모바일 고객 상세 — 풀스크린 모달 */}
+        {selected && (
+          <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+            {/* 헤더 */}
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 shadow-sm">
+              <button
+                onClick={() => setSelected(null)}
+                className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200"
+                aria-label="뒤로가기"
+              >
+                <ChevronRight size={18} className="rotate-180 text-gray-600" />
+              </button>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-gray-900">{selected.name}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${GRADE_COLORS[selected.grade]}`}>
+                    {selected.grade}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 상세 콘텐츠 스크롤 */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+              {/* 기본 정보 */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-3">기본 정보</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-xs text-gray-500">전화번호</span>
+                    <span className="text-xs font-medium text-gray-900">{selected.phone}</span>
+                  </div>
+                  {selected.birthDate && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">생년월일</span>
+                      <span className="text-xs font-medium text-gray-900">{selected.birthDate}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-xs text-gray-500">피부 타입</span>
+                    <span className="text-xs font-medium text-gray-900">{selected.skinType || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-xs text-gray-500">총 방문</span>
+                    <span className="text-xs font-medium text-gray-900">{selected.totalVisits}회</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-xs text-gray-500">총 결제</span>
+                    <span className="text-xs font-medium text-gray-900">{(selected.totalSpent || 0).toLocaleString()}원</span>
+                  </div>
+                  {selected.lastVisitDate && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">마지막 방문</span>
+                      <span className="text-xs font-medium text-gray-900">{formatDate(selected.lastVisitDate)}</span>
+                    </div>
+                  )}
+                </div>
+                {selected.memo && (
+                  <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                    <p className="text-xs text-gray-500 mb-1">메모</p>
+                    <p className="text-xs text-gray-700">{selected.memo}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* 프로그램 목록 */}
+              {customerPrograms.length > 0 && (
+                <div className="bg-white rounded-xl border border-slate-200 p-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-3">진행 프로그램</p>
+                  <div className="space-y-2">
+                    {customerPrograms.map(cp => (
+                      <div key={cp.id} className="p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                            !cp.isCompleted ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'
+                          }`}>{!cp.isCompleted ? '진행중' : '완료'}</span>
+                        </div>
+                        {cp.totalSessions != null && (
+                          <p className="text-xs text-gray-500">
+                            {cp.usedSessions || 0}/{cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-slate-400 text-center pb-2">수정·삭제는 PC에서 이용해주세요</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 데스크톱 뷰 (lg+) ── 기존 레이아웃 그대로 */}
+      <div className="hidden lg:flex h-full flex-1">
       {/* 왼쪽: 고객 목록 */}
       <div className="w-80 flex-shrink-0 border-r border-gray-100 flex flex-col bg-white">
         <div className="p-4 border-b border-gray-100">
@@ -694,6 +866,7 @@ export default function Customers() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import MobileTabBar from './MobileTabBar';
 import UpdateBanner from '../ui/UpdateBanner';
 import AnnouncementBanner from '../ui/AnnouncementBanner';
+import OfflineBanner from '../ui/OfflineBanner';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -21,16 +23,20 @@ export default function Layout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* 메인 콘텐츠 */}
-      <main className="flex-1 lg:ml-64 min-h-screen overflow-x-hidden">
+      {/* pb-16 lg:pb-0: 모바일 탭바(h-14=56px) + safe-area 여백 / 데스크톱은 0 */}
+      <main className="flex-1 lg:ml-64 min-h-screen overflow-x-hidden pb-16 lg:pb-0">
         {/* 업데이트 배너 */}
         <UpdateBanner />
         {/* 공지사항 배너 */}
         <AnnouncementBanner />
+        {/* 오프라인 배너 (모바일 전용 — lg:hidden) */}
+        <OfflineBanner />
         {/* 모바일 상단 헤더 */}
         <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
           <button
             onClick={() => setSidebarOpen(true)}
             className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+            aria-label="사이드바 열기"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="3" y1="6" x2="21" y2="6" />
@@ -53,6 +59,9 @@ export default function Layout() {
 
         <Outlet />
       </main>
+
+      {/* 하단 탭바 — 모바일 전용 (내부에서 lg:hidden 처리) */}
+      <MobileTabBar />
     </div>
   );
 }

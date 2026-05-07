@@ -1,6 +1,6 @@
 ﻿import { useState, useCallback, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar } from 'lucide-react';
-import { format, addDays, subDays, startOfWeek, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
+import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
@@ -86,6 +86,35 @@ export default function Reservations() {
     setSelectedReservation(null);
   };
 
+  // 모바일 전용 상태
+  const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const mobileFilteredReservations = (() => {
+    if (mobileTab === 'today') {
+      return reservations.filter(r => r.date === todayStr);
+    } else if (mobileTab === 'week') {
+      const wStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+      const wEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+      return reservations.filter(r => r.date >= wStart && r.date <= wEnd);
+    } else {
+      const mStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
+      const mEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+      return reservations.filter(r => r.date >= mStart && r.date <= mEnd);
+    }
+  })().sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+
+  const STATUS_COLORS: Record<string, string> = {
+    confirmed: 'bg-indigo-100 text-indigo-700',
+    pending: 'bg-amber-100 text-amber-700',
+    completed: 'bg-emerald-100 text-emerald-700',
+    cancelled: 'bg-slate-100 text-slate-500',
+    noshow: 'bg-red-100 text-red-600',
+  };
+  const STATUS_LABELS: Record<string, string> = {
+    confirmed: '확정', pending: '대기', completed: '완료', cancelled: '취소', noshow: '노쇼',
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header
@@ -94,7 +123,76 @@ export default function Reservations() {
         action={{ label: '예약 추가', onClick: () => setShowAddModal(true) }}
       />
 
-      <div className="p-8 flex-1">
+      {/* ── 모바일 뷰 (< lg) ── 일별 리스트 */}
+      <div className="block lg:hidden flex-1 flex flex-col">
+        {/* 탭 필터 */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
+          <div className="flex gap-2">
+            {(['today', 'week', 'month'] as const).map(tab => {
+              const label = tab === 'today' ? '오늘' : tab === 'week' ? '이번주' : '이번달';
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setMobileTab(tab)}
+                  className={clsx(
+                    'flex-1 py-2 rounded-xl text-sm font-medium transition-colors min-h-[44px]',
+                    mobileTab === tab
+                      ? 'bg-[#1a3a8f] text-white'
+                      : 'bg-slate-100 text-slate-600',
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {mobileFilteredReservations.length === 0 ? (
+            <div className="py-16 text-center">
+              <Calendar size={32} className="text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">
+                {mobileTab === 'today' ? '오늘' : mobileTab === 'week' ? '이번 주' : '이번 달'} 예약이 없습니다
+              </p>
+              <p className="text-xs text-slate-400 mt-1">PC에서 예약을 추가하세요</p>
+            </div>
+          ) : (
+            mobileFilteredReservations.map(r => (
+              <button
+                key={r.id}
+                onClick={() => setSelectedReservation(r)}
+                className="w-full bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-left min-h-[60px]"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-center w-14 flex-shrink-0 pt-0.5">
+                    <p className="text-xs text-slate-500">{r.date.slice(5).replace('-', '/')}</p>
+                    <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-900">{r.customerName}</p>
+                      <span className={clsx(
+                        'text-xs font-medium px-1.5 py-0.5 rounded-full',
+                        STATUS_COLORS[r.status] ?? 'bg-slate-100 text-slate-500',
+                      )}>
+                        {STATUS_LABELS[r.status] ?? r.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">
+                      {r.services.map(s => s.serviceName).join(', ')} · {r.staffName}
+                    </p>
+                    <p className="text-xs font-medium text-gray-700 mt-0.5">{r.totalPrice.toLocaleString()}원</p>
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ── 데스크톱 뷰 (lg+) ── 기존 캘린더 그대로 */}
+      <div className="hidden lg:block p-8 flex-1">
         {/* Controls */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
