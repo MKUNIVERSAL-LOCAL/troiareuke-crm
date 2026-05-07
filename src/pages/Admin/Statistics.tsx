@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { format, subDays, parseISO, startOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -91,7 +91,7 @@ export default function Statistics() {
     { label: '활성 지점', value: summary.totalBranches, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },
     { label: '전체 사용자', value: summary.totalUsers, icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
     { label: '전체 로그인', value: summary.totalLogins.toLocaleString(), icon: LogIn, color: 'text-purple-400', bg: 'bg-purple-500/10' },
-    { label: '로그인 성공률', value: summary.successRate + '%', icon: TrendingUp, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+    { label: '로그인 성공률', value: summary.successRate + '%', icon: TrendingUp, color: 'text-amber-700', bg: 'bg-amber-500/10' },
   ];
 
   return (

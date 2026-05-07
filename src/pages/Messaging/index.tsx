@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -187,7 +187,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: () => void; reloadKey: numbe
                   <p className="text-sm font-semibold text-gray-900">{m.title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <p className="text-xs text-gray-400">{m.desc}</p>
-                    <span className={clsx('px-1.5 py-0.5 rounded text-[10px] font-medium', MSG_TYPE_COLORS[m.type])}>
+                    <span className={clsx('px-1.5 py-0.5 rounded text-xs font-medium', MSG_TYPE_COLORS[m.type])}>
                       {MSG_TYPE_LABELS[m.type]}
                     </span>
                   </div>
@@ -292,7 +292,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
               {t.variables.length > 0 && (
                 <div className="flex gap-1 mt-2 flex-wrap">
                   {t.variables.map(v => (
-                    <span key={v} className="px-1.5 py-0.5 bg-purple-50 text-purple-500 rounded text-[10px]">{'{' + v + '}'}</span>
+                    <span key={v} className="px-1.5 py-0.5 bg-purple-50 text-purple-500 rounded text-xs">{'{' + v + '}'}</span>
                   ))}
                 </div>
               )}

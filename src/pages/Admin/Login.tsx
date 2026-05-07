@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Shield, Lock, Server, Activity } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -47,7 +47,7 @@ export default function AdminLogin() {
             </div>
             <div>
               <p className="text-sm font-black tracking-widest text-white">TROIAREUKE</p>
-              <p className="text-[10px] text-blue-400 font-medium tracking-wider">ADMIN CONSOLE</p>
+              <p className="text-xs text-blue-400 font-medium tracking-wider">ADMIN CONSOLE</p>
             </div>
           </div>
         </div>
@@ -71,7 +71,7 @@ export default function AdminLogin() {
             <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3.5">
               <div className="flex items-center gap-2 mb-2">
                 <Server size={14} className="text-emerald-400" />
-                <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">System</span>
+                <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">System</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
@@ -81,7 +81,7 @@ export default function AdminLogin() {
             <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3.5">
               <div className="flex items-center gap-2 mb-2">
                 <Activity size={14} className="text-blue-400" />
-                <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Database</span>
+                <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Database</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse"></span>
@@ -108,7 +108,7 @@ export default function AdminLogin() {
               </div>
               <div>
                 <p className="text-sm font-black tracking-widest text-white">TROIAREUKE</p>
-                <p className="text-[10px] text-blue-400 font-medium">ADMIN CONSOLE</p>
+                <p className="text-xs text-blue-400 font-medium">ADMIN CONSOLE</p>
               </div>
             </div>
           </div>
@@ -184,7 +184,7 @@ export default function AdminLogin() {
           </div>
 
           {/* Security notice */}
-          <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-slate-600">
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-600">
             <Lock size={10} />
             <span>이 페이지는 권한이 부여된 관리자만 접근 가능합니다</span>
           </div>

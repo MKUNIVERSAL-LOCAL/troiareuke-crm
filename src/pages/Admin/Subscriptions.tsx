@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { CreditCard, Plus, Pencil, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
@@ -17,7 +17,7 @@ interface Subscription {
 }
 
 const planOptions = [
-  { value: 'trial', label: '무료체험', color: 'bg-amber-500/10 text-amber-400', price: 0 },
+  { value: 'trial', label: '무료체험', color: 'bg-amber-500/10 text-amber-700', price: 0 },
   { value: 'starter', label: '스타터', color: 'bg-blue-500/10 text-blue-400', price: 49000 },
   { value: 'pro', label: '프로', color: 'bg-purple-500/10 text-purple-400', price: 99000 },
   { value: 'enterprise', label: '엔터프라이즈', color: 'bg-emerald-500/10 text-emerald-400', price: 199000 },
@@ -26,7 +26,7 @@ const planOptions = [
 const statusOptions = [
   { value: 'active', label: '활성', icon: CheckCircle, color: 'text-emerald-400' },
   { value: 'expired', label: '만료', icon: AlertCircle, color: 'text-red-400' },
-  { value: 'pending', label: '대기', icon: Clock, color: 'text-amber-400' },
+  { value: 'pending', label: '대기', icon: Clock, color: 'text-amber-700' },
   { value: 'cancelled', label: '해지', icon: AlertCircle, color: 'text-slate-400' },
 ];
 

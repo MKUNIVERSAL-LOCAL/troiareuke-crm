@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 const planLabels: Record<string, { label: string; color: string }> = {
-  trial: { label: '무료체험', color: 'bg-amber-500/10 text-amber-400' },
+  trial: { label: '무료체험', color: 'bg-amber-500/10 text-amber-700' },
   starter: { label: '스타터', color: 'bg-blue-500/10 text-blue-400' },
   pro: { label: '프로', color: 'bg-purple-500/10 text-purple-400' },
   enterprise: { label: '엔터프라이즈', color: 'bg-emerald-500/10 text-emerald-400' },

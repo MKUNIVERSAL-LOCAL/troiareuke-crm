@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { CheckCircle2, Circle, ExternalLink, ChevronDown, ChevronUp, AlertCircle, CreditCard } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import clsx from 'clsx';
@@ -314,7 +314,7 @@ export default function ApiGuide() {
                       <div className="space-y-2">
                         {api.steps.map((step, i) => (
                           <div key={i} className="flex items-start gap-3">
-                            <div className="w-5 h-5 rounded-full bg-[#1a3a8f] text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
+                            <div className="w-5 h-5 rounded-full bg-[#1a3a8f] text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</div>
                             <p className="text-sm text-gray-700 leading-relaxed">{step}</p>
                           </div>
                         ))}
@@ -371,7 +371,7 @@ export default function ApiGuide() {
               '관리자 대시보드: 구독 현황·매출 통계 개발',
             ].map((s, i) => (
               <div key={i} className="flex items-start gap-2.5 text-sm text-blue-100">
-                <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
+                <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
                 {s}
               </div>
             ))}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -152,7 +152,7 @@ export function TroiareukeLogo({ white = false }: { white?: boolean }) {
       </div>
       <div>
         <p className={`text-sm font-black tracking-wider leading-tight ${white ? 'text-white' : 'text-[#1a3a8f]'}`}>TROIAREUKE</p>
-        <p className={`text-[10px] font-medium tracking-wide ${white ? 'text-blue-200' : 'text-gray-400'}`}>에스테틱 전용 CRM</p>
+        <p className={`text-xs font-medium tracking-wide ${white ? 'text-blue-200' : 'text-gray-400'}`}>에스테틱 전용 CRM</p>
       </div>
     </div>
   );

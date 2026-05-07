@@ -1,4 +1,5 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
@@ -116,11 +117,51 @@ function AppRoutes() {
   );
 }
 
+// ── BW-H4: localStorage 용량 초과 토스트 + BW-C6: 자동 백업 트리거 ─
+function SystemListeners() {
+  const [quotaToast, setQuotaToast] = useState(false);
+
+  useEffect(() => {
+    // 저장 용량 초과 이벤트
+    const onQuota = () => {
+      setQuotaToast(true);
+      setTimeout(() => setQuotaToast(false), 6000);
+    };
+    window.addEventListener('crm:storage-quota-exceeded', onQuota);
+
+    // 자동 백업 트리거 (main 프로세스 → preload → renderer)
+    const electronAPI = (window as Window & { electronAPI?: { backup?: { exportNow: (d: Record<string, string>) => Promise<unknown>; onTrigger: (cb: () => void) => void } } }).electronAPI;
+    if (electronAPI?.backup) {
+      electronAPI.backup.onTrigger(() => {
+        // localStorage 전체 스냅샷
+        const snapshot: Record<string, string> = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k) snapshot[k] = localStorage.getItem(k) ?? '';
+        }
+        electronAPI.backup!.exportNow(snapshot).catch(() => {});
+      });
+    }
+
+    return () => {
+      window.removeEventListener('crm:storage-quota-exceeded', onQuota);
+    };
+  }, []);
+
+  if (!quotaToast) return null;
+  return (
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] bg-red-600 text-white text-sm px-4 py-3 rounded-lg shadow-lg max-w-sm text-center">
+      저장 공간이 부족합니다. 사진을 정리하거나 설정에서 데이터를 백업 후 정리해주세요.
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
         <UpdateNotification />
+        <SystemListeners />
         <AppRoutes />
       </AuthProvider>
     </HashRouter>

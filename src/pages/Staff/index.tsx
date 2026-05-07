@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Phone, Mail, Plus, Trash2, Edit3 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -70,11 +70,11 @@ export default function StaffPage() {
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center">
                     <p className="text-base font-bold text-gray-800">{staffTodayRes.length}</p>
-                    <p className="text-[10px] text-gray-400">오늘 예약</p>
+                    <p className="text-xs text-gray-400">오늘 예약</p>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center">
                     <p className="text-base font-bold text-gray-800">{(monthlyRevenue / 10000).toFixed(0)}만</p>
-                    <p className="text-[10px] text-gray-400">이번달 매출</p>
+                    <p className="text-xs text-gray-400">이번달 매출</p>
                   </div>
                 </div>
 

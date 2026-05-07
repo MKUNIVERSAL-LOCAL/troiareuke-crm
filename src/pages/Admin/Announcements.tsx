@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
@@ -16,7 +16,7 @@ interface Announcement {
 const typeOptions = [
   { value: 'info', label: '일반 공지', color: 'bg-blue-500/10 text-blue-400', badge: 'bg-blue-500' },
   { value: 'update', label: '업데이트', color: 'bg-emerald-500/10 text-emerald-400', badge: 'bg-emerald-500' },
-  { value: 'warning', label: '주의사항', color: 'bg-amber-500/10 text-amber-400', badge: 'bg-amber-500' },
+  { value: 'warning', label: '주의사항', color: 'bg-amber-500/10 text-amber-700', badge: 'bg-amber-500' },
   { value: 'event', label: '이벤트', color: 'bg-purple-500/10 text-purple-400', badge: 'bg-purple-500' },
 ];
 

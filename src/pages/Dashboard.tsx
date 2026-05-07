@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag } from 'lucide-react';
 import {
@@ -207,7 +207,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-gray-800 truncate">{p.customerName || '고객'}</p>
-                      <p className="text-[10px] text-gray-400">{p.paymentDate} · {p.typeLabel}</p>
+                      <p className="text-xs text-gray-400">{p.paymentDate} · {p.typeLabel}</p>
                     </div>
                     <span className="text-xs font-bold text-gray-800 flex-shrink-0">{p.amount.toLocaleString()}원</span>
                   </div>
@@ -234,7 +234,7 @@ export default function Dashboard() {
                   <div key={r.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/50 transition-colors">
                     <div className="text-center w-14 flex-shrink-0">
                       <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
-                      <p className="text-[10px] text-gray-400">{r.endTime}</p>
+                      <p className="text-xs text-gray-400">{r.endTime}</p>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-400 flex items-center justify-center flex-shrink-0">
                       <span className="text-white text-xs font-bold">{r.customerName[0]}</span>
@@ -281,7 +281,7 @@ export default function Dashboard() {
                       </div>
                       <div className="text-right">
                         <p className="text-xs font-bold text-red-500">{p.stock}{p.unit}</p>
-                        <p className="text-[10px] text-gray-400">최소 {p.minStock}{p.unit}</p>
+                        <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit}</p>
                       </div>
                     </div>
                   ))
@@ -304,7 +304,7 @@ export default function Dashboard() {
                       <span className="text-xs font-medium text-[#1a3a8f] w-10 flex-shrink-0">{r.startTime}</span>
                       <div className="flex-1 bg-blue-50 rounded-lg px-3 py-1.5">
                         <p className="text-[11px] font-semibold text-gray-800">{r.customerName}</p>
-                        <p className="text-[10px] text-gray-400">{r.staffName}</p>
+                        <p className="text-xs text-gray-400">{r.staffName}</p>
                       </div>
                     </div>
                   ))

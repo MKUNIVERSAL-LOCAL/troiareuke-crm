@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { recordLoginLog } from '../lib/loginLog';
-import { initializeStores, resetStoreCache } from '../lib/store';
+import { initializeStores, resetStoreCache, safeSetItem } from '../lib/store';
 
 // 슈퍼어드민 권한은 오직 Supabase의 user_profiles.role === 'superadmin' 로만 판정한다.
 // 자격증명을 클라이언트에 절대 하드코딩하지 않는다 (번들에 노출되어 공개되기 때문).
@@ -58,7 +58,7 @@ function getLocalUsers(): LocalUserRecord[] {
 function saveLocalUser(record: LocalUserRecord) {
   const users = getLocalUsers().filter(u => u.email !== record.email);
   users.push(record);
-  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+  safeSetItem(LOCAL_USERS_KEY, JSON.stringify(users));
 }
 
 // ── AuthProvider ─────────────────────────────────────────────────
@@ -154,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const saveUser = (u: AuthUser) => {
     setUser(u);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
+    safeSetItem(STORAGE_KEY, JSON.stringify(u));
     // Supabase에서 데이터 미리 로드
     initializeStores().catch(() => {});
   };

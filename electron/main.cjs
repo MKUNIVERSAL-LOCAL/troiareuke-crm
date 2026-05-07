@@ -1,5 +1,6 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Menu } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const { autoUpdater } = require('electron-updater');
 
@@ -186,6 +187,9 @@ ipcMain.handle('start-google-oauth', async (_event, { authUrl }) => {
   });
 });
 
+// ─── BW-M3: 애플리케이션 메뉴 제거 ──────────────────────────────
+Menu.setApplicationMenu(null);
+
 // ─── 윈도우 생성 ─────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -196,6 +200,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.cjs'),
     },
     title: '트로이아르케 CRM',
@@ -216,6 +221,23 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  // ─── BW-H2: will-navigate 외부 도메인 차단 ───────────────────
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowedPrefixes = [
+      'http://localhost:',
+      'https://localhost:',
+      'http://127.0.0.1:',
+      'https://127.0.0.1:',
+    ];
+    const isLocal = allowedPrefixes.some(prefix => url.startsWith(prefix));
+    const isFile = url.startsWith('file://');
+    if (!isLocal && !isFile) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
+  // ─── BW-H2: new-window 외부 브라우저로 위임 ─────────────────
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
@@ -223,15 +245,107 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // ─── BW-M3: prod 환경에서 DevTools 차단 ─────────────────────
+  mainWindow.webContents.on('devtools-opened', () => {
+    if (!isDev) {
+      mainWindow.webContents.closeDevTools();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
+// ─── BW-C6: 자동 백업 ──────────────────────────────────────────
+const BACKUP_DIR_NAME = 'backups';
+const BACKUP_RETENTION_DAYS = 7;
+const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6시간
+
+function getBackupDir() {
+  return path.join(app.getPath('userData'), BACKUP_DIR_NAME);
+}
+
+function formatDateForFilename(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return (
+    date.getFullYear() +
+    pad(date.getMonth() + 1) +
+    pad(date.getDate()) +
+    '-' +
+    pad(date.getHours()) +
+    pad(date.getMinutes()) +
+    pad(date.getSeconds())
+  );
+}
+
+async function pruneOldBackups(backupDir) {
+  try {
+    const files = await fs.promises.readdir(backupDir);
+    const cutoff = Date.now() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    for (const file of files) {
+      if (!file.startsWith('troiareuke-') || !file.endsWith('.json')) continue;
+      const filePath = path.join(backupDir, file);
+      const stat = await fs.promises.stat(filePath);
+      if (stat.mtimeMs < cutoff) {
+        await fs.promises.unlink(filePath);
+      }
+    }
+  } catch {
+    // 백업 정리 실패는 무시
+  }
+}
+
+async function runBackup(localStorageData) {
+  try {
+    const backupDir = getBackupDir();
+    await fs.promises.mkdir(backupDir, { recursive: true });
+    await pruneOldBackups(backupDir);
+
+    const filename = `troiareuke-${formatDateForFilename(new Date())}.json`;
+    const filePath = path.join(backupDir, filename);
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      appVersion: app.getVersion(),
+      source: 'auto-backup',
+      localStorage: localStorageData || {},
+    };
+
+    await fs.promises.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf-8');
+    return { success: true, filePath };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// IPC: 렌더러에서 localStorage 데이터 수신 후 백업 실행
+ipcMain.handle('backup-export', async (_event, localStorageData) => {
+  return runBackup(localStorageData);
+});
+
+// IPC: 백업 폴더 열기
+ipcMain.handle('backup-open-folder', async () => {
+  const backupDir = getBackupDir();
+  await fs.promises.mkdir(backupDir, { recursive: true });
+  shell.openPath(backupDir);
+  return { success: true };
+});
+
 // ─── 앱 이벤트 ──────────────────────────────────────────────────
 app.whenReady().then(() => {
   createWindow();
   setupAutoUpdater();
+
+  // 앱 시작 후 10초 뒤 첫 백업 (렌더러가 뜰 시간 확보)
+  setTimeout(() => {
+    mainWindow?.webContents.send('trigger-backup');
+  }, 10000);
+
+  // 6시간마다 정기 백업
+  setInterval(() => {
+    mainWindow?.webContents.send('trigger-backup');
+  }, BACKUP_INTERVAL_MS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

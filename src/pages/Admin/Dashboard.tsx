@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { getLocalLogs } from '../../lib/loginLog';
@@ -78,7 +78,7 @@ export default function AdminDashboard() {
     { label: '전체 지점', value: stats.totalBranches, sub: `운영 중 ${stats.activeBranches}개`, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },
     { label: '등록 사용자', value: stats.totalUsers, sub: '전체 지점 합계', icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
     { label: '오늘 로그인', value: stats.todayLogins, sub: '성공 기준', icon: LogIn, color: 'text-purple-400', bg: 'bg-purple-500/10' },
-    { label: '성공률', value: stats.recentLogs.length > 0 ? Math.round((stats.recentLogs.filter(l => l.status === 'success').length / stats.recentLogs.length) * 100) + '%' : '-', sub: '최근 20건 기준', icon: TrendingUp, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+    { label: '성공률', value: stats.recentLogs.length > 0 ? Math.round((stats.recentLogs.filter(l => l.status === 'success').length / stats.recentLogs.length) * 100) + '%' : '-', sub: '최근 20건 기준', icon: TrendingUp, color: 'text-amber-700', bg: 'bg-amber-500/10' },
   ];
 
   return (

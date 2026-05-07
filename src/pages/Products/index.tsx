@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+﻿import { useState, useCallback } from 'react';
 import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -197,7 +197,7 @@ export default function Products() {
                             <p className={clsx('text-sm font-bold', isLow ? 'text-red-500' : 'text-gray-800')}>
                               {p.stock}{p.unit}
                             </p>
-                            <p className="text-[10px] text-gray-400">최소 {p.minStock}{p.unit}</p>
+                            <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit}</p>
                           </td>
                           <td className="px-4 py-4 text-center">
                             {isLow ? (

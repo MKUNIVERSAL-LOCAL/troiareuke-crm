@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Users, Building2 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
@@ -150,7 +150,7 @@ export default function AdminUsers() {
                       {u.is_onboarded ? (
                         <span className="text-xs text-emerald-400">완료</span>
                       ) : (
-                        <span className="text-xs text-amber-400">미완료</span>
+                        <span className="text-xs text-amber-700">미완료</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-xs text-slate-500">

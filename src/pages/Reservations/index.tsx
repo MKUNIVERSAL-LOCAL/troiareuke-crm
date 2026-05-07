@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+﻿import { useState, useCallback, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -203,7 +203,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                 {format(day, 'd')}
               </p>
               {dayReservations.length > 0 && (
-                <span className="text-[10px] text-purple-500 font-medium">{dayReservations.length}건</span>
+                <span className="text-xs text-purple-500 font-medium">{dayReservations.length}건</span>
               )}
             </div>
           );
@@ -236,7 +236,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                       <button
                         key={r.id}
                         onClick={() => onSelect(r)}
-                        className="w-full text-left rounded-lg p-1.5 text-[10px] font-medium text-white transition-opacity hover:opacity-80 shadow-sm"
+                        className="w-full text-left rounded-lg p-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80 shadow-sm"
                         style={{ backgroundColor: staff?.color || '#8B5CF6' }}
                       >
                         <p className="font-bold truncate">{r.customerName}</p>
@@ -250,7 +250,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                       href={ge.htmlLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full text-left rounded-lg p-1.5 text-[10px] font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm block mt-0.5"
+                      className="w-full text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm block mt-0.5"
                     >
                       <p className="font-bold truncate flex items-center gap-0.5">
                         <Calendar size={9} className="flex-shrink-0" />
@@ -394,7 +394,7 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-bold text-gray-900">{ge.summary}</p>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-medium rounded-full">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
                   <Calendar size={10} /> Google
                 </span>
               </div>

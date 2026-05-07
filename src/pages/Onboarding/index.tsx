@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+﻿import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -348,7 +348,7 @@ export default function Onboarding() {
             </div>
             <div className="text-left">
               <p className="text-sm font-black tracking-wider text-[#1a3a8f] leading-tight">TROIAREUKE</p>
-              <p className="text-[10px] text-gray-400">에스테틱 전용 CRM</p>
+              <p className="text-xs text-gray-400">에스테틱 전용 CRM</p>
             </div>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">안녕하세요, {user?.name}님!</h1>
@@ -367,7 +367,7 @@ export default function Onboarding() {
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-500 text-white' : i === step ? 'bg-[#1a3a8f] text-white shadow-lg shadow-blue-200' : 'bg-gray-100 text-gray-400'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
-                <p className={`text-[10px] font-medium hidden sm:block ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400'}`}>{s.label}</p>
+                <p className={`text-xs font-medium hidden sm:block ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400'}`}>{s.label}</p>
               </div>
               {i < steps.length - 1 && (
                 <div className={`w-8 sm:w-12 h-0.5 mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />
@@ -480,7 +480,7 @@ export default function Onboarding() {
                           className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-[#1a3a8f] uppercase">{cat.label}</span>
-                            <span className="text-[10px] text-gray-400">
+                            <span className="text-xs text-gray-400">
                               ({cat.programs.filter(p => selectedTroiPrograms.has(p.name)).length}/{cat.programs.length})
                             </span>
                           </div>
@@ -502,7 +502,7 @@ export default function Onboarding() {
                                   </div>
                                   <div className="text-right flex-shrink-0">
                                     <p className="text-sm font-bold text-[#1a3a8f]">{p.price.toLocaleString()}원</p>
-                                    <p className="text-[10px] text-gray-400">{p.duration}분</p>
+                                    <p className="text-xs text-gray-400">{p.duration}분</p>
                                   </div>
                                 </button>
                               );
@@ -528,7 +528,7 @@ export default function Onboarding() {
                     ) : (
                       <>
                         <span>파일을 선택하세요</span>
-                        <span className="text-[10px]">CSV/TSV 형식 (시술명, 시간(분), 가격(원))</span>
+                        <span className="text-xs">CSV/TSV 형식 (시술명, 시간(분), 가격(원))</span>
                       </>
                     )}
                   </button>
@@ -618,7 +618,7 @@ export default function Onboarding() {
                           <p className="text-sm font-bold text-gray-400">{plan.price.toLocaleString()}원/월</p>
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
-                        <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">결제 기능 준비 중</span>
+                        <span className="inline-block mt-1.5 text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">결제 기능 준비 중</span>
                       </div>
                     </div>
                   </div>

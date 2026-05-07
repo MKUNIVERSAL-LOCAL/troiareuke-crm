@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+﻿import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -34,14 +34,14 @@ export default function AdminLayout() {
             </div>
             <div>
               <p className="text-xs font-black tracking-widest text-white leading-tight">TROIAREUKE</p>
-              <p className="text-[10px] text-blue-400 font-medium">관리자 콘솔</p>
+              <p className="text-xs text-blue-400 font-medium">관리자 콘솔</p>
             </div>
           </div>
         </div>
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">메뉴</p>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">메뉴</p>
           <ul className="space-y-0.5">
             {adminNav.map(({ to, label, icon: Icon }) => (
               <li key={to}>
@@ -68,7 +68,7 @@ export default function AdminLayout() {
 
           {/* 일반 CRM으로 이동 링크 */}
           <div className="mt-6">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">바로가기</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">바로가기</p>
             <NavLink
               to="/"
               className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-all"
@@ -83,10 +83,10 @@ export default function AdminLayout() {
         <div className="px-4 py-4 border-t border-slate-700/50">
           <div className="bg-slate-800 rounded-xl px-4 py-3 mb-3">
             <p className="text-xs font-bold text-white truncate">{user?.name || '관리자'}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5 truncate">{user?.email}</p>
+            <p className="text-xs text-slate-400 mt-0.5 truncate">{user?.email}</p>
             <div className="flex items-center gap-1.5 mt-1.5">
               <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
-              <span className="text-[10px] text-blue-400 font-medium">슈퍼어드민</span>
+              <span className="text-xs text-blue-400 font-medium">슈퍼어드민</span>
             </div>
           </div>
           <button

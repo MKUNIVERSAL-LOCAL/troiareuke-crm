@@ -60,8 +60,26 @@ function getList<T>(key: string): T[] {
   }
 }
 
+// ─── BW-H4: QuotaExceededError 안전 래퍼 ───────────────────────
+export function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (err) {
+    if (err instanceof DOMException && (
+      err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    )) {
+      console.warn('[CRM] localStorage 용량 초과:', key);
+      // 브라우저 alert 대신 커스텀 이벤트를 dispatch해 UI에서 토스트 처리
+      window.dispatchEvent(new CustomEvent('crm:storage-quota-exceeded', { detail: { key } }));
+    } else {
+      throw err;
+    }
+  }
+}
+
 function saveList<T>(key: string, data: T[]): void {
-  localStorage.setItem(key, JSON.stringify(data));
+  safeSetItem(key, JSON.stringify(data));
 }
 
 function shopKey(table: string): string {
@@ -1380,7 +1398,7 @@ export const SettingsStore = {
     const current = this.get();
     const updated = { ...current, ...updates };
     _settings = updated;
-    localStorage.setItem(shopKey('settings'), JSON.stringify(updated));
+    safeSetItem(shopKey('settings'), JSON.stringify(updated));
 
     if (isSupabaseConfigured) {
       const dbRow = { ...toDbSettings(updated), branch_id: getShopId() };

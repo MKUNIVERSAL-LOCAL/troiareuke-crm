@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar } from 'lucide-react';
+﻿import { useState, useEffect, useCallback } from 'react';
+import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen } from 'lucide-react';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore } from '../../lib/store';
@@ -9,7 +9,7 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import clsx from 'clsx';
 
-type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription';
+type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup';
 
 const tabs = [
   { key: 'shop' as SettingTab, label: '샵 정보', icon: <Store size={16} /> },
@@ -18,6 +18,7 @@ const tabs = [
   { key: 'notifications' as SettingTab, label: '알림 설정', icon: <Bell size={16} /> },
   { key: 'services' as SettingTab, label: '시술 관리', icon: <Palette size={16} /> },
   { key: 'subscription' as SettingTab, label: '구독/플랜', icon: <CreditCard size={16} /> },
+  { key: 'backup' as SettingTab, label: '데이터 백업', icon: <HardDrive size={16} /> },
 ];
 
 const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
@@ -38,6 +39,24 @@ export default function Settings() {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [planChangeLoading, setPlanChangeLoading] = useState(false);
   const [planChangeError, setPlanChangeError] = useState<string | null>(null);
+
+  // Backup state
+  const [backupStatus, setBackupStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
+  const electronAPI = (window as Window & { electronAPI?: { backup?: { exportNow: (d: Record<string, string>) => Promise<{ success: boolean; filePath?: string; error?: string }>; openFolder: () => Promise<void> } } }).electronAPI;
+  const isElectron = !!electronAPI?.backup;
+
+  const handleBackupNow = async () => {
+    if (!electronAPI?.backup) return;
+    setBackupStatus('saving');
+    const snapshot: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k) snapshot[k] = localStorage.getItem(k) ?? '';
+    }
+    const result = await electronAPI.backup.exportNow(snapshot);
+    setBackupStatus(result.success ? 'done' : 'error');
+    setTimeout(() => setBackupStatus('idle'), 3000);
+  };
 
   // Load subscription data
   useEffect(() => {
@@ -903,7 +922,7 @@ export default function Settings() {
                               <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {plan.features.map(f => (
-                                  <span key={f} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{f}</span>
+                                  <span key={f} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{f}</span>
                                 ))}
                               </div>
                             </div>
@@ -931,6 +950,45 @@ export default function Settings() {
                   <div className="mt-4 p-3 bg-blue-50 rounded-xl text-xs text-blue-600">
                     Enterprise 플랜은 별도 문의가 필요합니다. support@troiareuke.com 으로 문의해주세요.
                   </div>
+                </SettingCard>
+              </div>
+            )}
+
+            {tab === 'backup' && (
+              <div className="space-y-4">
+                <SettingCard title="데이터 백업">
+                  {isElectron ? (
+                    <div className="space-y-4">
+                      <p className="text-sm text-gray-500">
+                        앱은 시작 시 자동으로 데이터를 백업하며, 6시간마다 자동 저장합니다.
+                        최근 7일치 백업 파일이 보관됩니다.
+                      </p>
+                      <div className="flex flex-wrap gap-3">
+                        <button
+                          onClick={handleBackupNow}
+                          disabled={backupStatus === 'saving'}
+                          className="flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <HardDrive size={16} />
+                          {backupStatus === 'saving' ? '백업 중...' : backupStatus === 'done' ? '백업 완료!' : backupStatus === 'error' ? '백업 실패' : '지금 백업'}
+                        </button>
+                        <button
+                          onClick={() => electronAPI?.backup?.openFolder()}
+                          className="flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-gray-100 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-200 transition-colors"
+                        >
+                          <FolderOpen size={16} />
+                          백업 폴더 열기
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        백업 파일 위치: 앱 데이터 폴더 / backups / troiareuke-YYYYMMDD-HHmmss.json
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">
+                      데이터 백업 기능은 데스크탑(Electron) 앱에서만 사용 가능합니다.
+                    </p>
+                  )}
                 </SettingCard>
               </div>
             )}

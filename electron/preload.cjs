@@ -34,6 +34,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('google-oauth-token', (_event, hash) => callback(hash));
   },
 
+  // ── BW-C6: 백업 ──
+  backup: {
+    exportNow: (localStorageData) => ipcRenderer.invoke('backup-export', localStorageData),
+    openFolder: () => ipcRenderer.invoke('backup-open-folder'),
+    onTrigger: (callback) => {
+      ipcRenderer.on('trigger-backup', () => callback());
+    },
+  },
+
   // ── 리스너 정리 (메모리 누수 방지) ──
   removeUpdateListeners: () => {
     ipcRenderer.removeAllListeners('update-available');
@@ -41,5 +50,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('update-downloaded');
     ipcRenderer.removeAllListeners('update-error');
     ipcRenderer.removeAllListeners('google-oauth-token');
+    ipcRenderer.removeAllListeners('trigger-backup');
   },
 });

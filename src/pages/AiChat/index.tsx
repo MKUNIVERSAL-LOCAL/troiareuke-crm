@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check, Zap } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
@@ -371,7 +371,7 @@ export default function AiChat() {
                 </label>
                 <input type="password" value={claudeKey} onChange={e => setClaudeKey(e.target.value)}
                   placeholder="sk-ant-..." className="w-full px-3 py-2.5 text-sm border border-violet-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-300 font-mono bg-violet-50/30" />
-                <p className="text-[10px] text-violet-500 mt-1">클로드 맥스 사용자 추천! Electron 앱에서 CORS 없이 바로 사용 가능</p>
+                <p className="text-xs text-violet-500 mt-1">클로드 맥스 사용자 추천! Electron 앱에서 CORS 없이 바로 사용 가능</p>
               </div>
               {/* OpenAI */}
               <div>
@@ -435,7 +435,7 @@ export default function AiChat() {
                     {msg.content}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-300">{format(msg.timestamp, 'HH:mm')}</span>
+                    <span className="text-xs text-gray-300">{format(msg.timestamp, 'HH:mm')}</span>
                     {/* 어떤 AI가 답했는지 표시 */}
                     {msg.usedProvider && (
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
@@ -488,7 +488,7 @@ export default function AiChat() {
                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
-            <p className="text-[10px] text-gray-300 mt-2 text-center">
+            <p className="text-xs text-gray-300 mt-2 text-center">
               Claude (Anthropic) 기반 CRM 데이터 실시간 분석 | OpenAI / Gemini 폴백 지원
             </p>
           </div>

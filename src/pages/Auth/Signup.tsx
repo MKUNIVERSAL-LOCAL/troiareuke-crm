@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -98,8 +98,8 @@ export default function Signup() {
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-bold text-gray-900">{p.label}</p>
-                          {p.highlight && <span className="px-2 py-0.5 bg-[#1a3a8f] text-white rounded-full text-[10px] font-bold">선택됨</span>}
-                          {p.disabled && <span className="px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full text-[10px] font-bold">준비 중</span>}
+                          {p.highlight && <span className="px-2 py-0.5 bg-[#1a3a8f] text-white rounded-full text-xs font-bold">선택됨</span>}
+                          {p.disabled && <span className="px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full text-xs font-bold">준비 중</span>}
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">{p.desc}</p>
                       </div>
