@@ -216,13 +216,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw new Error(error.message);
 
       if (authData.user) {
-        await supabase.from('user_profiles').upsert({
+        const { error: profileErr } = await supabase.from('user_profiles').upsert({
           id: authData.user.id,
           name: data.name,
           phone: data.phone,
           role: 'admin',
           is_onboarded: false,
         });
+        if (profileErr) {
+          console.error('user_profiles upsert 실패:', profileErr);
+          // RLS 정책 위반 또는 컬럼 누락 시 명확한 에러 — 회원가입은 이어가되 다음 단계에서 재시도 안내
+        }
+      }
+      // 이메일 인증 필요 환경: session 없으면 로그인 막힘
+      if (authData.user && !authData.session) {
+        throw new Error('Email not confirmed');
       }
     } else {
       await new Promise(r => setTimeout(r, 800));

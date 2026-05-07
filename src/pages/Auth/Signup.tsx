@@ -30,8 +30,24 @@ export default function Signup() {
     try {
       await signup({ name: form.name, email: form.email, phone: form.phone, password: form.password });
       navigate('/onboarding');
-    } catch {
-      setError('회원가입에 실패했습니다. 다시 시도해주세요.');
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (/already registered|user already exists|duplicate/i.test(msg)) {
+        setError('이미 가입된 이메일입니다. 로그인 페이지에서 시도해주세요.');
+      } else if (/Email not confirmed/i.test(msg)) {
+        // Supabase "Confirm email" 활성화 상태 — 가입은 됐으나 이메일 인증 대기
+        setError('가입 완료! 이메일 인증 메일을 확인해주세요. 시연 환경에서는 Supabase 대시보드 → Authentication → Settings → "Confirm email"을 비활성화해주세요.');
+      } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
+        setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.');
+      } else if (/invalid email/i.test(msg)) {
+        setError('이메일 형식이 올바르지 않습니다.');
+      } else if (/password/i.test(msg)) {
+        setError('비밀번호 형식이 올바르지 않습니다 (8자 이상, 영문·숫자 조합 권장).');
+      } else if (msg) {
+        setError(`회원가입 실패: ${msg}`);
+      } else {
+        setError('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
     } finally { setLoading(false); }
   };
 

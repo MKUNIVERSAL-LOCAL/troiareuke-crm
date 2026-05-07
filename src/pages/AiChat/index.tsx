@@ -1,5 +1,11 @@
 ﻿import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check, Zap } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check, Zap, AlertTriangle, Monitor } from 'lucide-react';
+
+// 웹(브라우저) 환경 감지 — Electron IPC 없으면 Claude API CORS 차단됨
+const IS_ELECTRON =
+  typeof window !== 'undefined' &&
+  /Electron/i.test(navigator.userAgent) &&
+  !!(window as any).electronAPI;
 import Header from '../../components/layout/Header';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
 import { format, subMonths, parseISO, differenceInDays } from 'date-fns';
@@ -121,26 +127,13 @@ ${crmContext}`;
     });
   }
 
-  // Web 폴백 (프록시 필요)
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      system: systemPrompt,
-      messages,
-    }),
-  });
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error?.message || 'Claude API 오류');
-  }
-  return (await response.json()).content[0].text;
+  // 웹 환경에서는 Anthropic API가 CORS 정책으로 차단됨
+  // OpenAI / Gemini는 CORS 허용이므로 해당 키로 폴백 가능
+  throw new Error(
+    'CLAUDE_CORS_BLOCKED: 브라우저에서 Claude API를 직접 호출할 수 없습니다 (CORS 정책).\n' +
+    'OpenAI 또는 Gemini API 키를 설정하면 웹에서도 AI 분석이 가능합니다.\n' +
+    'Claude를 사용하려면 데스크탑 앱에서 접속해주세요.'
+  );
 }
 
 async function callOpenAI(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
@@ -283,10 +276,15 @@ export default function AiChat() {
         usedProvider,
       }]);
     } catch (err: any) {
+      const rawMsg: string = err?.message || '';
+      const isCorsBlocked = rawMsg.includes('CLAUDE_CORS_BLOCKED') || rawMsg.includes('Failed to fetch');
+      const displayMsg = isCorsBlocked && !IS_ELECTRON
+        ? 'Claude는 브라우저에서 CORS 정책으로 사용 불가합니다.\nOpenAI 또는 Gemini API 키를 설정해서 시도해보세요.\n데스크탑 앱에서는 Claude를 정상 사용할 수 있습니다.'
+        : `오류: ${rawMsg}\n\nAPI 키 설정을 확인해주세요.`;
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `오류: ${err.message}\n\nAPI 키 설정을 확인해주세요.`,
+        content: displayMsg,
         timestamp: new Date(),
       }]);
     } finally {
@@ -322,6 +320,25 @@ export default function AiChat() {
       <Header title="AI 분석 챗봇" subtitle="Claude AI 기반 CRM 데이터 실시간 분석" />
 
       <div className="flex-1 flex flex-col p-6 gap-4 max-w-4xl mx-auto w-full">
+        {/* 웹 환경 안내 배너 */}
+        {!IS_ELECTRON && (
+          <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+            <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-800">브라우저 환경 안내</p>
+              <p className="text-xs text-amber-700 mt-1">
+                브라우저에서는 <strong>Claude (Anthropic)</strong> API가 CORS 정책으로 차단됩니다.
+                <br />
+                <strong>OpenAI</strong> 또는 <strong>Gemini</strong> API 키를 설정하면 웹에서도 AI 분석을 사용할 수 있습니다.
+              </p>
+              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                <Monitor size={12} />
+                Claude를 사용하려면 데스크탑 앱(Windows/Mac)에서 접속해주세요.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* 상단 컨트롤 */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* AI 상태 */}
@@ -371,7 +388,11 @@ export default function AiChat() {
                 </label>
                 <input type="password" value={claudeKey} onChange={e => setClaudeKey(e.target.value)}
                   placeholder="sk-ant-..." className="w-full px-3 py-2.5 text-sm border border-violet-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-300 font-mono bg-violet-50/30" />
-                <p className="text-xs text-violet-500 mt-1">클로드 맥스 사용자 추천! Electron 앱에서 CORS 없이 바로 사용 가능</p>
+                <p className="text-xs text-violet-500 mt-1">
+                  {IS_ELECTRON
+                    ? '클로드 맥스 사용자 추천! 데스크탑 앱에서 CORS 없이 바로 사용 가능'
+                    : '브라우저에서는 CORS 정책으로 차단됨 — 데스크탑 앱에서만 사용 가능'}
+                </p>
               </div>
               {/* OpenAI */}
               <div>

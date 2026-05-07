@@ -27,8 +27,19 @@ export default function Login() {
     try {
       await login(email, password);
       navigate('/');
-    } catch {
-      setError('로그인에 실패했습니다. 다시 시도해주세요.');
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
+        setError('서버에 연결할 수 없습니다. 인터넷 연결 또는 관리자에게 문의해주세요.');
+      } else if (/올바르지 않|Invalid|invalid_credentials/i.test(msg)) {
+        setError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      } else if (/Email not confirmed/i.test(msg)) {
+        setError('이메일 인증이 필요합니다. 가입 시 받은 메일에서 확인 링크를 클릭해주세요.');
+      } else if (msg) {
+        setError(`로그인 실패: ${msg}`);
+      } else {
+        setError('로그인에 실패했습니다. 다시 시도해주세요.');
+      }
     } finally { setLoading(false); }
   };
 
@@ -134,8 +145,7 @@ export default function Login() {
               </p>
             </div>
 
-            <div className="mt-4 text-center space-y-2">
-              <p className="text-xs text-gray-300">데모 계정: 아무 이메일/비밀번호로 로그인 가능</p>
+            <div className="mt-4 text-center">
               <Link to="/admin/login" className="text-[11px] text-gray-400 hover:text-blue-500 transition-colors">
                 관리자 로그인 →
               </Link>
