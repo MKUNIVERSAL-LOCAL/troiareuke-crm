@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';

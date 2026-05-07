@@ -14,6 +14,14 @@ import type {
 
 import { supabase, isSupabaseConfigured } from './supabase';
 
+// ─── 오프라인 배너용 동기화 타임스탬프 ────────────────────────
+// OfflineBanner.tsx의 recordSyncTimestamp와 동일 키를 직접 기록
+// (컴포넌트 → lib 역방향 import 회피)
+const LAST_SYNC_KEY = 'crm_last_sync_at';
+function recordSyncTimestamp(): void {
+  try { localStorage.setItem(LAST_SYNC_KEY, String(Date.now())); } catch {}
+}
+
 // ─── 현재 브랜치(샵) ID 가져오기 ──────────────────────────────
 export function getShopId(): string {
   try {
@@ -688,6 +696,7 @@ export async function initializeStores(): Promise<void> {
       if (messageHistory !== null) _messageHistory = messageHistory;
 
       console.log('[Store] Supabase에서 데이터 로드 완료');
+      recordSyncTimestamp(); // OfflineBanner "마지막 동기화 N분 전" 갱신
     } catch (e) {
       console.error('[Store] 초기화 실패, localStorage 폴백:', e);
     }

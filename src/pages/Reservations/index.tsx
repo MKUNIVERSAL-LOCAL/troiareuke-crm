@@ -13,6 +13,8 @@ import {
   createCalendarEvent,
 } from '../../lib/googleCalendar';
 import clsx from 'clsx';
+import { maskPhone } from '../../lib/masking';
+import { useAuth } from '../../contexts/AuthContext';
 
 const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
 
@@ -509,6 +511,7 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
 }
 
 function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+  const { user: authUser } = useAuth();
   const customers = CustomerStore.getAll();
   const staffList = StaffStore.getAll();
   const services = ServiceStore.getAll().filter(s => s.isActive);
@@ -580,7 +583,7 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
             >
               <option value="">고객 선택</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
+              {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>)}
             </select>
           </div>
           <div>
@@ -684,6 +687,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete }:
   onUpdate: () => void;
   onDelete: () => void;
 }) {
+  const { user } = useAuth();
   const handleCancel = () => {
     ReservationStore.updateStatus(r.id, 'cancelled');
     onUpdate();
@@ -712,7 +716,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete }:
               </div>
               <div>
                 <p className="font-bold text-gray-900">{r.customerName}</p>
-                <p className="text-xs text-gray-400">{r.customerPhone}</p>
+                <p className="text-xs text-gray-400">{maskPhone(r.customerPhone, user?.role ?? 'staff')}</p>
               </div>
             </div>
             <div className="flex gap-2">

@@ -1,0 +1,45 @@
+name: CI — TypeScript + Build Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - '_avengers/**'
+      - 'docs/**'
+      - 'LICENSE'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: PWA build check
+        run: npm run build
+        env:
+          # 빌드 타임 검증용 더미값. 실제 런타임에 사용되지 않음.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://dummy.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'dummy_build_only' }}
+
+      - name: Verify PWA assets exist
+        run: |
+          echo "--- dist/ 확인 ---"
+          ls dist/
+          echo "--- sw.js 존재 확인 ---"
+          test -f dist/sw.js && echo "sw.js OK" || (echo "ERROR: sw.js missing" && exit 1)
+          echo "--- manifest.webmanifest 존재 확인 ---"
+          test -f dist/manifest.webmanifest && echo "manifest OK" || (echo "ERROR: manifest missing" && exit 1)

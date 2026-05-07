@@ -5,6 +5,8 @@ import Modal from '../../components/ui/Modal';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
+import { maskPhone } from '../../lib/masking';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function Treatments() {
   const [search, setSearch] = useState('');
@@ -185,6 +187,7 @@ export default function Treatments() {
 }
 
 function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+  const { user: authUser } = useAuth();
   const customers = CustomerStore.getAll();
   const staff = StaffStore.getAll();
   const services = ServiceStore.getAll();
@@ -247,7 +250,7 @@ function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: (
             >
               <option value="">고객 선택</option>
               {customers.map(c => (
-                <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+                <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>
               ))}
             </select>
           </div>

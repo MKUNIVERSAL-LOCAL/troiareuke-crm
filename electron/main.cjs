@@ -221,17 +221,19 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // ─── BW-H2: will-navigate 외부 도메인 차단 ───────────────────
+  // ─── BW-H2: will-navigate 화이트리스트 (최소 허용 원칙) ─────
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const allowedPrefixes = [
-      'http://localhost:',
-      'https://localhost:',
-      'http://127.0.0.1:',
-      'https://127.0.0.1:',
-    ];
-    const isLocal = allowedPrefixes.some(prefix => url.startsWith(prefix));
-    const isFile = url.startsWith('file://');
-    if (!isLocal && !isFile) {
+    let allowed = false;
+    if (isDev) {
+      // 개발: Vite dev 서버 정확 origin만 허용
+      allowed = url.startsWith('http://localhost:5173/');
+    } else {
+      // 프로덕션: file:// 및 Google OAuth 콜백 로컬 서버만 허용
+      allowed =
+        url.startsWith('file://') ||
+        url.startsWith('http://127.0.0.1:19876/google-callback');
+    }
+    if (!allowed) {
       event.preventDefault();
       shell.openExternal(url);
     }

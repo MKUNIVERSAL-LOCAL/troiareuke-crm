@@ -35,7 +35,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (data: SignupData) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   completeOnboarding: (shopData: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) => void;
 }
 
@@ -245,17 +245,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ── 로그아웃 ─────────────────────────────────────────────────
+  // allow-list: 로그아웃 후에도 잔존해야 하는 키
+  // troiareuke_local_users: Supabase 미설정 환경에서 폴백 로그인에 필요
+  const LOGOUT_PRESERVE = new Set(['troiareuke_local_users']);
+
   const logout = async () => {
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
     }
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
     resetStoreCache();
-    // crm_* 캐시 키 전체 제거 (QA 1순위: 타 계정 데이터 노출 방지)
-    Object.keys(localStorage)
-      .filter(k => k.startsWith('crm_'))
-      .forEach(k => localStorage.removeItem(k));
+
+    // allow-list 외 모든 localStorage 키 제거
+    // (troiareuke_* API 키/구독/로그, crm_* 고객 캐시, google_calendar_token, ai_key_* 등 전체)
+    const allKeys = Object.keys(localStorage);
+    for (const key of allKeys) {
+      if (!LOGOUT_PRESERVE.has(key)) {
+        localStorage.removeItem(key);
+      }
+    }
+
+    // Service Worker 캐시도 비우기 (타 계정 데이터 캐시 격리)
+    if ('caches' in window) {
+      try {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map(k => caches.delete(k)));
+      } catch {
+        // SW 캐시 삭제 실패는 무시
+      }
+    }
   };
 
   // ── 온보딩 완료 ──────────────────────────────────────────────

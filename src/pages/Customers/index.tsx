@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore } from '../../lib/store';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod } from '../../types';
+import { maskPhone } from '../../lib/masking';
+import { useAuth } from '../../contexts/AuthContext';
 
 const GRADE_COLORS: Record<CustomerGrade, string> = {
   VIP: 'bg-yellow-100 text-yellow-700',
@@ -34,6 +36,7 @@ function calcExpiryDate(days?: number | null) {
 }
 
 export default function Customers() {
+  const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
@@ -244,7 +247,7 @@ export default function Customers() {
                         </span>
                       </div>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {customer.phone.replace(/(\d{3})-?(\d{4})-?(\d{4})/, '$1-****-$3')}
+                        {maskPhone(customer.phone, user?.role ?? 'staff')}
                       </p>
                       <p className="text-xs text-gray-400">
                         {daysSince !== null ? `${daysSince}일 전 방문` : '방문 기록 없음'} · 방문 {customer.totalVisits}회
@@ -288,7 +291,7 @@ export default function Customers() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">전화번호</span>
-                    <span className="text-xs font-medium text-gray-900">{selected.phone}</span>
+                    <span className="text-xs font-medium text-gray-900">{maskPhone(selected.phone, user?.role ?? 'staff')}</span>
                   </div>
                   {selected.birthDate && (
                     <div className="flex justify-between">
@@ -423,7 +426,7 @@ export default function Customers() {
                           {customer.grade}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400 truncate">{customer.phone}</p>
+                      <p className="text-xs text-gray-400 truncate">{maskPhone(customer.phone, user?.role ?? 'staff')}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-xs text-gray-400 pl-10">
@@ -456,7 +459,7 @@ export default function Customers() {
                       <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${GRADE_COLORS[selected.grade]}`}>{selected.grade}</span>
                     </div>
-                    <p className="text-sm text-gray-500">{selected.phone}</p>
+                    <p className="text-sm text-gray-500">{maskPhone(selected.phone, user?.role ?? 'staff')}</p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}
                   </div>
                 </div>
