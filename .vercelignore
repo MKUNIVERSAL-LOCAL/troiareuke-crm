@@ -1,0 +1,26 @@
+node_modules
+dist
+release
+electron
+.git
+.github
+supabase
+*.md
+!README.md
+.env
+.env.*
+1. 트로이아르케-CRM
+상품,교육,이미지등 자료
+*.exe
+*.zip
+*.tar
+*.tar.gz
+*.dll
+*.pak
+*.dat
+*.bin
+*.icudtl
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.claude
