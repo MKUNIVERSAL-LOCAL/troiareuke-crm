@@ -18,11 +18,7 @@ const GRADE_COLORS: Record<CustomerGrade, string> = {
 const GRADES: CustomerGrade[] = ['VIP', '골드', '일반', '신규'];
 const PAYMENT_METHODS: PaymentMethod[] = ['카드', '현금', '계좌이체', '카카오페이'];
 
-function formatPrice(n: number) { return n.toLocaleString('ko-KR') + '원'; }
-function formatDate(d?: string) {
-  if (!d) return '-';
-  return d.replace(/-/g, '.').substring(0, 10);
-}
+import { formatPrice, formatDate } from '../../lib/format';
 function getDaysSince(d?: string) {
   if (!d) return null;
   return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);

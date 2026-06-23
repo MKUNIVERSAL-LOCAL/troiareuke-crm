@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# 🔒 코어코드 보호 — git pre-commit 훅
+# 스테이징된 파일 중 코어가 있으면 커밋을 거부한다.
+# 우회: CORE_EDIT=1 git commit ...  (docs/CORE-LOCK.md 참조)
+
+if [ "$CORE_EDIT" = "1" ]; then
+  exit 0
+fi
+
+# 스테이징된 파일 목록 (이름에 공백/한글 있어도 안전하게 stdin 전달)
+staged="$(git diff --cached --name-only)"
+[ -z "$staged" ] && exit 0
+
+printf '%s\n' "$staged" | node scripts/core-lock.mjs check-stdin
+status=$?
+if [ "$status" -ne 0 ]; then
+  echo "" >&2
+  echo "❌ 커밋이 차단되었습니다. 코어 변경을 빼거나(git restore --staged <file>)," >&2
+  echo "   꼭 필요하면  CORE_EDIT=1 git commit ...  으로 진행하세요." >&2
+  exit 1
+fi
+exit 0
