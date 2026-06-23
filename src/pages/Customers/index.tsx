@@ -8,6 +8,7 @@ import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, S
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod } from '../../types';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
+import { formatPrice, formatDate, todayISO as today } from '../../lib/format';
 
 const GRADE_COLORS: Record<CustomerGrade, string> = {
   VIP: 'bg-yellow-100 text-yellow-700',
@@ -18,12 +19,10 @@ const GRADE_COLORS: Record<CustomerGrade, string> = {
 const GRADES: CustomerGrade[] = ['VIP', '골드', '일반', '신규'];
 const PAYMENT_METHODS: PaymentMethod[] = ['카드', '현금', '계좌이체', '카카오페이'];
 
-import { formatPrice, formatDate } from '../../lib/format';
 function getDaysSince(d?: string) {
   if (!d) return null;
   return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 }
-function today() { return new Date().toISOString().split('T')[0]; }
 function calcExpiryDate(days?: number | null) {
   if (!days) return undefined;
   const d = new Date();
