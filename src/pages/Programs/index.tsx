@@ -11,9 +11,7 @@ const COLOR_LABELS: Record<string, string> = {
   '#059669': '그린', '#d97706': '오렌지', '#0891b2': '시안', '#be185d': '핑크',
 };
 
-function formatPrice(n: number) {
-  return n.toLocaleString('ko-KR') + '원';
-}
+import { formatPrice } from '../../lib/format';
 
 interface ProgramFormData {
   name: string;

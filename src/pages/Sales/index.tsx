@@ -13,7 +13,7 @@ import {
 } from '../../lib/store';
 import type { Payment, PaymentMethod } from '../../types';
 
-function formatPrice(n: number) { return n.toLocaleString('ko-KR') + '원'; }
+import { formatPrice } from '../../lib/format';
 function today() { return new Date().toISOString().split('T')[0]; }
 function getYearMonth(d: Date) { return d.toISOString().substring(0, 7); }
 
