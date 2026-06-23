@@ -1,3 +1,4 @@
+// 🔒 CORE — 보호 파일(코어 잠금). 수정 금지. 변경 필요 시 docs/CORE-LOCK.md 의 CORE_EDIT=1 우회 절차.
 // preload.cjs — 보안 컨텍스트 브리지
 const { contextBridge, ipcRenderer } = require('electron');
 
