@@ -11,3 +11,8 @@ export function formatDate(d?: string): string {
   if (!d) return '-';
   return d.replace(/-/g, '.').substring(0, 10);
 }
+
+/** 오늘 날짜 "YYYY-MM-DD" (date input 기본값 등) */
+export function todayISO(): string {
+  return new Date().toISOString().split('T')[0];
+}

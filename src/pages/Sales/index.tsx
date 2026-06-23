@@ -13,8 +13,7 @@ import {
 } from '../../lib/store';
 import type { Payment, PaymentMethod } from '../../types';
 
-import { formatPrice } from '../../lib/format';
-function today() { return new Date().toISOString().split('T')[0]; }
+import { formatPrice, todayISO as today } from '../../lib/format';
 function getYearMonth(d: Date) { return d.toISOString().substring(0, 7); }
 
 const PAYMENT_METHODS: PaymentMethod[] = ['카드', '현금', '계좌이체', '카카오페이'];
