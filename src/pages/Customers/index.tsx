@@ -3,13 +3,14 @@ import {
   Search, Plus, Phone, Star, Calendar, TrendingUp,
   User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus,
-  Sparkles, Activity
+  Sparkles, Activity, Mail, Download
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore } from '../../lib/store';
 import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
 } from '../../lib/consultationStore';
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
+import * as XLSX from 'xlsx';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
@@ -74,6 +75,39 @@ function calcExpiryDate(days?: number | null) {
   return d.toISOString().split('T')[0];
 }
 
+// 생년월일 — 연/월/일 드롭다운 (네이티브 달력 대체). 3개 모두 선택 시에만 완전한 날짜를 emit.
+function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parts = (value || '').split('-');
+  const [y, setY] = useState(parts[0] && parts[0] !== '0000' ? parts[0] : '');
+  const [mo, setMo] = useState(parts[1] && parts[1] !== '00' ? parts[1] : '');
+  const [d, setD] = useState(parts[2] && parts[2] !== '00' ? parts[2] : '');
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({ length: thisYear - 1930 + 1 }, (_, i) => String(thisYear - i));
+  const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
+  const daysInMonth = y && mo ? new Date(Number(y), Number(mo), 0).getDate() : 31;
+  const days = Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, '0'));
+  function emit(ny: string, nm: string, nd: string) {
+    onChange(ny && nm && nd ? `${ny}-${nm}-${nd}` : '');
+  }
+  const sel = 'px-2 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-indigo-300 transition cursor-pointer';
+  return (
+    <div className="grid grid-cols-3 gap-1.5">
+      <select className={sel} value={y} onChange={e => { setY(e.target.value); emit(e.target.value, mo, d); }}>
+        <option value="">연도</option>
+        {years.map(yr => <option key={yr} value={yr}>{yr}년</option>)}
+      </select>
+      <select className={sel} value={mo} onChange={e => { setMo(e.target.value); emit(y, e.target.value, d); }}>
+        <option value="">월</option>
+        {months.map(m => <option key={m} value={m}>{Number(m)}월</option>)}
+      </select>
+      <select className={sel} value={d} onChange={e => { setD(e.target.value); emit(y, mo, e.target.value); }}>
+        <option value="">일</option>
+        {days.map(dy => <option key={dy} value={dy}>{Number(dy)}일</option>)}
+      </select>
+    </div>
+  );
+}
+
 export default function Customers() {
   const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -85,7 +119,7 @@ export default function Customers() {
 
   // 고객 추가 모달
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState({ name: '', phone: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
   // 등급(VIP) 변경 드롭다운
   const [showGradeMenu, setShowGradeMenu] = useState(false);
@@ -278,6 +312,37 @@ export default function Customers() {
     return matchSearch && matchGrade;
   });
 
+  // 고객 기록 엑셀(xlsx) 다운로드 — 현재 필터된 목록을 이메일 포함 전체 항목으로 내보냄
+  function exportToExcel() {
+    if (filtered.length === 0) { window.alert('내보낼 고객이 없습니다.'); return; }
+    const rows = filtered.map(c => ({
+      '이름': c.name,
+      '전화번호': c.phone,
+      '이메일': c.email || '',
+      '성별': c.gender,
+      '등급': c.grade,
+      '생년월일': c.birthDate || '',
+      '피부유형': c.skinType || '',
+      '총방문(회)': c.totalVisits ?? 0,
+      '누적결제(원)': c.totalSpent ?? 0,
+      '마지막방문': c.lastVisitDate || '',
+      '등록일': c.registeredAt ? String(c.registeredAt).split('T')[0] : '',
+      '유입경로': c.referralSource || '',
+      '태그': (c.tags || []).join(', '),
+      '메모': c.memo || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 15 }, { wch: 22 }, { wch: 6 }, { wch: 6 },
+      { wch: 12 }, { wch: 9 }, { wch: 9 }, { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 24 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '고객목록');
+    const today = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `고객목록_${today}.xlsx`);
+  }
+
   // 고객 추가
   function handleAddCustomer(e: React.FormEvent) {
     e.preventDefault();
@@ -287,11 +352,11 @@ export default function Customers() {
       skinType: addForm.skinType, memo: addForm.memo,
       birthDate: addForm.birthDate || undefined,
       referralSource: addForm.referralSource || undefined,
-      email: undefined, allergies: undefined,
+      email: addForm.email.trim() || undefined, allergies: undefined,
       tags: [], isActive: true,
     });
     setShowAddModal(false);
-    setAddForm({ name: '', phone: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '' });
+    setAddForm({ name: '', phone: '', email: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '' });
     loadAll();
   }
 
@@ -463,6 +528,12 @@ export default function Customers() {
                     <span className="text-xs text-gray-500">전화번호</span>
                     <span className="text-xs font-medium text-gray-900">{maskPhone(selected.phone, user?.role ?? 'staff')}</span>
                   </div>
+                  {selected.email && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">이메일</span>
+                      <span className="text-xs font-medium text-gray-900 truncate ml-2">{selected.email}</span>
+                    </div>
+                  )}
                   {selected.birthDate && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">생년월일</span>
@@ -534,8 +605,15 @@ export default function Customers() {
           <div className="flex items-center gap-2 mb-3">
             <h1 className="text-lg font-bold text-gray-900 flex-1">고객 관리</h1>
             <button
+              onClick={exportToExcel}
+              title="현재 목록을 엑셀(xlsx)로 다운로드"
+              className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+            >
+              <Download size={12} />엑셀
+            </button>
+            <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-[#1a3a8f] text-white rounded-lg text-xs font-medium hover:bg-[#152f75] transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 bg-[#1a3a8f] text-white rounded-lg text-xs font-medium hover:bg-[#152f75] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
               <Plus size={12} />고객 추가
             </button>
@@ -922,11 +1000,11 @@ export default function Customers() {
 
       {/* ───── 고객 추가 모달 ───── */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="modal-card bg-white rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">고객 추가</h2>
-              <button onClick={() => setShowAddModal(false)}><X size={18} className="text-gray-400" /></button>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200"><X size={18} /></button>
             </div>
             <form onSubmit={handleAddCustomer} className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
@@ -960,8 +1038,7 @@ export default function Customers() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">생년월일</label>
-                  <input type="date" value={addForm.birthDate} onChange={e => setAddForm(f => ({ ...f, birthDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <BirthDateSelect value={addForm.birthDate} onChange={v => setAddForm(f => ({ ...f, birthDate: v }))} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
@@ -971,6 +1048,11 @@ export default function Customers() {
                     {['건성', '지성', '복합성', '민감성', '중성'].map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
+                <input type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
@@ -987,8 +1069,8 @@ export default function Customers() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
               <div className="flex gap-2">
-                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
-                <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">등록</button>
+                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">취소</button>
+                <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">등록</button>
               </div>
             </form>
           </div>
@@ -997,8 +1079,8 @@ export default function Customers() {
 
       {/* ───── 프로그램 등록 모달 ───── */}
       {showProgramModal && selected && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="modal-card bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
                 <h2 className="font-bold text-gray-900">프로그램 등록</h2>
@@ -1089,8 +1171,8 @@ export default function Customers() {
 
       {/* ───── 시술 기록 모달 ───── */}
       {showTreatmentModal && selected && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="modal-card bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
                 <h2 className="font-bold text-gray-900">시술 기록</h2>
@@ -1169,8 +1251,8 @@ export default function Customers() {
 
       {/* ───── 피부 상담 모달 ───── */}
       {showConsultModal && selected && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="modal-card bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white flex items-center justify-between p-5 border-b border-gray-100 z-10">
               <div>
                 <h2 className="font-bold text-gray-900 flex items-center gap-1.5">
