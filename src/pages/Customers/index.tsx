@@ -85,6 +85,19 @@ export default function Customers() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', phone: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
+  // 등급(VIP) 변경 드롭다운
+  const [showGradeMenu, setShowGradeMenu] = useState(false);
+
+  // 선택된 고객의 등급을 변경 (뱃지 클릭 → 드롭다운)
+  function changeGrade(grade: CustomerGrade) {
+    if (!selected || selected.grade === grade) { setShowGradeMenu(false); return; }
+    CustomerStore.update(selected.id, { grade });
+    const updated = CustomerStore.getById(selected.id);
+    if (updated) setSelected(updated);
+    loadAll();          // 목록 뱃지도 갱신
+    setShowGradeMenu(false);
+  }
+
   // 프로그램 등록 모달
   const [showProgramModal, setShowProgramModal] = useState(false);
   const [progForm, setProgForm] = useState({ programId: '', pricePaid: '', paymentMethod: '카드' as PaymentMethod, purchaseDate: today(), notes: '' });
@@ -185,7 +198,24 @@ export default function Customers() {
     });
   }
 
+  // 신규 → 일반(기존고객) 자동 승급: 등록 90일 경과 + 시술 3회 이상
+  // (목록을 불러올 때마다 점검 — 조건 충족 시 1회만 승급되고 이후엔 '신규'가 아니라 재실행 안 됨)
+  function autoPromoteNewCustomers() {
+    const NINETY_DAYS = 90 * 86400000;
+    const now = Date.now();
+    CustomerStore.getAll().forEach(c => {
+      if (c.grade !== '신규' || c.id.startsWith('sample_') || !c.registeredAt) return;
+      const aged = now - new Date(c.registeredAt).getTime() >= NINETY_DAYS;
+      if (!aged) return;
+      const treatmentCount = TreatmentLogStore.getByCustomer(c.id).length;
+      if (treatmentCount >= 3) {
+        CustomerStore.update(c.id, { grade: '일반' });
+      }
+    });
+  }
+
   function loadAll() {
+    autoPromoteNewCustomers();
     setCustomers(CustomerStore.getAll());
     // Pull from ProgramStore first; if empty, create Program-like entries from ServiceStore
     const storePrograms = ProgramStore.getAll().filter(p => p.isActive);
@@ -567,7 +597,33 @@ export default function Customers() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${GRADE_COLORS[selected.grade]}`}>{selected.grade}</span>
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowGradeMenu(v => !v)}
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5 hover:ring-2 hover:ring-offset-1 hover:ring-blue-300 transition ${GRADE_COLORS[selected.grade]}`}
+                          aria-label="등급 변경"
+                        >
+                          {selected.grade}
+                          <ChevronDown size={11} />
+                        </button>
+                        {showGradeMenu && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setShowGradeMenu(false)} />
+                            <div className="absolute left-0 mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 min-w-[90px]">
+                              {GRADES.map(g => (
+                                <button
+                                  key={g}
+                                  onClick={() => changeGrade(g)}
+                                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-1.5 ${g === selected.grade ? 'font-bold text-blue-700' : 'text-gray-600'}`}
+                                >
+                                  {g === selected.grade && <CheckCircle size={11} className="text-blue-600" />}
+                                  <span className={g === selected.grade ? '' : 'ml-[18px]'}>{g}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <p className="text-sm text-gray-500">{maskPhone(selected.phone, user?.role ?? 'staff')}</p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}
