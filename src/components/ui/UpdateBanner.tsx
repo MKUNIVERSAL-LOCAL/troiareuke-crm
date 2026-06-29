@@ -41,7 +41,9 @@ export default function UpdateBanner() {
     });
 
     api.onUpdateError(() => {
-      setState('error');
+      // 수동 복사 배포(GitHub 릴리스 미게시) 모델에서는 업데이트 확인 실패가 정상 동작.
+      // 사용자에게 불필요한 오류 배너를 띄우지 않고 조용히 무시한다.
+      // (실제 릴리스 게시를 시작하면 setState('error')로 되돌릴 것)
     });
 
     return () => {
