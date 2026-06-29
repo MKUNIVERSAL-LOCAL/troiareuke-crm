@@ -9,6 +9,7 @@ import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, S
 import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
 } from '../../lib/consultationStore';
+import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
@@ -44,6 +45,7 @@ const emptyConsultForm = () => ({
   consultDate: today(),
   staffName: '',
   concerns: [] as string[],
+  homecareProblems: [] as string[], // 홈케어 추천용 피부 문제(세트 타입) 체크
   metrics: {} as Record<string, string>, // 입력 편의를 위해 문자열로 보관
   skinTypeResult: '',
   managerNote: '',
@@ -196,6 +198,34 @@ export default function Customers() {
       const concerns = has ? f.concerns.filter(c => c !== item) : [...f.concerns, item];
       return { ...f, concerns };
     });
+  }
+
+  // 홈케어 추천용 피부 문제(세트 타입) 토글
+  function toggleHomecareProblem(problem: string) {
+    setConsultForm(f => {
+      const has = f.homecareProblems.includes(problem);
+      const homecareProblems = has
+        ? f.homecareProblems.filter(p => p !== problem)
+        : [...f.homecareProblems, problem];
+      return { ...f, homecareProblems };
+    });
+  }
+
+  // 체크된 피부 문제 → 추천 홈케어 세트를 '추천 제품·솔루션' 칸에 자동 반영
+  function applyHomecareRecommendation() {
+    const sets = recommendHomecare(consultForm.homecareProblems);
+    if (sets.length === 0) return;
+    // 추천 제품: 세트별 스텝 제품을 중복 없이 모음
+    const products = Array.from(new Set(sets.flatMap(s => s.steps)));
+    // 솔루션 요약: 세트명 + 설명
+    const summary = sets.map(s => `[${s.name}] ${s.description}`).join('\n');
+    setConsultForm(f => ({
+      ...f,
+      recommendedProducts: products.join(', '),
+      recommendedSolution: f.recommendedSolution
+        ? `${f.recommendedSolution}\n\n■ 추천 홈케어\n${summary}`
+        : `■ 추천 홈케어\n${summary}`,
+    }));
   }
 
   // 신규 → 일반(기존고객) 자동 승급: 등록 90일 경과 + 시술 3회 이상
@@ -1194,6 +1224,56 @@ export default function Customers() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* 홈케어 추천용 피부 문제 (진단기기 가이드 연동) */}
+              <div className="bg-indigo-50/40 border border-indigo-100 rounded-xl p-3.5">
+                <label className="block text-xs font-semibold text-indigo-900 mb-2">
+                  진단 후 피부 문제 체크 → 홈케어 추천
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {HOMECARE_PROBLEMS.map(problem => {
+                    const active = consultForm.homecareProblems.includes(problem);
+                    return (
+                      <button key={problem} type="button" onClick={() => toggleHomecareProblem(problem)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300'
+                        }`}>
+                        {problem}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 추천 세트 미리보기 */}
+                {(() => {
+                  const sets = recommendHomecare(consultForm.homecareProblems);
+                  if (sets.length === 0) return null;
+                  return (
+                    <div className="mt-3 space-y-2">
+                      {sets.map(s => (
+                        <div key={s.id} className="bg-white border border-indigo-100 rounded-lg p-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-indigo-700">🧴 {s.name}</span>
+                            <span className="text-[10px] text-gray-400">{s.problem}</span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-1 leading-snug">{s.description}</p>
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {s.steps.map((step, i) => (
+                              <span key={step} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">
+                                {i + 1}. {step}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <button type="button" onClick={applyHomecareRecommendation}
+                        className="w-full mt-1 text-xs px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700">
+                        ↓ 추천 홈케어를 제품·솔루션 칸에 자동 입력
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 비컨 측정 수치 */}
