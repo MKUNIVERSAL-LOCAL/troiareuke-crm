@@ -7,6 +7,7 @@ import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
+import { isBeaconConsultationEnabled, setBeaconConsultationEnabled } from '../../lib/featureFlags';
 import clsx from 'clsx';
 
 type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup';
@@ -31,6 +32,8 @@ export default function Settings() {
   const { user } = useAuth();
   const [tab, setTab] = useState<SettingTab>('shop');
   const [settings, setSettings] = useState<ShopSettings>(() => SettingsStore.get());
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -504,6 +507,43 @@ export default function Settings() {
 
             {tab === 'integrations' && (
               <div className="space-y-4">
+                {/* 비컨 피부진단 (피부 상담) 기능 ON/OFF — 관리자 전용 */}
+                {isAdmin && (
+                  <SettingCard title="비컨 피부진단 (피부 상담)">
+                    <div className={clsx(
+                      'flex items-center gap-3 p-4 rounded-xl border',
+                      beaconOn ? 'bg-indigo-50 border-indigo-200' : 'bg-gray-50 border-gray-200'
+                    )}>
+                      <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold', beaconOn ? 'bg-indigo-500' : 'bg-gray-300')}>
+                        B
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-gray-900">피부 상담 기능</p>
+                        <p className={clsx('text-xs mt-0.5', beaconOn ? 'text-indigo-600' : 'text-gray-400')}>
+                          {beaconOn ? '사용 중 · 고객 화면에 표시됩니다' : '숨김 · 고객 화면에 나타나지 않습니다'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => { const next = !beaconOn; setBeaconConsultationEnabled(next); setBeaconOn(next); }}
+                        role="switch"
+                        aria-checked={beaconOn}
+                        className={clsx(
+                          'relative w-12 h-7 rounded-full transition-colors duration-200 flex-shrink-0',
+                          beaconOn ? 'bg-indigo-500' : 'bg-gray-300'
+                        )}
+                      >
+                        <span className={clsx(
+                          'absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all duration-200',
+                          beaconOn ? 'left-6' : 'left-1'
+                        )} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+                      비컨 AI 피부진단기 연동(API)이 확정되기 전까지 피부 상담 기능을 숨겨둘 수 있습니다.
+                      켜면 고객 상세 화면에 ‘피부 상담’ 버튼과 상담 이력이 다시 나타납니다. (이 기기에만 적용)
+                    </p>
+                  </SettingCard>
+                )}
                 {/* Naver */}
                 <SettingCard title="네이버 예약 연동">
                   <div className="space-y-4">

@@ -10,6 +10,7 @@ import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
 } from '../../lib/consultationStore';
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
+import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import * as XLSX from 'xlsx';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
 import { maskPhone } from '../../lib/masking';
@@ -155,6 +156,10 @@ export default function Customers() {
   const [showConsultModal, setShowConsultModal] = useState(false);
   const [consultForm, setConsultForm] = useState(emptyConsultForm());
   const [consultations, setConsultations] = useState<Consultation[]>([]);
+
+  // 비컨(피부 상담) 기능 노출 — 관리자가 설정에서 토글. 기본 OFF(숨김).
+  const [beaconEnabled, setBeaconEnabled] = useState(isBeaconConsultationEnabled());
+  useEffect(() => onFeatureFlagsChanged(() => setBeaconEnabled(isBeaconConsultationEnabled())), []);
 
   useEffect(() => {
     loadAll();
@@ -738,12 +743,14 @@ export default function Customers() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
-                  >
-                    <Sparkles size={12} />피부 상담
-                  </button>
+                  {beaconEnabled && (
+                    <button
+                      onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
+                    >
+                      <Sparkles size={12} />피부 상담
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowTreatmentModal(true)}
                     className="flex items-center gap-1.5 px-3 py-2 bg-green-500 text-white rounded-xl text-xs font-medium hover:bg-green-600 transition-colors"
@@ -785,6 +792,8 @@ export default function Customers() {
               )}
             </div>
 
+            {beaconEnabled && (
+            <>
             {/* 피부 상담 이력 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <div className="flex items-center justify-between mb-4">
@@ -879,6 +888,8 @@ export default function Customers() {
                 </div>
               )}
             </div>
+            </>
+            )}
 
             {/* 등록된 프로그램 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
@@ -1250,7 +1261,7 @@ export default function Customers() {
       )}
 
       {/* ───── 피부 상담 모달 ───── */}
-      {showConsultModal && selected && (
+      {beaconEnabled && showConsultModal && selected && (
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="modal-card bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white flex items-center justify-between p-5 border-b border-gray-100 z-10">
