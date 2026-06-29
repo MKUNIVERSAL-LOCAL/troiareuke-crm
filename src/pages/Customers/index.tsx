@@ -2,13 +2,55 @@
 import {
   Search, Plus, Phone, Star, Calendar, TrendingUp,
   User, ChevronRight, AlertCircle, X, CheckCircle,
-  Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus
+  Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus,
+  Sparkles, Activity
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore } from '../../lib/store';
-import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod } from '../../types';
+import {
+  ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
+} from '../../lib/consultationStore';
+import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatPrice, formatDate, todayISO as today } from '../../lib/format';
+
+// 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
+const CONCERN_GROUPS: { group: string; items: string[] }[] = [
+  { group: '수분·유분', items: ['건조함', '속건조', '번들거림', '유수분 불균형'] },
+  { group: '모공·각질', items: ['모공 늘어짐', '블랙헤드', '각질', '피지 과다'] },
+  { group: '색소', items: ['기미', '잡티', '주근깨', '색소침착', '칙칙함'] },
+  { group: '주름·탄력', items: ['잔주름', '탄력 저하', '처짐', '팔자주름'] },
+  { group: '트러블', items: ['여드름', '뾰루지', '좁쌀', '여드름 흉터'] },
+  { group: '민감·장벽', items: ['민감성', '붉어짐', '따가움', '홍조'] },
+  { group: '기타', items: ['다크서클', '안색 저하', '푸석함'] },
+];
+
+// 비컨(AI 피부진단기) 측정 지표 — 0~100
+const BEACON_FIELDS: { key: keyof BeaconMetrics; label: string; hint: string }[] = [
+  { key: 'moisture', label: '수분', hint: '높을수록 촉촉' },
+  { key: 'oil', label: '유분', hint: '높을수록 유분 많음' },
+  { key: 'elasticity', label: '탄력', hint: '높을수록 탄탄' },
+  { key: 'pigmentation', label: '색소침착', hint: '높을수록 침착 심함' },
+  { key: 'pore', label: '모공', hint: '높을수록 모공 큼' },
+  { key: 'wrinkle', label: '주름', hint: '높을수록 주름 많음' },
+  { key: 'redness', label: '홍조', hint: '높을수록 붉음' },
+  { key: 'sensitivity', label: '민감도', hint: '높을수록 민감' },
+  { key: 'skinTone', label: '피부톤', hint: '높을수록 밝음' },
+];
+
+const SKIN_TYPES = ['건성', '지성', '복합성', '민감성', '중성'];
+
+const emptyConsultForm = () => ({
+  consultDate: today(),
+  staffName: '',
+  concerns: [] as string[],
+  metrics: {} as Record<string, string>, // 입력 편의를 위해 문자열로 보관
+  skinTypeResult: '',
+  managerNote: '',
+  recommendedSolution: '',
+  recommendedProducts: '',
+  nextConsultDate: '',
+});
 
 const GRADE_COLORS: Record<CustomerGrade, string> = {
   VIP: 'bg-yellow-100 text-yellow-700',
@@ -60,15 +102,88 @@ export default function Customers() {
     nextAppointment: '',
   });
 
+  // 피부상담 모달
+  const [showConsultModal, setShowConsultModal] = useState(false);
+  const [consultForm, setConsultForm] = useState(emptyConsultForm());
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
+
   useEffect(() => {
     loadAll();
+    // 상담 기록 Supabase에서 1회 동기화 후 캐시 반영
+    loadConsultations().catch(() => {});
   }, []);
 
   useEffect(() => {
     if (selected) {
       setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
+      setConsultations(ConsultationStore.getByCustomer(selected.id));
     }
   }, [selected]);
+
+  // 입력된 비컨 측정값(문자열)을 BeaconMetrics(숫자)로 변환
+  function parseMetrics(m: Record<string, string>): BeaconMetrics {
+    const out: BeaconMetrics = {};
+    for (const { key } of BEACON_FIELDS) {
+      const raw = m[key as string];
+      if (raw !== undefined && raw !== '') {
+        const n = Math.max(0, Math.min(100, parseInt(raw, 10)));
+        if (!Number.isNaN(n)) (out as any)[key] = n;
+      }
+    }
+    return out;
+  }
+
+  // 비컨값 입력 시 피부타입·솔루션 초안 자동 제안
+  function applyDiagnosisDraft(nextMetrics: Record<string, string>, concerns: string[]) {
+    const parsed = parseMetrics(nextMetrics);
+    const type = deriveSkinType(parsed);
+    const draft = buildSolutionDraft(parsed, concerns);
+    setConsultForm(f => ({
+      ...f,
+      metrics: nextMetrics,
+      skinTypeResult: f.skinTypeResult || type,
+      recommendedSolution: draft,
+    }));
+  }
+
+  // 피부상담 저장
+  function handleSaveConsultation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    ConsultationStore.save({
+      customerId: selected.id,
+      customerName: selected.name,
+      consultDate: consultForm.consultDate,
+      staffName: consultForm.staffName || undefined,
+      concerns: consultForm.concerns,
+      beaconMetrics: parseMetrics(consultForm.metrics),
+      skinTypeResult: consultForm.skinTypeResult || undefined,
+      managerNote: consultForm.managerNote || undefined,
+      recommendedSolution: consultForm.recommendedSolution || undefined,
+      recommendedProducts: consultForm.recommendedProducts
+        ? consultForm.recommendedProducts.split(',').map(s => s.trim()).filter(Boolean)
+        : [],
+      nextConsultDate: consultForm.nextConsultDate || undefined,
+      photos: [],
+    });
+    // 상담에서 판정한 피부타입을 고객 프로필에도 반영(있을 때)
+    if (consultForm.skinTypeResult && consultForm.skinTypeResult !== selected.skinType) {
+      CustomerStore.update(selected.id, { skinType: consultForm.skinTypeResult });
+      const updated = CustomerStore.getById(selected.id);
+      if (updated) setSelected(updated);
+    }
+    setConsultations(ConsultationStore.getByCustomer(selected.id));
+    setShowConsultModal(false);
+    setConsultForm(emptyConsultForm());
+  }
+
+  function toggleConcern(item: string) {
+    setConsultForm(f => {
+      const has = f.concerns.includes(item);
+      const concerns = has ? f.concerns.filter(c => c !== item) : [...f.concerns, item];
+      return { ...f, concerns };
+    });
+  }
 
   function loadAll() {
     setCustomers(CustomerStore.getAll());
@@ -460,6 +575,12 @@ export default function Customers() {
                 </div>
                 <div className="flex gap-2">
                   <button
+                    onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
+                  >
+                    <Sparkles size={12} />피부 상담
+                  </button>
+                  <button
                     onClick={() => setShowTreatmentModal(true)}
                     className="flex items-center gap-1.5 px-3 py-2 bg-green-500 text-white rounded-xl text-xs font-medium hover:bg-green-600 transition-colors"
                   >
@@ -496,6 +617,101 @@ export default function Customers() {
               {selected.memo && (
                 <div className="mt-3 p-3 bg-yellow-50 rounded-xl">
                   <p className="text-xs text-yellow-700">📝 {selected.memo}</p>
+                </div>
+              )}
+            </div>
+
+            {/* 피부 상담 이력 */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-900 flex items-center gap-1.5">
+                  <Sparkles size={16} className="text-indigo-600" />피부 상담 이력
+                </h3>
+                <button
+                  onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+                >
+                  <Plus size={12} />상담 기록
+                </button>
+              </div>
+
+              {consultations.length === 0 ? (
+                <div className="text-center py-6">
+                  <Activity size={28} className="text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">상담 기록이 없어요</p>
+                  <button onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
+                    비컨 분석으로 첫 상담 시작하기
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {consultations.map(c => {
+                    const metricEntries = BEACON_FIELDS
+                      .map(f => ({ label: f.label, v: (c.beaconMetrics as any)?.[f.key] }))
+                      .filter(e => e.v != null);
+                    return (
+                      <div key={c.id} className="border border-indigo-100 bg-indigo-50/30 rounded-xl p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {c.skinTypeResult && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">
+                                {c.skinTypeResult}
+                              </span>
+                            )}
+                            <span className="text-sm font-semibold text-gray-800">{formatDate(c.consultDate)}</span>
+                            {c.staffName && <span className="text-xs text-gray-400">· {c.staffName}</span>}
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (window.confirm('이 상담 기록을 삭제할까요?')) {
+                                ConsultationStore.delete(c.id);
+                                setConsultations(ConsultationStore.getByCustomer(selected.id));
+                              }
+                            }}
+                            className="text-gray-300 hover:text-red-400"
+                            aria-label="상담 삭제"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        {c.concerns.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {c.concerns.map(cc => (
+                              <span key={cc} className="text-xs px-1.5 py-0.5 rounded bg-white border border-indigo-100 text-gray-600">{cc}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        {metricEntries.length > 0 && (
+                          <div className="grid grid-cols-3 gap-1.5 mb-2">
+                            {metricEntries.map(e => (
+                              <div key={e.label} className="text-center bg-white rounded-lg py-1 border border-indigo-50">
+                                <p className="text-[10px] text-gray-400">{e.label}</p>
+                                <p className="text-xs font-bold text-indigo-700">{e.v}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {c.recommendedSolution && (
+                          <div className="mt-1 p-2.5 bg-white rounded-lg border border-indigo-50">
+                            <p className="text-[10px] font-semibold text-indigo-500 mb-0.5">추천 솔루션</p>
+                            <p className="text-xs text-gray-700 whitespace-pre-line">{c.recommendedSolution}</p>
+                          </div>
+                        )}
+                        {c.recommendedProducts.length > 0 && (
+                          <p className="text-xs text-gray-500 mt-1.5">🧴 {c.recommendedProducts.join(', ')}</p>
+                        )}
+                        {c.managerNote && (
+                          <p className="text-xs text-gray-500 mt-1.5">📝 {c.managerNote}</p>
+                        )}
+                        {c.nextConsultDate && (
+                          <p className="text-xs text-indigo-500 mt-1.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -858,6 +1074,147 @@ export default function Customers() {
                 <button type="button" onClick={() => setShowTreatmentModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
                   <Scissors size={14} />시술 기록 저장
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ───── 피부 상담 모달 ───── */}
+      {showConsultModal && selected && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white flex items-center justify-between p-5 border-b border-gray-100 z-10">
+              <div>
+                <h2 className="font-bold text-gray-900 flex items-center gap-1.5">
+                  <Sparkles size={16} className="text-indigo-600" />피부 상담 · 비컨 분석
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">{selected.name} 고객 · 1:1 맞춤 솔루션</p>
+              </div>
+              <button onClick={() => setShowConsultModal(false)}><X size={18} className="text-gray-400" /></button>
+            </div>
+            <form onSubmit={handleSaveConsultation} className="p-5 space-y-5">
+              {/* 상담일 / 담당 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">상담일 *</label>
+                  <input required type="date" value={consultForm.consultDate}
+                    onChange={e => setConsultForm(f => ({ ...f, consultDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">담당 관리사</label>
+                  <select value={consultForm.staffName} onChange={e => setConsultForm(f => ({ ...f, staffName: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">선택</option>
+                    {StaffStore.getAll().filter(s => s.isActive).map(s => (
+                      <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 피부 고민 체크리스트 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-2">피부 고민 (고객 체크)</label>
+                <div className="space-y-2.5">
+                  {CONCERN_GROUPS.map(grp => (
+                    <div key={grp.group}>
+                      <p className="text-[11px] text-gray-400 mb-1">{grp.group}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {grp.items.map(item => {
+                          const active = consultForm.concerns.includes(item);
+                          return (
+                            <button key={item} type="button" onClick={() => toggleConcern(item)}
+                              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                                active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300'
+                              }`}>
+                              {item}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 비컨 측정 수치 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                    <Activity size={13} className="text-indigo-500" />비컨 측정 수치 (0~100)
+                  </label>
+                  <button type="button"
+                    onClick={() => applyDiagnosisDraft(consultForm.metrics, consultForm.concerns)}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 font-medium hover:bg-indigo-100">
+                    분석 → 맞춤 제안 자동작성
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {BEACON_FIELDS.map(f => (
+                    <div key={f.key as string}>
+                      <label className="block text-[11px] text-gray-500 mb-0.5" title={f.hint}>{f.label}</label>
+                      <input type="number" min={0} max={100} inputMode="numeric"
+                        value={consultForm.metrics[f.key as string] ?? ''}
+                        onChange={e => setConsultForm(prev => ({ ...prev, metrics: { ...prev.metrics, [f.key as string]: e.target.value } }))}
+                        placeholder="-"
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 피부타입 판정 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">종합 피부 타입</label>
+                  <select value={consultForm.skinTypeResult} onChange={e => setConsultForm(f => ({ ...f, skinTypeResult: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">선택</option>
+                    {SKIN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">다음 관리 권고일</label>
+                  <input type="date" value={consultForm.nextConsultDate} onChange={e => setConsultForm(f => ({ ...f, nextConsultDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+              </div>
+
+              {/* 맞춤 솔루션 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">1:1 맞춤 솔루션 (추천)</label>
+                <textarea value={consultForm.recommendedSolution} onChange={e => setConsultForm(f => ({ ...f, recommendedSolution: e.target.value }))}
+                  rows={4} placeholder="‘분석 → 맞춤 제안 자동작성’을 누르면 비컨 수치 기반 초안이 채워집니다. 자유롭게 수정하세요."
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              </div>
+
+              {/* 추천 제품/프로그램 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">추천 제품·프로그램 (쉼표로 구분)</label>
+                <input value={consultForm.recommendedProducts} onChange={e => setConsultForm(f => ({ ...f, recommendedProducts: e.target.value }))}
+                  placeholder="예: 수분 앰플, 진정 관리 10회권"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+
+              {/* 관리사 소견 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">관리사 소견</label>
+                <textarea value={consultForm.managerNote} onChange={e => setConsultForm(f => ({ ...f, managerNote: e.target.value }))}
+                  rows={2} placeholder="고객 피부 상태 관찰 소견을 기록하세요"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              </div>
+
+              <p className="text-[11px] text-gray-400">
+                ※ 비컨은 피부 상태를 분석·측정하는 미용 기기입니다. 본 상담은 의료 진단·처방·치료가 아닙니다.
+              </p>
+
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowConsultModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
+                <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
+                  <CheckCircle size={14} />상담 저장
                 </button>
               </div>
             </form>

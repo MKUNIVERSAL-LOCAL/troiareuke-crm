@@ -271,6 +271,46 @@ export interface Payment {
   createdAt: string;
 }
 
+/** 비컨(AI 피부진단기) 측정 지표 — 각 0~100 점수 (없으면 미측정) */
+export interface BeaconMetrics {
+  moisture?: number;     // 수분
+  oil?: number;          // 유분
+  elasticity?: number;   // 탄력
+  pigmentation?: number; // 색소침착
+  pore?: number;         // 모공
+  wrinkle?: number;      // 주름
+  redness?: number;      // 홍조
+  sensitivity?: number;  // 민감도
+  skinTone?: number;     // 피부톤(밝기)
+}
+
+/** 고객 피부상담 기록 (트로이아르케 비컨 1:1 맞춤) */
+export interface Consultation {
+  id: string;
+  shopId: string;
+  customerId: string;
+  customerName: string;
+  consultDate: string;
+  staffName?: string;
+  /** 고객 주관적 피부 고민 (체크리스트 태그) */
+  concerns: string[];
+  /** 비컨 진단 측정값 */
+  beaconMetrics: BeaconMetrics;
+  /** 종합 피부타입 판정 */
+  skinTypeResult?: string;
+  /** 관리사 소견 */
+  managerNote?: string;
+  /** 1:1 맞춤 솔루션 제안 (서술) */
+  recommendedSolution?: string;
+  /** 추천 제품/프로그램명 */
+  recommendedProducts: string[];
+  /** 다음 상담/관리 권고일 */
+  nextConsultDate?: string;
+  /** 전/후 사진 URL */
+  photos: string[];
+  createdAt: string;
+}
+
 /** 일별 매출 집계 */
 export interface DailySales {
   date: string;
