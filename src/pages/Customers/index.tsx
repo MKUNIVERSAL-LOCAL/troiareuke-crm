@@ -743,14 +743,12 @@ export default function Customers() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {beaconEnabled && (
-                    <button
-                      onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
-                    >
-                      <Sparkles size={12} />피부 상담
-                    </button>
-                  )}
+                  <button
+                    onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
+                  >
+                    <Sparkles size={12} />피부 상담
+                  </button>
                   <button
                     onClick={() => setShowTreatmentModal(true)}
                     className="flex items-center gap-1.5 px-3 py-2 bg-green-500 text-white rounded-xl text-xs font-medium hover:bg-green-600 transition-colors"
@@ -792,8 +790,6 @@ export default function Customers() {
               )}
             </div>
 
-            {beaconEnabled && (
-            <>
             {/* 피부 상담 이력 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <div className="flex items-center justify-between mb-4">
@@ -813,7 +809,7 @@ export default function Customers() {
                   <Activity size={28} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">상담 기록이 없어요</p>
                   <button onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
-                    비컨 분석으로 첫 상담 시작하기
+                    첫 상담 시작하기
                   </button>
                 </div>
               ) : (
@@ -856,7 +852,7 @@ export default function Customers() {
                           </div>
                         )}
 
-                        {metricEntries.length > 0 && (
+                        {beaconEnabled && metricEntries.length > 0 && (
                           <div className="grid grid-cols-3 gap-1.5 mb-2">
                             {metricEntries.map(e => (
                               <div key={e.label} className="text-center bg-white rounded-lg py-1 border border-indigo-50">
@@ -888,8 +884,6 @@ export default function Customers() {
                 </div>
               )}
             </div>
-            </>
-            )}
 
             {/* 등록된 프로그램 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
@@ -1261,13 +1255,13 @@ export default function Customers() {
       )}
 
       {/* ───── 피부 상담 모달 ───── */}
-      {beaconEnabled && showConsultModal && selected && (
+      {showConsultModal && selected && (
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="modal-card bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white flex items-center justify-between p-5 border-b border-gray-100 z-10">
               <div>
                 <h2 className="font-bold text-gray-900 flex items-center gap-1.5">
-                  <Sparkles size={16} className="text-indigo-600" />피부 상담 · 비컨 분석
+                  <Sparkles size={16} className="text-indigo-600" />피부 상담{beaconEnabled ? ' · 비컨 분석' : ''}
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">{selected.name} 고객 · 1:1 맞춤 솔루션</p>
               </div>
@@ -1369,7 +1363,8 @@ export default function Customers() {
                 })()}
               </div>
 
-              {/* 비컨 측정 수치 */}
+              {/* 비컨 측정 수치 — 비컨 기능 ON일 때만 (관리자 설정) */}
+              {beaconEnabled && (
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-semibold text-gray-700 flex items-center gap-1">
@@ -1394,6 +1389,7 @@ export default function Customers() {
                   ))}
                 </div>
               </div>
+              )}
 
               {/* 피부타입 판정 */}
               <div className="grid grid-cols-2 gap-3">
@@ -1416,7 +1412,7 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">1:1 맞춤 솔루션 (추천)</label>
                 <textarea value={consultForm.recommendedSolution} onChange={e => setConsultForm(f => ({ ...f, recommendedSolution: e.target.value }))}
-                  rows={4} placeholder="‘분석 → 맞춤 제안 자동작성’을 누르면 비컨 수치 기반 초안이 채워집니다. 자유롭게 수정하세요."
+                  rows={4} placeholder="피부 문제를 체크하면 추천 홈케어를 자동 입력할 수 있습니다. 자유롭게 수정하세요."
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
               </div>
 
@@ -1437,7 +1433,9 @@ export default function Customers() {
               </div>
 
               <p className="text-[11px] text-gray-400">
-                ※ 비컨은 피부 상태를 분석·측정하는 미용 기기입니다. 본 상담은 의료 진단·처방·치료가 아닙니다.
+                {beaconEnabled
+                  ? '※ 비컨은 피부 상태를 분석·측정하는 미용 기기입니다. 본 상담은 의료 진단·처방·치료가 아닙니다.'
+                  : '※ 본 상담은 의료 진단·처방·치료가 아닌 피부 분석·관리 소견입니다.'}
               </p>
 
               <div className="flex gap-2">

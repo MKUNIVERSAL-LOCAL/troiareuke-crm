@@ -507,9 +507,9 @@ export default function Settings() {
 
             {tab === 'integrations' && (
               <div className="space-y-4">
-                {/* 비컨 피부진단 (피부 상담) 기능 ON/OFF — 관리자 전용 */}
+                {/* 비컨 점수(AI 피부진단 수치) 기능 ON/OFF — 관리자 전용 */}
                 {isAdmin && (
-                  <SettingCard title="비컨 피부진단 (피부 상담)">
+                  <SettingCard title="비컨 점수 기록 (AI 피부진단기)">
                     <div className={clsx(
                       'flex items-center gap-3 p-4 rounded-xl border',
                       beaconOn ? 'bg-indigo-50 border-indigo-200' : 'bg-gray-50 border-gray-200'
@@ -518,9 +518,9 @@ export default function Settings() {
                         B
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">피부 상담 기능</p>
+                        <p className="text-sm font-bold text-gray-900">비컨 측정 수치 입력·표시</p>
                         <p className={clsx('text-xs mt-0.5', beaconOn ? 'text-indigo-600' : 'text-gray-400')}>
-                          {beaconOn ? '사용 중 · 고객 화면에 표시됩니다' : '숨김 · 고객 화면에 나타나지 않습니다'}
+                          {beaconOn ? '사용 중 · 상담에 비컨 점수 입력칸이 표시됩니다' : '숨김 · 상담은 그대로, 비컨 점수만 숨김'}
                         </p>
                       </div>
                       <button
@@ -539,8 +539,8 @@ export default function Settings() {
                       </button>
                     </div>
                     <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                      비컨 AI 피부진단기 연동(API)이 확정되기 전까지 피부 상담 기능을 숨겨둘 수 있습니다.
-                      켜면 고객 상세 화면에 ‘피부 상담’ 버튼과 상담 이력이 다시 나타납니다. (이 기기에만 적용)
+                      비컨 AI 피부진단기 연동(API)이 확정되기 전까지 상담 화면의 ‘비컨 측정 수치’ 입력·표시만 숨깁니다.
+                      <strong className="text-gray-500"> 피부 상담과 홈케어 추천은 계속 사용됩니다.</strong> (이 기기에만 적용)
                     </p>
                   </SettingCard>
                 )}
