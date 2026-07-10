@@ -1,8 +1,9 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2 } from 'lucide-react';
+import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { MessageTemplateStore, MessageHistoryStore, CustomerStore, SettingsStore } from '../../lib/store';
+import { sendMessages } from '../../lib/messagingGateway';
 import type { MessageType, MessageTemplate, MessageHistory } from '../../types';
 import clsx from 'clsx';
 
@@ -454,39 +455,57 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
         <p className="text-xs text-gray-400">최근 30일</p>
       </div>
       <div className="divide-y divide-gray-50">
-        {history.map(h => (
-          <div key={h.id} className="px-6 py-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <div className={clsx(
-                  'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5',
-                  h.status === 'sent' ? 'bg-green-100' : 'bg-red-100'
-                )}>
-                  {h.status === 'sent'
-                    ? <CheckCircle size={16} className="text-green-600" />
-                    : <AlertCircle size={16} className="text-red-500" />
-                  }
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-bold text-gray-900">{h.templateName || '직접 작성'}</p>
-                    <span className={clsx('px-2 py-0.5 rounded text-[11px] font-medium', MSG_TYPE_COLORS[h.type])}>
-                      {MSG_TYPE_LABELS[h.type]}
-                    </span>
+        {history.map(h => {
+          const isGatewayPending = h.status === 'failed' && h.successCount === 0 && (h.cost === 0 || h.cost === undefined);
+          return (
+            <div key={h.id} className="px-6 py-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className={clsx(
+                    'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5',
+                    h.status === 'sent' ? 'bg-green-100' : isGatewayPending ? 'bg-amber-100' : 'bg-red-100'
+                  )}>
+                    {h.status === 'sent'
+                      ? <CheckCircle size={16} className="text-green-600" />
+                      : isGatewayPending
+                        ? <AlertCircle size={16} className="text-amber-500" />
+                        : <AlertCircle size={16} className="text-red-500" />
+                    }
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{h.sentAt}</p>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-gray-900">{h.templateName || '직접 작성'}</p>
+                      <span className={clsx('px-2 py-0.5 rounded text-[11px] font-medium', MSG_TYPE_COLORS[h.type])}>
+                        {MSG_TYPE_LABELS[h.type]}
+                      </span>
+                      {isGatewayPending && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-700">미연동</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{h.sentAt}</p>
+                    {isGatewayPending && (
+                      <p className="text-[11px] text-amber-600 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-gray-800">{h.recipients}명 대상</p>
+                  {h.status === 'sent'
+                    ? <p className="text-xs text-green-500">성공 {h.successCount}명</p>
+                    : isGatewayPending
+                      ? <p className="text-xs text-amber-500">미발송 (미연동)</p>
+                      : <p className="text-xs text-red-400">실패 {h.failCount}명</p>
+                  }
+                  {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-400">실패 {h.failCount}명</p>}
+                  {h.status === 'sent' && h.cost !== undefined && h.cost > 0 && (
+                    <p className="text-[11px] text-gray-400 mt-1">{h.cost.toLocaleString()}원</p>
+                  )}
                 </div>
               </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-sm font-bold text-gray-800">{h.recipients}명 발송</p>
-                <p className="text-xs text-green-500">성공 {h.successCount}명</p>
-                {h.failCount > 0 && <p className="text-xs text-red-400">실패 {h.failCount}명</p>}
-                {h.cost !== undefined && <p className="text-[11px] text-gray-400 mt-1">{h.cost.toLocaleString()}원</p>}
-              </div>
+              <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{h.content}</p>
             </div>
-            <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{h.content}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -499,7 +518,8 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
   const [title, setTitle] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplate);
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [sendResult, setSendResult] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+  const [resultMessage, setResultMessage] = useState('');
   const charLimit = msgType === 'sms' ? 90 : 1000;
 
   const customers = CustomerStore.getAll();
@@ -532,42 +552,105 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
 
   const estimatedCost = msgType === 'sms' ? recipientCount * 11 : msgType === 'lms' ? recipientCount * 25 : recipientCount * 5;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
 
-    MessageHistoryStore.save({
+    const result = await sendMessages({
       type: msgType,
-      templateId: selectedTemplate?.id,
-      templateName: selectedTemplate?.name,
-      title: title || undefined,
       content: content.trim(),
+      title: title || undefined,
       recipients: recipientCount,
-      successCount: recipientCount,
-      failCount: 0,
-      sentAt: new Date().toLocaleString(),
-      status: 'sent',
-      cost: estimatedCost,
     });
 
-    setSending(false);
-    setSent(true);
-    onSent();
-
-    setTimeout(() => {
-      onClose();
-    }, 1200);
+    if (result.pending) {
+      // 게이트웨이 미연동 — 발송되지 않았음을 명확히 기록
+      MessageHistoryStore.save({
+        type: msgType,
+        templateId: selectedTemplate?.id,
+        templateName: selectedTemplate?.name,
+        title: title || undefined,
+        content: content.trim(),
+        recipients: recipientCount,
+        successCount: 0,
+        failCount: recipientCount,
+        sentAt: new Date().toLocaleString(),
+        status: 'failed',
+        cost: 0,
+      });
+      setSending(false);
+      setSendResult('pending');
+      setResultMessage(result.reason ?? '게이트웨이 미연동');
+      onSent();
+    } else if (result.sent > 0) {
+      // 실제 발송 성공
+      MessageHistoryStore.save({
+        type: msgType,
+        templateId: selectedTemplate?.id,
+        templateName: selectedTemplate?.name,
+        title: title || undefined,
+        content: content.trim(),
+        recipients: recipientCount,
+        successCount: result.sent,
+        failCount: result.failed,
+        sentAt: new Date().toLocaleString(),
+        status: result.failed === 0 ? 'sent' : 'failed',
+        cost: estimatedCost,
+      });
+      setSending(false);
+      setSendResult('success');
+      onSent();
+      setTimeout(() => { onClose(); }, 1200);
+    } else {
+      // 발송 실패
+      MessageHistoryStore.save({
+        type: msgType,
+        templateId: selectedTemplate?.id,
+        templateName: selectedTemplate?.name,
+        title: title || undefined,
+        content: content.trim(),
+        recipients: recipientCount,
+        successCount: 0,
+        failCount: recipientCount,
+        sentAt: new Date().toLocaleString(),
+        status: 'failed',
+        cost: 0,
+      });
+      setSending(false);
+      setSendResult('error');
+      setResultMessage(result.reason ?? '발송 실패');
+      onSent();
+    }
   };
 
   return (
     <Modal isOpen={true} onClose={onClose} title="메시지 발송" size="lg">
-      {sent ? (
+      {sendResult === 'success' ? (
         <div className="flex flex-col items-center justify-center py-12">
           <CheckCircle size={48} className="text-green-500 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 완료!</p>
           <p className="text-sm text-gray-500 mt-1">{recipientCount}명에게 메시지가 발송되었습니다</p>
+        </div>
+      ) : sendResult === 'pending' ? (
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <AlertCircle size={48} className="text-amber-400 mb-3" />
+          <p className="text-lg font-bold text-gray-900">실제 발송이 되지 않았습니다</p>
+          <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+            메시지 발송 게이트웨이가 아직 연동되지 않았습니다.<br />
+            설정 &gt; 연동에서 준비 예정입니다.
+          </p>
+          <p className="text-xs text-gray-400 mt-3 bg-gray-50 rounded-lg px-3 py-2">{resultMessage}</p>
+          <p className="text-xs text-gray-400 mt-2">발송 이력에 '미연동' 사유로 기록되었습니다.</p>
+          <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
+        </div>
+      ) : sendResult === 'error' ? (
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <AlertCircle size={48} className="text-red-400 mb-3" />
+          <p className="text-lg font-bold text-gray-900">발송 실패</p>
+          <p className="text-xs text-gray-400 mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
+          <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
         </div>
       ) : (
         <div className="space-y-5">
@@ -679,10 +762,19 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
           {/* Schedule */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">발송 시간</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button className="px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-xl border border-purple-600">즉시 발송</button>
-              <button className="px-4 py-2 text-sm font-medium bg-white text-gray-600 rounded-xl border border-gray-200">예약 발송</button>
+              <button
+                type="button"
+                onClick={() => alert('예약 발송은 NAS 서버 연동 후 지원됩니다.')}
+                className="px-4 py-2 text-sm font-medium bg-white text-gray-400 rounded-xl border border-gray-200 flex items-center gap-1.5 cursor-not-allowed opacity-60"
+                title="NAS 서버 연동 후 지원 예정"
+              >
+                예약 발송
+                <HelpCircle size={12} className="text-gray-400" />
+              </button>
             </div>
+            <p className="text-[11px] text-gray-400 mt-1.5">예약 발송은 NAS 서버 연동 후 지원됩니다.</p>
           </div>
 
           {/* Cost estimate */}
@@ -701,10 +793,11 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
             <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
             <button
               onClick={handleSend}
-              disabled={sending || !content.trim()}
+              disabled={sending || !content.trim() || recipientCount === 0}
               className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={14} /> 발송하기
+              {sending ? <Clock size={14} className="animate-spin" /> : <Send size={14} />}
+              {sending ? '처리 중...' : '발송하기'}
             </button>
           </div>
         </div>
