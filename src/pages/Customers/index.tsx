@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, Phone, Star, Calendar, TrendingUp,
   User, ChevronRight, AlertCircle, X, CheckCircle,
@@ -125,6 +125,9 @@ export default function Customers() {
   // 고객 수정 모달
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+
+  // 엑셀 업로드용 파일 input ref
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   // 등급(VIP) 변경 드롭다운
   const [showGradeMenu, setShowGradeMenu] = useState(false);
@@ -350,6 +353,63 @@ export default function Customers() {
     XLSX.utils.book_append_sheet(wb, ws, '고객목록');
     const today = new Date().toISOString().split('T')[0];
     XLSX.writeFile(wb, `고객목록_${today}.xlsx`);
+  }
+
+  // 고객 엑셀/CSV 대량 업로드 — 다운로드와 동일한 헤더(이름/전화번호/이메일/성별/등급/생년월일/피부유형/유입경로/메모)를 인식
+  function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+        if (rows.length === 0) { window.alert('시트에 데이터가 없습니다.'); return; }
+
+        const pick = (r: Record<string, any>, keys: string[]) => {
+          for (const k of keys) {
+            const hit = Object.keys(r).find(col => col.replace(/\s/g, '') === k);
+            if (hit && String(r[hit]).trim() !== '') return String(r[hit]).trim();
+          }
+          return '';
+        };
+        const normGender = (g: string): Gender => (g === '남성' || g === '남' ? '남성' : g === '여성' || g === '여' ? '여성' : '미입력');
+        const normGrade = (g: string): CustomerGrade => (GRADES as string[]).includes(g) ? g as CustomerGrade : '신규';
+
+        // 기존 전화번호로 중복 스킵
+        const existingPhones = new Set(CustomerStore.getAll().map(c => c.phone.replace(/[^0-9]/g, '')));
+        let added = 0, skipped = 0;
+        rows.forEach(r => {
+          const name = pick(r, ['이름', '고객명', '성함', 'name']);
+          const phone = pick(r, ['전화번호', '연락처', '휴대폰', '전화', 'phone']);
+          if (!name || !phone) { skipped++; return; }
+          const digits = phone.replace(/[^0-9]/g, '');
+          if (existingPhones.has(digits)) { skipped++; return; }
+          existingPhones.add(digits);
+          CustomerStore.save({
+            name, phone,
+            gender: normGender(pick(r, ['성별', 'gender'])),
+            grade: normGrade(pick(r, ['등급', 'grade'])),
+            skinType: pick(r, ['피부유형', '피부타입', 'skinType']),
+            memo: pick(r, ['메모', '비고', 'memo']),
+            birthDate: pick(r, ['생년월일', '생일', 'birthDate']) || undefined,
+            referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
+            email: pick(r, ['이메일', 'email']) || undefined,
+            allergies: undefined, tags: [], isActive: true,
+          });
+          added++;
+        });
+        loadAll();
+        window.alert(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 중복).`);
+      } catch (err) {
+        window.alert('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
+      } finally {
+        if (importInputRef.current) importInputRef.current.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   // 고객 추가
@@ -652,12 +712,26 @@ export default function Customers() {
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-2 mb-3">
             <h1 className="text-lg font-bold text-gray-900 flex-1">고객 관리</h1>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleImportExcel}
+              className="hidden"
+            />
+            <button
+              onClick={() => importInputRef.current?.click()}
+              title="엑셀(xlsx)/CSV로 고객 대량 등록 (이름·전화번호 필수, 중복 자동 제외)"
+              className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+            >
+              <Upload size={12} />업로드
+            </button>
             <button
               onClick={exportToExcel}
               title="현재 목록을 엑셀(xlsx)로 다운로드"
               className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
-              <Download size={12} />엑셀
+              <Download size={12} />다운로드
             </button>
             <button
               onClick={() => setShowAddModal(true)}
