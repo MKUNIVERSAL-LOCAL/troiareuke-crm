@@ -34,6 +34,7 @@ export default function Reservations() {
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editReservation, setEditReservation] = useState<Reservation | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
   const [staffList] = useState<Staff[]>(() => StaffStore.getAll());
@@ -223,10 +224,10 @@ export default function Reservations() {
                 Google 캘린더 연동
               </div>
             )}
-            {/* Naver sync badge */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-xs font-medium text-green-700">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-              네이버 예약 동기화
+            {/* Naver sync badge — 실제 연동 전까지 '준비 중' 표기 (오해 방지) */}
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-400" title="네이버 예약 연동은 준비 중입니다">
+              <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
+              네이버 예약 (준비 중)
             </div>
             <div className="flex bg-gray-100 rounded-xl p-1">
               {(['week', 'day', 'list'] as ViewMode[]).map(m => {
@@ -264,12 +265,20 @@ export default function Reservations() {
       {showAddModal && (
         <AddReservationModal onClose={() => setShowAddModal(false)} onSave={handleSaveReservation} />
       )}
+      {editReservation && (
+        <AddReservationModal
+          reservation={editReservation}
+          onClose={() => setEditReservation(null)}
+          onSave={() => { reloadReservations(); setEditReservation(null); }}
+        />
+      )}
       {selectedReservation && (
         <ReservationDetailModal
           reservation={selectedReservation}
           onClose={() => setSelectedReservation(null)}
           onUpdate={handleUpdateReservation}
           onDelete={handleDeleteReservation}
+          onEdit={() => { setEditReservation(selectedReservation); setSelectedReservation(null); }}
         />
       )}
     </div>
@@ -510,20 +519,21 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
   );
 }
 
-function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+function AddReservationModal({ reservation: editing, onClose, onSave }: { reservation?: Reservation | null; onClose: () => void; onSave: () => void }) {
   const { user: authUser } = useAuth();
+  const isEdit = !!editing;
   const customers = CustomerStore.getAll();
   const staffList = StaffStore.getAll();
   const services = ServiceStore.getAll().filter(s => s.isActive);
 
-  const [customerId, setCustomerId] = useState('');
-  const [staffId, setStaffId] = useState('');
-  const [serviceId, setServiceId] = useState('');
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [startTime, setStartTime] = useState('10:00');
-  const [source, setSource] = useState<Reservation['source']>('manual');
-  const [memo, setMemo] = useState('');
-  const [addToGoogle, setAddToGoogle] = useState(isGoogleCalendarConnected());
+  const [customerId, setCustomerId] = useState(editing?.customerId ?? '');
+  const [staffId, setStaffId] = useState(editing?.staffId ?? '');
+  const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? '');
+  const [date, setDate] = useState(editing?.date ?? format(new Date(), 'yyyy-MM-dd'));
+  const [startTime, setStartTime] = useState(editing?.startTime ?? '10:00');
+  const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
+  const [memo, setMemo] = useState(editing?.memo ?? '');
+  const [addToGoogle, setAddToGoogle] = useState(!isEdit && isGoogleCalendarConnected());
   const googleAvailable = isGoogleCalendarConnected();
 
   const handleSave = () => {
@@ -555,24 +565,29 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
       date,
       startTime,
       endTime,
-      status: 'confirmed',
+      status: editing?.status ?? 'confirmed',
       source,
       memo: memo || undefined,
       totalPrice: service.price,
     };
 
-    const saved = ReservationStore.save(reservation);
-    // Google Calendar에도 추가
-    if (addToGoogle && googleAvailable && saved) {
-      createCalendarEvent({ ...reservation, id: saved.id }).catch(() => {
-        // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
-      });
+    if (isEdit && editing) {
+      // 수정: 기존 예약 갱신 (상태·네이버ID 등 보존)
+      ReservationStore.update(editing.id, reservation);
+    } else {
+      const saved = ReservationStore.save(reservation);
+      // Google Calendar에도 추가
+      if (addToGoogle && googleAvailable && saved) {
+        createCalendarEvent({ ...reservation, id: saved.id }).catch(() => {
+          // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
+        });
+      }
     }
     onSave();
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="예약 추가" size="lg">
+    <Modal isOpen={true} onClose={onClose} title={isEdit ? '예약 수정' : '예약 추가'} size="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -655,7 +670,7 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
             placeholder="특이사항"
           />
         </div>
-        {googleAvailable && (
+        {googleAvailable && !isEdit && (
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -681,11 +696,12 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
   );
 }
 
-function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete }: {
+function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, onEdit }: {
   reservation: Reservation;
   onClose: () => void;
   onUpdate: () => void;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const { user } = useAuth();
   const handleCancel = () => {
@@ -776,7 +792,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete }:
           >
             <Trash2 size={14} /> 삭제
           </button>
-          <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl">수정</button>
+          <button onClick={onEdit} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all">수정</button>
         </div>
       </div>
     </Modal>
