@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag } from 'lucide-react';
 import {
@@ -12,10 +12,10 @@ import StatCard from '../components/ui/StatCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 
-const todayStr = format(new Date(), 'yyyy-MM-dd');
-const thisMonthStr = format(new Date(), 'yyyy-MM');
-
 function getDashboardData() {
+  // 자정을 넘겨도 정확하도록 매 호출마다 오늘 날짜 계산
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const thisMonthStr = format(new Date(), 'yyyy-MM');
   const customers = CustomerStore.getAll();
   const products = ProductStore.getAll();
 
@@ -74,7 +74,20 @@ function getDashboardData() {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [data] = useState(() => getDashboardData());
+  const [data, setData] = useState(() => getDashboardData());
+
+  // 다른 페이지에서 CRUD 후 돌아오거나 창에 포커스가 돌아오면 최신 데이터로 재계산 (stale 방지)
+  useEffect(() => {
+    const refresh = () => setData(getDashboardData());
+    refresh(); // 마운트 시 최신화
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   const {
     thisMonth, revenueGrowth,
