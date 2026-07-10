@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Search, ClipboardList, Camera, ChevronRight, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore } from '../../lib/store';
@@ -7,10 +7,12 @@ import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
+import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, type PhotoEntry } from '../../lib/photoStore';
 
 export default function Treatments() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editing, setEditing] = useState<TreatmentLog | null>(null);
   const [selected, setSelected] = useState<TreatmentLog | null>(null);
   const [treatmentLogs, setTreatmentLogs] = useState<TreatmentLog[]>([]);
 
@@ -31,6 +33,7 @@ export default function Treatments() {
 
   const handleDelete = (id: string) => {
     TreatmentLogStore.delete(id);
+    clearPhotos(`treatment:${id}`); // 연결된 사진도 정리
     setSelected(null);
     loadLogs();
   };
@@ -175,31 +178,48 @@ export default function Treatments() {
           }}
         />
       )}
+      {editing && (
+        <AddTreatmentModal
+          treatment={editing}
+          onClose={() => setEditing(null)}
+          onSave={() => {
+            setEditing(null);
+            loadLogs();
+          }}
+        />
+      )}
       {selected && (
         <TreatmentDetailModal
           treatment={selected}
           onClose={() => setSelected(null)}
           onDelete={handleDelete}
+          onEdit={() => { setEditing(selected); setSelected(null); }}
         />
       )}
     </div>
   );
 }
 
-function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?: TreatmentLog | null; onClose: () => void; onSave: () => void }) {
   const { user: authUser } = useAuth();
+  const isEdit = !!editing;
   const customers = CustomerStore.getAll();
   const staff = StaffStore.getAll();
   const services = ServiceStore.getAll();
 
-  const [customerId, setCustomerId] = useState('');
-  const [customerProgramId, setCustomerProgramId] = useState('');
-  const [staffName, setStaffName] = useState('');
+  const [customerId, setCustomerId] = useState(editing?.customerId ?? '');
+  const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? '');
+  const [staffName, setStaffName] = useState(editing?.staffName ?? '');
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
-  const [treatmentDetails, setTreatmentDetails] = useState('');
-  const [skinCondition, setSkinCondition] = useState('');
-  const [staffNotes, setStaffNotes] = useState('');
-  const [nextAppointment, setNextAppointment] = useState('');
+  const [treatmentDetails, setTreatmentDetails] = useState(editing?.treatmentDetails ?? '');
+  const [skinCondition, setSkinCondition] = useState(editing?.skinCondition ?? '');
+  const [staffNotes, setStaffNotes] = useState(editing?.staffNotes ?? '');
+  const [nextAppointment, setNextAppointment] = useState(editing?.nextAppointment ?? '');
+
+  // 사진 (시술 전/후) — 로컬 photoStore에 별도 저장
+  const [photos, setPhotoList] = useState<PhotoEntry[]>(() => (editing ? getPhotos(`treatment:${editing.id}`) : []));
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get active programs for the selected customer
   const activePrograms = customerId ? CustomerProgramStore.getActive(customerId) : [];
@@ -210,6 +230,29 @@ function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: (
     );
   };
 
+  const handlePickPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const added: PhotoEntry[] = [];
+      for (const file of files) {
+        try {
+          const dataUrl = await resizeImageFile(file);
+          added.push({ id: makePhotoId(), dataUrl, takenAt: new Date().toISOString() });
+        } catch {
+          // 개별 파일 실패는 건너뜀
+        }
+      }
+      setPhotoList(prev => [...prev, ...added]);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removePhotoLocal = (id: string) => setPhotoList(prev => prev.filter(p => p.id !== id));
+
   const handleSave = () => {
     if (!customerId) return;
 
@@ -219,26 +262,44 @@ function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: (
     const details = treatmentDetails || selectedServices.join(', ') || undefined;
     const linkedProgram = customerProgramId ? activePrograms.find(cp => cp.id === customerProgramId) : undefined;
 
-    TreatmentLogStore.save({
-      customerId,
-      customerName: customer.name,
-      customerProgramId: customerProgramId || undefined,
-      programName: linkedProgram?.programName || undefined,
-      staffName: staffName || undefined,
-      treatmentDate: new Date().toISOString().slice(0, 10),
-      treatmentTime: new Date().toTimeString().slice(0, 5),
-      sessionsUsed: 1,
-      treatmentDetails: details,
-      skinCondition: skinCondition || undefined,
-      staffNotes: staffNotes || undefined,
-      nextAppointment: nextAppointment || undefined,
-    });
+    if (isEdit && editing) {
+      TreatmentLogStore.update(editing.id, {
+        customerId,
+        customerName: customer.name,
+        customerProgramId: customerProgramId || undefined,
+        programName: linkedProgram?.programName || editing.programName || undefined,
+        staffName: staffName || undefined,
+        treatmentDetails: details,
+        skinCondition: skinCondition || undefined,
+        staffNotes: staffNotes || undefined,
+        nextAppointment: nextAppointment || undefined,
+      });
+      try { savePhotos(`treatment:${editing.id}`, photos); } catch { alert('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
+    } else {
+      const saved = TreatmentLogStore.save({
+        customerId,
+        customerName: customer.name,
+        customerProgramId: customerProgramId || undefined,
+        programName: linkedProgram?.programName || undefined,
+        staffName: staffName || undefined,
+        treatmentDate: new Date().toISOString().slice(0, 10),
+        treatmentTime: new Date().toTimeString().slice(0, 5),
+        sessionsUsed: 1,
+        treatmentDetails: details,
+        skinCondition: skinCondition || undefined,
+        staffNotes: staffNotes || undefined,
+        nextAppointment: nextAppointment || undefined,
+      });
+      if (saved && photos.length > 0) {
+        try { savePhotos(`treatment:${saved.id}`, photos); } catch { alert('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
+      }
+    }
 
     onSave();
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="시술 기록 추가" size="xl">
+    <Modal isOpen={true} onClose={onClose} title={isEdit ? '시술 기록 수정' : '시술 기록 추가'} size="xl">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -351,10 +412,41 @@ function AddTreatmentModal({ onClose, onSave }: { onClose: () => void; onSave: (
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-2">시술 전후 사진</label>
-          <button className="w-full border-2 border-dashed border-gray-200 rounded-xl py-6 flex flex-col items-center gap-2 text-gray-400 hover:border-purple-300 hover:text-purple-400 transition-colors">
-            <Camera size={24} />
-            <span className="text-sm">사진 추가</span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handlePickPhotos}
+            className="hidden"
+          />
+          {photos.length > 0 && (
+            <div className="grid grid-cols-4 gap-2 mb-2">
+              {photos.map(p => (
+                <div key={p.id} className="relative group aspect-square">
+                  <img src={p.dataUrl} alt="시술 사진" className="w-full h-full object-cover rounded-xl border border-gray-100" />
+                  <button
+                    type="button"
+                    onClick={() => removePhotoLocal(p.id)}
+                    className="absolute top-1 right-1 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                    aria-label="사진 삭제"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="w-full border-2 border-dashed border-gray-200 rounded-xl py-6 flex flex-col items-center gap-2 text-gray-400 hover:border-purple-300 hover:text-purple-400 transition-colors disabled:opacity-50"
+          >
+            {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}
+            <span className="text-sm">{uploading ? '사진 처리 중...' : '사진 추가 (여러 장 가능)'}</span>
           </button>
+          <p className="text-[11px] text-gray-400 mt-1">사진은 기기에 저장됩니다. (클라우드 동기화는 NAS 서버 연동 후 지원)</p>
         </div>
 
         <div className="flex gap-3 pt-2">
@@ -381,12 +473,15 @@ function TreatmentDetailModal({
   treatment: t,
   onClose,
   onDelete,
+  onEdit,
 }: {
   treatment: TreatmentLog;
   onClose: () => void;
   onDelete: (id: string) => void;
+  onEdit: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const photos = getPhotos(`treatment:${t.id}`);
 
   return (
     <Modal isOpen={true} onClose={onClose} title="시술 기록 상세" size="lg">
@@ -444,6 +539,19 @@ function TreatmentDetailModal({
           </div>
         )}
 
+        {photos.length > 0 && (
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">시술 전후 사진 ({photos.length})</p>
+            <div className="grid grid-cols-4 gap-2">
+              {photos.map(p => (
+                <a key={p.id} href={p.dataUrl} target="_blank" rel="noreferrer" className="aspect-square">
+                  <img src={p.dataUrl} alt="시술 사진" className="w-full h-full object-cover rounded-xl border border-gray-100 hover:opacity-90 transition" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-3 pt-2">
           {!confirmDelete ? (
             <button
@@ -463,6 +571,13 @@ function TreatmentDetailModal({
             </button>
           )}
           <div className="flex-1" />
+          <button
+            onClick={onEdit}
+            className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all"
+          >
+            <Pencil size={14} />
+            수정
+          </button>
           <button onClick={onClose} className="px-6 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">닫기</button>
         </div>
       </div>
