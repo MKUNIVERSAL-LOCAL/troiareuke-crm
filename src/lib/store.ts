@@ -1009,6 +1009,17 @@ export const TreatmentLogStore = {
     return log;
   },
 
+  update(id: string, updates: Partial<TreatmentLog>): TreatmentLog | null {
+    const all = this.getAll();
+    const idx = all.findIndex(t => t.id === id);
+    if (idx === -1) return null;
+    all[idx] = { ...all[idx], ...updates };
+    _treatmentLogs = all;
+    saveList(shopKey('treatment_logs'), all);
+    sbUpdate('treatment_logs', id, toDbTreatmentLog(updates));
+    return all[idx];
+  },
+
   delete(id: string): void {
     const all = this.getAll().filter(t => t.id !== id);
     _treatmentLogs = all;
@@ -1194,6 +1205,23 @@ export const PaymentStore = {
     saveList(shopKey('payments'), all);
     sbUpdate('payments', id, toDbPayment(updates));
     return all[idx];
+  },
+
+  delete(id: string): void {
+    const target = this.getAll().find(p => p.id === id);
+    // 완료 결제를 삭제하면 고객 누적 결제액에서 차감(save의 역연산으로 정합성 유지)
+    if (target && target.customerId && target.status === 'completed') {
+      const customer = CustomerStore.getById(target.customerId);
+      if (customer && !customer.id.startsWith('sample_')) {
+        CustomerStore.update(target.customerId, {
+          totalSpent: Math.max(0, (customer.totalSpent || 0) - target.amount),
+        });
+      }
+    }
+    const all = this.getAll().filter(p => p.id !== id);
+    _payments = all;
+    saveList(shopKey('payments'), all);
+    sbDelete('payments', id);
   },
 
   /** 기간별 매출 집계 */
