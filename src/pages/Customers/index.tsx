@@ -3,7 +3,7 @@ import {
   Search, Plus, Phone, Star, Calendar, TrendingUp,
   User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus,
-  Sparkles, Activity, Mail, Download
+  Sparkles, Activity, Mail, Download, Pencil, Trash2, Upload
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore } from '../../lib/store';
 import {
@@ -121,6 +121,10 @@ export default function Customers() {
   // 고객 추가 모달
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+
+  // 고객 수정 모달
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
   // 등급(VIP) 변경 드롭다운
   const [showGradeMenu, setShowGradeMenu] = useState(false);
@@ -362,6 +366,45 @@ export default function Customers() {
     });
     setShowAddModal(false);
     setAddForm({ name: '', phone: '', email: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '' });
+    loadAll();
+  }
+
+  // 고객 수정 — 상세에서 '수정' 클릭 시 현재 값으로 폼 채우고 모달 오픈
+  function openEditModal() {
+    if (!selected) return;
+    setEditForm({
+      name: selected.name, phone: selected.phone,
+      email: selected.email ?? '', gender: selected.gender,
+      grade: selected.grade, skinType: selected.skinType ?? '',
+      memo: selected.memo ?? '', birthDate: selected.birthDate ?? '',
+      referralSource: selected.referralSource ?? '',
+    });
+    setShowEditModal(true);
+  }
+
+  function handleEditCustomer(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    CustomerStore.update(selected.id, {
+      name: editForm.name, phone: editForm.phone,
+      gender: editForm.gender, grade: editForm.grade,
+      skinType: editForm.skinType, memo: editForm.memo,
+      birthDate: editForm.birthDate || undefined,
+      referralSource: editForm.referralSource || undefined,
+      email: editForm.email.trim() || undefined,
+    });
+    const updated = CustomerStore.getById(selected.id);
+    if (updated) setSelected(updated);
+    setShowEditModal(false);
+    loadAll();
+  }
+
+  // 고객 삭제 — 2단계 확인 후 제거
+  function handleDeleteCustomer() {
+    if (!selected) return;
+    if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?\n등록된 상담·시술 기록은 남지만 고객 정보는 복구할 수 없습니다.`)) return;
+    CustomerStore.delete(selected.id);
+    setSelected(null);
     loadAll();
   }
 
@@ -761,6 +804,19 @@ export default function Customers() {
                   >
                     <Plus size={12} />프로그램 등록
                   </button>
+                  <button
+                    onClick={openEditModal}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-200 transition-colors"
+                  >
+                    <Pencil size={12} />수정
+                  </button>
+                  <button
+                    onClick={handleDeleteCustomer}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors"
+                    aria-label="고객 삭제"
+                  >
+                    <Trash2 size={12} />삭제
+                  </button>
                 </div>
               </div>
 
@@ -1076,6 +1132,85 @@ export default function Customers() {
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">등록</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ───── 고객 수정 모달 ───── */}
+      {showEditModal && selected && (
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="modal-card bg-white rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">고객 정보 수정</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleEditCustomer} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">이름 *</label>
+                  <input required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="홍길동" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
+                  <input required value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="010-0000-0000" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">성별</label>
+                  <select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value as Gender }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="여성">여성</option><option value="남성">남성</option><option value="미입력">미입력</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">등급</label>
+                  <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value as CustomerGrade }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">생년월일</label>
+                  <BirthDateSelect value={editForm.birthDate} onChange={v => setEditForm(f => ({ ...f, birthDate: v }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
+                  <select value={editForm.skinType} onChange={e => setEditForm(f => ({ ...f, skinType: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">선택 안함</option>
+                    {['건성', '지성', '복합성', '민감성', '중성'].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
+                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
+                <select value={editForm.referralSource} onChange={e => setEditForm(f => ({ ...f, referralSource: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">선택</option>
+                  {['네이버', '카카오', '지인 소개', '간판', '유튜브', 'SNS', '직접 방문', '기타'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
+                <textarea value={editForm.memo} onChange={e => setEditForm(f => ({ ...f, memo: e.target.value }))}
+                  rows={2} placeholder="특이사항, 알레르기 등"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">취소</button>
+                <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">저장</button>
               </div>
             </form>
           </div>
