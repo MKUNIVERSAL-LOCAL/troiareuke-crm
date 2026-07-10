@@ -10,6 +10,7 @@ import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
 } from '../../lib/consultationStore';
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
+import TimelapseViewer from '../../components/TimelapseViewer';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import * as XLSX from 'xlsx';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
@@ -1088,6 +1089,9 @@ export default function Customers() {
                 </div>
               )}
             </div>
+
+            {/* Before/After 타임랩스 (킬러②) — 시술 사진이 있을 때만 표시 */}
+            <TimelapseViewer customerId={selected.id} />
 
             {/* 최근 시술 기록 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
