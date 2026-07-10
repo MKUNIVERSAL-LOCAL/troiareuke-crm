@@ -9,6 +9,7 @@ import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
+import RevisitReminderCard from '../components/RevisitReminderCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 
@@ -191,6 +192,9 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* 재방문 리마인더 (킬러③) */}
+        <RevisitReminderCard compact />
       </div>
 
       {/* ── 데스크톱 뷰 (lg+) ────────────────────────────────── */}
@@ -363,6 +367,9 @@ export default function Dashboard() {
 
           {/* Alerts */}
           <div className="space-y-4">
+            {/* 재방문 리마인더 (킬러③) */}
+            <RevisitReminderCard />
+
             {/* Low Stock Alert */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">
