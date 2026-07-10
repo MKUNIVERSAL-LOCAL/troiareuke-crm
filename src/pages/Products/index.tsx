@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback } from 'react';
-import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp } from 'lucide-react';
+import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { ProductStore, ProductSaleStore, CustomerStore } from '../../lib/store';
@@ -20,6 +20,7 @@ export default function Products() {
   const [products, setProducts] = useState(() => ProductStore.getAll());
   const [sales, setSales] = useState(() => ProductSaleStore.getAll());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [saleProduct, setSaleProduct] = useState<Product | null>(null);
 
@@ -27,6 +28,12 @@ export default function Products() {
     setProducts(ProductStore.getAll());
     setSales(ProductSaleStore.getAll());
   }, []);
+
+  const handleDeleteProduct = (product: Product) => {
+    if (!window.confirm(`'${product.name}' 제품을 삭제할까요?\n판매 기록은 남지만 재고 항목은 복구할 수 없습니다.`)) return;
+    ProductStore.delete(product.id);
+    refresh();
+  };
 
   const filtered = products.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
@@ -216,14 +223,30 @@ export default function Products() {
                               {margin}%
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-center">
-                            <button
-                              onClick={() => handleSell(p)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg hover:bg-[#152d6e] transition-colors"
-                            >
-                              <ShoppingCart size={11} />
-                              판매
-                            </button>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => handleSell(p)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg hover:bg-[#152d6e] transition-colors"
+                              >
+                                <ShoppingCart size={11} />
+                                판매
+                              </button>
+                              <button
+                                onClick={() => setEditProduct(p)}
+                                className="p-1.5 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded-lg transition-colors"
+                                aria-label="제품 수정"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(p)}
+                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                aria-label="제품 삭제"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -293,6 +316,13 @@ export default function Products() {
           onSaved={() => { refresh(); setShowAddModal(false); }}
         />
       )}
+      {editProduct && (
+        <AddProductModal
+          product={editProduct}
+          onClose={() => setEditProduct(null)}
+          onSaved={() => { refresh(); setEditProduct(null); }}
+        />
+      )}
       {showSaleModal && saleProduct && (
         <SaleModal
           product={saleProduct}
@@ -304,19 +334,20 @@ export default function Products() {
   );
 }
 
-// ─── 제품 추가 모달 ──────────────────────────────────────────────
-function AddProductModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+// ─── 제품 추가/수정 모달 ──────────────────────────────────────────────
+function AddProductModal({ product, onClose, onSaved }: { product?: Product | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!product;
   const [form, setForm] = useState({
-    name: '',
-    category: '세럼',
-    brand: '',
-    price: '',
-    cost: '',
-    stock: '',
-    minStock: '5',
-    unit: '개',
-    description: '',
-    isActive: true,
+    name: product?.name ?? '',
+    category: product?.category ?? '세럼',
+    brand: product?.brand ?? '',
+    price: product ? String(product.price) : '',
+    cost: product ? String(product.cost) : '',
+    stock: product ? String(product.stock) : '',
+    minStock: product ? String(product.minStock) : '5',
+    unit: product?.unit ?? '개',
+    description: product?.description ?? '',
+    isActive: product?.isActive ?? true,
   });
   const [saving, setSaving] = useState(false);
 
@@ -328,7 +359,7 @@ function AddProductModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       return;
     }
     setSaving(true);
-    ProductStore.save({
+    const payload = {
       name: form.name.trim(),
       category: form.category,
       brand: form.brand.trim() || undefined,
@@ -339,12 +370,17 @@ function AddProductModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       unit: form.unit || '개',
       description: form.description.trim() || undefined,
       isActive: form.isActive,
-    });
+    };
+    if (isEdit && product) {
+      ProductStore.update(product.id, payload);
+    } else {
+      ProductStore.save(payload);
+    }
     onSaved();
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="제품 추가" size="md">
+    <Modal isOpen onClose={onClose} title={isEdit ? '제품 수정' : '제품 추가'} size="md">
       <div className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">제품명 *</label>
