@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle,
   CreditCard, Banknote, Smartphone, DollarSign,
-  ShoppingBag, Scissors, ChevronLeft, ChevronRight
+  ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -25,6 +25,7 @@ export default function Sales() {
   const [tab, setTab] = useState<'overview' | 'list'>('overview');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [viewMonth, setViewMonth] = useState(getYearMonth(new Date()));
 
   // 결제 등록 폼
@@ -100,13 +101,44 @@ export default function Sales() {
     setViewMonth(getYearMonth(d));
   }
 
-  // 결제 등록
+  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: '카드', paymentDate: today(), memo: '', discountAmount: '0' });
+
+  function closeModal() {
+    setShowModal(false);
+    setEditingId(null);
+    resetForm();
+  }
+
+  // 결제 수정 — 목록에서 편집 클릭 시 폼 채우고 모달 오픈
+  function openEdit(p: Payment) {
+    setForm({
+      customerId: p.customerId || '',
+      customerName: p.customerName || '',
+      type: p.type,
+      amount: String(p.amount),
+      paymentMethod: p.paymentMethod,
+      paymentDate: p.paymentDate,
+      memo: p.memo || '',
+      discountAmount: String(p.discountAmount || 0),
+    });
+    setEditingId(p.id);
+    setShowModal(true);
+  }
+
+  // 결제 삭제
+  function handleDelete(p: Payment) {
+    if (!window.confirm(`${p.paymentDate} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
+    PaymentStore.delete(p.id);
+    loadPayments();
+  }
+
+  // 결제 등록/수정
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const customer = customers.find(c => c.id === form.customerId);
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
 
-    PaymentStore.save({
+    const payload = {
       customerId: form.customerId || undefined,
       customerName: customer?.name || form.customerName || undefined,
       paymentDate: form.paymentDate,
@@ -115,12 +147,17 @@ export default function Sales() {
       amount: parseInt(form.amount.replace(/,/g, '')) || 0,
       paymentMethod: form.paymentMethod,
       discountAmount: parseInt(form.discountAmount.replace(/,/g, '')) || 0,
-      status: 'completed',
+      status: 'completed' as const,
       memo: form.memo || undefined,
-    });
+    };
 
-    setShowModal(false);
-    setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: '카드', paymentDate: today(), memo: '', discountAmount: '0' });
+    if (editingId) {
+      PaymentStore.update(editingId, payload);
+    } else {
+      PaymentStore.save(payload);
+    }
+
+    closeModal();
     loadPayments();
   }
 
@@ -303,16 +340,27 @@ export default function Sales() {
                 <span className="text-right">금액</span>
               </div>
               {[...monthPayments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate)).map(p => (
-                <div key={p.id} className="grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
+                <div key={p.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
                   <span className="text-gray-500 text-xs">{p.paymentDate}</span>
-                  <span className="col-span-2 font-medium text-gray-800">{p.customerName || '—'}</span>
+                  <span className="col-span-2 font-medium text-gray-800">
+                    {p.customerName || '—'}
+                    {p.discountAmount > 0 && <span className="ml-1.5 text-[11px] text-orange-500">-{formatPrice(p.discountAmount)}</span>}
+                  </span>
                   <span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
                       {p.typeLabel}
                     </span>
                   </span>
                   <span className="text-gray-500 text-xs">{p.paymentMethod}</span>
-                  <span className="text-right font-bold text-gray-900">{formatPrice(p.amount)}</span>
+                  <span className="flex items-center justify-end gap-1.5">
+                    <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
+                    <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 수정">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 삭제">
+                      <Trash2 size={13} />
+                    </button>
+                  </span>
                 </div>
               ))}
               <div className="px-4 py-3 bg-gray-50 rounded-b-2xl flex items-center justify-between">
@@ -329,8 +377,8 @@ export default function Sales() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900">결제 등록</h2>
-              <button onClick={() => setShowModal(false)}><X size={18} className="text-gray-400" /></button>
+              <h2 className="font-bold text-gray-900">{editingId ? '결제 수정' : '결제 등록'}</h2>
+              <button onClick={closeModal}><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleSave} className="p-5 space-y-4">
               {/* 구분 */}
@@ -393,6 +441,26 @@ export default function Sales() {
                 </div>
               </div>
 
+              {/* 할인 금액 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">할인 금액</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={form.discountAmount && form.discountAmount !== '0' ? parseInt(form.discountAmount || '0').toLocaleString('ko-KR') : ''}
+                    onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value.replace(/,/g, '') || '0' }))}
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
+                </div>
+                {form.amount && parseInt(form.discountAmount || '0') > 0 && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    할인 적용 실수령: <strong className="text-gray-600">{formatPrice((parseInt(form.amount.replace(/,/g, '')) || 0))}</strong> (결제 금액 = 할인 반영 후 금액을 입력하세요)
+                  </p>
+                )}
+              </div>
+
               {/* 결제 방법 & 날짜 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -428,9 +496,9 @@ export default function Sales() {
               </div>
 
               <div className="flex gap-2">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
+                <button type="button" onClick={closeModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
-                  <CheckCircle size={14} />결제 등록
+                  <CheckCircle size={14} />{editingId ? '수정 저장' : '결제 등록'}
                 </button>
               </div>
             </form>
