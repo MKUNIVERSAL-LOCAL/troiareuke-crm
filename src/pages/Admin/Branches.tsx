@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
+import { createBranchAdmin } from '../../lib/adminApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -20,12 +21,11 @@ interface BranchForm {
   shop_type: string;
   plan: string;
   admin_email: string;
-  admin_password: string;
 }
 
 const emptyForm: BranchForm = {
   name: '', address: '', phone: '', shop_type: '피부관리실',
-  plan: 'trial', admin_email: '', admin_password: '',
+  plan: 'trial', admin_email: '',
 };
 
 export default function Branches() {
@@ -36,6 +36,7 @@ export default function Branches() {
   const [form, setForm] = useState<BranchForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [adminPending, setAdminPending] = useState(false);
 
   useEffect(() => { loadBranches(); }, []);
 
@@ -63,7 +64,7 @@ export default function Branches() {
 
   function openEdit(b: Branch) {
     setEditTarget(b);
-    setForm({ name: b.name, address: b.address || '', phone: b.phone || '', shop_type: b.shop_type || '', plan: b.plan, admin_email: '', admin_password: '' });
+    setForm({ name: b.name, address: b.address || '', phone: b.phone || '', shop_type: b.shop_type || '', plan: b.plan, admin_email: '' });
     setError('');
     setShowModal(true);
   }
@@ -72,6 +73,9 @@ export default function Branches() {
     if (!form.name.trim()) { setError('지점명을 입력해주세요.'); return; }
     setSaving(true);
     setError('');
+    setAdminPending(false);
+
+    let isPending = false;
 
     try {
       if (isSupabaseConfigured) {
@@ -81,33 +85,32 @@ export default function Branches() {
             shop_type: form.shop_type, plan: form.plan,
           }).eq('id', editTarget.id);
         } else {
-          // 새 지점 생성
+          // 지점 레코드 생성
           const { data: branch } = await supabase.from('branches').insert({
             name: form.name, address: form.address, phone: form.phone,
             shop_type: form.shop_type, plan: form.plan,
             trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
           }).select().single();
 
-          // 관리자 계정 생성 (이메일 입력된 경우)
-          if (form.admin_email && form.admin_password && branch) {
-            const { data: authData } = await supabase.auth.admin.createUser({
+          // 관리자 계정 생성은 NAS 관리자 API를 통해 수행 (auth.admin 직접 호출 금지)
+          if (form.admin_email && branch) {
+            const result = await createBranchAdmin({
               email: form.admin_email,
-              password: form.admin_password,
-              email_confirm: true,
+              branchId: branch.id,
+              branchName: form.name,
+              shopType: form.shop_type,
+              plan: form.plan,
             });
-            if (authData.user) {
-              await supabase.from('user_profiles').insert({
-                id: authData.user.id,
-                name: form.name + ' 관리자',
-                role: 'admin',
-                branch_id: branch.id,
-                is_onboarded: true,
-              });
+            if (result.pending) {
+              isPending = true;
+              setAdminPending(true);
+            } else if (!result.ok) {
+              setError(`관리자 계정 생성 실패: ${result.reason || '알 수 없는 오류'}`);
             }
           }
         }
       } else {
-        // 로컬 폴백
+        // 로컬 폴백 — 지점 정보만 저장, 계정 생성은 NAS 연동 후 지원
         const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
         if (editTarget) {
           const idx = localBranches.findIndex(b => b.id === editTarget.id);
@@ -123,34 +126,19 @@ export default function Branches() {
           };
           localBranches.unshift(newBranch);
 
-          // 로컬 유저 저장 (관리자 계정)
-          if (form.admin_email && form.admin_password) {
-            const localUsers = JSON.parse(localStorage.getItem('troiareuke_local_users') || '[]');
-            localUsers.push({
-              email: form.admin_email,
-              passwordHash: form.admin_password,
-              user: {
-                id: 'user_' + Date.now(),
-                email: form.admin_email,
-                name: form.name + ' 관리자',
-                shopName: form.name,
-                shopType: form.shop_type,
-                plan: form.plan,
-                trialEndsAt: new Date(Date.now() + 14 * 86400000).toISOString(),
-                isOnboarded: true,
-                role: 'admin',
-                branchId: newBranch.id,
-                branchName: form.name,
-                createdAt: new Date().toISOString(),
-              },
-            });
-            localStorage.setItem('troiareuke_local_users', JSON.stringify(localUsers));
+          // 관리자 이메일 입력된 경우 — NAS 연동 전임을 표시
+          if (form.admin_email) {
+            isPending = true;
+            setAdminPending(true);
           }
         }
         localStorage.setItem('troiareuke_branches', JSON.stringify(localBranches));
       }
 
-      setShowModal(false);
+      if (!isPending) {
+        setShowModal(false);
+      }
+      // isPending이면 모달을 열어두고 안내 메시지 표시 후 사용자가 직접 닫음
       loadBranches();
     } catch (e: any) {
       setError(e.message || '저장 중 오류가 발생했습니다.');
@@ -309,13 +297,24 @@ export default function Branches() {
                 <>
                   <div className="border-t border-slate-700 pt-4">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">관리자 계정 발급 (선택)</p>
+                    <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-3">
+                      <Info size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-600 leading-relaxed">
+                        관리자 계정 생성은 NAS 백엔드 연동 후 지원됩니다. 현재는 이메일만 기록되며, 연동 완료 후 일괄 발급합니다.
+                      </p>
+                    </div>
                   </div>
                   <Field label="관리자 이메일">
                     <input className="admin-input" type="email" value={form.admin_email} onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))} placeholder="manager@example.com" />
                   </Field>
-                  <Field label="초기 비밀번호">
-                    <input className="admin-input" type="password" value={form.admin_password} onChange={e => setForm(f => ({ ...f, admin_password: e.target.value }))} placeholder="임시 비밀번호" />
-                  </Field>
+                  {adminPending && (
+                    <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <Info size={13} className="text-blue-400 mt-0.5 shrink-0" />
+                      <p className="text-xs text-blue-400 leading-relaxed">
+                        지점이 저장되었습니다. 관리자 계정은 NAS 관리자 API 연동 후 생성됩니다.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
             </div>

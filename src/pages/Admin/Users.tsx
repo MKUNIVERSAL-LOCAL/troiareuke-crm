@@ -34,21 +34,18 @@ export default function AdminUsers() {
     setLoading(true);
     try {
       if (isSupabaseConfigured) {
+        // auth.admin.listUsers() 는 service_role 전용 — 프론트에서 직접 호출 금지.
+        // 이메일은 user_profiles에 email 컬럼이 있으면 함께 select, 없으면 '—' 처리.
         const [usersRes, branchesRes] = await Promise.all([
           supabase.from('user_profiles')
-            .select('id, name, role, branch_id, is_onboarded, created_at, branches(name)')
+            .select('id, email, name, role, branch_id, is_onboarded, created_at, branches(name)')
             .order('created_at', { ascending: false }),
           supabase.from('branches').select('*').order('name'),
         ]);
 
-        const { data: authUsers } = await supabase.auth.admin.listUsers();
-
-        const emailMap: Record<string, string> = {};
-        authUsers?.users?.forEach(u => { emailMap[u.id] = u.email || ''; });
-
         setUsers((usersRes.data || []).map((u: any) => ({
           id: u.id,
-          email: emailMap[u.id] || '(이메일 없음)',
+          email: u.email || '—',
           name: u.name,
           role: u.role,
           branch_name: u.branches?.name || null,
