@@ -3,7 +3,7 @@ import {
   Search, Plus, Phone, Star, Calendar, TrendingUp,
   User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus,
-  Sparkles, Activity, Mail, Download, Pencil, Trash2, Upload
+  Sparkles, Activity, Mail, Download, Pencil, Trash2, Upload, Camera, Loader2
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore } from '../../lib/store';
 import {
@@ -11,6 +11,8 @@ import {
 } from '../../lib/consultationStore';
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
 import TimelapseViewer from '../../components/TimelapseViewer';
+import { resizeImageFile } from '../../lib/photoStore';
+import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import * as XLSX from 'xlsx';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
@@ -164,6 +166,54 @@ export default function Customers() {
   const [showConsultModal, setShowConsultModal] = useState(false);
   const [consultForm, setConsultForm] = useState(emptyConsultForm());
   const [consultations, setConsultations] = useState<Consultation[]>([]);
+
+  // AI 피부 분석 (킬러①) — 사진 업로드 → 비전 AI 분석 → 지표/소견 자동 반영
+  const [aiPhoto, setAiPhoto] = useState<string | null>(null);
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiResult, setAiResult] = useState<SkinAnalysisResult | null>(null);
+  const consultPhotoRef = useRef<HTMLInputElement>(null);
+
+  async function handleConsultPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await resizeImageFile(file, 1024, 0.85);
+      setAiPhoto(dataUrl);
+      setAiResult(null);
+    } catch {
+      window.alert('사진을 불러오지 못했습니다.');
+    } finally {
+      if (consultPhotoRef.current) consultPhotoRef.current.value = '';
+    }
+  }
+
+  async function runSkinAnalysis() {
+    if (!aiPhoto) return;
+    setAiAnalyzing(true);
+    try {
+      const result = await analyzeSkinPhoto(aiPhoto);
+      setAiResult(result);
+      if (result.available && result.scores) {
+        // 분석 점수를 비컨 지표 입력칸(문자열)으로 반영
+        setConsultForm(f => ({
+          ...f,
+          metrics: {
+            ...f.metrics,
+            moisture: String(result.scores!.moisture),
+            oil: String(result.scores!.oil),
+            pigmentation: String(result.scores!.pigmentation),
+            pore: String(result.scores!.pore),
+            wrinkle: String(result.scores!.wrinkle),
+          },
+          managerNote: result.comment
+            ? (f.managerNote ? `${f.managerNote}\n[AI 소견] ${result.comment}` : `[AI 소견] ${result.comment}`)
+            : f.managerNote,
+        }));
+      }
+    } finally {
+      setAiAnalyzing(false);
+    }
+  }
 
   // 비컨(피부 상담) 기능 노출 — 관리자가 설정에서 토글. 기본 OFF(숨김).
   const [beaconEnabled, setBeaconEnabled] = useState(isBeaconConsultationEnabled());
@@ -862,7 +912,7 @@ export default function Customers() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
+                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setShowConsultModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
                   >
                     <Sparkles size={12} />피부 상담
@@ -1498,6 +1548,61 @@ export default function Customers() {
                       <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* AI 피부 분석 (킬러①) — 사진 → 비전 AI 분석 */}
+              <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-indigo-100 rounded-xl p-3.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Sparkles size={14} className="text-violet-600" />
+                  <label className="text-xs font-semibold text-violet-900">AI 피부 분석 (사진)</label>
+                  <span className="text-[10px] text-gray-400">· 관리 참고용 (의학적 진단 아님)</span>
+                </div>
+                <input ref={consultPhotoRef} type="file" accept="image/*" onChange={handleConsultPhoto} className="hidden" />
+                <div className="flex gap-3">
+                  {aiPhoto ? (
+                    <img src={aiPhoto} alt="분석 사진" className="w-20 h-20 rounded-xl object-cover border border-indigo-100 flex-shrink-0" />
+                  ) : (
+                    <button type="button" onClick={() => consultPhotoRef.current?.click()}
+                      className="w-20 h-20 rounded-xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center gap-1 text-indigo-400 hover:border-indigo-400 transition-colors flex-shrink-0">
+                      <Camera size={18} />
+                      <span className="text-[10px]">사진</span>
+                    </button>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    {aiPhoto && (
+                      <div className="flex gap-2 mb-2">
+                        <button type="button" onClick={runSkinAnalysis} disabled={aiAnalyzing}
+                          className="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
+                          {aiAnalyzing ? <><Loader2 size={12} className="animate-spin" />분석 중...</> : <><Sparkles size={12} />AI 분석 실행</>}
+                        </button>
+                        <button type="button" onClick={() => consultPhotoRef.current?.click()}
+                          className="px-3 py-1.5 bg-white border border-gray-200 text-gray-500 rounded-lg text-xs font-medium hover:bg-gray-50">다른 사진</button>
+                      </div>
+                    )}
+                    {!aiPhoto && (
+                      <p className="text-[11px] text-gray-500 leading-relaxed">
+                        고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다.
+                        {!isSkinAnalysisAvailable() && ' (AI 챗봇 설정에서 OpenAI/Gemini 키 입력 필요)'}
+                      </p>
+                    )}
+                    {aiResult && !aiResult.available && (
+                      <p className="text-[11px] text-amber-600">{aiResult.reason}</p>
+                    )}
+                    {aiResult?.available && aiResult.scores && (
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {SKIN_LABELS.map(({ key, label }) => (
+                          <div key={key} className="bg-white rounded-lg py-1.5 text-center border border-indigo-50">
+                            <p className="text-[10px] text-gray-400">{label}</p>
+                            <p className="text-sm font-bold text-violet-700">{aiResult.scores![key]}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {aiResult?.available && aiResult.comment && (
+                      <p className="text-[11px] text-gray-600 mt-1.5">💬 {aiResult.comment}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
