@@ -936,7 +936,8 @@ export const CustomerProgramStore = {
     const idx = all.findIndex(cp => cp.id === id);
     if (idx === -1) return null;
     const cp = all[idx];
-    const newUsed = cp.usedSessions + sessionsUsed;
+    // sessionsUsed에 음수를 넘기면 회차 복구(취소/수정 시). 0 미만으로는 내려가지 않음.
+    const newUsed = Math.max(0, cp.usedSessions + sessionsUsed);
     const isCompleted = cp.totalSessions !== null && newUsed >= cp.totalSessions;
     all[idx] = { ...cp, usedSessions: newUsed, isCompleted };
     _customerPrograms = all;
@@ -1013,14 +1014,32 @@ export const TreatmentLogStore = {
     const all = this.getAll();
     const idx = all.findIndex(t => t.id === id);
     if (idx === -1) return null;
-    all[idx] = { ...all[idx], ...updates };
+    const prev = all[idx];
+    const next = { ...prev, ...updates };
+    all[idx] = next;
     _treatmentLogs = all;
     saveList(shopKey('treatment_logs'), all);
     sbUpdate('treatment_logs', id, toDbTreatmentLog(updates));
-    return all[idx];
+
+    // 프로그램 회차 정합성: 이전 연결을 되돌리고 새 연결을 차감 (수정 시 회차가 어긋나지 않도록)
+    const prevProg = prev.customerProgramId, prevUsed = prev.sessionsUsed || 0;
+    const nextProg = next.customerProgramId, nextUsed = next.sessionsUsed || 0;
+    if (prevProg === nextProg) {
+      const delta = nextUsed - prevUsed;
+      if (prevProg && delta !== 0) CustomerProgramStore.useSession(prevProg, delta);
+    } else {
+      if (prevProg) CustomerProgramStore.useSession(prevProg, -prevUsed);
+      if (nextProg) CustomerProgramStore.useSession(nextProg, nextUsed);
+    }
+    return next;
   },
 
   delete(id: string): void {
+    const target = this.getAll().find(t => t.id === id);
+    // 삭제 시 차감했던 프로그램 회차를 복구 (직원 실수 삭제로 고객 회차가 사라지지 않도록)
+    if (target?.customerProgramId) {
+      CustomerProgramStore.useSession(target.customerProgramId, -(target.sessionsUsed || 0));
+    }
     const all = this.getAll().filter(t => t.id !== id);
     _treatmentLogs = all;
     saveList(shopKey('treatment_logs'), all);
@@ -1200,11 +1219,30 @@ export const PaymentStore = {
     const all = this.getAll();
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
-    all[idx] = { ...all[idx], ...updates };
+    const prev = all[idx];
+    const next = { ...prev, ...updates };
+    all[idx] = next;
     _payments = all;
     saveList(shopKey('payments'), all);
     sbUpdate('payments', id, toDbPayment(updates));
-    return all[idx];
+
+    // 고객 누적 결제액 정합성: 이전 기여분 빼고 새 기여분 더함 (금액/상태/고객 변경 반영)
+    const adjust = (customerId: string | undefined, amt: number) => {
+      if (!customerId || amt === 0) return;
+      const customer = CustomerStore.getById(customerId);
+      if (customer && !customer.id.startsWith('sample_')) {
+        CustomerStore.update(customerId, { totalSpent: Math.max(0, (customer.totalSpent || 0) + amt) });
+      }
+    };
+    const prevContrib = prev.status === 'completed' ? prev.amount : 0;
+    const nextContrib = next.status === 'completed' ? next.amount : 0;
+    if (prev.customerId === next.customerId) {
+      adjust(next.customerId, nextContrib - prevContrib);
+    } else {
+      adjust(prev.customerId, -prevContrib);
+      adjust(next.customerId, nextContrib);
+    }
+    return next;
   },
 
   delete(id: string): void {

@@ -17,6 +17,7 @@ export default function Products() {
   const [tab, setTab] = useState<Tab>('inventory');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('전체');
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [products, setProducts] = useState(() => ProductStore.getAll());
   const [sales, setSales] = useState(() => ProductSaleStore.getAll());
   const [showAddModal, setShowAddModal] = useState(false);
@@ -39,7 +40,8 @@ export default function Products() {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
       || (p.brand || '').toLowerCase().includes(search.toLowerCase());
     const matchCategory = category === '전체' || p.category === category;
-    return matchSearch && matchCategory;
+    const matchLowStock = !lowStockOnly || p.stock <= p.minStock;
+    return matchSearch && matchCategory && matchLowStock;
   });
 
   const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
@@ -64,14 +66,24 @@ export default function Products() {
       />
 
       <div className="p-8 flex-1">
-        {/* Low Stock Alert */}
+        {/* Low Stock Alert — 클릭 시 재고부족만 필터 */}
         {lowStockCount > 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl mb-6">
+          <button
+            type="button"
+            onClick={() => setLowStockOnly(v => !v)}
+            className={clsx(
+              'w-full flex items-center gap-3 px-4 py-3 border rounded-xl mb-6 text-left transition-colors',
+              lowStockOnly ? 'bg-orange-100 border-orange-300' : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
+            )}
+          >
             <AlertTriangle size={16} className="text-orange-500 flex-shrink-0" />
-            <p className="text-sm text-orange-700 font-medium">
+            <p className="text-sm text-orange-700 font-medium flex-1">
               재고 부족 제품이 <strong>{lowStockCount}종</strong> 있습니다. 빠른 발주가 필요합니다.
             </p>
-          </div>
+            <span className="text-xs font-semibold text-orange-600">
+              {lowStockOnly ? '전체 보기 ↩' : '재고 부족만 보기 →'}
+            </span>
+          </button>
         )}
 
         {/* Summary Cards */}
@@ -358,15 +370,23 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
       alert('제품명, 판매가, 재고는 필수 입력 항목입니다.');
       return;
     }
+    const price = parseInt(form.price, 10);
+    const cost = parseInt(form.cost, 10) || 0;
+    const stock = parseInt(form.stock, 10);
+    const minStock = form.minStock ? parseInt(form.minStock, 10) : 5;
+    if ([price, cost, stock, minStock].some(n => Number.isNaN(n) || n < 0)) {
+      alert('판매가·원가·재고·최소재고는 0 이상 숫자로 입력해주세요.');
+      return;
+    }
     setSaving(true);
     const payload = {
       name: form.name.trim(),
       category: form.category,
       brand: form.brand.trim() || undefined,
-      price: parseInt(form.price) || 0,
-      cost: parseInt(form.cost) || 0,
-      stock: parseInt(form.stock) || 0,
-      minStock: parseInt(form.minStock) || 5,
+      price,
+      cost,
+      stock,
+      minStock,
       unit: form.unit || '개',
       description: form.description.trim() || undefined,
       isActive: form.isActive,
@@ -439,10 +459,10 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
           </div>
         </div>
         {/* Margin preview */}
-        {form.price && form.cost && (
+        {parseInt(form.price) > 0 && form.cost !== '' && (
           <div className="px-3 py-2 bg-blue-50 rounded-xl text-xs text-blue-700">
-            마진율: <strong>{Math.round(((parseInt(form.price) - parseInt(form.cost)) / parseInt(form.price)) * 100)}%</strong>
-            {' '}· 마진액: <strong>{(parseInt(form.price) - parseInt(form.cost)).toLocaleString()}원</strong>
+            마진율: <strong>{Math.round(((parseInt(form.price) - (parseInt(form.cost) || 0)) / parseInt(form.price)) * 100)}%</strong>
+            {' '}· 마진액: <strong>{(parseInt(form.price) - (parseInt(form.cost) || 0)).toLocaleString()}원</strong>
           </div>
         )}
         <div className="grid grid-cols-3 gap-3">

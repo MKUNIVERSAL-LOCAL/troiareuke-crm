@@ -411,12 +411,12 @@ export default function Programs() {
               </div>
 
               {/* 마진 미리보기 */}
-              {form.price && form.costPrice && (
+              {parseInt(form.price) > 0 && form.costPrice !== '' && (
                 <div className="bg-gray-50 rounded-xl p-3 text-sm flex items-center justify-between">
                   <span className="text-gray-500">예상 마진</span>
                   <span className="font-bold text-green-600">
-                    {formatPrice(parseInt(form.price) - parseInt(form.costPrice))}
-                    {' '}({Math.round(((parseInt(form.price) - parseInt(form.costPrice)) / parseInt(form.price)) * 100)}%)
+                    {formatPrice(parseInt(form.price) - (parseInt(form.costPrice) || 0))}
+                    {' '}({Math.round(((parseInt(form.price) - (parseInt(form.costPrice) || 0)) / parseInt(form.price)) * 100)}%)
                   </span>
                 </div>
               )}

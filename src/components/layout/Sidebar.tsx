@@ -18,7 +18,7 @@ const navItems = [
   { to: '/products', label: '제품/재고', icon: Package, badge: null },
   { to: '/sales', label: '매출 관리', icon: TrendingUp, badge: null },
   { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, badge: null },
-  { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, badge: 'NEW' },
+  { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, badge: 'SOON' },
   { to: '/api-guide', label: 'API 연동 가이드', icon: Link2, badge: null },
   { to: '/settings', label: '설정', icon: Settings, badge: null },
 ];
@@ -119,7 +119,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
           <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
           <div className="flex items-center gap-1.5 mt-2">
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
-            <span className="text-xs text-green-600 font-medium">네이버 예약 연동 중</span>
+            <span className="text-xs text-green-600 font-medium">정상 운영 중</span>
           </div>
         </div>
         <button

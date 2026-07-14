@@ -6,6 +6,7 @@ import { StaffStore, ServiceStore, ProgramStore } from '../../lib/store';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import type { SubscriptionPlan } from '../../types';
+import * as XLSX from 'xlsx';
 
 const steps = [
   { icon: <Store size={20} />, label: '샵 정보', desc: '기본 정보 입력' },
@@ -125,23 +126,27 @@ export default function Onboarding() {
     setExcelFileName(file.name);
 
     try {
-      const text = await file.text();
-      const lines = text.split('\n').filter(l => l.trim());
+      // xlsx/xls/csv 모두 SheetJS로 실제 파싱 (엑셀 바이너리를 텍스트로 잘못 읽는 문제 해결)
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, blankrows: false });
       const parsed: { name: string; duration: number; price: number }[] = [];
 
-      // CSV 또는 TSV 파싱 (첫 줄 헤더 스킵)
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].includes('\t') ? lines[i].split('\t') : lines[i].split(',');
-        if (cols.length >= 1) {
-          const name = cols[0]?.trim().replace(/"/g, '');
-          const duration = parseInt(cols[1]?.trim().replace(/"/g, '') || '60', 10) || 60;
-          const price = parseInt((cols[2]?.trim().replace(/"/g, '') || '0').replace(/[,원]/g, ''), 10) || 0;
-          if (name) parsed.push({ name, duration, price });
-        }
+      // 첫 줄 헤더 스킵
+      for (let i = 1; i < rows.length; i++) {
+        const cols = rows[i] || [];
+        const name = String(cols[0] ?? '').trim();
+        const duration = parseInt(String(cols[1] ?? '60').replace(/[^\d]/g, ''), 10) || 60;
+        const price = parseInt(String(cols[2] ?? '0').replace(/[^\d]/g, ''), 10) || 0;
+        if (name) parsed.push({ name, duration, price });
+      }
+      if (parsed.length === 0) {
+        alert('시술 데이터를 찾지 못했습니다. 1행은 헤더, 2행부터 [시술명, 소요시간(분), 가격] 순으로 입력해주세요.');
       }
       setExcelServices(parsed);
     } catch {
-      alert('파일을 읽을 수 없습니다. CSV 또는 TSV 형식의 파일을 올려주세요.');
+      alert('파일을 읽을 수 없습니다. 엑셀(.xlsx/.xls) 또는 CSV 파일을 올려주세요.');
     }
   };
 

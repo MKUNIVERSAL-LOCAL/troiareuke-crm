@@ -550,6 +550,21 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
     const endDate = addMinutes(startDate, service.duration);
     const endTime = format(endDate, 'HH:mm');
 
+    // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외)
+    const overlap = ReservationStore.getAll().find(r =>
+      r.id !== editing?.id &&
+      r.staffId === staff.id &&
+      r.date === date &&
+      r.status !== 'cancelled' && r.status !== 'noshow' &&
+      startTime < r.endTime && endTime > r.startTime
+    );
+    if (overlap) {
+      const proceed = window.confirm(
+        `${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.\n그래도 등록하시겠습니까?`
+      );
+      if (!proceed) return;
+    }
+
     const reservation: Omit<Reservation, 'id'> = {
       customerId: customer.id,
       customerName: customer.name,

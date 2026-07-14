@@ -51,8 +51,9 @@ function getDashboardData() {
   // Low stock
   const lowStockProducts = products.filter(p => p.stock <= p.minStock);
 
-  // Today's reservations
+  // Today's reservations (목록엔 전부 표시, 건수 집계는 취소/노쇼 제외)
   const todayReservations = ReservationStore.getByDate(todayStr);
+  const todayActiveReservations = todayReservations.filter(r => r.status !== 'cancelled' && r.status !== 'noshow');
 
   // Recent payments (last 5)
   const recentPayments = PaymentStore.getByDateRange(
@@ -69,6 +70,7 @@ function getDashboardData() {
     totalCustomers, newThisMonth, vipCount, totalPercent,
     lowStockProducts,
     todayReservations,
+    todayActiveReservations,
     recentPayments,
   };
 }
@@ -96,6 +98,7 @@ export default function Dashboard() {
     totalCustomers, newThisMonth, vipCount, totalPercent,
     lowStockProducts,
     todayReservations,
+    todayActiveReservations,
     recentPayments,
   } = data;
 
@@ -113,7 +116,7 @@ export default function Dashboard() {
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <p className="text-xs text-gray-500">오늘 예약</p>
-            <p className="text-lg font-black text-gray-900 mt-1">{todayReservations.length}건</p>
+            <p className="text-lg font-black text-gray-900 mt-1">{todayActiveReservations.length}건</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <p className="text-xs text-gray-500">전체 고객</p>
@@ -214,7 +217,7 @@ export default function Dashboard() {
           <div className="cursor-pointer" onClick={() => navigate('/reservations')}>
             <StatCard
               title="오늘 예약"
-              value={`${todayReservations.length}건`}
+              value={`${todayActiveReservations.length}건`}
               subtitle={`완료 ${todayReservations.filter(r => r.status === 'completed').length}건 · 대기 ${todayReservations.filter(r => r.status === 'pending').length}건`}
               icon={<Calendar size={20} />}
               accent="pink"

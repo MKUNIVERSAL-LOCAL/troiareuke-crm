@@ -138,15 +138,22 @@ export default function Sales() {
     const customer = customers.find(c => c.id === form.customerId);
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
 
+    const amount = parseInt(form.amount.replace(/,/g, ''), 10);
+    if (Number.isNaN(amount) || amount <= 0) {
+      alert('결제 금액을 0보다 큰 숫자로 입력해주세요.');
+      return;
+    }
+    const discountAmount = Math.max(0, parseInt(form.discountAmount.replace(/,/g, ''), 10) || 0);
+
     const payload = {
       customerId: form.customerId || undefined,
       customerName: customer?.name || form.customerName || undefined,
       paymentDate: form.paymentDate,
       type: form.type,
       typeLabel: typeLabels[form.type],
-      amount: parseInt(form.amount.replace(/,/g, '')) || 0,
+      amount,
       paymentMethod: form.paymentMethod,
-      discountAmount: parseInt(form.discountAmount.replace(/,/g, '')) || 0,
+      discountAmount,
       status: 'completed' as const,
       memo: form.memo || undefined,
     };

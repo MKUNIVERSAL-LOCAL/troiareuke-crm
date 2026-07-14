@@ -5,6 +5,10 @@
 const BEACON_KEY = 'feature_beacon_consultation';
 const EVENT = 'feature-flags-changed';
 
+// AI 분석 챗봇 런치 게이트. 시스템 정식 오픈 전까지 false(=Coming Soon 화면).
+// 오픈 시 이 한 줄만 true로 바꾸면 챗봇이 활성화된다.
+export const AI_CHAT_ENABLED = false;
+
 export function isBeaconConsultationEnabled(): boolean {
   try {
     return localStorage.getItem(BEACON_KEY) === '1';

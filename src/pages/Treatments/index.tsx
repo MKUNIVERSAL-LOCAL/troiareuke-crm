@@ -29,7 +29,7 @@ export default function Treatments() {
     (t.staffName && t.staffName.includes(search)) ||
     (t.treatmentDetails && t.treatmentDetails.includes(search)) ||
     (t.programName && t.programName.includes(search))
-  );
+  ).sort((a, b) => b.treatmentDate.localeCompare(a.treatmentDate)); // 최신 시술 먼저
 
   const handleDelete = (id: string) => {
     TreatmentLogStore.delete(id);

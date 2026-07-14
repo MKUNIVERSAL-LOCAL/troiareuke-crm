@@ -3,9 +3,10 @@ import {
   Search, Plus, Phone, Star, Calendar, TrendingUp,
   User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus,
-  Sparkles, Activity, Mail, Download, Pencil, Trash2, Upload, Camera, Loader2
+  Sparkles, Activity, Mail, Download, Pencil, Trash2, Upload, Camera, Loader2, Send
 } from 'lucide-react';
-import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore } from '../../lib/store';
+import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore } from '../../lib/store';
+import { sendMessages } from '../../lib/messagingGateway';
 import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
 } from '../../lib/consultationStore';
@@ -173,6 +174,10 @@ export default function Customers() {
   const [aiResult, setAiResult] = useState<SkinAnalysisResult | null>(null);
   const consultPhotoRef = useRef<HTMLInputElement>(null);
 
+  // 상담 결과 카카오 전송 상태
+  const [kakaoSending, setKakaoSending] = useState(false);
+  const [kakaoMsg, setKakaoMsg] = useState<string | null>(null);
+
   async function handleConsultPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -258,9 +263,8 @@ export default function Customers() {
     }));
   }
 
-  // 피부상담 저장
-  function handleSaveConsultation(e: React.FormEvent) {
-    e.preventDefault();
+  // 상담 내용 저장 (공통) — 저장만 수행하고 폼 초기화/모달 닫기는 호출부에서 결정
+  function persistConsultation() {
     if (!selected) return;
     ConsultationStore.save({
       customerId: selected.id,
@@ -285,8 +289,64 @@ export default function Customers() {
       if (updated) setSelected(updated);
     }
     setConsultations(ConsultationStore.getByCustomer(selected.id));
+  }
+
+  // 피부상담 저장
+  function handleSaveConsultation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    persistConsultation();
     setShowConsultModal(false);
     setConsultForm(emptyConsultForm());
+  }
+
+  // 상담 요약을 카카오 메시지 본문으로 구성
+  function buildConsultationMessage(): string {
+    const shopName = SettingsStore.get()?.name || '트로이아르케';
+    const lines = [`[${shopName}] ${selected?.name}님 피부 상담 결과`, ''];
+    lines.push(`· 상담일: ${consultForm.consultDate}`);
+    if (consultForm.skinTypeResult) lines.push(`· 피부 타입: ${consultForm.skinTypeResult}`);
+    if (consultForm.concerns.length) lines.push(`· 주요 고민: ${consultForm.concerns.join(', ')}`);
+    if (consultForm.recommendedSolution) lines.push('', `▷ 추천 솔루션\n${consultForm.recommendedSolution}`);
+    if (consultForm.recommendedProducts) lines.push('', `▷ 추천 제품\n${consultForm.recommendedProducts}`);
+    if (consultForm.nextConsultDate) lines.push('', `· 다음 상담 예정일: ${consultForm.nextConsultDate}`);
+    lines.push('', '※ 본 상담은 의료 진단·처방·치료가 아닌 피부 관리 소견입니다.');
+    return lines.join('\n');
+  }
+
+  // 상담 저장 후 상담 내용을 카카오로 전송
+  async function handleSaveAndSendKakao() {
+    if (!selected) return;
+    persistConsultation();
+    setKakaoSending(true);
+    setKakaoMsg(null);
+    const content = buildConsultationMessage();
+    const result = await sendMessages({
+      type: 'kakao-channel',
+      content,
+      title: `${selected.name}님 피부 상담 결과`,
+      recipients: 1,
+    });
+    MessageHistoryStore.save({
+      type: 'kakao-channel',
+      templateName: '상담 결과 안내',
+      title: `${selected.name}님 피부 상담 결과`,
+      content,
+      recipients: 1,
+      successCount: result.pending ? 0 : result.sent,
+      failCount: result.pending ? 1 : result.failed,
+      sentAt: new Date().toLocaleString(),
+      status: !result.pending && result.sent > 0 ? 'sent' : 'failed',
+      cost: !result.pending && result.sent > 0 ? 5 : 0,
+    });
+    setKakaoSending(false);
+    if (result.pending) {
+      setKakaoMsg('상담은 저장됐어요. 단, 카카오 발송 게이트웨이가 아직 연동되지 않아 실제 전송은 되지 않았습니다 (설정>연동에서 준비 예정). 발송 이력에 기록됨.');
+    } else if (result.sent > 0) {
+      setKakaoMsg(`상담 저장 완료 · ${selected.name}님에게 카카오로 상담 결과를 전송했습니다.`);
+    } else {
+      setKakaoMsg(`상담은 저장됐으나 카카오 전송에 실패했습니다: ${result.reason ?? '알 수 없는 오류'}`);
+    }
   }
 
   function toggleConcern(item: string) {
@@ -466,6 +526,18 @@ export default function Customers() {
   // 고객 추가
   function handleAddCustomer(e: React.FormEvent) {
     e.preventDefault();
+    // 필수값 + 전화번호 중복 방지 (같은 고객이 두 레코드로 쪼개지지 않도록)
+    if (!addForm.name.trim() || !addForm.phone.trim()) {
+      alert('이름과 전화번호는 필수입니다.');
+      return;
+    }
+    const normalize = (p: string) => p.replace(/\D/g, '');
+    const newPhone = normalize(addForm.phone);
+    const dup = CustomerStore.getAll().find(c => normalize(c.phone) === newPhone && newPhone !== '');
+    if (dup) {
+      alert(`이미 등록된 번호입니다: ${dup.name} (${dup.phone})\n기존 고객 정보를 사용해주세요.`);
+      return;
+    }
     CustomerStore.save({
       name: addForm.name, phone: addForm.phone,
       gender: addForm.gender, grade: addForm.grade,
@@ -526,6 +598,18 @@ export default function Customers() {
     const prog = programs.find(p => p.id === progForm.programId);
     if (!prog) return;
 
+    // 결제금액: 빈칸이면 정가, 입력했으면 그 값(0원 이벤트도 유효). 잘못된 값은 차단.
+    const rawPrice = progForm.pricePaid.replace(/,/g, '').trim();
+    let pricePaid = prog.price;
+    if (rawPrice !== '') {
+      const parsed = parseInt(rawPrice, 10);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        alert('결제 금액을 올바르게 입력해주세요. (0 이상 숫자)');
+        return;
+      }
+      pricePaid = parsed;
+    }
+
     CustomerProgramStore.save({
       customerId: selected.id,
       customerName: selected.name,
@@ -533,7 +617,7 @@ export default function Customers() {
       programName: prog.name,
       category: prog.category,
       totalSessions: prog.totalSessions,
-      pricePaid: parseInt(progForm.pricePaid.replace(/,/g, '')) || prog.price,
+      pricePaid,
       paymentMethod: progForm.paymentMethod,
       purchaseDate: progForm.purchaseDate,
       expiryDate: calcExpiryDate(prog.validityDays),
@@ -912,7 +996,7 @@ export default function Customers() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setShowConsultModal(true); }}
+                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setKakaoMsg(null); setShowConsultModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
                   >
                     <Sparkles size={12} />피부 상담
@@ -978,7 +1062,7 @@ export default function Customers() {
                   <Sparkles size={16} className="text-indigo-600" />피부 상담 이력
                 </h3>
                 <button
-                  onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
+                  onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setShowConsultModal(true); }}
                   className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
                 >
                   <Plus size={12} />상담 기록
@@ -989,7 +1073,7 @@ export default function Customers() {
                 <div className="text-center py-6">
                   <Activity size={28} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">상담 기록이 없어요</p>
-                  <button onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
+                  <button onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
                     첫 상담 시작하기
                   </button>
                 </div>
@@ -1551,7 +1635,8 @@ export default function Customers() {
                 </div>
               </div>
 
-              {/* AI 피부 분석 (킬러①) — 사진 → 비전 AI 분석 */}
+              {/* AI 피부 분석 (킬러①) — 사진 → 비전 AI 분석. 비컨 진단기기 API 연동 전까지 숨김(beaconEnabled 게이트) */}
+              {beaconEnabled && (
               <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-indigo-100 rounded-xl p-3.5">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Sparkles size={14} className="text-violet-600" />
@@ -1605,6 +1690,7 @@ export default function Customers() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* 피부 고민 체크리스트 */}
               <div>
@@ -1756,8 +1842,24 @@ export default function Customers() {
                   : '※ 본 상담은 의료 진단·처방·치료가 아닌 피부 분석·관리 소견입니다.'}
               </p>
 
+              {kakaoMsg && (
+                <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-3 py-2 leading-relaxed">
+                  {kakaoMsg}
+                </div>
+              )}
+
               <div className="flex gap-2">
-                <button type="button" onClick={() => setShowConsultModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
+                <button type="button" onClick={() => setShowConsultModal(false)} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndSendKakao}
+                  disabled={kakaoSending}
+                  className="flex-1 py-2.5 bg-yellow-400 text-yellow-900 rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-yellow-500 disabled:opacity-50"
+                  title="상담을 저장하고 상담 결과를 고객에게 카카오로 전송합니다"
+                >
+                  {kakaoSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  저장 + 카톡 전송
+                </button>
                 <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
                   <CheckCircle size={14} />상담 저장
                 </button>

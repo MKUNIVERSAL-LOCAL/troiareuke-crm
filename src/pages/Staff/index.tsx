@@ -31,7 +31,9 @@ export default function StaffPage() {
 
   const today = getToday();
   const yearMonth = getYearMonth();
-  const allReservations = ReservationStore.getAll();
+  // 통계는 취소/노쇼 제외 (직원 성과 부풀림 방지)
+  const isActiveRes = (r: { status: string }) => r.status !== 'cancelled' && r.status !== 'noshow';
+  const allReservations = ReservationStore.getAll().filter(isActiveRes);
   const todayReservations = allReservations.filter(r => r.date === today);
 
   return (
@@ -190,7 +192,10 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
   };
 
   const handleSave = () => {
-    if (!name.trim() || !phone.trim()) return;
+    if (!name.trim() || !phone.trim()) {
+      alert('이름과 전화번호는 필수입니다.');
+      return;
+    }
     StaffStore.save({
       name: name.trim(),
       role,
@@ -342,7 +347,8 @@ function StaffDetailModal({
   const [color, setColor] = useState(staff.color);
 
   const yearMonth = getYearMonth();
-  const allReservations = ReservationStore.getAll();
+  // 통계는 취소/노쇼 제외
+  const allReservations = ReservationStore.getAll().filter(r => r.status !== 'cancelled' && r.status !== 'noshow');
   const staffReservations = allReservations.filter(r => r.staffId === staff.id);
   const monthRevenue = allReservations
     .filter(r => r.staffId === staff.id && r.date.startsWith(yearMonth))
@@ -353,6 +359,10 @@ function StaffDetailModal({
   };
 
   const handleUpdate = () => {
+    if (!name.trim() || !phone.trim()) {
+      alert('이름과 전화번호는 필수입니다.');
+      return;
+    }
     StaffStore.update(staff.id, {
       name: name.trim(),
       role,

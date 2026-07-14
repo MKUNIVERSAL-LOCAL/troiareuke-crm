@@ -545,9 +545,9 @@ export default function Settings() {
                         B
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">비컨 측정 수치 입력·표시</p>
+                        <p className="text-sm font-bold text-gray-900">비컨 측정 수치 · AI 피부분석</p>
                         <p className={clsx('text-xs mt-0.5', beaconOn ? 'text-indigo-600' : 'text-gray-400')}>
-                          {beaconOn ? '사용 중 · 상담에 비컨 점수 입력칸이 표시됩니다' : '숨김 · 상담은 그대로, 비컨 점수만 숨김'}
+                          {beaconOn ? '사용 중 · 상담에 비컨 점수·AI 사진 분석이 표시됩니다' : '숨김 · 상담은 그대로, 비컨 점수·AI 피부분석 숨김'}
                         </p>
                       </div>
                       <button
@@ -566,7 +566,7 @@ export default function Settings() {
                       </button>
                     </div>
                     <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                      비컨 AI 피부진단기 연동(API)이 확정되기 전까지 상담 화면의 ‘비컨 측정 수치’ 입력·표시만 숨깁니다.
+                      비컨 AI 피부진단기 연동(API)이 확정되기 전까지 상담 화면의 ‘비컨 측정 수치’ 입력·표시와 ‘AI 사진 피부분석’을 숨깁니다.
                       <strong className="text-gray-500"> 피부 상담과 홈케어 추천은 계속 사용됩니다.</strong> (이 기기에만 적용)
                     </p>
                   </SettingCard>

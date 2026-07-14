@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle } from 'lucide-react';
+import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { MessageTemplateStore, MessageHistoryStore, CustomerStore, SettingsStore } from '../../lib/store';
@@ -75,7 +75,7 @@ export default function Messaging() {
         </div>
 
         {tab === 'send' && <SendPanel onSend={() => setShowSendModal(true)} reloadKey={reloadKey} />}
-        {tab === 'templates' && <TemplatesPanel onSelect={setSelectedTemplate} reloadKey={reloadKey} onReload={reload} />}
+        {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
         {tab === 'history' && <HistoryPanel reloadKey={reloadKey} />}
       </div>
 
@@ -216,6 +216,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
   const [cat, setCat] = useState('전체');
   const [templates, setTemplates] = useState<MessageTemplate[]>(MessageTemplateStore.getAll());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editing, setEditing] = useState<MessageTemplate | null>(null);
 
   useEffect(() => {
     setTemplates(MessageTemplateStore.getAll());
@@ -229,8 +230,9 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
     onReload();
   };
 
-  const handleAdded = () => {
+  const handleSaved = () => {
     setShowAddModal(false);
+    setEditing(null);
     setTemplates(MessageTemplateStore.getAll());
     onReload();
   };
@@ -273,6 +275,13 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => setEditing(t)}
+                  className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                  title="수정"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
                   onClick={() => handleDelete(t.id)}
                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                   title="삭제"
@@ -302,17 +311,20 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
         ))}
       </div>
 
-      {showAddModal && <AddTemplateModal onClose={() => setShowAddModal(false)} onSaved={handleAdded} />}
+      {showAddModal && <TemplateModal onClose={() => setShowAddModal(false)} onSaved={handleSaved} />}
+      {editing && <TemplateModal editing={editing} onClose={() => setEditing(null)} onSaved={handleSaved} />}
     </div>
   );
 }
 
-function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState<MessageTemplate['type']>('sms');
-  const [category, setCategory] = useState('예약');
-  const [content, setContent] = useState('');
-  const [variablesStr, setVariablesStr] = useState('');
+function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplate; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!editing;
+  const [name, setName] = useState(editing?.name ?? '');
+  const [type, setType] = useState<MessageTemplate['type']>(editing?.type ?? 'sms');
+  const [category, setCategory] = useState(editing?.category ?? '예약');
+  const [title, setTitle] = useState(editing?.title ?? '');
+  const [content, setContent] = useState(editing?.content ?? '');
+  const [variablesStr, setVariablesStr] = useState((editing?.variables ?? []).join(', '));
 
   const handleSave = () => {
     if (!name.trim() || !content.trim()) return;
@@ -320,18 +332,24 @@ function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
       .split(',')
       .map(v => v.trim())
       .filter(Boolean);
-    MessageTemplateStore.save({
+    const payload = {
       name: name.trim(),
       type,
       category,
+      title: title.trim() || undefined,
       content: content.trim(),
       variables,
-    });
+    };
+    if (isEdit && editing) {
+      MessageTemplateStore.update(editing.id, payload);
+    } else {
+      MessageTemplateStore.save(payload);
+    }
     onSaved();
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="템플릿 추가" size="lg">
+    <Modal isOpen={true} onClose={onClose} title={isEdit ? '템플릿 수정' : '템플릿 추가'} size="lg">
       <div className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">템플릿 이름 *</label>
@@ -388,6 +406,19 @@ function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
           </div>
         </div>
 
+        {(type === 'kakao-channel' || type === 'lms' || type === 'mms') && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">제목 (카카오·LMS·MMS)</label>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              placeholder="예: [트로이아르케] 예약 안내"
+            />
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">메시지 내용 *</label>
           <textarea
@@ -417,7 +448,7 @@ function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
             disabled={!name.trim() || !content.trim()}
             className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            <Plus size={14} /> 저장
+            {isEdit ? <><Pencil size={14} /> 수정 저장</> : <><Plus size={14} /> 저장</>}
           </button>
         </div>
       </div>
