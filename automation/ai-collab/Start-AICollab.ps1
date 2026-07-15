@@ -153,25 +153,33 @@ try {
 
   Write-Host '[4/7] Claude가 두 의견을 합쳐 최종 명세를 확정합니다...' -ForegroundColor Cyan
   $finalSpecPath = Join-Path $runRoot '03-final-spec.md'
-  $finalSpecPrompt = Read-Template '03-claude-final-spec.md' @{ TASK = $Task; CLAUDE_PROPOSAL = $claudeProposal; CODEX_CHALLENGE = $codexChallenge }
-  Invoke-ClaudeReadOnly $finalSpecPrompt $finalSpecPath (Join-Path $runRoot '03-claude-error.log') $worktreePath 8
+  if (-not (Test-Path -LiteralPath $finalSpecPath)) {
+    $finalSpecPrompt = Read-Template '03-claude-final-spec.md' @{ TASK = $Task; CLAUDE_PROPOSAL = $claudeProposal; CODEX_CHALLENGE = $codexChallenge }
+    Invoke-ClaudeReadOnly $finalSpecPrompt $finalSpecPath (Join-Path $runRoot '03-claude-error.log') $worktreePath 8
+  }
   $finalSpec = [System.IO.File]::ReadAllText($finalSpecPath)
 
   Write-Host '[5/7] Codex가 최종 명세를 구현합니다...' -ForegroundColor Cyan
   $implementationPath = Join-Path $runRoot '04-codex-implementation.md'
-  $implementationPrompt = Read-Template '04-codex-implement.md' @{ TASK = $Task; FINAL_SPEC = $finalSpec }
-  Invoke-Codex $implementationPrompt $implementationPath (Join-Path $runRoot '04-codex-error.log') $worktreePath 'workspace-write'
+  if (-not (Test-Path -LiteralPath $implementationPath)) {
+    $implementationPrompt = Read-Template '04-codex-implement.md' @{ TASK = $Task; FINAL_SPEC = $finalSpec }
+    Invoke-Codex $implementationPrompt $implementationPath (Join-Path $runRoot '04-codex-error.log') $worktreePath 'workspace-write'
+  }
 
   for ($round = 1; $round -le $ReviewRounds; $round++) {
     Write-Host "[6/7] Claude 검토와 Codex 수정을 진행합니다 ($round/$ReviewRounds)..." -ForegroundColor Cyan
     $reviewPath = Join-Path $runRoot ("05-claude-review-{0}.md" -f $round)
-    $reviewPrompt = Read-Template '05-claude-review.md' @{ TASK = $Task; FINAL_SPEC = $finalSpec; ROUND = $round }
-    Invoke-ClaudeReadOnly $reviewPrompt $reviewPath (Join-Path $runRoot ("05-claude-error-{0}.log" -f $round)) $worktreePath 18
+    if (-not (Test-Path -LiteralPath $reviewPath)) {
+      $reviewPrompt = Read-Template '05-claude-review.md' @{ TASK = $Task; FINAL_SPEC = $finalSpec; ROUND = $round }
+      Invoke-ClaudeReadOnly $reviewPrompt $reviewPath (Join-Path $runRoot ("05-claude-error-{0}.log" -f $round)) $worktreePath 18
+    }
     $review = [System.IO.File]::ReadAllText($reviewPath)
 
     $fixPath = Join-Path $runRoot ("06-codex-fix-{0}.md" -f $round)
-    $fixPrompt = Read-Template '06-codex-fix.md' @{ TASK = $Task; FINAL_SPEC = $finalSpec; CLAUDE_REVIEW = $review; ROUND = $round }
-    Invoke-Codex $fixPrompt $fixPath (Join-Path $runRoot ("06-codex-error-{0}.log" -f $round)) $worktreePath 'workspace-write'
+    if (-not (Test-Path -LiteralPath $fixPath)) {
+      $fixPrompt = Read-Template '06-codex-fix.md' @{ TASK = $Task; FINAL_SPEC = $finalSpec; CLAUDE_REVIEW = $review; ROUND = $round }
+      Invoke-Codex $fixPrompt $fixPath (Join-Path $runRoot ("06-codex-error-{0}.log" -f $round)) $worktreePath 'workspace-write'
+    }
   }
 
   Write-Host '[7/7] 자동 검증과 Git 기록을 만듭니다...' -ForegroundColor Cyan
@@ -179,8 +187,15 @@ try {
     Assert-BuildCapacity
     Push-Location $worktreePath
     try {
-      & npm.cmd run build *>&1 | Tee-Object -FilePath (Join-Path $runRoot '07-build.log')
-      if ($LASTEXITCODE -ne 0) { throw '앱 빌드 검증에 실패했습니다.' }
+      $previousErrorActionPreference = $ErrorActionPreference
+      try {
+        $ErrorActionPreference = 'Continue'
+        & npm.cmd run build *>&1 | Tee-Object -FilePath (Join-Path $runRoot '07-build.log')
+        $buildExitCode = $LASTEXITCODE
+      } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+      }
+      if ($buildExitCode -ne 0) { throw '앱 빌드 검증에 실패했습니다.' }
     } finally {
       Pop-Location
     }
