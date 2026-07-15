@@ -87,7 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const timeout = setTimeout(() => setIsLoading(false), 5000);
       restoreAuthApiSession()
         .then(profile => {
-          if (profile) saveUser(profile);
+          if (profile) {
+            saveUser(profile);
+          } else {
+            setUser(null);
+            localStorage.removeItem(STORAGE_KEY);
+          }
         })
         .finally(() => {
           clearTimeout(timeout);
