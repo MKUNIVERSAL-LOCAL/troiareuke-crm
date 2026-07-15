@@ -7,7 +7,7 @@
  * 절대 금지: 이 파일에서 supabase.auth.admin.* 호출 금지.
  * 관리자 계정 생성/조회는 서버 사이드(NAS API)에서만 수행합니다.
  */
-import { adminCreateUser, isAuthApiConfigured } from './authApi';
+import { adminCreateUser, adminUpdateBranch, isAuthApiConfigured } from './authApi';
 
 export interface CreateBranchAdminPayload {
   email: string;
@@ -15,6 +15,8 @@ export interface CreateBranchAdminPayload {
   branchName: string;
   shopType: string;
   plan: string;
+  shopPhone?: string;
+  shopAddress?: string;
 }
 
 export interface AdminApiResult {
@@ -39,9 +41,18 @@ export async function createBranchAdmin(
       branchId: payload.branchId,
       branchName: payload.branchName,
       shopType: payload.shopType,
+      shopPhone: payload.shopPhone,
+      shopAddress: payload.shopAddress,
     });
     return { ok: true, pending: false, temporaryPassword: result.temporaryPassword };
   } catch (e: any) {
     return { ok: false, pending: false, reason: e?.message || '계정 생성 요청 실패' };
   }
+}
+
+export async function updateBranchAdmin(
+  branchId: string,
+  updates: { name?: string; shopType?: string; shopPhone?: string; shopAddress?: string; plan?: string; isActive?: boolean },
+): Promise<void> {
+  await adminUpdateBranch(branchId, updates);
 }

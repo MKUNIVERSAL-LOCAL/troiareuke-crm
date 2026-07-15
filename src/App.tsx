@@ -17,6 +17,7 @@ import Programs from './pages/Programs/index';
 import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
 import ResetPassword from './pages/Auth/ResetPassword';
+import { isAuthApiConfigured } from './lib/authApi';
 import Onboarding from './pages/Onboarding/index';
 import AiChat from './pages/AiChat/index';
 
@@ -82,7 +83,7 @@ function AppRoutes() {
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-      <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+      <Route path="/signup" element={isAuthApiConfigured ? <Navigate to="/login" replace /> : <PublicRoute><Signup /></PublicRoute>} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/admin/login" element={<PublicRoute><AdminLogin /></PublicRoute>} />
@@ -165,16 +166,20 @@ const IS_ELECTRON =
   typeof navigator !== 'undefined' &&
   navigator.userAgent.includes('Electron');
 
-const Router = IS_ELECTRON ? HashRouter : BrowserRouter;
+function AppContent() {
+  return (
+    <AuthProvider>
+      <UpdateNotification />
+      <SystemListeners />
+      <AppRoutes />
+    </AuthProvider>
+  );
+}
 
 export default function App() {
-  return (
-    <Router>
-      <AuthProvider>
-        <UpdateNotification />
-        <SystemListeners />
-        <AppRoutes />
-      </AuthProvider>
-    </Router>
-  );
+  if (IS_ELECTRON) {
+    return <HashRouter><AppContent /></HashRouter>;
+  }
+
+  return <BrowserRouter basename={import.meta.env.BASE_URL}><AppContent /></BrowserRouter>;
 }

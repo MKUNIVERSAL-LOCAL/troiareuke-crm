@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { requestPasswordReset, isAuthApiConfigured } from '../../lib/authApi';
+import { getPasswordResetRedirectUrl } from '../../lib/appUrl';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 const features = [
@@ -53,13 +54,8 @@ export default function Login() {
         await requestPasswordReset(normalizedEmail);
       } else if (isSupabaseConfigured) {
         // NAS 미배포 환경 폴백: Supabase 재설정 메일 (웹 /reset-password로 복귀)
-        const configuredUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, '');
-        const browserUrl = window.location.protocol === 'http:' || window.location.protocol === 'https:'
-          ? window.location.origin
-          : '';
-        const publicAppUrl = configuredUrl || browserUrl || 'https://troiareuke-crm.vercel.app';
         const { error: resetRequestError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-          redirectTo: `${publicAppUrl}/reset-password`,
+          redirectTo: getPasswordResetRedirectUrl(),
         });
         if (resetRequestError) throw resetRequestError;
       } else {
@@ -70,10 +66,12 @@ export default function Login() {
       setResetSent(true);
     } catch (e: any) {
       const message = e?.message || '';
-      if (/rate limit|too many/i.test(message)) {
+      if (/rate limit|too many|over_email_send_rate_limit/i.test(message)) {
         setResetError('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
       } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(message)) {
         setResetError('서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
+      } else if (/설정되지 않|연결되어 있지 않/.test(message)) {
+        setResetError(message);
       } else {
         setResetError('재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
       }
@@ -208,10 +206,14 @@ export default function Login() {
             </form>
 
             <div className="mt-6 pt-6 border-t border-gray-100 text-center">
-              <p className="text-sm text-gray-500">
-                계정이 없으신가요?{' '}
-                <Link to="/signup" className="text-blue-600 font-semibold hover:text-blue-700">무료로 시작하기</Link>
-              </p>
+              {isAuthApiConfigured ? (
+                <p className="text-sm text-gray-500">계정은 트로이아르케 관리자가 지점별로 발급합니다.</p>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  계정이 없으신가요?{' '}
+                  <Link to="/signup" className="text-blue-600 font-semibold hover:text-blue-700">무료로 시작하기</Link>
+                </p>
+              )}
             </div>
 
             <div className="mt-4 text-center">

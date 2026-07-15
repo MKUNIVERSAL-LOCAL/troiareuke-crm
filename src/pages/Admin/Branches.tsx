@@ -1,8 +1,8 @@
 ﻿import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
-import { createBranchAdmin, type AdminApiResult } from '../../lib/adminApi';
-import { isAuthApiConfigured } from '../../lib/authApi';
+import { createBranchAdmin, updateBranchAdmin, type AdminApiResult } from '../../lib/adminApi';
+import { adminListUsers, isAuthApiConfigured } from '../../lib/authApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -46,7 +46,28 @@ export default function Branches() {
 
   async function loadBranches() {
     setLoading(true);
-    if (isSupabaseConfigured) {
+    if (isAuthApiConfigured) {
+      const users = await adminListUsers();
+      const grouped = new Map<string, typeof users>();
+      for (const user of users) {
+        if (user.role === 'superadmin' || !user.branchId) continue;
+        grouped.set(user.branchId, [...(grouped.get(user.branchId) || []), user]);
+      }
+      setBranches([...grouped.entries()].map(([id, branchUsers]) => {
+        const representative = branchUsers.find(user => user.role === 'admin') || branchUsers[0];
+        return {
+          id,
+          name: representative.branchName || representative.shopName || '이름 미설정',
+          address: representative.shopAddress || null,
+          phone: representative.shopPhone || null,
+          shop_type: representative.shopType || null,
+          plan: representative.plan,
+          trial_ends_at: representative.trialEndsAt || null,
+          is_active: branchUsers.some(user => user.isActive !== false),
+          created_at: branchUsers.map(user => user.createdAt).sort()[0] || new Date().toISOString(),
+        } satisfies Branch;
+      }).sort((a, b) => b.created_at.localeCompare(a.created_at)));
+    } else if (isSupabaseConfigured) {
       const { data } = await supabase.from('branches').select('*').order('created_at', { ascending: false });
       setBranches(data || []);
     } else {
@@ -101,7 +122,32 @@ export default function Branches() {
     let isPending = false;
 
     try {
-      if (isSupabaseConfigured) {
+      if (isAuthApiConfigured) {
+        if (editTarget) {
+          await updateBranchAdmin(editTarget.id, {
+            name: form.name,
+            shopType: form.shop_type,
+            shopPhone: form.phone,
+            shopAddress: form.address,
+            plan: form.plan,
+          });
+        } else {
+          if (!form.admin_email.trim()) {
+            setError('NAS 지점 생성에는 관리자 이메일이 필요합니다.');
+            return;
+          }
+          const result = await createBranchAdmin({
+            email: form.admin_email,
+            branchId: crypto.randomUUID(),
+            branchName: form.name,
+            shopType: form.shop_type,
+            shopPhone: form.phone,
+            shopAddress: form.address,
+            plan: form.plan,
+          });
+          if (applyAdminResult(result)) isPending = true;
+        }
+      } else if (isSupabaseConfigured) {
         if (editTarget) {
           await supabase.from('branches').update({
             name: form.name, address: form.address, phone: form.phone,
@@ -122,6 +168,8 @@ export default function Branches() {
               branchId: branch.id,
               branchName: form.name,
               shopType: form.shop_type,
+              shopPhone: form.phone,
+              shopAddress: form.address,
               plan: form.plan,
             });
             if (applyAdminResult(result)) {
@@ -153,6 +201,8 @@ export default function Branches() {
               branchId: newBranch.id,
               branchName: form.name,
               shopType: form.shop_type,
+              shopPhone: form.phone,
+              shopAddress: form.address,
               plan: form.plan,
             });
             if (applyAdminResult(result)) {
@@ -176,7 +226,9 @@ export default function Branches() {
   }
 
   async function handleToggleActive(b: Branch) {
-    if (isSupabaseConfigured) {
+    if (isAuthApiConfigured) {
+      await updateBranchAdmin(b.id, { isActive: !b.is_active });
+    } else if (isSupabaseConfigured) {
       await supabase.from('branches').update({ is_active: !b.is_active }).eq('id', b.id);
     } else {
       const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');

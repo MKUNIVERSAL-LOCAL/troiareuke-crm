@@ -18,8 +18,12 @@ export default function AdminLayout() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/admin/login');
+    try {
+      await logout();
+      navigate('/admin/login');
+    } catch {
+      window.alert('서버에 연결할 수 없어 로그아웃을 완료하지 못했습니다. 인터넷 연결을 확인해주세요.');
+    }
   };
 
   return (

@@ -642,7 +642,7 @@ async function loadFromSupabase<T>(
       const local = getList<any>(shopKey(spec.localKey))
         .filter(r => r?.id && !String(r.id).startsWith('sample_'));
       if (local.length > 0) {
-        nasBulkUpsert(table, local.map(r => spec.toDb(r)));
+        await nasBulkUpsert(table, local.map(r => spec.toDb(r)));
         return local as T[];
       }
     }

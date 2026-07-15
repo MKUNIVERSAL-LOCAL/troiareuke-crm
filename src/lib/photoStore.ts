@@ -46,18 +46,49 @@ function setDirty(entityKey: string, dirty: boolean): void {
   } catch { /* noop */ }
 }
 
-// NAS 중앙 서버로 사진 백업. 실패 시 dirty로 표시해 다음 sync에서 재푸시.
+const pendingUploads = new Map<string, Promise<void>>();
+
+// NAS 중앙 서버로 사진 백업. 전송 전에 dirty로 표시해 앱 종료·로그아웃 경합에서도 보존한다.
 function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
   if (!isAuthApiConfigured) return;
-  apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
-    method: 'PUT',
-    body: JSON.stringify({ photos }),
-  })
-    .then(() => setDirty(entityKey, false))
+  setDirty(entityKey, true);
+  // 같은 엔티티의 빠른 연속 편집은 직렬화해 늦게 끝난 과거 요청이 최신 사진을 덮지 않게 한다.
+  const previous = pendingUploads.get(entityKey) || Promise.resolve();
+  let upload: Promise<void>;
+  upload = previous
+    .catch(() => {})
+    .then(() => apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ photos }),
+    }))
+    .then(() => {
+      if (pendingUploads.get(entityKey) === upload) setDirty(entityKey, false);
+    })
     .catch(e => {
-      setDirty(entityKey, true);
+      if (pendingUploads.get(entityKey) === upload) setDirty(entityKey, true);
       console.error(`[NAS] 사진 동기화 실패 (${entityKey}):`, e);
+      throw e;
+    })
+    .finally(() => {
+      if (pendingUploads.get(entityKey) === upload) pendingUploads.delete(entityKey);
     });
+  pendingUploads.set(entityKey, upload);
+  void upload.catch(() => {});
+}
+
+/** 로그아웃 전에 진행 중/실패한 사진 업로드를 모두 확인한다. */
+export async function flushPhotosToNas(): Promise<void> {
+  if (!isAuthApiConfigured) return;
+  const pending = [...pendingUploads.values()];
+  if (pending.length > 0) await Promise.all(pending);
+
+  for (const entityKey of getDirtyKeys()) {
+    await apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ photos: getPhotos(entityKey) }),
+    });
+    setDirty(entityKey, false);
+  }
 }
 
 /**

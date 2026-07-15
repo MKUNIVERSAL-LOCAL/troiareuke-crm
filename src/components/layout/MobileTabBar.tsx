@@ -19,9 +19,13 @@ export default function MobileTabBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    setMoreOpen(false);
-    logout();
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setMoreOpen(false);
+    } catch {
+      window.alert('아직 서버에 저장되지 않은 변경이 있거나 서버에 연결할 수 없습니다. 인터넷 연결을 확인한 뒤 다시 로그아웃해주세요.');
+    }
   };
 
   const handleNavigate = (to: string) => {

@@ -18,7 +18,7 @@
 2. 이 `server` 폴더를 NAS의 예: `/volume1/docker/troiareuke-crm-server`에 올립니다.
 3. `.env.example`을 `.env`로 복사한 뒤 값을 입력합니다.
    - `POSTGRES_PASSWORD`, `DATABASE_URL` — 긴 랜덤 비밀번호 (두 곳 동일하게)
-   - `PUBLIC_BASE_URL` — 외부에서 접근할 HTTPS 주소 (예: `https://crm-api.mkcorp.familyds.com`)
+   - `PUBLIC_BASE_URL` — 외부에서 접근할 HTTPS 주소 (예: `https://crm-api.example.com`)
    - `ALLOWED_ORIGINS` — `http://localhost:5173,null` (데스크톱 앱은 `null` 오리진)
    - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — **최초 슈퍼어드민 계정** (첫 기동 시 자동 생성)
    - `ALLOW_PUBLIC_SIGNUP=false` — 관리자 발급제 (앱의 무료가입을 열려면 true)
@@ -27,15 +27,20 @@
 5. DSM 제어판 → 로그인 포털 → 고급 → **역방향 프록시**: 외부 HTTPS 주소 → `http://127.0.0.1:8787`, Let's Encrypt 인증서 적용.
 6. `https://외부주소/health`가 `{"ok":true}`를 반환하는지 확인합니다.
 
+`docker-compose.yml`은 API 포트를 `127.0.0.1`에만 바인딩합니다. DSM 역방향 프록시를 사용할 때
+`TRUST_PROXY_HOPS=1`을 유지하고, 포트를 직접 공개하는 구성에서는 반드시 `0`으로 바꿉니다.
+
 ## 클라이언트(CRM 앱) 연결
 
 CRM 앱 빌드 시 `.env`에 아래를 설정하면 로그인·계정·데이터가 모두 이 서버로 연결됩니다.
 
 ```
 VITE_AUTH_API_URL=https://외부주소
+VITE_NAS_CUTOVER_APPROVED=true
 ```
 
 - 이 값이 설정되면 Supabase 대신 NAS가 사용됩니다 (인증 + 데이터 모두).
+- `VITE_NAS_CUTOVER_APPROVED=true`는 아래 컷오버 게이트를 모두 통과한 빌드에서만 설정합니다.
 - 어드민 → 지점 관리에서 지점 생성 시 관리자 이메일을 입력하면 계정이 즉시 발급되고 **임시 비밀번호가 1회 표시**됩니다.
 
 ## 검증
@@ -44,3 +49,22 @@ VITE_AUTH_API_URL=https://외부주소
 - NAS 배포 직후 수동 확인: `/health` → 어드민 로그인 → 지점 계정 발급 → 발급 계정으로 CRM 로그인 → 고객 등록 → DSM에서 `crm_records` 행 확인.
 
 SMTP는 회사 메일 또는 NAS MailPlus SMTP 정보를 사용합니다. 고객이 비밀번호 찾기를 누르면 계정 존재 여부와 관계없이 동일한 안내가 표시되며, 실제 가입 고객에게만 30분 유효·1회용 링크가 전송됩니다.
+
+## 상용 컷오버 게이트
+
+기존 판매 고객의 Supabase 계정과 데이터는 NAS로 자동 이관되지 않습니다. 로컬 캐시는 최신 정본을 보장하지
+않으므로 `VITE_AUTH_API_URL`만 켜서 배포하지 않습니다.
+
+1. Supabase와 NAS 양쪽의 지점·계정·컬렉션별 행 수를 비식별 집계로 대조합니다.
+2. Supabase 내보내기와 NAS PostgreSQL 백업을 각각 보존합니다.
+3. 합성 데이터로 전체 이관 및 롤백 리허설을 완료합니다.
+4. 지점별 로그인, 고객/예약/시술/결제 표본, 사진 tombstone, 오프라인 outbox 재전송을 확인합니다.
+5. 승인 기록 후에만 빌드 변수 `VITE_NAS_CUTOVER_APPROVED=true`를 설정합니다.
+
+## 백업·복구 운영
+
+- Container Manager 프로젝트 업데이트 전에 `crm_auth_database` 볼륨 스냅샷과 `pg_dump` 논리 백업을 모두 남깁니다.
+- 백업은 NAS와 다른 저장소에도 암호화해 보관하고 접근 권한을 최소화합니다.
+- 복구는 운영 DB가 아닌 격리된 임시 PostgreSQL에서 먼저 검증합니다. 복구 리허설에서 계정 수,
+  `crm_records` 컬렉션별 행 수, 사진 행 수, 세션/재설정 토큰 제외 여부를 기록합니다.
+- 보존 기간과 `message_send_log`의 전화번호·본문 삭제 정책은 개인정보 처리 기준 확정 후 운영 설정으로 적용합니다.
