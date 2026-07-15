@@ -4,17 +4,22 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { autoUpdater } = require('electron-updater');
+const { createPortableUpdater } = require('./portable-updater.cjs');
 
 // 개발 모드 판별: 패키징된 앱이면 false, 소스 실행이면 true
 const isDev = !app.isPackaged;
 
 let mainWindow;
+let portableUpdater;
 
 // ─── autoUpdater 설정 ─────────────────────────────────────────────
 autoUpdater.autoDownload = true;       // 업데이트 발견 시 자동 다운로드
 autoUpdater.autoInstallOnAppQuit = true; // 앱 종료 시 자동 설치
 
 function setupAutoUpdater() {
+  portableUpdater = createPortableUpdater({ app, getMainWindow: () => mainWindow });
+  portableUpdater.setup();
+  return;
   if (isDev) return; // 개발 모드에서는 업데이트 비활성화
 
   // 업데이트 확인 시작 (앱 시작 5초 후)
@@ -64,8 +69,12 @@ function setupAutoUpdater() {
 
 // ── IPC 핸들러: 렌더러에서 "지금 설치" 버튼 클릭 시 ──
 ipcMain.on('install-update', () => {
-  autoUpdater.quitAndInstall(true, true); // silent install + auto restart
+  portableUpdater?.apply().catch(error => {
+    mainWindow?.webContents.send('update-error', { message: error.message });
+  });
 });
+
+ipcMain.handle('download-portable-update', () => portableUpdater?.download());
 
 // ── IPC 핸들러: 현재 앱 버전 조회 ──
 ipcMain.handle('get-app-version', () => {

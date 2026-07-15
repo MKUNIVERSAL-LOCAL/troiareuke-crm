@@ -2,7 +2,7 @@
   "name": "troiareuke-crm",
   "productName": "트로이아르케 CRM",
   "private": true,
-  "version": "1.0.23",
+  "version": "1.0.24",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -12,6 +12,7 @@
     "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev\" \"wait-on tcp:5173 && electron .\"",
     "electron:build": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win",
     "electron:build:portable": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win portable",
+    "electron:portable:prepare": "node scripts/prepare-portable-update.mjs",
     "electron:installer": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis",
     "electron:build:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir",
     "electron:zip": "npm run electron:build:dir && powershell -Command \"Remove-Item -Path 'release\\트로이아르케-CRM.zip' -ErrorAction SilentlyContinue; Compress-Archive -Path 'release\\win-unpacked\\*' -DestinationPath 'release\\트로이아르케-CRM.zip'; Write-Host '✅ ZIP 완료: release/트로이아르케-CRM.zip'\"",
@@ -94,6 +95,10 @@
         "ko_KR"
       ],
       "language": "1042"
+    },
+    "portable": {
+      "artifactName": "트로이아르케 CRM.exe",
+      "requestExecutionLevel": "user"
     }
   }
 }
