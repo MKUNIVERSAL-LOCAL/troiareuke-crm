@@ -14,6 +14,10 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
 const SESSION_DAYS = Number(process.env.SESSION_DAYS || 30);
 const RESET_TOKEN_MINUTES = Number(process.env.RESET_TOKEN_MINUTES || 30);
+// 상용 배포 기본값: 관리자 발급 계정만 허용 (공개 가입 차단)
+const ALLOW_PUBLIC_SIGNUP = String(process.env.ALLOW_PUBLIC_SIGNUP || 'false').toLowerCase() === 'true';
+const BOOTSTRAP_ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+const BOOTSTRAP_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const allowedOrigins = new Set(
   (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,null')
     .split(',')
@@ -47,7 +51,8 @@ app.use(cors({
     callback(new Error('허용되지 않은 요청입니다.'));
   },
 }));
-app.use(express.json({ limit: '32kb' }));
+// 데이터 동기화(고객 엑셀 대량 업로드 등)는 32kb를 초과할 수 있다
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '32kb' }));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
@@ -83,8 +88,18 @@ function publicUser(row) {
     role: row.role || 'staff',
     branchId: row.branch_id || undefined,
     branchName: row.branch_name || undefined,
+    shopPhone: row.shop_phone || undefined,
+    shopAddress: row.shop_address || undefined,
+    isActive: row.is_active !== false,
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+// 데이터 스코프: 온보딩 전에는 user.id, 온보딩 후에는 branch_id.
+// 클라이언트 getShopId()의 `branchId || user.id` 규칙과 반드시 일치해야 한다.
+function branchScopeOf(user) {
+  if (user.role === 'superadmin') return 'superadmin';
+  return user.branch_id || user.id;
 }
 
 async function initializeDatabase() {
@@ -130,7 +145,49 @@ async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions(user_id);
     CREATE INDEX IF NOT EXISTS password_reset_user_idx ON password_reset_tokens(user_id);
     CREATE INDEX IF NOT EXISTS password_reset_expiry_idx ON password_reset_tokens(expires_at);
+
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS shop_phone text;
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS shop_address text;
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
+
+    CREATE TABLE IF NOT EXISTS crm_records (
+      branch_id text NOT NULL,
+      collection text NOT NULL,
+      id text NOT NULL,
+      data jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (branch_id, collection, id)
+    );
+
+    CREATE INDEX IF NOT EXISTS crm_records_collection_idx ON crm_records(collection, updated_at);
   `);
+}
+
+// 최초 기동 시 슈퍼어드민 1개 계정을 env로 생성한다 (이미 있으면 건너뜀).
+async function bootstrapSuperadmin() {
+  if (!BOOTSTRAP_ADMIN_EMAIL || !BOOTSTRAP_ADMIN_PASSWORD) return;
+  if (!isEmail(BOOTSTRAP_ADMIN_EMAIL) || !isStrongPassword(BOOTSTRAP_ADMIN_PASSWORD)) {
+    console.warn('ADMIN_EMAIL/ADMIN_PASSWORD 형식이 올바르지 않아 슈퍼어드민 생성을 건너뜁니다.');
+    return;
+  }
+  const { rows } = await pool.query('SELECT id FROM auth_users WHERE email = $1 LIMIT 1', [BOOTSTRAP_ADMIN_EMAIL]);
+  if (rows[0]) return;
+  const passwordHash = await bcrypt.hash(BOOTSTRAP_ADMIN_PASSWORD, 12);
+  await pool.query(`
+    INSERT INTO auth_users (id, email, password_hash, name, trial_ends_at, role, plan, is_onboarded)
+    VALUES ($1, $2, $3, '총괄 관리자', now() + interval '3650 days', 'superadmin', 'enterprise', true)
+  `, [crypto.randomUUID(), BOOTSTRAP_ADMIN_EMAIL, passwordHash]);
+  console.log(`슈퍼어드민 계정 생성됨: ${BOOTSTRAP_ADMIN_EMAIL}`);
+}
+
+// 만료 세션·재설정 토큰 정리 (기동 시 + 매일)
+async function cleanupExpired() {
+  try {
+    await pool.query("DELETE FROM password_reset_tokens WHERE expires_at < now() - interval '1 day'");
+    await pool.query("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'");
+  } catch (error) {
+    console.error('expired cleanup failed', error?.message || error);
+  }
 }
 
 async function createSession(userId) {
@@ -154,6 +211,7 @@ async function requireSession(req, res, next) {
       FROM auth_sessions s
       JOIN auth_users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
+        AND u.is_active
       LIMIT 1
     `, [tokenHash(token)]);
     if (!rows[0]) return res.status(401).json({ error: '로그인 정보가 만료되었습니다.' });
@@ -238,6 +296,9 @@ app.get('/health', async (_req, res, next) => {
 
 app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
   try {
+    if (!ALLOW_PUBLIC_SIGNUP) {
+      return res.status(403).json({ error: '이 서비스는 관리자가 발급한 계정으로만 이용할 수 있습니다. 관리자에게 계정 발급을 요청해주세요.' });
+    }
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
     const name = String(req.body.name || '').trim();
@@ -270,6 +331,7 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
     const user = rows[0];
     const valid = user ? await bcrypt.compare(password, user.password_hash) : false;
     if (!valid) return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+    if (user.is_active === false) return res.status(403).json({ error: '비활성화된 계정입니다. 관리자에게 문의해주세요.' });
 
     const session = await createSession(user.id);
     res.json({ user: publicUser(user), ...session });
@@ -286,15 +348,118 @@ app.patch('/api/auth/profile', requireSession, async (req, res, next) => {
   try {
     const shopName = String(req.body.shopName || '').trim();
     const shopType = String(req.body.shopType || '').trim();
+    const shopPhone = String(req.body.shopPhone || '').trim();
+    const shopAddress = String(req.body.shopAddress || '').trim();
     if (!shopName || !shopType) return res.status(400).json({ error: '매장 이름과 유형을 입력해주세요.' });
-    const branchId = req.authUser.branch_id || crypto.randomUUID();
+    // 온보딩 전 user.id 스코프로 쌓인 데이터가 유실되지 않도록 branch_id는 user.id로 고정
+    const branchId = req.authUser.branch_id || req.authUser.id;
     const { rows } = await pool.query(`
       UPDATE auth_users
-      SET shop_name = $1, shop_type = $2, branch_name = $1, branch_id = $3,
-          is_onboarded = true, updated_at = now()
-      WHERE id = $4
+      SET shop_name = $1, shop_type = $2, shop_phone = $3, shop_address = $4,
+          branch_name = $1, branch_id = $5, is_onboarded = true, updated_at = now()
+      WHERE id = $6
       RETURNING *
-    `, [shopName, shopType, branchId, req.authUser.id]);
+    `, [shopName, shopType, shopPhone || null, shopAddress || null, branchId, req.authUser.id]);
+    res.json({ user: publicUser(rows[0]) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 관리자 전용: 계정 발급·관리 ─────────────────────────────────
+function requireSuperadmin(req, res, next) {
+  if (req.authUser?.role !== 'superadmin') {
+    return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+  }
+  next();
+}
+
+app.get('/api/admin/users', requireSession, requireSuperadmin, async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM auth_users ORDER BY created_at DESC');
+    res.json({ users: rows.map(publicUser) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const name = String(req.body.name || '').trim() || email.split('@')[0];
+    const role = ['admin', 'staff'].includes(req.body.role) ? req.body.role : 'admin';
+    const plan = ['trial', 'starter', 'pro', 'enterprise'].includes(req.body.plan) ? req.body.plan : 'trial';
+    const branchName = String(req.body.branchName || '').trim();
+    const shopType = String(req.body.shopType || '').trim();
+    const requestedBranchId = String(req.body.branchId || '').trim();
+    if (!isEmail(email)) return res.status(400).json({ error: '이메일 형식을 확인해주세요.' });
+
+    // 비밀번호를 직접 지정하지 않으면 임시 비밀번호를 발급해 1회 응답으로만 알려준다.
+    const providedPassword = req.body.password;
+    if (providedPassword !== undefined && !isStrongPassword(providedPassword)) {
+      return res.status(400).json({ error: '비밀번호는 8자 이상 128자 이하여야 합니다.' });
+    }
+    const temporaryPassword = providedPassword || crypto.randomBytes(9).toString('base64url');
+    const passwordHash = await bcrypt.hash(temporaryPassword, 12);
+
+    const userId = crypto.randomUUID();
+    // 같은 지점에 직원 계정을 추가할 땐 branchId를 넘겨 기존 지점에 합류시킨다.
+    const branchId = requestedBranchId || userId;
+    const isOnboarded = Boolean(branchName);
+    const { rows } = await pool.query(`
+      INSERT INTO auth_users (id, email, password_hash, name, role, plan,
+        shop_name, shop_type, branch_id, branch_name, is_onboarded, trial_ends_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + interval '14 days')
+      RETURNING *
+    `, [userId, email, passwordHash, name, role, plan,
+        branchName, shopType, branchId, branchName || null, isOnboarded]);
+
+    res.status(201).json({
+      user: publicUser(rows[0]),
+      ...(providedPassword ? {} : { temporaryPassword }),
+    });
+  } catch (error) {
+    if (error?.code === '23505') return res.status(409).json({ error: '이미 등록된 이메일입니다.' });
+    next(error);
+  }
+});
+
+app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const targetId = String(req.params.id);
+    const fields = [];
+    const values = [];
+    const push = (column, value) => { values.push(value); fields.push(`${column} = $${values.length}`); };
+
+    if (req.body.role !== undefined) {
+      if (!['admin', 'staff'].includes(req.body.role)) return res.status(400).json({ error: '역할은 admin 또는 staff만 지정할 수 있습니다.' });
+      push('role', req.body.role);
+    }
+    if (req.body.plan !== undefined) {
+      if (!['trial', 'starter', 'pro', 'enterprise'].includes(req.body.plan)) return res.status(400).json({ error: '요금제 값을 확인해주세요.' });
+      push('plan', req.body.plan);
+    }
+    if (req.body.isActive !== undefined) {
+      if (targetId === req.authUser.id) return res.status(400).json({ error: '본인 계정은 비활성화할 수 없습니다.' });
+      push('is_active', Boolean(req.body.isActive));
+    }
+    if (req.body.password !== undefined) {
+      if (!isStrongPassword(req.body.password)) return res.status(400).json({ error: '비밀번호는 8자 이상 128자 이하여야 합니다.' });
+      push('password_hash', await bcrypt.hash(req.body.password, 12));
+    }
+    if (fields.length === 0) return res.status(400).json({ error: '변경할 항목이 없습니다.' });
+
+    values.push(targetId);
+    const { rows } = await pool.query(
+      `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now() WHERE id = $${values.length} AND role <> 'superadmin' RETURNING *`,
+      values,
+    );
+    if (!rows[0]) return res.status(404).json({ error: '대상 계정을 찾을 수 없습니다.' });
+
+    // 비활성화 또는 비밀번호 변경 시 기존 세션 즉시 종료
+    if (req.body.isActive === false || req.body.password !== undefined) {
+      await pool.query('UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [targetId]);
+    }
     res.json({ user: publicUser(rows[0]) });
   } catch (error) {
     next(error);
@@ -371,6 +536,103 @@ app.post('/reset-password', resetLimiter, async (req, res, next) => {
   }
 });
 
+// ── CRM 데이터 저장 API (사용 데이터가 NAS에 쌓이는 지점) ────────
+// 클라이언트 store.ts가 Supabase 대신 이 API로 동기화한다. 행 형식은
+// 클라이언트 toDb*()가 만드는 snake_case 행 그대로를 JSONB로 저장한다.
+const DATA_COLLECTIONS = new Set([
+  'customers', 'programs', 'customer_programs', 'treatment_logs',
+  'products', 'product_sales', 'payments', 'staff', 'services',
+  'reservations', 'shop_settings', 'message_templates', 'message_history',
+]);
+
+function requireCollection(req, res, next) {
+  if (!DATA_COLLECTIONS.has(req.params.collection)) {
+    return res.status(404).json({ error: '지원하지 않는 데이터 종류입니다.' });
+  }
+  next();
+}
+
+app.get('/api/data/:collection', requireSession, requireCollection, async (req, res, next) => {
+  try {
+    const scope = branchScopeOf(req.authUser);
+    const { rows } = scope === 'superadmin'
+      ? await pool.query('SELECT data FROM crm_records WHERE collection = $1 ORDER BY updated_at', [req.params.collection])
+      : await pool.query('SELECT data FROM crm_records WHERE branch_id = $1 AND collection = $2 ORDER BY updated_at', [scope, req.params.collection]);
+    res.json({ rows: rows.map(r => r.data) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/data/:collection', requireSession, requireCollection, async (req, res, next) => {
+  try {
+    const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+    if (rows.length === 0) return res.status(400).json({ error: '저장할 행이 없습니다.' });
+    if (rows.length > 2000) return res.status(400).json({ error: '한 번에 2,000행까지만 저장할 수 있습니다.' });
+    const scope = branchScopeOf(req.authUser);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const row of rows) {
+        const id = String(row?.id || '').trim();
+        if (!id) continue;
+        // 세션 스코프를 강제해 다른 지점 데이터를 덮어쓰지 못하게 한다.
+        // (슈퍼어드민은 행에 담긴 branch_id를 존중해 지점 대신 저장 가능)
+        const branchId = scope === 'superadmin' ? String(row.branch_id || 'superadmin') : scope;
+        await client.query(`
+          INSERT INTO crm_records (branch_id, collection, id, data, updated_at)
+          VALUES ($1, $2, $3, $4, now())
+          ON CONFLICT (branch_id, collection, id)
+          DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `, [branchId, req.params.collection, id, row]);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    res.json({ saved: rows.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch('/api/data/:collection/:id', requireSession, requireCollection, async (req, res, next) => {
+  try {
+    const updates = req.body.updates;
+    if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+      return res.status(400).json({ error: '변경 내용을 확인해주세요.' });
+    }
+    const scope = branchScopeOf(req.authUser);
+    const { rowCount } = scope === 'superadmin'
+      ? await pool.query(
+          'UPDATE crm_records SET data = data || $1::jsonb, updated_at = now() WHERE collection = $2 AND id = $3',
+          [updates, req.params.collection, req.params.id])
+      : await pool.query(
+          'UPDATE crm_records SET data = data || $1::jsonb, updated_at = now() WHERE branch_id = $2 AND collection = $3 AND id = $4',
+          [updates, scope, req.params.collection, req.params.id]);
+    if (rowCount === 0) return res.status(404).json({ error: '대상 데이터를 찾을 수 없습니다.' });
+    res.json({ updated: rowCount });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/data/:collection/:id', requireSession, requireCollection, async (req, res, next) => {
+  try {
+    const scope = branchScopeOf(req.authUser);
+    scope === 'superadmin'
+      ? await pool.query('DELETE FROM crm_records WHERE collection = $1 AND id = $2', [req.params.collection, req.params.id])
+      : await pool.query('DELETE FROM crm_records WHERE branch_id = $1 AND collection = $2 AND id = $3', [scope, req.params.collection, req.params.id]);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error, _req, res, _next) => {
   console.error(error);
   res.status(500).json({ error: '서버 처리 중 문제가 발생했습니다.' });
@@ -378,6 +640,9 @@ app.use((error, _req, res, _next) => {
 
 initializeDatabase()
   .then(async () => {
+    await bootstrapSuperadmin();
+    await cleanupExpired();
+    setInterval(cleanupExpired, 24 * 60 * 60 * 1000).unref();
     if (process.env.SMTP_HOST) await smtp.verify();
     app.listen(PORT, '0.0.0.0', () => console.log(`Troiareuke auth server listening on ${PORT}`));
   })

@@ -11,6 +11,9 @@ export interface AuthApiUser {
   role: 'superadmin' | 'admin' | 'staff';
   branchId?: string;
   branchName?: string;
+  shopPhone?: string;
+  shopAddress?: string;
+  isActive?: boolean;
   createdAt: string;
 }
 
@@ -25,7 +28,7 @@ const AUTH_TOKEN_KEY = 'troiareuke_auth_token';
 
 export const isAuthApiConfigured = Boolean(apiBaseUrl);
 
-async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!isAuthApiConfigured) throw new Error('중앙 계정 서버가 설정되지 않았습니다.');
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -96,6 +99,41 @@ export async function updateAuthProfile(data: { shopName: string; shopType: stri
   const response = await apiRequest<{ user: AuthApiUser }>('/api/auth/profile', {
     method: 'PATCH',
     body: JSON.stringify(data),
+  });
+  return response.user;
+}
+
+// ── 관리자(슈퍼어드민) 전용: 계정 발급·관리 ─────────────────────
+export interface AdminCreateUserPayload {
+  email: string;
+  name?: string;
+  password?: string; // 미지정 시 서버가 임시 비밀번호 발급
+  role?: 'admin' | 'staff';
+  plan?: string;
+  branchId?: string; // 기존 지점에 직원을 추가할 때
+  branchName?: string;
+  shopType?: string;
+}
+
+export async function adminListUsers() {
+  const response = await apiRequest<{ users: AuthApiUser[] }>('/api/admin/users');
+  return response.users;
+}
+
+export async function adminCreateUser(payload: AdminCreateUserPayload) {
+  return apiRequest<{ user: AuthApiUser; temporaryPassword?: string }>('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminUpdateUser(
+  id: string,
+  updates: { role?: 'admin' | 'staff'; plan?: string; isActive?: boolean; password?: string },
+) {
+  const response = await apiRequest<{ user: AuthApiUser }>(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
   });
   return response.user;
 }

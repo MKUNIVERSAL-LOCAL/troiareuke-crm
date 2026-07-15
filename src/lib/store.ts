@@ -14,6 +14,7 @@ import type {
 } from '../types';
 
 import { supabase, isSupabaseConfigured } from './supabase';
+import { isNasDataConfigured, nasLoad, nasUpsert, nasUpdate, nasDelete } from './nasData';
 
 // ─── 오프라인 배너용 동기화 타임스탬프 ────────────────────────
 // OfflineBanner.tsx의 recordSyncTimestamp와 동일 키를 직접 기록
@@ -612,6 +613,11 @@ async function loadFromSupabase<T>(
   table: string,
   fromDb: (row: Record<string, any>) => T,
 ): Promise<T[] | null> {
+  // NAS 중앙 서버가 설정되어 있으면 NAS가 우선 (서버가 지점 스코프 강제)
+  if (isNasDataConfigured) {
+    const rows = await nasLoad(table);
+    return rows === null ? null : rows.map(fromDb);
+  }
   if (!isSupabaseConfigured) return null;
   try {
     const branchId = getShopId();
@@ -636,6 +642,10 @@ async function loadFromSupabase<T>(
 }
 
 async function loadSettingsFromSupabase(): Promise<ShopSettings | null> {
+  if (isNasDataConfigured) {
+    const rows = await nasLoad('shop_settings');
+    return rows && rows.length > 0 ? fromDbSettings(rows[0]) : null;
+  }
   if (!isSupabaseConfigured) return null;
   try {
     const branchId = getShopId();
@@ -657,7 +667,7 @@ export async function initializeStores(): Promise<void> {
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured && !isNasDataConfigured) {
       _initialized = true;
       return;
     }
@@ -736,6 +746,7 @@ export function resetStoreCache(): void {
 
 // ─── Supabase 비동기 쓰기 헬퍼 (fire-and-forget) ───────────────
 function sbInsert(table: string, row: Record<string, any>): void {
+  if (isNasDataConfigured) { nasUpsert(table, row); return; }
   if (!isSupabaseConfigured) return;
   // 슈퍼어드민이면 branch_id를 null로 처리
   const insertRow = isSuperadmin() && row.branch_id === 'superadmin'
@@ -747,6 +758,7 @@ function sbInsert(table: string, row: Record<string, any>): void {
 }
 
 function sbUpdate(table: string, id: string, updates: Record<string, any>): void {
+  if (isNasDataConfigured) { nasUpdate(table, id, updates); return; }
   if (!isSupabaseConfigured) return;
   supabase.from(table).update(updates).eq('id', id).then(({ error }) => {
     if (error) console.error(`[Store] ${table} update 실패:`, error.message);
@@ -754,6 +766,7 @@ function sbUpdate(table: string, id: string, updates: Record<string, any>): void
 }
 
 function sbDelete(table: string, id: string): void {
+  if (isNasDataConfigured) { nasDelete(table, id); return; }
   if (!isSupabaseConfigured) return;
   supabase.from(table).delete().eq('id', id).then(({ error }) => {
     if (error) console.error(`[Store] ${table} delete 실패:`, error.message);
@@ -761,6 +774,7 @@ function sbDelete(table: string, id: string): void {
 }
 
 function sbUpsert(table: string, row: Record<string, any>): void {
+  if (isNasDataConfigured) { nasUpsert(table, row); return; }
   if (!isSupabaseConfigured) return;
   supabase.from(table).upsert(row).then(({ error }) => {
     if (error) console.error(`[Store] ${table} upsert 실패:`, error.message);
@@ -1544,7 +1558,7 @@ export const SettingsStore = {
     _settings = updated;
     safeSetItem(shopKey('settings'), JSON.stringify(updated));
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured || isNasDataConfigured) {
       const dbRow = { ...toDbSettings(updated), branch_id: getShopId() };
       sbUpsert('shop_settings', dbRow);
     }
