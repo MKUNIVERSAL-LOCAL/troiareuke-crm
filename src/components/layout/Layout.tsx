@@ -1,13 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileTabBar from './MobileTabBar';
 import UpdateBanner from '../ui/UpdateBanner';
 import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCrmBrand } from '../../hooks/useCrmBrand';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user } = useAuth();
+  const { programName } = useCrmBrand(user?.shopName);
+
+  useEffect(() => {
+    document.title = programName;
+  }, [programName]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -51,8 +59,8 @@ export default function Layout() {
               </svg>
             </div>
             <div>
-              <p className="text-xs font-black tracking-widest text-[#1a3a8f] leading-tight">TROIAREUKE</p>
-              <p className="text-[9px] text-gray-400">에스테틱 전용 CRM</p>
+              <p className="max-w-[220px] truncate text-xs font-black text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
+              <p className="text-[9px] text-gray-400">에스테틱 고객관리</p>
             </div>
           </div>
         </div>

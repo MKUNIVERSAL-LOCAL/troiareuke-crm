@@ -2,10 +2,10 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { StaffStore, ServiceStore, ProgramStore } from '../../lib/store';
+import { StaffStore, ServiceStore, ProgramStore, SettingsStore } from '../../lib/store';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
-import type { SubscriptionPlan } from '../../types';
+import type { ShopSettings, SubscriptionPlan } from '../../types';
 import * as XLSX from 'xlsx';
 
 const steps = [
@@ -240,6 +240,14 @@ export default function Onboarding() {
       branchName: shopName,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+
+    // 첫 설정에서 입력한 샵명을 프로그램 표시명(“○○○ CRM”)으로 즉시 사용한다.
+    SettingsStore.save({
+      name: shopName.trim(),
+      type: shopType as ShopSettings['type'],
+      phone: shopPhone,
+      address: shopAddress,
+    });
 
     // ★ 2단계: 이제 getShopId()가 fixedBranchId를 반환하므로 안전하게 데이터 저장
     // 직원 목록 저장

@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
@@ -39,6 +39,8 @@ export default function Reservations() {
   const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
   const [staffList] = useState<Staff[]>(() => StaffStore.getAll());
   const [googleEvents, setGoogleEvents] = useState<GoogleEventLike[]>([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const googleConnected = isGoogleCalendarConnected();
 
   const reloadReservations = useCallback(() => {
@@ -93,17 +95,29 @@ export default function Reservations() {
   const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredReservations = reservations.filter(r => {
+    const statusMatches = statusFilter === 'all' || r.status === statusFilter;
+    const searchMatches = !normalizedSearch || [
+      r.customerName,
+      r.customerPhone,
+      r.staffName,
+      r.memo || '',
+      ...r.services.map(service => service.serviceName),
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return statusMatches && searchMatches;
+  });
   const mobileFilteredReservations = (() => {
     if (mobileTab === 'today') {
-      return reservations.filter(r => r.date === todayStr);
+      return filteredReservations.filter(r => r.date === todayStr);
     } else if (mobileTab === 'week') {
       const wStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
       const wEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      return reservations.filter(r => r.date >= wStart && r.date <= wEnd);
+      return filteredReservations.filter(r => r.date >= wStart && r.date <= wEnd);
     } else {
       const mStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
       const mEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
-      return reservations.filter(r => r.date >= mStart && r.date <= mEnd);
+      return filteredReservations.filter(r => r.date >= mStart && r.date <= mEnd);
     }
   })().sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 
@@ -148,6 +162,31 @@ export default function Reservations() {
                 </button>
               );
             })}
+          </div>
+          <div className="flex gap-2 mt-2">
+            <label className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="고객, 직원, 시술 검색"
+                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                aria-label="예약 검색"
+              />
+            </label>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="border border-gray-200 rounded-xl px-2 text-xs bg-white outline-none"
+              aria-label="예약 상태 필터"
+            >
+              <option value="all">전체 상태</option>
+              <option value="pending">대기</option>
+              <option value="confirmed">확정</option>
+              <option value="completed">완료</option>
+              <option value="cancelled">취소</option>
+              <option value="noshow">노쇼</option>
+            </select>
           </div>
         </div>
 
@@ -250,15 +289,42 @@ export default function Reservations() {
           </div>
         </div>
 
+        <div className="bg-white rounded-2xl border border-gray-100 p-3 mb-4 flex gap-3 items-center">
+          <label className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="고객명, 전화번호, 담당 직원, 시술 검색"
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+              aria-label="예약 검색"
+            />
+          </label>
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
+            aria-label="예약 상태 필터"
+          >
+            <option value="all">전체 상태</option>
+            <option value="pending">대기</option>
+            <option value="confirmed">확정</option>
+            <option value="completed">완료</option>
+            <option value="cancelled">취소</option>
+            <option value="noshow">노쇼</option>
+          </select>
+          <span className="text-xs text-gray-400 whitespace-nowrap">{filteredReservations.length}건</span>
+        </div>
+
         {/* Calendar Views */}
         {viewMode === 'week' && (
-          <WeekView weekDays={weekDays} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <WeekView weekDays={weekDays} reservations={filteredReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'day' && (
-          <DayView date={currentDate} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <DayView date={currentDate} reservations={filteredReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'list' && (
-          <ListView reservations={reservations} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <ListView reservations={filteredReservations} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
       </div>
 

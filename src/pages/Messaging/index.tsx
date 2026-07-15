@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil } from 'lucide-react';
+import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { MessageTemplateStore, MessageHistoryStore, CustomerStore, SettingsStore } from '../../lib/store';
@@ -217,12 +217,24 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
   const [templates, setTemplates] = useState<MessageTemplate[]>(MessageTemplateStore.getAll());
   const [showAddModal, setShowAddModal] = useState(false);
   const [editing, setEditing] = useState<MessageTemplate | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     setTemplates(MessageTemplateStore.getAll());
   }, [reloadKey]);
 
-  const filtered = templates.filter(t => cat === '전체' || t.category === cat);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = templates.filter(template => {
+    const categoryMatches = cat === '전체' || template.category === cat;
+    const searchMatches = !normalizedSearch || [
+      template.name,
+      template.title || '',
+      template.content,
+      template.category,
+      MSG_TYPE_LABELS[template.type] || template.type,
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return categoryMatches && searchMatches;
+  });
 
   const handleDelete = (id: string) => {
     MessageTemplateStore.delete(id);
@@ -239,7 +251,18 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
+        <label className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="템플릿명, 제목, 내용 검색"
+            className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+            aria-label="메시지 템플릿 검색"
+          />
+        </label>
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
         {categories.map(c => (
           <button
             key={c}
@@ -252,15 +275,22 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
             {c}
           </button>
         ))}
+        </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="ml-auto flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg border border-purple-200 hover:bg-purple-100"
+          className="lg:ml-auto flex items-center justify-center gap-1 px-3 py-2.5 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg border border-purple-200 hover:bg-purple-100 whitespace-nowrap"
         >
           <Plus size={14} /> 템플릿 추가
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filtered.length === 0 && (
+          <div className="md:col-span-2 bg-white rounded-2xl border border-gray-100 py-14 text-center">
+            <FileText size={34} className="text-gray-200 mx-auto mb-3" />
+            <p className="text-sm text-gray-500">조건에 맞는 템플릿이 없어요</p>
+          </div>
+        )}
         {filtered.map(t => (
           <div key={t.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
             <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
@@ -458,10 +488,24 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
 
 function HistoryPanel({ reloadKey }: { reloadKey: number }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>('all');
 
   useEffect(() => {
     setHistory(MessageHistoryStore.getAll());
   }, [reloadKey]);
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredHistory = history.filter(item => {
+    const statusMatches = statusFilter === 'all' || item.status === statusFilter;
+    const searchMatches = !normalizedSearch || [
+      item.templateName || '직접 작성',
+      item.content,
+      item.sentAt,
+      MSG_TYPE_LABELS[item.type] || item.type,
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return statusMatches && searchMatches;
+  });
 
   if (history.length === 0) {
     return (
@@ -485,8 +529,33 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
         <p className="text-sm font-bold text-gray-900">발송 이력</p>
         <p className="text-xs text-gray-400">최근 30일</p>
       </div>
-      <div className="divide-y divide-gray-50">
-        {history.map(h => {
+      <div className="p-3 border-b border-gray-100 flex flex-col sm:flex-row gap-2 sm:items-center">
+        <label className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="템플릿명, 내용, 발송일 검색"
+            className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+            aria-label="발송 이력 검색"
+          />
+        </label>
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as 'all' | 'sent' | 'failed')}
+          className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
+          aria-label="발송 상태 필터"
+        >
+          <option value="all">전체 상태</option>
+          <option value="sent">성공</option>
+          <option value="failed">실패·미연동</option>
+        </select>
+      </div>
+      <div className="divide-y divide-gray-50 overflow-y-auto max-h-[65vh]">
+        {filteredHistory.length === 0 && (
+          <div className="py-14 text-center text-sm text-gray-400">조건에 맞는 발송 이력이 없어요</div>
+        )}
+        {filteredHistory.map(h => {
           const isGatewayPending = h.status === 'failed' && h.successCount === 0 && (h.cost === 0 || h.cost === undefined);
           return (
             <div key={h.id} className="px-6 py-4">

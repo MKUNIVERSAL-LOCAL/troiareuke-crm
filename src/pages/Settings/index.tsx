@@ -32,7 +32,13 @@ const emptyServiceForm = { name: '', category: '', duration: 60, price: 0, descr
 export default function Settings() {
   const { user } = useAuth();
   const [tab, setTab] = useState<SettingTab>('shop');
-  const [settings, setSettings] = useState<ShopSettings>(() => SettingsStore.get());
+  const [settings, setSettings] = useState<ShopSettings>(() => {
+    const current = SettingsStore.get();
+    if (current.name === '내 에스테틱 샵' && user?.shopName) {
+      return { ...current, name: user.shopName };
+    }
+    return current;
+  });
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
@@ -273,15 +279,46 @@ export default function Settings() {
   };
 
   // ─── Shop Info ────────────────────────────────────────────
-  const handleShopSave = () => {
+  const handleShopSave = async () => {
+    const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
+    if (!shopName) {
+      flash('샵 이름을 입력해주세요');
+      return;
+    }
+
+    const updatedSettings = { ...settings, name: shopName };
+    setSettings(updatedSettings);
     SettingsStore.save({
-      name: settings.name,
+      name: shopName,
       type: settings.type as ShopSettings['type'],
       phone: settings.phone,
       address: settings.address,
       pointRate: settings.pointRate,
     });
-    flash();
+
+    // 다음 로그인에서도 같은 샵명이 보이도록 지점·로컬 세션을 함께 갱신한다.
+    if (isSupabaseConfigured && user?.branchId) {
+      await supabase.from('branches').update({
+        name: shopName,
+        phone: settings.phone || null,
+        address: settings.address || null,
+      }).eq('id', user.branchId);
+    }
+
+    try {
+      const key = 'troiareuke_auth_user';
+      const storedUser = JSON.parse(localStorage.getItem(key) || 'null');
+      if (storedUser) {
+        localStorage.setItem(key, JSON.stringify({
+          ...storedUser,
+          shopName,
+          shopType: settings.type,
+          branchName: shopName,
+        }));
+      }
+    } catch { /* 세션 갱신 실패는 샵 설정 저장을 막지 않음 */ }
+
+    flash(`${shopName} CRM으로 설정했습니다`);
   };
 
   // ─── Business Hours ───────────────────────────────────────
@@ -428,12 +465,19 @@ export default function Settings() {
               <SettingCard title="샵 기본 정보">
                 <div className="space-y-4">
                   <FormRow label="샵 이름">
-                    <input
-                      type="text"
-                      value={settings.name}
-                      onChange={e => setSettings(prev => ({ ...prev, name: e.target.value }))}
-                      className="form-input"
-                    />
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={settings.name}
+                        onChange={e => setSettings(prev => ({ ...prev, name: e.target.value }))}
+                        className="form-input"
+                        placeholder="예: 아르케스파"
+                        maxLength={40}
+                      />
+                      <p className="text-xs text-gray-400">
+                        프로그램명 미리보기: <strong className="text-[#1a3a8f]">{settings.name.trim().replace(/\s*CRM\s*$/i, '') || '샵 이름'} CRM</strong>
+                      </p>
+                    </div>
                   </FormRow>
                   <FormRow label="샵 유형">
                     <select

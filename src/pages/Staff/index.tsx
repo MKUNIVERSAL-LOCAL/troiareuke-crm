@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { Phone, Mail, Plus, Trash2, Edit3 } from 'lucide-react';
+import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { StaffStore, ReservationStore, TreatmentLogStore, PaymentStore } from '../../lib/store';
@@ -20,6 +20,8 @@ export default function StaffPage() {
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selected, setSelected] = useState<Staff | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
 
   const reload = () => {
     setStaffList(StaffStore.getAll());
@@ -35,6 +37,19 @@ export default function StaffPage() {
   const isActiveRes = (r: { status: string }) => r.status !== 'cancelled' && r.status !== 'noshow';
   const allReservations = ReservationStore.getAll().filter(isActiveRes);
   const todayReservations = allReservations.filter(r => r.date === today);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredStaff = staffList.filter(staff => {
+    const statusMatches = statusFilter === 'all'
+      || (statusFilter === 'active' ? staff.isActive : !staff.isActive);
+    const searchMatches = !normalizedSearch || [
+      staff.name,
+      staff.role,
+      staff.phone,
+      staff.email || '',
+      ...staff.specialty,
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return statusMatches && searchMatches;
+  });
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -44,9 +59,38 @@ export default function StaffPage() {
         action={{ label: '직원 추가', onClick: () => setShowAddModal(true) }}
       />
 
-      <div className="p-8 flex-1">
+      <div className="p-4 sm:p-6 lg:p-8 flex-1">
+        <div className="bg-white rounded-2xl border border-gray-100 p-3 mb-5 flex flex-col md:flex-row gap-3 md:items-center">
+          <label className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="직원명, 역할, 연락처, 전문분야 검색"
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+              aria-label="직원 검색"
+            />
+          </label>
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto no-scrollbar">
+            {([
+              ['active', '재직'],
+              ['inactive', '퇴사·비활성'],
+              ['all', '전체'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setStatusFilter(value)}
+                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${statusFilter === value ? 'bg-white text-[#1a3a8f] shadow-sm' : 'text-gray-500'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-gray-400 whitespace-nowrap">{filteredStaff.length}명 표시</span>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-          {staffList.map(staff => {
+          {filteredStaff.map(staff => {
             const staffTodayRes = todayReservations.filter(r => r.staffId === staff.id);
             const monthlyRevenue = allReservations
               .filter(r => r.staffId === staff.id && r.date.startsWith(yearMonth))
@@ -102,6 +146,14 @@ export default function StaffPage() {
             );
           })}
 
+          {filteredStaff.length === 0 && (
+            <div className="md:col-span-2 xl:col-span-4 bg-white rounded-2xl border border-gray-100 py-14 text-center">
+              <Users size={36} className="text-gray-200 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500">조건에 맞는 직원이 없어요</p>
+              <p className="text-xs text-gray-400 mt-1">검색어나 재직 상태를 바꿔보세요</p>
+            </div>
+          )}
+
           {/* Add Staff Card */}
           <button
             onClick={() => setShowAddModal(true)}
@@ -120,7 +172,7 @@ export default function StaffPage() {
             <h3 className="text-sm font-bold text-gray-900">오늘 직원별 예약 현황</h3>
           </div>
           <div className="p-6 space-y-4">
-            {staffList.map(staff => {
+            {filteredStaff.map(staff => {
               const todayRes = todayReservations.filter(r => r.staffId === staff.id);
               return (
                 <div key={staff.id} className="flex items-center gap-4">

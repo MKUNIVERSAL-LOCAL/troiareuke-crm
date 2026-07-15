@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle,
   CreditCard, Banknote, Smartphone, DollarSign,
-  ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2
+  ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -27,6 +27,9 @@ export default function Sales() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewMonth, setViewMonth] = useState(getYearMonth(new Date()));
+  const [listSearch, setListSearch] = useState('');
+  const [listType, setListType] = useState<'all' | Payment['type']>('all');
+  const [listMethod, setListMethod] = useState<'all' | PaymentMethod>('all');
 
   // 결제 등록 폼
   const [form, setForm] = useState({
@@ -61,6 +64,28 @@ export default function Sales() {
     total: monthPayments.reduce((s, p) => s + p.amount, 0),
     count: monthPayments.length,
   }), [monthPayments]);
+
+  const listPayments = useMemo(() => {
+    const query = listSearch.trim().toLowerCase();
+    return [...monthPayments]
+      .filter(payment => {
+        const typeMatches = listType === 'all' || payment.type === listType;
+        const methodMatches = listMethod === 'all' || payment.paymentMethod === listMethod;
+        const searchMatches = !query || [
+          payment.customerName || '',
+          payment.typeLabel,
+          payment.paymentMethod,
+          payment.memo || '',
+        ].some(value => value.toLowerCase().includes(query));
+        return typeMatches && methodMatches && searchMatches;
+      })
+      .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
+  }, [monthPayments, listSearch, listType, listMethod]);
+
+  const listTotal = useMemo(
+    () => listPayments.reduce((sum, payment) => sum + payment.amount, 0),
+    [listPayments],
+  );
 
   // 지난 달 집계
   const lastSummary = useMemo(() => {
@@ -176,9 +201,9 @@ export default function Sales() {
   const monthLabel = `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">매출 관리</h1>
           <p className="text-sm text-gray-400 mt-0.5">시술 + 제품 판매 통합 매출 현황</p>
@@ -215,7 +240,7 @@ export default function Sales() {
       {tab === 'overview' && (
         <div className="space-y-5">
           {/* 요약 카드 */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-gray-400">총 매출</p>
@@ -273,7 +298,7 @@ export default function Sales() {
           </div>
 
           {/* 결제 수단 & 최근 결제 */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <h3 className="font-bold text-gray-900 mb-4">결제 수단</h3>
               {methodData.length === 0 ? (
@@ -329,50 +354,90 @@ export default function Sales() {
 
       {tab === 'list' && (
         <div className="bg-white rounded-2xl border border-gray-100">
-          {monthPayments.length === 0 ? (
+          <div className="p-3 border-b border-gray-100 flex flex-col lg:flex-row gap-2 lg:items-center">
+            <label className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={listSearch}
+                onChange={e => setListSearch(e.target.value)}
+                placeholder="고객명, 구분, 결제수단, 메모 검색"
+                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                aria-label="결제 내역 검색"
+              />
+            </label>
+            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+              <select
+                value={listType}
+                onChange={e => setListType(e.target.value as 'all' | Payment['type'])}
+                className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
+                aria-label="결제 구분 필터"
+              >
+                <option value="all">전체 구분</option>
+                <option value="single_treatment">단건 시술</option>
+                <option value="program">프로그램</option>
+                <option value="product">제품 판매</option>
+                <option value="other">기타</option>
+              </select>
+              <select
+                value={listMethod}
+                onChange={e => setListMethod(e.target.value as 'all' | PaymentMethod)}
+                className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
+                aria-label="결제 수단 필터"
+              >
+                <option value="all">전체 결제수단</option>
+                {PAYMENT_METHODS.map(method => <option key={method} value={method}>{method}</option>)}
+              </select>
+            </div>
+            <span className="text-xs text-gray-400 whitespace-nowrap">{listPayments.length}건 표시</span>
+          </div>
+          {listPayments.length === 0 ? (
             <div className="text-center py-12">
               <DollarSign size={40} className="text-gray-200 mx-auto mb-3" />
-              <p className="text-gray-400">이번 달 결제 내역이 없어요</p>
+              <p className="text-gray-400">조건에 맞는 결제 내역이 없어요</p>
               <button onClick={() => setShowModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
                 결제 등록하기
               </button>
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-50">
-                <span>날짜</span>
-                <span className="col-span-2">고객</span>
-                <span>구분</span>
-                <span>결제 방법</span>
-                <span className="text-right">금액</span>
-              </div>
-              {[...monthPayments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate)).map(p => (
-                <div key={p.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
-                  <span className="text-gray-500 text-xs">{p.paymentDate}</span>
-                  <span className="col-span-2 font-medium text-gray-800">
-                    {p.customerName || '—'}
-                    {p.discountAmount > 0 && <span className="ml-1.5 text-[11px] text-orange-500">-{formatPrice(p.discountAmount)}</span>}
-                  </span>
-                  <span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
-                      {p.typeLabel}
-                    </span>
-                  </span>
-                  <span className="text-gray-500 text-xs">{p.paymentMethod}</span>
-                  <span className="flex items-center justify-end gap-1.5">
-                    <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
-                    <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 수정">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 삭제">
-                      <Trash2 size={13} />
-                    </button>
-                  </span>
+              <div className="overflow-auto max-h-[65vh]">
+                <div className="min-w-[720px]">
+                  <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
+                    <span>날짜</span>
+                    <span className="col-span-2">고객</span>
+                    <span>구분</span>
+                    <span>결제 방법</span>
+                    <span className="text-right">금액</span>
+                  </div>
+                  {listPayments.map(p => (
+                    <div key={p.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
+                      <span className="text-gray-500 text-xs">{p.paymentDate}</span>
+                      <span className="col-span-2 font-medium text-gray-800">
+                        {p.customerName || '—'}
+                        {p.discountAmount > 0 && <span className="ml-1.5 text-[11px] text-orange-500">-{formatPrice(p.discountAmount)}</span>}
+                      </span>
+                      <span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                          {p.typeLabel}
+                        </span>
+                      </span>
+                      <span className="text-gray-500 text-xs">{p.paymentMethod}</span>
+                      <span className="flex items-center justify-end gap-1.5">
+                        <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
+                        <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 수정">
+                          <Pencil size={13} />
+                        </button>
+                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 삭제">
+                          <Trash2 size={13} />
+                        </button>
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
               <div className="px-4 py-3 bg-gray-50 rounded-b-2xl flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-600">합계 {monthPayments.length}건</span>
-                <span className="text-base font-bold text-gray-900">{formatPrice(thisSummary.total)}</span>
+                <span className="text-sm font-medium text-gray-600">표시 합계 {listPayments.length}건</span>
+                <span className="text-base font-bold text-gray-900">{formatPrice(listTotal)}</span>
               </div>
             </div>
           )}

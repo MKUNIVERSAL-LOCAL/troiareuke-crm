@@ -625,7 +625,9 @@ async function loadFromSupabase<T>(
       console.error(`[Store] ${table} 로드 실패:`, error.message);
       return null;
     }
-    if (!data || data.length === 0) return null; // 빈 데이터면 null → 샘플 데이터 폴백
+    // 정상 조회된 빈 배열은 운영 지점의 실제 상태다. null로 돌리면 이전 기기의
+    // localStorage가 다시 노출되어 삭제된 데이터나 다른 환경의 데이터가 보일 수 있다.
+    if (!data) return [];
     return data.map(fromDb);
   } catch (e) {
     console.error(`[Store] ${table} 로드 예외:`, e);
@@ -692,7 +694,12 @@ export async function initializeStores(): Promise<void> {
       if (staff !== null) _staff = staff;
       if (services !== null) _services = services;
       if (reservations !== null) _reservations = reservations;
-      if (settings !== null) _settings = settings;
+      if (settings !== null) {
+        _settings = settings;
+        window.dispatchEvent(new CustomEvent('crm:shop-settings-changed', {
+          detail: { name: settings.name },
+        }));
+      }
       if (messageTemplates !== null) _messageTemplates = messageTemplates;
       if (messageHistory !== null) _messageHistory = messageHistory;
 
@@ -1110,6 +1117,7 @@ export const ProductSaleStore = {
     if (_productSales !== null) return _productSales;
     const stored = getList<ProductSale>(shopKey('product_sales'));
     if (stored.length > 0) { _productSales = stored; return stored; }
+    _productSales = [];
     return [];
   },
 
@@ -1158,6 +1166,13 @@ export const ProductSaleStore = {
   },
 
   delete(id: string): void {
+    const sale = this.getAll().find(item => item.id === id);
+    if (sale?.productId) {
+      // 판매 취소 시 차감했던 재고를 복구한다. adjustStock은 전달 수량을 빼므로 음수로 전달.
+      ProductStore.adjustStock(sale.productId, -sale.quantity);
+    }
+    const linkedPayments = PaymentStore.getAll().filter(payment => payment.referenceId === id);
+    linkedPayments.forEach(payment => PaymentStore.delete(payment.id));
     const all = this.getAll().filter(s => s.id !== id);
     _productSales = all;
     saveList(shopKey('product_sales'), all);
@@ -1427,16 +1442,25 @@ export const ReservationStore = {
 
   updateStatus(id: string, status: Reservation['status']): Reservation | null {
     const reservation = this.getAll().find(r => r.id === id);
+    const previousStatus = reservation?.status;
     const result = this.update(id, { status });
 
-    // When reservation is completed, update customer's lastVisitDate
-    if (status === 'completed' && reservation?.customerId) {
+    // 완료 상태를 반복 저장해도 방문 수가 중복 증가하지 않도록 상태 전환 때만 반영한다.
+    if (reservation?.customerId && previousStatus !== status) {
       const customer = CustomerStore.getById(reservation.customerId);
       if (customer && !customer.id.startsWith('sample_')) {
-        CustomerStore.update(reservation.customerId, {
-          lastVisitDate: reservation.date || today(),
-          totalVisits: (customer.totalVisits || 0) + 1,
-        });
+        if (status === 'completed') {
+          CustomerStore.update(reservation.customerId, {
+            lastVisitDate: !customer.lastVisitDate || reservation.date > customer.lastVisitDate
+              ? reservation.date
+              : customer.lastVisitDate,
+            totalVisits: (customer.totalVisits || 0) + 1,
+          });
+        } else if (previousStatus === 'completed') {
+          CustomerStore.update(reservation.customerId, {
+            totalVisits: Math.max(0, (customer.totalVisits || 0) - 1),
+          });
+        }
       }
     }
 
@@ -1444,6 +1468,15 @@ export const ReservationStore = {
   },
 
   delete(id: string): void {
+    const reservation = this.getAll().find(r => r.id === id);
+    if (reservation?.status === 'completed' && reservation.customerId) {
+      const customer = CustomerStore.getById(reservation.customerId);
+      if (customer && !customer.id.startsWith('sample_')) {
+        CustomerStore.update(reservation.customerId, {
+          totalVisits: Math.max(0, (customer.totalVisits || 0) - 1),
+        });
+      }
+    }
     const all = this.getAll().filter(r => r.id !== id);
     _reservations = all;
     saveList(shopKey('reservations'), all);
@@ -1480,6 +1513,10 @@ export const SettingsStore = {
       const dbRow = { ...toDbSettings(updated), branch_id: getShopId() };
       sbUpsert('shop_settings', dbRow);
     }
+
+    window.dispatchEvent(new CustomEvent('crm:shop-settings-changed', {
+      detail: { name: updated.name },
+    }));
 
     return updated;
   },
@@ -1534,6 +1571,7 @@ export const MessageHistoryStore = {
     if (_messageHistory !== null) return _messageHistory;
     const stored = getList<MessageHistory>(shopKey('msg_history'));
     if (stored.length > 0) { _messageHistory = stored; return stored; }
+    _messageHistory = [];
     return [];
   },
 

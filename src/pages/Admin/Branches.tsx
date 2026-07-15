@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info } from 'lucide-react';
+import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { createBranchAdmin } from '../../lib/adminApi';
 import { format, parseISO } from 'date-fns';
@@ -37,6 +37,8 @@ export default function Branches() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [adminPending, setAdminPending] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   useEffect(() => { loadBranches(); }, []);
 
@@ -159,9 +161,24 @@ export default function Branches() {
     loadBranches();
   }
 
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredBranches = branches.filter(branch => {
+    const statusMatches = statusFilter === 'all'
+      || (statusFilter === 'active' ? branch.is_active : !branch.is_active);
+    const planLabel = planLabels[branch.plan]?.label || branch.plan;
+    const searchMatches = !normalizedSearch || [
+      branch.name,
+      branch.address || '',
+      branch.phone || '',
+      branch.shop_type || '',
+      planLabel,
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return statusMatches && searchMatches;
+  });
+
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">지점 관리</h1>
           <p className="text-slate-400 text-sm mt-1">지점을 추가하고 관리자 계정을 발급하세요</p>
@@ -175,21 +192,51 @@ export default function Branches() {
         </button>
       </div>
 
+      <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-3 mb-4 flex flex-col md:flex-row gap-3 md:items-center">
+        <label className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="지점명, 주소, 연락처, 유형, 플랜 검색"
+            className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+            aria-label="지점 검색"
+          />
+        </label>
+        <div className="flex gap-1 p-1 bg-slate-800 rounded-xl overflow-x-auto no-scrollbar">
+          {([
+            ['all', '전체'],
+            ['active', '운영 중'],
+            ['inactive', '비활성'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${statusFilter === value ? 'bg-blue-500/20 text-blue-300' : 'text-slate-400'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-slate-500 whitespace-nowrap">{filteredBranches.length}개 지점</span>
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : branches.length === 0 ? (
+      ) : filteredBranches.length === 0 ? (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">
           <Building2 size={32} className="text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 font-medium">등록된 지점이 없습니다</p>
-          <p className="text-slate-600 text-sm mt-1">위의 "지점 추가" 버튼으로 첫 지점을 등록하세요</p>
+          <p className="text-slate-400 font-medium">조건에 맞는 지점이 없습니다</p>
+          <p className="text-slate-600 text-sm mt-1">검색어나 상태 필터를 바꿔보세요</p>
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-auto max-h-[70vh]">
+          <table className="w-full min-w-[850px]">
             <thead>
-              <tr className="border-b border-slate-700/30">
+              <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">지점명</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">유형</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">플랜</th>
@@ -199,7 +246,7 @@ export default function Branches() {
               </tr>
             </thead>
             <tbody>
-              {branches.map(b => {
+              {filteredBranches.map(b => {
                 const plan = planLabels[b.plan] || planLabels.trial;
                 return (
                   <tr key={b.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
@@ -254,6 +301,7 @@ export default function Branches() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

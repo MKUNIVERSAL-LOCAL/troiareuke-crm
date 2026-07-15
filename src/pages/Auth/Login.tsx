@@ -5,10 +5,10 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const features = [
   '고객 관리 · 예약 · 시술 기록 통합',
-  '네이버 예약 자동 연동',
-  'SMS · 카카오 채널 자동 발송',
+  '네이버 예약 수동 등록 · 연동 준비',
+  'SMS · 카카오 메시지 초안 관리',
   '매출 분석 · 재고 관리',
-  'AI 챗봇으로 데이터 분석 (ChatGPT · Gemini)',
+  '피부 상담 · 홈케어 추천 기록',
 ];
 
 export default function Login() {
@@ -60,7 +60,7 @@ export default function Login() {
             에스테틱 샵 운영의<br />모든 것을 한 곳에서
           </h2>
           <p className="text-blue-200 text-sm leading-relaxed">
-            피부관리실 · 에스테틱샵 전용<br />AI 분석 탑재 CRM 솔루션
+            피부관리실 · 에스테틱샵 전용<br />고객·예약·시술 통합 CRM 솔루션
           </p>
           <div className="space-y-3 pt-4">
             {features.map(f => (
