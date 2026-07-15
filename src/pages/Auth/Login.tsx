@@ -2,7 +2,7 @@
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { requestPasswordReset } from '../../lib/authApi';
 
 const features = [
   '고객 관리 · 예약 · 시술 기록 통합',
@@ -44,22 +44,10 @@ export default function Login() {
       setResetError('가입할 때 사용한 이메일을 입력해주세요.');
       return;
     }
-    if (!isSupabaseConfigured) {
-      setResetError('비밀번호 재설정 서버가 연결되어 있지 않습니다. 관리자에게 문의해주세요.');
-      return;
-    }
-
     setResetLoading(true);
     setResetError('');
     try {
-      const configuredUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, '');
-      const browserUrl = window.location.protocol === 'http:' || window.location.protocol === 'https:'
-        ? window.location.origin
-        : '';
-      const publicAppUrl = configuredUrl || browserUrl || 'https://troiareuke-crm.vercel.app';
-      const redirectTo = `${publicAppUrl}/reset-password`;
-      const { error: resetRequestError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo });
-      if (resetRequestError) throw resetRequestError;
+      await requestPasswordReset(normalizedEmail);
       setResetSent(true);
     } catch (e: any) {
       const message = e?.message || '';
@@ -244,7 +232,7 @@ export default function Login() {
               <div className="mt-5">
                 <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">메일을 확인해주세요</h2>
                 <p className="mt-2 text-sm leading-6 text-gray-500">
-                  입력한 이메일로 비밀번호 재설정 링크를 보냈습니다. 메일이 보이지 않으면 스팸함도 확인해주세요.
+                  가입된 이메일이면 비밀번호 재설정 링크가 발송됩니다. 메일이 보이지 않으면 스팸함도 확인해주세요.
                 </p>
                 <button
                   type="button"

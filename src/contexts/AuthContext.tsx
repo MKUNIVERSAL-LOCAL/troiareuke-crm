@@ -1,6 +1,14 @@
 // 🔒 CORE — 보호 파일(코어 잠금). 수정 금지. 변경 필요 시 docs/CORE-LOCK.md 의 CORE_EDIT=1 우회 절차.
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import {
+  isAuthApiConfigured,
+  loginWithAuthApi,
+  logoutFromAuthApi,
+  restoreAuthApiSession,
+  signupWithAuthApi,
+  updateAuthProfile,
+} from '../lib/authApi';
 import { recordLoginLog } from '../lib/loginLog';
 import { initializeStores, resetStoreCache, safeSetItem } from '../lib/store';
 
@@ -37,7 +45,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (data: SignupData) => Promise<void>;
   logout: () => Promise<void>;
-  completeOnboarding: (shopData: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) => void;
+  completeOnboarding: (shopData: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -73,6 +81,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try { setUser(JSON.parse(stored)); } catch { localStorage.removeItem(STORAGE_KEY); }
+    }
+
+    if (isAuthApiConfigured) {
+      const timeout = setTimeout(() => setIsLoading(false), 5000);
+      restoreAuthApiSession()
+        .then(profile => {
+          if (profile) saveUser(profile);
+        })
+        .finally(() => {
+          clearTimeout(timeout);
+          setIsLoading(false);
+        });
+      return () => clearTimeout(timeout);
     }
 
     if (isSupabaseConfigured) {
@@ -162,6 +183,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── 로그인 ───────────────────────────────────────────────────
   const login = async (email: string, password: string) => {
+    if (isAuthApiConfigured) {
+      try {
+        const profile = await loginWithAuthApi(email.trim().toLowerCase(), password);
+        await recordLoginLog({
+          userId: profile.id,
+          email: profile.email,
+          branchId: profile.branchId,
+          branchName: profile.branchName,
+          status: 'success',
+        });
+        saveUser(profile);
+        return;
+      } catch (error: any) {
+        await recordLoginLog({ email, status: 'failed', failReason: error?.message || '중앙 계정 로그인 실패' });
+        throw error;
+      }
+    }
+
     if (isSupabaseConfigured) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -208,6 +247,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── 회원가입 ─────────────────────────────────────────────────
   const signup = async (data: SignupData) => {
+    if (isAuthApiConfigured) {
+      const profile = await signupWithAuthApi({
+        ...data,
+        email: data.email.trim().toLowerCase(),
+      });
+      saveUser(profile);
+      return;
+    }
+
     if (isSupabaseConfigured) {
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email,
@@ -259,7 +307,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const LOGOUT_PRESERVE = new Set(['troiareuke_local_users']);
 
   const logout = async () => {
-    if (isSupabaseConfigured) {
+    if (isAuthApiConfigured) {
+      await logoutFromAuthApi();
+    } else if (isSupabaseConfigured) {
       await supabase.auth.signOut();
     }
     setUser(null);
@@ -288,6 +338,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── 온보딩 완료 ──────────────────────────────────────────────
   const completeOnboarding = async (shopData: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) => {
     if (!user) return;
+
+    if (isAuthApiConfigured) {
+      const updated = await updateAuthProfile(shopData);
+      saveUser(updated);
+      return;
+    }
 
     // ★ branchId는 localStorage에서 이미 확정된 값을 사용 (finish()에서 먼저 설정함)
     const stored = localStorage.getItem(STORAGE_KEY);

@@ -1,0 +1,41 @@
+services:
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: crm_auth
+      POSTGRES_USER: crm_auth
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - crm_auth_database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_auth -d crm_auth"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  auth-api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      DATABASE_URL: ${DATABASE_URL}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+      RESET_TOKEN_MINUTES: ${RESET_TOKEN_MINUTES:-30}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      MAIL_FROM: ${MAIL_FROM}
+    ports:
+      - "8787:8787"
+
+volumes:
+  crm_auth_database:
