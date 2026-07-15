@@ -16,6 +16,7 @@ import Settings from './pages/Settings/index';
 import Programs from './pages/Programs/index';
 import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
+import ResetPassword from './pages/Auth/ResetPassword';
 import Onboarding from './pages/Onboarding/index';
 import AiChat from './pages/AiChat/index';
 
@@ -82,6 +83,7 @@ function AppRoutes() {
       {/* Public routes */}
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/admin/login" element={<PublicRoute><AdminLogin /></PublicRoute>} />
 
