@@ -165,16 +165,20 @@ const IS_ELECTRON =
   typeof navigator !== 'undefined' &&
   navigator.userAgent.includes('Electron');
 
-const Router = IS_ELECTRON ? HashRouter : BrowserRouter;
+function AppContent() {
+  return (
+    <AuthProvider>
+      <UpdateNotification />
+      <SystemListeners />
+      <AppRoutes />
+    </AuthProvider>
+  );
+}
 
 export default function App() {
-  return (
-    <Router>
-      <AuthProvider>
-        <UpdateNotification />
-        <SystemListeners />
-        <AppRoutes />
-      </AuthProvider>
-    </Router>
-  );
+  if (IS_ELECTRON) {
+    return <HashRouter><AppContent /></HashRouter>;
+  }
+
+  return <BrowserRouter basename={import.meta.env.BASE_URL}><AppContent /></BrowserRouter>;
 }

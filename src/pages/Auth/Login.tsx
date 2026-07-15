@@ -2,7 +2,9 @@
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { requestPasswordReset } from '../../lib/authApi';
+import { isAuthApiConfigured, requestPasswordReset } from '../../lib/authApi';
+import { getPasswordResetRedirectUrl } from '../../lib/appUrl';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 const features = [
   '고객 관리 · 예약 · 시술 기록 통합',
@@ -47,14 +49,25 @@ export default function Login() {
     setResetLoading(true);
     setResetError('');
     try {
-      await requestPasswordReset(normalizedEmail);
+      if (isAuthApiConfigured) {
+        await requestPasswordReset(normalizedEmail);
+      } else if (isSupabaseConfigured) {
+        const { error: resetRequestError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+          redirectTo: getPasswordResetRedirectUrl(),
+        });
+        if (resetRequestError) throw resetRequestError;
+      } else {
+        throw new Error('비밀번호 재설정 서버가 연결되어 있지 않습니다. 관리자에게 문의해주세요.');
+      }
       setResetSent(true);
     } catch (e: any) {
-      const message = e?.message || '';
-      if (/rate limit|too many/i.test(message)) {
+      const message = `${e?.code || ''} ${e?.message || ''}`.trim();
+      if (/rate limit|too many|over_email_send_rate_limit/i.test(message)) {
         setResetError('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
       } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(message)) {
         setResetError('서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
+      } else if (/설정되지 않|연결되어 있지 않/.test(message)) {
+        setResetError(message);
       } else {
         setResetError('재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
       }

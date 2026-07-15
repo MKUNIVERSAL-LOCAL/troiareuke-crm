@@ -1,7 +1,21 @@
 # 트로이아르케 CRM — 배포 가이드
 
 > 단독 실행 가능한 단계별 배포 매뉴얼 (한국어)  
-> 최종 업데이트: 2026-05-07 | 대상: 사내 파일럿 → 외부 베타
+> 최종 업데이트: 2026-07-15 | 대상: 사내 파일럿 → 외부 베타
+
+## 2026-07-15 비밀번호 재설정 상용 배포 게이트
+
+상용 인증 정본은 클라우드 Supabase입니다. `server/`와 `VITE_AUTH_API_URL`은 격리 테스트 전용이며 상용 빌드에 주입하지 않습니다.
+
+배포 전에 아래 항목을 모두 완료해야 합니다.
+
+1. GitHub Actions의 repository variable `VITE_PUBLIC_APP_URL`을 실제 공개 앱 기본 URL로 설정합니다. 예: `https://<org>.github.io/troiareuke-crm` (후행 `/` 없음).
+2. Supabase Dashboard → Authentication → URL Configuration에서 **Site URL**을 같은 공개 앱 기본 URL로 설정합니다.
+3. 같은 화면의 **Redirect URLs**에 `${VITE_PUBLIC_APP_URL}/reset-password`를 정확히 등록합니다. 운영 주소에는 와일드카드보다 정확한 경로를 사용합니다.
+4. 배포 후 테스트 전용 계정으로 로그인 화면의 비밀번호 찾기를 요청하고, 실제 수신 메일 링크가 공개 앱의 `/reset-password`로 열리는지 확인합니다.
+5. 새 비밀번호 저장, 로그아웃, 새 비밀번호 재로그인까지 한 번 왕복합니다. 이 검증 전에는 상용 릴리스 완료로 판정하지 않습니다.
+
+> Supabase 이메일 템플릿을 커스터마이즈했다면 링크가 `{{ .RedirectTo }}`를 사용하는지도 확인합니다. `redirectTo` 주소가 Redirect URLs 허용목록과 일치하지 않으면 의도한 복구 화면으로 돌아오지 않을 수 있습니다.
 
 ---
 

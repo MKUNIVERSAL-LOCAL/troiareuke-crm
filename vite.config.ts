@@ -30,6 +30,12 @@ function cspMetaPlugin(): Plugin {
 
 // Electron 빌드 여부 — BUILD_TARGET=electron npm run build 로 전달
 const isElectronBuild = process.env.BUILD_TARGET === 'electron'
+const appBase =
+  process.env.DEPLOY_TARGET === 'ghpages'
+    ? '/troiareuke-crm/'
+    : isElectronBuild
+      ? './'
+      : '/'
 
 export default defineConfig({
   plugins: [
@@ -49,24 +55,24 @@ export default defineConfig({
               background_color: '#ffffff',
               display: 'standalone',
               orientation: 'portrait',
-              start_url: '/',
-              scope: '/',
+              start_url: appBase,
+              scope: appBase,
               lang: 'ko-KR',
               icons: [
                 {
-                  src: '/icons/icon-192.png',
+                  src: `${appBase}icons/icon-192.png`,
                   sizes: '192x192',
                   type: 'image/png',
                   purpose: 'any',
                 },
                 {
-                  src: '/icons/icon-512.png',
+                  src: `${appBase}icons/icon-512.png`,
                   sizes: '512x512',
                   type: 'image/png',
                   purpose: 'any',
                 },
                 {
-                  src: '/icons/icon-512-maskable.png',
+                  src: `${appBase}icons/icon-512-maskable.png`,
                   sizes: '512x512',
                   type: 'image/png',
                   purpose: 'maskable',
@@ -128,12 +134,7 @@ export default defineConfig({
       : []),
   ],
   // GitHub Pages: /troiareuke-crm/, Electron: ./  Web/PWA: /
-  base:
-    process.env.DEPLOY_TARGET === 'ghpages'
-      ? '/troiareuke-crm/'
-      : isElectronBuild
-        ? './'
-        : '/',
+  base: appBase,
   build: {
     outDir: 'dist',
     emptyOutDir: true,
