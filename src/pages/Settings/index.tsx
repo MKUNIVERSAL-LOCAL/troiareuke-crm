@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle } from 'lucide-react';
+import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Search } from 'lucide-react';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
@@ -42,6 +42,8 @@ export default function Settings() {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [serviceCategory, setServiceCategory] = useState('all');
   const [saved, setSaved] = useState<string | null>(null);
 
   // Subscription state
@@ -418,8 +420,18 @@ export default function Settings() {
     flash('삭제 완료');
   };
 
-  // Group services by category
-  const servicesByCategory = services.reduce<Record<string, Service[]>>((acc, svc) => {
+  const serviceCategories = Array.from(new Set(services.map(svc => svc.category))).sort((a, b) => a.localeCompare(b, 'ko'));
+  const normalizedServiceSearch = serviceSearch.trim().toLowerCase();
+  const filteredServices = services.filter(svc => {
+    const matchesSearch = !normalizedServiceSearch
+      || svc.name.toLowerCase().includes(normalizedServiceSearch)
+      || (svc.description || '').toLowerCase().includes(normalizedServiceSearch);
+    const matchesCategory = serviceCategory === 'all' || svc.category === serviceCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  // Group filtered services by category
+  const servicesByCategory = filteredServices.reduce<Record<string, Service[]>>((acc, svc) => {
     if (!acc[svc.category]) acc[svc.category] = [];
     acc[svc.category].push(svc);
     return acc;
@@ -886,24 +898,59 @@ export default function Settings() {
             {tab === 'services' && (
               <SettingCard title="시술 항목 관리">
                 <p className="text-sm text-gray-500 mb-4">시술 항목을 추가, 수정, 삭제할 수 있습니다.</p>
-                <button
-                  onClick={openAddService}
-                  className="mb-4 px-4 py-2 text-sm font-medium bg-purple-50 text-purple-700 rounded-xl border border-purple-200 hover:bg-purple-100 flex items-center gap-1.5"
-                >
-                  <Plus size={14} /> 시술 추가
-                </button>
-                <div className="space-y-2">
-                  {Object.keys(servicesByCategory).length === 0 && (
+                <div className="flex flex-col lg:flex-row gap-3 mb-4">
+                  <div className="relative flex-1 min-w-0">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={serviceSearch}
+                      onChange={e => setServiceSearch(e.target.value)}
+                      placeholder="시술명 또는 설명 검색"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl outline-none focus:border-purple-400"
+                      aria-label="시술 항목 검색"
+                    />
+                  </div>
+                  <select
+                    value={serviceCategory}
+                    onChange={e => setServiceCategory(e.target.value)}
+                    className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-purple-400 lg:w-44"
+                    aria-label="시술 카테고리 필터"
+                  >
+                    <option value="all">전체 카테고리</option>
+                    {serviceCategories.map(category => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={openAddService}
+                    className="px-4 py-2 text-sm font-medium bg-purple-50 text-purple-700 rounded-xl border border-purple-200 hover:bg-purple-100 flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    <Plus size={14} /> 시술 추가
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mb-3">전체 {services.length}개 중 {filteredServices.length}개 표시</p>
+                <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+                  {services.length === 0 && (
                     <p className="text-sm text-gray-400 py-4 text-center">등록된 시술이 없습니다.</p>
+                  )}
+                  {services.length > 0 && filteredServices.length === 0 && (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-gray-400">조건에 맞는 시술이 없습니다.</p>
+                      <button
+                        onClick={() => { setServiceSearch(''); setServiceCategory('all'); }}
+                        className="mt-2 text-xs text-purple-600 hover:text-purple-800"
+                      >
+                        검색과 필터 초기화
+                      </button>
+                    </div>
                   )}
                   {Object.entries(servicesByCategory).map(([cat, svcs]) => (
                     <div key={cat}>
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wider px-2 py-2">{cat}</p>
                       <div className="space-y-1">
                         {svcs.map(svc => (
-                          <div key={svc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl text-sm">
-                            <span className="text-gray-700">{svc.name}</span>
-                            <div className="flex items-center gap-3">
+                          <div key={svc.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-gray-50 rounded-xl text-sm">
+                            <span className="text-gray-700 min-w-0 break-words">{svc.name}</span>
+                            <div className="flex items-center justify-end gap-3 shrink-0">
                               <span className="text-gray-500">{svc.duration}분</span>
                               <span className="font-semibold text-gray-800">{svc.price.toLocaleString()}원</span>
                               <button
