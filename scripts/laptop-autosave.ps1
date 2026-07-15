@@ -45,6 +45,15 @@ try {
     $changed = @($changed | Where-Object { $_ } | Sort-Object -Unique)
 
     if ($changed.Count -eq 0) {
+        $aheadText = (& git rev-list --count '@{u}..HEAD' 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and $aheadText -match '^\d+$' -and [int]$aheadText -gt 0) {
+            & git push --quiet origin "HEAD:refs/heads/$ExpectedBranch"
+            if ($LASTEXITCODE -ne 0) {
+                Write-AutosaveLog "RETRY_PUSH_FAILED pending=$aheadText"
+                exit 1
+            }
+            Write-AutosaveLog "RETRY_PUSH_OK commits=$aheadText"
+        }
         exit 0
     }
 
