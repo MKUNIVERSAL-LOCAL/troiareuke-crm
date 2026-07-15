@@ -1,8 +1,9 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2 } from 'lucide-react';
+import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { MessageTemplateStore, MessageHistoryStore, CustomerStore, SettingsStore } from '../../lib/store';
+import { sendMessages } from '../../lib/messagingGateway';
 import type { MessageType, MessageTemplate, MessageHistory } from '../../types';
 import clsx from 'clsx';
 
@@ -74,7 +75,7 @@ export default function Messaging() {
         </div>
 
         {tab === 'send' && <SendPanel onSend={() => setShowSendModal(true)} reloadKey={reloadKey} />}
-        {tab === 'templates' && <TemplatesPanel onSelect={setSelectedTemplate} reloadKey={reloadKey} onReload={reload} />}
+        {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
         {tab === 'history' && <HistoryPanel reloadKey={reloadKey} />}
       </div>
 
@@ -215,12 +216,25 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
   const [cat, setCat] = useState('전체');
   const [templates, setTemplates] = useState<MessageTemplate[]>(MessageTemplateStore.getAll());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editing, setEditing] = useState<MessageTemplate | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     setTemplates(MessageTemplateStore.getAll());
   }, [reloadKey]);
 
-  const filtered = templates.filter(t => cat === '전체' || t.category === cat);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = templates.filter(template => {
+    const categoryMatches = cat === '전체' || template.category === cat;
+    const searchMatches = !normalizedSearch || [
+      template.name,
+      template.title || '',
+      template.content,
+      template.category,
+      MSG_TYPE_LABELS[template.type] || template.type,
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return categoryMatches && searchMatches;
+  });
 
   const handleDelete = (id: string) => {
     MessageTemplateStore.delete(id);
@@ -228,15 +242,27 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
     onReload();
   };
 
-  const handleAdded = () => {
+  const handleSaved = () => {
     setShowAddModal(false);
+    setEditing(null);
     setTemplates(MessageTemplateStore.getAll());
     onReload();
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
+        <label className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="템플릿명, 제목, 내용 검색"
+            className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+            aria-label="메시지 템플릿 검색"
+          />
+        </label>
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
         {categories.map(c => (
           <button
             key={c}
@@ -249,15 +275,22 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
             {c}
           </button>
         ))}
+        </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="ml-auto flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg border border-purple-200 hover:bg-purple-100"
+          className="lg:ml-auto flex items-center justify-center gap-1 px-3 py-2.5 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg border border-purple-200 hover:bg-purple-100 whitespace-nowrap"
         >
           <Plus size={14} /> 템플릿 추가
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {filtered.length === 0 && (
+          <div className="md:col-span-2 bg-white rounded-2xl border border-gray-100 py-14 text-center">
+            <FileText size={34} className="text-gray-200 mx-auto mb-3" />
+            <p className="text-sm text-gray-500">조건에 맞는 템플릿이 없어요</p>
+          </div>
+        )}
         {filtered.map(t => (
           <div key={t.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
             <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
@@ -271,6 +304,13 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setEditing(t)}
+                  className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                  title="수정"
+                >
+                  <Pencil size={14} />
+                </button>
                 <button
                   onClick={() => handleDelete(t.id)}
                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
@@ -301,17 +341,20 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
         ))}
       </div>
 
-      {showAddModal && <AddTemplateModal onClose={() => setShowAddModal(false)} onSaved={handleAdded} />}
+      {showAddModal && <TemplateModal onClose={() => setShowAddModal(false)} onSaved={handleSaved} />}
+      {editing && <TemplateModal editing={editing} onClose={() => setEditing(null)} onSaved={handleSaved} />}
     </div>
   );
 }
 
-function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState<MessageTemplate['type']>('sms');
-  const [category, setCategory] = useState('예약');
-  const [content, setContent] = useState('');
-  const [variablesStr, setVariablesStr] = useState('');
+function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplate; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!editing;
+  const [name, setName] = useState(editing?.name ?? '');
+  const [type, setType] = useState<MessageTemplate['type']>(editing?.type ?? 'sms');
+  const [category, setCategory] = useState(editing?.category ?? '예약');
+  const [title, setTitle] = useState(editing?.title ?? '');
+  const [content, setContent] = useState(editing?.content ?? '');
+  const [variablesStr, setVariablesStr] = useState((editing?.variables ?? []).join(', '));
 
   const handleSave = () => {
     if (!name.trim() || !content.trim()) return;
@@ -319,18 +362,24 @@ function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
       .split(',')
       .map(v => v.trim())
       .filter(Boolean);
-    MessageTemplateStore.save({
+    const payload = {
       name: name.trim(),
       type,
       category,
+      title: title.trim() || undefined,
       content: content.trim(),
       variables,
-    });
+    };
+    if (isEdit && editing) {
+      MessageTemplateStore.update(editing.id, payload);
+    } else {
+      MessageTemplateStore.save(payload);
+    }
     onSaved();
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="템플릿 추가" size="lg">
+    <Modal isOpen={true} onClose={onClose} title={isEdit ? '템플릿 수정' : '템플릿 추가'} size="lg">
       <div className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">템플릿 이름 *</label>
@@ -387,6 +436,19 @@ function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
           </div>
         </div>
 
+        {(type === 'kakao-channel' || type === 'lms' || type === 'mms') && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">제목 (카카오·LMS·MMS)</label>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              placeholder="예: [트로이아르케] 예약 안내"
+            />
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">메시지 내용 *</label>
           <textarea
@@ -416,7 +478,7 @@ function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
             disabled={!name.trim() || !content.trim()}
             className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            <Plus size={14} /> 저장
+            {isEdit ? <><Pencil size={14} /> 수정 저장</> : <><Plus size={14} /> 저장</>}
           </button>
         </div>
       </div>
@@ -426,10 +488,24 @@ function AddTemplateModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
 
 function HistoryPanel({ reloadKey }: { reloadKey: number }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>('all');
 
   useEffect(() => {
     setHistory(MessageHistoryStore.getAll());
   }, [reloadKey]);
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredHistory = history.filter(item => {
+    const statusMatches = statusFilter === 'all' || item.status === statusFilter;
+    const searchMatches = !normalizedSearch || [
+      item.templateName || '직접 작성',
+      item.content,
+      item.sentAt,
+      MSG_TYPE_LABELS[item.type] || item.type,
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return statusMatches && searchMatches;
+  });
 
   if (history.length === 0) {
     return (
@@ -453,40 +529,83 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
         <p className="text-sm font-bold text-gray-900">발송 이력</p>
         <p className="text-xs text-gray-400">최근 30일</p>
       </div>
-      <div className="divide-y divide-gray-50">
-        {history.map(h => (
-          <div key={h.id} className="px-6 py-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <div className={clsx(
-                  'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5',
-                  h.status === 'sent' ? 'bg-green-100' : 'bg-red-100'
-                )}>
-                  {h.status === 'sent'
-                    ? <CheckCircle size={16} className="text-green-600" />
-                    : <AlertCircle size={16} className="text-red-500" />
-                  }
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-bold text-gray-900">{h.templateName || '직접 작성'}</p>
-                    <span className={clsx('px-2 py-0.5 rounded text-[11px] font-medium', MSG_TYPE_COLORS[h.type])}>
-                      {MSG_TYPE_LABELS[h.type]}
-                    </span>
+      <div className="p-3 border-b border-gray-100 flex flex-col sm:flex-row gap-2 sm:items-center">
+        <label className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="템플릿명, 내용, 발송일 검색"
+            className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+            aria-label="발송 이력 검색"
+          />
+        </label>
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as 'all' | 'sent' | 'failed')}
+          className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
+          aria-label="발송 상태 필터"
+        >
+          <option value="all">전체 상태</option>
+          <option value="sent">성공</option>
+          <option value="failed">실패·미연동</option>
+        </select>
+      </div>
+      <div className="divide-y divide-gray-50 overflow-y-auto max-h-[65vh]">
+        {filteredHistory.length === 0 && (
+          <div className="py-14 text-center text-sm text-gray-400">조건에 맞는 발송 이력이 없어요</div>
+        )}
+        {filteredHistory.map(h => {
+          const isGatewayPending = h.status === 'failed' && h.successCount === 0 && (h.cost === 0 || h.cost === undefined);
+          return (
+            <div key={h.id} className="px-6 py-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className={clsx(
+                    'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5',
+                    h.status === 'sent' ? 'bg-green-100' : isGatewayPending ? 'bg-amber-100' : 'bg-red-100'
+                  )}>
+                    {h.status === 'sent'
+                      ? <CheckCircle size={16} className="text-green-600" />
+                      : isGatewayPending
+                        ? <AlertCircle size={16} className="text-amber-500" />
+                        : <AlertCircle size={16} className="text-red-500" />
+                    }
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{h.sentAt}</p>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-bold text-gray-900">{h.templateName || '직접 작성'}</p>
+                      <span className={clsx('px-2 py-0.5 rounded text-[11px] font-medium', MSG_TYPE_COLORS[h.type])}>
+                        {MSG_TYPE_LABELS[h.type]}
+                      </span>
+                      {isGatewayPending && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-700">미연동</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{h.sentAt}</p>
+                    {isGatewayPending && (
+                      <p className="text-[11px] text-amber-600 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-gray-800">{h.recipients}명 대상</p>
+                  {h.status === 'sent'
+                    ? <p className="text-xs text-green-500">성공 {h.successCount}명</p>
+                    : isGatewayPending
+                      ? <p className="text-xs text-amber-500">미발송 (미연동)</p>
+                      : <p className="text-xs text-red-400">실패 {h.failCount}명</p>
+                  }
+                  {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-400">실패 {h.failCount}명</p>}
+                  {h.status === 'sent' && h.cost !== undefined && h.cost > 0 && (
+                    <p className="text-[11px] text-gray-400 mt-1">{h.cost.toLocaleString()}원</p>
+                  )}
                 </div>
               </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-sm font-bold text-gray-800">{h.recipients}명 발송</p>
-                <p className="text-xs text-green-500">성공 {h.successCount}명</p>
-                {h.failCount > 0 && <p className="text-xs text-red-400">실패 {h.failCount}명</p>}
-                {h.cost !== undefined && <p className="text-[11px] text-gray-400 mt-1">{h.cost.toLocaleString()}원</p>}
-              </div>
+              <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{h.content}</p>
             </div>
-            <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{h.content}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -499,7 +618,8 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
   const [title, setTitle] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplate);
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [sendResult, setSendResult] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
+  const [resultMessage, setResultMessage] = useState('');
   const charLimit = msgType === 'sms' ? 90 : 1000;
 
   const customers = CustomerStore.getAll();
@@ -532,42 +652,105 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
 
   const estimatedCost = msgType === 'sms' ? recipientCount * 11 : msgType === 'lms' ? recipientCount * 25 : recipientCount * 5;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
 
-    MessageHistoryStore.save({
+    const result = await sendMessages({
       type: msgType,
-      templateId: selectedTemplate?.id,
-      templateName: selectedTemplate?.name,
-      title: title || undefined,
       content: content.trim(),
+      title: title || undefined,
       recipients: recipientCount,
-      successCount: recipientCount,
-      failCount: 0,
-      sentAt: new Date().toLocaleString(),
-      status: 'sent',
-      cost: estimatedCost,
     });
 
-    setSending(false);
-    setSent(true);
-    onSent();
-
-    setTimeout(() => {
-      onClose();
-    }, 1200);
+    if (result.pending) {
+      // 게이트웨이 미연동 — 발송되지 않았음을 명확히 기록
+      MessageHistoryStore.save({
+        type: msgType,
+        templateId: selectedTemplate?.id,
+        templateName: selectedTemplate?.name,
+        title: title || undefined,
+        content: content.trim(),
+        recipients: recipientCount,
+        successCount: 0,
+        failCount: recipientCount,
+        sentAt: new Date().toLocaleString(),
+        status: 'failed',
+        cost: 0,
+      });
+      setSending(false);
+      setSendResult('pending');
+      setResultMessage(result.reason ?? '게이트웨이 미연동');
+      onSent();
+    } else if (result.sent > 0) {
+      // 실제 발송 성공
+      MessageHistoryStore.save({
+        type: msgType,
+        templateId: selectedTemplate?.id,
+        templateName: selectedTemplate?.name,
+        title: title || undefined,
+        content: content.trim(),
+        recipients: recipientCount,
+        successCount: result.sent,
+        failCount: result.failed,
+        sentAt: new Date().toLocaleString(),
+        status: result.failed === 0 ? 'sent' : 'failed',
+        cost: estimatedCost,
+      });
+      setSending(false);
+      setSendResult('success');
+      onSent();
+      setTimeout(() => { onClose(); }, 1200);
+    } else {
+      // 발송 실패
+      MessageHistoryStore.save({
+        type: msgType,
+        templateId: selectedTemplate?.id,
+        templateName: selectedTemplate?.name,
+        title: title || undefined,
+        content: content.trim(),
+        recipients: recipientCount,
+        successCount: 0,
+        failCount: recipientCount,
+        sentAt: new Date().toLocaleString(),
+        status: 'failed',
+        cost: 0,
+      });
+      setSending(false);
+      setSendResult('error');
+      setResultMessage(result.reason ?? '발송 실패');
+      onSent();
+    }
   };
 
   return (
     <Modal isOpen={true} onClose={onClose} title="메시지 발송" size="lg">
-      {sent ? (
+      {sendResult === 'success' ? (
         <div className="flex flex-col items-center justify-center py-12">
           <CheckCircle size={48} className="text-green-500 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 완료!</p>
           <p className="text-sm text-gray-500 mt-1">{recipientCount}명에게 메시지가 발송되었습니다</p>
+        </div>
+      ) : sendResult === 'pending' ? (
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <AlertCircle size={48} className="text-amber-400 mb-3" />
+          <p className="text-lg font-bold text-gray-900">실제 발송이 되지 않았습니다</p>
+          <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+            메시지 발송 게이트웨이가 아직 연동되지 않았습니다.<br />
+            설정 &gt; 연동에서 준비 예정입니다.
+          </p>
+          <p className="text-xs text-gray-400 mt-3 bg-gray-50 rounded-lg px-3 py-2">{resultMessage}</p>
+          <p className="text-xs text-gray-400 mt-2">발송 이력에 '미연동' 사유로 기록되었습니다.</p>
+          <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
+        </div>
+      ) : sendResult === 'error' ? (
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <AlertCircle size={48} className="text-red-400 mb-3" />
+          <p className="text-lg font-bold text-gray-900">발송 실패</p>
+          <p className="text-xs text-gray-400 mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
+          <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
         </div>
       ) : (
         <div className="space-y-5">
@@ -679,10 +862,19 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
           {/* Schedule */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">발송 시간</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button className="px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-xl border border-purple-600">즉시 발송</button>
-              <button className="px-4 py-2 text-sm font-medium bg-white text-gray-600 rounded-xl border border-gray-200">예약 발송</button>
+              <button
+                type="button"
+                onClick={() => alert('예약 발송은 NAS 서버 연동 후 지원됩니다.')}
+                className="px-4 py-2 text-sm font-medium bg-white text-gray-400 rounded-xl border border-gray-200 flex items-center gap-1.5 cursor-not-allowed opacity-60"
+                title="NAS 서버 연동 후 지원 예정"
+              >
+                예약 발송
+                <HelpCircle size={12} className="text-gray-400" />
+              </button>
             </div>
+            <p className="text-[11px] text-gray-400 mt-1.5">예약 발송은 NAS 서버 연동 후 지원됩니다.</p>
           </div>
 
           {/* Cost estimate */}
@@ -701,10 +893,11 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
             <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
             <button
               onClick={handleSend}
-              disabled={sending || !content.trim()}
+              disabled={sending || !content.trim() || recipientCount === 0}
               className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={14} /> 발송하기
+              {sending ? <Clock size={14} className="animate-spin" /> : <Send size={14} />}
+              {sending ? '처리 중...' : '발송하기'}
             </button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen } from 'lucide-react';
+import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle } from 'lucide-react';
+import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore } from '../../lib/store';
@@ -31,7 +32,13 @@ const emptyServiceForm = { name: '', category: '', duration: 60, price: 0, descr
 export default function Settings() {
   const { user } = useAuth();
   const [tab, setTab] = useState<SettingTab>('shop');
-  const [settings, setSettings] = useState<ShopSettings>(() => SettingsStore.get());
+  const [settings, setSettings] = useState<ShopSettings>(() => {
+    const current = SettingsStore.get();
+    if (current.name === '내 에스테틱 샵' && user?.shopName) {
+      return { ...current, name: user.shopName };
+    }
+    return current;
+  });
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
@@ -42,6 +49,29 @@ export default function Settings() {
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [planChangeLoading, setPlanChangeLoading] = useState(false);
   const [planChangeError, setPlanChangeError] = useState<string | null>(null);
+
+  // SMS test send state
+  const [smsTestStatus, setSmsTestStatus] = useState<'idle' | 'sending' | 'done'>('idle');
+  const [smsTestMessage, setSmsTestMessage] = useState<string | null>(null);
+
+  const handleSmsTest = async () => {
+    setSmsTestStatus('sending');
+    setSmsTestMessage(null);
+    const result = await sendMessages({
+      type: 'sms',
+      content: '[트로이아르케 CRM] 테스트 발송 메시지입니다.',
+      recipients: 1,
+    });
+    if (result.pending) {
+      setSmsTestMessage('SMS 게이트웨이가 아직 연동되지 않았습니다 (NAS 서버 연동 후 지원). 실제 발송되지 않습니다.');
+    } else if (result.reason) {
+      setSmsTestMessage(`발송 실패: ${result.reason}`);
+    } else {
+      setSmsTestMessage(`발송 완료 (성공 ${result.sent}건)`);
+    }
+    setSmsTestStatus('done');
+    setTimeout(() => { setSmsTestStatus('idle'); setSmsTestMessage(null); }, 5000);
+  };
 
   // Backup state
   const [backupStatus, setBackupStatus] = useState<'idle' | 'saving' | 'done' | 'error'>('idle');
@@ -69,6 +99,8 @@ export default function Settings() {
   const loadSubscription = async () => {
     setSubscriptionLoading(true);
     try {
+      let fetchedFromRemote = false;
+
       if (isSupabaseConfigured && user?.branchId) {
         const { data } = await supabase
           .from('subscriptions')
@@ -80,6 +112,7 @@ export default function Settings() {
           .single();
 
         if (data) {
+          fetchedFromRemote = true;
           setCurrentSubscription({
             id: data.id,
             branchId: data.branch_id,
@@ -100,8 +133,8 @@ export default function Settings() {
         }
       }
 
-      // 로컬 스토리지 폴백
-      if (!currentSubscription) {
+      // 로컬 스토리지 폴백 — fetchedFromRemote 플래그로 stale closure 방지
+      if (!fetchedFromRemote) {
         const stored = localStorage.getItem('troiareuke_subscription');
         if (stored) {
           try {
@@ -246,15 +279,46 @@ export default function Settings() {
   };
 
   // ─── Shop Info ────────────────────────────────────────────
-  const handleShopSave = () => {
+  const handleShopSave = async () => {
+    const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
+    if (!shopName) {
+      flash('샵 이름을 입력해주세요');
+      return;
+    }
+
+    const updatedSettings = { ...settings, name: shopName };
+    setSettings(updatedSettings);
     SettingsStore.save({
-      name: settings.name,
+      name: shopName,
       type: settings.type as ShopSettings['type'],
       phone: settings.phone,
       address: settings.address,
       pointRate: settings.pointRate,
     });
-    flash();
+
+    // 다음 로그인에서도 같은 샵명이 보이도록 지점·로컬 세션을 함께 갱신한다.
+    if (isSupabaseConfigured && user?.branchId) {
+      await supabase.from('branches').update({
+        name: shopName,
+        phone: settings.phone || null,
+        address: settings.address || null,
+      }).eq('id', user.branchId);
+    }
+
+    try {
+      const key = 'troiareuke_auth_user';
+      const storedUser = JSON.parse(localStorage.getItem(key) || 'null');
+      if (storedUser) {
+        localStorage.setItem(key, JSON.stringify({
+          ...storedUser,
+          shopName,
+          shopType: settings.type,
+          branchName: shopName,
+        }));
+      }
+    } catch { /* 세션 갱신 실패는 샵 설정 저장을 막지 않음 */ }
+
+    flash(`${shopName} CRM으로 설정했습니다`);
   };
 
   // ─── Business Hours ───────────────────────────────────────
@@ -401,12 +465,19 @@ export default function Settings() {
               <SettingCard title="샵 기본 정보">
                 <div className="space-y-4">
                   <FormRow label="샵 이름">
-                    <input
-                      type="text"
-                      value={settings.name}
-                      onChange={e => setSettings(prev => ({ ...prev, name: e.target.value }))}
-                      className="form-input"
-                    />
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={settings.name}
+                        onChange={e => setSettings(prev => ({ ...prev, name: e.target.value }))}
+                        className="form-input"
+                        placeholder="예: 아르케스파"
+                        maxLength={40}
+                      />
+                      <p className="text-xs text-gray-400">
+                        프로그램명 미리보기: <strong className="text-[#1a3a8f]">{settings.name.trim().replace(/\s*CRM\s*$/i, '') || '샵 이름'} CRM</strong>
+                      </p>
+                    </div>
                   </FormRow>
                   <FormRow label="샵 유형">
                     <select
@@ -518,9 +589,9 @@ export default function Settings() {
                         B
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">비컨 측정 수치 입력·표시</p>
+                        <p className="text-sm font-bold text-gray-900">비컨 측정 수치 · AI 피부분석</p>
                         <p className={clsx('text-xs mt-0.5', beaconOn ? 'text-indigo-600' : 'text-gray-400')}>
-                          {beaconOn ? '사용 중 · 상담에 비컨 점수 입력칸이 표시됩니다' : '숨김 · 상담은 그대로, 비컨 점수만 숨김'}
+                          {beaconOn ? '사용 중 · 상담에 비컨 점수·AI 사진 분석이 표시됩니다' : '숨김 · 상담은 그대로, 비컨 점수·AI 피부분석 숨김'}
                         </p>
                       </div>
                       <button
@@ -539,7 +610,7 @@ export default function Settings() {
                       </button>
                     </div>
                     <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                      비컨 AI 피부진단기 연동(API)이 확정되기 전까지 상담 화면의 ‘비컨 측정 수치’ 입력·표시만 숨깁니다.
+                      비컨 AI 피부진단기 연동(API)이 확정되기 전까지 상담 화면의 ‘비컨 측정 수치’ 입력·표시와 ‘AI 사진 피부분석’을 숨깁니다.
                       <strong className="text-gray-500"> 피부 상담과 홈케어 추천은 계속 사용됩니다.</strong> (이 기기에만 적용)
                     </p>
                   </SettingCard>
@@ -547,37 +618,30 @@ export default function Settings() {
                 {/* Naver */}
                 <SettingCard title="네이버 예약 연동">
                   <div className="space-y-4">
-                    <div className={clsx(
-                      'flex items-center gap-3 p-4 rounded-xl border',
-                      settings.naverBooking.isConnected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
-                    )}>
-                      <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold', settings.naverBooking.isConnected ? 'bg-green-500' : 'bg-gray-300')}>
+                    <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
                         N
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">네이버 예약</p>
-                        {settings.naverBooking.isConnected ? (
-                          <p className="text-xs text-green-600 mt-0.5">연동됨 · {settings.naverBooking.placeName} · 마지막 동기화: {settings.naverBooking.lastSyncAt}</p>
-                        ) : (
-                          <p className="text-xs text-gray-400 mt-0.5">연동되지 않음</p>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-gray-900">네이버 예약</p>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                            <AlertCircle size={11} /> 준비 중
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
                       </div>
                       <button
-                        onClick={() => {
-                          setSettings(prev => ({
-                            ...prev,
-                            naverBooking: { ...prev.naverBooking, isConnected: !prev.naverBooking.isConnected },
-                          }));
-                        }}
-                        className={clsx(
-                          'px-4 py-2 text-sm font-medium rounded-xl',
-                          settings.naverBooking.isConnected
-                            ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            : 'bg-green-500 text-white hover:bg-green-600'
-                        )}
+                        disabled
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
+                        title="NAS 서버 연동 후 활성화됩니다"
                       >
-                        {settings.naverBooking.isConnected ? '연동 해제' : '연동하기'}
+                        연동하기
                       </button>
+                    </div>
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
+                      <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                      <span>네이버 예약 API 연동은 NAS 서버 구축 후 지원됩니다. 아래 플레이스 ID를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
                     </div>
                     <FormRow label="네이버 플레이스 ID">
                       <input
@@ -588,6 +652,7 @@ export default function Settings() {
                           naverBooking: { ...prev.naverBooking, placeId: e.target.value },
                         }))}
                         className="form-input"
+                        placeholder="연동 시 사용할 플레이스 ID 미리 입력"
                       />
                     </FormRow>
                     <div className="pt-2">
@@ -604,66 +669,53 @@ export default function Settings() {
                 {/* Kakao */}
                 <SettingCard title="카카오 연동">
                   <div className="space-y-4">
-                    <div className={clsx(
-                      'flex items-center gap-3 p-4 rounded-xl border',
-                      settings.kakao.channelConnected ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-200'
-                    )}>
-                      <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold', settings.kakao.channelConnected ? 'bg-yellow-400' : 'bg-gray-300')}>
+                    <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
                         K
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">카카오 채널</p>
-                        {settings.kakao.channelConnected ? (
-                          <p className="text-xs text-yellow-600 mt-0.5">연동됨 · {settings.kakao.channelName}</p>
-                        ) : (
-                          <p className="text-xs text-gray-400 mt-0.5">연동되지 않음</p>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-gray-900">카카오 채널</p>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                            <AlertCircle size={11} /> 준비 중
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
                       </div>
                       <button
-                        onClick={() => {
-                          setSettings(prev => ({
-                            ...prev,
-                            kakao: { ...prev.kakao, channelConnected: !prev.kakao.channelConnected },
-                          }));
-                        }}
-                        className={clsx(
-                          'px-4 py-2 text-sm font-medium rounded-xl',
-                          settings.kakao.channelConnected ? 'bg-gray-100 text-gray-600' : 'bg-yellow-400 text-white'
-                        )}
+                        disabled
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
+                        title="NAS 서버 연동 후 활성화됩니다"
                       >
-                        {settings.kakao.channelConnected ? '연동 해제' : '연동하기'}
+                        연동하기
                       </button>
                     </div>
 
-                    <div className={clsx(
-                      'flex items-center gap-3 p-4 rounded-xl border',
-                      settings.kakao.openchatConnected ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-200'
-                    )}>
-                      <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold', settings.kakao.openchatConnected ? 'bg-yellow-400' : 'bg-gray-300')}>
+                    <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
                         K
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">카카오 오픈채팅</p>
-                        {settings.kakao.openchatConnected ? (
-                          <p className="text-xs text-yellow-600 mt-0.5">연동됨</p>
-                        ) : (
-                          <p className="text-xs text-gray-400 mt-0.5">연동되지 않음</p>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-gray-900">카카오 오픈채팅</p>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                            <AlertCircle size={11} /> 준비 중
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
                       </div>
                       <button
-                        onClick={() => {
-                          setSettings(prev => ({
-                            ...prev,
-                            kakao: { ...prev.kakao, openchatConnected: !prev.kakao.openchatConnected },
-                          }));
-                        }}
-                        className={clsx(
-                          'px-4 py-2 text-sm font-medium rounded-xl',
-                          settings.kakao.openchatConnected ? 'bg-gray-100 text-gray-600' : 'bg-yellow-400 text-white'
-                        )}
+                        disabled
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
+                        title="NAS 서버 연동 후 활성화됩니다"
                       >
-                        {settings.kakao.openchatConnected ? '연동 해제' : '연동하기'}
+                        연동하기
                       </button>
+                    </div>
+
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
+                      <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                      <span>카카오 채널·오픈채팅 API 연동은 NAS 서버 구축 후 지원됩니다. 아래 ID/URL을 미리 입력해두면 연동 시 자동 적용됩니다.</span>
                     </div>
 
                     <FormRow label="카카오 채널 ID">
@@ -675,6 +727,7 @@ export default function Settings() {
                           kakao: { ...prev.kakao, channelId: e.target.value },
                         }))}
                         className="form-input"
+                        placeholder="연동 시 사용할 채널 ID 미리 입력"
                       />
                     </FormRow>
                     <FormRow label="오픈채팅 URL">
@@ -686,6 +739,7 @@ export default function Settings() {
                           kakao: { ...prev.kakao, openchatUrl: e.target.value },
                         }))}
                         className="form-input"
+                        placeholder="연동 시 사용할 오픈채팅 URL 미리 입력"
                       />
                     </FormRow>
                     <div className="pt-2">
@@ -744,12 +798,17 @@ export default function Settings() {
                 {/* SMS */}
                 <SettingCard title="SMS 발송 설정 (엔포+)">
                   <div className="space-y-4">
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
+                      <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                      <span>엔포+ SMS 게이트웨이는 NAS 서버 연동 후 실제 발송이 지원됩니다. API Key와 발신번호를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
+                    </div>
                     <FormRow label="API Key">
                       <input
                         type="password"
                         value={settings.smsApiKey || ''}
                         onChange={e => setSettings(prev => ({ ...prev, smsApiKey: e.target.value }))}
                         className="form-input"
+                        placeholder="엔포+ API Key (미리 입력 가능)"
                       />
                     </FormRow>
                     <FormRow label="발신번호">
@@ -758,11 +817,22 @@ export default function Settings() {
                         value={settings.smsCallerId || ''}
                         onChange={e => setSettings(prev => ({ ...prev, smsCallerId: e.target.value }))}
                         className="form-input"
+                        placeholder="01012345678"
                       />
                     </FormRow>
+                    {smsTestMessage && (
+                      <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
+                        <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                        <span>{smsTestMessage}</span>
+                      </div>
+                    )}
                     <div className="flex gap-3">
-                      <button className="px-4 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100">
-                        테스트 발송
+                      <button
+                        onClick={handleSmsTest}
+                        disabled={smsTestStatus === 'sending'}
+                        className="px-4 py-2 text-sm font-medium bg-blue-50 text-blue-700 rounded-xl hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {smsTestStatus === 'sending' ? '발송 중...' : '테스트 발송'}
                       </button>
                       <button
                         onClick={handleSmsSave}

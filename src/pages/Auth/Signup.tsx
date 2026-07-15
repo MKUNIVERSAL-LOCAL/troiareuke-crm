@@ -17,7 +17,7 @@ export default function Signup() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '', agree: false });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '', agreeTerms: false, agreePrivacy: false, agreeMarketing: false });
 
   const set = (k: string, v: string | boolean) => setForm(p => ({ ...p, [k]: v }));
 
@@ -25,7 +25,7 @@ export default function Signup() {
     e.preventDefault();
     if (form.password !== form.confirm) { setError('비밀번호가 일치하지 않습니다.'); return; }
     if (form.password.length < 8) { setError('비밀번호는 8자 이상이어야 합니다.'); return; }
-    if (!form.agree) { setError('이용약관에 동의해주세요.'); return; }
+    if (!form.agreeTerms || !form.agreePrivacy) { setError('이용약관과 개인정보 처리방침에 모두 동의해주세요.'); return; }
     setLoading(true); setError('');
     try {
       await signup({ name: form.name, email: form.email, phone: form.phone, password: form.password });
@@ -92,7 +92,7 @@ export default function Signup() {
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 * (8자 이상)</label>
                   <div className="relative">
                     <input type={showPw ? 'text' : 'password'} value={form.password} onChange={e => set('password', e.target.value)} className="auth-input pr-11" placeholder="비밀번호 (8자 이상)" required />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><EyeOff size={16} /></button>
+                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showPw ? <Eye size={16} /> : <EyeOff size={16} />}</button>
                   </div>
                 </div>
                 <div>
@@ -126,12 +126,30 @@ export default function Signup() {
                 <p className="text-xs text-gray-400 text-center">14일 무료 체험 후 유료 플랜으로 전환할 수 있습니다</p>
               </div>
               <div className="space-y-3 mb-6">
-                {['이용약관에 동의합니다 (필수)', '개인정보 처리방침에 동의합니다 (필수)', '마케팅 정보 수신에 동의합니다 (선택)'].map((t, i) => (
-                  <label key={t} className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" onChange={e => { if (i === 0) set('agree', e.target.checked); }} className="rounded text-blue-500 w-4 h-4" />
-                    <span className="text-sm text-gray-700">{t}</span>
+                {([
+                  { key: 'agreeTerms', label: '이용약관에 동의합니다 (필수)' },
+                  { key: 'agreePrivacy', label: '개인정보 처리방침에 동의합니다 (필수)' },
+                  { key: 'agreeMarketing', label: '마케팅 정보 수신에 동의합니다 (선택)' },
+                ] as const).map(item => (
+                  <label key={item.key} className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form[item.key]}
+                      onChange={e => set(item.key, e.target.checked)}
+                      className="rounded text-blue-500 w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-700">{item.label}</span>
                   </label>
                 ))}
+                <label className="flex items-center gap-3 cursor-pointer pt-1 border-t border-gray-100 mt-1">
+                  <input
+                    type="checkbox"
+                    checked={form.agreeTerms && form.agreePrivacy && form.agreeMarketing}
+                    onChange={e => setForm(p => ({ ...p, agreeTerms: e.target.checked, agreePrivacy: e.target.checked, agreeMarketing: e.target.checked }))}
+                    className="rounded text-blue-500 w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-gray-500">전체 동의</span>
+                </label>
               </div>
               {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>}
               <div className="flex gap-3">

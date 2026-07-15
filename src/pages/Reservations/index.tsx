@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
@@ -34,10 +34,13 @@ export default function Reservations() {
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editReservation, setEditReservation] = useState<Reservation | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
   const [staffList] = useState<Staff[]>(() => StaffStore.getAll());
   const [googleEvents, setGoogleEvents] = useState<GoogleEventLike[]>([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const googleConnected = isGoogleCalendarConnected();
 
   const reloadReservations = useCallback(() => {
@@ -92,17 +95,29 @@ export default function Reservations() {
   const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredReservations = reservations.filter(r => {
+    const statusMatches = statusFilter === 'all' || r.status === statusFilter;
+    const searchMatches = !normalizedSearch || [
+      r.customerName,
+      r.customerPhone,
+      r.staffName,
+      r.memo || '',
+      ...r.services.map(service => service.serviceName),
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return statusMatches && searchMatches;
+  });
   const mobileFilteredReservations = (() => {
     if (mobileTab === 'today') {
-      return reservations.filter(r => r.date === todayStr);
+      return filteredReservations.filter(r => r.date === todayStr);
     } else if (mobileTab === 'week') {
       const wStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
       const wEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      return reservations.filter(r => r.date >= wStart && r.date <= wEnd);
+      return filteredReservations.filter(r => r.date >= wStart && r.date <= wEnd);
     } else {
       const mStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
       const mEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
-      return reservations.filter(r => r.date >= mStart && r.date <= mEnd);
+      return filteredReservations.filter(r => r.date >= mStart && r.date <= mEnd);
     }
   })().sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 
@@ -147,6 +162,31 @@ export default function Reservations() {
                 </button>
               );
             })}
+          </div>
+          <div className="flex gap-2 mt-2">
+            <label className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="고객, 직원, 시술 검색"
+                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                aria-label="예약 검색"
+              />
+            </label>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="border border-gray-200 rounded-xl px-2 text-xs bg-white outline-none"
+              aria-label="예약 상태 필터"
+            >
+              <option value="all">전체 상태</option>
+              <option value="pending">대기</option>
+              <option value="confirmed">확정</option>
+              <option value="completed">완료</option>
+              <option value="cancelled">취소</option>
+              <option value="noshow">노쇼</option>
+            </select>
           </div>
         </div>
 
@@ -223,10 +263,10 @@ export default function Reservations() {
                 Google 캘린더 연동
               </div>
             )}
-            {/* Naver sync badge */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-xs font-medium text-green-700">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-              네이버 예약 동기화
+            {/* Naver sync badge — 실제 연동 전까지 '준비 중' 표기 (오해 방지) */}
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-400" title="네이버 예약 연동은 준비 중입니다">
+              <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
+              네이버 예약 (준비 중)
             </div>
             <div className="flex bg-gray-100 rounded-xl p-1">
               {(['week', 'day', 'list'] as ViewMode[]).map(m => {
@@ -249,20 +289,54 @@ export default function Reservations() {
           </div>
         </div>
 
+        <div className="bg-white rounded-2xl border border-gray-100 p-3 mb-4 flex gap-3 items-center">
+          <label className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="고객명, 전화번호, 담당 직원, 시술 검색"
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+              aria-label="예약 검색"
+            />
+          </label>
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
+            aria-label="예약 상태 필터"
+          >
+            <option value="all">전체 상태</option>
+            <option value="pending">대기</option>
+            <option value="confirmed">확정</option>
+            <option value="completed">완료</option>
+            <option value="cancelled">취소</option>
+            <option value="noshow">노쇼</option>
+          </select>
+          <span className="text-xs text-gray-400 whitespace-nowrap">{filteredReservations.length}건</span>
+        </div>
+
         {/* Calendar Views */}
         {viewMode === 'week' && (
-          <WeekView weekDays={weekDays} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <WeekView weekDays={weekDays} reservations={filteredReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'day' && (
-          <DayView date={currentDate} reservations={reservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <DayView date={currentDate} reservations={filteredReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'list' && (
-          <ListView reservations={reservations} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <ListView reservations={filteredReservations} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
       </div>
 
       {showAddModal && (
         <AddReservationModal onClose={() => setShowAddModal(false)} onSave={handleSaveReservation} />
+      )}
+      {editReservation && (
+        <AddReservationModal
+          reservation={editReservation}
+          onClose={() => setEditReservation(null)}
+          onSave={() => { reloadReservations(); setEditReservation(null); }}
+        />
       )}
       {selectedReservation && (
         <ReservationDetailModal
@@ -270,6 +344,7 @@ export default function Reservations() {
           onClose={() => setSelectedReservation(null)}
           onUpdate={handleUpdateReservation}
           onDelete={handleDeleteReservation}
+          onEdit={() => { setEditReservation(selectedReservation); setSelectedReservation(null); }}
         />
       )}
     </div>
@@ -510,20 +585,21 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
   );
 }
 
-function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+function AddReservationModal({ reservation: editing, onClose, onSave }: { reservation?: Reservation | null; onClose: () => void; onSave: () => void }) {
   const { user: authUser } = useAuth();
+  const isEdit = !!editing;
   const customers = CustomerStore.getAll();
   const staffList = StaffStore.getAll();
   const services = ServiceStore.getAll().filter(s => s.isActive);
 
-  const [customerId, setCustomerId] = useState('');
-  const [staffId, setStaffId] = useState('');
-  const [serviceId, setServiceId] = useState('');
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [startTime, setStartTime] = useState('10:00');
-  const [source, setSource] = useState<Reservation['source']>('manual');
-  const [memo, setMemo] = useState('');
-  const [addToGoogle, setAddToGoogle] = useState(isGoogleCalendarConnected());
+  const [customerId, setCustomerId] = useState(editing?.customerId ?? '');
+  const [staffId, setStaffId] = useState(editing?.staffId ?? '');
+  const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? '');
+  const [date, setDate] = useState(editing?.date ?? format(new Date(), 'yyyy-MM-dd'));
+  const [startTime, setStartTime] = useState(editing?.startTime ?? '10:00');
+  const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
+  const [memo, setMemo] = useState(editing?.memo ?? '');
+  const [addToGoogle, setAddToGoogle] = useState(!isEdit && isGoogleCalendarConnected());
   const googleAvailable = isGoogleCalendarConnected();
 
   const handleSave = () => {
@@ -540,6 +616,21 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
     const endDate = addMinutes(startDate, service.duration);
     const endTime = format(endDate, 'HH:mm');
 
+    // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외)
+    const overlap = ReservationStore.getAll().find(r =>
+      r.id !== editing?.id &&
+      r.staffId === staff.id &&
+      r.date === date &&
+      r.status !== 'cancelled' && r.status !== 'noshow' &&
+      startTime < r.endTime && endTime > r.startTime
+    );
+    if (overlap) {
+      const proceed = window.confirm(
+        `${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.\n그래도 등록하시겠습니까?`
+      );
+      if (!proceed) return;
+    }
+
     const reservation: Omit<Reservation, 'id'> = {
       customerId: customer.id,
       customerName: customer.name,
@@ -555,24 +646,29 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
       date,
       startTime,
       endTime,
-      status: 'confirmed',
+      status: editing?.status ?? 'confirmed',
       source,
       memo: memo || undefined,
       totalPrice: service.price,
     };
 
-    const saved = ReservationStore.save(reservation);
-    // Google Calendar에도 추가
-    if (addToGoogle && googleAvailable && saved) {
-      createCalendarEvent({ ...reservation, id: saved.id }).catch(() => {
-        // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
-      });
+    if (isEdit && editing) {
+      // 수정: 기존 예약 갱신 (상태·네이버ID 등 보존)
+      ReservationStore.update(editing.id, reservation);
+    } else {
+      const saved = ReservationStore.save(reservation);
+      // Google Calendar에도 추가
+      if (addToGoogle && googleAvailable && saved) {
+        createCalendarEvent({ ...reservation, id: saved.id }).catch(() => {
+          // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
+        });
+      }
     }
     onSave();
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="예약 추가" size="lg">
+    <Modal isOpen={true} onClose={onClose} title={isEdit ? '예약 수정' : '예약 추가'} size="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -655,7 +751,7 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
             placeholder="특이사항"
           />
         </div>
-        {googleAvailable && (
+        {googleAvailable && !isEdit && (
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -681,11 +777,12 @@ function AddReservationModal({ onClose, onSave }: { onClose: () => void; onSave:
   );
 }
 
-function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete }: {
+function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, onEdit }: {
   reservation: Reservation;
   onClose: () => void;
   onUpdate: () => void;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const { user } = useAuth();
   const handleCancel = () => {
@@ -776,7 +873,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete }:
           >
             <Trash2 size={14} /> 삭제
           </button>
-          <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl">수정</button>
+          <button onClick={onEdit} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all">수정</button>
         </div>
       </div>
     </Modal>

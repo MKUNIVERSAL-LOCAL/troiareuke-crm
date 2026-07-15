@@ -1,9 +1,9 @@
 ﻿import { useState, useCallback } from 'react';
-import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp } from 'lucide-react';
+import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { ProductStore, ProductSaleStore, CustomerStore } from '../../lib/store';
-import type { Product } from '../../types';
+import type { Product, ProductSale } from '../../types';
 import type { PaymentMethod } from '../../types';
 import clsx from 'clsx';
 
@@ -16,10 +16,13 @@ type Tab = 'inventory' | 'sales';
 export default function Products() {
   const [tab, setTab] = useState<Tab>('inventory');
   const [search, setSearch] = useState('');
+  const [salesSearch, setSalesSearch] = useState('');
   const [category, setCategory] = useState('전체');
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [products, setProducts] = useState(() => ProductStore.getAll());
   const [sales, setSales] = useState(() => ProductSaleStore.getAll());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [saleProduct, setSaleProduct] = useState<Product | null>(null);
 
@@ -28,20 +31,41 @@ export default function Products() {
     setSales(ProductSaleStore.getAll());
   }, []);
 
+  const handleDeleteProduct = (product: Product) => {
+    if (!window.confirm(`'${product.name}' 제품을 삭제할까요?\n판매 기록은 남지만 재고 항목은 복구할 수 없습니다.`)) return;
+    ProductStore.delete(product.id);
+    refresh();
+  };
+
+  const handleDeleteSale = (sale: ProductSale) => {
+    if (!window.confirm(`${sale.saleDate} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고와 연결된 결제 금액도 함께 복구됩니다.`)) return;
+    ProductSaleStore.delete(sale.id);
+    refresh();
+  };
+
   const filtered = products.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
       || (p.brand || '').toLowerCase().includes(search.toLowerCase());
     const matchCategory = category === '전체' || p.category === category;
-    return matchSearch && matchCategory;
+    const matchLowStock = !lowStockOnly || p.stock <= p.minStock;
+    return matchSearch && matchCategory && matchLowStock;
   });
 
   const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
 
+  const normalizedSalesSearch = salesSearch.trim().toLowerCase();
   const recentSales = [...sales]
+    .filter(sale => !normalizedSalesSearch || [
+      sale.productName,
+      sale.customerName || '',
+      sale.paymentMethod,
+      sale.saleDate,
+    ].some(value => value.toLowerCase().includes(normalizedSalesSearch)))
     .sort((a, b) => b.saleDate.localeCompare(a.saleDate))
     .slice(0, 60);
 
-  const totalSalesRevenue = sales.reduce((s, sale) => s + sale.totalPrice, 0);
+  const totalSalesRevenue = sales.reduce((sum, sale) => sum + sale.totalPrice, 0);
+  const visibleSalesRevenue = recentSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
 
   const handleSell = (product: Product) => {
     setSaleProduct(product);
@@ -56,15 +80,25 @@ export default function Products() {
         action={{ label: '+ 제품 추가', onClick: () => setShowAddModal(true) }}
       />
 
-      <div className="p-8 flex-1">
-        {/* Low Stock Alert */}
+      <div className="p-4 sm:p-6 lg:p-8 flex-1">
+        {/* Low Stock Alert — 클릭 시 재고부족만 필터 */}
         {lowStockCount > 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl mb-6">
+          <button
+            type="button"
+            onClick={() => setLowStockOnly(v => !v)}
+            className={clsx(
+              'w-full flex items-center gap-3 px-4 py-3 border rounded-xl mb-6 text-left transition-colors',
+              lowStockOnly ? 'bg-orange-100 border-orange-300' : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
+            )}
+          >
             <AlertTriangle size={16} className="text-orange-500 flex-shrink-0" />
-            <p className="text-sm text-orange-700 font-medium">
+            <p className="text-sm text-orange-700 font-medium flex-1">
               재고 부족 제품이 <strong>{lowStockCount}종</strong> 있습니다. 빠른 발주가 필요합니다.
             </p>
-          </div>
+            <span className="text-xs font-semibold text-orange-600">
+              {lowStockOnly ? '전체 보기 ↩' : '재고 부족만 보기 →'}
+            </span>
+          </button>
         )}
 
         {/* Summary Cards */}
@@ -153,9 +187,10 @@ export default function Products() {
                   <p className="text-sm text-gray-400">해당하는 제품이 없습니다</p>
                 </div>
               ) : (
-                <table className="w-full">
+                <div className="overflow-auto max-h-[65vh]">
+                <table className="w-full min-w-[900px]">
                   <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50/50">
+                    <tr className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50">
                       <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-500">제품명</th>
                       <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500">카테고리</th>
                       <th className="text-right px-4 py-3.5 text-xs font-semibold text-gray-500">판매가</th>
@@ -216,26 +251,56 @@ export default function Products() {
                               {margin}%
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-center">
-                            <button
-                              onClick={() => handleSell(p)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg hover:bg-[#152d6e] transition-colors"
-                            >
-                              <ShoppingCart size={11} />
-                              판매
-                            </button>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => handleSell(p)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg hover:bg-[#152d6e] transition-colors"
+                              >
+                                <ShoppingCart size={11} />
+                                판매
+                              </button>
+                              <button
+                                onClick={() => setEditProduct(p)}
+                                className="p-1.5 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded-lg transition-colors"
+                                aria-label="제품 수정"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(p)}
+                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                aria-label="제품 삭제"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </>
         ) : (
           /* 판매 기록 탭 */
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-3 border-b border-gray-100 flex flex-col sm:flex-row gap-2 sm:items-center">
+              <label className="relative flex-1">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={salesSearch}
+                  onChange={e => setSalesSearch(e.target.value)}
+                  placeholder="제품명, 고객명, 결제수단, 판매일 검색"
+                  className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+                  aria-label="제품 판매 기록 검색"
+                />
+              </label>
+              <span className="text-xs text-gray-400 whitespace-nowrap">최근 {recentSales.length}건 표시</span>
+            </div>
             {recentSales.length === 0 ? (
               <div className="py-16 text-center">
                 <TrendingUp size={32} className="mx-auto mb-3 text-gray-300" />
@@ -243,9 +308,10 @@ export default function Products() {
                 <p className="text-xs text-gray-300">제품 목록에서 "판매" 버튼을 눌러 기록하세요</p>
               </div>
             ) : (
-              <table className="w-full">
+              <div className="overflow-auto max-h-[65vh]">
+              <table className="w-full min-w-[760px]">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/50">
+                  <tr className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50">
                     <th className="text-left px-6 py-3.5 text-xs font-semibold text-gray-500">판매일</th>
                     <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500">제품명</th>
                     <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500">고객</th>
@@ -253,6 +319,7 @@ export default function Products() {
                     <th className="text-right px-4 py-3.5 text-xs font-semibold text-gray-500">단가</th>
                     <th className="text-right px-4 py-3.5 text-xs font-semibold text-gray-500">합계</th>
                     <th className="text-center px-6 py-3.5 text-xs font-semibold text-gray-500">결제수단</th>
+                    <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -269,6 +336,16 @@ export default function Products() {
                       <td className="px-6 py-3.5 text-center">
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs">{sale.paymentMethod}</span>
                       </td>
+                      <td className="px-4 py-3.5 text-center">
+                        <button
+                          onClick={() => handleDeleteSale(sale)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                          aria-label="판매 취소"
+                          title="판매 취소 및 재고 복구"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -276,12 +353,13 @@ export default function Products() {
                   <tr className="border-t border-gray-100 bg-gray-50/50">
                     <td colSpan={5} className="px-6 py-3 text-xs font-semibold text-gray-500 text-right">합계</td>
                     <td className="px-4 py-3 text-sm font-black text-[#1a3a8f] text-right">
-                      {totalSalesRevenue.toLocaleString()}원
+                      {visibleSalesRevenue.toLocaleString()}원
                     </td>
-                    <td />
+                    <td colSpan={2} />
                   </tr>
                 </tfoot>
               </table>
+              </div>
             )}
           </div>
         )}
@@ -291,6 +369,13 @@ export default function Products() {
         <AddProductModal
           onClose={() => setShowAddModal(false)}
           onSaved={() => { refresh(); setShowAddModal(false); }}
+        />
+      )}
+      {editProduct && (
+        <AddProductModal
+          product={editProduct}
+          onClose={() => setEditProduct(null)}
+          onSaved={() => { refresh(); setEditProduct(null); }}
         />
       )}
       {showSaleModal && saleProduct && (
@@ -304,19 +389,20 @@ export default function Products() {
   );
 }
 
-// ─── 제품 추가 모달 ──────────────────────────────────────────────
-function AddProductModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+// ─── 제품 추가/수정 모달 ──────────────────────────────────────────────
+function AddProductModal({ product, onClose, onSaved }: { product?: Product | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!product;
   const [form, setForm] = useState({
-    name: '',
-    category: '세럼',
-    brand: '',
-    price: '',
-    cost: '',
-    stock: '',
-    minStock: '5',
-    unit: '개',
-    description: '',
-    isActive: true,
+    name: product?.name ?? '',
+    category: product?.category ?? '세럼',
+    brand: product?.brand ?? '',
+    price: product ? String(product.price) : '',
+    cost: product ? String(product.cost) : '',
+    stock: product ? String(product.stock) : '',
+    minStock: product ? String(product.minStock) : '5',
+    unit: product?.unit ?? '개',
+    description: product?.description ?? '',
+    isActive: product?.isActive ?? true,
   });
   const [saving, setSaving] = useState(false);
 
@@ -327,24 +413,37 @@ function AddProductModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
       alert('제품명, 판매가, 재고는 필수 입력 항목입니다.');
       return;
     }
+    const price = parseInt(form.price, 10);
+    const cost = parseInt(form.cost, 10) || 0;
+    const stock = parseInt(form.stock, 10);
+    const minStock = form.minStock ? parseInt(form.minStock, 10) : 5;
+    if ([price, cost, stock, minStock].some(n => Number.isNaN(n) || n < 0)) {
+      alert('판매가·원가·재고·최소재고는 0 이상 숫자로 입력해주세요.');
+      return;
+    }
     setSaving(true);
-    ProductStore.save({
+    const payload = {
       name: form.name.trim(),
       category: form.category,
       brand: form.brand.trim() || undefined,
-      price: parseInt(form.price) || 0,
-      cost: parseInt(form.cost) || 0,
-      stock: parseInt(form.stock) || 0,
-      minStock: parseInt(form.minStock) || 5,
+      price,
+      cost,
+      stock,
+      minStock,
       unit: form.unit || '개',
       description: form.description.trim() || undefined,
       isActive: form.isActive,
-    });
+    };
+    if (isEdit && product) {
+      ProductStore.update(product.id, payload);
+    } else {
+      ProductStore.save(payload);
+    }
     onSaved();
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="제품 추가" size="md">
+    <Modal isOpen onClose={onClose} title={isEdit ? '제품 수정' : '제품 추가'} size="md">
       <div className="space-y-4">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">제품명 *</label>
@@ -403,10 +502,10 @@ function AddProductModal({ onClose, onSaved }: { onClose: () => void; onSaved: (
           </div>
         </div>
         {/* Margin preview */}
-        {form.price && form.cost && (
+        {parseInt(form.price) > 0 && form.cost !== '' && (
           <div className="px-3 py-2 bg-blue-50 rounded-xl text-xs text-blue-700">
-            마진율: <strong>{Math.round(((parseInt(form.price) - parseInt(form.cost)) / parseInt(form.price)) * 100)}%</strong>
-            {' '}· 마진액: <strong>{(parseInt(form.price) - parseInt(form.cost)).toLocaleString()}원</strong>
+            마진율: <strong>{Math.round(((parseInt(form.price) - (parseInt(form.cost) || 0)) / parseInt(form.price)) * 100)}%</strong>
+            {' '}· 마진액: <strong>{(parseInt(form.price) - (parseInt(form.cost) || 0)).toLocaleString()}원</strong>
           </div>
         )}
         <div className="grid grid-cols-3 gap-3">

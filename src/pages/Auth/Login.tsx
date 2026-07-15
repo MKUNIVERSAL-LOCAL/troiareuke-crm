@@ -1,24 +1,79 @@
 ﻿import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, Sparkles, CheckCircle } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { Eye, EyeOff, Sparkles, CheckCircle, Mail, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 const features = [
   '고객 관리 · 예약 · 시술 기록 통합',
-  '네이버 예약 자동 연동',
-  'SMS · 카카오 채널 자동 발송',
+  '네이버 예약 수동 등록 · 연동 준비',
+  'SMS · 카카오 메시지 초안 관리',
   '매출 분석 · 재고 관리',
-  'AI 챗봇으로 데이터 분석 (ChatGPT · Gemini)',
+  '피부 상담 · 홈케어 추천 기록',
 ];
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetError, setResetError] = useState('');
+
+  const resetComplete = new URLSearchParams(location.search).get('reset') === 'success';
+
+  const openPasswordReset = () => {
+    setResetEmail(email.trim());
+    setResetError('');
+    setResetSent(false);
+    setResetOpen(true);
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const normalizedEmail = resetEmail.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setResetError('가입할 때 사용한 이메일을 입력해주세요.');
+      return;
+    }
+    if (!isSupabaseConfigured) {
+      setResetError('비밀번호 재설정 서버가 연결되어 있지 않습니다. 관리자에게 문의해주세요.');
+      return;
+    }
+
+    setResetLoading(true);
+    setResetError('');
+    try {
+      const configuredUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, '');
+      const browserUrl = window.location.protocol === 'http:' || window.location.protocol === 'https:'
+        ? window.location.origin
+        : '';
+      const publicAppUrl = configuredUrl || browserUrl || 'https://troiareuke-crm.vercel.app';
+      const redirectTo = `${publicAppUrl}/reset-password`;
+      const { error: resetRequestError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo });
+      if (resetRequestError) throw resetRequestError;
+      setResetSent(true);
+    } catch (e: any) {
+      const message = e?.message || '';
+      if (/rate limit|too many/i.test(message)) {
+        setResetError('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
+      } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(message)) {
+        setResetError('서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
+      } else {
+        setResetError('재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
+      }
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +115,7 @@ export default function Login() {
             에스테틱 샵 운영의<br />모든 것을 한 곳에서
           </h2>
           <p className="text-blue-200 text-sm leading-relaxed">
-            피부관리실 · 에스테틱샵 전용<br />AI 분석 탑재 CRM 솔루션
+            피부관리실 · 에스테틱샵 전용<br />고객·예약·시술 통합 CRM 솔루션
           </p>
           <div className="space-y-3 pt-4">
             {features.map(f => (
@@ -88,6 +143,11 @@ export default function Login() {
 
             {error && (
               <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>
+            )}
+            {resetComplete && (
+              <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
+                비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.
+              </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -120,7 +180,9 @@ export default function Login() {
                   <input type="checkbox" className="rounded text-blue-500" />
                   <span className="text-gray-500">자동 로그인</span>
                 </label>
-                <a href="#" className="text-blue-600 hover:text-blue-700">비밀번호 찾기</a>
+                <button type="button" onClick={openPasswordReset} className="text-blue-600 hover:text-blue-700">
+                  비밀번호 찾기
+                </button>
               </div>
               <button
                 type="submit" disabled={loading}
@@ -153,6 +215,78 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {resetOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="password-reset-title"
+          onMouseDown={e => { if (e.target === e.currentTarget && !resetLoading) setResetOpen(false); }}
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#1a3a8f]">
+                <Mail size={20} />
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetOpen(false)}
+                disabled={resetLoading}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                aria-label="닫기"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {resetSent ? (
+              <div className="mt-5">
+                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">메일을 확인해주세요</h2>
+                <p className="mt-2 text-sm leading-6 text-gray-500">
+                  입력한 이메일로 비밀번호 재설정 링크를 보냈습니다. 메일이 보이지 않으면 스팸함도 확인해주세요.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setResetOpen(false)}
+                  className="mt-6 w-full rounded-xl bg-[#1a3a8f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0d2260]"
+                >
+                  확인
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handlePasswordReset} className="mt-5">
+                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">비밀번호 재설정</h2>
+                <p className="mt-2 text-sm leading-6 text-gray-500">
+                  가입할 때 사용한 이메일을 입력하면 새 비밀번호를 설정할 수 있는 링크를 보내드립니다.
+                </p>
+                <label className="mt-5 block text-xs font-medium text-gray-600" htmlFor="reset-email">이메일</label>
+                <input
+                  id="reset-email"
+                  type="email"
+                  value={resetEmail}
+                  onChange={e => setResetEmail(e.target.value)}
+                  autoComplete="email"
+                  autoFocus
+                  required
+                  className="mt-1.5 w-full rounded-xl border border-gray-200 px-4 py-3 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  placeholder="example@email.com"
+                />
+                {resetError && (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">{resetError}</div>
+                )}
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="mt-5 w-full min-h-[48px] rounded-xl bg-[#1a3a8f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0d2260] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {resetLoading ? '메일 보내는 중...' : '재설정 메일 보내기'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

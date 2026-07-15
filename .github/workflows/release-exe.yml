@@ -1,70 +1,16 @@
-name: Auto Release EXE
+name: Manual Portable Release
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '.github/**'
-      - '*.md'
-      - 'LICENSE'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  # 1단계: 버전 올리고 태그 생성
-  bump-and-tag:
-    runs-on: ubuntu-latest
-    outputs:
-      new_tag: ${{ steps.bump.outputs.new_tag }}
-      skipped: ${{ steps.check.outputs.skipped }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check if version bump needed
-        id: check
-        run: |
-          MSG=$(git log -1 --pretty=%B)
-          if echo "$MSG" | grep -qE "^(chore: bump|chore\(release\))"; then
-            echo "skipped=true" >> $GITHUB_OUTPUT
-          else
-            echo "skipped=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Bump version and create tag
-        id: bump
-        if: steps.check.outputs.skipped == 'false'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          CURRENT=$(node -p "require('./package.json').version")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          NEW_PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
-          NEW_TAG="v$NEW_VERSION"
-
-          npm version $NEW_VERSION --no-git-tag-version
-          git add package.json package-lock.json
-          git commit -m "chore: bump v$NEW_VERSION [skip ci]" || true
-          git tag "$NEW_TAG"
-          git push origin main --tags
-
-          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
-          echo "Bumped to $NEW_TAG"
-
-  # 2단계: Windows EXE 빌드 + 릴리즈
-  build-exe:
-    needs: bump-and-tag
-    if: needs.bump-and-tag.outputs.skipped == 'false'
+  build-portable:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.bump-and-tag.outputs.new_tag }}
 
       - uses: actions/setup-node@v4
         with:
@@ -73,48 +19,16 @@ jobs:
 
       - run: npm ci
 
-      - name: Build Vite + Electron
-        run: npm run build
+      - name: Build single portable executable
+        run: npm run electron:build:portable
         env:
-          BUILD_TARGET: electron
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
-      - name: Build Electron EXE & Upload to GitHub Releases
-        run: npx electron-builder --win --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish Draft Release
-        uses: actions/github-script@v7
+      - name: Upload portable executable
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const tag = '${{ needs.bump-and-tag.outputs.new_tag }}';
-            // electron-builder가 Draft로 만들므로 Published로 변경
-            const releases = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-            const draft = releases.data.find(r => r.draft && r.tag_name === tag);
-            if (draft) {
-              await github.rest.repos.updateRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: draft.id,
-                draft: false,
-                name: `트로이아르케 CRM ${tag}`,
-                body: [
-                  `## 트로이아르케 CRM ${tag}`,
-                  '',
-                  '자동 빌드된 릴리즈입니다.',
-                  '',
-                  '### 설치 방법',
-                  '1. `troiareuke-crm-setup-*.exe` 다운로드',
-                  '2. 실행하여 설치',
-                  '3. 이후 업데이트는 자동',
-                ].join('\n'),
-              });
-              console.log(`✅ Published release ${tag}`);
-            } else {
-              console.log(`⚠️ No draft release found for ${tag}`);
-            }
+          name: troiareuke-crm-portable-${{ github.sha }}
+          path: release/트로이아르케 CRM.exe
+          if-no-files-found: error
+          retention-days: 14

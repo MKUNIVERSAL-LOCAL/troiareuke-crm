@@ -1,15 +1,19 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, Phone, Star, Calendar, TrendingUp,
   User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus,
-  Sparkles, Activity, Mail, Download
+  Sparkles, Activity, Mail, Download, Pencil, Trash2, Upload, Camera, Loader2, Send
 } from 'lucide-react';
-import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore } from '../../lib/store';
+import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore } from '../../lib/store';
+import { sendMessages } from '../../lib/messagingGateway';
 import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
 } from '../../lib/consultationStore';
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
+import TimelapseViewer from '../../components/TimelapseViewer';
+import { resizeImageFile } from '../../lib/photoStore';
+import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import * as XLSX from 'xlsx';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
@@ -122,6 +126,13 @@ export default function Customers() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
+  // 고객 수정 모달
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+
+  // 엑셀 업로드용 파일 input ref
+  const importInputRef = useRef<HTMLInputElement>(null);
+
   // 등급(VIP) 변경 드롭다운
   const [showGradeMenu, setShowGradeMenu] = useState(false);
 
@@ -156,6 +167,58 @@ export default function Customers() {
   const [showConsultModal, setShowConsultModal] = useState(false);
   const [consultForm, setConsultForm] = useState(emptyConsultForm());
   const [consultations, setConsultations] = useState<Consultation[]>([]);
+
+  // AI 피부 분석 (킬러①) — 사진 업로드 → 비전 AI 분석 → 지표/소견 자동 반영
+  const [aiPhoto, setAiPhoto] = useState<string | null>(null);
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [aiResult, setAiResult] = useState<SkinAnalysisResult | null>(null);
+  const consultPhotoRef = useRef<HTMLInputElement>(null);
+
+  // 상담 결과 카카오 전송 상태
+  const [kakaoSending, setKakaoSending] = useState(false);
+  const [kakaoMsg, setKakaoMsg] = useState<string | null>(null);
+
+  async function handleConsultPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await resizeImageFile(file, 1024, 0.85);
+      setAiPhoto(dataUrl);
+      setAiResult(null);
+    } catch {
+      window.alert('사진을 불러오지 못했습니다.');
+    } finally {
+      if (consultPhotoRef.current) consultPhotoRef.current.value = '';
+    }
+  }
+
+  async function runSkinAnalysis() {
+    if (!aiPhoto) return;
+    setAiAnalyzing(true);
+    try {
+      const result = await analyzeSkinPhoto(aiPhoto);
+      setAiResult(result);
+      if (result.available && result.scores) {
+        // 분석 점수를 비컨 지표 입력칸(문자열)으로 반영
+        setConsultForm(f => ({
+          ...f,
+          metrics: {
+            ...f.metrics,
+            moisture: String(result.scores!.moisture),
+            oil: String(result.scores!.oil),
+            pigmentation: String(result.scores!.pigmentation),
+            pore: String(result.scores!.pore),
+            wrinkle: String(result.scores!.wrinkle),
+          },
+          managerNote: result.comment
+            ? (f.managerNote ? `${f.managerNote}\n[AI 소견] ${result.comment}` : `[AI 소견] ${result.comment}`)
+            : f.managerNote,
+        }));
+      }
+    } finally {
+      setAiAnalyzing(false);
+    }
+  }
 
   // 비컨(피부 상담) 기능 노출 — 관리자가 설정에서 토글. 기본 OFF(숨김).
   const [beaconEnabled, setBeaconEnabled] = useState(isBeaconConsultationEnabled());
@@ -200,9 +263,8 @@ export default function Customers() {
     }));
   }
 
-  // 피부상담 저장
-  function handleSaveConsultation(e: React.FormEvent) {
-    e.preventDefault();
+  // 상담 내용 저장 (공통) — 저장만 수행하고 폼 초기화/모달 닫기는 호출부에서 결정
+  function persistConsultation() {
     if (!selected) return;
     ConsultationStore.save({
       customerId: selected.id,
@@ -227,8 +289,64 @@ export default function Customers() {
       if (updated) setSelected(updated);
     }
     setConsultations(ConsultationStore.getByCustomer(selected.id));
+  }
+
+  // 피부상담 저장
+  function handleSaveConsultation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    persistConsultation();
     setShowConsultModal(false);
     setConsultForm(emptyConsultForm());
+  }
+
+  // 상담 요약을 카카오 메시지 본문으로 구성
+  function buildConsultationMessage(): string {
+    const shopName = SettingsStore.get()?.name || '트로이아르케';
+    const lines = [`[${shopName}] ${selected?.name}님 피부 상담 결과`, ''];
+    lines.push(`· 상담일: ${consultForm.consultDate}`);
+    if (consultForm.skinTypeResult) lines.push(`· 피부 타입: ${consultForm.skinTypeResult}`);
+    if (consultForm.concerns.length) lines.push(`· 주요 고민: ${consultForm.concerns.join(', ')}`);
+    if (consultForm.recommendedSolution) lines.push('', `▷ 추천 솔루션\n${consultForm.recommendedSolution}`);
+    if (consultForm.recommendedProducts) lines.push('', `▷ 추천 제품\n${consultForm.recommendedProducts}`);
+    if (consultForm.nextConsultDate) lines.push('', `· 다음 상담 예정일: ${consultForm.nextConsultDate}`);
+    lines.push('', '※ 본 상담은 의료 진단·처방·치료가 아닌 피부 관리 소견입니다.');
+    return lines.join('\n');
+  }
+
+  // 상담 저장 후 상담 내용을 카카오로 전송
+  async function handleSaveAndSendKakao() {
+    if (!selected) return;
+    persistConsultation();
+    setKakaoSending(true);
+    setKakaoMsg(null);
+    const content = buildConsultationMessage();
+    const result = await sendMessages({
+      type: 'kakao-channel',
+      content,
+      title: `${selected.name}님 피부 상담 결과`,
+      recipients: 1,
+    });
+    MessageHistoryStore.save({
+      type: 'kakao-channel',
+      templateName: '상담 결과 안내',
+      title: `${selected.name}님 피부 상담 결과`,
+      content,
+      recipients: 1,
+      successCount: result.pending ? 0 : result.sent,
+      failCount: result.pending ? 1 : result.failed,
+      sentAt: new Date().toLocaleString(),
+      status: !result.pending && result.sent > 0 ? 'sent' : 'failed',
+      cost: !result.pending && result.sent > 0 ? 5 : 0,
+    });
+    setKakaoSending(false);
+    if (result.pending) {
+      setKakaoMsg('상담은 저장됐어요. 단, 카카오 발송 게이트웨이가 아직 연동되지 않아 실제 전송은 되지 않았습니다 (설정>연동에서 준비 예정). 발송 이력에 기록됨.');
+    } else if (result.sent > 0) {
+      setKakaoMsg(`상담 저장 완료 · ${selected.name}님에게 카카오로 상담 결과를 전송했습니다.`);
+    } else {
+      setKakaoMsg(`상담은 저장됐으나 카카오 전송에 실패했습니다: ${result.reason ?? '알 수 없는 오류'}`);
+    }
   }
 
   function toggleConcern(item: string) {
@@ -348,9 +466,78 @@ export default function Customers() {
     XLSX.writeFile(wb, `고객목록_${today}.xlsx`);
   }
 
+  // 고객 엑셀/CSV 대량 업로드 — 다운로드와 동일한 헤더(이름/전화번호/이메일/성별/등급/생년월일/피부유형/유입경로/메모)를 인식
+  function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+        if (rows.length === 0) { window.alert('시트에 데이터가 없습니다.'); return; }
+
+        const pick = (r: Record<string, any>, keys: string[]) => {
+          for (const k of keys) {
+            const hit = Object.keys(r).find(col => col.replace(/\s/g, '') === k);
+            if (hit && String(r[hit]).trim() !== '') return String(r[hit]).trim();
+          }
+          return '';
+        };
+        const normGender = (g: string): Gender => (g === '남성' || g === '남' ? '남성' : g === '여성' || g === '여' ? '여성' : '미입력');
+        const normGrade = (g: string): CustomerGrade => (GRADES as string[]).includes(g) ? g as CustomerGrade : '신규';
+
+        // 기존 전화번호로 중복 스킵
+        const existingPhones = new Set(CustomerStore.getAll().map(c => c.phone.replace(/[^0-9]/g, '')));
+        let added = 0, skipped = 0;
+        rows.forEach(r => {
+          const name = pick(r, ['이름', '고객명', '성함', 'name']);
+          const phone = pick(r, ['전화번호', '연락처', '휴대폰', '전화', 'phone']);
+          if (!name || !phone) { skipped++; return; }
+          const digits = phone.replace(/[^0-9]/g, '');
+          if (existingPhones.has(digits)) { skipped++; return; }
+          existingPhones.add(digits);
+          CustomerStore.save({
+            name, phone,
+            gender: normGender(pick(r, ['성별', 'gender'])),
+            grade: normGrade(pick(r, ['등급', 'grade'])),
+            skinType: pick(r, ['피부유형', '피부타입', 'skinType']),
+            memo: pick(r, ['메모', '비고', 'memo']),
+            birthDate: pick(r, ['생년월일', '생일', 'birthDate']) || undefined,
+            referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
+            email: pick(r, ['이메일', 'email']) || undefined,
+            allergies: undefined, tags: [], isActive: true,
+          });
+          added++;
+        });
+        loadAll();
+        window.alert(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 중복).`);
+      } catch (err) {
+        window.alert('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
+      } finally {
+        if (importInputRef.current) importInputRef.current.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   // 고객 추가
   function handleAddCustomer(e: React.FormEvent) {
     e.preventDefault();
+    // 필수값 + 전화번호 중복 방지 (같은 고객이 두 레코드로 쪼개지지 않도록)
+    if (!addForm.name.trim() || !addForm.phone.trim()) {
+      alert('이름과 전화번호는 필수입니다.');
+      return;
+    }
+    const normalize = (p: string) => p.replace(/\D/g, '');
+    const newPhone = normalize(addForm.phone);
+    const dup = CustomerStore.getAll().find(c => normalize(c.phone) === newPhone && newPhone !== '');
+    if (dup) {
+      alert(`이미 등록된 번호입니다: ${dup.name} (${dup.phone})\n기존 고객 정보를 사용해주세요.`);
+      return;
+    }
     CustomerStore.save({
       name: addForm.name, phone: addForm.phone,
       gender: addForm.gender, grade: addForm.grade,
@@ -365,12 +552,63 @@ export default function Customers() {
     loadAll();
   }
 
+  // 고객 수정 — 상세에서 '수정' 클릭 시 현재 값으로 폼 채우고 모달 오픈
+  function openEditModal() {
+    if (!selected) return;
+    setEditForm({
+      name: selected.name, phone: selected.phone,
+      email: selected.email ?? '', gender: selected.gender,
+      grade: selected.grade, skinType: selected.skinType ?? '',
+      memo: selected.memo ?? '', birthDate: selected.birthDate ?? '',
+      referralSource: selected.referralSource ?? '',
+    });
+    setShowEditModal(true);
+  }
+
+  function handleEditCustomer(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selected) return;
+    CustomerStore.update(selected.id, {
+      name: editForm.name, phone: editForm.phone,
+      gender: editForm.gender, grade: editForm.grade,
+      skinType: editForm.skinType, memo: editForm.memo,
+      birthDate: editForm.birthDate || undefined,
+      referralSource: editForm.referralSource || undefined,
+      email: editForm.email.trim() || undefined,
+    });
+    const updated = CustomerStore.getById(selected.id);
+    if (updated) setSelected(updated);
+    setShowEditModal(false);
+    loadAll();
+  }
+
+  // 고객 삭제 — 2단계 확인 후 제거
+  function handleDeleteCustomer() {
+    if (!selected) return;
+    if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?\n등록된 상담·시술 기록은 남지만 고객 정보는 복구할 수 없습니다.`)) return;
+    CustomerStore.delete(selected.id);
+    setSelected(null);
+    loadAll();
+  }
+
   // 프로그램 등록
   function handleRegisterProgram(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
     const prog = programs.find(p => p.id === progForm.programId);
     if (!prog) return;
+
+    // 결제금액: 빈칸이면 정가, 입력했으면 그 값(0원 이벤트도 유효). 잘못된 값은 차단.
+    const rawPrice = progForm.pricePaid.replace(/,/g, '').trim();
+    let pricePaid = prog.price;
+    if (rawPrice !== '') {
+      const parsed = parseInt(rawPrice, 10);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        alert('결제 금액을 올바르게 입력해주세요. (0 이상 숫자)');
+        return;
+      }
+      pricePaid = parsed;
+    }
 
     CustomerProgramStore.save({
       customerId: selected.id,
@@ -379,7 +617,7 @@ export default function Customers() {
       programName: prog.name,
       category: prog.category,
       totalSessions: prog.totalSessions,
-      pricePaid: parseInt(progForm.pricePaid.replace(/,/g, '')) || prog.price,
+      pricePaid,
       paymentMethod: progForm.paymentMethod,
       purchaseDate: progForm.purchaseDate,
       expiryDate: calcExpiryDate(prog.validityDays),
@@ -609,12 +847,26 @@ export default function Customers() {
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-2 mb-3">
             <h1 className="text-lg font-bold text-gray-900 flex-1">고객 관리</h1>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleImportExcel}
+              className="hidden"
+            />
+            <button
+              onClick={() => importInputRef.current?.click()}
+              title="엑셀(xlsx)/CSV로 고객 대량 등록 (이름·전화번호 필수, 중복 자동 제외)"
+              className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+            >
+              <Upload size={12} />업로드
+            </button>
             <button
               onClick={exportToExcel}
               title="현재 목록을 엑셀(xlsx)로 다운로드"
               className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
-              <Download size={12} />엑셀
+              <Download size={12} />다운로드
             </button>
             <button
               onClick={() => setShowAddModal(true)}
@@ -744,7 +996,7 @@ export default function Customers() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
+                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setKakaoMsg(null); setShowConsultModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
                   >
                     <Sparkles size={12} />피부 상담
@@ -760,6 +1012,19 @@ export default function Customers() {
                     className="flex items-center gap-1.5 px-3 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75] transition-colors"
                   >
                     <Plus size={12} />프로그램 등록
+                  </button>
+                  <button
+                    onClick={openEditModal}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-200 transition-colors"
+                  >
+                    <Pencil size={12} />수정
+                  </button>
+                  <button
+                    onClick={handleDeleteCustomer}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors"
+                    aria-label="고객 삭제"
+                  >
+                    <Trash2 size={12} />삭제
                   </button>
                 </div>
               </div>
@@ -797,7 +1062,7 @@ export default function Customers() {
                   <Sparkles size={16} className="text-indigo-600" />피부 상담 이력
                 </h3>
                 <button
-                  onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }}
+                  onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setShowConsultModal(true); }}
                   className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
                 >
                   <Plus size={12} />상담 기록
@@ -808,7 +1073,7 @@ export default function Customers() {
                 <div className="text-center py-6">
                   <Activity size={28} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">상담 기록이 없어요</p>
-                  <button onClick={() => { setConsultForm(emptyConsultForm()); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
+                  <button onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
                     첫 상담 시작하기
                   </button>
                 </div>
@@ -959,6 +1224,9 @@ export default function Customers() {
               )}
             </div>
 
+            {/* Before/After 타임랩스 (킬러②) — 시술 사진이 있을 때만 표시 */}
+            <TimelapseViewer customerId={selected.id} />
+
             {/* 최근 시술 기록 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <h3 className="font-bold text-gray-900 mb-4">최근 시술 기록</h3>
@@ -1076,6 +1344,85 @@ export default function Customers() {
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">등록</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ───── 고객 수정 모달 ───── */}
+      {showEditModal && selected && (
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="modal-card bg-white rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">고객 정보 수정</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleEditCustomer} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">이름 *</label>
+                  <input required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="홍길동" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
+                  <input required value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="010-0000-0000" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">성별</label>
+                  <select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value as Gender }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="여성">여성</option><option value="남성">남성</option><option value="미입력">미입력</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">등급</label>
+                  <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value as CustomerGrade }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">생년월일</label>
+                  <BirthDateSelect value={editForm.birthDate} onChange={v => setEditForm(f => ({ ...f, birthDate: v }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
+                  <select value={editForm.skinType} onChange={e => setEditForm(f => ({ ...f, skinType: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">선택 안함</option>
+                    {['건성', '지성', '복합성', '민감성', '중성'].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
+                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
+                <select value={editForm.referralSource} onChange={e => setEditForm(f => ({ ...f, referralSource: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">선택</option>
+                  {['네이버', '카카오', '지인 소개', '간판', '유튜브', 'SNS', '직접 방문', '기타'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
+                <textarea value={editForm.memo} onChange={e => setEditForm(f => ({ ...f, memo: e.target.value }))}
+                  rows={2} placeholder="특이사항, 알레르기 등"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">취소</button>
+                <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">저장</button>
               </div>
             </form>
           </div>
@@ -1288,6 +1635,63 @@ export default function Customers() {
                 </div>
               </div>
 
+              {/* AI 피부 분석 (킬러①) — 사진 → 비전 AI 분석. 비컨 진단기기 API 연동 전까지 숨김(beaconEnabled 게이트) */}
+              {beaconEnabled && (
+              <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-indigo-100 rounded-xl p-3.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Sparkles size={14} className="text-violet-600" />
+                  <label className="text-xs font-semibold text-violet-900">AI 피부 분석 (사진)</label>
+                  <span className="text-[10px] text-gray-400">· 관리 참고용 (의학적 진단 아님)</span>
+                </div>
+                <input ref={consultPhotoRef} type="file" accept="image/*" onChange={handleConsultPhoto} className="hidden" />
+                <div className="flex gap-3">
+                  {aiPhoto ? (
+                    <img src={aiPhoto} alt="분석 사진" className="w-20 h-20 rounded-xl object-cover border border-indigo-100 flex-shrink-0" />
+                  ) : (
+                    <button type="button" onClick={() => consultPhotoRef.current?.click()}
+                      className="w-20 h-20 rounded-xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center gap-1 text-indigo-400 hover:border-indigo-400 transition-colors flex-shrink-0">
+                      <Camera size={18} />
+                      <span className="text-[10px]">사진</span>
+                    </button>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    {aiPhoto && (
+                      <div className="flex gap-2 mb-2">
+                        <button type="button" onClick={runSkinAnalysis} disabled={aiAnalyzing}
+                          className="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
+                          {aiAnalyzing ? <><Loader2 size={12} className="animate-spin" />분석 중...</> : <><Sparkles size={12} />AI 분석 실행</>}
+                        </button>
+                        <button type="button" onClick={() => consultPhotoRef.current?.click()}
+                          className="px-3 py-1.5 bg-white border border-gray-200 text-gray-500 rounded-lg text-xs font-medium hover:bg-gray-50">다른 사진</button>
+                      </div>
+                    )}
+                    {!aiPhoto && (
+                      <p className="text-[11px] text-gray-500 leading-relaxed">
+                        고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다.
+                        {!isSkinAnalysisAvailable() && ' (AI 챗봇 설정에서 OpenAI/Gemini 키 입력 필요)'}
+                      </p>
+                    )}
+                    {aiResult && !aiResult.available && (
+                      <p className="text-[11px] text-amber-600">{aiResult.reason}</p>
+                    )}
+                    {aiResult?.available && aiResult.scores && (
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {SKIN_LABELS.map(({ key, label }) => (
+                          <div key={key} className="bg-white rounded-lg py-1.5 text-center border border-indigo-50">
+                            <p className="text-[10px] text-gray-400">{label}</p>
+                            <p className="text-sm font-bold text-violet-700">{aiResult.scores![key]}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {aiResult?.available && aiResult.comment && (
+                      <p className="text-[11px] text-gray-600 mt-1.5">💬 {aiResult.comment}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              )}
+
               {/* 피부 고민 체크리스트 */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-2">피부 고민 (고객 체크)</label>
@@ -1438,8 +1842,24 @@ export default function Customers() {
                   : '※ 본 상담은 의료 진단·처방·치료가 아닌 피부 분석·관리 소견입니다.'}
               </p>
 
+              {kakaoMsg && (
+                <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-3 py-2 leading-relaxed">
+                  {kakaoMsg}
+                </div>
+              )}
+
               <div className="flex gap-2">
-                <button type="button" onClick={() => setShowConsultModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
+                <button type="button" onClick={() => setShowConsultModal(false)} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
+                <button
+                  type="button"
+                  onClick={handleSaveAndSendKakao}
+                  disabled={kakaoSending}
+                  className="flex-1 py-2.5 bg-yellow-400 text-yellow-900 rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-yellow-500 disabled:opacity-50"
+                  title="상담을 저장하고 상담 결과를 고객에게 카카오로 전송합니다"
+                >
+                  {kakaoSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  저장 + 카톡 전송
+                </button>
                 <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
                   <CheckCircle size={14} />상담 저장
                 </button>

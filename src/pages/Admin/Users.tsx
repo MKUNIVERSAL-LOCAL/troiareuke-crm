@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { Users, Building2 } from 'lucide-react';
+import { Users, Building2, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -25,6 +25,7 @@ export default function AdminUsers() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [branchFilter, setBranchFilter] = useState('all');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     loadData();
@@ -34,21 +35,18 @@ export default function AdminUsers() {
     setLoading(true);
     try {
       if (isSupabaseConfigured) {
+        // auth.admin.listUsers() 는 service_role 전용 — 프론트에서 직접 호출 금지.
+        // 이메일은 user_profiles에 email 컬럼이 있으면 함께 select, 없으면 '—' 처리.
         const [usersRes, branchesRes] = await Promise.all([
           supabase.from('user_profiles')
-            .select('id, name, role, branch_id, is_onboarded, created_at, branches(name)')
+            .select('id, email, name, role, branch_id, is_onboarded, created_at, branches(name)')
             .order('created_at', { ascending: false }),
           supabase.from('branches').select('*').order('name'),
         ]);
 
-        const { data: authUsers } = await supabase.auth.admin.listUsers();
-
-        const emailMap: Record<string, string> = {};
-        authUsers?.users?.forEach(u => { emailMap[u.id] = u.email || ''; });
-
         setUsers((usersRes.data || []).map((u: any) => ({
           id: u.id,
-          email: emailMap[u.id] || '(이메일 없음)',
+          email: u.email || '—',
           name: u.name,
           role: u.role,
           branch_name: u.branches?.name || null,
@@ -77,12 +75,20 @@ export default function AdminUsers() {
     }
   }
 
-  const filtered = branchFilter === 'all'
-    ? users
-    : users.filter(u => u.branch_name === branchFilter);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = users.filter(user => {
+    const branchMatches = branchFilter === 'all' || user.branch_name === branchFilter;
+    const searchMatches = !normalizedSearch || [
+      user.name || '',
+      user.email,
+      user.branch_name || '',
+      roleLabels[user.role]?.label || user.role,
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return branchMatches && searchMatches;
+  });
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">사용자 관리</h1>
@@ -90,8 +96,19 @@ export default function AdminUsers() {
         </div>
       </div>
 
+      <div className="relative mb-4 max-w-xl">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="이름, 이메일, 역할, 지점 검색"
+          className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+          aria-label="관리자 사용자 검색"
+        />
+      </div>
+
       {/* Branch Filter */}
-      <div className="flex items-center gap-2 mb-5 flex-wrap">
+      <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1 no-scrollbar">
         <Building2 size={14} className="text-slate-500" />
         <button
           onClick={() => setBranchFilter('all')}
@@ -121,9 +138,10 @@ export default function AdminUsers() {
             <p className="text-slate-400">등록된 사용자가 없습니다</p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-auto max-h-[70vh]">
+          <table className="w-full min-w-[760px]">
             <thead>
-              <tr className="border-b border-slate-700/30">
+              <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">이름 / 이메일</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">역할</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">소속 지점</th>
@@ -161,6 +179,7 @@ export default function AdminUsers() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

@@ -7,6 +7,7 @@ import {
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { differenceInDays, parseISO } from 'date-fns';
+import { useCrmBrand } from '../../hooks/useCrmBrand';
 
 const navItems = [
   { to: '/', label: '대시보드', icon: LayoutDashboard, badge: null },
@@ -18,7 +19,7 @@ const navItems = [
   { to: '/products', label: '제품/재고', icon: Package, badge: null },
   { to: '/sales', label: '매출 관리', icon: TrendingUp, badge: null },
   { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, badge: null },
-  { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, badge: 'NEW' },
+  { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, badge: 'SOON' },
   { to: '/api-guide', label: 'API 연동 가이드', icon: Link2, badge: null },
   { to: '/settings', label: '설정', icon: Settings, badge: null },
 ];
@@ -31,6 +32,7 @@ interface SidebarProps {
 export default function Sidebar({ open = false, onClose }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { shopName, programName } = useCrmBrand(user?.shopName);
 
   const trialDaysLeft = user?.trialEndsAt
     ? differenceInDays(parseISO(user.trialEndsAt), new Date())
@@ -56,8 +58,8 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
             <Sparkles size={18} className="text-white" />
           </div>
           <div>
-            <p className="text-[12px] font-black tracking-widest text-[#1a3a8f] leading-tight">TROIAREUKE</p>
-            <p className="text-xs text-gray-400 font-medium tracking-wide">에스테틱 전용 CRM</p>
+            <p className="max-w-[145px] truncate text-[13px] font-black text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
+            <p className="text-[10px] text-gray-400 font-medium tracking-wide">에스테틱 고객관리</p>
           </div>
         </div>
         {/* 모바일 닫기 버튼 */}
@@ -115,11 +117,11 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
           </div>
         )}
         <div className="bg-gray-50 rounded-xl px-4 py-3">
-          <p className="text-[11px] font-bold text-gray-700 truncate">{user?.shopName || '샵 정보 미설정'}</p>
+          <p className="text-[11px] font-bold text-gray-700 truncate">{shopName || '샵 정보 미설정'}</p>
           <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
           <div className="flex items-center gap-1.5 mt-2">
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
-            <span className="text-xs text-green-600 font-medium">네이버 예약 연동 중</span>
+            <span className="text-xs text-green-600 font-medium">정상 운영 중</span>
           </div>
         </div>
         <button

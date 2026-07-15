@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { CreditCard, Plus, Pencil, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { CreditCard, Plus, Pencil, AlertCircle, CheckCircle, Clock, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -38,6 +38,7 @@ export default function Subscriptions() {
   const [form, setForm] = useState({ plan: 'trial', status: 'active', expires_at: '', amount: '0', notes: '' });
   const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [search, setSearch] = useState('');
 
   useEffect(() => { loadSubs(); }, []);
 
@@ -84,7 +85,17 @@ export default function Subscriptions() {
     loadSubs();
   }
 
-  const filtered = filterStatus === 'all' ? subs : subs.filter(s => s.status === filterStatus);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = subs.filter(subscription => {
+    const statusMatches = filterStatus === 'all' || subscription.status === filterStatus;
+    const planLabel = planOptions.find(plan => plan.value === subscription.plan)?.label || subscription.plan;
+    const searchMatches = !normalizedSearch || [
+      subscription.branch_name,
+      planLabel,
+      subscription.notes || '',
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return statusMatches && searchMatches;
+  });
 
   // 요약 통계
   const stats = {
@@ -95,7 +106,7 @@ export default function Subscriptions() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">구독 / 플랜 관리</h1>
@@ -104,7 +115,7 @@ export default function Subscriptions() {
       </div>
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
         {[
           { label: '전체 구독', value: stats.total, color: 'text-white' },
           { label: '활성 구독', value: stats.active, color: 'text-emerald-400' },
@@ -118,8 +129,19 @@ export default function Subscriptions() {
         ))}
       </div>
 
+      <div className="relative mb-4 max-w-xl">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="지점명, 플랜, 메모 검색"
+          className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+          aria-label="구독 검색"
+        />
+      </div>
+
       {/* 필터 */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar">
         {['all', 'active', 'expired', 'pending', 'cancelled'].map(s => (
           <button
             key={s}
@@ -146,9 +168,10 @@ export default function Subscriptions() {
             <p className="text-slate-600 text-sm mt-1">지점 추가 시 자동으로 구독이 생성됩니다</p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-auto max-h-[70vh]">
+          <table className="w-full min-w-[900px]">
             <thead>
-              <tr className="border-b border-slate-700/30">
+              <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
                 {['지점명', '플랜', '상태', '금액', '만료일', '메모', '액션'].map(h => (
                   <th key={h} className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                 ))}
@@ -188,6 +211,7 @@ export default function Subscriptions() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

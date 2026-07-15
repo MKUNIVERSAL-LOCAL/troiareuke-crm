@@ -625,7 +625,9 @@ async function loadFromSupabase<T>(
       console.error(`[Store] ${table} 로드 실패:`, error.message);
       return null;
     }
-    if (!data || data.length === 0) return null; // 빈 데이터면 null → 샘플 데이터 폴백
+    // 정상 조회된 빈 배열은 운영 지점의 실제 상태다. null로 돌리면 이전 기기의
+    // localStorage가 다시 노출되어 삭제된 데이터나 다른 환경의 데이터가 보일 수 있다.
+    if (!data) return [];
     return data.map(fromDb);
   } catch (e) {
     console.error(`[Store] ${table} 로드 예외:`, e);
@@ -692,7 +694,12 @@ export async function initializeStores(): Promise<void> {
       if (staff !== null) _staff = staff;
       if (services !== null) _services = services;
       if (reservations !== null) _reservations = reservations;
-      if (settings !== null) _settings = settings;
+      if (settings !== null) {
+        _settings = settings;
+        window.dispatchEvent(new CustomEvent('crm:shop-settings-changed', {
+          detail: { name: settings.name },
+        }));
+      }
       if (messageTemplates !== null) _messageTemplates = messageTemplates;
       if (messageHistory !== null) _messageHistory = messageHistory;
 
@@ -936,7 +943,8 @@ export const CustomerProgramStore = {
     const idx = all.findIndex(cp => cp.id === id);
     if (idx === -1) return null;
     const cp = all[idx];
-    const newUsed = cp.usedSessions + sessionsUsed;
+    // sessionsUsed에 음수를 넘기면 회차 복구(취소/수정 시). 0 미만으로는 내려가지 않음.
+    const newUsed = Math.max(0, cp.usedSessions + sessionsUsed);
     const isCompleted = cp.totalSessions !== null && newUsed >= cp.totalSessions;
     all[idx] = { ...cp, usedSessions: newUsed, isCompleted };
     _customerPrograms = all;
@@ -1003,13 +1011,69 @@ export const TreatmentLogStore = {
       CustomerProgramStore.useSession(data.customerProgramId, data.sessionsUsed);
     }
 
-    // 고객 방문 횟수 업데이트
-    CustomerStore.incrementVisit(data.customerId, 0);
+    // 같은 고객·날짜의 완료 예약이 이미 방문으로 반영됐다면 중복 가산하지 않는다.
+    const completedReservationExists = ReservationStore.getAll().some(reservation =>
+      reservation.customerId === data.customerId
+      && reservation.date === data.treatmentDate
+      && reservation.status === 'completed'
+    );
+    if (!completedReservationExists) {
+      CustomerStore.incrementVisit(data.customerId, 0);
+    }
 
     return log;
   },
 
+  update(id: string, updates: Partial<TreatmentLog>): TreatmentLog | null {
+    const all = this.getAll();
+    const idx = all.findIndex(t => t.id === id);
+    if (idx === -1) return null;
+    const prev = all[idx];
+    const next = { ...prev, ...updates };
+    all[idx] = next;
+    _treatmentLogs = all;
+    saveList(shopKey('treatment_logs'), all);
+    sbUpdate('treatment_logs', id, toDbTreatmentLog(updates));
+
+    // 프로그램 회차 정합성: 이전 연결을 되돌리고 새 연결을 차감 (수정 시 회차가 어긋나지 않도록)
+    const prevProg = prev.customerProgramId, prevUsed = prev.sessionsUsed || 0;
+    const nextProg = next.customerProgramId, nextUsed = next.sessionsUsed || 0;
+    if (prevProg === nextProg) {
+      const delta = nextUsed - prevUsed;
+      if (prevProg && delta !== 0) CustomerProgramStore.useSession(prevProg, delta);
+    } else {
+      if (prevProg) CustomerProgramStore.useSession(prevProg, -prevUsed);
+      if (nextProg) CustomerProgramStore.useSession(nextProg, nextUsed);
+    }
+    return next;
+  },
+
   delete(id: string): void {
+    const target = this.getAll().find(t => t.id === id);
+    // 삭제 시 차감했던 프로그램 회차를 복구 (직원 실수 삭제로 고객 회차가 사라지지 않도록)
+    if (target?.customerProgramId) {
+      CustomerProgramStore.useSession(target.customerProgramId, -(target.sessionsUsed || 0));
+    }
+    if (target) {
+      const anotherTreatmentExists = this.getAll().some(log =>
+        log.id !== target.id
+        && log.customerId === target.customerId
+        && log.treatmentDate === target.treatmentDate
+      );
+      const completedReservationExists = ReservationStore.getAll().some(reservation =>
+        reservation.customerId === target.customerId
+        && reservation.date === target.treatmentDate
+        && reservation.status === 'completed'
+      );
+      if (!anotherTreatmentExists && !completedReservationExists) {
+        const customer = CustomerStore.getById(target.customerId);
+        if (customer && !customer.id.startsWith('sample_')) {
+          CustomerStore.update(target.customerId, {
+            totalVisits: Math.max(0, (customer.totalVisits || 0) - 1),
+          });
+        }
+      }
+    }
     const all = this.getAll().filter(t => t.id !== id);
     _treatmentLogs = all;
     saveList(shopKey('treatment_logs'), all);
@@ -1080,6 +1144,7 @@ export const ProductSaleStore = {
     if (_productSales !== null) return _productSales;
     const stored = getList<ProductSale>(shopKey('product_sales'));
     if (stored.length > 0) { _productSales = stored; return stored; }
+    _productSales = [];
     return [];
   },
 
@@ -1128,6 +1193,13 @@ export const ProductSaleStore = {
   },
 
   delete(id: string): void {
+    const sale = this.getAll().find(item => item.id === id);
+    if (sale?.productId) {
+      // 판매 취소 시 차감했던 재고를 복구한다. adjustStock은 전달 수량을 빼므로 음수로 전달.
+      ProductStore.adjustStock(sale.productId, -sale.quantity);
+    }
+    const linkedPayments = PaymentStore.getAll().filter(payment => payment.referenceId === id);
+    linkedPayments.forEach(payment => PaymentStore.delete(payment.id));
     const all = this.getAll().filter(s => s.id !== id);
     _productSales = all;
     saveList(shopKey('product_sales'), all);
@@ -1189,11 +1261,47 @@ export const PaymentStore = {
     const all = this.getAll();
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
-    all[idx] = { ...all[idx], ...updates };
+    const prev = all[idx];
+    const next = { ...prev, ...updates };
+    all[idx] = next;
     _payments = all;
     saveList(shopKey('payments'), all);
     sbUpdate('payments', id, toDbPayment(updates));
-    return all[idx];
+
+    // 고객 누적 결제액 정합성: 이전 기여분 빼고 새 기여분 더함 (금액/상태/고객 변경 반영)
+    const adjust = (customerId: string | undefined, amt: number) => {
+      if (!customerId || amt === 0) return;
+      const customer = CustomerStore.getById(customerId);
+      if (customer && !customer.id.startsWith('sample_')) {
+        CustomerStore.update(customerId, { totalSpent: Math.max(0, (customer.totalSpent || 0) + amt) });
+      }
+    };
+    const prevContrib = prev.status === 'completed' ? prev.amount : 0;
+    const nextContrib = next.status === 'completed' ? next.amount : 0;
+    if (prev.customerId === next.customerId) {
+      adjust(next.customerId, nextContrib - prevContrib);
+    } else {
+      adjust(prev.customerId, -prevContrib);
+      adjust(next.customerId, nextContrib);
+    }
+    return next;
+  },
+
+  delete(id: string): void {
+    const target = this.getAll().find(p => p.id === id);
+    // 완료 결제를 삭제하면 고객 누적 결제액에서 차감(save의 역연산으로 정합성 유지)
+    if (target && target.customerId && target.status === 'completed') {
+      const customer = CustomerStore.getById(target.customerId);
+      if (customer && !customer.id.startsWith('sample_')) {
+        CustomerStore.update(target.customerId, {
+          totalSpent: Math.max(0, (customer.totalSpent || 0) - target.amount),
+        });
+      }
+    }
+    const all = this.getAll().filter(p => p.id !== id);
+    _payments = all;
+    saveList(shopKey('payments'), all);
+    sbDelete('payments', id);
   },
 
   /** 기간별 매출 집계 */
@@ -1361,16 +1469,29 @@ export const ReservationStore = {
 
   updateStatus(id: string, status: Reservation['status']): Reservation | null {
     const reservation = this.getAll().find(r => r.id === id);
+    const previousStatus = reservation?.status;
     const result = this.update(id, { status });
 
-    // When reservation is completed, update customer's lastVisitDate
-    if (status === 'completed' && reservation?.customerId) {
+    // 완료 상태를 반복 저장해도 방문 수가 중복 증가하지 않도록 상태 전환 때만 반영한다.
+    if (reservation?.customerId && previousStatus !== status) {
       const customer = CustomerStore.getById(reservation.customerId);
       if (customer && !customer.id.startsWith('sample_')) {
-        CustomerStore.update(reservation.customerId, {
-          lastVisitDate: reservation.date || today(),
-          totalVisits: (customer.totalVisits || 0) + 1,
-        });
+        const treatmentExists = TreatmentLogStore.getAll().some(log =>
+          log.customerId === reservation.customerId
+          && log.treatmentDate === reservation.date
+        );
+        if (status === 'completed' && !treatmentExists) {
+          CustomerStore.update(reservation.customerId, {
+            lastVisitDate: !customer.lastVisitDate || reservation.date > customer.lastVisitDate
+              ? reservation.date
+              : customer.lastVisitDate,
+            totalVisits: (customer.totalVisits || 0) + 1,
+          });
+        } else if (previousStatus === 'completed' && !treatmentExists) {
+          CustomerStore.update(reservation.customerId, {
+            totalVisits: Math.max(0, (customer.totalVisits || 0) - 1),
+          });
+        }
       }
     }
 
@@ -1378,6 +1499,19 @@ export const ReservationStore = {
   },
 
   delete(id: string): void {
+    const reservation = this.getAll().find(r => r.id === id);
+    if (reservation?.status === 'completed' && reservation.customerId) {
+      const customer = CustomerStore.getById(reservation.customerId);
+      const treatmentExists = TreatmentLogStore.getAll().some(log =>
+        log.customerId === reservation.customerId
+        && log.treatmentDate === reservation.date
+      );
+      if (customer && !customer.id.startsWith('sample_') && !treatmentExists) {
+        CustomerStore.update(reservation.customerId, {
+          totalVisits: Math.max(0, (customer.totalVisits || 0) - 1),
+        });
+      }
+    }
     const all = this.getAll().filter(r => r.id !== id);
     _reservations = all;
     saveList(shopKey('reservations'), all);
@@ -1414,6 +1548,10 @@ export const SettingsStore = {
       const dbRow = { ...toDbSettings(updated), branch_id: getShopId() };
       sbUpsert('shop_settings', dbRow);
     }
+
+    window.dispatchEvent(new CustomEvent('crm:shop-settings-changed', {
+      detail: { name: updated.name },
+    }));
 
     return updated;
   },
@@ -1468,6 +1606,7 @@ export const MessageHistoryStore = {
     if (_messageHistory !== null) return _messageHistory;
     const stored = getList<MessageHistory>(shopKey('msg_history'));
     if (stored.length > 0) { _messageHistory = stored; return stored; }
+    _messageHistory = [];
     return [];
   },
 

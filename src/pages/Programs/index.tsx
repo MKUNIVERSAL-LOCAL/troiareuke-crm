@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Package, Edit2, Trash2, CheckCircle, XCircle, Tag, Clock, Calendar } from 'lucide-react';
+import { Plus, Package, Edit2, Trash2, CheckCircle, XCircle, Tag, Clock, Calendar, Search } from 'lucide-react';
 import { ProgramStore } from '../../lib/store';
 import type { Program } from '../../types';
 
@@ -37,6 +37,8 @@ export default function Programs() {
   const [editTarget, setEditTarget] = useState<Program | null>(null);
   const [form, setForm] = useState<ProgramFormData>(defaultForm);
   const [filterCategory, setFilterCategory] = useState('전체');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => { loadPrograms(); }, []);
@@ -97,16 +99,24 @@ export default function Programs() {
     loadPrograms();
   }
 
-  const filtered = filterCategory === '전체'
-    ? programs
-    : programs.filter(p => p.category === filterCategory);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = programs.filter(p => {
+    const categoryMatches = filterCategory === '전체' || p.category === filterCategory;
+    const statusMatches = statusFilter === 'all'
+      || (statusFilter === 'active' ? p.isActive : !p.isActive);
+    const searchMatches = !normalizedSearch
+      || p.name.toLowerCase().includes(normalizedSearch)
+      || p.category.toLowerCase().includes(normalizedSearch)
+      || (p.description || '').toLowerCase().includes(normalizedSearch);
+    return categoryMatches && statusMatches && searchMatches;
+  });
 
   const activeCount = programs.filter(p => p.isActive).length;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">시술 프로그램 관리</h1>
           <p className="text-sm text-gray-400 mt-0.5">회원권, 패키지, 회차권 등 프로그램을 등록하고 관리하세요</p>
@@ -121,7 +131,7 @@ export default function Programs() {
       </div>
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <p className="text-xs text-gray-400 mb-1">전체 프로그램</p>
           <p className="text-2xl font-bold text-gray-900">{programs.length}개</p>
@@ -144,8 +154,38 @@ export default function Programs() {
         </div>
       </div>
 
+      {/* 검색 및 상태 필터 */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-3 mb-4 flex flex-col md:flex-row gap-3 md:items-center">
+        <label className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="프로그램명, 카테고리, 설명 검색"
+            className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
+            aria-label="프로그램 검색"
+          />
+        </label>
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto no-scrollbar">
+          {([
+            ['all', '전체 상태'],
+            ['active', '활성'],
+            ['inactive', '비활성'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${statusFilter === value ? 'bg-white text-[#1a3a8f] shadow-sm' : 'text-gray-500'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-gray-400 whitespace-nowrap">{filtered.length}개 표시</span>
+      </div>
+
       {/* 카테고리 필터 */}
-      <div className="flex gap-2 mb-4 flex-wrap">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar sm:flex-wrap">
         {['전체', ...CATEGORIES].map(cat => (
           <button
             key={cat}
@@ -170,8 +210,8 @@ export default function Programs() {
       {filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
           <Package size={40} className="text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">등록된 프로그램이 없어요</p>
-          <p className="text-sm text-gray-300 mt-1">상단 버튼을 클릭해 첫 번째 프로그램을 추가하세요</p>
+          <p className="text-gray-400 font-medium">조건에 맞는 프로그램이 없어요</p>
+          <p className="text-sm text-gray-300 mt-1">검색어나 필터를 바꾸거나 새 프로그램을 추가하세요</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -411,12 +451,12 @@ export default function Programs() {
               </div>
 
               {/* 마진 미리보기 */}
-              {form.price && form.costPrice && (
+              {parseInt(form.price) > 0 && form.costPrice !== '' && (
                 <div className="bg-gray-50 rounded-xl p-3 text-sm flex items-center justify-between">
                   <span className="text-gray-500">예상 마진</span>
                   <span className="font-bold text-green-600">
-                    {formatPrice(parseInt(form.price) - parseInt(form.costPrice))}
-                    {' '}({Math.round(((parseInt(form.price) - parseInt(form.costPrice)) / parseInt(form.price)) * 100)}%)
+                    {formatPrice(parseInt(form.price) - (parseInt(form.costPrice) || 0))}
+                    {' '}({Math.round(((parseInt(form.price) - (parseInt(form.costPrice) || 0)) / parseInt(form.price)) * 100)}%)
                   </span>
                 </div>
               )}

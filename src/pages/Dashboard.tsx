@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag } from 'lucide-react';
 import {
@@ -9,13 +9,14 @@ import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
+import RevisitReminderCard from '../components/RevisitReminderCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 
-const todayStr = format(new Date(), 'yyyy-MM-dd');
-const thisMonthStr = format(new Date(), 'yyyy-MM');
-
 function getDashboardData() {
+  // 자정을 넘겨도 정확하도록 매 호출마다 오늘 날짜 계산
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const thisMonthStr = format(new Date(), 'yyyy-MM');
   const customers = CustomerStore.getAll();
   const products = ProductStore.getAll();
 
@@ -50,8 +51,9 @@ function getDashboardData() {
   // Low stock
   const lowStockProducts = products.filter(p => p.stock <= p.minStock);
 
-  // Today's reservations
+  // Today's reservations (목록엔 전부 표시, 건수 집계는 취소/노쇼 제외)
   const todayReservations = ReservationStore.getByDate(todayStr);
+  const todayActiveReservations = todayReservations.filter(r => r.status !== 'cancelled' && r.status !== 'noshow');
 
   // Recent payments (last 5)
   const recentPayments = PaymentStore.getByDateRange(
@@ -68,13 +70,27 @@ function getDashboardData() {
     totalCustomers, newThisMonth, vipCount, totalPercent,
     lowStockProducts,
     todayReservations,
+    todayActiveReservations,
     recentPayments,
   };
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [data] = useState(() => getDashboardData());
+  const [data, setData] = useState(() => getDashboardData());
+
+  // 다른 페이지에서 CRUD 후 돌아오거나 창에 포커스가 돌아오면 최신 데이터로 재계산 (stale 방지)
+  useEffect(() => {
+    const refresh = () => setData(getDashboardData());
+    refresh(); // 마운트 시 최신화
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   const {
     thisMonth, revenueGrowth,
@@ -82,6 +98,7 @@ export default function Dashboard() {
     totalCustomers, newThisMonth, vipCount, totalPercent,
     lowStockProducts,
     todayReservations,
+    todayActiveReservations,
     recentPayments,
   } = data;
 
@@ -99,7 +116,7 @@ export default function Dashboard() {
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <p className="text-xs text-gray-500">오늘 예약</p>
-            <p className="text-lg font-black text-gray-900 mt-1">{todayReservations.length}건</p>
+            <p className="text-lg font-black text-gray-900 mt-1">{todayActiveReservations.length}건</p>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <p className="text-xs text-gray-500">전체 고객</p>
@@ -178,6 +195,9 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* 재방문 리마인더 (킬러③) */}
+        <RevisitReminderCard compact />
       </div>
 
       {/* ── 데스크톱 뷰 (lg+) ────────────────────────────────── */}
@@ -197,7 +217,7 @@ export default function Dashboard() {
           <div className="cursor-pointer" onClick={() => navigate('/reservations')}>
             <StatCard
               title="오늘 예약"
-              value={`${todayReservations.length}건`}
+              value={`${todayActiveReservations.length}건`}
               subtitle={`완료 ${todayReservations.filter(r => r.status === 'completed').length}건 · 대기 ${todayReservations.filter(r => r.status === 'pending').length}건`}
               icon={<Calendar size={20} />}
               accent="pink"
@@ -350,6 +370,9 @@ export default function Dashboard() {
 
           {/* Alerts */}
           <div className="space-y-4">
+            {/* 재방문 리마인더 (킬러③) */}
+            <RevisitReminderCard />
+
             {/* Low Stock Alert */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">

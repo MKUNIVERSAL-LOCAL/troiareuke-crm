@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
+import { createBranchAdmin } from '../../lib/adminApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -20,12 +21,11 @@ interface BranchForm {
   shop_type: string;
   plan: string;
   admin_email: string;
-  admin_password: string;
 }
 
 const emptyForm: BranchForm = {
   name: '', address: '', phone: '', shop_type: '피부관리실',
-  plan: 'trial', admin_email: '', admin_password: '',
+  plan: 'trial', admin_email: '',
 };
 
 export default function Branches() {
@@ -36,6 +36,9 @@ export default function Branches() {
   const [form, setForm] = useState<BranchForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [adminPending, setAdminPending] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   useEffect(() => { loadBranches(); }, []);
 
@@ -63,7 +66,7 @@ export default function Branches() {
 
   function openEdit(b: Branch) {
     setEditTarget(b);
-    setForm({ name: b.name, address: b.address || '', phone: b.phone || '', shop_type: b.shop_type || '', plan: b.plan, admin_email: '', admin_password: '' });
+    setForm({ name: b.name, address: b.address || '', phone: b.phone || '', shop_type: b.shop_type || '', plan: b.plan, admin_email: '' });
     setError('');
     setShowModal(true);
   }
@@ -72,6 +75,9 @@ export default function Branches() {
     if (!form.name.trim()) { setError('지점명을 입력해주세요.'); return; }
     setSaving(true);
     setError('');
+    setAdminPending(false);
+
+    let isPending = false;
 
     try {
       if (isSupabaseConfigured) {
@@ -81,33 +87,32 @@ export default function Branches() {
             shop_type: form.shop_type, plan: form.plan,
           }).eq('id', editTarget.id);
         } else {
-          // 새 지점 생성
+          // 지점 레코드 생성
           const { data: branch } = await supabase.from('branches').insert({
             name: form.name, address: form.address, phone: form.phone,
             shop_type: form.shop_type, plan: form.plan,
             trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
           }).select().single();
 
-          // 관리자 계정 생성 (이메일 입력된 경우)
-          if (form.admin_email && form.admin_password && branch) {
-            const { data: authData } = await supabase.auth.admin.createUser({
+          // 관리자 계정 생성은 NAS 관리자 API를 통해 수행 (auth.admin 직접 호출 금지)
+          if (form.admin_email && branch) {
+            const result = await createBranchAdmin({
               email: form.admin_email,
-              password: form.admin_password,
-              email_confirm: true,
+              branchId: branch.id,
+              branchName: form.name,
+              shopType: form.shop_type,
+              plan: form.plan,
             });
-            if (authData.user) {
-              await supabase.from('user_profiles').insert({
-                id: authData.user.id,
-                name: form.name + ' 관리자',
-                role: 'admin',
-                branch_id: branch.id,
-                is_onboarded: true,
-              });
+            if (result.pending) {
+              isPending = true;
+              setAdminPending(true);
+            } else if (!result.ok) {
+              setError(`관리자 계정 생성 실패: ${result.reason || '알 수 없는 오류'}`);
             }
           }
         }
       } else {
-        // 로컬 폴백
+        // 로컬 폴백 — 지점 정보만 저장, 계정 생성은 NAS 연동 후 지원
         const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
         if (editTarget) {
           const idx = localBranches.findIndex(b => b.id === editTarget.id);
@@ -123,34 +128,19 @@ export default function Branches() {
           };
           localBranches.unshift(newBranch);
 
-          // 로컬 유저 저장 (관리자 계정)
-          if (form.admin_email && form.admin_password) {
-            const localUsers = JSON.parse(localStorage.getItem('troiareuke_local_users') || '[]');
-            localUsers.push({
-              email: form.admin_email,
-              passwordHash: form.admin_password,
-              user: {
-                id: 'user_' + Date.now(),
-                email: form.admin_email,
-                name: form.name + ' 관리자',
-                shopName: form.name,
-                shopType: form.shop_type,
-                plan: form.plan,
-                trialEndsAt: new Date(Date.now() + 14 * 86400000).toISOString(),
-                isOnboarded: true,
-                role: 'admin',
-                branchId: newBranch.id,
-                branchName: form.name,
-                createdAt: new Date().toISOString(),
-              },
-            });
-            localStorage.setItem('troiareuke_local_users', JSON.stringify(localUsers));
+          // 관리자 이메일 입력된 경우 — NAS 연동 전임을 표시
+          if (form.admin_email) {
+            isPending = true;
+            setAdminPending(true);
           }
         }
         localStorage.setItem('troiareuke_branches', JSON.stringify(localBranches));
       }
 
-      setShowModal(false);
+      if (!isPending) {
+        setShowModal(false);
+      }
+      // isPending이면 모달을 열어두고 안내 메시지 표시 후 사용자가 직접 닫음
       loadBranches();
     } catch (e: any) {
       setError(e.message || '저장 중 오류가 발생했습니다.');
@@ -171,9 +161,24 @@ export default function Branches() {
     loadBranches();
   }
 
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredBranches = branches.filter(branch => {
+    const statusMatches = statusFilter === 'all'
+      || (statusFilter === 'active' ? branch.is_active : !branch.is_active);
+    const planLabel = planLabels[branch.plan]?.label || branch.plan;
+    const searchMatches = !normalizedSearch || [
+      branch.name,
+      branch.address || '',
+      branch.phone || '',
+      branch.shop_type || '',
+      planLabel,
+    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    return statusMatches && searchMatches;
+  });
+
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">지점 관리</h1>
           <p className="text-slate-400 text-sm mt-1">지점을 추가하고 관리자 계정을 발급하세요</p>
@@ -187,21 +192,51 @@ export default function Branches() {
         </button>
       </div>
 
+      <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-3 mb-4 flex flex-col md:flex-row gap-3 md:items-center">
+        <label className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="지점명, 주소, 연락처, 유형, 플랜 검색"
+            className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+            aria-label="지점 검색"
+          />
+        </label>
+        <div className="flex gap-1 p-1 bg-slate-800 rounded-xl overflow-x-auto no-scrollbar">
+          {([
+            ['all', '전체'],
+            ['active', '운영 중'],
+            ['inactive', '비활성'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${statusFilter === value ? 'bg-blue-500/20 text-blue-300' : 'text-slate-400'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-slate-500 whitespace-nowrap">{filteredBranches.length}개 지점</span>
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : branches.length === 0 ? (
+      ) : filteredBranches.length === 0 ? (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">
           <Building2 size={32} className="text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 font-medium">등록된 지점이 없습니다</p>
-          <p className="text-slate-600 text-sm mt-1">위의 "지점 추가" 버튼으로 첫 지점을 등록하세요</p>
+          <p className="text-slate-400 font-medium">조건에 맞는 지점이 없습니다</p>
+          <p className="text-slate-600 text-sm mt-1">검색어나 상태 필터를 바꿔보세요</p>
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-auto max-h-[70vh]">
+          <table className="w-full min-w-[850px]">
             <thead>
-              <tr className="border-b border-slate-700/30">
+              <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">지점명</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">유형</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">플랜</th>
@@ -211,7 +246,7 @@ export default function Branches() {
               </tr>
             </thead>
             <tbody>
-              {branches.map(b => {
+              {filteredBranches.map(b => {
                 const plan = planLabels[b.plan] || planLabels.trial;
                 return (
                   <tr key={b.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
@@ -266,6 +301,7 @@ export default function Branches() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -309,13 +345,24 @@ export default function Branches() {
                 <>
                   <div className="border-t border-slate-700 pt-4">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">관리자 계정 발급 (선택)</p>
+                    <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-3">
+                      <Info size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-600 leading-relaxed">
+                        관리자 계정 생성은 NAS 백엔드 연동 후 지원됩니다. 현재는 이메일만 기록되며, 연동 완료 후 일괄 발급합니다.
+                      </p>
+                    </div>
                   </div>
                   <Field label="관리자 이메일">
                     <input className="admin-input" type="email" value={form.admin_email} onChange={e => setForm(f => ({ ...f, admin_email: e.target.value }))} placeholder="manager@example.com" />
                   </Field>
-                  <Field label="초기 비밀번호">
-                    <input className="admin-input" type="password" value={form.admin_password} onChange={e => setForm(f => ({ ...f, admin_password: e.target.value }))} placeholder="임시 비밀번호" />
-                  </Field>
+                  {adminPending && (
+                    <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                      <Info size={13} className="text-blue-400 mt-0.5 shrink-0" />
+                      <p className="text-xs text-blue-400 leading-relaxed">
+                        지점이 저장되었습니다. 관리자 계정은 NAS 관리자 API 연동 후 생성됩니다.
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
             </div>

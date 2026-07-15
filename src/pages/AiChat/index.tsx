@@ -7,6 +7,7 @@ const IS_ELECTRON =
   /Electron/i.test(navigator.userAgent) &&
   !!(window as any).electronAPI;
 import Header from '../../components/layout/Header';
+import { AI_CHAT_ENABLED } from '../../lib/featureFlags';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
 import { format, subMonths, parseISO, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -182,7 +183,36 @@ async function callGemini(apiKey: string, messages: { role: string; content: str
   return (await response.json()).candidates[0].content.parts[0].text;
 }
 
+function AiChatComingSoon() {
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header title="AI 분석 챗봇" subtitle="Claude AI 기반 CRM 데이터 실시간 분석" />
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="max-w-md w-full text-center bg-white border border-gray-100 rounded-2xl shadow-sm px-8 py-12">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center shadow-md shadow-blue-200">
+            <Bot size={28} className="text-white" />
+          </div>
+          <span className="inline-block mt-5 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-[#1a3a8f]">
+            Coming Soon
+          </span>
+          <h2 className="mt-4 text-lg font-bold text-gray-900">AI 분석 챗봇 준비 중입니다</h2>
+          <p className="mt-2 text-sm text-gray-500 leading-relaxed">
+            시스템 정식 오픈과 함께 제공될 예정입니다.<br />
+            고객·매출·재고 데이터를 AI가 실시간으로 분석해 드립니다.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AiChat() {
+  if (!AI_CHAT_ENABLED) return <AiChatComingSoon />;
+
+  return <AiChatInner />;
+}
+
+function AiChatInner() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '0',
