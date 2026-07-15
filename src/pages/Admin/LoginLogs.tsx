@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Search, RefreshCw, Filter } from 'lucide-react';
+import { CheckCircle, XCircle, Search, RefreshCw, Filter, AlertCircle } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { getLocalLogs } from '../../lib/loginLog';
 import { format, parseISO } from 'date-fns';
@@ -19,6 +19,7 @@ export default function LoginLogs() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filtered, setFiltered] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
   const [page, setPage] = useState(0);
@@ -41,18 +42,22 @@ export default function LoginLogs() {
 
   async function loadLogs() {
     setLoading(true);
+    setError(null);
     try {
       if (isSupabaseConfigured) {
-        const { data } = await supabase
+        const { data, error: loadError } = await supabase
           .from('login_logs')
           .select('*')
           .order('logged_in_at', { ascending: false })
           .limit(500);
+        if (loadError) throw loadError;
         setLogs(data || []);
       } else {
         const local = getLocalLogs();
         setLogs(local.map(l => ({ ...l })));
       }
+    } catch {
+      setError('로그인 기록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setLoading(false);
     }
@@ -64,9 +69,9 @@ export default function LoginLogs() {
   const failCount = filtered.filter(l => l.status === 'failed').length;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">로그인 기록</h1>
           <p className="text-slate-400 text-sm mt-1">전체 지점의 로그인 이력을 확인하세요</p>
@@ -81,7 +86,7 @@ export default function LoginLogs() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
         <div className="bg-slate-900 border border-slate-700/50 rounded-xl px-5 py-4">
           <p className="text-2xl font-bold text-white">{filtered.length.toLocaleString()}</p>
           <p className="text-xs text-slate-400 mt-1">전체 기록</p>
@@ -97,8 +102,8 @@ export default function LoginLogs() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-4">
+        <div className="relative flex-1 lg:max-w-xs">
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             className="w-full pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 placeholder-slate-600 outline-none focus:border-blue-500"
@@ -107,7 +112,7 @@ export default function LoginLogs() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
           <Filter size={14} className="text-slate-500" />
           {(['all', 'success', 'failed'] as const).map(s => (
             <button
@@ -133,11 +138,22 @@ export default function LoginLogs() {
           <div className="flex items-center justify-center h-64">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-64 px-6 text-center">
+            <AlertCircle size={32} className="text-red-400 mb-3" />
+            <p className="text-sm text-slate-400">{error}</p>
+            <button
+              onClick={loadLogs}
+              className="flex items-center gap-2 mt-4 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-xl"
+            >
+              <RefreshCw size={14} /> 다시 불러오기
+            </button>
+          </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="max-h-[60vh] overflow-auto">
               <table className="w-full">
-                <thead>
+                <thead className="sticky top-0 z-10 bg-slate-900">
                   <tr className="border-b border-slate-700/30">
                     <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">이메일</th>
                     <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">지점</th>
