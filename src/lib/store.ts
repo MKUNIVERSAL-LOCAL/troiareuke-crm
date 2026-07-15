@@ -1011,8 +1011,15 @@ export const TreatmentLogStore = {
       CustomerProgramStore.useSession(data.customerProgramId, data.sessionsUsed);
     }
 
-    // 고객 방문 횟수 업데이트
-    CustomerStore.incrementVisit(data.customerId, 0);
+    // 같은 고객·날짜의 완료 예약이 이미 방문으로 반영됐다면 중복 가산하지 않는다.
+    const completedReservationExists = ReservationStore.getAll().some(reservation =>
+      reservation.customerId === data.customerId
+      && reservation.date === data.treatmentDate
+      && reservation.status === 'completed'
+    );
+    if (!completedReservationExists) {
+      CustomerStore.incrementVisit(data.customerId, 0);
+    }
 
     return log;
   },
@@ -1046,6 +1053,26 @@ export const TreatmentLogStore = {
     // 삭제 시 차감했던 프로그램 회차를 복구 (직원 실수 삭제로 고객 회차가 사라지지 않도록)
     if (target?.customerProgramId) {
       CustomerProgramStore.useSession(target.customerProgramId, -(target.sessionsUsed || 0));
+    }
+    if (target) {
+      const anotherTreatmentExists = this.getAll().some(log =>
+        log.id !== target.id
+        && log.customerId === target.customerId
+        && log.treatmentDate === target.treatmentDate
+      );
+      const completedReservationExists = ReservationStore.getAll().some(reservation =>
+        reservation.customerId === target.customerId
+        && reservation.date === target.treatmentDate
+        && reservation.status === 'completed'
+      );
+      if (!anotherTreatmentExists && !completedReservationExists) {
+        const customer = CustomerStore.getById(target.customerId);
+        if (customer && !customer.id.startsWith('sample_')) {
+          CustomerStore.update(target.customerId, {
+            totalVisits: Math.max(0, (customer.totalVisits || 0) - 1),
+          });
+        }
+      }
     }
     const all = this.getAll().filter(t => t.id !== id);
     _treatmentLogs = all;
@@ -1449,14 +1476,18 @@ export const ReservationStore = {
     if (reservation?.customerId && previousStatus !== status) {
       const customer = CustomerStore.getById(reservation.customerId);
       if (customer && !customer.id.startsWith('sample_')) {
-        if (status === 'completed') {
+        const treatmentExists = TreatmentLogStore.getAll().some(log =>
+          log.customerId === reservation.customerId
+          && log.treatmentDate === reservation.date
+        );
+        if (status === 'completed' && !treatmentExists) {
           CustomerStore.update(reservation.customerId, {
             lastVisitDate: !customer.lastVisitDate || reservation.date > customer.lastVisitDate
               ? reservation.date
               : customer.lastVisitDate,
             totalVisits: (customer.totalVisits || 0) + 1,
           });
-        } else if (previousStatus === 'completed') {
+        } else if (previousStatus === 'completed' && !treatmentExists) {
           CustomerStore.update(reservation.customerId, {
             totalVisits: Math.max(0, (customer.totalVisits || 0) - 1),
           });
@@ -1471,7 +1502,11 @@ export const ReservationStore = {
     const reservation = this.getAll().find(r => r.id === id);
     if (reservation?.status === 'completed' && reservation.customerId) {
       const customer = CustomerStore.getById(reservation.customerId);
-      if (customer && !customer.id.startsWith('sample_')) {
+      const treatmentExists = TreatmentLogStore.getAll().some(log =>
+        log.customerId === reservation.customerId
+        && log.treatmentDate === reservation.date
+      );
+      if (customer && !customer.id.startsWith('sample_') && !treatmentExists) {
         CustomerStore.update(reservation.customerId, {
           totalVisits: Math.max(0, (customer.totalVisits || 0) - 1),
         });
