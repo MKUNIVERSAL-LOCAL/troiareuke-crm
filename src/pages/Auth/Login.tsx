@@ -2,7 +2,8 @@
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { requestPasswordReset } from '../../lib/authApi';
+import { requestPasswordReset, isAuthApiConfigured } from '../../lib/authApi';
+import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 const features = [
   '고객 관리 · 예약 · 시술 기록 통합',
@@ -47,7 +48,25 @@ export default function Login() {
     setResetLoading(true);
     setResetError('');
     try {
-      await requestPasswordReset(normalizedEmail);
+      if (isAuthApiConfigured) {
+        // NAS 중앙 서버 (1회용 토큰 메일 발송)
+        await requestPasswordReset(normalizedEmail);
+      } else if (isSupabaseConfigured) {
+        // NAS 미배포 환경 폴백: Supabase 재설정 메일 (웹 /reset-password로 복귀)
+        const configuredUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, '');
+        const browserUrl = window.location.protocol === 'http:' || window.location.protocol === 'https:'
+          ? window.location.origin
+          : '';
+        const publicAppUrl = configuredUrl || browserUrl || 'https://troiareuke-crm.vercel.app';
+        const { error: resetRequestError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+          redirectTo: `${publicAppUrl}/reset-password`,
+        });
+        if (resetRequestError) throw resetRequestError;
+      } else {
+        setResetError('비밀번호 재설정 서버가 연결되어 있지 않습니다. 관리자에게 문의해주세요.');
+        setResetLoading(false);
+        return;
+      }
       setResetSent(true);
     } catch (e: any) {
       const message = e?.message || '';

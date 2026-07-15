@@ -782,6 +782,120 @@ async function dispatchScheduledMessages() {
   }
 }
 
+// ── 재방문 자동 리마인더 (클라이언트 reminderEngine.ts의 서버 포트) ──
+// 앱이 꺼져 있어도 매일 REMINDER_HOUR시에 재방문 권장일이 지난 고객에게
+// 자동 발송한다. REMINDER_ENABLED=true + 발송사 설정 시에만 실동작.
+const REMINDER_ENABLED = String(process.env.REMINDER_ENABLED || 'false').toLowerCase() === 'true';
+const REMINDER_HOUR = Number(process.env.REMINDER_HOUR || 10);
+const REMINDER_CYCLE_DAYS = Number(process.env.REMINDER_CYCLE_DAYS || 28);
+const REMINDER_MIN_OVERDUE = Number(process.env.REMINDER_MIN_OVERDUE || 0);
+const REMINDER_COOLDOWN_DAYS = Number(process.env.REMINDER_COOLDOWN_DAYS || 7);
+let reminderLastRunDate = '';
+
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+async function loadCollection(branchId, collection) {
+  const { rows } = await pool.query(
+    'SELECT data FROM crm_records WHERE branch_id = $1 AND collection = $2',
+    [branchId, collection],
+  );
+  return rows.map(r => r.data);
+}
+
+// 권장 재방문일이 지난 고객 산출 (행 형식 = 클라이언트 toDb*의 snake_case)
+function computeRevisitDue({ customers, treatmentLogs, reservations }) {
+  const today = isoDate(new Date());
+  const due = [];
+  for (const customer of customers) {
+    if (!customer?.id || String(customer.id).startsWith('sample_') || !customer.phone) continue;
+    const hasUpcoming = reservations.some(r =>
+      r.customer_id === customer.id && r.date >= today && r.status !== 'cancelled');
+    if (hasUpcoming) continue;
+
+    const logs = treatmentLogs
+      .filter(t => t.customer_id === customer.id)
+      .sort((a, b) => String(b.treatment_date || '').localeCompare(String(a.treatment_date || '')));
+    const lastLog = logs[0];
+    const lastVisit = lastLog?.treatment_date || customer.last_visit_date || null;
+
+    let dueDate;
+    if (lastLog?.next_appointment) {
+      dueDate = lastLog.next_appointment;
+    } else if (lastVisit) {
+      const d = new Date(`${lastVisit}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + REMINDER_CYCLE_DAYS);
+      dueDate = isoDate(d);
+    } else {
+      continue;
+    }
+
+    const overdueDays = Math.floor((new Date(today).getTime() - new Date(dueDate).getTime()) / 86400000);
+    if (overdueDays < REMINDER_MIN_OVERDUE) continue;
+    due.push({ customer, overdueDays });
+  }
+  return due.sort((a, b) => b.overdueDays - a.overdueDays);
+}
+
+async function runRevisitReminders() {
+  if (!REMINDER_ENABLED) return;
+  const now = new Date();
+  const today = isoDate(now);
+  if (now.getHours() !== REMINDER_HOUR || reminderLastRunDate === today) return;
+  reminderLastRunDate = today;
+
+  const { rows: branchRows } = await pool.query(
+    "SELECT DISTINCT branch_id FROM crm_records WHERE collection = 'customers'",
+  );
+
+  for (const { branch_id: branchId } of branchRows) {
+    try {
+      const [customers, treatmentLogs, reservations, settingsRows] = await Promise.all([
+        loadCollection(branchId, 'customers'),
+        loadCollection(branchId, 'treatment_logs'),
+        loadCollection(branchId, 'reservations'),
+        loadCollection(branchId, 'shop_settings'),
+      ]);
+      const due = computeRevisitDue({ customers, treatmentLogs, reservations });
+      if (due.length === 0) continue;
+
+      // 쿨다운: 최근 N일 내 리마인더를 받은 번호는 제외 (매일 재발송 금지)
+      const { rows: recent } = await pool.query(
+        `SELECT DISTINCT phone FROM message_send_log
+         WHERE branch_id = $1 AND type = 'revisit-reminder'
+           AND created_at > now() - ($2 || ' days')::interval`,
+        [branchId, REMINDER_COOLDOWN_DAYS],
+      );
+      const cooled = new Set(recent.map(r => r.phone));
+      const shopName = settingsRows[0]?.name || '저희 샵';
+
+      const targets = due.filter(d => {
+        const normalized = normalizePhone(d.customer.phone);
+        return normalized && !cooled.has(normalized);
+      }).slice(0, MESSAGE_MAX_RECIPIENTS);
+      if (targets.length === 0) continue;
+
+      // 고객명이 들어가므로 개별 발송
+      for (const { customer } of targets) {
+        const content =
+          `[${shopName}] ${customer.name || '고객'}님, 안녕하세요 😊\n` +
+          `피부 관리 주기가 다가왔어요. 그동안 관리하신 피부 컨디션을 이어가시려면 ` +
+          `이번 주 방문을 추천드려요!\n예약 문의는 편하게 답장 주세요. 감사합니다.`;
+        await processSend({
+          authUser: { id: null, role: 'admin', branch_id: branchId },
+          type: 'revisit-reminder',
+          content,
+          phones: [customer.phone],
+        });
+      }
+      console.log(`재방문 리마인더: ${branchId} 지점 ${targets.length}명 처리`);
+    } catch (error) {
+      console.error(`재방문 리마인더 실패 (${branchId}):`, error?.message || error);
+    }
+  }
+}
+
 // ── CRM 데이터 저장 API (사용 데이터가 NAS에 쌓이는 지점) ────────
 // 클라이언트 store.ts가 Supabase 대신 이 API로 동기화한다. 행 형식은
 // 클라이언트 toDb*()가 만드는 snake_case 행 그대로를 JSONB로 저장한다.
@@ -890,6 +1004,7 @@ initializeDatabase()
     await cleanupExpired();
     setInterval(cleanupExpired, 24 * 60 * 60 * 1000).unref();
     setInterval(() => dispatchScheduledMessages().catch(e => console.error('dispatch error', e)), 60 * 1000).unref();
+    setInterval(() => runRevisitReminders().catch(e => console.error('reminder error', e)), 10 * 60 * 1000).unref();
     if (process.env.SMTP_HOST) await smtp.verify();
     app.listen(PORT, '0.0.0.0', () => console.log(`Troiareuke auth server listening on ${PORT}`));
   })
