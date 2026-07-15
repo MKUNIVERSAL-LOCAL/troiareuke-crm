@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle, Search, Filter } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -29,6 +29,20 @@ export default function Announcements() {
   const [editTarget, setEditTarget] = useState<Announcement | null>(null);
   const [form, setForm] = useState<typeof emptyForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'hidden'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | Announcement['type']>('all');
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredList = list.filter(a => {
+    const matchesSearch = !normalizedSearch
+      || a.title.toLowerCase().includes(normalizedSearch)
+      || a.content.toLowerCase().includes(normalizedSearch);
+    const matchesStatus = statusFilter === 'all'
+      || (statusFilter === 'active' ? a.is_active : !a.is_active);
+    const matchesType = typeFilter === 'all' || a.type === typeFilter;
+    return matchesSearch && matchesStatus && matchesType;
+  });
 
   useEffect(() => { load(); }, []);
 
@@ -64,6 +78,7 @@ export default function Announcements() {
   }
 
   async function handleDelete(id: string) {
+    if (!window.confirm('이 공지사항을 삭제할까요? 삭제한 공지는 복구할 수 없습니다.')) return;
     await supabase.from('announcements').delete().eq('id', id);
     load();
   }
@@ -74,8 +89,8 @@ export default function Announcements() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">공지사항 관리</h1>
           <p className="text-slate-400 text-sm mt-1">전체 샵에 공지 및 업데이트 내용을 발송하세요</p>
@@ -90,7 +105,7 @@ export default function Announcements() {
       </div>
 
       {/* 요약 */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl px-5 py-4">
           <p className="text-2xl font-bold text-white">{list.length}</p>
           <p className="text-xs text-slate-400 mt-1">전체 공지</p>
@@ -105,8 +120,49 @@ export default function Announcements() {
         </div>
       </div>
 
+      {/* 검색 및 필터 */}
+      <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-3 sm:p-4 mb-5">
+        <div className="flex flex-col xl:flex-row gap-3">
+          <div className="relative flex-1 min-w-0">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="제목 또는 내용 검색"
+              className="admin-input admin-input-search"
+              aria-label="공지사항 검색"
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <Filter size={15} className="hidden sm:block text-slate-500" />
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
+              className="admin-input sm:w-32"
+              aria-label="게시 상태 필터"
+            >
+              <option value="all">전체 상태</option>
+              <option value="active">게시 중</option>
+              <option value="hidden">숨김</option>
+            </select>
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value as typeof typeFilter)}
+              className="admin-input sm:w-36"
+              aria-label="공지 유형 필터"
+            >
+              <option value="all">전체 유형</option>
+              {typeOptions.map(type => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-2 px-1">전체 {list.length}건 중 {filteredList.length}건 표시</p>
+      </div>
+
       {/* 목록 */}
-      <div className="space-y-3">
+      <div className="space-y-3 max-h-[calc(100vh-23rem)] min-h-48 overflow-y-auto pr-1">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -117,12 +173,23 @@ export default function Announcements() {
             <p className="text-slate-400">등록된 공지사항이 없습니다</p>
             <p className="text-slate-600 text-sm mt-1">"공지 작성" 버튼으로 첫 공지를 작성하세요</p>
           </div>
+        ) : filteredList.length === 0 ? (
+          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-12 text-center">
+            <Search size={30} className="text-slate-600 mx-auto mb-3" />
+            <p className="text-slate-400">조건에 맞는 공지사항이 없습니다</p>
+            <button
+              onClick={() => { setSearch(''); setStatusFilter('all'); setTypeFilter('all'); }}
+              className="text-xs text-blue-400 hover:text-blue-300 mt-2"
+            >
+              검색과 필터 초기화
+            </button>
+          </div>
         ) : (
-          list.map(a => {
+          filteredList.map(a => {
             const type = typeOptions.find(t => t.value === a.type) || typeOptions[0];
             return (
               <div key={a.id} className={`bg-slate-900 border rounded-2xl p-5 transition-all ${a.is_active ? 'border-slate-700/50' : 'border-slate-800/30 opacity-50'}`}>
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${type.color}`}>
@@ -144,7 +211,7 @@ export default function Announcements() {
                     <h3 className="text-sm font-bold text-white mb-1">{a.title}</h3>
                     <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">{a.content}</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center justify-end gap-2 shrink-0">
                     <button
                       onClick={() => handleToggle(a)}
                       className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
@@ -238,6 +305,7 @@ export default function Announcements() {
 
       <style>{`
         .admin-input { width: 100%; padding: 0.5rem 0.75rem; font-size: 0.875rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.75rem; color: #e2e8f0; outline: none; }
+        .admin-input-search { padding-left: 2.25rem; }
         .admin-input:focus { border-color: #3b82f6; }
       `}</style>
     </div>
