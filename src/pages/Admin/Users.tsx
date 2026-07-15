@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { Users, Building2, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
+import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -11,7 +12,15 @@ interface UserRow {
   role: string;
   branch_name: string | null;
   is_onboarded: boolean;
+  is_active: boolean;
   created_at: string;
+}
+
+// 어드민이 계정 관리 시 발급하는 임시 비밀번호 (표시는 1회)
+function generateTempPassword(): string {
+  const bytes = new Uint8Array(9);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, '').slice(0, 12);
 }
 
 const roleLabels: Record<string, { label: string; color: string }> = {
@@ -34,7 +43,23 @@ export default function AdminUsers() {
   async function loadData() {
     setLoading(true);
     try {
-      if (isSupabaseConfigured) {
+      if (isAuthApiConfigured) {
+        // NAS 중앙 서버: 전체 계정 목록 (슈퍼어드민 전용 API)
+        const list = await adminListUsers();
+        setUsers(list.map(u => ({
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          branch_name: u.branchName || null,
+          is_onboarded: u.isOnboarded,
+          is_active: u.isActive !== false,
+          created_at: u.createdAt,
+        })));
+        // 지점 필터는 계정에 등록된 지점명으로 구성
+        const branchNames = [...new Set(list.map(u => u.branchName).filter(Boolean))] as string[];
+        setBranches(branchNames.map(name => ({ id: name, name } as Branch)));
+      } else if (isSupabaseConfigured) {
         // auth.admin.listUsers() 는 service_role 전용 — 프론트에서 직접 호출 금지.
         // 이메일은 user_profiles에 email 컬럼이 있으면 함께 select, 없으면 '—' 처리.
         const [usersRes, branchesRes] = await Promise.all([
@@ -51,6 +76,7 @@ export default function AdminUsers() {
           role: u.role,
           branch_name: u.branches?.name || null,
           is_onboarded: u.is_onboarded,
+          is_active: true,
           created_at: u.created_at,
         })));
         setBranches(branchesRes.data || []);
@@ -66,12 +92,44 @@ export default function AdminUsers() {
           role: u.user.role,
           branch_name: u.user.branchName || null,
           is_onboarded: u.user.isOnboarded,
+          is_active: true,
           created_at: u.user.createdAt,
         })));
         setBranches(localBranches);
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ── NAS 계정 관리 액션 (활성/비활성 · 비밀번호 재설정) ─────────
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  async function handleToggleActive(user: UserRow) {
+    const next = !user.is_active;
+    if (!confirm(`${user.email} 계정을 ${next ? '활성화' : '비활성화'}할까요?${next ? '' : ' 비활성화하면 즉시 로그아웃되고 로그인할 수 없습니다.'}`)) return;
+    setActionBusy(user.id);
+    try {
+      await adminUpdateUser(user.id, { isActive: next });
+      await loadData();
+    } catch (e: any) {
+      alert(e?.message || '계정 상태 변경에 실패했습니다.');
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleResetPassword(user: UserRow) {
+    if (!confirm(`${user.email}의 비밀번호를 재설정할까요? 기존 세션은 모두 로그아웃됩니다.`)) return;
+    setActionBusy(user.id);
+    try {
+      const temp = generateTempPassword();
+      await adminUpdateUser(user.id, { password: temp });
+      alert(`새 임시 비밀번호: ${temp}\n\n지금 복사해서 전달하세요. 이 창을 닫으면 다시 확인할 수 없습니다.`);
+    } catch (e: any) {
+      alert(e?.message || '비밀번호 재설정에 실패했습니다.');
+    } finally {
+      setActionBusy(null);
     }
   }
 
@@ -147,6 +205,9 @@ export default function AdminUsers() {
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">소속 지점</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">온보딩</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">가입일</th>
+                {isAuthApiConfigured && (
+                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">관리</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -155,7 +216,12 @@ export default function AdminUsers() {
                 return (
                   <tr key={u.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
                     <td className="px-6 py-4">
-                      <p className="text-sm font-medium text-white">{u.name || '(이름 없음)'}</p>
+                      <p className="text-sm font-medium text-white">
+                        {u.name || '(이름 없음)'}
+                        {!u.is_active && (
+                          <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400">비활성</span>
+                        )}
+                      </p>
                       <p className="text-xs text-slate-500 mt-0.5">{u.email}</p>
                     </td>
                     <td className="px-6 py-4">
@@ -174,6 +240,34 @@ export default function AdminUsers() {
                     <td className="px-6 py-4 text-xs text-slate-500">
                       {format(parseISO(u.created_at), 'yyyy.MM.dd', { locale: ko })}
                     </td>
+                    {isAuthApiConfigured && (
+                      <td className="px-6 py-4">
+                        {u.role === 'superadmin' ? (
+                          <span className="text-xs text-slate-600">—</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleToggleActive(u)}
+                              disabled={actionBusy === u.id}
+                              className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+                                u.is_active
+                                  ? 'text-red-400 border-red-500/20 hover:bg-red-500/10'
+                                  : 'text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10'
+                              }`}
+                            >
+                              {u.is_active ? '비활성화' : '활성화'}
+                            </button>
+                            <button
+                              onClick={() => handleResetPassword(u)}
+                              disabled={actionBusy === u.id}
+                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50"
+                            >
+                              비밀번호 재설정
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
