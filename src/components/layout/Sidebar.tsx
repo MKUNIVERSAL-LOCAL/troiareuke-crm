@@ -43,6 +43,14 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
     if (onClose) onClose();
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      window.alert('아직 서버에 저장되지 않은 변경이 있거나 서버에 연결할 수 없습니다. 인터넷 연결을 확인한 뒤 다시 로그아웃해주세요.');
+    }
+  };
+
   return (
     <aside className={clsx(
       'w-64 h-screen bg-white border-r border-gray-100 flex flex-col fixed left-0 top-0 z-30 shadow-sm transition-transform duration-300',
@@ -125,7 +133,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
           </div>
         </div>
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
         >
           <LogOut size={14} />

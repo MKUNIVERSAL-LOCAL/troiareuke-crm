@@ -28,12 +28,22 @@ jobs:
       - name: TypeScript check (tsc --noEmit)
         run: npx tsc --noEmit
 
+      - name: Targeted commercial-readiness tests
+        run: |
+          npm run test:nas-outbox
+          npm run test:password-reset
+          npm run test:photo-sync
+
       - name: PWA build check
         run: npm run build
         env:
+          DEPLOY_TARGET: ghpages
           # 빌드 타임 검증용 더미값. 실제 런타임에 사용되지 않음.
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://dummy.supabase.co' }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'dummy_build_only' }}
+          VITE_PUBLIC_APP_URL: https://example.github.io/troiareuke-crm
+          VITE_AUTH_API_URL: https://crm-api.example.com
+          VITE_NAS_CUTOVER_APPROVED: 'true'
 
       - name: Verify PWA assets exist
         run: |
@@ -43,3 +53,5 @@ jobs:
           test -f dist/sw.js && echo "sw.js OK" || (echo "ERROR: sw.js missing" && exit 1)
           echo "--- manifest.webmanifest 존재 확인 ---"
           test -f dist/manifest.webmanifest && echo "manifest OK" || (echo "ERROR: manifest missing" && exit 1)
+          node -e "const manifest=JSON.parse(require('fs').readFileSync('dist/manifest.webmanifest')); if (manifest.start_url !== '/troiareuke-crm/' || manifest.scope !== '/troiareuke-crm/' || manifest.icons.some(({src}) => !src.startsWith('/troiareuke-crm/'))) throw new Error('GitHub Pages PWA paths are invalid')"
+          grep -q "https://crm-api.example.com" dist/index.html || (echo "ERROR: NAS API origin missing from CSP" && exit 1)

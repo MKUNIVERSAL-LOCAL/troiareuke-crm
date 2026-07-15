@@ -11,6 +11,8 @@ import {
 } from '../lib/authApi';
 import { recordLoginLog } from '../lib/loginLog';
 import { initializeStores, resetStoreCache, safeSetItem } from '../lib/store';
+import { flushNasOutbox } from '../lib/nasData';
+import { flushPhotosToNas } from '../lib/photoStore';
 
 // 슈퍼어드민 권한은 오직 Supabase의 user_profiles.role === 'superadmin' 로만 판정한다.
 // 자격증명을 클라이언트에 절대 하드코딩하지 않는다 (번들에 노출되어 공개되기 때문).
@@ -314,6 +316,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     if (isAuthApiConfigured) {
+      // 전송 대기 중인 고객 변경이 있으면 서버 반영을 확인한 뒤 로그아웃한다.
+      // 실패 시 아래 로컬 캐시 삭제를 진행하지 않아 오프라인 데이터 유실을 막는다.
+      await flushNasOutbox();
+      await flushPhotosToNas();
       await logoutFromAuthApi();
     } else if (isSupabaseConfigured) {
       await supabase.auth.signOut();

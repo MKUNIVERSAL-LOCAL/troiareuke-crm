@@ -26,10 +26,24 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run build
+      - name: Validate required build configuration
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_APP_URL: ${{ vars.VITE_PUBLIC_APP_URL }}
+          VITE_AUTH_API_URL: ${{ vars.VITE_AUTH_API_URL }}
+          VITE_NAS_CUTOVER_APPROVED: ${{ vars.VITE_NAS_CUTOVER_APPROVED }}
+        run: |
+          node -e "for (const name of ['VITE_SUPABASE_URL','VITE_SUPABASE_ANON_KEY','VITE_PUBLIC_APP_URL']) if (!process.env[name]?.trim()) throw new Error('Missing required build configuration: ' + name); for (const name of ['VITE_PUBLIC_APP_URL','VITE_AUTH_API_URL']) { const value=process.env[name]?.trim(); if (!value) continue; const url=new URL(value); if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error(name + ' must be a public HTTPS URL without credentials, query, or hash'); } if (process.env.VITE_AUTH_API_URL?.trim() && process.env.VITE_NAS_CUTOVER_APPROVED !== 'true') throw new Error('NAS cutover requires VITE_NAS_CUTOVER_APPROVED=true');"
+
+      - run: npm run build
+        env:
+          DEPLOY_TARGET: ghpages
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_APP_URL: ${{ vars.VITE_PUBLIC_APP_URL }}
+          VITE_AUTH_API_URL: ${{ vars.VITE_AUTH_API_URL }}
+          VITE_NAS_CUTOVER_APPROVED: ${{ vars.VITE_NAS_CUTOVER_APPROVED }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

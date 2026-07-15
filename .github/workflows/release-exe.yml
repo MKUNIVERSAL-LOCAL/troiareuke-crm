@@ -19,11 +19,38 @@ jobs:
 
       - run: npm ci
 
+      - name: Validate required build configuration
+        shell: pwsh
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_APP_URL: ${{ vars.VITE_PUBLIC_APP_URL }}
+          VITE_AUTH_API_URL: ${{ vars.VITE_AUTH_API_URL }}
+          VITE_NAS_CUTOVER_APPROVED: ${{ vars.VITE_NAS_CUTOVER_APPROVED }}
+        run: |
+          $required = 'VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_PUBLIC_APP_URL'
+          $missing = $required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) }
+          if ($missing) { throw "Missing required build configuration: $($missing -join ', ')" }
+          foreach ($name in 'VITE_PUBLIC_APP_URL', 'VITE_AUTH_API_URL') {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ([string]::IsNullOrWhiteSpace($value)) { continue }
+            $url = [Uri]$value
+            if ($url.Scheme -ne 'https' -or $url.UserInfo -or $url.Query -or $url.Fragment) {
+              throw "$name must be a public HTTPS URL without credentials, query, or hash"
+            }
+          }
+          if ($env:VITE_AUTH_API_URL -and $env:VITE_NAS_CUTOVER_APPROVED -ne 'true') {
+            throw 'NAS cutover requires VITE_NAS_CUTOVER_APPROVED=true'
+          }
+
       - name: Build single portable executable
         run: npm run electron:build:portable
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_APP_URL: ${{ vars.VITE_PUBLIC_APP_URL }}
+          VITE_AUTH_API_URL: ${{ vars.VITE_AUTH_API_URL }}
+          VITE_NAS_CUTOVER_APPROVED: ${{ vars.VITE_NAS_CUTOVER_APPROVED }}
 
       - name: Upload portable executable
         uses: actions/upload-artifact@v4

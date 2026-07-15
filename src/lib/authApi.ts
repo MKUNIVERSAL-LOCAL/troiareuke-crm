@@ -25,6 +25,7 @@ interface AuthResponse {
 
 const apiBaseUrl = (import.meta.env.VITE_AUTH_API_URL as string | undefined)?.trim().replace(/\/$/, '') || '';
 const AUTH_TOKEN_KEY = 'troiareuke_auth_token';
+const API_TIMEOUT_MS = 10000;
 
 export const isAuthApiConfigured = Boolean(apiBaseUrl);
 
@@ -42,6 +43,9 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
+    signal: init.signal
+      ? AbortSignal.any([init.signal, AbortSignal.timeout(API_TIMEOUT_MS)])
+      : AbortSignal.timeout(API_TIMEOUT_MS),
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -131,6 +135,8 @@ export interface AdminCreateUserPayload {
   branchId?: string; // 기존 지점에 직원을 추가할 때
   branchName?: string;
   shopType?: string;
+  shopPhone?: string;
+  shopAddress?: string;
 }
 
 export async function adminListUsers() {
@@ -154,4 +160,15 @@ export async function adminUpdateUser(
     body: JSON.stringify(updates),
   });
   return response.user;
+}
+
+export async function adminUpdateBranch(
+  id: string,
+  updates: { name?: string; shopType?: string; shopPhone?: string; shopAddress?: string; plan?: string; isActive?: boolean },
+) {
+  const response = await apiRequest<{ users: AuthApiUser[] }>(`/api/admin/branches/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+  return response.users;
 }

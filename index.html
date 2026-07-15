@@ -2,14 +2,26 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1a3a8f" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="아르케 CRM" />
     <title>트로이아르케 CRM</title>
+    <script>
+      // GitHub Pages 404.html이 query string으로 보존한 SPA 경로를 복원한다.
+      (function (location) {
+        if (location.search.startsWith('?/')) {
+          var decoded = location.search
+            .slice(2)
+            .split('&')
+            .map(function (part) { return part.replace(/~and~/g, '&'); })
+            .join('?');
+          window.history.replaceState(null, '', location.pathname.replace(/\/$/, '') + '/' + decoded + location.hash);
+        }
+      })(window.location);
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">

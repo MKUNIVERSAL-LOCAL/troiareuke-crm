@@ -102,6 +102,24 @@ await test('발급된 계정이 임시 비밀번호로 로그인된다', async (
 await test('일반 계정은 admin API에 접근할 수 없다', async () => {
   const { status } = await call('/api/admin/users', { token: shopToken });
   assert(status === 403, `status=${status}`);
+  const branchPatch = await call('/api/admin/branches/forbidden', {
+    method: 'PATCH', token: shopToken, body: { name: '권한 없음' },
+  });
+  assert(branchPatch.status === 403, `branch patch status=${branchPatch.status}`);
+});
+
+await test('NAS 지점 정보 수정이 소속 계정 전체에 반영된다', async () => {
+  const users = await call('/api/admin/users', { token: adminToken });
+  const shop = users.data.users.find(user => user.email === shopEmail);
+  const patched = await call(`/api/admin/branches/${shop.branchId}`, {
+    method: 'PATCH', token: adminToken,
+    body: { name: '아르케스파 수정점', shopPhone: '02-1234-5678', shopAddress: '합성 테스트 주소', plan: 'enterprise' },
+  });
+  assert(patched.status === 200, `status=${patched.status} ${JSON.stringify(patched.data)}`);
+  const updated = patched.data.users.find(user => user.email === shopEmail);
+  assert(updated.branchName === '아르케스파 수정점', `branchName=${updated.branchName}`);
+  assert(updated.shopPhone === '02-1234-5678' && updated.shopAddress === '합성 테스트 주소', '지점 연락처/주소 불일치');
+  assert(updated.plan === 'enterprise', `plan=${updated.plan}`);
 });
 
 await test('CRM 데이터가 저장되고 조회된다 (branch_id 스푸핑 무시)', async () => {
@@ -217,6 +235,19 @@ await test('전화번호 없이 발송하면 400이다', async () => {
     body: { type: 'sms', content: '테스트', phones: [] },
   });
   assert(send.status === 400, `status=${send.status}`);
+});
+
+await test('과대 메시지와 알 수 없는 유형을 거부한다', async () => {
+  const oversized = await call('/api/messages/send', {
+    method: 'POST', token: shopToken,
+    body: { type: 'sms', content: 'x'.repeat(4001), phones: ['01011112222'] },
+  });
+  assert(oversized.status === 400, `oversized status=${oversized.status}`);
+  const unknown = await call('/api/messages/send', {
+    method: 'POST', token: shopToken,
+    body: { type: 'unknown', content: 'test', phones: ['01011112222'] },
+  });
+  assert(unknown.status === 400, `unknown status=${unknown.status}`);
 });
 
 await test('예약 발송 등록·조회·취소가 동작한다', async () => {

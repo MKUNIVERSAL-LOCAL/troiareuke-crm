@@ -14,6 +14,7 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
 const SESSION_DAYS = Number(process.env.SESSION_DAYS || 30);
 const RESET_TOKEN_MINUTES = Number(process.env.RESET_TOKEN_MINUTES || 30);
+const TRUST_PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS || 0);
 // 상용 배포 기본값: 관리자 발급 계정만 허용 (공개 가입 차단)
 const ALLOW_PUBLIC_SIGNUP = String(process.env.ALLOW_PUBLIC_SIGNUP || 'false').toLowerCase() === 'true';
 const BOOTSTRAP_ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
@@ -27,6 +28,9 @@ const allowedOrigins = new Set(
 
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
 if (!PUBLIC_BASE_URL) throw new Error('PUBLIC_BASE_URL is required');
+if (!Number.isInteger(TRUST_PROXY_HOPS) || TRUST_PROXY_HOPS < 0 || TRUST_PROXY_HOPS > 2) {
+  throw new Error('TRUST_PROXY_HOPS must be an integer between 0 and 2');
+}
 
 const pool = new Pool({ connectionString: DATABASE_URL });
 
@@ -40,7 +44,9 @@ const smtp = nodemailer.createTransport({
 });
 
 const app = express();
-app.set('trust proxy', 1);
+// DSM 역방향 프록시 뒤에서만 1을 설정한다. 직접 공개된 포트에서 X-Forwarded-For를
+// 신뢰하면 공격자가 로그인/재설정 rate limit을 우회할 수 있다.
+app.set('trust proxy', TRUST_PROXY_HOPS);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin(origin, callback) {
@@ -430,6 +436,8 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
     const plan = ['trial', 'starter', 'pro', 'enterprise'].includes(req.body.plan) ? req.body.plan : 'trial';
     const branchName = String(req.body.branchName || '').trim();
     const shopType = String(req.body.shopType || '').trim();
+    const shopPhone = String(req.body.shopPhone || '').trim();
+    const shopAddress = String(req.body.shopAddress || '').trim();
     const requestedBranchId = String(req.body.branchId || '').trim();
     if (!isEmail(email)) return res.status(400).json({ error: '이메일 형식을 확인해주세요.' });
 
@@ -447,11 +455,12 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
     const isOnboarded = Boolean(branchName);
     const { rows } = await pool.query(`
       INSERT INTO auth_users (id, email, password_hash, name, role, plan,
-        shop_name, shop_type, branch_id, branch_name, is_onboarded, trial_ends_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + interval '14 days')
+        shop_name, shop_type, shop_phone, shop_address, branch_id, branch_name, is_onboarded, trial_ends_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now() + interval '14 days')
       RETURNING *
     `, [userId, email, passwordHash, name, role, plan,
-        branchName, shopType, branchId, branchName || null, isOnboarded]);
+        branchName, shopType, shopPhone || null, shopAddress || null,
+        branchId, branchName || null, isOnboarded]);
 
     res.status(201).json({
       user: publicUser(rows[0]),
@@ -459,6 +468,49 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
     });
   } catch (error) {
     if (error?.code === '23505') return res.status(409).json({ error: '이미 등록된 이메일입니다.' });
+    next(error);
+  }
+});
+
+// 지점 정본은 해당 branch_id 계정들의 공통 필드다. 수정/비활성화는 전 계정에 원자적으로 적용한다.
+app.patch('/api/admin/branches/:id', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const branchId = String(req.params.id || '').trim();
+    const fields = [];
+    const values = [];
+    const push = (column, value) => { values.push(value); fields.push(`${column} = $${values.length}`); };
+
+    if (req.body.name !== undefined) {
+      const name = String(req.body.name || '').trim();
+      if (!name) return res.status(400).json({ error: '지점명을 입력해주세요.' });
+      push('branch_name', name);
+      push('shop_name', name);
+    }
+    if (req.body.shopType !== undefined) push('shop_type', String(req.body.shopType || '').trim());
+    if (req.body.shopPhone !== undefined) push('shop_phone', String(req.body.shopPhone || '').trim() || null);
+    if (req.body.shopAddress !== undefined) push('shop_address', String(req.body.shopAddress || '').trim() || null);
+    if (req.body.plan !== undefined) {
+      if (!['trial', 'starter', 'pro', 'enterprise'].includes(req.body.plan)) {
+        return res.status(400).json({ error: '요금제 값을 확인해주세요.' });
+      }
+      push('plan', req.body.plan);
+    }
+    if (req.body.isActive !== undefined) push('is_active', Boolean(req.body.isActive));
+    if (!branchId || fields.length === 0) return res.status(400).json({ error: '변경할 지점 정보가 없습니다.' });
+
+    values.push(branchId);
+    const { rows, rowCount } = await pool.query(
+      `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now()
+       WHERE branch_id = $${values.length} AND role <> 'superadmin' RETURNING *`,
+      values,
+    );
+    if (rowCount === 0) return res.status(404).json({ error: '지점을 찾을 수 없습니다.' });
+    if (req.body.isActive === false) {
+      await pool.query(`UPDATE auth_sessions SET revoked_at = now()
+        WHERE user_id IN (SELECT id FROM auth_users WHERE branch_id = $1) AND revoked_at IS NULL`, [branchId]);
+    }
+    res.json({ users: rows.map(publicUser) });
+  } catch (error) {
     next(error);
   }
 });
@@ -580,6 +632,18 @@ app.post('/reset-password', resetLimiter, async (req, res, next) => {
 // 어떤 메시지도 나가지 않고 pending으로 정직하게 기록·응답한다.
 const MESSAGE_HOURLY_LIMIT = Number(process.env.MESSAGE_HOURLY_LIMIT || 500);
 const MESSAGE_MAX_RECIPIENTS = 500;
+const MESSAGE_MAX_CONTENT_LENGTH = 4000;
+const MESSAGE_MAX_TITLE_LENGTH = 200;
+const MESSAGE_PROVIDER_TIMEOUT_MS = Number(process.env.MESSAGE_PROVIDER_TIMEOUT_MS || 10000);
+const MESSAGE_TYPES = new Set(['sms', 'lms', 'kakao-channel', 'revisit-reminder']);
+
+function validateMessage(type, title, content) {
+  if (!MESSAGE_TYPES.has(type)) return '지원하지 않는 메시지 유형입니다.';
+  if (!content) return '메시지 내용을 입력해주세요.';
+  if (content.length > MESSAGE_MAX_CONTENT_LENGTH) return `메시지 내용은 ${MESSAGE_MAX_CONTENT_LENGTH}자 이하여야 합니다.`;
+  if (title && title.length > MESSAGE_MAX_TITLE_LENGTH) return `메시지 제목은 ${MESSAGE_MAX_TITLE_LENGTH}자 이하여야 합니다.`;
+  return null;
+}
 
 function normalizePhone(value) {
   const digits = String(value || '').replace(/\D/g, '');
@@ -604,6 +668,7 @@ async function sendViaProvider({ type, title, content, phones }) {
     if (!process.env.SMS_HTTP_URL) throw new Error('SMS_HTTP_URL이 설정되지 않았습니다.');
     const response = await fetch(process.env.SMS_HTTP_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(MESSAGE_PROVIDER_TIMEOUT_MS),
       headers: {
         'Content-Type': 'application/json',
         ...(process.env.SMS_HTTP_KEY ? { Authorization: `Bearer ${process.env.SMS_HTTP_KEY}` } : {}),
@@ -686,7 +751,8 @@ app.post('/api/messages/send', requireSession, messageLimiter, async (req, res, 
     const title = req.body.title ? String(req.body.title) : undefined;
     const content = String(req.body.content || '').trim();
     const phones = Array.isArray(req.body.phones) ? req.body.phones : [];
-    if (!content) return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
+    const validationError = validateMessage(type, title, content);
+    if (validationError) return res.status(400).json({ error: validationError });
     const { httpStatus, body } = await processSend({ authUser: req.authUser, type, title, content, phones });
     res.status(httpStatus).json(body);
   } catch (error) {
@@ -705,7 +771,8 @@ app.post('/api/messages/schedule', requireSession, messageLimiter, async (req, r
     if (Number.isNaN(sendAt.getTime())) return res.status(400).json({ error: '발송 시각을 확인해주세요.' });
     if (sendAt.getTime() < Date.now() + 60000) return res.status(400).json({ error: '발송 시각은 최소 1분 뒤여야 합니다.' });
     if (sendAt.getTime() > Date.now() + 30 * 86400000) return res.status(400).json({ error: '발송 예약은 30일 이내만 가능합니다.' });
-    if (!content) return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
+    const validationError = validateMessage(type, title, content);
+    if (validationError) return res.status(400).json({ error: validationError });
     if (phones.length === 0) return res.status(400).json({ error: '유효한 수신자 전화번호가 없습니다.' });
     if (phones.length > MESSAGE_MAX_RECIPIENTS) return res.status(400).json({ error: `한 번에 ${MESSAGE_MAX_RECIPIENTS}명까지만 예약할 수 있습니다.` });
 
@@ -1082,7 +1149,10 @@ initializeDatabase()
     setInterval(cleanupExpired, 24 * 60 * 60 * 1000).unref();
     setInterval(() => dispatchScheduledMessages().catch(e => console.error('dispatch error', e)), 60 * 1000).unref();
     setInterval(() => runRevisitReminders().catch(e => console.error('reminder error', e)), 10 * 60 * 1000).unref();
-    if (process.env.SMTP_HOST) await smtp.verify();
+    // 메일 서버 일시 장애가 로그인·CRM 데이터 API 전체 기동을 막지 않게 한다.
+    if (process.env.SMTP_HOST) {
+      await smtp.verify().catch(error => console.warn('SMTP verify failed; password reset mail is unavailable:', error?.message || error));
+    }
     app.listen(PORT, '0.0.0.0', () => console.log(`Troiareuke auth server listening on ${PORT}`));
   })
   .catch(error => {
