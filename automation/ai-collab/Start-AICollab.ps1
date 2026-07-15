@@ -29,13 +29,13 @@ function Read-Template {
 }
 
 function Invoke-ClaudeReadOnly {
-  param([string]$Prompt, [string]$OutputPath, [string]$ErrorPath, [string]$WorkingDirectory)
+  param([string]$Prompt, [string]$OutputPath, [string]$ErrorPath, [string]$WorkingDirectory, [int]$MaxTurns = 16)
   $promptPath = "$OutputPath.prompt.txt"
   Write-Utf8File -Path $promptPath -Content $Prompt
   Push-Location $WorkingDirectory
   try {
     $result = Get-Content -LiteralPath $promptPath -Raw -Encoding UTF8 |
-      & $script:ClaudeCommand -p --output-format text --permission-mode plan --max-turns 12 --no-session-persistence --tools 'Read,Glob,Grep,Bash' 2>> $ErrorPath
+      & $script:ClaudeCommand -p --output-format text --permission-mode plan --max-turns $MaxTurns --effort medium --no-session-persistence --tools 'Read,Glob,Grep,Bash' 2>> $ErrorPath
     Write-Utf8File -Path $OutputPath -Content (($result | Out-String).Trim())
     if ($LASTEXITCODE -ne 0) { throw "Claude 실행 실패(코드 $LASTEXITCODE). 로그: $ErrorPath" }
   } finally {
@@ -116,7 +116,7 @@ try {
   Write-Host '[2/7] Claude가 제품·사용자·보안 관점의 제안을 작성합니다...' -ForegroundColor Cyan
   $claudeProposalPath = Join-Path $runRoot '01-claude-proposal.md'
   $claudeProposalPrompt = Read-Template '01-claude-proposal.md' @{ TASK = $Task }
-  Invoke-ClaudeReadOnly $claudeProposalPrompt $claudeProposalPath (Join-Path $runRoot '01-claude-error.log') $worktreePath
+  Invoke-ClaudeReadOnly $claudeProposalPrompt $claudeProposalPath (Join-Path $runRoot '01-claude-error.log') $worktreePath 20
   $claudeProposal = [System.IO.File]::ReadAllText($claudeProposalPath)
 
   Write-Host '[3/7] Codex가 제안의 허점과 구현 가능성을 검토합니다...' -ForegroundColor Cyan
@@ -128,7 +128,7 @@ try {
   Write-Host '[4/7] Claude가 두 의견을 합쳐 최종 명세를 확정합니다...' -ForegroundColor Cyan
   $finalSpecPath = Join-Path $runRoot '03-final-spec.md'
   $finalSpecPrompt = Read-Template '03-claude-final-spec.md' @{ TASK = $Task; CLAUDE_PROPOSAL = $claudeProposal; CODEX_CHALLENGE = $codexChallenge }
-  Invoke-ClaudeReadOnly $finalSpecPrompt $finalSpecPath (Join-Path $runRoot '03-claude-error.log') $worktreePath
+  Invoke-ClaudeReadOnly $finalSpecPrompt $finalSpecPath (Join-Path $runRoot '03-claude-error.log') $worktreePath 8
   $finalSpec = [System.IO.File]::ReadAllText($finalSpecPath)
 
   Write-Host '[5/7] Codex가 최종 명세를 구현합니다...' -ForegroundColor Cyan
@@ -140,7 +140,7 @@ try {
     Write-Host "[6/7] Claude 검토와 Codex 수정을 진행합니다 ($round/$ReviewRounds)..." -ForegroundColor Cyan
     $reviewPath = Join-Path $runRoot ("05-claude-review-{0}.md" -f $round)
     $reviewPrompt = Read-Template '05-claude-review.md' @{ TASK = $Task; FINAL_SPEC = $finalSpec; ROUND = $round }
-    Invoke-ClaudeReadOnly $reviewPrompt $reviewPath (Join-Path $runRoot ("05-claude-error-{0}.log" -f $round)) $worktreePath
+    Invoke-ClaudeReadOnly $reviewPrompt $reviewPath (Join-Path $runRoot ("05-claude-error-{0}.log" -f $round)) $worktreePath 18
     $review = [System.IO.File]::ReadAllText($reviewPath)
 
     $fixPath = Join-Path $runRoot ("06-codex-fix-{0}.md" -f $round)
