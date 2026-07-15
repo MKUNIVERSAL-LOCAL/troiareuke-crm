@@ -45,13 +45,21 @@ try {
     $changed = @($changed | Where-Object { $_ } | Sort-Object -Unique)
 
     if ($changed.Count -eq 0) {
-        $aheadText = (& git rev-list --count '@{u}..HEAD' 2>$null | Out-String).Trim()
+        $trackingBranch = "origin/$ExpectedBranch"
+        $trackingRef = "refs/remotes/$trackingBranch"
+        & git show-ref --verify --quiet $trackingRef
+        $hasTrackingRef = $LASTEXITCODE -eq 0
+        $aheadText = ''
+        if ($hasTrackingRef) {
+            $aheadText = (& git rev-list --count "$trackingBranch..HEAD" 2>$null | Out-String).Trim()
+        }
         if ($LASTEXITCODE -eq 0 -and $aheadText -match '^\d+$' -and [int]$aheadText -gt 0) {
             & git push --quiet origin "HEAD:refs/heads/$ExpectedBranch"
             if ($LASTEXITCODE -ne 0) {
                 Write-AutosaveLog "RETRY_PUSH_FAILED pending=$aheadText"
                 exit 1
             }
+            & git update-ref $trackingRef HEAD
             Write-AutosaveLog "RETRY_PUSH_OK commits=$aheadText"
         }
         exit 0
@@ -134,6 +142,7 @@ try {
         exit 1
     }
 
+    & git update-ref "refs/remotes/origin/$ExpectedBranch" HEAD
     Write-AutosaveLog "PUSH_OK $message"
 }
 catch {
