@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>트로이아르케 CRM</title>
+    <script>
+      // GitHub Pages 프로젝트 경로와 루트 도메인 모두에서 SPA 경로를 보존한다.
+      (function (location) {
+        var projectBase = '/troiareuke-crm';
+        var isProjectPage = location.pathname === projectBase ||
+          location.pathname.indexOf(projectBase + '/') === 0;
+        var basePath = isProjectPage ? projectBase : '';
+        var route = location.pathname.slice(basePath.length).replace(/^\/+/, '');
+        var query = location.search ? '&' + location.search.slice(1).replace(/&/g, '~and~') : '';
+        location.replace(
+          location.protocol + '//' + location.host + basePath + '/?/' +
+          route.replace(/&/g, '~and~') + query + location.hash
+        );
+      })(window.location);
+    </script>
+  </head>
+  <body></body>
+</html>

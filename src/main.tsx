@@ -4,17 +4,22 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import { saveTokenFromHash } from './lib/googleCalendar'
+import { isPasswordRecoveryHash } from './lib/appUrl'
 
 // Supabase가 기본 Site URL로 복귀시킨 경우에도 비밀번호 재설정 화면으로 보낸다.
-const authHashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-const isPasswordRecovery = authHashParams.get('type') === 'recovery'
+// 만료 오류는 Supabase 고유 error_code로만 판정해 Google OAuth 오류와 구분한다.
+const isPasswordRecovery = isPasswordRecoveryHash(window.location.hash)
 
-if (isPasswordRecovery && window.location.pathname !== '/reset-password') {
-  window.history.replaceState(
-    null,
-    '',
-    `/reset-password${window.location.search}${window.location.hash}`,
-  )
+if (isPasswordRecovery && window.location.protocol !== 'file:') {
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '')
+  const resetPath = `${basePath}/reset-password`
+  if (window.location.pathname !== resetPath) {
+    window.history.replaceState(
+      null,
+      '',
+      `${resetPath}${window.location.search}${window.location.hash}`,
+    )
+  }
 }
 
 // ── Google OAuth 콜백 처리 ────────────────────────────────────

@@ -26,10 +26,20 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run build
+      - name: Validate required build configuration
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_APP_URL: ${{ vars.VITE_PUBLIC_APP_URL }}
+        run: |
+          node -e "for (const name of ['VITE_SUPABASE_URL','VITE_SUPABASE_ANON_KEY','VITE_PUBLIC_APP_URL']) if (!process.env[name]?.trim()) throw new Error('Missing required build configuration: ' + name); const url = new URL(process.env.VITE_PUBLIC_APP_URL); if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('VITE_PUBLIC_APP_URL must be a public https base URL without credentials, query, or hash')"
+
+      - run: npm run build
+        env:
+          DEPLOY_TARGET: ghpages
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_APP_URL: ${{ vars.VITE_PUBLIC_APP_URL }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
