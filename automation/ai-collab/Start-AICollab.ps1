@@ -54,9 +54,18 @@ function Invoke-Codex {
   )
   $promptPath = "$OutputPath.prompt.txt"
   Write-Utf8File -Path $promptPath -Content $Prompt
-  Get-Content -LiteralPath $promptPath -Raw -Encoding UTF8 |
-    & $script:CodexCommand exec --ephemeral --sandbox $Sandbox --cd $WorkingDirectory --output-last-message $OutputPath - 2>> $ErrorPath | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw "Codex 실행 실패(코드 $LASTEXITCODE). 로그: $ErrorPath" }
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    # Codex may write harmless warnings to stderr even when it succeeds. Preserve
+    # those warnings in the log and decide success only from the native exit code.
+    $ErrorActionPreference = 'Continue'
+    Get-Content -LiteralPath $promptPath -Raw -Encoding UTF8 |
+      & $script:CodexCommand exec --ephemeral --sandbox $Sandbox --cd $WorkingDirectory --output-last-message $OutputPath - 2>> $ErrorPath | Out-Null
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+  if ($exitCode -ne 0) { throw "Codex 실행 실패(코드 $exitCode). 로그: $ErrorPath" }
 }
 
 function Assert-BuildCapacity {
