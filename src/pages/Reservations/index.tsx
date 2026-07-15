@@ -601,9 +601,24 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [addToGoogle, setAddToGoogle] = useState(!isEdit && isGoogleCalendarConnected());
   const googleAvailable = isGoogleCalendarConnected();
+  const [formError, setFormError] = useState('');
 
   const handleSave = () => {
-    if (!customerId || !staffId || !serviceId) return;
+    // 조용한 실패 금지 — 무엇이 비었는지 명확히 안내
+    if (!customerId || !staffId || !serviceId) {
+      const missing = [
+        !customerId && '고객',
+        !staffId && '담당 직원',
+        !serviceId && '시술',
+      ].filter(Boolean).join(', ');
+      const guide = [
+        staffList.length === 0 && !staffId ? '등록된 직원이 없습니다 — 직원 관리에서 먼저 등록해주세요.' : '',
+        services.length === 0 && !serviceId ? '등록된 시술이 없습니다 — 설정 > 시술 관리에서 먼저 등록해주세요.' : '',
+      ].filter(Boolean).join(' ');
+      setFormError(`${missing}을(를) 선택해주세요. ${guide}`.trim());
+      return;
+    }
+    setFormError('');
 
     const customer = customers.find(c => c.id === customerId);
     const staff = staffList.find(s => s.id === staffId);
@@ -762,6 +777,11 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
             <Calendar size={14} className="text-blue-500" />
             <span className="text-sm text-gray-700">Google 캘린더에도 추가</span>
           </label>
+        )}
+        {formError && (
+          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+            {formError}
+          </div>
         )}
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
