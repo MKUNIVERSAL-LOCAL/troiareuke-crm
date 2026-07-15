@@ -57,10 +57,13 @@ export default function Settings() {
   const handleSmsTest = async () => {
     setSmsTestStatus('sending');
     setSmsTestMessage(null);
+    // 테스트 수신처 = 설정된 샵 전화번호 (없으면 발송 불가 안내)
+    const shopPhone = SettingsStore.get().phone;
     const result = await sendMessages({
       type: 'sms',
       content: '[트로이아르케 CRM] 테스트 발송 메시지입니다.',
       recipients: 1,
+      phones: shopPhone ? [shopPhone] : [],
     });
     if (result.pending) {
       setSmsTestMessage('SMS 게이트웨이가 아직 연동되지 않았습니다 (NAS 서버 연동 후 지원). 실제 발송되지 않습니다.');

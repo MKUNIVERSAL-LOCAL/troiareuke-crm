@@ -3,7 +3,10 @@ import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, 
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { MessageTemplateStore, MessageHistoryStore, CustomerStore, SettingsStore } from '../../lib/store';
-import { sendMessages } from '../../lib/messagingGateway';
+import {
+  sendMessages, scheduleMessage, listScheduledMessages, cancelScheduledMessage,
+  isScheduleAvailable, type ScheduledMessage,
+} from '../../lib/messagingGateway';
 import type { MessageType, MessageTemplate, MessageHistory } from '../../types';
 import clsx from 'clsx';
 
@@ -486,6 +489,75 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
   );
 }
 
+const SCHEDULE_STATUS_LABELS: Record<ScheduledMessage['status'], { label: string; color: string }> = {
+  pending: { label: '대기', color: 'bg-blue-100 text-blue-600' },
+  processing: { label: '발송 중', color: 'bg-purple-100 text-purple-600' },
+  sent: { label: '발송 완료', color: 'bg-green-100 text-green-600' },
+  partial: { label: '일부 실패', color: 'bg-amber-100 text-amber-600' },
+  failed: { label: '실패', color: 'bg-red-100 text-red-600' },
+  canceled: { label: '취소됨', color: 'bg-gray-100 text-gray-500' },
+};
+
+function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
+  const [items, setItems] = useState<ScheduledMessage[]>([]);
+  const [visible, setVisible] = useState(false);
+
+  const refresh = useCallback(() => {
+    if (!isScheduleAvailable) return;
+    listScheduledMessages()
+      .then(list => { setItems(list); setVisible(list.length > 0); })
+      .catch(() => setVisible(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [reloadKey, refresh]);
+
+  const handleCancel = async (id: string) => {
+    if (!confirm('이 발송 예약을 취소할까요?')) return;
+    try {
+      await cancelScheduledMessage(id);
+      refresh();
+    } catch (e: any) {
+      alert(e?.message || '예약 취소에 실패했습니다.');
+    }
+  };
+
+  if (!isScheduleAvailable || !visible) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <p className="text-sm font-bold text-gray-900">예약된 발송</p>
+        <p className="text-xs text-gray-400">{items.filter(i => i.status === 'pending').length}건 대기</p>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {items.map(item => {
+          const badge = SCHEDULE_STATUS_LABELS[item.status] || SCHEDULE_STATUS_LABELS.pending;
+          return (
+            <div key={item.id} className="px-6 py-3 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={clsx('text-[11px] px-2 py-0.5 rounded-full font-medium', badge.color)}>{badge.label}</span>
+                  <span className="text-xs text-gray-500">{new Date(item.send_at).toLocaleString()}</span>
+                  <span className="text-xs text-gray-400">{item.phones.length}명</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1 truncate">{item.title ? `[${item.title}] ` : ''}{item.content}</p>
+              </div>
+              {item.status === 'pending' && (
+                <button
+                  onClick={() => handleCancel(item.id)}
+                  className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
+                >
+                  취소
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function HistoryPanel({ reloadKey }: { reloadKey: number }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const [search, setSearch] = useState('');
@@ -509,21 +581,26 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
 
   if (history.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <p className="text-sm font-bold text-gray-900">발송 이력</p>
-          <p className="text-xs text-gray-400">최근 30일</p>
-        </div>
-        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-          <Clock size={40} className="mb-3 text-gray-300" />
-          <p className="text-sm font-medium">발송 이력이 없습니다</p>
-          <p className="text-xs mt-1">메시지를 발송하면 이곳에 이력이 표시됩니다</p>
+      <div>
+        <ScheduledMessagesCard reloadKey={reloadKey} />
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <p className="text-sm font-bold text-gray-900">발송 이력</p>
+            <p className="text-xs text-gray-400">최근 30일</p>
+          </div>
+          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+            <Clock size={40} className="mb-3 text-gray-300" />
+            <p className="text-sm font-medium">발송 이력이 없습니다</p>
+            <p className="text-xs mt-1">메시지를 발송하면 이곳에 이력이 표시됩니다</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
+    <div>
+    <ScheduledMessagesCard reloadKey={reloadKey} />
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <p className="text-sm font-bold text-gray-900">발송 이력</p>
@@ -608,6 +685,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
         })}
       </div>
     </div>
+    </div>
   );
 }
 
@@ -620,6 +698,8 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
   const [resultMessage, setResultMessage] = useState('');
+  const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
+  const [scheduleAt, setScheduleAt] = useState('');
   const charLimit = msgType === 'sms' ? 90 : 1000;
 
   const customers = CustomerStore.getAll();
@@ -652,17 +732,47 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
 
   const estimatedCost = msgType === 'sms' ? recipientCount * 11 : msgType === 'lms' ? recipientCount * 25 : recipientCount * 5;
 
+  // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
+  const recipientPhones = (recipientMode === 'vip' ? customers.filter(c => c.grade === 'VIP') : customers)
+    .map(c => c.phone)
+    .filter((p): p is string => Boolean(p && p.trim()));
+
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
 
+    // 예약 발송: 서버 큐에 등록하고 종료 (시각 도달 시 서버가 발송)
+    if (scheduleMode === 'later' && isScheduleAvailable) {
+      try {
+        if (!scheduleAt) throw new Error('발송 시각을 선택해주세요.');
+        await scheduleMessage({
+          sendAt: new Date(scheduleAt).toISOString(),
+          type: msgType,
+          title: title || undefined,
+          content: content.trim(),
+          phones: recipientPhones,
+        });
+        setSending(false);
+        setSendResult('success');
+        setResultMessage(`${new Date(scheduleAt).toLocaleString()} 발송 예약 완료`);
+        onSent();
+        setTimeout(() => { onClose(); }, 1500);
+      } catch (e: any) {
+        setSending(false);
+        setSendResult('error');
+        setResultMessage(e?.message || '발송 예약 실패');
+      }
+      return;
+    }
+
     const result = await sendMessages({
       type: msgType,
       content: content.trim(),
       title: title || undefined,
       recipients: recipientCount,
+      phones: recipientPhones,
     });
 
     if (result.pending) {
@@ -863,18 +973,47 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">발송 시간</label>
             <div className="flex gap-2 items-center">
-              <button className="px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-xl border border-purple-600">즉시 발송</button>
               <button
                 type="button"
-                onClick={() => alert('예약 발송은 NAS 서버 연동 후 지원됩니다.')}
-                className="px-4 py-2 text-sm font-medium bg-white text-gray-400 rounded-xl border border-gray-200 flex items-center gap-1.5 cursor-not-allowed opacity-60"
-                title="NAS 서버 연동 후 지원 예정"
+                onClick={() => setScheduleMode('now')}
+                className={clsx('px-4 py-2 text-sm font-medium rounded-xl border',
+                  scheduleMode === 'now' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
               >
-                예약 발송
-                <HelpCircle size={12} className="text-gray-400" />
+                즉시 발송
               </button>
+              {isScheduleAvailable ? (
+                <button
+                  type="button"
+                  onClick={() => setScheduleMode('later')}
+                  className={clsx('px-4 py-2 text-sm font-medium rounded-xl border',
+                    scheduleMode === 'later' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
+                >
+                  예약 발송
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => alert('예약 발송은 NAS 서버 연동 후 지원됩니다.')}
+                  className="px-4 py-2 text-sm font-medium bg-white text-gray-400 rounded-xl border border-gray-200 flex items-center gap-1.5 cursor-not-allowed opacity-60"
+                  title="NAS 서버 연동 후 지원 예정"
+                >
+                  예약 발송
+                  <HelpCircle size={12} className="text-gray-400" />
+                </button>
+              )}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1.5">예약 발송은 NAS 서버 연동 후 지원됩니다.</p>
+            {scheduleMode === 'later' && isScheduleAvailable && (
+              <input
+                type="datetime-local"
+                value={scheduleAt}
+                onChange={e => setScheduleAt(e.target.value)}
+                className="mt-2 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+                aria-label="예약 발송 시각"
+              />
+            )}
+            {!isScheduleAvailable && (
+              <p className="text-[11px] text-gray-400 mt-1.5">예약 발송은 NAS 서버 연동 후 지원됩니다.</p>
+            )}
           </div>
 
           {/* Cost estimate */}

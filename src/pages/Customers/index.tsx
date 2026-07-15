@@ -326,6 +326,7 @@ export default function Customers() {
       content,
       title: `${selected.name}님 피부 상담 결과`,
       recipients: 1,
+      phones: selected.phone ? [selected.phone] : [],
     });
     MessageHistoryStore.save({
       type: 'kakao-channel',

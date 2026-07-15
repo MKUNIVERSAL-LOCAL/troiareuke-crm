@@ -197,6 +197,59 @@ await test('비밀번호 재설정이 1회용 토큰으로 완료된다', async 
   assert(reuse.status === 400, `reuse status=${reuse.status}`);
 });
 
+await test('발송사 미설정 시 발송이 pending으로 정직 기록된다', async () => {
+  const send = await call('/api/messages/send', {
+    method: 'POST',
+    token: shopToken,
+    body: { type: 'sms', content: '테스트 메시지', phones: ['010-1234-5678', '010-1234-5678', '02-555-0100'] },
+  });
+  assert(send.status === 200, `status=${send.status} ${JSON.stringify(send.data)}`);
+  assert(send.data.pending === true, `pending=${send.data.pending}`);
+  // 중복 번호는 1건으로 합쳐져 총 2건 로그
+  const { rows } = await pool.query("SELECT status FROM message_send_log WHERE phone IN ('01012345678','025550100')");
+  assert(rows.length === 2 && rows.every(r => r.status === 'pending'), `log rows=${rows.length}`);
+});
+
+await test('전화번호 없이 발송하면 400이다', async () => {
+  const send = await call('/api/messages/send', {
+    method: 'POST',
+    token: shopToken,
+    body: { type: 'sms', content: '테스트', phones: [] },
+  });
+  assert(send.status === 400, `status=${send.status}`);
+});
+
+await test('예약 발송 등록·조회·취소가 동작한다', async () => {
+  const scheduled = await call('/api/messages/schedule', {
+    method: 'POST',
+    token: shopToken,
+    body: {
+      sendAt: new Date(Date.now() + 10 * 60000).toISOString(),
+      type: 'sms', content: '예약 테스트', phones: ['010-9999-8888'],
+    },
+  });
+  assert(scheduled.status === 201, `status=${scheduled.status} ${JSON.stringify(scheduled.data)}`);
+  const id = scheduled.data.scheduled.id;
+
+  const list = await call('/api/messages/scheduled', { token: shopToken });
+  assert(list.status === 200 && list.data.scheduled.some(s => s.id === id && s.status === 'pending'), '목록에 없음');
+
+  const cancel = await call(`/api/messages/scheduled/${id}`, { method: 'DELETE', token: shopToken });
+  assert(cancel.status === 204, `cancel status=${cancel.status}`);
+
+  const after = await call('/api/messages/scheduled', { token: shopToken });
+  assert(after.data.scheduled.find(s => s.id === id)?.status === 'canceled', '취소 반영 안 됨');
+});
+
+await test('과거 시각 예약은 400이다', async () => {
+  const scheduled = await call('/api/messages/schedule', {
+    method: 'POST',
+    token: shopToken,
+    body: { sendAt: new Date(Date.now() - 60000).toISOString(), type: 'sms', content: 'x', phones: ['01011112222'] },
+  });
+  assert(scheduled.status === 400, `status=${scheduled.status}`);
+});
+
 await test('프로필(매장 전화·주소)이 저장된다', async () => {
   const patch = await call('/api/auth/profile', {
     method: 'PATCH',

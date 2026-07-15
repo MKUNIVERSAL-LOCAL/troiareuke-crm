@@ -160,6 +160,35 @@ async function initializeDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS crm_records_collection_idx ON crm_records(collection, updated_at);
+
+    CREATE TABLE IF NOT EXISTS message_send_log (
+      id uuid PRIMARY KEY,
+      branch_id text NOT NULL,
+      user_id uuid,
+      type text NOT NULL,
+      title text,
+      content text NOT NULL,
+      phone text NOT NULL,
+      status text NOT NULL,
+      reason text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS message_send_log_branch_idx ON message_send_log(branch_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS scheduled_messages (
+      id uuid PRIMARY KEY,
+      branch_id text NOT NULL,
+      user_id uuid,
+      send_at timestamptz NOT NULL,
+      type text NOT NULL,
+      title text,
+      content text NOT NULL,
+      phones jsonb NOT NULL,
+      status text NOT NULL DEFAULT 'pending',
+      result jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS scheduled_messages_due_idx ON scheduled_messages(status, send_at);
   `);
 }
 
@@ -536,6 +565,223 @@ app.post('/reset-password', resetLimiter, async (req, res, next) => {
   }
 });
 
+// ── 메시지 발송 파이프라인 (SMS·카카오) ──────────────────────────
+// 발송사 API 키는 이 서버의 env에만 둔다. SMS_PROVIDER 미설정 시
+// 어떤 메시지도 나가지 않고 pending으로 정직하게 기록·응답한다.
+const MESSAGE_HOURLY_LIMIT = Number(process.env.MESSAGE_HOURLY_LIMIT || 500);
+const MESSAGE_MAX_RECIPIENTS = 500;
+
+function normalizePhone(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15) return null;
+  return digits;
+}
+
+// 발송사 어댑터. 'none' = 미설정(발송 안 함), 'http' = 범용 HTTP 중계
+// (엔포 등 발송사 스펙이 확정되면 여기에 어댑터 하나를 추가하면 된다).
+async function sendViaProvider({ type, title, content, phones }) {
+  const provider = String(process.env.SMS_PROVIDER || 'none').toLowerCase();
+
+  if (provider === 'none') {
+    return {
+      pending: true,
+      reason: '발송사 미설정 — NAS 서버 .env의 SMS_PROVIDER를 설정하세요',
+      results: phones.map(phone => ({ phone, status: 'pending', reason: '발송사 미설정' })),
+    };
+  }
+
+  if (provider === 'http') {
+    if (!process.env.SMS_HTTP_URL) throw new Error('SMS_HTTP_URL이 설정되지 않았습니다.');
+    const response = await fetch(process.env.SMS_HTTP_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.SMS_HTTP_KEY ? { Authorization: `Bearer ${process.env.SMS_HTTP_KEY}` } : {}),
+      },
+      body: JSON.stringify({ type, title, content, phones, sender: process.env.SMS_SENDER_ID || '' }),
+    });
+    if (!response.ok) throw new Error(`발송사 응답 오류: ${response.status}`);
+    const data = await response.json().catch(() => ({}));
+    if (Array.isArray(data.results)) {
+      return {
+        pending: false,
+        results: phones.map(phone => {
+          const match = data.results.find(r => normalizePhone(r.phone) === phone);
+          return { phone, status: match?.status === 'sent' ? 'sent' : 'failed', reason: match?.reason };
+        }),
+      };
+    }
+    // {sent, failed} 요약만 주는 발송사: 앞에서부터 sent건은 성공 처리
+    const sentCount = Number(data.sent || 0);
+    return {
+      pending: false,
+      results: phones.map((phone, index) => ({ phone, status: index < sentCount ? 'sent' : 'failed' })),
+    };
+  }
+
+  throw new Error(`알 수 없는 SMS_PROVIDER: ${provider}`);
+}
+
+// 검증 → 시간당 한도 → 발송 → 건별 로그. HTTP 라우트와 스케줄러가 공용.
+async function processSend({ authUser, type, title, content, phones }) {
+  const scope = branchScopeOf(authUser);
+  const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
+  if (normalized.length === 0) {
+    return { httpStatus: 400, body: { error: '유효한 수신자 전화번호가 없습니다.' } };
+  }
+  if (normalized.length > MESSAGE_MAX_RECIPIENTS) {
+    return { httpStatus: 400, body: { error: `한 번에 ${MESSAGE_MAX_RECIPIENTS}명까지만 발송할 수 있습니다.` } };
+  }
+
+  // 시간당 발송량 상한 (오발송·재시도 폭주 방지)
+  const { rows: [{ count }] } = await pool.query(
+    "SELECT count(*)::int AS count FROM message_send_log WHERE branch_id = $1 AND created_at > now() - interval '1 hour'",
+    [scope],
+  );
+  if (count + normalized.length > MESSAGE_HOURLY_LIMIT) {
+    return { httpStatus: 429, body: { error: `시간당 발송 한도(${MESSAGE_HOURLY_LIMIT}건)를 초과합니다. 잠시 후 다시 시도해주세요.` } };
+  }
+
+  let outcome;
+  try {
+    outcome = await sendViaProvider({ type, title, content, phones: normalized });
+  } catch (error) {
+    outcome = {
+      pending: false,
+      reason: error?.message || '발송사 호출 실패',
+      results: normalized.map(phone => ({ phone, status: 'failed', reason: error?.message || '발송사 호출 실패' })),
+    };
+  }
+
+  for (const result of outcome.results) {
+    await pool.query(
+      'INSERT INTO message_send_log (id, branch_id, user_id, type, title, content, phone, status, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [crypto.randomUUID(), scope, authUser.id, type, title || null, content, result.phone, result.status, result.reason || null],
+    );
+  }
+
+  const sent = outcome.results.filter(r => r.status === 'sent').length;
+  const failed = outcome.results.filter(r => r.status === 'failed').length;
+  return {
+    httpStatus: 200,
+    body: { sent, failed, pending: Boolean(outcome.pending), reason: outcome.reason, results: outcome.results },
+  };
+}
+
+const messageLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
+
+app.post('/api/messages/send', requireSession, messageLimiter, async (req, res, next) => {
+  try {
+    const type = String(req.body.type || 'sms');
+    const title = req.body.title ? String(req.body.title) : undefined;
+    const content = String(req.body.content || '').trim();
+    const phones = Array.isArray(req.body.phones) ? req.body.phones : [];
+    if (!content) return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
+    const { httpStatus, body } = await processSend({ authUser: req.authUser, type, title, content, phones });
+    res.status(httpStatus).json(body);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 예약 발송 큐 ────────────────────────────────────────────────
+app.post('/api/messages/schedule', requireSession, messageLimiter, async (req, res, next) => {
+  try {
+    const sendAt = new Date(String(req.body.sendAt || ''));
+    const type = String(req.body.type || 'sms');
+    const title = req.body.title ? String(req.body.title) : null;
+    const content = String(req.body.content || '').trim();
+    const phones = (Array.isArray(req.body.phones) ? req.body.phones : []).map(normalizePhone).filter(Boolean);
+    if (Number.isNaN(sendAt.getTime())) return res.status(400).json({ error: '발송 시각을 확인해주세요.' });
+    if (sendAt.getTime() < Date.now() + 60000) return res.status(400).json({ error: '발송 시각은 최소 1분 뒤여야 합니다.' });
+    if (sendAt.getTime() > Date.now() + 30 * 86400000) return res.status(400).json({ error: '발송 예약은 30일 이내만 가능합니다.' });
+    if (!content) return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
+    if (phones.length === 0) return res.status(400).json({ error: '유효한 수신자 전화번호가 없습니다.' });
+    if (phones.length > MESSAGE_MAX_RECIPIENTS) return res.status(400).json({ error: `한 번에 ${MESSAGE_MAX_RECIPIENTS}명까지만 예약할 수 있습니다.` });
+
+    const { rows } = await pool.query(
+      `INSERT INTO scheduled_messages (id, branch_id, user_id, send_at, type, title, content, phones)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, send_at, status`,
+      [crypto.randomUUID(), branchScopeOf(req.authUser), req.authUser.id, sendAt, type, title, content, JSON.stringify(phones)],
+    );
+    res.status(201).json({ scheduled: rows[0] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/messages/scheduled', requireSession, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, send_at, type, title, content, phones, status, result, created_at
+       FROM scheduled_messages WHERE branch_id = $1 ORDER BY send_at DESC LIMIT 100`,
+      [branchScopeOf(req.authUser)],
+    );
+    res.json({ scheduled: rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/messages/scheduled/:id', requireSession, async (req, res, next) => {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE scheduled_messages SET status = 'canceled' WHERE id = $1 AND branch_id = $2 AND status = 'pending'`,
+      [req.params.id, branchScopeOf(req.authUser)],
+    );
+    if (rowCount === 0) return res.status(404).json({ error: '취소할 수 있는 예약을 찾을 수 없습니다.' });
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 분 단위 디스패처: 시각이 지난 예약을 잠그고 발송한다 (다중 인스턴스 안전)
+async function dispatchScheduledMessages() {
+  const client = await pool.connect();
+  let due = [];
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(`
+      UPDATE scheduled_messages SET status = 'processing'
+      WHERE id IN (
+        SELECT id FROM scheduled_messages
+        WHERE status = 'pending' AND send_at <= now()
+        ORDER BY send_at LIMIT 20
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
+    await client.query('COMMIT');
+    due = rows;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('scheduled dispatch lock failed', error?.message || error);
+  } finally {
+    client.release();
+  }
+
+  for (const job of due) {
+    try {
+      const { rows: userRows } = await pool.query('SELECT * FROM auth_users WHERE id = $1', [job.user_id]);
+      const authUser = userRows[0] || { id: job.user_id, role: 'admin', branch_id: job.branch_id };
+      const { body } = await processSend({
+        authUser: { ...authUser, branch_id: job.branch_id },
+        type: job.type,
+        title: job.title || undefined,
+        content: job.content,
+        phones: Array.isArray(job.phones) ? job.phones : [],
+      });
+      const status = body.error ? 'failed' : body.pending ? 'failed' : body.failed === 0 ? 'sent' : 'partial';
+      await pool.query('UPDATE scheduled_messages SET result = $1, status = $2 WHERE id = $3',
+        [JSON.stringify(body), status, job.id]);
+    } catch (error) {
+      await pool.query('UPDATE scheduled_messages SET status = $1, result = $2 WHERE id = $3',
+        ['failed', JSON.stringify({ error: error?.message || '발송 처리 실패' }), job.id]);
+    }
+  }
+}
+
 // ── CRM 데이터 저장 API (사용 데이터가 NAS에 쌓이는 지점) ────────
 // 클라이언트 store.ts가 Supabase 대신 이 API로 동기화한다. 행 형식은
 // 클라이언트 toDb*()가 만드는 snake_case 행 그대로를 JSONB로 저장한다.
@@ -643,6 +889,7 @@ initializeDatabase()
     await bootstrapSuperadmin();
     await cleanupExpired();
     setInterval(cleanupExpired, 24 * 60 * 60 * 1000).unref();
+    setInterval(() => dispatchScheduledMessages().catch(e => console.error('dispatch error', e)), 60 * 1000).unref();
     if (process.env.SMTP_HOST) await smtp.verify();
     app.listen(PORT, '0.0.0.0', () => console.log(`Troiareuke auth server listening on ${PORT}`));
   })
