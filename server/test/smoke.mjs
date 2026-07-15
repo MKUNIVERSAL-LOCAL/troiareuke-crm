@@ -250,6 +250,25 @@ await test('과거 시각 예약은 400이다', async () => {
   assert(scheduled.status === 400, `status=${scheduled.status}`);
 });
 
+await test('시술 사진이 저장·조회·삭제된다 (지점 격리 포함)', async () => {
+  const entityKey = encodeURIComponent('treatment:t1');
+  const photos = [{ id: 'ph_1', dataUrl: 'data:image/jpeg;base64,dGVzdA==', takenAt: '2026-07-15' }];
+
+  const put = await call(`/api/photos/${entityKey}`, { method: 'PUT', token: shopToken, body: { photos } });
+  assert(put.status === 200 && put.data.saved === 1, `put status=${put.status}`);
+
+  const get = await call(`/api/photos/${entityKey}`, { token: shopToken });
+  assert(get.status === 200 && get.data.photos.length === 1 && get.data.photos[0].id === 'ph_1', 'photos 조회 불일치');
+
+  const other = await call(`/api/photos/${entityKey}`, { token: shop2Token });
+  assert(other.status === 200 && other.data.photos.length === 0, '다른 지점에 사진이 보임');
+
+  const clear = await call(`/api/photos/${entityKey}`, { method: 'PUT', token: shopToken, body: { photos: [] } });
+  assert(clear.status === 200, `clear status=${clear.status}`);
+  const after = await call(`/api/photos/${entityKey}`, { token: shopToken });
+  assert(after.data.photos.length === 0, '삭제 후에도 사진이 남아 있음');
+});
+
 await test('프로필(매장 전화·주소)이 저장된다', async () => {
   const patch = await call('/api/auth/profile', {
     method: 'PATCH',

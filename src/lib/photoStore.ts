@@ -11,11 +11,64 @@
 //    나머지 UI/호출부는 그대로 재사용 가능 (연동 지점 = 이 파일).
 // ═══════════════════════════════════════════════════════════════
 
+import { apiRequest, isAuthApiConfigured } from './authApi';
+
 const PREFIX = 'troiareuke_photos_';
+
+/** 사진이 NAS에서 갱신됐을 때 발생 (detail: { entityKeys: string[] }) */
+export const PHOTOS_CHANGED_EVENT = 'crm:photos-changed';
 
 /** 엔티티 키 규칙: `treatment:<logId>`, `customer:<customerId>` 등 */
 function storageKey(entityKey: string): string {
   return `${PREFIX}${entityKey}`;
+}
+
+// NAS 중앙 서버로 사진 백업 (fire-and-forget — 실패해도 로컬 저장은 유지)
+function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
+  if (!isAuthApiConfigured) return;
+  apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ photos }),
+  }).catch(e => console.error(`[NAS] 사진 동기화 실패 (${entityKey}):`, e));
+}
+
+/**
+ * NAS에서 사진을 내려받아 로컬 캐시를 갱신한다 (다른 기기에서 올린 사진 반영).
+ * 규칙: 서버에 행이 있으면 서버가 정본(로컬 덮어씀), 서버가 비어 있고
+ * 로컬에 사진이 있으면 로컬을 서버로 올린다(최초 마이그레이션).
+ * @returns 로컬 캐시가 바뀌었으면 true
+ */
+export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> {
+  if (!isAuthApiConfigured || entityKeys.length === 0) return false;
+  let changed = false;
+  const changedKeys: string[] = [];
+
+  for (const entityKey of entityKeys) {
+    try {
+      const { photos: remote } = await apiRequest<{ photos: PhotoEntry[] }>(
+        `/api/photos/${encodeURIComponent(entityKey)}`,
+      );
+      const local = getPhotos(entityKey);
+      if (remote.length > 0) {
+        if (JSON.stringify(remote) !== JSON.stringify(local)) {
+          try {
+            localStorage.setItem(storageKey(entityKey), JSON.stringify(remote));
+            changed = true;
+            changedKeys.push(entityKey);
+          } catch { /* 로컬 캐시 용량 초과 — 서버본은 남아 있으므로 무시 */ }
+        }
+      } else if (local.length > 0) {
+        pushToNas(entityKey, local);
+      }
+    } catch {
+      // 네트워크 실패 — 로컬 캐시 그대로 사용
+    }
+  }
+
+  if (changed) {
+    window.dispatchEvent(new CustomEvent(PHOTOS_CHANGED_EVENT, { detail: { entityKeys: changedKeys } }));
+  }
+  return changed;
 }
 
 /** 해당 엔티티에 저장된 사진(base64 data URL) 목록 반환 */
@@ -30,7 +83,7 @@ export function getPhotos(entityKey: string): PhotoEntry[] {
   }
 }
 
-/** 사진 목록 저장(덮어쓰기) */
+/** 사진 목록 저장(덮어쓰기) — NAS 설정 시 서버에도 백업 */
 export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
   try {
     if (photos.length === 0) {
@@ -40,8 +93,11 @@ export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
     }
   } catch (e) {
     // 용량 초과(QuotaExceeded) 등 — 조용히 실패하지 않고 상위에서 처리하도록 throw
+    // (NAS 백업은 아래에서 계속 시도)
+    pushToNas(entityKey, photos);
     throw e;
   }
+  pushToNas(entityKey, photos);
 }
 
 /** 사진 1장 추가 후 갱신된 목록 반환 */
@@ -58,9 +114,10 @@ export function removePhoto(entityKey: string, photoId: string): PhotoEntry[] {
   return next;
 }
 
-/** 엔티티의 모든 사진 삭제 (레코드 삭제 시 정리용) */
+/** 엔티티의 모든 사진 삭제 (레코드 삭제 시 정리용) — NAS에서도 삭제 */
 export function clearPhotos(entityKey: string): void {
   try { localStorage.removeItem(storageKey(entityKey)); } catch { /* noop */ }
+  pushToNas(entityKey, []);
 }
 
 export interface PhotoEntry {

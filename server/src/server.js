@@ -51,8 +51,8 @@ app.use(cors({
     callback(new Error('허용되지 않은 요청입니다.'));
   },
 }));
-// 데이터 동기화(고객 엑셀 대량 업로드 등)는 32kb를 초과할 수 있다
-app.use(express.json({ limit: '2mb' }));
+// 데이터 동기화(고객 엑셀 대량 업로드)와 시술 사진(base64)은 커질 수 있다
+app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: false, limit: '32kb' }));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
@@ -189,6 +189,14 @@ async function initializeDatabase() {
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS scheduled_messages_due_idx ON scheduled_messages(status, send_at);
+
+    CREATE TABLE IF NOT EXISTS crm_photos (
+      branch_id text NOT NULL,
+      entity_key text NOT NULL,
+      photos jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (branch_id, entity_key)
+    );
   `);
 }
 
@@ -988,6 +996,41 @@ app.delete('/api/data/:collection/:id', requireSession, requireCollection, async
       ? await pool.query('DELETE FROM crm_records WHERE collection = $1 AND id = $2', [req.params.collection, req.params.id])
       : await pool.query('DELETE FROM crm_records WHERE branch_id = $1 AND collection = $2 AND id = $3', [scope, req.params.collection, req.params.id]);
     res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 시술 사진 저장 (기기 간 공유 — 고객 얼굴 사진 = 민감 PII, 세션 인증 필수) ──
+app.get('/api/photos/:entityKey', requireSession, async (req, res, next) => {
+  try {
+    const scope = branchScopeOf(req.authUser);
+    const { rows } = await pool.query(
+      'SELECT photos FROM crm_photos WHERE branch_id = $1 AND entity_key = $2',
+      [scope, req.params.entityKey],
+    );
+    res.json({ photos: rows[0]?.photos || [] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/photos/:entityKey', requireSession, async (req, res, next) => {
+  try {
+    const photos = Array.isArray(req.body.photos) ? req.body.photos : [];
+    if (photos.length > 100) return res.status(400).json({ error: '엔티티당 사진은 100장까지만 저장할 수 있습니다.' });
+    const scope = branchScopeOf(req.authUser);
+    if (photos.length === 0) {
+      await pool.query('DELETE FROM crm_photos WHERE branch_id = $1 AND entity_key = $2', [scope, req.params.entityKey]);
+    } else {
+      await pool.query(`
+        INSERT INTO crm_photos (branch_id, entity_key, photos, updated_at)
+        VALUES ($1, $2, $3, now())
+        ON CONFLICT (branch_id, entity_key)
+        DO UPDATE SET photos = EXCLUDED.photos, updated_at = now()
+      `, [scope, req.params.entityKey, JSON.stringify(photos)]);
+    }
+    res.json({ saved: photos.length });
   } catch (error) {
     next(error);
   }

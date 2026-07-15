@@ -7,7 +7,7 @@ import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
-import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, type PhotoEntry } from '../../lib/photoStore';
+import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, type PhotoEntry } from '../../lib/photoStore';
 
 export default function Treatments() {
   const [search, setSearch] = useState('');
@@ -22,6 +22,11 @@ export default function Treatments() {
 
   useEffect(() => {
     loadLogs();
+    // 다른 기기에서 올린 사진을 NAS에서 내려받아 반영
+    const keys = TreatmentLogStore.getAll().map(t => `treatment:${t.id}`);
+    syncPhotosFromNas(keys).then(changed => {
+      if (changed) setTreatmentLogs([...TreatmentLogStore.getAll()]);
+    });
   }, []);
 
   const filtered = treatmentLogs.filter(t =>

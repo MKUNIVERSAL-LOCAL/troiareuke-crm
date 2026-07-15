@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Images, ArrowLeftRight } from 'lucide-react';
 import { TreatmentLogStore } from '../lib/store';
-import { getPhotos, type PhotoEntry } from '../lib/photoStore';
+import { getPhotos, syncPhotosFromNas, type PhotoEntry } from '../lib/photoStore';
 
 interface DatedPhoto extends PhotoEntry {
   date: string; // 시술일 (YYYY-MM-DD)
@@ -13,6 +13,16 @@ interface DatedPhoto extends PhotoEntry {
  * - 스크러버로 시간 이동 + Before(최초)/After(선택) 나란히 비교.
  */
 export default function TimelapseViewer({ customerId }: { customerId: string }) {
+  // NAS 동기화로 사진이 바뀌면 재수집
+  const [photoVersion, setPhotoVersion] = useState(0);
+
+  useEffect(() => {
+    const logs = TreatmentLogStore.getByCustomer(customerId);
+    syncPhotosFromNas(logs.map(log => `treatment:${log.id}`)).then(changed => {
+      if (changed) setPhotoVersion(v => v + 1);
+    });
+  }, [customerId]);
+
   // 고객의 모든 시술기록 사진을 날짜순(오래된→최신)으로 평탄화
   const photos = useMemo<DatedPhoto[]>(() => {
     const logs = TreatmentLogStore.getByCustomer(customerId); // 최신순
@@ -24,7 +34,7 @@ export default function TimelapseViewer({ customerId }: { customerId: string }) 
       });
     });
     return collected;
-  }, [customerId]);
+  }, [customerId, photoVersion]);
 
   const [idx, setIdx] = useState(0);
   const [compare, setCompare] = useState(false);
