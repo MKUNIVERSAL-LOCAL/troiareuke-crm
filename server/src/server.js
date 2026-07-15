@@ -40,7 +40,12 @@ const smtp = nodemailer.createTransport({
 });
 
 const app = express();
-app.set('trust proxy', 1);
+// 역방향 프록시(DSM) 뒤에서만 1로 둔다. 8787 포트를 직접 노출하는 구성이면
+// TRUST_PROXY=0으로 꺼야 X-Forwarded-For 위조로 rate limit이 우회되지 않는다.
+const TRUST_PROXY = String(process.env.TRUST_PROXY ?? '1');
+if (TRUST_PROXY !== '0' && TRUST_PROXY.toLowerCase() !== 'false') {
+  app.set('trust proxy', Number.isNaN(Number(TRUST_PROXY)) ? TRUST_PROXY : Number(TRUST_PROXY));
+}
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin(origin, callback) {

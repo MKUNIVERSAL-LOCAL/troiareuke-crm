@@ -6,7 +6,12 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 
 export const isSupabaseConfigured = !!supabaseUrl && !!supabaseAnonKey;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 환경변수 누락 빌드에서 createClient가 throw하면 앱 전체가 흰 화면으로 죽는다.
+// 미설정 시 placeholder로 클라이언트를 만들어 두고(호출은 isSupabaseConfigured
+// 가드 뒤에서만 일어남) 로컬 폴백 모드로 정상 기동하게 한다.
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createClient('https://placeholder.supabase.co', 'placeholder-anon-key');
 
 // ── 타입 정의 ────────────────────────────────────────────────────
 
