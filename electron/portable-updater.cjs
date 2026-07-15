@@ -248,6 +248,10 @@ function createPortableUpdater({ app, getMainWindow }) {
   }
 
   function setup() {
+    log('portable-updater-started', {
+      currentVersion: app.getVersion(),
+      portableExecutable: process.env.PORTABLE_EXECUTABLE_FILE || null,
+    });
     setTimeout(() => check('startup'), 5000);
     setInterval(() => check('interval'), 10 * 60 * 1000);
   }
