@@ -3,7 +3,9 @@ param(
   [string]$Task,
   [ValidateRange(1, 2)]
   [int]$ReviewRounds = 1,
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  [ValidatePattern('^\d{8}-\d{6}$')]
+  [string]$ResumeRunId
 )
 
 $ErrorActionPreference = 'Stop'
@@ -96,7 +98,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Codex CLI 로그인이 필요합니다.' }
 $claudeAuth = & $script:ClaudeCommand auth status --json 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $claudeAuth) { throw 'Claude Code 로그인이 필요합니다.' }
 
-$runId = Get-Date -Format 'yyyyMMdd-HHmmss'
+$runId = if ($ResumeRunId) { $ResumeRunId } else { Get-Date -Format 'yyyyMMdd-HHmmss' }
 $slug = ($Task.ToLowerInvariant() -replace '[^a-z0-9가-힣]+', '-').Trim('-')
 if (-not $slug) { $slug = 'crm-task' }
 if ($slug.Length -gt 28) { $slug = $slug.Substring(0, 28).Trim('-') }
@@ -107,14 +109,25 @@ $sharedRoot = if ($env:CRM_AI_SHARED_ROOT) { $env:CRM_AI_SHARED_ROOT } else { Jo
 $runRoot = Join-Path $sharedRoot $runId
 New-Item -ItemType Directory -Path $worktreesRoot, $runRoot -Force | Out-Null
 
-Write-Utf8File -Path (Join-Path $runRoot '00-task.md') -Content "# CRM 협업 작업`n`n$Task`n"
+if (-not $ResumeRunId) {
+  Write-Utf8File -Path (Join-Path $runRoot '00-task.md') -Content "# CRM 협업 작업`n`n$Task`n"
+}
 
 try {
-  Write-Host '[1/7] 격리된 Git 작업공간을 준비합니다...' -ForegroundColor Cyan
-  & git -C $repoRoot fetch origin main --quiet
-  if ($LASTEXITCODE -ne 0) { throw 'GitHub main 정보를 가져오지 못했습니다.' }
-  & git -C $repoRoot worktree add -b $branchName $worktreePath origin/main
-  if ($LASTEXITCODE -ne 0) { throw '격리 작업공간을 만들지 못했습니다.' }
+  if ($ResumeRunId) {
+    Write-Host '[1/7] 기존 Git 작업공간에서 이어서 진행합니다...' -ForegroundColor Cyan
+    if (-not (Test-Path -LiteralPath (Join-Path $worktreePath '.git'))) {
+      throw "재개할 작업공간을 찾지 못했습니다: $worktreePath"
+    }
+    $branchName = (& git -C $worktreePath branch --show-current | Out-String).Trim()
+    Remove-Item -LiteralPath (Join-Path $runRoot '99-failure.md') -ErrorAction SilentlyContinue
+  } else {
+    Write-Host '[1/7] 격리된 Git 작업공간을 준비합니다...' -ForegroundColor Cyan
+    & git -C $repoRoot fetch origin main --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'GitHub main 정보를 가져오지 못했습니다.' }
+    & git -C $repoRoot worktree add -b $branchName $worktreePath origin/main
+    if ($LASTEXITCODE -ne 0) { throw '격리 작업공간을 만들지 못했습니다.' }
+  }
 
   $sourceModules = Join-Path $repoRoot 'node_modules'
   $worktreeModules = Join-Path $worktreePath 'node_modules'
@@ -124,14 +137,18 @@ try {
 
   Write-Host '[2/7] Claude가 제품·사용자·보안 관점의 제안을 작성합니다...' -ForegroundColor Cyan
   $claudeProposalPath = Join-Path $runRoot '01-claude-proposal.md'
-  $claudeProposalPrompt = Read-Template '01-claude-proposal.md' @{ TASK = $Task }
-  Invoke-ClaudeReadOnly $claudeProposalPrompt $claudeProposalPath (Join-Path $runRoot '01-claude-error.log') $worktreePath 20
+  if (-not (Test-Path -LiteralPath $claudeProposalPath)) {
+    $claudeProposalPrompt = Read-Template '01-claude-proposal.md' @{ TASK = $Task }
+    Invoke-ClaudeReadOnly $claudeProposalPrompt $claudeProposalPath (Join-Path $runRoot '01-claude-error.log') $worktreePath 20
+  }
   $claudeProposal = [System.IO.File]::ReadAllText($claudeProposalPath)
 
   Write-Host '[3/7] Codex가 제안의 허점과 구현 가능성을 검토합니다...' -ForegroundColor Cyan
   $codexChallengePath = Join-Path $runRoot '02-codex-challenge.md'
-  $codexChallengePrompt = Read-Template '02-codex-challenge.md' @{ TASK = $Task; CLAUDE_PROPOSAL = $claudeProposal }
-  Invoke-Codex $codexChallengePrompt $codexChallengePath (Join-Path $runRoot '02-codex-error.log') $worktreePath 'read-only'
+  if (-not (Test-Path -LiteralPath $codexChallengePath)) {
+    $codexChallengePrompt = Read-Template '02-codex-challenge.md' @{ TASK = $Task; CLAUDE_PROPOSAL = $claudeProposal }
+    Invoke-Codex $codexChallengePrompt $codexChallengePath (Join-Path $runRoot '02-codex-error.log') $worktreePath 'read-only'
+  }
   $codexChallenge = [System.IO.File]::ReadAllText($codexChallengePath)
 
   Write-Host '[4/7] Claude가 두 의견을 합쳐 최종 명세를 확정합니다...' -ForegroundColor Cyan

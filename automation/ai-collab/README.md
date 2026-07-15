@@ -24,6 +24,12 @@
 powershell -ExecutionPolicy Bypass -File .\automation\ai-collab\Start-AICollab.ps1 -Task "비밀번호 재설정 서비스를 NAS 인증 서버와 연결"
 ```
 
+중간에 멈춘 실행은 기록 폴더의 시간 번호로 이어서 진행할 수 있습니다. 완료된 단계는 다시 호출하지 않습니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\automation\ai-collab\Start-AICollab.ps1 -Task "비밀번호 재설정 서비스를 NAS 인증 서버와 연결" -ResumeRunId 20260715-195910
+```
+
 ## NAS 작업 기록 폴더
 
 Windows 환경변수 `CRM_AI_SHARED_ROOT`를 NAS 공유 폴더로 설정하면 모든 설계·검토·실행 로그가 NAS에 저장됩니다.
