@@ -1,49 +1,72 @@
 # NAS 자동 업데이트 배포
 
-## 목적
+## 현재 배포 방식
 
-거래처 PC에 **설치형(NSIS) 트로이아르케 CRM**을 배포하고, NAS가 최신 설치 파일을 제공한다.
-클라이언트는 앱 실행 중 업데이트를 확인·다운로드하고, 종료 또는 재시작 시 적용한다.
+아르케스파와 거래처에는 단일 실행 파일 **`트로이아르케 CRM.exe`**를 전달한다.
+포터블 앱은 실행 후 5초 뒤, 이후 10분마다 NAS의 업데이트 정보를 확인한다.
+새 버전이 있으면 사용자가 앱 안에서 다운로드하고, 적용을 누르면 현재 실행 파일을 안전하게 교체한 뒤 새 버전으로 다시 실행한다.
 
-> 포터블 `트로이아르케 CRM.exe`는 자동 업데이트 대상이 아니다. 거래처에는 설치 파일을 사용한다.
+```text
+https://crm-update.mkcorp.familyds.com/portable/latest.json
+  → 버전·다운로드 주소·파일 크기·SHA-256 제공
+  → 트로이아르케 CRM.exe 다운로드
+  → SHA-256 검증
+  → 기존 실행 파일 교체 및 재실행
+```
+
+NSIS 설치형 빌드 설정도 유지하지만, 현재 상용 베타의 기준 배포물은 지정 폴더에서 바로 실행하고 그 파일 자체가 갱신되는 포터블 EXE다.
 
 ## NAS 공개 범위
 
-- 공개: `https://crm-update.mkcorp.familyds.com/` 아래의 업데이트 파일만
+- 공개: `https://crm-update.mkcorp.familyds.com/portable/` 아래의 업데이트 파일만
 - 비공개: DSM 관리화면(`:5001`), SMB 공유폴더, PostgreSQL, Docker 관리 포트
 - DSM의 5001 포트는 업데이트 주소로 사용하지 않는다.
+- nginx 컨테이너에는 `CRM-UPDATES`만 읽기 전용으로 연결한다.
 
-NAS의 Web Station 또는 리버스 프록시에서 `crm-update.mkcorp.familyds.com`이 `crm-updates` 정적 폴더를 HTTPS 443으로 제공하게 한다.
-업데이트 파일을 올리는 내부 공유 폴더와 외부 공개 경로는 분리한다.
+## 포터블 릴리스 절차
 
-## 릴리스 절차
-
-1. `package.json` 버전을 올린다.
-2. 소스 루트에서 설치 파일을 만든다.
+1. `package.json`의 버전을 이전 배포보다 높인다.
+2. 시스템 부하를 확인하고 다른 빌드가 없을 때 포터블 파일을 만든다.
 
    ```powershell
-   npm run electron:installer
+   npm run electron:build:portable
    ```
 
-3. NAS의 업데이트 업로드 공유 폴더를 Windows에 연결한 뒤 배포한다.
+3. 업데이트 묶음을 준비한다.
 
    ```powershell
-   $env:NAS_UPDATE_DIR='\\NAS이름\\공유폴더\\crm-updates'
-   npm run release:stage
+   npm run electron:portable:prepare
    ```
 
-4. NAS 공개 주소에서 아래 파일이 모두 내려받아지는지 확인한다.
+   생성 결과:
 
-   - `latest.yml`
-   - `latest.yml`에 기록된 설치 파일
-   - 해당 `.blockmap` 파일
+   - `release/portable-update/트로이아르케 CRM.exe`
+   - `release/portable-update/latest.json`
 
-   기준 주소: `https://crm-update.mkcorp.familyds.com/`
+4. 게시 전 아래 값이 모두 일치하는지 확인한다.
 
-5. 기존 버전이 설치된 별도 PC에서 앱을 실행해 다운로드·재시작 업데이트를 검증한다.
+   - `package.json` 버전 = `latest.json.version`
+   - 실제 EXE 크기 = `latest.json.size`
+   - 실제 EXE SHA-256 = `latest.json.sha256`
+   - 다운로드 호스트 = `crm-update.mkcorp.familyds.com`
 
-## 주의
+5. NAS에는 EXE를 먼저 올리고 `latest.json`을 마지막에 올린다. 준비 도구는 `NAS_UPDATE_DIR`이 설정된 경우 임시 파일로 복사한 뒤 원자적으로 이름을 바꾼다.
 
-- 설치 파일·blockmap·`latest.yml`은 반드시 같은 빌드에서 생성된 파일을 함께 올린다.
-- `latest.yml`을 먼저 올리면 일부 PC가 아직 업로드 중인 설치 파일을 받을 수 있다.
-- 긴급 수정도 버전을 다시 올려 새 릴리스로 배포한다. 이미 배포된 동일 버전 파일을 덮어쓰지 않는다.
+   ```powershell
+   $env:NAS_UPDATE_DIR='\\192.168.0.52\CRM-UPDATES'
+   npm run electron:portable:prepare
+   ```
+
+6. 외부 주소에서 `latest.json`과 EXE가 모두 HTTP 200으로 내려받아지는지 확인하고, 별도 PC의 이전 버전으로 다운로드·교체·재실행을 검증한다.
+
+## 안전 규칙
+
+- `latest.json`을 EXE보다 먼저 게시하지 않는다.
+- 이미 게시한 동일 버전 파일을 덮어쓰지 않고 반드시 버전을 올린다.
+- 앱은 HTTPS이며 호스트가 `crm-update.mkcorp.familyds.com`인 파일만 허용한다.
+- 다운로드 파일은 SHA-256이 일치해야만 적용한다.
+- NAS 게시와 실제 거래처 업데이트 시작은 명시적 승인 후 수행한다.
+
+## NSIS 설치형 배포
+
+신규 PC에 설치 프로그램이 필요한 경우 `npm run electron:installer`로 NSIS 파일을 만들 수 있다. 이 방식의 자동 업데이트를 사용할 때는 같은 빌드에서 생성된 설치 파일·`.blockmap`·`latest.yml`을 함께 게시해야 한다. 현재 포터블 배포와 혼합하지 않는다.
