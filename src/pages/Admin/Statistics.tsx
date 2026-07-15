@@ -6,7 +6,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { TrendingUp, Users, Building2, LogIn } from 'lucide-react';
+import { TrendingUp, Users, Building2, LogIn, AlertCircle, RefreshCw } from 'lucide-react';
 
 const PLAN_COLORS: Record<string, string> = {
   trial: '#f59e0b',
@@ -21,18 +21,30 @@ export default function Statistics() {
   const [planDist, setPlanDist] = useState<{ name: string; value: number; color: string }[]>([]);
   const [branchGrowth, setBranchGrowth] = useState<{ date: string; 누적지점: number }[]>([]);
   const [summary, setSummary] = useState({ totalBranches: 0, totalUsers: 0, totalLogins: 0, successRate: 0 });
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { loadAll(); }, []);
 
   async function loadAll() {
     setLoading(true);
-    if (!isSupabaseConfigured) { setLoading(false); return; }
+    setError(null);
+    if (!isSupabaseConfigured) {
+      setError('통계 서버가 설정되지 않았습니다. 연동 설정을 확인해 주세요.');
+      setLoading(false);
+      return;
+    }
 
     const [branches, users, logs] = await Promise.all([
       supabase.from('branches').select('id, plan, created_at, is_active'),
       supabase.from('user_profiles').select('id'),
       supabase.from('login_logs').select('status, logged_in_at').order('logged_in_at', { ascending: true }),
     ]);
+
+    if (branches.error || users.error || logs.error) {
+      setError('통계 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      setLoading(false);
+      return;
+    }
 
     // 요약
     const totalLogins = logs.data?.length || 0;
@@ -95,7 +107,7 @@ export default function Statistics() {
   ];
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">통계 / 분석</h1>
         <p className="text-slate-400 text-sm mt-1">전체 서비스 현황을 한눈에 파악하세요</p>
@@ -105,10 +117,21 @@ export default function Statistics() {
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : error ? (
+        <div className="bg-slate-900 border border-red-500/20 rounded-2xl p-10 text-center">
+          <AlertCircle size={34} className="text-red-400 mx-auto mb-3" />
+          <p className="text-sm text-slate-300">{error}</p>
+          <button
+            onClick={loadAll}
+            className="inline-flex items-center gap-2 mt-4 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-xl"
+          >
+            <RefreshCw size={14} /> 다시 불러오기
+          </button>
+        </div>
       ) : (
         <>
           {/* 요약 카드 */}
-          <div className="grid grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
             {statCards.map(c => (
               <div key={c.label} className="bg-slate-900 border border-slate-700/50 rounded-2xl p-5">
                 <div className={`w-10 h-10 ${c.bg} rounded-xl flex items-center justify-center mb-4`}>
@@ -120,9 +143,9 @@ export default function Statistics() {
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             {/* 로그인 추이 (2/3) */}
-            <div className="col-span-2 bg-slate-900 border border-slate-700/50 rounded-2xl p-6">
+            <div className="lg:col-span-2 bg-slate-900 border border-slate-700/50 rounded-2xl p-4 sm:p-6">
               <h2 className="text-sm font-bold text-white mb-6">최근 14일 로그인 추이</h2>
               <ResponsiveContainer width="100%" height={220}>
                 <AreaChart data={loginTrend}>
@@ -148,7 +171,7 @@ export default function Statistics() {
             </div>
 
             {/* 플랜 분포 (1/3) */}
-            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6">
+            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-4 sm:p-6">
               <h2 className="text-sm font-bold text-white mb-6">플랜 분포</h2>
               {planDist.length === 0 ? (
                 <div className="flex items-center justify-center h-48 text-slate-600 text-sm">데이터 없음</div>
@@ -179,7 +202,7 @@ export default function Statistics() {
           </div>
 
           {/* 지점 누적 증가 */}
-          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6">
+          <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-4 sm:p-6">
             <h2 className="text-sm font-bold text-white mb-6">지점 누적 증가 추이</h2>
             {branchGrowth.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-slate-600 text-sm">지점 데이터가 없습니다</div>
