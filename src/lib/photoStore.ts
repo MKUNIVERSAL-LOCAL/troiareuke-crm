@@ -23,36 +23,86 @@ function storageKey(entityKey: string): string {
   return `${PREFIX}${entityKey}`;
 }
 
-// NAS 중앙 서버로 사진 백업 (fire-and-forget — 실패해도 로컬 저장은 유지)
+// ── NAS 동기화 dirty 추적 ─────────────────────────────────────
+// 푸시가 실패한(오프라인 등) 엔티티는 dirty로 표시한다. dirty인 동안에는
+// 서버본이 로컬을 덮어쓰지 못하고(사진 유실 방지), 재푸시로 해소된다.
+const DIRTY_KEY = 'troiareuke_photos_dirty';
+
+function getDirtyKeys(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DIRTY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function setDirty(entityKey: string, dirty: boolean): void {
+  try {
+    const keys = new Set(getDirtyKeys());
+    if (dirty) keys.add(entityKey);
+    else keys.delete(entityKey);
+    localStorage.setItem(DIRTY_KEY, JSON.stringify([...keys]));
+  } catch { /* noop */ }
+}
+
+// NAS 중앙 서버로 사진 백업. 실패 시 dirty로 표시해 다음 sync에서 재푸시.
 function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
   if (!isAuthApiConfigured) return;
   apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
     method: 'PUT',
     body: JSON.stringify({ photos }),
-  }).catch(e => console.error(`[NAS] 사진 동기화 실패 (${entityKey}):`, e));
+  })
+    .then(() => setDirty(entityKey, false))
+    .catch(e => {
+      setDirty(entityKey, true);
+      console.error(`[NAS] 사진 동기화 실패 (${entityKey}):`, e);
+    });
 }
 
 /**
  * NAS에서 사진을 내려받아 로컬 캐시를 갱신한다 (다른 기기에서 올린 사진 반영).
- * 규칙: 서버에 행이 있으면 서버가 정본(로컬 덮어씀), 서버가 비어 있고
- * 로컬에 사진이 있으면 로컬을 서버로 올린다(최초 마이그레이션).
+ * 규칙:
+ *  - dirty(푸시 실패분 보유) 키 → 로컬이 정본, 서버로 재푸시
+ *  - 서버에 행이 있으면(빈 배열 = 삭제 tombstone 포함) 서버가 정본
+ *  - 서버에 행이 없고 로컬에 사진이 있으면 로컬을 올린다 (최초 마이그레이션)
  * @returns 로컬 캐시가 바뀌었으면 true
  */
 export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> {
   if (!isAuthApiConfigured || entityKeys.length === 0) return false;
+
+  const dirty = new Set(getDirtyKeys());
+  for (const key of entityKeys) {
+    if (dirty.has(key)) pushToNas(key, getPhotos(key));
+  }
+  const cleanKeys = entityKeys.filter(k => !dirty.has(k));
+  if (cleanKeys.length === 0) return false;
+
   let changed = false;
   const changedKeys: string[] = [];
 
-  for (const entityKey of entityKeys) {
+  // 배치 조회 (500키 단위) — 시술기록 수백 건에서 왕복 폭주 방지
+  for (let i = 0; i < cleanKeys.length; i += 500) {
+    const chunk = cleanKeys.slice(i, i + 500);
+    let entries: Record<string, PhotoEntry[]>;
     try {
-      const { photos: remote } = await apiRequest<{ photos: PhotoEntry[] }>(
-        `/api/photos/${encodeURIComponent(entityKey)}`,
+      const response = await apiRequest<{ entries: Record<string, PhotoEntry[]> }>(
+        '/api/photos/batch',
+        { method: 'POST', body: JSON.stringify({ keys: chunk }) },
       );
+      entries = response.entries;
+    } catch {
+      continue; // 네트워크 실패 — 로컬 캐시 그대로 사용
+    }
+
+    for (const entityKey of chunk) {
+      const remote = entries[entityKey]; // undefined = 서버에 행 없음
       const local = getPhotos(entityKey);
-      if (remote.length > 0) {
+      if (remote !== undefined) {
         if (JSON.stringify(remote) !== JSON.stringify(local)) {
           try {
-            localStorage.setItem(storageKey(entityKey), JSON.stringify(remote));
+            if (remote.length === 0) localStorage.removeItem(storageKey(entityKey));
+            else localStorage.setItem(storageKey(entityKey), JSON.stringify(remote));
             changed = true;
             changedKeys.push(entityKey);
           } catch { /* 로컬 캐시 용량 초과 — 서버본은 남아 있으므로 무시 */ }
@@ -60,8 +110,6 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
       } else if (local.length > 0) {
         pushToNas(entityKey, local);
       }
-    } catch {
-      // 네트워크 실패 — 로컬 캐시 그대로 사용
     }
   }
 

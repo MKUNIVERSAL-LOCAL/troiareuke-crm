@@ -197,6 +197,8 @@ async function initializeDatabase() {
       updated_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (branch_id, entity_key)
     );
+
+    ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS locked_at timestamptz;
   `);
 }
 
@@ -746,12 +748,19 @@ app.delete('/api/messages/scheduled/:id', requireSession, async (req, res, next)
 
 // 분 단위 디스패처: 시각이 지난 예약을 잠그고 발송한다 (다중 인스턴스 안전)
 async function dispatchScheduledMessages() {
+  // 크래시 복구: processing으로 잠긴 채 10분 넘게 방치된 잡은 pending으로 되돌린다
+  // (재배포·정전으로 결과 UPDATE 전에 프로세스가 죽은 경우 — 영구 고착 방지)
+  await pool.query(`
+    UPDATE scheduled_messages SET status = 'pending', locked_at = NULL
+    WHERE status = 'processing' AND locked_at < now() - interval '10 minutes'
+  `).catch(e => console.error('stale processing recovery failed', e?.message || e));
+
   const client = await pool.connect();
   let due = [];
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(`
-      UPDATE scheduled_messages SET status = 'processing'
+      UPDATE scheduled_messages SET status = 'processing', locked_at = now()
       WHERE id IN (
         SELECT id FROM scheduled_messages
         WHERE status = 'pending' AND send_at <= now()
@@ -773,13 +782,20 @@ async function dispatchScheduledMessages() {
     try {
       const { rows: userRows } = await pool.query('SELECT * FROM auth_users WHERE id = $1', [job.user_id]);
       const authUser = userRows[0] || { id: job.user_id, role: 'admin', branch_id: job.branch_id };
-      const { body } = await processSend({
+      const { httpStatus, body } = await processSend({
         authUser: { ...authUser, branch_id: job.branch_id },
         type: job.type,
         title: job.title || undefined,
         content: job.content,
         phones: Array.isArray(job.phones) ? job.phones : [],
       });
+      if (httpStatus === 429) {
+        // 시간당 한도와 겹침 — 실패 처리하지 않고 5분 뒤 재시도
+        await pool.query(
+          `UPDATE scheduled_messages SET status = 'pending', locked_at = NULL, send_at = now() + interval '5 minutes' WHERE id = $1`,
+          [job.id]);
+        continue;
+      }
       const status = body.error ? 'failed' : body.pending ? 'failed' : body.failed === 0 ? 'sent' : 'partial';
       await pool.query('UPDATE scheduled_messages SET result = $1, status = $2 WHERE id = $3',
         [JSON.stringify(body), status, job.id]);
@@ -869,9 +885,11 @@ async function runRevisitReminders() {
       if (due.length === 0) continue;
 
       // 쿨다운: 최근 N일 내 리마인더를 받은 번호는 제외 (매일 재발송 금지)
+      // 쿨다운은 실제 발송(sent)만 소모한다 — 발송사 미설정(pending) 기록이
+      // 쿨다운을 잡아먹으면 발송사 연동 직후 7일간 리마인더가 안 나간다
       const { rows: recent } = await pool.query(
         `SELECT DISTINCT phone FROM message_send_log
-         WHERE branch_id = $1 AND type = 'revisit-reminder'
+         WHERE branch_id = $1 AND type = 'revisit-reminder' AND status = 'sent'
            AND created_at > now() - ($2 || ' days')::interval`,
         [branchId, REMINDER_COOLDOWN_DAYS],
       );
@@ -1002,6 +1020,8 @@ app.delete('/api/data/:collection/:id', requireSession, requireCollection, async
 });
 
 // ── 시술 사진 저장 (기기 간 공유 — 고객 얼굴 사진 = 민감 PII, 세션 인증 필수) ──
+// 빈 배열도 행으로 저장한다(tombstone). "삭제됨"과 "원래 없음"을 구분해야
+// 다른 기기의 옛 캐시가 삭제된 고객 사진을 서버에 되살리지 못한다.
 app.get('/api/photos/:entityKey', requireSession, async (req, res, next) => {
   try {
     const scope = branchScopeOf(req.authUser);
@@ -1009,7 +1029,25 @@ app.get('/api/photos/:entityKey', requireSession, async (req, res, next) => {
       'SELECT photos FROM crm_photos WHERE branch_id = $1 AND entity_key = $2',
       [scope, req.params.entityKey],
     );
-    res.json({ photos: rows[0]?.photos || [] });
+    res.json({ exists: rows.length > 0, photos: rows[0]?.photos || [] });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 배치 조회: 시술기록이 수백 건일 때 왕복 1회로 (keys 최대 500)
+app.post('/api/photos/batch', requireSession, async (req, res, next) => {
+  try {
+    const keys = Array.isArray(req.body.keys) ? req.body.keys.map(String).slice(0, 500) : [];
+    if (keys.length === 0) return res.status(400).json({ error: '조회할 키가 없습니다.' });
+    const scope = branchScopeOf(req.authUser);
+    const { rows } = await pool.query(
+      'SELECT entity_key, photos FROM crm_photos WHERE branch_id = $1 AND entity_key = ANY($2)',
+      [scope, keys],
+    );
+    const entries = {};
+    for (const row of rows) entries[row.entity_key] = row.photos;
+    res.json({ entries });
   } catch (error) {
     next(error);
   }
@@ -1020,16 +1058,12 @@ app.put('/api/photos/:entityKey', requireSession, async (req, res, next) => {
     const photos = Array.isArray(req.body.photos) ? req.body.photos : [];
     if (photos.length > 100) return res.status(400).json({ error: '엔티티당 사진은 100장까지만 저장할 수 있습니다.' });
     const scope = branchScopeOf(req.authUser);
-    if (photos.length === 0) {
-      await pool.query('DELETE FROM crm_photos WHERE branch_id = $1 AND entity_key = $2', [scope, req.params.entityKey]);
-    } else {
-      await pool.query(`
-        INSERT INTO crm_photos (branch_id, entity_key, photos, updated_at)
-        VALUES ($1, $2, $3, now())
-        ON CONFLICT (branch_id, entity_key)
-        DO UPDATE SET photos = EXCLUDED.photos, updated_at = now()
-      `, [scope, req.params.entityKey, JSON.stringify(photos)]);
-    }
+    await pool.query(`
+      INSERT INTO crm_photos (branch_id, entity_key, photos, updated_at)
+      VALUES ($1, $2, $3, now())
+      ON CONFLICT (branch_id, entity_key)
+      DO UPDATE SET photos = EXCLUDED.photos, updated_at = now()
+    `, [scope, req.params.entityKey, JSON.stringify(photos)]);
     res.json({ saved: photos.length });
   } catch (error) {
     next(error);

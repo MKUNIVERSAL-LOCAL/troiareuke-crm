@@ -86,13 +86,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isAuthApiConfigured) {
       const timeout = setTimeout(() => setIsLoading(false), 5000);
       restoreAuthApiSession()
-        .then(profile => {
-          if (profile) {
-            saveUser(profile);
-          } else {
+        .then(result => {
+          if (result.status === 'ok') {
+            saveUser(result.user);
+          } else if (result.status === 'unauthenticated') {
             setUser(null);
             localStorage.removeItem(STORAGE_KEY);
           }
+          // 'offline': 서버 미접속 — 위에서 복원한 캐시 세션 유지 (강제 로그아웃 금지)
         })
         .finally(() => {
           clearTimeout(timeout);

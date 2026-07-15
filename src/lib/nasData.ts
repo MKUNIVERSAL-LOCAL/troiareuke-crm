@@ -21,6 +21,17 @@ export async function nasLoad(collection: string): Promise<Record<string, any>[]
   }
 }
 
+/** 대량 이관용 upsert (NAS 최초 전환 시 localStorage → 서버 1회 이관) */
+export function nasBulkUpsert(collection: string, rows: Record<string, any>[]): void {
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    apiRequest(`/api/data/${collection}`, {
+      method: 'PUT',
+      body: JSON.stringify({ rows: chunk }),
+    }).catch(e => console.error(`[NAS] ${collection} 이관 실패:`, e));
+  }
+}
+
 export function nasUpsert(collection: string, row: Record<string, any>): void {
   apiRequest(`/api/data/${collection}`, {
     method: 'PUT',

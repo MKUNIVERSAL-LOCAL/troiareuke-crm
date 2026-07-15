@@ -263,10 +263,20 @@ await test('시술 사진이 저장·조회·삭제된다 (지점 격리 포함)
   const other = await call(`/api/photos/${entityKey}`, { token: shop2Token });
   assert(other.status === 200 && other.data.photos.length === 0, '다른 지점에 사진이 보임');
 
+  // 배치 조회: 존재하는 키만 entries에 담긴다
+  const batch = await call('/api/photos/batch', {
+    method: 'POST', token: shopToken,
+    body: { keys: ['treatment:t1', 'treatment:none'] },
+  });
+  assert(batch.status === 200, `batch status=${batch.status}`);
+  assert(Array.isArray(batch.data.entries['treatment:t1']), '배치에 저장 키 누락');
+  assert(batch.data.entries['treatment:none'] === undefined, '없는 키가 배치에 포함됨');
+
+  // 삭제는 행 제거가 아니라 빈 배열 tombstone — 다른 기기의 옛 캐시가 부활 못 하도록
   const clear = await call(`/api/photos/${entityKey}`, { method: 'PUT', token: shopToken, body: { photos: [] } });
   assert(clear.status === 200, `clear status=${clear.status}`);
   const after = await call(`/api/photos/${entityKey}`, { token: shopToken });
-  assert(after.data.photos.length === 0, '삭제 후에도 사진이 남아 있음');
+  assert(after.data.exists === true && after.data.photos.length === 0, 'tombstone이 유지되지 않음');
 });
 
 await test('프로필(매장 전화·주소)이 저장된다', async () => {

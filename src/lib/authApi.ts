@@ -28,6 +28,15 @@ const AUTH_TOKEN_KEY = 'troiareuke_auth_token';
 
 export const isAuthApiConfigured = Boolean(apiBaseUrl);
 
+/** 서버가 응답한 HTTP 오류 — 네트워크 실패(fetch TypeError)와 구분된다 */
+export class AuthApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!isAuthApiConfigured) throw new Error('중앙 계정 서버가 설정되지 않았습니다.');
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -42,7 +51,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
   if (response.status === 204) return undefined as T;
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || '계정 서버 요청에 실패했습니다.');
+  if (!response.ok) throw new AuthApiError(data.error || '계정 서버 요청에 실패했습니다.', response.status);
   return data as T;
 }
 
@@ -67,14 +76,23 @@ export async function signupWithAuthApi(data: { email: string; password: string;
   return saveAuth(response);
 }
 
-export async function restoreAuthApiSession() {
-  if (!localStorage.getItem(AUTH_TOKEN_KEY)) return null;
+export type RestoreResult =
+  | { status: 'ok'; user: AuthApiUser }
+  | { status: 'unauthenticated' }   // 토큰 없음/무효 — 로그아웃 처리
+  | { status: 'offline' };          // 서버 미접속 — 캐시 세션 유지
+
+export async function restoreAuthApiSession(): Promise<RestoreResult> {
+  if (!localStorage.getItem(AUTH_TOKEN_KEY)) return { status: 'unauthenticated' };
   try {
     const response = await apiRequest<{ user: AuthApiUser }>('/api/auth/me');
-    return response.user;
-  } catch {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    return null;
+    return { status: 'ok', user: response.user };
+  } catch (error) {
+    if (error instanceof AuthApiError && (error.status === 401 || error.status === 403)) {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      return { status: 'unauthenticated' };
+    }
+    // 네트워크 실패 — 토큰을 파기하면 오프라인 사용이 불가능해지므로 유지
+    return { status: 'offline' };
   }
 }
 
