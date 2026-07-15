@@ -338,12 +338,12 @@ export default function Dashboard() {
                 전체보기 <ChevronRight size={13} />
               </button>
             </div>
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-gray-50 max-h-[32rem] overflow-y-auto">
               {todayReservations.length === 0 ? (
                 <div className="py-12 text-center text-gray-400 text-sm">오늘 예약이 없습니다</div>
               ) : (
                 todayReservations.map(r => (
-                  <div key={r.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/50 transition-colors">
+                  <div key={r.id} className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 hover:bg-gray-50/50 transition-colors">
                     <div className="text-center w-14 flex-shrink-0">
                       <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
                       <p className="text-xs text-gray-400">{r.endTime}</p>
@@ -358,7 +358,7 @@ export default function Dashboard() {
                       </div>
                       <p className="text-xs text-gray-400 mt-0.5">{r.services.map(s => s.serviceName).join(', ')} · {r.staffName}</p>
                     </div>
-                    <div className="text-right flex-shrink-0">
+                    <div className="hidden sm:block text-right flex-shrink-0">
                       <p className="text-sm font-bold text-gray-800">{r.totalPrice.toLocaleString()}원</p>
                       <StatusBadge status={r.status} />
                     </div>
