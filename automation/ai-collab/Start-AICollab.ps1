@@ -35,7 +35,7 @@ function Invoke-ClaudeReadOnly {
   Push-Location $WorkingDirectory
   try {
     $result = Get-Content -LiteralPath $promptPath -Raw -Encoding UTF8 |
-      & $script:ClaudeCommand -p --output-format text --permission-mode plan --max-turns 6 --no-session-persistence --tools 'Read,Glob,Grep,Bash' 2>> $ErrorPath
+      & $script:ClaudeCommand -p --output-format text --permission-mode plan --max-turns 12 --no-session-persistence --tools 'Read,Glob,Grep,Bash' 2>> $ErrorPath
     Write-Utf8File -Path $OutputPath -Content (($result | Out-String).Trim())
     if ($LASTEXITCODE -ne 0) { throw "Claude 실행 실패(코드 $LASTEXITCODE). 로그: $ErrorPath" }
   } finally {
