@@ -73,7 +73,10 @@ export default function Login() {
       if (/rate limit|too many/i.test(message)) {
         setResetError('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
       } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(message)) {
-        setResetError('서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.');
+        // 인터넷 문제와 서버(클라우드) 다운을 구분해 안내 — 잘못된 안내는 사용자를 헛수고시킴
+        setResetError(navigator.onLine
+          ? '클라우드 서버가 응답하지 않습니다. 서비스 점검 중이거나 일시정지 상태일 수 있으니 관리자에게 문의해주세요.'
+          : '인터넷 연결이 끊겨 있습니다. 네트워크 연결을 확인해주세요.');
       } else {
         setResetError('재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
       }

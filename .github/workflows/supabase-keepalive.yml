@@ -1,0 +1,24 @@
+name: supabase-keepalive
+
+# Supabase 무료 플랜은 7일간 API 요청이 없으면 프로젝트를 자동 일시정지한다.
+# 매일 한 번 인증 서버 헬스를 호출해 정지를 방지한다 (NAS 전환 완료 후 삭제 가능).
+# publishable key는 클라이언트 번들에 이미 노출되는 공개용 키다.
+
+on:
+  schedule:
+    - cron: '17 21 * * *'   # 매일 06:17 KST
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase auth health
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            "https://hmgxhrtqfbffqrleorxf.supabase.co/auth/v1/health")
+          echo "auth health status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Supabase 프로젝트가 응답하지 않습니다 (status=$STATUS). 일시정지 여부를 대시보드에서 확인하세요."
+            exit 1
+          fi
