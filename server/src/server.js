@@ -51,7 +51,9 @@ if (TRUST_PROXY !== '0' && TRUST_PROXY.toLowerCase() !== 'false') {
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.has(origin) || (origin === 'null' && allowedOrigins.has('null'))) {
+    // Electron 데스크톱 앱(file://)은 Chromium 버전에 따라 Origin을 'null' 또는 'file://'로 보낸다.
+    // 거부 시 CORS 헤더가 빠져 앱에서 "서버에 연결할 수 없습니다"(fetch TypeError)로 보이는 함정 주의.
+    if (!origin || origin === 'null' || origin === 'file://' || allowedOrigins.has(origin)) {
       callback(null, true);
       return;
     }
