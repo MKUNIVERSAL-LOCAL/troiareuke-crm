@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
-import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle } from 'lucide-react';
+import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
+import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
@@ -74,6 +75,32 @@ export default function Settings() {
     }
     setSmsTestStatus('done');
     setTimeout(() => { setSmsTestStatus('idle'); setSmsTestMessage(null); }, 5000);
+  };
+
+  // 데이터 내보내기 (엑셀) state — 기본 선택은 사장님 지정 핵심 5종
+  const [exportSelection, setExportSelection] = useState<Set<string>>(
+    () => new Set(['customers', 'consultations', 'payments', 'products', 'product_sales']),
+  );
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+
+  const toggleExport = (key: string) => {
+    setExportSelection(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleExport = () => {
+    try {
+      const keys = EXPORT_DATASETS.filter(d => exportSelection.has(d.key)).map(d => d.key);
+      const result = exportDatasetsToXlsx(keys);
+      const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
+      setExportMessage(`다운로드 완료: ${result.fileName} — ${Object.keys(result.counts).length}개 시트, 총 ${total.toLocaleString()}행`);
+    } catch (e: any) {
+      setExportMessage(e?.message || '내보내기에 실패했습니다.');
+    }
   };
 
   // Backup state
@@ -1069,6 +1096,72 @@ export default function Settings() {
 
             {tab === 'backup' && (
               <div className="space-y-4">
+                <SettingCard title="데이터 내보내기 (엑셀 다운로드)">
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-500">
+                      로그인한 계정의 샵 데이터만 내보내집니다. 선택한 항목이 시트별로 담긴
+                      엑셀(.xlsx) 파일 하나로 다운로드됩니다.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setExportSelection(new Set(EXPORT_DATASETS.map(d => d.key)))}
+                        className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                      >
+                        전체 선택
+                      </button>
+                      <button
+                        onClick={() => setExportSelection(new Set())}
+                        className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                      >
+                        전체 해제
+                      </button>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      {EXPORT_DATASETS.map(d => (
+                        <label
+                          key={d.key}
+                          className={`flex items-start gap-2.5 px-3 py-2.5 border rounded-xl cursor-pointer transition-colors ${
+                            exportSelection.has(d.key) ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={exportSelection.has(d.key)}
+                            onChange={() => toggleExport(d.key)}
+                            className="mt-0.5 rounded text-blue-500"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-gray-800">
+                              {d.label}
+                              {d.sensitive && <span className="ml-1.5 text-[10px] font-bold text-amber-600">민감정보</span>}
+                            </span>
+                            <span className="block text-xs text-gray-400 mt-0.5">{d.description}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                      <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-700 leading-relaxed">
+                        고객 연락처·피부상담 내역은 개인정보(민감정보)입니다. 다운로드한 파일은
+                        외부 공유를 금지하고, 사용 후 안전하게 삭제해주세요. 시술 사진은 용량 문제로
+                        엑셀에 포함되지 않으며 NAS 백업(CRM-BACKUP)에서 파일로 제공됩니다.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <button
+                        onClick={handleExport}
+                        disabled={exportSelection.size === 0}
+                        className="flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <Download size={16} />
+                        선택 항목 다운로드 ({exportSelection.size}종)
+                      </button>
+                      {exportMessage && <p className="text-xs text-gray-500">{exportMessage}</p>}
+                    </div>
+                  </div>
+                </SettingCard>
+
                 <SettingCard title="데이터 백업">
                   {isElectron ? (
                     <div className="space-y-4">

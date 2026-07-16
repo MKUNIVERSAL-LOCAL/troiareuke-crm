@@ -133,6 +133,7 @@ function toDbCustomer(c: Partial<Customer>): Record<string, any> {
   if (c.name !== undefined) db.name = c.name;
   if (c.phone !== undefined) db.phone = c.phone;
   if (c.email !== undefined) db.email = c.email;
+  if (c.address !== undefined) db.address = c.address;
   if (c.birthDate !== undefined) db.birth_date = c.birthDate;
   if (c.gender !== undefined) db.gender = c.gender;
   if (c.grade !== undefined) db.grade = c.grade;
@@ -156,6 +157,7 @@ function fromDbCustomer(row: Record<string, any>): Customer {
     name: row.name,
     phone: row.phone || '',
     email: row.email,
+    address: row.address,
     birthDate: row.birth_date,
     gender: row.gender || '미입력',
     grade: row.grade || '일반',

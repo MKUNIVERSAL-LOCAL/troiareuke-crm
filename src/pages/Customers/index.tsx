@@ -124,11 +124,11 @@ export default function Customers() {
 
   // 고객 추가 모달
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
   // 고객 수정 모달
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
   // 엑셀 업로드용 파일 input ref
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -443,6 +443,7 @@ export default function Customers() {
       '이름': c.name,
       '전화번호': c.phone,
       '이메일': c.email || '',
+      '주소': c.address || '',
       '성별': c.gender,
       '등급': c.grade,
       '생년월일': c.birthDate || '',
@@ -509,6 +510,7 @@ export default function Customers() {
             birthDate: pick(r, ['생년월일', '생일', 'birthDate']) || undefined,
             referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
             email: pick(r, ['이메일', 'email']) || undefined,
+            address: pick(r, ['주소', 'address']) || undefined,
             allergies: undefined, tags: [], isActive: true,
           });
           added++;
@@ -546,10 +548,11 @@ export default function Customers() {
       birthDate: addForm.birthDate || undefined,
       referralSource: addForm.referralSource || undefined,
       email: addForm.email.trim() || undefined, allergies: undefined,
+      address: addForm.address.trim() || undefined,
       tags: [], isActive: true,
     });
     setShowAddModal(false);
-    setAddForm({ name: '', phone: '', email: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '' });
+    setAddForm({ name: '', phone: '', email: '', address: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '' });
     loadAll();
   }
 
@@ -558,7 +561,8 @@ export default function Customers() {
     if (!selected) return;
     setEditForm({
       name: selected.name, phone: selected.phone,
-      email: selected.email ?? '', gender: selected.gender,
+      email: selected.email ?? '', address: selected.address ?? '',
+      gender: selected.gender,
       grade: selected.grade, skinType: selected.skinType ?? '',
       memo: selected.memo ?? '', birthDate: selected.birthDate ?? '',
       referralSource: selected.referralSource ?? '',
@@ -576,6 +580,7 @@ export default function Customers() {
       birthDate: editForm.birthDate || undefined,
       referralSource: editForm.referralSource || undefined,
       email: editForm.email.trim() || undefined,
+      address: editForm.address.trim() || undefined,
     });
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
@@ -1329,6 +1334,11 @@ export default function Customers() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">주소</label>
+                <input type="text" value={addForm.address} onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="서울시 강남구..." />
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
                 <select value={addForm.referralSource} onChange={e => setAddForm(f => ({ ...f, referralSource: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -1406,6 +1416,11 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
                 <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">주소</label>
+                <input type="text" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="서울시 강남구..." />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
