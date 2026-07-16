@@ -60,8 +60,10 @@ function createPortableUpdater({ app, getMainWindow }) {
           return;
         }
         if (response.statusCode !== 200) {
+          const error = new Error(`업데이트 서버 응답 오류 (${response.statusCode})`);
+          error.statusCode = response.statusCode;
           response.resume();
-          reject(new Error(`업데이트 서버 응답 오류 (${response.statusCode})`));
+          reject(error);
           return;
         }
 
@@ -177,6 +179,12 @@ function createPortableUpdater({ app, getMainWindow }) {
       send('update-available', { version: manifest.version, releaseDate: manifest.releaseDate });
       return availableUpdate;
     } catch (error) {
+      // 업데이트 채널을 아직 게시하지 않은 환경의 404는 앱 오류가 아니다.
+      if (error?.statusCode === 404) {
+        availableUpdate = null;
+        log('update-manifest-not-published');
+        return null;
+      }
       log('update-check-failed', { message: error.message });
       send('update-error', { message: error.message });
       return null;

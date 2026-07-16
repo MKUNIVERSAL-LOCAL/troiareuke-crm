@@ -2,7 +2,7 @@
   "name": "troiareuke-crm",
   "productName": "트로이아르케 CRM",
   "private": true,
-  "version": "1.0.25",
+  "version": "1.0.26",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -19,6 +19,8 @@
     "electron:release": "npm run build && electron-builder --win --publish always",
     "release:stage": "node scripts/stage-nas-update.mjs",
     "release:nas": "npm run electron:installer && npm run release:stage",
+    "deploy:onedrive": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-onedrive.ps1 -Target \"F:\\OneDrive\\바탕 화면\\06_개발프로젝트\\전체 작업폴더\\트로이아르케-CRM\"",
+    "release:onedrive": "npm run electron:build:dir && npm run deploy:onedrive",
     "deploy": "cross-env DEPLOY_TARGET=ghpages npm run build && gh-pages -d dist"
   },
   "dependencies": {

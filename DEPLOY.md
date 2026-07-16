@@ -145,8 +145,11 @@ GitHub → 저장소 → Settings → Secrets and variables → Actions → New 
 |------|---|
 | `VITE_SUPABASE_URL` | Supabase URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
+| `VITE_AUTH_PROVIDER` | 현재는 반드시 `supabase` |
+| `VITE_AUTH_API_URL` | NAS 인증 시험 서버 URL(기본 인증에는 사용하지 않음) |
 
 > `GITHUB_TOKEN`은 GitHub이 자동으로 제공합니다. 별도 등록 불필요.
+> NAS 인증은 기존 계정 이전과 Supabase RLS 연동이 완료된 뒤에만 `nas`로 전환합니다.
 
 등록 후 동작 확인:
 - `main` 브랜치에 코드 push → GitHub Actions → "Auto Release EXE" 워크플로 실행 확인

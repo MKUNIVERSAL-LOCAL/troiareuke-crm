@@ -24,6 +24,8 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_AUTH_PROVIDER: supabase
+          VITE_AUTH_API_URL: ${{ secrets.VITE_AUTH_API_URL }}
 
       - name: Upload portable executable
         uses: actions/upload-artifact@v4
