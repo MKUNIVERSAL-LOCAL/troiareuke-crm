@@ -15,6 +15,7 @@
     "electron:portable:prepare": "node scripts/prepare-portable-update.mjs",
     "electron:installer": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis",
     "electron:build:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir",
+    "electron:build:admin:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir --config electron-builder.admin.cjs",
     "electron:zip": "npm run electron:build:dir && powershell -Command \"Remove-Item -Path 'release\\트로이아르케-CRM.zip' -ErrorAction SilentlyContinue; Compress-Archive -Path 'release\\win-unpacked\\*' -DestinationPath 'release\\트로이아르케-CRM.zip'; Write-Host '✅ ZIP 완료: release/트로이아르케-CRM.zip'\"",
     "electron:release": "npm run build && electron-builder --win --publish always",
     "release:stage": "node scripts/stage-nas-update.mjs",
