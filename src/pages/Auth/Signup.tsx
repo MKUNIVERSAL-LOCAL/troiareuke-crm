@@ -1,6 +1,6 @@
-﻿import { useState } from 'react';
+﻿import { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle2, Paperclip, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { TroiareukeLogo } from './Login';
 
@@ -17,9 +17,34 @@ export default function Signup() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '', agreeTerms: false, agreePrivacy: false, agreeMarketing: false });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', businessNumber: '', password: '', confirm: '', agreeTerms: false, agreePrivacy: false, agreeMarketing: false });
+  const [licenseImage, setLicenseImage] = useState(''); // 사업자등록증 사진 (data URL)
+  const [licenseFileName, setLicenseFileName] = useState('');
+  const licenseInputRef = useRef<HTMLInputElement>(null);
 
   const set = (k: string, v: string | boolean) => setForm(p => ({ ...p, [k]: v }));
+
+  // 사업자등록번호 자동 하이픈 (000-00-00000)
+  const formatBusinessNumber = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+  };
+  const isValidBusinessNumber = /^\d{3}-\d{2}-\d{5}$/.test(form.businessNumber);
+
+  const handleLicenseFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('사업자등록증은 이미지 파일(jpg, png)만 첨부할 수 있습니다.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setError('사업자등록증 사진은 5MB 이하로 첨부해주세요.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setLicenseImage(String(reader.result || ''));
+      setLicenseFileName(file.name);
+      setError('');
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +53,14 @@ export default function Signup() {
     if (!form.agreeTerms || !form.agreePrivacy) { setError('이용약관과 개인정보 처리방침에 모두 동의해주세요.'); return; }
     setLoading(true); setError('');
     try {
-      await signup({ name: form.name, email: form.email, phone: form.phone, password: form.password });
+      await signup({
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        password: form.password,
+        businessNumber: form.businessNumber,
+        businessLicenseImage: licenseImage || undefined,
+      });
       navigate('/onboarding');
     } catch (e: any) {
       const msg = e?.message || '';
@@ -75,10 +107,10 @@ export default function Signup() {
               <h2 className="text-xl font-bold text-gray-900 mb-1">계정 정보 입력</h2>
               <p className="text-sm text-gray-400 mb-6">14일 무료 체험 · 신용카드 불필요</p>
               {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>}
-              <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.password) { setError('모든 항목을 입력해주세요.'); return; } setError(''); setStep(2); }} className="space-y-4">
+              <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.businessNumber || !form.password) { setError('모든 항목을 입력해주세요.'); return; } if (!isValidBusinessNumber) { setError('사업자등록번호 10자리를 확인해주세요. (예: 123-45-67890)'); return; } setError(''); setStep(2); }} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">이름 *</label>
-                  <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="auth-input" placeholder="홍길동" required />
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">샵명 *</label>
+                  <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="auth-input" placeholder="예: 아르케스파 강남점" required />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">이메일 *</label>
@@ -87,6 +119,25 @@ export default function Signup() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">휴대폰 번호 *</label>
                   <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} className="auth-input" placeholder="010-0000-0000" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록번호 *</label>
+                  <input type="text" inputMode="numeric" value={form.businessNumber} onChange={e => set('businessNumber', formatBusinessNumber(e.target.value))} className="auth-input" placeholder="123-45-67890" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록증 사진 (선택)</label>
+                  <input ref={licenseInputRef} type="file" accept="image/*" className="hidden" onChange={e => { handleLicenseFile(e.target.files?.[0]); e.target.value = ''; }} />
+                  {licenseImage ? (
+                    <div className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-xl bg-gray-50">
+                      <img src={licenseImage} alt="사업자등록증 미리보기" className="w-12 h-12 rounded-lg object-cover border border-gray-200" />
+                      <span className="flex-1 text-sm text-gray-600 truncate">{licenseFileName}</span>
+                      <button type="button" onClick={() => { setLicenseImage(''); setLicenseFileName(''); }} className="p-1.5 text-gray-400 hover:text-red-500" aria-label="첨부 삭제"><X size={16} /></button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => licenseInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-[#1a3a8f] hover:text-[#1a3a8f] transition-all">
+                      <Paperclip size={15} /> 사업자등록증 사진 첨부 (jpg·png, 5MB 이하)
+                    </button>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 * (8자 이상)</label>

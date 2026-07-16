@@ -97,6 +97,7 @@ function publicUser(row) {
     branchName: row.branch_name || undefined,
     shopPhone: row.shop_phone || undefined,
     shopAddress: row.shop_address || undefined,
+    businessNumber: row.business_number || undefined,
     isActive: row.is_active !== false,
     createdAt: new Date(row.created_at).toISOString(),
   };
@@ -156,6 +157,8 @@ async function initializeDatabase() {
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS shop_phone text;
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS shop_address text;
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS business_number text;
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS business_license_image text;
 
     CREATE TABLE IF NOT EXISTS crm_records (
       branch_id text NOT NULL,
@@ -347,20 +350,35 @@ app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
     }
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
-    const name = String(req.body.name || '').trim();
+    const name = String(req.body.name || '').trim(); // 가입 화면에서는 샵명
     const phone = String(req.body.phone || '').trim();
     if (!isEmail(email) || !name || !isStrongPassword(password)) {
-      return res.status(400).json({ error: '이메일, 이름, 8자 이상의 비밀번호를 확인해주세요.' });
+      return res.status(400).json({ error: '이메일, 샵명, 8자 이상의 비밀번호를 확인해주세요.' });
+    }
+
+    // 사업자등록번호: 하이픈 유무 무관하게 받아 000-00-00000 로 정규화 (선택 필드 — 구 클라이언트 호환)
+    const businessDigits = String(req.body.businessNumber || '').replace(/\D/g, '');
+    if (businessDigits && businessDigits.length !== 10) {
+      return res.status(400).json({ error: '사업자등록번호 10자리를 확인해주세요.' });
+    }
+    const businessNumber = businessDigits
+      ? `${businessDigits.slice(0, 3)}-${businessDigits.slice(3, 5)}-${businessDigits.slice(5)}`
+      : null;
+
+    // 사업자등록증 사진: 이미지 data URL만, ~5MB(base64 7MB) 초과 거부
+    const licenseImage = typeof req.body.businessLicenseImage === 'string' ? req.body.businessLicenseImage : '';
+    if (licenseImage && (!licenseImage.startsWith('data:image/') || licenseImage.length > 7 * 1024 * 1024)) {
+      return res.status(400).json({ error: '사업자등록증은 5MB 이하의 이미지 파일만 첨부할 수 있습니다.' });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const userId = crypto.randomUUID();
     const trialEndsAt = new Date(Date.now() + 14 * 86400000);
     const { rows } = await pool.query(`
-      INSERT INTO auth_users (id, email, password_hash, name, phone, trial_ends_at, role)
-      VALUES ($1, $2, $3, $4, $5, $6, 'admin')
+      INSERT INTO auth_users (id, email, password_hash, name, phone, shop_name, business_number, business_license_image, trial_ends_at, role)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'admin')
       RETURNING *
-    `, [userId, email, passwordHash, name, phone || null, trialEndsAt]);
+    `, [userId, email, passwordHash, name, phone || null, name, businessNumber, licenseImage || null, trialEndsAt]);
     const session = await createSession(userId);
     res.status(201).json({ user: publicUser(rows[0]), ...session });
   } catch (error) {

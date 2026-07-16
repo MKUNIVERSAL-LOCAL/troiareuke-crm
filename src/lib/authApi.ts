@@ -68,7 +68,14 @@ export async function loginWithAuthApi(email: string, password: string) {
   return saveAuth(response);
 }
 
-export async function signupWithAuthApi(data: { email: string; password: string; name: string; phone: string }) {
+export async function signupWithAuthApi(data: {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+  businessNumber?: string;
+  businessLicenseImage?: string;
+}) {
   const response = await apiRequest<AuthResponse>('/api/auth/signup', {
     method: 'POST',
     body: JSON.stringify(data),
