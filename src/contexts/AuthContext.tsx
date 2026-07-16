@@ -102,6 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (isSupabaseConfigured) {
+      // 이전 NAS 인증 시험 빌드의 토큰은 Supabase 세션으로 사용할 수 없다.
+      localStorage.removeItem('troiareuke_auth_token');
+
       // 5초 타임아웃: Supabase 연결 실패 시 localStorage 폴백
       const timeout = setTimeout(() => {
         setIsLoading(false);
@@ -113,6 +116,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           const profile = await loadProfile(session.user.id, session.user.email!);
           saveUser(profile);
+        } else {
+          // 저장된 화면 상태만으로 인증된 것으로 보이지 않게 한다.
+          setUser(null);
+          localStorage.removeItem(STORAGE_KEY);
         }
         setIsLoading(false);
       }).catch(() => {

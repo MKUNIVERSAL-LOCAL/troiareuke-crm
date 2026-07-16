@@ -11,7 +11,7 @@ function cspMetaPlugin(): Plugin {
     "script-src 'self' 'unsafe-inline' https://cdn.iamport.kr",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://www.googleapis.com https://oauth2.googleapis.com http://127.0.0.1:19876",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://crm-api.mkcorp.familyds.com https://api.anthropic.com https://www.googleapis.com https://oauth2.googleapis.com http://127.0.0.1:19876",
     "img-src 'self' data: blob: https:",
     "frame-src 'self' https://accounts.google.com",
   ].join('; ')

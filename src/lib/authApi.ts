@@ -21,9 +21,12 @@ interface AuthResponse {
 }
 
 const apiBaseUrl = (import.meta.env.VITE_AUTH_API_URL as string | undefined)?.trim().replace(/\/$/, '') || '';
+const authProvider = (import.meta.env.VITE_AUTH_PROVIDER as string | undefined)?.trim().toLowerCase() || 'supabase';
 const AUTH_TOKEN_KEY = 'troiareuke_auth_token';
 
-export const isAuthApiConfigured = Boolean(apiBaseUrl);
+// NAS authentication must be selected explicitly. A configured URL alone must
+// not bypass Supabase auth because CRM data access depends on its session/RLS.
+export const isAuthApiConfigured = authProvider === 'nas' && Boolean(apiBaseUrl);
 
 async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!isAuthApiConfigured) throw new Error('중앙 계정 서버가 설정되지 않았습니다.');

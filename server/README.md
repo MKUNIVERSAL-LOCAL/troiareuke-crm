@@ -1,5 +1,11 @@
 # NAS 중앙 계정·비밀번호 재설정 서버
 
+> **현재 상태:** 실험적 전환 서버입니다. CRM 데이터의 Supabase 세션/RLS 연동과
+> 기존 계정 이전이 완료되기 전까지 배포 빌드의 `VITE_AUTH_PROVIDER`는
+> 반드시 `supabase`로 유지하세요. NAS 서버의 `/health`가 정상이어도
+> `VITE_AUTH_PROVIDER=nas`로 바꾸면 기존 Supabase 계정과 CRM 데이터 권한이
+> 이어지지 않습니다.
+
 이 서버는 고객 PC가 아닌 NAS에서 회원 계정, 암호화된 비밀번호, 로그인 세션, 1회용 비밀번호 재설정 토큰을 관리합니다.
 
 ## NAS 배포 순서
