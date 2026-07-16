@@ -40,6 +40,9 @@ services:
       REMINDER_HOUR: ${REMINDER_HOUR:-10}
       REMINDER_CYCLE_DAYS: ${REMINDER_CYCLE_DAYS:-28}
       REMINDER_COOLDOWN_DAYS: ${REMINDER_COOLDOWN_DAYS:-7}
+      BACKUP_DIR: /backup
+      BACKUP_HOUR: ${BACKUP_HOUR:-4}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
       TZ: Asia/Seoul
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -47,6 +50,9 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       MAIL_FROM: ${MAIL_FROM}
+    volumes:
+      # File Station의 CRM-BACKUP 공유폴더 — 지점별/날짜별 백업이 여기 쌓인다
+      - ${BACKUP_HOST_DIR:-/volume1/CRM-BACKUP}/troiareuke-crm:/backup
     ports:
       - "8787:8787"
 

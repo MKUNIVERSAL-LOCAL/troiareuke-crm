@@ -35,6 +35,7 @@ jobs:
       ADMIN_EMAIL: owner@smoke.test
       ADMIN_PASSWORD: admin-smoke-password-1
       API_BASE_URL: http://localhost:8787
+      BACKUP_DIR: ${{ github.workspace }}/server/smoke-backup
     defaults:
       run:
         working-directory: server

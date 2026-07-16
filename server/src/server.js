@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express from 'express';
@@ -468,6 +470,17 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
   }
 });
 
+// 즉시 백업 (슈퍼어드민 전용) — File Station의 CRM-BACKUP에서 바로 확인 가능
+app.post('/api/admin/backup', requireSession, requireSuperadmin, async (_req, res, next) => {
+  try {
+    if (!BACKUP_DIR) return res.status(400).json({ error: '서버에 BACKUP_DIR가 설정되지 않았습니다.' });
+    const result = await runBackup();
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const targetId = String(req.params.id);
@@ -811,6 +824,115 @@ async function dispatchScheduledMessages() {
   }
 }
 
+// ── 지점(계정)별 파일 백업 → NAS CRM-BACKUP ─────────────────────
+// 라이브 데이터는 PostgreSQL에 있고, 매일 BACKUP_HOUR시에 지점별 폴더로
+// JSON + 시술사진(jpg)을 내보낸다. File Station에서 바로 열람 가능.
+// 경로: BACKUP_DIR/<지점명_지점ID8자리>/<날짜>/<컬렉션>.json, photos/...
+const BACKUP_DIR = String(process.env.BACKUP_DIR || '').trim();
+const BACKUP_HOUR = Number(process.env.BACKUP_HOUR || 4);
+const BACKUP_KEEP_DAYS = Number(process.env.BACKUP_KEEP_DAYS || 14);
+let backupLastRunDate = '';
+
+function sanitizeFolderName(value) {
+  return String(value || '').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 40) || 'branch';
+}
+
+async function runBackup() {
+  if (!BACKUP_DIR) throw new Error('BACKUP_DIR가 설정되지 않았습니다.');
+  const date = isoDate(new Date());
+
+  const { rows: branchRows } = await pool.query(`
+    SELECT DISTINCT branch_id FROM crm_records
+    UNION SELECT DISTINCT branch_id FROM crm_photos
+  `);
+  const { rows: userRows } = await pool.query(
+    'SELECT branch_id, branch_name FROM auth_users WHERE branch_id IS NOT NULL');
+  const nameByBranch = new Map(userRows.map(u => [u.branch_id, u.branch_name]));
+
+  let fileCount = 0;
+  for (const { branch_id: branchId } of branchRows) {
+    const folder = `${sanitizeFolderName(nameByBranch.get(branchId) || '')}_${String(branchId).slice(0, 8)}`;
+    const dateDir = path.join(BACKUP_DIR, folder, date);
+    await fs.mkdir(dateDir, { recursive: true });
+
+    // 컬렉션별 JSON
+    for (const collection of DATA_COLLECTIONS) {
+      const { rows } = await pool.query(
+        'SELECT data FROM crm_records WHERE branch_id = $1 AND collection = $2 ORDER BY updated_at',
+        [branchId, collection]);
+      if (rows.length === 0) continue;
+      await fs.writeFile(
+        path.join(dateDir, `${collection}.json`),
+        JSON.stringify(rows.map(r => r.data), null, 2), 'utf8');
+      fileCount += 1;
+    }
+
+    // 이 지점의 계정 목록 (비밀번호 해시 제외)
+    const { rows: accounts } = await pool.query(
+      'SELECT * FROM auth_users WHERE branch_id = $1', [branchId]);
+    if (accounts.length > 0) {
+      await fs.writeFile(path.join(dateDir, 'accounts.json'),
+        JSON.stringify(accounts.map(publicUser), null, 2), 'utf8');
+      fileCount += 1;
+    }
+
+    // 발송 로그 (최근 90일)
+    const { rows: sendLogs } = await pool.query(
+      `SELECT type, title, content, phone, status, reason, created_at FROM message_send_log
+       WHERE branch_id = $1 AND created_at > now() - interval '90 days' ORDER BY created_at`, [branchId]);
+    if (sendLogs.length > 0) {
+      await fs.writeFile(path.join(dateDir, 'message_send_log.json'),
+        JSON.stringify(sendLogs, null, 2), 'utf8');
+      fileCount += 1;
+    }
+
+    // 시술 사진 → jpg 파일
+    const { rows: photoRows } = await pool.query(
+      'SELECT entity_key, photos FROM crm_photos WHERE branch_id = $1', [branchId]);
+    for (const { entity_key: entityKey, photos } of photoRows) {
+      if (!Array.isArray(photos) || photos.length === 0) continue;
+      const photoDir = path.join(dateDir, 'photos', sanitizeFolderName(entityKey.replace(/:/g, '_')));
+      await fs.mkdir(photoDir, { recursive: true });
+      for (const photo of photos) {
+        const match = /^data:image\/(\w+);base64,(.+)$/.exec(photo?.dataUrl || '');
+        if (!match) continue;
+        const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+        await fs.writeFile(
+          path.join(photoDir, `${sanitizeFolderName(photo.id)}.${ext}`),
+          Buffer.from(match[2], 'base64'));
+        fileCount += 1;
+      }
+    }
+
+    // 보존 기간 지난 날짜 폴더 정리
+    try {
+      const cutoff = new Date(Date.now() - BACKUP_KEEP_DAYS * 86400000).toISOString().slice(0, 10);
+      const entries = await fs.readdir(path.join(BACKUP_DIR, folder));
+      for (const entry of entries) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(entry) && entry < cutoff) {
+          await fs.rm(path.join(BACKUP_DIR, folder, entry), { recursive: true, force: true });
+        }
+      }
+    } catch { /* 정리 실패는 백업 자체를 막지 않음 */ }
+  }
+
+  return { branches: branchRows.length, files: fileCount, date };
+}
+
+async function runDailyBackup() {
+  if (!BACKUP_DIR) return;
+  const now = new Date();
+  const today = isoDate(now);
+  if (now.getHours() !== BACKUP_HOUR || backupLastRunDate === today) return;
+  backupLastRunDate = today;
+  try {
+    const result = await runBackup();
+    console.log(`일일 백업 완료: 지점 ${result.branches}곳, 파일 ${result.files}개`);
+  } catch (error) {
+    console.error('일일 백업 실패:', error?.message || error);
+  }
+}
+
 // ── 재방문 자동 리마인더 (클라이언트 reminderEngine.ts의 서버 포트) ──
 // 앱이 꺼져 있어도 매일 REMINDER_HOUR시에 재방문 권장일이 지난 고객에게
 // 자동 발송한다. REMINDER_ENABLED=true + 발송사 설정 시에만 실동작.
@@ -1087,6 +1209,7 @@ initializeDatabase()
     setInterval(cleanupExpired, 24 * 60 * 60 * 1000).unref();
     setInterval(() => dispatchScheduledMessages().catch(e => console.error('dispatch error', e)), 60 * 1000).unref();
     setInterval(() => runRevisitReminders().catch(e => console.error('reminder error', e)), 10 * 60 * 1000).unref();
+    setInterval(() => runDailyBackup().catch(e => console.error('backup error', e)), 10 * 60 * 1000).unref();
     if (process.env.SMTP_HOST) await smtp.verify();
     app.listen(PORT, '0.0.0.0', () => console.log(`Troiareuke auth server listening on ${PORT}`));
   })

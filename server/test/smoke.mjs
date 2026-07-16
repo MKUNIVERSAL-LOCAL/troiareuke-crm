@@ -289,6 +289,39 @@ await test('프로필(매장 전화·주소)이 저장된다', async () => {
   assert(patch.data.user.shopPhone === '02-1234-5678', `shopPhone=${patch.data.user.shopPhone}`);
 });
 
+await test('지점별 백업이 CRM-BACKUP 구조로 파일을 만든다', async () => {
+  // 백업할 데이터 준비
+  await call('/api/data/customers', {
+    method: 'PUT', token: shopToken,
+    body: { rows: [{ id: 'c2', name: '김백업', branch_id: 'ignored' }] },
+  });
+
+  // 일반 계정은 백업 트리거 불가
+  const forbidden = await call('/api/admin/backup', { method: 'POST', token: shopToken });
+  assert(forbidden.status === 403, `non-admin status=${forbidden.status}`);
+
+  const res = await call('/api/admin/backup', { method: 'POST', token: adminToken });
+  assert(res.status === 200, `status=${res.status} ${JSON.stringify(res.data)}`);
+  assert(res.data.branches >= 1 && res.data.files >= 1, `branches=${res.data.branches} files=${res.data.files}`);
+
+  // 실제 파일 확인: <지점폴더>/<날짜>/customers.json 안에 김백업이 있어야 한다
+  const fsMod = await import('node:fs/promises');
+  const pathMod = await import('node:path');
+  const backupRoot = process.env.BACKUP_DIR;
+  const branchDirs = await fsMod.readdir(backupRoot);
+  let found = false;
+  for (const branchDir of branchDirs) {
+    const dates = await fsMod.readdir(pathMod.join(backupRoot, branchDir));
+    for (const date of dates) {
+      try {
+        const raw = await fsMod.readFile(pathMod.join(backupRoot, branchDir, date, 'customers.json'), 'utf8');
+        if (raw.includes('김백업')) found = true;
+      } catch { /* 해당 지점엔 customers 없음 */ }
+    }
+  }
+  assert(found, 'customers.json에 백업 데이터가 없음');
+});
+
 await pool.end();
 
 if (failures > 0) {
