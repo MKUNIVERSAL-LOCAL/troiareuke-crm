@@ -77,10 +77,12 @@ export default function Settings() {
     setTimeout(() => { setSmsTestStatus('idle'); setSmsTestMessage(null); }, 5000);
   };
 
-  // 데이터 내보내기 (엑셀) state — 기본 선택은 사장님 지정 핵심 5종
+  // 데이터 내보내기 state — 기본 선택은 사장님 지정 핵심 5종
   const [exportSelection, setExportSelection] = useState<Set<string>>(
     () => new Set(['customers', 'consultations', 'payments', 'products', 'product_sales']),
   );
+  const [exportFormat, setExportFormat] = useState<'xlsx' | 'pdf'>('xlsx');
+  const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   const toggleExport = (key: string) => {
@@ -92,14 +94,20 @@ export default function Settings() {
     });
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    setExporting(true);
+    setExportMessage(null);
     try {
       const keys = EXPORT_DATASETS.filter(d => exportSelection.has(d.key)).map(d => d.key);
-      const result = exportDatasetsToXlsx(keys);
+      const result = exportFormat === 'pdf'
+        ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys)
+        : exportDatasetsToXlsx(keys);
       const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
-      setExportMessage(`다운로드 완료: ${result.fileName} — ${Object.keys(result.counts).length}개 시트, 총 ${total.toLocaleString()}행`);
+      setExportMessage(`다운로드 완료: ${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행`);
     } catch (e: any) {
       setExportMessage(e?.message || '내보내기에 실패했습니다.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -1149,13 +1157,27 @@ export default function Settings() {
                       </p>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex rounded-xl border border-gray-200 overflow-hidden">
+                        <button
+                          onClick={() => setExportFormat('xlsx')}
+                          className={`px-4 py-2.5 text-sm font-medium transition-colors ${exportFormat === 'xlsx' ? 'bg-[#1a3a8f] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          엑셀 (.xlsx)
+                        </button>
+                        <button
+                          onClick={() => setExportFormat('pdf')}
+                          className={`px-4 py-2.5 text-sm font-medium transition-colors ${exportFormat === 'pdf' ? 'bg-[#1a3a8f] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          PDF
+                        </button>
+                      </div>
                       <button
                         onClick={handleExport}
-                        disabled={exportSelection.size === 0}
+                        disabled={exportSelection.size === 0 || exporting}
                         className="flex items-center gap-2 px-5 py-2.5 min-h-[44px] bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         <Download size={16} />
-                        선택 항목 다운로드 ({exportSelection.size}종)
+                        {exporting ? '생성 중...' : `선택 항목 다운로드 (${exportSelection.size}종)`}
                       </button>
                       {exportMessage && <p className="text-xs text-gray-500">{exportMessage}</p>}
                     </div>

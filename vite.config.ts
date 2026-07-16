@@ -75,6 +75,8 @@ export default defineConfig({
             },
             workbox: {
               globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+              // PDF 한글 폰트 청크(~2.7MB)가 프리캐시 기본 한도(2MB)를 넘으므로 상향
+              maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
               runtimeCaching: [
                 // Supabase REST API — NetworkFirst (3초 타임아웃)
                 {
