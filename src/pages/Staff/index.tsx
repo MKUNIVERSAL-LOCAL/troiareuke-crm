@@ -2,7 +2,7 @@
 import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
-import { StaffStore, ReservationStore, TreatmentLogStore, PaymentStore } from '../../lib/store';
+import { StaffStore, ReservationStore } from '../../lib/store';
 import type { Staff } from '../../types';
 
 const SPECIALTY_OPTIONS = ['피부관리', '마사지', '네일', '왁싱', '눈썹관리', '각질관리'];

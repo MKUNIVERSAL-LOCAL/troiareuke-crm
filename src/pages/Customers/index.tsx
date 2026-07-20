@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search, Plus, Phone, Star, Calendar, TrendingUp,
   User, ChevronRight, AlertCircle, X, CheckCircle,
@@ -119,7 +120,13 @@ export default function Customers() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [customerPrograms, setCustomerPrograms] = useState<CustomerProgram[]>([]);
-  const [search, setSearch] = useState('');
+  // 헤더 전역 검색(?q=)에서 넘어온 검색어를 초기값·변경 모두 반영
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q !== null) setSearch(q);
+  }, [searchParams]);
   const [gradeFilter, setGradeFilter] = useState<CustomerGrade | '전체'>('전체');
 
   // 고객 추가 모달

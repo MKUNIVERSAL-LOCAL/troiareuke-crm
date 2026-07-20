@@ -27,12 +27,13 @@ export default function AnnouncementBanner() {
   }, []);
 
   async function loadAnnouncements() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('announcements')
       .select('id, title, content, type')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(5);
+    if (error) console.warn('[Announcement] 공지 로드 실패(배너 생략):', error.message);
     setAnnouncements(data || []);
   }
 
