@@ -1076,6 +1076,7 @@ const DATA_COLLECTIONS = new Set([
   'customers', 'programs', 'customer_programs', 'treatment_logs',
   'products', 'product_sales', 'payments', 'staff', 'services',
   'reservations', 'shop_settings', 'message_templates', 'message_history',
+  'consultations',
 ]);
 
 function requireCollection(req, res, next) {

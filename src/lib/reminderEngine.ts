@@ -18,17 +18,13 @@ const CYCLE_KEY = 'troiareuke_revisit_cycle_days';
 const DEFAULT_CYCLE_DAYS = 28;
 
 /** 기본 재방문 주기(일) — 설정에서 변경 가능(기기별 localStorage) */
-export function getRevisitCycleDays(): number {
+function getRevisitCycleDays(): number {
   try {
     const v = parseInt(localStorage.getItem(CYCLE_KEY) || '', 10);
     return Number.isFinite(v) && v > 0 ? v : DEFAULT_CYCLE_DAYS;
   } catch {
     return DEFAULT_CYCLE_DAYS;
   }
-}
-
-export function setRevisitCycleDays(days: number): void {
-  try { localStorage.setItem(CYCLE_KEY, String(days)); } catch { /* noop */ }
 }
 
 export interface DueCustomer {

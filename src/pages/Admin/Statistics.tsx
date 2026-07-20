@@ -1,5 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import DataBrowser from './DataBrowser';
 import { format, subDays, parseISO, startOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import {
@@ -16,6 +18,8 @@ const PLAN_COLORS: Record<string, string> = {
 };
 
 export default function Statistics() {
+  const [searchParams] = useSearchParams();
+  const isDataView = searchParams.get('view') === 'data';
   const [loading, setLoading] = useState(true);
   const [loginTrend, setLoginTrend] = useState<{ date: string; 성공: number; 실패: number }[]>([]);
   const [planDist, setPlanDist] = useState<{ name: string; value: number; color: string }[]>([]);
@@ -86,6 +90,9 @@ export default function Statistics() {
 
     setLoading(false);
   }
+
+  // 전체 데이터 조회 탭 (?view=data) — 모든 훅 선언 이후에 분기해야 훅 순서가 유지됨
+  if (isDataView) return <DataBrowser />;
 
   const statCards = [
     { label: '활성 지점', value: summary.totalBranches, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },

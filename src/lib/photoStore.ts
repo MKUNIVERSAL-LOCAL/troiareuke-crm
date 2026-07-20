@@ -148,20 +148,6 @@ export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
   pushToNas(entityKey, photos);
 }
 
-/** 사진 1장 추가 후 갱신된 목록 반환 */
-export function addPhoto(entityKey: string, photo: PhotoEntry): PhotoEntry[] {
-  const next = [...getPhotos(entityKey), photo];
-  setPhotos(entityKey, next);
-  return next;
-}
-
-/** 특정 사진 삭제 후 갱신된 목록 반환 */
-export function removePhoto(entityKey: string, photoId: string): PhotoEntry[] {
-  const next = getPhotos(entityKey).filter(p => p.id !== photoId);
-  setPhotos(entityKey, next);
-  return next;
-}
-
 /** 엔티티의 모든 사진 삭제 (레코드 삭제 시 정리용) — NAS에서도 삭제 */
 export function clearPhotos(entityKey: string): void {
   try { localStorage.removeItem(storageKey(entityKey)); } catch { /* noop */ }
