@@ -57,12 +57,13 @@ export default function AdminDashboard() {
           console.warn('[AdminDashboard] NAS 계정 집계 실패:', e?.message);
         }
         const logs = getLocalLogs();
-        const today = new Date().toISOString().split('T')[0];
+        // "오늘"은 로컬(KST) 기준 — UTC 문자열 prefix 비교는 00~09시에 전날로 어긋남
+        const todayLocal = new Date().toDateString();
         setStats({
           totalBranches,
           activeBranches,
           totalUsers,
-          todayLogins: logs.filter(l => l.logged_in_at.startsWith(today)).length,
+          todayLogins: logs.filter(l => new Date(l.logged_in_at).toDateString() === todayLocal).length,
           recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
         });
       } else if (isSupabaseConfigured) {
@@ -107,9 +108,14 @@ export default function AdminDashboard() {
   async function handleBackupNow() {
     setBackupState('running');
     try {
-      const result = await apiRequest<{ ok: boolean; path?: string }>('/api/admin/backup', { method: 'POST' });
+      // 서버 runBackup() 응답 shape: { branches, files, date }
+      const result = await apiRequest<{ branches?: number; files?: number; date?: string }>('/api/admin/backup', { method: 'POST' });
       setBackupState('done');
-      setBackupMessage(result?.path ? `백업 완료: ${result.path}` : '백업이 완료되었습니다.');
+      setBackupMessage(
+        typeof result?.branches === 'number'
+          ? `백업 완료: 지점 ${result.branches}곳, 파일 ${result.files ?? 0}개`
+          : '백업이 완료되었습니다.'
+      );
     } catch (e: any) {
       setBackupState('error');
       setBackupMessage(`백업 실패: ${e?.message || '서버 오류'}`);

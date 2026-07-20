@@ -264,7 +264,10 @@ export default function Sales() {
                 )}
               </div>
               <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.total)}</p>
-              <p className="text-xs text-gray-300 mt-1">지난달 {formatPrice(lastSummary.total)}</p>
+              <p className="text-xs text-gray-300 mt-1">
+                지난달 {formatPrice(lastSummary.total)}
+                {thisSummary.other > 0 && <span className="ml-1.5 text-gray-400">· 기타 {formatPrice(thisSummary.other)} 포함</span>}
+              </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">시술 매출</p>
@@ -451,7 +454,9 @@ export default function Sales() {
                 </div>
               </div>
               <div className="px-4 py-3 bg-gray-50 rounded-b-2xl flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-600">표시 합계 {listPayments.length}건</span>
+                <span className="text-sm font-medium text-gray-600">
+                  표시 {listPayments.length}건 · 완료 합계 (환불/대기 제외)
+                </span>
                 <span className="text-base font-bold text-gray-900">{formatPrice(listTotal)}</span>
               </div>
             </div>

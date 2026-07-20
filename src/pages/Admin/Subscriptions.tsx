@@ -99,6 +99,13 @@ export default function Subscriptions() {
 
     if (NAS_MODE) {
       // NAS 모드: 계정의 plan / 활성 여부만 서버에 반영 (만료일·금액·메모는 파생값)
+      const willDeactivate = form.status !== 'active' && editTarget.status === 'active';
+      if (willDeactivate && !window.confirm(
+        `${editTarget.branch_name} 지점 계정의 로그인이 차단됩니다.\n계속할까요?`
+      )) {
+        setSaving(false);
+        return;
+      }
       try {
         await adminUpdateUser(editTarget.id, {
           plan: form.plan,
@@ -279,9 +286,15 @@ export default function Subscriptions() {
                 </select>
               </Field>
               <Field label="상태">
+                {/* NAS 모드: 서버 계정에는 활성/비활성만 존재 — 만료·대기 선택지를 주면
+                    isActive=false로 축약 저장되어 지점 로그인이 잠기는 함정이 됨 */}
                 <select className="admin-input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                  {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {(NAS_MODE ? statusOptions.filter(o => o.value === 'active' || o.value === 'cancelled') : statusOptions)
+                    .map(o => <option key={o.value} value={o.value}>{NAS_MODE && o.value === 'cancelled' ? '해지 (로그인 차단)' : o.label}</option>)}
                 </select>
+                {NAS_MODE && (
+                  <p className="text-[11px] text-slate-500 mt-1">중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다.</p>
+                )}
               </Field>
               <Field label="월 금액 (원)">
                 <input className="admin-input" type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
