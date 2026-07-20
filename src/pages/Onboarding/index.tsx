@@ -178,7 +178,9 @@ export default function Onboarding() {
     };
 
     if (isSupabaseConfigured) {
-      const { error } = await supabase.from('subscriptions').insert(subscriptionData);
+      // 라이브 subscriptions 테이블에는 currency 컬럼이 없음(PGRST204) — 제외하고 저장
+      const { currency: _currency, ...dbRow } = subscriptionData;
+      const { error } = await supabase.from('subscriptions').insert(dbRow);
       if (error) {
         console.error('구독 저장 실패:', error);
       }
@@ -346,8 +348,15 @@ export default function Onboarding() {
     } catch { /* 무시 */ }
 
     // ★ 4단계: 강제 리로드로 대시보드 이동
-    window.location.hash = '#/';
-    window.location.reload();
+    // ⚠️ Electron은 HashRouter(#/), 웹/PWA는 BrowserRouter(pathname) — App.tsx와 동일 감지.
+    // 기존 hash 방식만 쓰면 웹에서 /onboarding 경로 그대로 리로드되어 온보딩 무한 루프에 빠짐.
+    const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron');
+    if (isElectron) {
+      window.location.hash = '#/';
+      window.location.reload();
+    } else {
+      window.location.assign('/');
+    }
   };
 
   return (

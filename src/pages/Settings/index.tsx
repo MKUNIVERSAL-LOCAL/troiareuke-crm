@@ -233,7 +233,9 @@ export default function Settings() {
             const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
             if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
           }
-          const { error: insertError } = await supabase.from('subscriptions').insert(subData);
+          // 라이브 subscriptions 테이블에는 currency 컬럼이 없음(PGRST204) — 제외하고 저장
+          const { currency: _currency, ...dbRow } = subData;
+          const { error: insertError } = await supabase.from('subscriptions').insert(dbRow);
           if (insertError) {
             setPlanChangeError(`서버에 구독 저장 실패: ${insertError.message}`);
             setPlanChangeLoading(false);
@@ -291,7 +293,8 @@ export default function Settings() {
             const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
             if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
           }
-          const { error: insertError } = await supabase.from('subscriptions').insert(subData);
+          const { currency: _currency, ...dbRow } = subData;
+          const { error: insertError } = await supabase.from('subscriptions').insert(dbRow);
           if (insertError) {
             setPlanChangeError(`결제는 완료됐지만 서버 기록에 실패했습니다: ${insertError.message}`);
             setPlanChangeLoading(false);
