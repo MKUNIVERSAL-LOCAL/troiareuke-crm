@@ -7,10 +7,39 @@ import {
   sendMessages, scheduleMessage, listScheduledMessages, cancelScheduledMessage,
   isScheduleAvailable, type ScheduledMessage,
 } from '../../lib/messagingGateway';
-import type { MessageType, MessageTemplate, MessageHistory } from '../../types';
+import type { MessageType, MessageTemplate, MessageHistory, Customer } from '../../types';
+import { isAuthApiConfigured } from '../../lib/authApi';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit';
+
+// ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
+const SEGMENT_LABELS: Record<Segment, string> = {
+  all: '전체',
+  vip: 'VIP',
+  birthday: '이번달 생일',
+  novisit: '미방문 60일+',
+};
+
+const SEGMENT_FILTERS: Record<Segment, (c: Customer) => boolean> = {
+  all: () => true,
+  vip: c => c.grade === 'VIP',
+  birthday: c => {
+    if (!c.birthDate) return false;
+    return new Date(c.birthDate).getMonth() === new Date().getMonth();
+  },
+  novisit: c => {
+    if (!c.lastVisitDate) return false;
+    return Date.now() - new Date(c.lastVisitDate).getTime() > 60 * 86400000;
+  },
+};
+
+/** 실발송 경로(NAS 서버 또는 레거시 게이트웨이)가 하나라도 살아있는가 */
+function isMessagingLive(): boolean {
+  if (isAuthApiConfigured) return true;
+  try { return Boolean(localStorage.getItem('crm_sms_gateway_url')); } catch { return false; }
+}
 
 const MSG_TYPE_LABELS: Record<string, string> = {
   sms: 'SMS',
@@ -31,12 +60,19 @@ const MSG_TYPE_COLORS: Record<string, string> = {
 export default function Messaging() {
   const [tab, setTab] = useState<Tab>('send');
   const [showSendModal, setShowSendModal] = useState(false);
+  const [sendSegment, setSendSegment] = useState<Segment>('all');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const reload = useCallback(() => setReloadKey(k => k + 1), []);
 
   const settings = SettingsStore.get();
+  const messagingLive = isMessagingLive();
+
+  const openSendModal = (segment: Segment = 'all') => {
+    setSendSegment(segment);
+    setShowSendModal(true);
+  };
 
   const tabs = [
     { key: 'send' as Tab, label: '발송하기', icon: <Send size={14} /> },
@@ -49,13 +85,24 @@ export default function Messaging() {
       <Header
         title="문자/카카오 발송"
         subtitle="SMS · LMS · 카카오 채널 · 오픈채팅"
-        action={{ label: '메시지 보내기', onClick: () => setShowSendModal(true) }}
+        action={{ label: '메시지 보내기', onClick: () => openSendModal('all') }}
       />
 
       <div className="p-8 flex-1">
-        {/* Connection Status */}
+        {/* 실발송 경로 미연동 안내 */}
+        {!messagingLive && (
+          <div className="flex items-start gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+            <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+            <span>
+              실제 문자/카카오 발송은 중앙 서버(NAS) 연동 후 지원됩니다. 지금 발송을 시도하면
+              발송되지 않고 이력에 '미연동'으로만 기록됩니다.
+            </span>
+          </div>
+        )}
+
+        {/* Connection Status — 실제 발송 경로 기준 (설정값 장식 아님) */}
         <div className="flex gap-3 mb-6">
-          <StatusChip label="엔포+ SMS" connected={!!settings.smsApiKey} />
+          <StatusChip label="발송 서버" connected={messagingLive} />
           <StatusChip label="카카오 채널" connected={!!settings.kakao?.channelConnected} />
           <StatusChip label="카카오 오픈채팅" connected={!!settings.kakao?.openchatConnected} />
           <StatusChip label="네이버 톡톡" connected={false} />
@@ -77,7 +124,7 @@ export default function Messaging() {
           ))}
         </div>
 
-        {tab === 'send' && <SendPanel onSend={() => setShowSendModal(true)} reloadKey={reloadKey} />}
+        {tab === 'send' && <SendPanel onSend={openSendModal} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
         {tab === 'history' && <HistoryPanel reloadKey={reloadKey} />}
       </div>
@@ -86,6 +133,7 @@ export default function Messaging() {
         <SendMessageModal
           onClose={() => setShowSendModal(false)}
           initialTemplate={selectedTemplate}
+          initialSegment={sendSegment}
           onSent={reload}
         />
       )}
@@ -106,7 +154,7 @@ function StatusChip({ label, connected }: { label: string; connected: boolean })
   );
 }
 
-function SendPanel({ onSend, reloadKey }: { onSend: () => void; reloadKey: number }) {
+function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; reloadKey: number }) {
   const [customers, setCustomers] = useState(CustomerStore.getAll());
   const [settings, setSettings] = useState(SettingsStore.get());
 
@@ -144,18 +192,14 @@ function SendPanel({ onSend, reloadKey }: { onSend: () => void; reloadKey: numbe
       {/* Quick Send Targets */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: '전체 고객', count: customers.length, color: 'purple' },
-          { label: 'VIP 고객', count: customers.filter(c => c.grade === 'VIP').length, color: 'yellow' },
-          { label: '이번달 생일', count: birthdayCount, color: 'pink' },
-          { label: '미방문 60일+', count: customers.filter(c => {
-            if (!c.lastVisitDate) return false;
-            const diff = Date.now() - new Date(c.lastVisitDate).getTime();
-            return diff > 60 * 86400000;
-          }).length, color: 'orange' },
+          { key: 'all' as Segment, label: '전체 고객', count: customers.length, color: 'purple' },
+          { key: 'vip' as Segment, label: 'VIP 고객', count: customers.filter(SEGMENT_FILTERS.vip).length, color: 'yellow' },
+          { key: 'birthday' as Segment, label: '이번달 생일', count: birthdayCount, color: 'pink' },
+          { key: 'novisit' as Segment, label: '미방문 60일+', count: customers.filter(SEGMENT_FILTERS.novisit).length, color: 'orange' },
         ].map(t => (
           <button
             key={t.label}
-            onClick={onSend}
+            onClick={() => onSend(t.key)}
             className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all text-left hover:-translate-y-0.5"
           >
             <div className="flex items-center justify-between mb-3">
@@ -689,9 +733,9 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
   );
 }
 
-function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () => void; initialTemplate: string | null; onSent: () => void }) {
+function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; onSent: () => void }) {
   const [msgType, setMsgType] = useState<MessageType>('sms');
-  const [recipientMode, setRecipientMode] = useState<'all' | 'vip' | 'custom'>('all');
+  const [recipientMode, setRecipientMode] = useState<Segment>(initialSegment ?? 'all');
   const [content, setContent] = useState('');
   const [title, setTitle] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplate);
@@ -724,24 +768,24 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
     { key: 'kakao-openchat', label: '카카오 오픈채팅' },
   ];
 
-  const recipientCount = {
-    all: customers.length,
-    vip: customers.filter(c => c.grade === 'VIP').length,
-    custom: 0,
-  }[recipientMode];
-
-  const estimatedCost = msgType === 'sms' ? recipientCount * 11 : msgType === 'lms' ? recipientCount * 25 : recipientCount * 5;
+  // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준)
+  const targetCustomers = customers.filter(SEGMENT_FILTERS[recipientMode]);
+  const recipientCount = targetCustomers.length;
 
   // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
-  const recipientPhones = (recipientMode === 'vip' ? customers.filter(c => c.grade === 'VIP') : customers)
+  const recipientPhones = targetCustomers
     .map(c => c.phone)
     .filter((p): p is string => Boolean(p && p.trim()));
+
+  const estimatedCost = msgType === 'sms' ? recipientPhones.length * 11 : msgType === 'lms' ? recipientPhones.length * 25 : recipientPhones.length * 5;
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
+    // "90자 초과 시 자동 LMS 전환" 안내대로 실제 전환 (기존엔 문구만 있고 미구현)
+    const effectiveType: MessageType = msgType === 'sms' && content.trim().length > 90 ? 'lms' : msgType;
 
     // 예약 발송: 서버 큐에 등록하고 종료 (시각 도달 시 서버가 발송)
     if (scheduleMode === 'later' && isScheduleAvailable) {
@@ -749,7 +793,7 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
         if (!scheduleAt) throw new Error('발송 시각을 선택해주세요.');
         await scheduleMessage({
           sendAt: new Date(scheduleAt).toISOString(),
-          type: msgType,
+          type: effectiveType,
           title: title || undefined,
           content: content.trim(),
           phones: recipientPhones,
@@ -768,7 +812,7 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
     }
 
     const result = await sendMessages({
-      type: msgType,
+      type: effectiveType,
       content: content.trim(),
       title: title || undefined,
       recipients: recipientCount,
@@ -778,7 +822,7 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
     if (result.pending) {
       // 게이트웨이 미연동 — 발송되지 않았음을 명확히 기록
       MessageHistoryStore.save({
-        type: msgType,
+        type: effectiveType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
@@ -795,9 +839,9 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
       setResultMessage(result.reason ?? '게이트웨이 미연동');
       onSent();
     } else if (result.sent > 0) {
-      // 실제 발송 성공
+      // 실제 발송 성공 (일부 실패 포함 — 부분 성공도 sent로 기록해 성공/실패 건수 모두 노출)
       MessageHistoryStore.save({
-        type: msgType,
+        type: effectiveType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
@@ -806,17 +850,22 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
         successCount: result.sent,
         failCount: result.failed,
         sentAt: new Date().toLocaleString(),
-        status: result.failed === 0 ? 'sent' : 'failed',
+        status: 'sent',
         cost: estimatedCost,
       });
       setSending(false);
       setSendResult('success');
+      setResultMessage(
+        `${result.sent}명 발송 성공` +
+        (result.failed > 0 ? `, ${result.failed}명 실패` : '') +
+        (recipientCount > recipientPhones.length ? ` (전화번호 없는 ${recipientCount - recipientPhones.length}명 제외)` : '')
+      );
       onSent();
-      setTimeout(() => { onClose(); }, 1200);
+      setTimeout(() => { onClose(); }, 1800);
     } else {
       // 발송 실패
       MessageHistoryStore.save({
-        type: msgType,
+        type: effectiveType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
@@ -841,7 +890,7 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
         <div className="flex flex-col items-center justify-center py-12">
           <CheckCircle size={48} className="text-green-500 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 완료!</p>
-          <p className="text-sm text-gray-500 mt-1">{recipientCount}명에게 메시지가 발송되었습니다</p>
+          <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다`}</p>
         </div>
       ) : sendResult === 'pending' ? (
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -888,12 +937,11 @@ function SendMessageModal({ onClose, initialTemplate, onSent }: { onClose: () =>
           {/* Recipients */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">수신 대상</label>
-            <div className="flex gap-2">
-              {[
-                { key: 'all', label: `전체 (${customers.length}명)` },
-                { key: 'vip', label: `VIP (${customers.filter(c => c.grade === 'VIP').length}명)` },
-                { key: 'custom', label: '직접 선택' },
-              ].map(r => (
+            <div className="flex gap-2 flex-wrap">
+              {(['all', 'vip', 'birthday', 'novisit'] as Segment[]).map(key => ({
+                key,
+                label: `${SEGMENT_LABELS[key]} (${customers.filter(SEGMENT_FILTERS[key]).length}명)`,
+              })).map(r => (
                 <button
                   key={r.key}
                   onClick={() => setRecipientMode(r.key as typeof recipientMode)}

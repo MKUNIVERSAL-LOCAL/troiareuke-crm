@@ -1687,7 +1687,7 @@ export default function Customers() {
                     {!aiPhoto && (
                       <p className="text-[11px] text-gray-500 leading-relaxed">
                         고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다.
-                        {!isSkinAnalysisAvailable() && ' (AI 챗봇 설정에서 OpenAI/Gemini 키 입력 필요)'}
+                        {!isSkinAnalysisAvailable() && ' (설정 > 연동 설정 > AI 피부분석에서 OpenAI/Gemini 키 입력 필요)'}
                       </p>
                     )}
                     {aiResult && !aiResult.available && (

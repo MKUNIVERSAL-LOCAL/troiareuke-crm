@@ -9,8 +9,10 @@ import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
-import { isBeaconConsultationEnabled, setBeaconConsultationEnabled } from '../../lib/featureFlags';
+import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, PAYMENT_ENABLED } from '../../lib/featureFlags';
 import clsx from 'clsx';
+
+const GOOGLE_OAUTH_READY = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim());
 
 type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup';
 
@@ -228,9 +230,15 @@ export default function Settings() {
         if (isSupabaseConfigured && user?.branchId) {
           // 기존 구독 만료 처리
           if (currentSubscription?.id) {
-            await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
+            const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
+            if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
           }
-          await supabase.from('subscriptions').insert(subData);
+          const { error: insertError } = await supabase.from('subscriptions').insert(subData);
+          if (insertError) {
+            setPlanChangeError(`서버에 구독 저장 실패: ${insertError.message}`);
+            setPlanChangeLoading(false);
+            return;
+          }
         }
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
@@ -244,7 +252,12 @@ export default function Settings() {
       return;
     }
 
-    // 유료 플랜 결제
+    // 유료 플랜 결제 — 실 PG 계약 전까지 게이트 (테스트 PG로 결제 시 실청구 없이
+    // '유료 활성' 기록만 생기는 가짜 결제 상태를 방지)
+    if (!PAYMENT_ENABLED) {
+      setPlanChangeError('구독 결제는 정식 오픈 준비 중입니다. 오픈 후 이용하실 수 있습니다.');
+      return;
+    }
     setPlanChangeLoading(true);
     try {
       const result = await requestPayment({
@@ -275,9 +288,15 @@ export default function Settings() {
 
         if (isSupabaseConfigured && user?.branchId) {
           if (currentSubscription?.id) {
-            await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
+            const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
+            if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
           }
-          await supabase.from('subscriptions').insert(subData);
+          const { error: insertError } = await supabase.from('subscriptions').insert(subData);
+          if (insertError) {
+            setPlanChangeError(`결제는 완료됐지만 서버 기록에 실패했습니다: ${insertError.message}`);
+            setPlanChangeLoading(false);
+            return;
+          }
         }
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
@@ -335,12 +354,17 @@ export default function Settings() {
     });
 
     // 다음 로그인에서도 같은 샵명이 보이도록 지점·로컬 세션을 함께 갱신한다.
+    let remoteFailed = false;
     if (isSupabaseConfigured && user?.branchId) {
-      await supabase.from('branches').update({
+      const { error } = await supabase.from('branches').update({
         name: shopName,
         phone: settings.phone || null,
         address: settings.address || null,
       }).eq('id', user.branchId);
+      if (error) {
+        remoteFailed = true;
+        console.warn('[Settings] 지점 정보 서버 반영 실패:', error.message);
+      }
     }
 
     try {
@@ -356,7 +380,9 @@ export default function Settings() {
       }
     } catch { /* 세션 갱신 실패는 샵 설정 저장을 막지 않음 */ }
 
-    flash(`${shopName} CRM으로 설정했습니다`);
+    flash(remoteFailed
+      ? `${shopName} 저장 완료 (서버 반영 실패 — 네트워크 확인 후 다시 저장해주세요)`
+      : `${shopName} CRM으로 설정했습니다`);
   };
 
   // ─── Business Hours ───────────────────────────────────────
@@ -389,6 +415,22 @@ export default function Settings() {
   const handleSmsSave = () => {
     SettingsStore.save({ smsApiKey: settings.smsApiKey, smsCallerId: settings.smsCallerId });
     flash();
+  };
+
+  // ─── AI 분석 키 (피부분석·AI챗봇 공유) ──────────────────────
+  // AiChat이 Coming Soon 게이트로 막혀 있어도 피부분석이 쓸 키를 여기서 입력 가능하게 한다.
+  const [aiKeys, setAiKeys] = useState(() => ({
+    openai: localStorage.getItem('ai_key_openai') || '',
+    gemini: localStorage.getItem('ai_key_gemini') || '',
+  }));
+  const handleAiKeysSave = () => {
+    try {
+      localStorage.setItem('ai_key_openai', aiKeys.openai.trim());
+      localStorage.setItem('ai_key_gemini', aiKeys.gemini.trim());
+      flash('AI 분석 키를 저장했습니다');
+    } catch {
+      flash('키 저장 실패 — 브라우저 저장소를 확인해주세요');
+    }
   };
 
   // ─── Notifications ────────────────────────────────────────
@@ -816,12 +858,20 @@ export default function Settings() {
                         >
                           연결 해제
                         </button>
-                      ) : (
+                      ) : GOOGLE_OAUTH_READY ? (
                         <button
                           onClick={() => startGoogleOAuth()}
                           className="px-4 py-2 text-sm font-medium rounded-xl bg-blue-500 text-white hover:bg-blue-600"
                         >
                           Google 캘린더 연결
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
+                          title="Google OAuth 클라이언트가 설정되지 않은 빌드입니다"
+                        >
+                          준비 중
                         </button>
                       )}
                     </div>
@@ -879,6 +929,43 @@ export default function Settings() {
                         저장하기
                       </button>
                     </div>
+                  </div>
+                </SettingCard>
+
+                {/* AI 피부분석 키 */}
+                <SettingCard title="AI 피부분석 (비전 분석 키)">
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
+                      <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                      <span>
+                        고객 상세의 AI 피부분석 기능이 사용할 키입니다. OpenAI 또는 Gemini 중 하나만
+                        입력해도 동작합니다. 키는 이 기기에만 저장됩니다.
+                      </span>
+                    </div>
+                    <FormRow label="OpenAI API Key">
+                      <input
+                        type="password"
+                        value={aiKeys.openai}
+                        onChange={e => setAiKeys(prev => ({ ...prev, openai: e.target.value }))}
+                        className="form-input"
+                        placeholder="sk-..."
+                      />
+                    </FormRow>
+                    <FormRow label="Gemini API Key">
+                      <input
+                        type="password"
+                        value={aiKeys.gemini}
+                        onChange={e => setAiKeys(prev => ({ ...prev, gemini: e.target.value }))}
+                        className="form-input"
+                        placeholder="AIza..."
+                      />
+                    </FormRow>
+                    <button
+                      onClick={handleAiKeysSave}
+                      className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                    >
+                      저장하기
+                    </button>
                   </div>
                 </SettingCard>
               </div>
@@ -1074,7 +1161,15 @@ export default function Settings() {
                                 ))}
                               </div>
                             </div>
-                            {!isCurrent && (
+                            {!isCurrent && (plan.price > 0 && !PAYMENT_ENABLED ? (
+                              <button
+                                disabled
+                                className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-gray-100 text-gray-400 rounded-xl cursor-not-allowed"
+                                title="실결제(PG) 오픈 준비 중입니다"
+                              >
+                                결제 준비 중
+                              </button>
+                            ) : (
                               <button
                                 onClick={() => handlePlanChange(plan)}
                                 disabled={planChangeLoading}
@@ -1082,7 +1177,7 @@ export default function Settings() {
                               >
                                 {planChangeLoading ? '처리 중...' : plan.price > 0 ? '결제하기' : '변경하기'}
                               </button>
-                            )}
+                            ))}
                           </div>
                         </div>
                       );
