@@ -1,8 +1,13 @@
 ﻿import { useState, useEffect } from 'react';
 import { CreditCard, Plus, Pencil, AlertCircle, CheckCircle, Clock, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
+
+// NAS 중앙 서버 모드에서는 구독 테이블이 없고 계정(auth_users)의 plan이 진실이다.
+// 이 화면은 NAS 모드일 때 계정 목록에서 구독 뷰를 파생하고, 수정은 plan/활성만 반영한다.
+const NAS_MODE = isAuthApiConfigured;
 
 interface Subscription {
   id: string;
@@ -44,11 +49,33 @@ export default function Subscriptions() {
 
   async function loadSubs() {
     setLoading(true);
-    if (isSupabaseConfigured) {
-      const { data } = await supabase
+    if (NAS_MODE) {
+      try {
+        const users = await adminListUsers();
+        const priceOf = (plan: string) => planOptions.find(p => p.value === plan)?.price ?? 0;
+        setSubs(users
+          .filter(u => u.role !== 'superadmin')
+          .map(u => ({
+            id: u.id,
+            branch_id: u.branchId || u.id,
+            branch_name: u.branchName || u.shopName || u.email,
+            plan: u.plan,
+            status: u.isActive === false ? 'cancelled' : 'active',
+            started_at: u.createdAt,
+            expires_at: u.plan === 'trial' ? u.trialEndsAt : null,
+            amount: priceOf(u.plan),
+            notes: u.email,
+          })));
+      } catch (e: any) {
+        console.warn('[Subscriptions] NAS 계정 목록 로드 실패:', e?.message);
+        setSubs([]);
+      }
+    } else if (isSupabaseConfigured) {
+      const { data, error } = await supabase
         .from('subscriptions')
         .select('*, branches(name)')
         .order('created_at', { ascending: false });
+      if (error) console.warn('[Subscriptions] 로드 실패:', error.message);
       setSubs((data || []).map((s: any) => ({ ...s, branch_name: s.branches?.name || '—' })));
     }
     setLoading(false);
@@ -69,7 +96,26 @@ export default function Subscriptions() {
   async function handleSave() {
     if (!editTarget) return;
     setSaving(true);
-    await supabase.from('subscriptions').update({
+
+    if (NAS_MODE) {
+      // NAS 모드: 계정의 plan / 활성 여부만 서버에 반영 (만료일·금액·메모는 파생값)
+      try {
+        await adminUpdateUser(editTarget.id, {
+          plan: form.plan,
+          isActive: form.status === 'active',
+        });
+      } catch (e: any) {
+        setSaving(false);
+        alert(`플랜 변경 실패: ${e?.message || '서버 오류'}`);
+        return;
+      }
+      setSaving(false);
+      setShowModal(false);
+      loadSubs();
+      return;
+    }
+
+    const { error: subError } = await supabase.from('subscriptions').update({
       plan: form.plan,
       status: form.status,
       expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
@@ -78,9 +124,13 @@ export default function Subscriptions() {
     }).eq('id', editTarget.id);
 
     // branches 테이블도 동기화
-    await supabase.from('branches').update({ plan: form.plan }).eq('id', editTarget.branch_id);
+    const { error: branchError } = await supabase.from('branches').update({ plan: form.plan }).eq('id', editTarget.branch_id);
 
     setSaving(false);
+    if (subError || branchError) {
+      alert(`저장 실패: ${(subError || branchError)!.message}`);
+      return;
+    }
     setShowModal(false);
     loadSubs();
   }

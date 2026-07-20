@@ -2,6 +2,7 @@
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, CheckCircle2, Paperclip, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { isAuthApiConfigured } from '../../lib/authApi';
 import { TroiareukeLogo } from './Login';
 
 const plans = [
@@ -64,7 +65,11 @@ export default function Signup() {
       navigate('/onboarding');
     } catch (e: any) {
       const msg = e?.message || '';
-      if (/already registered|user already exists|duplicate/i.test(msg)) {
+      const status = e?.status;
+      if (status === 403 || /공개 가입이 비활성|가입이 허용되지 않/i.test(msg)) {
+        // NAS 중앙 서버는 계정 발급제(공개 가입 차단) — 막다른 오류 대신 발급 안내
+        setError('이 서비스는 관리자 발급제로 운영됩니다. 본사(트로이아르케)에 계정 발급을 요청해주세요.');
+      } else if (/already registered|user already exists|duplicate/i.test(msg)) {
         setError('이미 가입된 이메일입니다. 로그인 페이지에서 시도해주세요.');
       } else if (/Email not confirmed/i.test(msg)) {
         // Supabase "Confirm email" 활성화 상태 — 가입은 됐으나 이메일 인증 대기
@@ -124,6 +129,9 @@ export default function Signup() {
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록번호 *</label>
                   <input type="text" inputMode="numeric" value={form.businessNumber} onChange={e => set('businessNumber', formatBusinessNumber(e.target.value))} className="auth-input" placeholder="123-45-67890" required />
                 </div>
+                {/* 사업자등록증 첨부는 중앙 서버(NAS) 가입에서만 저장됨 — Supabase 경로는
+                    저장 컬럼이 없어 조용히 유실되므로 필드 자체를 숨긴다 */}
+                {isAuthApiConfigured && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록증 사진 (선택)</label>
                   <input ref={licenseInputRef} type="file" accept="image/*" className="hidden" onChange={e => { handleLicenseFile(e.target.files?.[0]); e.target.value = ''; }} />
@@ -139,6 +147,7 @@ export default function Signup() {
                     </button>
                   )}
                 </div>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 * (8자 이상)</label>
                   <div className="relative">

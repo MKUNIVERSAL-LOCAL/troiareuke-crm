@@ -69,7 +69,11 @@ export default function LoginLogs() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">로그인 기록</h1>
-          <p className="text-slate-400 text-sm mt-1">전체 지점의 로그인 이력을 확인하세요</p>
+          <p className="text-slate-400 text-sm mt-1">
+            {isSupabaseConfigured
+              ? '전체 지점의 로그인 이력을 확인하세요'
+              : '로그인 이력을 확인하세요 (중앙 서버 모드에서는 이 기기에서 기록된 로그인만 표시됩니다)'}
+          </p>
         </div>
         <button
           onClick={loadLogs}

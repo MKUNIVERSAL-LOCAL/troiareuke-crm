@@ -112,6 +112,14 @@ export default function Statistics() {
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : !isSupabaseConfigured ? (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-8 text-center">
+          <p className="text-amber-200 font-bold text-sm">이 통계 화면은 Supabase 백엔드 전용입니다</p>
+          <p className="text-slate-400 text-sm mt-2">
+            중앙 서버(NAS) 모드에서는 사이드바의 <strong className="text-white">전체 데이터</strong> 메뉴에서
+            지점별 실데이터와 현황을 확인할 수 있습니다.
+          </p>
+        </div>
       ) : (
         <>
           {/* 요약 카드 */}

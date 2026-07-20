@@ -26,7 +26,8 @@ export default function ResetPassword() {
     }
 
     if (!isSupabaseConfigured) {
-      setError('비밀번호 재설정 서버가 연결되어 있지 않습니다. 관리자에게 문의해주세요.');
+      // 중앙 서버(NAS) 모드의 재설정은 이메일 링크(서버 페이지)에서 진행된다 — 이 화면은 Supabase 전용
+      setError('이 화면에서는 재설정할 수 없습니다. 비밀번호 찾기로 받은 이메일의 링크에서 새 비밀번호를 설정해주세요.');
       setChecking(false);
       return;
     }

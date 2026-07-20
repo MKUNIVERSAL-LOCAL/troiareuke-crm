@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -34,7 +34,9 @@ export default function Announcements() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+    if (!isSupabaseConfigured) { setList([]); setLoading(false); return; }
+    const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+    if (error) console.warn('[Announcements] 로드 실패:', error.message);
     setList(data || []);
     setLoading(false);
   }
@@ -52,24 +54,32 @@ export default function Announcements() {
   }
 
   async function handleSave() {
+    if (!isSupabaseConfigured) return;
     setSaving(true);
-    if (editTarget) {
-      await supabase.from('announcements').update(form).eq('id', editTarget.id);
-    } else {
-      await supabase.from('announcements').insert(form);
-    }
+    const { error } = editTarget
+      ? await supabase.from('announcements').update(form).eq('id', editTarget.id)
+      : await supabase.from('announcements').insert(form);
     setSaving(false);
+    if (error) {
+      alert(`공지 저장에 실패했습니다: ${error.message}`);
+      return; // 저장 실패 시 모달을 닫지 않아 내용이 유실되지 않게 함
+    }
     setShowModal(false);
     load();
   }
 
   async function handleDelete(id: string) {
-    await supabase.from('announcements').delete().eq('id', id);
+    if (!isSupabaseConfigured) return;
+    if (!window.confirm('이 공지를 삭제할까요?')) return;
+    const { error } = await supabase.from('announcements').delete().eq('id', id);
+    if (error) alert(`삭제 실패: ${error.message}`);
     load();
   }
 
   async function handleToggle(a: Announcement) {
-    await supabase.from('announcements').update({ is_active: !a.is_active }).eq('id', a.id);
+    if (!isSupabaseConfigured) return;
+    const { error } = await supabase.from('announcements').update({ is_active: !a.is_active }).eq('id', a.id);
+    if (error) alert(`변경 실패: ${error.message}`);
     load();
   }
 
@@ -82,12 +92,20 @@ export default function Announcements() {
         </div>
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors"
+          disabled={!isSupabaseConfigured}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={16} />
           공지 작성
         </button>
       </div>
+
+      {!isSupabaseConfigured && (
+        <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-4 text-sm text-amber-200">
+          공지사항 저장소(Supabase)가 이 빌드에 연결되어 있지 않아 공지 기능을 사용할 수 없습니다.
+          (NAS 중앙 서버로의 공지 이관은 준비 중)
+        </div>
+      )}
 
       {/* 요약 */}
       <div className="grid grid-cols-3 gap-4 mb-8">
