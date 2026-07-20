@@ -14,7 +14,8 @@ import {
 import type { Payment, PaymentMethod } from '../../types';
 
 import { formatPrice, todayISO as today } from '../../lib/format';
-function getYearMonth(d: Date) { return d.toISOString().substring(0, 7); }
+// 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
+function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
 const PAYMENT_METHODS: PaymentMethod[] = ['카드', '현금', '계좌이체', '카카오페이'];
 const METHOD_ICONS: Record<string, React.ElementType> = {
@@ -41,6 +42,7 @@ export default function Sales() {
     paymentDate: today(),
     memo: '',
     discountAmount: '0',
+    status: 'completed' as Payment['status'],
   });
 
   const customers = useMemo(() => CustomerStore.getAll(), []);
@@ -57,17 +59,24 @@ export default function Sales() {
     [payments, viewMonth]
   );
 
-  // 이번 달 집계
+  // 결제 내역 탭용: 환불/대기 상태도 함께 표시 (통계에는 미포함)
+  const monthAllPayments = useMemo(
+    () => payments.filter(p => p.paymentDate.startsWith(viewMonth)),
+    [payments, viewMonth]
+  );
+
+  // 이번 달 집계 — 기타(other) 포함해야 총매출과 비중 합이 일치
   const thisSummary = useMemo(() => ({
     treatment: monthPayments.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0),
     product: monthPayments.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0),
+    other: monthPayments.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0),
     total: monthPayments.reduce((s, p) => s + p.amount, 0),
     count: monthPayments.length,
   }), [monthPayments]);
 
   const listPayments = useMemo(() => {
     const query = listSearch.trim().toLowerCase();
-    return [...monthPayments]
+    return [...monthAllPayments]
       .filter(payment => {
         const typeMatches = listType === 'all' || payment.type === listType;
         const methodMatches = listMethod === 'all' || payment.paymentMethod === listMethod;
@@ -80,10 +89,11 @@ export default function Sales() {
         return typeMatches && methodMatches && searchMatches;
       })
       .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
-  }, [monthPayments, listSearch, listType, listMethod]);
+  }, [monthAllPayments, listSearch, listType, listMethod]);
 
+  // 합계는 완료 결제만 (환불/대기 제외)
   const listTotal = useMemo(
-    () => listPayments.reduce((sum, payment) => sum + payment.amount, 0),
+    () => listPayments.filter(p => p.status === 'completed').reduce((sum, payment) => sum + payment.amount, 0),
     [listPayments],
   );
 
@@ -107,6 +117,7 @@ export default function Sales() {
         day: `${i + 1}일`,
         시술: dayPayments.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0) / 10000,
         제품: dayPayments.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0) / 10000,
+        기타: dayPayments.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0) / 10000,
         total: dayPayments.reduce((s, p) => s + p.amount, 0),
       };
     });
@@ -126,7 +137,7 @@ export default function Sales() {
     setViewMonth(getYearMonth(d));
   }
 
-  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: '카드', paymentDate: today(), memo: '', discountAmount: '0' });
+  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: '카드', paymentDate: today(), memo: '', discountAmount: '0', status: 'completed' });
 
   function closeModal() {
     setShowModal(false);
@@ -145,6 +156,7 @@ export default function Sales() {
       paymentDate: p.paymentDate,
       memo: p.memo || '',
       discountAmount: String(p.discountAmount || 0),
+      status: p.status,
     });
     setEditingId(p.id);
     setShowModal(true);
@@ -179,7 +191,7 @@ export default function Sales() {
       amount,
       paymentMethod: form.paymentMethod,
       discountAmount,
-      status: 'completed' as const,
+      status: form.status,
       memo: form.memo || undefined,
     };
 
@@ -233,7 +245,7 @@ export default function Sales() {
           매출 현황
         </button>
         <button onClick={() => setTab('list')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-          결제 내역 ({monthPayments.length})
+          결제 내역 ({monthAllPayments.length})
         </button>
       </div>
 
@@ -292,7 +304,8 @@ export default function Sales() {
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="시술" stackId="a" fill="#1a3a8f" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="제품" stackId="a" fill="#7c3aed" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="제품" stackId="a" fill="#7c3aed" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="기타" stackId="a" fill="#94a3b8" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -415,6 +428,8 @@ export default function Sales() {
                       <span className="col-span-2 font-medium text-gray-800">
                         {p.customerName || '—'}
                         {p.discountAmount > 0 && <span className="ml-1.5 text-[11px] text-orange-500">-{formatPrice(p.discountAmount)}</span>}
+                        {p.status === 'refunded' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
+                        {p.status === 'pending' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
                       </span>
                       <span>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -528,8 +543,36 @@ export default function Sales() {
                 </div>
                 {form.amount && parseInt(form.discountAmount || '0') > 0 && (
                   <p className="text-[11px] text-gray-400 mt-1">
-                    할인 적용 실수령: <strong className="text-gray-600">{formatPrice((parseInt(form.amount.replace(/,/g, '')) || 0))}</strong> (결제 금액 = 할인 반영 후 금액을 입력하세요)
+                    결제 금액(할인 반영 후): <strong className="text-gray-600">{formatPrice((parseInt(form.amount.replace(/,/g, '')) || 0))}</strong> — 위 결제 금액란에 할인을 뺀 실수령액을 입력하세요
                   </p>
+                )}
+              </div>
+
+              {/* 결제 상태 — 환불/취소 기록 가능 (누적결제액은 자동 정합 조정) */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">결제 상태</label>
+                <div className="flex gap-1">
+                  {([
+                    { v: 'completed', label: '완료' },
+                    { v: 'refunded', label: '환불' },
+                    { v: 'pending', label: '대기' },
+                  ] as { v: Payment['status']; label: string }[]).map(({ v, label }) => (
+                    <button
+                      type="button"
+                      key={v}
+                      onClick={() => setForm(f => ({ ...f, status: v }))}
+                      className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
+                        form.status === v
+                          ? v === 'refunded' ? 'border-red-400 bg-red-50 text-red-600' : 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {form.status === 'refunded' && (
+                  <p className="text-[11px] text-red-400 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
                 )}
               </div>
 

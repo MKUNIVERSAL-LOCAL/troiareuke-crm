@@ -15,8 +15,8 @@ import { apiRequest, isAuthApiConfigured } from './authApi';
 
 const PREFIX = 'troiareuke_photos_';
 
-/** 사진이 NAS에서 갱신됐을 때 발생 (detail: { entityKeys: string[] }) */
-export const PHOTOS_CHANGED_EVENT = 'crm:photos-changed';
+/** 사진이 NAS에서 갱신됐을 때 발생 (detail: { entityKeys: string[] }) — 필요 시 구독용 */
+const PHOTOS_CHANGED_EVENT = 'crm:photos-changed';
 
 /** 엔티티 키 규칙: `treatment:<logId>`, `customer:<customerId>` 등 */
 function storageKey(entityKey: string): string {

@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, type PhotoEntry } from '../../lib/photoStore';
+import { isAuthApiConfigured } from '../../lib/authApi';
 
 export default function Treatments() {
   const [search, setSearch] = useState('');
@@ -215,7 +216,12 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
   const [customerId, setCustomerId] = useState(editing?.customerId ?? '');
   const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? '');
   const [staffName, setStaffName] = useState(editing?.staffName ?? '');
-  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  // 수정 모드: 기존 시술 내용에서 시술 메뉴명과 일치하는 항목을 체크 상태로 복원
+  const [selectedServices, setSelectedServices] = useState<string[]>(() => {
+    if (!editing?.treatmentDetails) return [];
+    const names = new Set(services.map(s => s.name));
+    return editing.treatmentDetails.split(',').map(s => s.trim()).filter(n => names.has(n));
+  });
   const [treatmentDetails, setTreatmentDetails] = useState(editing?.treatmentDetails ?? '');
   const [skinCondition, setSkinCondition] = useState(editing?.skinCondition ?? '');
   const [staffNotes, setStaffNotes] = useState(editing?.staffNotes ?? '');
@@ -451,7 +457,11 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
             {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}
             <span className="text-sm">{uploading ? '사진 처리 중...' : '사진 추가 (여러 장 가능)'}</span>
           </button>
-          <p className="text-[11px] text-gray-400 mt-1">사진은 기기에 저장됩니다. (클라우드 동기화는 NAS 서버 연동 후 지원)</p>
+          <p className="text-[11px] text-gray-400 mt-1">
+            {isAuthApiConfigured
+              ? '사진은 기기에 저장되고 중앙 서버(NAS)와 동기화되어 다른 기기에서도 볼 수 있습니다.'
+              : '사진은 이 기기에만 저장됩니다. (다른 기기 동기화는 중앙 서버 연동 후 지원)'}
+          </p>
         </div>
 
         <div className="flex gap-3 pt-2">

@@ -634,6 +634,9 @@ export default function Customers() {
     setProgForm({ programId: '', pricePaid: '', paymentMethod: '카드', purchaseDate: today(), notes: '' });
     setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
     loadAll();
+    // 결제 저장으로 누적결제액(totalSpent)이 갱신됐으므로 상세 헤더도 즉시 반영
+    const updated = CustomerStore.getById(selected.id);
+    if (updated) setSelected(updated);
   }
 
   // 시술 기록 (회차 차감)

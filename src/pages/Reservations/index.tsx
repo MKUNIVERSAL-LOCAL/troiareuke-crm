@@ -5,18 +5,46 @@ import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
-import { ReservationStore, StaffStore, ServiceStore, CustomerStore } from '../../lib/store';
+import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore } from '../../lib/store';
 import type { Reservation, Staff, Service, Customer } from '../../types';
 import {
   isGoogleCalendarConnected,
   fetchCalendarEventsAsReservations,
   createCalendarEvent,
+  deleteCalendarEvent,
 } from '../../lib/googleCalendar';
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 
 const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
+
+// ── Google Calendar 이벤트 매핑 (reservationId → eventId) ─────────────────
+// 예약 수정/취소/삭제 시 캘린더의 유령 일정을 정리하기 위해 로컬에 매핑 보관.
+// (Reservation 코어 타입에 googleEventId 필드가 없어 비코어 우회 저장)
+const GCAL_MAP_KEY = 'crm_gcal_event_map';
+
+function getGcalMap(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(GCAL_MAP_KEY) || '{}'); } catch { return {}; }
+}
+
+function rememberGcalEvent(reservationId: string, eventId: string): void {
+  const m = getGcalMap();
+  m[reservationId] = eventId;
+  try { localStorage.setItem(GCAL_MAP_KEY, JSON.stringify(m)); } catch { /* noop */ }
+}
+
+/** 예약에 연결된 Google 이벤트를 캘린더에서 삭제하고 매핑 제거 (미연결/실패는 무시) */
+function cleanupGcalEvent(reservationId: string): void {
+  const m = getGcalMap();
+  const eventId = m[reservationId];
+  if (!eventId) return;
+  delete m[reservationId];
+  try { localStorage.setItem(GCAL_MAP_KEY, JSON.stringify(m)); } catch { /* noop */ }
+  if (isGoogleCalendarConnected()) {
+    deleteCalendarEvent(eventId).catch(() => { /* 캘린더 정리는 best-effort */ });
+  }
+}
 
 type ViewMode = 'week' | 'day' | 'list';
 
@@ -670,13 +698,23 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
     if (isEdit && editing) {
       // 수정: 기존 예약 갱신 (상태·네이버ID 등 보존)
       ReservationStore.update(editing.id, reservation);
+      // Google 캘린더에 옛 정보가 남지 않도록 기존 이벤트 삭제 후 재생성
+      const oldEventId = getGcalMap()[editing.id];
+      if (oldEventId && isGoogleCalendarConnected()) {
+        deleteCalendarEvent(oldEventId).catch(() => { /* best-effort */ });
+        createCalendarEvent({ ...reservation, id: editing.id } as Reservation)
+          .then(ev => rememberGcalEvent(editing.id, ev.id))
+          .catch(() => { /* Google 동기화 실패해도 CRM 예약은 저장됨 */ });
+      }
     } else {
       const saved = ReservationStore.save(reservation);
-      // Google Calendar에도 추가
+      // Google Calendar에도 추가 — 이벤트 id를 기억해 취소/삭제 시 정리 가능하게
       if (addToGoogle && googleAvailable && saved) {
-        createCalendarEvent({ ...reservation, id: saved.id }).catch(() => {
-          // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
-        });
+        createCalendarEvent({ ...reservation, id: saved.id })
+          .then(ev => rememberGcalEvent(saved.id, ev.id))
+          .catch(() => {
+            // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
+          });
       }
     }
     onSave();
@@ -807,17 +845,43 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const { user } = useAuth();
   const handleCancel = () => {
     ReservationStore.updateStatus(r.id, 'cancelled');
+    cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     onUpdate();
   };
 
   const handleComplete = () => {
     ReservationStore.updateStatus(r.id, 'completed');
+    // 완료 → 결제 브리지: 기존엔 상태만 바뀌고 매출에 잡히지 않아 Sales에서 수기 재입력이 필요했음
+    if (r.totalPrice > 0) {
+      const alreadyPaid = PaymentStore.getAll().some(p => p.referenceId === r.id);
+      if (alreadyPaid) {
+        alert('완료 처리했습니다. (이 예약의 결제는 이미 등록되어 있어 중복 등록하지 않았습니다)');
+      } else if (window.confirm(
+        `완료 처리했습니다.\n\n결제 ${r.totalPrice.toLocaleString()}원(카드)도 함께 등록할까요?\n` +
+        `(금액·결제수단 수정은 매출 화면에서 가능합니다)`
+      )) {
+        PaymentStore.save({
+          customerId: r.customerId,
+          customerName: r.customerName,
+          paymentDate: r.date,
+          type: 'single_treatment',
+          typeLabel: r.services.map(s => s.serviceName).join(', ') || '시술',
+          referenceId: r.id,
+          amount: r.totalPrice,
+          paymentMethod: '카드',
+          discountAmount: 0,
+          status: 'completed',
+          memo: '예약 완료 처리에서 자동 등록',
+        });
+      }
+    }
     onUpdate();
   };
 
   const handleDelete = () => {
     if (window.confirm('이 예약을 삭제하시겠습니까?')) {
       ReservationStore.delete(r.id);
+      cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();
     }
   };
