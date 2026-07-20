@@ -218,10 +218,15 @@ const categories = ['전체', '예약', '메시지', '인증', '결제', '연동
 const priorities = { must: { label: '필수', color: 'bg-red-100 text-red-700' }, recommended: { label: '권장', color: 'bg-orange-100 text-orange-700' }, optional: { label: '선택', color: 'bg-gray-100 text-gray-600' } };
 const statuses = { connected: { label: '✅ 연동완료', color: 'text-green-600' }, pending: { label: '⏳ 진행중', color: 'text-orange-500' }, 'not-started': { label: '⬜ 미시작', color: 'text-gray-400' } };
 
+const API_STATUS_KEY = 'crm_api_guide_status';
+
 export default function ApiGuide() {
   const [category, setCategory] = useState('전체');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [localStatus, setLocalStatus] = useState<Record<string, Status>>({});
+  // 체크한 연동 상태를 localStorage에 보존 (기존엔 새로고침 시 초기화되던 비영속 상태)
+  const [localStatus, setLocalStatus] = useState<Record<string, Status>>(() => {
+    try { return JSON.parse(localStorage.getItem(API_STATUS_KEY) || '{}'); } catch { return {}; }
+  });
 
   const getStatus = (api: ApiItem): Status => localStatus[api.id] ?? api.status;
 
@@ -230,7 +235,11 @@ export default function ApiGuide() {
 
   const toggleStatus = (id: string, current: Status) => {
     const next: Status = current === 'not-started' ? 'pending' : current === 'pending' ? 'connected' : 'not-started';
-    setLocalStatus(p => ({ ...p, [id]: next }));
+    setLocalStatus(p => {
+      const updated = { ...p, [id]: next };
+      try { localStorage.setItem(API_STATUS_KEY, JSON.stringify(updated)); } catch { /* noop */ }
+      return updated;
+    });
   };
 
   return (
