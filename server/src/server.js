@@ -615,7 +615,28 @@ app.get('/api/admin/messages/:branchId', requireSession, requireSuperadmin, asyn
        FROM scheduled_messages WHERE branch_id = $1 ORDER BY send_at DESC LIMIT $2`,
       [branchId, limit],
     );
-    res.json({ sendLog, scheduled });
+    // 클라이언트(adminApi.ts) 계약은 camelCase — snake_case 원본을 매핑해 반환
+    res.json({
+      sendLog: sendLog.map(row => ({
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        content: row.content,
+        phone: row.phone,
+        status: row.status,
+        reason: row.reason,
+        createdAt: row.created_at,
+      })),
+      scheduled: scheduled.map(row => ({
+        id: row.id,
+        sendAt: row.send_at,
+        type: row.type,
+        title: row.title,
+        content: row.content,
+        phones: Array.isArray(row.phones) ? row.phones : [],
+        status: row.status,
+      })),
+    });
   } catch (error) {
     next(error);
   }
@@ -927,8 +948,21 @@ app.delete('/api/messages/scheduled/:id', requireSession, async (req, res, next)
 
 // 분 단위 디스패처: 시각이 지난 예약을 잠그고 발송한다 (다중 인스턴스 안전)
 async function dispatchScheduledMessages() {
-  // 크래시 복구: processing으로 잠긴 채 10분 넘게 방치된 잡은 pending으로 되돌린다
+  // 크래시 복구: processing으로 잠긴 채 10분 넘게 방치된 잡 처리
   // (재배포·정전으로 결과 UPDATE 전에 프로세스가 죽은 경우 — 영구 고착 방지)
+  // 단, 잠금 이후 발송 로그가 이미 남아 있으면(발송 완료 후 결과 기록 직전 사망)
+  // pending으로 되돌리는 순간 전체 수신자에게 이중 발송된다 → 수동 확인용 실패로 종결.
+  await pool.query(`
+    UPDATE scheduled_messages sm
+    SET status = 'failed', locked_at = NULL,
+        result = jsonb_build_object('error', '발송 도중 프로세스 중단 — 일부 발송됐을 수 있어 재발송하지 않음. 발송 로그를 확인하세요.')
+    WHERE sm.status = 'processing' AND sm.locked_at < now() - interval '10 minutes'
+      AND EXISTS (
+        SELECT 1 FROM message_send_log l
+        WHERE l.branch_id = sm.branch_id AND l.content = sm.content
+          AND l.status = 'sent' AND l.created_at >= sm.locked_at
+      )
+  `).catch(e => console.error('stale processing finalize failed', e?.message || e));
   await pool.query(`
     UPDATE scheduled_messages SET status = 'pending', locked_at = NULL
     WHERE status = 'processing' AND locked_at < now() - interval '10 minutes'
