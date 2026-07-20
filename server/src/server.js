@@ -501,6 +501,147 @@ app.post('/api/admin/backup', requireSession, requireSuperadmin, async (_req, re
   }
 });
 
+// 슈퍼어드민 전용 읽기 API — 모든 지점의 현황과 원본 데이터를 조회한다.
+app.get('/api/admin/overview', requireSession, requireSuperadmin, async (_req, res, next) => {
+  try {
+    const { rows: branchRows } = await pool.query(`
+      SELECT DISTINCT branch_id FROM crm_records
+      UNION SELECT DISTINCT branch_id FROM crm_photos
+      UNION SELECT DISTINCT branch_id FROM auth_users WHERE branch_id IS NOT NULL
+    `);
+    const { rows: userRows } = await pool.query(`
+      SELECT branch_id,
+        max(branch_name) FILTER (WHERE branch_name IS NOT NULL AND branch_name <> '') AS branch_name,
+        count(*)::int AS user_count
+      FROM auth_users WHERE branch_id IS NOT NULL GROUP BY branch_id
+    `);
+    const { rows: recordRows } = await pool.query(`
+      SELECT branch_id, collection, count(*)::int AS record_count, max(updated_at) AS last_activity
+      FROM crm_records GROUP BY branch_id, collection
+    `);
+    const { rows: photoRows } = await pool.query(`
+      SELECT branch_id,
+        coalesce(sum(CASE WHEN jsonb_typeof(photos) = 'array' THEN jsonb_array_length(photos) ELSE 0 END), 0)::int AS photo_count
+      FROM crm_photos GROUP BY branch_id
+    `);
+    const { rows: messageRows } = await pool.query(`
+      SELECT branch_id, count(*)::int AS message_count
+      FROM message_send_log GROUP BY branch_id
+    `);
+
+    const usersByBranch = new Map(userRows.map(row => [row.branch_id, row]));
+    const photosByBranch = new Map(photoRows.map(row => [row.branch_id, row.photo_count]));
+    const messagesByBranch = new Map(messageRows.map(row => [row.branch_id, row.message_count]));
+    const recordsByBranch = new Map();
+    for (const row of recordRows) {
+      if (!recordsByBranch.has(row.branch_id)) {
+        recordsByBranch.set(row.branch_id, { counts: {}, lastActivity: null });
+      }
+      const summary = recordsByBranch.get(row.branch_id);
+      if (DATA_COLLECTIONS.has(row.collection)) summary.counts[row.collection] = row.record_count;
+      if (!summary.lastActivity || row.last_activity > summary.lastActivity) {
+        summary.lastActivity = row.last_activity;
+      }
+    }
+
+    const branches = branchRows.map(({ branch_id: branchId }) => {
+      const user = usersByBranch.get(branchId);
+      const record = recordsByBranch.get(branchId);
+      const recordCounts = Object.fromEntries(
+        [...DATA_COLLECTIONS].map(collection => [collection, record?.counts[collection] || 0]),
+      );
+      return {
+        branchId,
+        branchName: user?.branch_name || null,
+        userCount: user?.user_count || 0,
+        recordCounts,
+        photoCount: photosByBranch.get(branchId) || 0,
+        messageCount: messagesByBranch.get(branchId) || 0,
+        lastActivity: record?.lastActivity || null,
+      };
+    });
+    res.json({ branches });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/admin/data/:branchId/:collection', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const branchId = String(req.params.branchId || '');
+    const collection = String(req.params.collection || '');
+    if (!DATA_COLLECTIONS.has(collection)) {
+      return res.status(404).json({ error: '지원하지 않는 데이터 종류입니다.' });
+    }
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const requestedOffset = Number.parseInt(req.query.offset, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 50;
+    const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
+    const query = String(req.query.q || '').trim();
+    const values = query ? [branchId, collection, `%${query}%`] : [branchId, collection];
+    const where = query
+      ? 'branch_id = $1 AND collection = $2 AND data::text ILIKE $3'
+      : 'branch_id = $1 AND collection = $2';
+    const { rows: countRows } = await pool.query(
+      `SELECT count(*)::int AS total FROM crm_records WHERE ${where}`,
+      values,
+    );
+    const { rows } = await pool.query(
+      `SELECT id, updated_at, data FROM crm_records
+       WHERE ${where} ORDER BY updated_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, limit, offset],
+    );
+    res.json({
+      total: countRows[0].total,
+      rows: rows.map(row => ({ id: row.id, updatedAt: row.updated_at, data: row.data })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/admin/messages/:branchId', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const branchId = String(req.params.branchId || '');
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 100;
+    const { rows: sendLog } = await pool.query(
+      `SELECT id, user_id, type, title, content, phone, status, reason, created_at
+       FROM message_send_log WHERE branch_id = $1 ORDER BY created_at DESC LIMIT $2`,
+      [branchId, limit],
+    );
+    const { rows: scheduled } = await pool.query(
+      `SELECT id, user_id, send_at, type, title, content, phones, status, result, created_at
+       FROM scheduled_messages WHERE branch_id = $1 ORDER BY send_at DESC LIMIT $2`,
+      [branchId, limit],
+    );
+    res.json({ sendLog, scheduled });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/admin/photos/:branchId', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const branchId = String(req.params.branchId || '');
+    const { rows } = await pool.query(`
+      SELECT entity_key,
+        CASE WHEN jsonb_typeof(photos) = 'array' THEN jsonb_array_length(photos) ELSE 0 END AS photo_count,
+        updated_at
+      FROM crm_photos WHERE branch_id = $1 ORDER BY updated_at DESC
+    `, [branchId]);
+    res.json({
+      entities: rows.map(row => ({
+        entityKey: row.entity_key,
+        photoCount: row.photo_count,
+        updatedAt: row.updated_at,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const targetId = String(req.params.id);
