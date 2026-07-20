@@ -44,3 +44,12 @@ VITE_AUTH_API_URL=https://외부주소
 - NAS 배포 직후 수동 확인: `/health` → 어드민 로그인 → 지점 계정 발급 → 발급 계정으로 CRM 로그인 → 고객 등록 → DSM에서 `crm_records` 행 확인.
 
 SMTP는 회사 메일 또는 NAS MailPlus SMTP 정보를 사용합니다. 고객이 비밀번호 찾기를 누르면 계정 존재 여부와 관계없이 동일한 안내가 표시되며, 실제 가입 고객에게만 30분 유효·1회용 링크가 전송됩니다.
+
+## 슈퍼어드민 데이터 조회 API
+
+아래 읽기 전용 API는 모두 로그인 세션과 `superadmin` 역할이 필요합니다.
+
+- `GET /api/admin/overview` — 전체 지점의 계정·CRM 레코드·사진·메시지 현황
+- `GET /api/admin/data/:branchId/:collection?limit=50&offset=0&q=검색어` — 지점별 CRM 컬렉션 원본 조회
+- `GET /api/admin/messages/:branchId?limit=100` — 지점별 최근 발송 로그와 예약 메시지 조회
+- `GET /api/admin/photos/:branchId` — 지점별 엔티티의 사진 개수 조회(base64 본문 제외)
