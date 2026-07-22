@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, PAYMENT_ENABLED } from '../../lib/featureFlags';
+import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import clsx from 'clsx';
 
 const GOOGLE_OAUTH_READY = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim());
@@ -73,7 +74,7 @@ function importLegacyShopData(fromShopId: string, toShopId: string): number {
   return copied;
 }
 
-type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup';
+type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup' | 'notice';
 
 const tabs = [
   { key: 'shop' as SettingTab, label: '샵 정보', icon: <Store size={16} /> },
@@ -83,6 +84,7 @@ const tabs = [
   { key: 'services' as SettingTab, label: '시술 관리', icon: <Palette size={16} /> },
   { key: 'subscription' as SettingTab, label: '구독/플랜', icon: <CreditCard size={16} /> },
   { key: 'backup' as SettingTab, label: '데이터 백업', icon: <HardDrive size={16} /> },
+  { key: 'notice' as SettingTab, label: '공지사항', icon: <Bell size={16} /> },
 ];
 
 const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
@@ -1274,6 +1276,12 @@ export default function Settings() {
                   </div>
                 </SettingCard>
               </div>
+            )}
+
+            {tab === 'notice' && (
+              <SettingCard title="공지사항 · 업데이트 소식">
+                <UpdateNewsBoard />
+              </SettingCard>
             )}
 
             {tab === 'backup' && (

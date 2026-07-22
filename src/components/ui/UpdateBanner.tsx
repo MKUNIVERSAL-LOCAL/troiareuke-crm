@@ -48,6 +48,8 @@ export default function UpdateBanner() {
     api.onUpdateDownloaded((info: UpdateInfo) => {
       setUpdateInfo(info);
       setState('ready');
+      // 사용자가 이미 [지금 업데이트]를 눌러 시작한 흐름 — 완료되면 자동으로 적용(재시작)
+      setTimeout(() => api.installUpdate?.(), 1200);
     });
 
     api.onUpdateError(() => {
@@ -78,7 +80,7 @@ export default function UpdateBanner() {
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
           <span>
-            <strong>v{updateInfo?.version}</strong> 업데이트 준비 완료 — 지금 재시작하면 적용됩니다
+            <strong>v{updateInfo?.version}</strong> 업데이트가 적용됩니다 — 프로그램이 곧 자동으로 다시 시작됩니다
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -114,7 +116,7 @@ export default function UpdateBanner() {
         </svg>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between text-xs mb-1">
-            <span>업데이트 다운로드 중...</span>
+            <span>업데이트가 진행됩니다... 잠시만 기다려주세요</span>
             <span className="font-bold">{progress?.percent ?? 0}%</span>
           </div>
           <div className="w-full bg-white/20 rounded-full h-1">

@@ -49,6 +49,21 @@ await fs.mkdir(stageDir, { recursive: true });
 await fs.copyFile(sourcePath, stagedArtifactPath);
 await fs.writeFile(path.join(stageDir, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
+// 공지 게시판용 누적 업데이트 로그 — docs/RELEASE-HISTORY.json이 정본(커밋됨),
+// 이번 버전 노트를 맨 앞에 추가(중복 방지)하고 history.json으로 스테이징한다.
+const historyPath = path.join(rootDir, 'docs', 'RELEASE-HISTORY.json');
+let history = [];
+try { history = JSON.parse(await fs.readFile(historyPath, 'utf8')); } catch { history = []; }
+if (notes && history[0]?.version !== packageJson.version) {
+  history.unshift({
+    version: packageJson.version,
+    releaseDate: new Date().toISOString().slice(0, 10),
+    notes,
+  });
+  await fs.writeFile(historyPath, `${JSON.stringify(history, null, 2)}\n`, 'utf8');
+}
+await fs.writeFile(path.join(stageDir, 'history.json'), `${JSON.stringify(history, null, 2)}\n`, 'utf8');
+
 const nasRoot = process.env.NAS_UPDATE_DIR;
 if (nasRoot) {
   const targetDir = path.join(nasRoot, 'portable');
