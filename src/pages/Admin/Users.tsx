@@ -119,13 +119,31 @@ export default function AdminUsers() {
     }
   }
 
+  // 재설정된 임시 비밀번호 표시 (alert는 텍스트 복사가 안 되는 함정 — 복사 버튼 모달로 대체)
+  const [tempPwResult, setTempPwResult] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function copyTempPassword() {
+    if (!tempPwResult) return;
+    try {
+      await navigator.clipboard.writeText(tempPwResult.password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // 클립보드 API 실패 시 — 입력칸을 선택 상태로 두어 수동 복사 유도
+      const el = document.getElementById('temp-pw-input') as HTMLInputElement | null;
+      el?.select();
+    }
+  }
+
   async function handleResetPassword(user: UserRow) {
     if (!confirm(`${user.email}의 비밀번호를 재설정할까요? 기존 세션은 모두 로그아웃됩니다.`)) return;
     setActionBusy(user.id);
     try {
       const temp = generateTempPassword();
       await adminUpdateUser(user.id, { password: temp });
-      alert(`새 임시 비밀번호: ${temp}\n\n지금 복사해서 전달하세요. 이 창을 닫으면 다시 확인할 수 없습니다.`);
+      setCopied(false);
+      setTempPwResult({ email: user.email, password: temp });
     } catch (e: any) {
       alert(e?.message || '비밀번호 재설정에 실패했습니다.');
     } finally {
@@ -147,6 +165,47 @@ export default function AdminUsers() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
+      {/* 임시 비밀번호 결과 모달 — 복사 버튼 포함 */}
+      {tempPwResult && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="px-6 py-5 border-b border-slate-700">
+              <h2 className="text-base font-bold text-white">임시 비밀번호 발급됨</h2>
+              <p className="text-xs text-slate-400 mt-1">{tempPwResult.email}</p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className="flex gap-2">
+                <input
+                  id="temp-pw-input"
+                  readOnly
+                  value={tempPwResult.password}
+                  onFocus={e => e.currentTarget.select()}
+                  className="flex-1 px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-base font-mono text-emerald-300 tracking-wider outline-none"
+                />
+                <button
+                  onClick={copyTempPassword}
+                  className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-colors ${copied ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                >
+                  {copied ? '복사됨 ✓' : '복사'}
+                </button>
+              </div>
+              <p className="text-[11px] text-amber-400/90 leading-relaxed">
+                이 창을 닫으면 다시 확인할 수 없습니다. 지금 복사해서 해당 지점에 전달하세요.
+                (첫 로그인 후 비밀번호 변경을 안내해주세요)
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-700 flex justify-end">
+              <button
+                onClick={() => setTempPwResult(null)}
+                className="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-xl"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">사용자 관리</h1>
