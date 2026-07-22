@@ -29,12 +29,20 @@ await new Promise((resolve, reject) => {
 });
 const sha256 = hash.digest('hex');
 
+// 변경 내용(릴리스 노트) — docs/RELEASE-NOTES-CURRENT.md가 있으면 매니페스트에 포함.
+// 앱의 업데이트 배너가 이 내용을 사용자에게 보여준 뒤 [지금 업데이트] 클릭을 받는다.
+const notesPath = path.join(rootDir, 'docs', 'RELEASE-NOTES-CURRENT.md');
+const notes = await fs.readFile(notesPath, 'utf8')
+  .then(text => text.trim().slice(0, 2000))
+  .catch(() => '');
+
 const manifest = {
   version: packageJson.version,
   url: `${publicBaseUrl}/${encodeURIComponent(artifactName)}`,
   sha256,
   size: sourceStat.size,
   releaseDate: new Date().toISOString(),
+  ...(notes ? { notes } : {}),
 };
 
 await fs.mkdir(stageDir, { recursive: true });

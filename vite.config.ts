@@ -13,7 +13,7 @@ function cspMetaPlugin(): Plugin {
     "font-src 'self' https://fonts.gstatic.com",
     // ⚠️ NAS 중앙서버(crm-api)가 빠지면 앱의 모든 NAS 요청(로그인 포함)이 CSP에서 차단되어
     //    "인증 실패"로만 보인다 — 새 API 도메인 추가 시 반드시 여기도 갱신할 것
-    "connect-src 'self' https://crm-api.mkcorp.familyds.com https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://www.googleapis.com https://oauth2.googleapis.com http://127.0.0.1:19876",
+    "connect-src 'self' https://crm-api.mkcorp.familyds.com https://crm-update.mkcorp.familyds.com https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://www.googleapis.com https://oauth2.googleapis.com http://127.0.0.1:19876",
     "img-src 'self' data: blob: https:",
     "frame-src 'self' https://accounts.google.com",
   ].join('; ')

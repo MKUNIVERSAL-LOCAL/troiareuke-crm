@@ -5,6 +5,9 @@ interface UpdateInfo {
   releaseDate?: string;
 }
 
+// 변경 내용(릴리스 노트)을 매니페스트에서 직접 가져온다 (메인 프로세스는 version만 전달)
+const MANIFEST_URL = 'https://crm-update.mkcorp.familyds.com/portable/latest.json';
+
 interface DownloadProgress {
   percent: number;
   bytesPerSecond: number;
@@ -17,6 +20,8 @@ export default function UpdateBanner() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [notes, setNotes] = useState<string>('');
+  const [showNotes, setShowNotes] = useState(false);
 
   const api = (window as any).electronAPI;
 
@@ -28,6 +33,11 @@ export default function UpdateBanner() {
       setUpdateInfo(info);
       setState('available');
       setDismissed(false);
+      // 변경 내용은 매니페스트에서 best-effort로 가져옴 (실패해도 업데이트는 가능)
+      fetch(`${MANIFEST_URL}?t=${Date.now()}`)
+        .then(r => r.json())
+        .then(m => { if (typeof m?.notes === 'string') setNotes(m.notes); })
+        .catch(() => {});
     });
 
     api.onUpdateDownloadProgress((prog: DownloadProgress) => {
@@ -118,30 +128,51 @@ export default function UpdateBanner() {
     );
   }
 
-  // ── 업데이트 발견 배너 ──
+  // ── 업데이트 발견 배너 — 변경 내용 확인 후 사용자가 직접 [지금 업데이트] 클릭 ──
   if (state === 'available') {
     return (
-      <div className="w-full bg-[#1a3a8f] text-white px-4 py-2.5 flex items-center justify-between gap-4 shadow-sm">
-        <div className="flex items-center gap-2 text-sm">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          <span>
-            새 버전 <strong>v{updateInfo?.version}</strong>을 백그라운드에서 다운로드하는 중입니다
-          </span>
+      <div className="w-full bg-[#1a3a8f] text-white shadow-sm">
+        <div className="px-4 py-2.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-sm min-w-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span className="truncate">
+              새 버전 <strong>v{updateInfo?.version}</strong> 업데이트가 있습니다
+            </span>
+            {notes && (
+              <button
+                onClick={() => setShowNotes(v => !v)}
+                className="shrink-0 text-xs underline text-white/80 hover:text-white"
+              >
+                {showNotes ? '내용 접기' : '변경 내용 보기'}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => api.downloadUpdate?.()}
+              className="bg-white text-[#1a3a8f] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              지금 업데이트
+            </button>
+            <button
+              onClick={() => setDismissed(true)}
+              className="text-white/70 hover:text-white transition-colors text-xs"
+            >
+              나중에
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => setDismissed(true)}
-          className="text-white/70 hover:text-white transition-colors shrink-0"
-          aria-label="닫기"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        {showNotes && notes && (
+          <div className="px-4 pb-3">
+            <div className="bg-white/10 rounded-lg px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto">
+              {notes}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
