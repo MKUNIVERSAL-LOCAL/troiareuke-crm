@@ -6,7 +6,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   isElectron: true,
   // 어드민 전용 빌드 여부 — 렌더러가 프로그램(빌드) 단위로 화면을 분리할 수 있게 전달
-  isAdminBuild: (() => { try { return require('../package.json').adminBuild === true; } catch { return false; } })(),
+  // (⚠️ sandbox된 preload에서는 require('../package.json')이 불가 — 메인 프로세스에 동기 질의)
+  isAdminBuild: (() => { try { return ipcRenderer.sendSync('get-admin-build-flag') === true; } catch { return false; } })(),
 
   // ── 앱 버전 조회 ──
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

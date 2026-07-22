@@ -87,6 +87,11 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
+// ── IPC 핸들러: 어드민 빌드 여부 (preload가 동기 질의 — sandbox에서 package.json 접근 불가) ──
+ipcMain.on('get-admin-build-flag', (event) => {
+  event.returnValue = isAdminBuild;
+});
+
 // ── IPC 핸들러: Claude API 호출 (CORS 우회) ──
 ipcMain.handle('call-claude-api', async (_event, { apiKey, messages, systemPrompt }) => {
   try {
