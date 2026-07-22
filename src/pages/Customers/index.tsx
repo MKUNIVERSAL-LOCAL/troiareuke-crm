@@ -475,6 +475,30 @@ export default function Customers() {
     XLSX.writeFile(wb, `고객목록_${today}.xlsx`);
   }
 
+  // 업로드 가이드 모달 — 양식을 모르면 쓸 수 없는 기능이라 안내+양식 다운로드를 먼저 보여줌
+  const [showImportGuide, setShowImportGuide] = useState(false);
+
+  // 업로드 양식 엑셀 다운로드 (헤더 + 예시 2행)
+  function downloadImportTemplate() {
+    const rows = [
+      {
+        '이름': '홍길동', '전화번호': '010-1234-5678', '성별': '여성', '등급': 'VIP',
+        '생년월일': '1990-01-15', '피부유형': '건성', '유입경로': '인스타그램',
+        '이메일': 'hong@example.com', '주소': '서울시 강남구', '메모': '민감성 피부, 향 알러지',
+      },
+      {
+        '이름': '김철수', '전화번호': '010-9876-5432', '성별': '남성', '등급': '신규',
+        '생년월일': '', '피부유형': '', '유입경로': '지인 소개',
+        '이메일': '', '주소': '', '메모': '',
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 6 }, { wch: 6 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 24 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '고객업로드양식');
+    XLSX.writeFile(wb, '고객_업로드_양식.xlsx');
+  }
+
   // 고객 엑셀/CSV 대량 업로드 — 다운로드와 동일한 헤더(이름/전화번호/이메일/성별/등급/생년월일/피부유형/유입경로/메모)를 인식
   function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -871,7 +895,7 @@ export default function Customers() {
               className="hidden"
             />
             <button
-              onClick={() => importInputRef.current?.click()}
+              onClick={() => setShowImportGuide(true)}
               title="엑셀(xlsx)/CSV로 고객 대량 등록 (이름·전화번호 필수, 중복 자동 제외)"
               className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
@@ -1283,6 +1307,46 @@ export default function Customers() {
             <User size={48} className="text-gray-200 mx-auto mb-3" />
             <p className="text-gray-400 font-medium">고객을 선택하세요</p>
             <p className="text-sm text-gray-300 mt-1">왼쪽 목록에서 고객을 클릭하면 상세 정보가 표시됩니다</p>
+          </div>
+        </div>
+      )}
+
+      {/* ───── 고객 엑셀 업로드 가이드 모달 ───── */}
+      {showImportGuide && (
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="modal-card bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">고객 엑셀 업로드</h2>
+              <button onClick={() => setShowImportGuide(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-gray-600">
+                기존에 관리하던 고객 명단을 엑셀 파일로 한 번에 등록할 수 있습니다.
+                아래 <strong>양식 다운로드</strong>로 받은 파일에 고객 정보를 채운 뒤 업로드하세요.
+              </p>
+              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-xs text-gray-600">
+                <p className="font-bold text-gray-800 text-sm mb-1">양식 안내</p>
+                <p>• <strong className="text-red-500">필수</strong>: <strong>이름</strong>, <strong>전화번호</strong> — 둘 중 하나라도 없으면 그 줄은 건너뜁니다</p>
+                <p>• 선택: 성별(남성/여성), 등급(신규·VIP 등), 생년월일(1990-01-15 형식), 피부유형, 유입경로, 이메일, 주소, 메모</p>
+                <p>• 첫 번째 줄은 반드시 <strong>항목 이름(헤더)</strong>이어야 하고, 첫 번째 시트만 읽습니다</p>
+                <p>• 이미 등록된 고객과 <strong>전화번호가 같으면 자동으로 건너뜁니다</strong> (중복 걱정 없음)</p>
+                <p>• 엑셀(.xlsx, .xls)과 CSV 모두 지원</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={downloadImportTemplate}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 transition-colors"
+                >
+                  <Download size={14} />양식 다운로드
+                </button>
+                <button
+                  onClick={() => { setShowImportGuide(false); importInputRef.current?.click(); }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium text-white bg-teal-600 rounded-xl hover:bg-teal-700 transition-colors"
+                >
+                  <Upload size={14} />파일 선택해서 업로드
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
