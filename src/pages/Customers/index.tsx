@@ -886,7 +886,7 @@ export default function Customers() {
       <div className="w-80 flex-shrink-0 border-r border-gray-100 flex flex-col bg-white">
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-2 mb-3">
-            <h1 className="text-lg font-bold text-gray-900 flex-1">고객 관리</h1>
+            <h1 className="text-lg font-bold text-gray-900 flex-1 whitespace-nowrap">고객 관리</h1>
             <input
               ref={importInputRef}
               type="file"

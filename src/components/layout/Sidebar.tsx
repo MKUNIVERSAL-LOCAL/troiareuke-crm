@@ -34,8 +34,9 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
   const { user, logout } = useAuth();
   const { shopName, programName } = useCrmBrand(user?.shopName);
 
+  // 올림 기준 — 가입 당일 "14일"로 표시 (내림이면 13일로 보이는 off-by-one)
   const trialDaysLeft = user?.trialEndsAt
-    ? differenceInDays(parseISO(user.trialEndsAt), new Date())
+    ? Math.ceil((parseISO(user.trialEndsAt).getTime() - Date.now()) / 86400000)
     : null;
 
   const handleNavClick = () => {
