@@ -356,3 +356,12 @@
 ---
 
 > **결론**: 이름은 **또봬요**. 사용자 Yes 시 후속 7종 산출물 즉시 진행.
+
+---
+
+## 2026-07-22 오너 제안 — DERMAVIA + 카테고리 네이밍
+- 후보: Skin Journey Management(SJM) / **Skin Journey Intelligence(SJI)** / Skin Lifecycle Intelligence(SLI) / Derma Journey Intelligence(DJI)
+- 오너 선호: **DERMAVIA + Skin Journey Intelligence(SJI)** — "Management는 관리에 머무르지만 Intelligence는 AI·데이터·추천·예측까지 포괄"
+- 태그라인 예시: "DERMAVIA — The World's First Skin Journey Intelligence Platform."
+- 제품 구조와의 정합: 각 샵 화면은 "{샵명} CRM"(계정별 브랜딩, 구현됨), 회사 판매 브랜드 = DERMAVIA (2층 구조)
+- 결정 전 확인 사항: ① 키프리스 상표 검색(더마 어근 혼잡) ② 도메인 확보 ③ "세계 최초" 류 문구는 광고 실증 이슈 — "A New Category" 계열 권장
