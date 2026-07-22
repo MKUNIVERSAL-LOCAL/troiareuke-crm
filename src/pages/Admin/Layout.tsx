@@ -2,6 +2,7 @@
 import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2, Database } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
+import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 
 // search가 있는 항목은 pathname+search까지 일치해야 활성 (통계 vs 전체 데이터 구분)
 const adminNav = [
@@ -19,6 +20,31 @@ export default function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // 프로그램 분리: 일반(지점용) exe에서는 관리자 콘솔을 절대 표시하지 않는다
+  if (BLOCK_ADMIN_UI) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-4">
+          <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto">
+            <span className="text-white text-xl font-black">T</span>
+          </div>
+          <h1 className="text-xl font-bold text-white">관리자 전용 기능입니다</h1>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            이 프로그램은 지점용 CRM입니다. 관리자 콘솔은
+            <strong className="text-white"> 트로이아르케 CRM 어드민 </strong>
+            프로그램에서 이용해주세요.
+          </p>
+          <button
+            onClick={async () => { await logout(); navigate('/login'); }}
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            로그아웃하고 지점 계정으로 로그인
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const isNavActive = (to: string) => {
     const [path, search] = to.split('?');

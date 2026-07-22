@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Shield, Lock, Server, Activity } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -11,6 +12,31 @@ export default function AdminLogin() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // 프로그램 분리: 일반(지점용) exe에서는 관리자 로그인 입구 자체를 막는다
+  if (BLOCK_ADMIN_UI) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-4">
+          <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto">
+            <span className="text-white text-xl font-black">T</span>
+          </div>
+          <h1 className="text-xl font-bold text-white">관리자 로그인은 어드민 프로그램에서</h1>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            이 프로그램은 지점용 CRM입니다. 관리자는
+            <strong className="text-white"> 트로이아르케 CRM 어드민 </strong>
+            프로그램을 실행해주세요.
+          </p>
+          <button
+            onClick={() => navigate('/login')}
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            지점 로그인으로 이동
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

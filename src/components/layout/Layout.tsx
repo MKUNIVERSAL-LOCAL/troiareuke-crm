@@ -7,15 +7,41 @@ import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
+import { BLOCK_STAFF_UI } from '../../lib/buildTarget';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { programName } = useCrmBrand(user?.shopName);
 
   useEffect(() => {
     document.title = programName;
   }, [programName]);
+
+  // 프로그램 분리: 어드민 전용 exe에서는 지점(일반 CRM) 화면을 표시하지 않는다
+  if (BLOCK_STAFF_UI) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-4">
+          <div className="w-14 h-14 bg-[#1a3a8f] rounded-2xl flex items-center justify-center mx-auto">
+            <span className="text-white text-xl font-black">T</span>
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">관리자 전용 프로그램입니다</h1>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            이 프로그램은 관리자 콘솔 전용입니다. 지점 업무는
+            <strong className="text-gray-900"> 트로이아르케 CRM </strong>
+            프로그램을 사용해주세요.
+          </p>
+          <button
+            onClick={async () => { await logout(); window.location.hash = '#/admin/login'; window.location.reload(); }}
+            className="px-5 py-2.5 bg-[#1a3a8f] hover:bg-[#0d2260] text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            관리자 로그인으로 돌아가기
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">

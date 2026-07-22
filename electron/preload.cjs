@@ -5,6 +5,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   isElectron: true,
+  // 어드민 전용 빌드 여부 — 렌더러가 프로그램(빌드) 단위로 화면을 분리할 수 있게 전달
+  isAdminBuild: (() => { try { return require('../package.json').adminBuild === true; } catch { return false; } })(),
 
   // ── 앱 버전 조회 ──
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
