@@ -139,7 +139,7 @@ async function analyzeWithGemini(apiKey: string, dataUrl: string): Promise<SkinA
 export async function analyzeSkinPhoto(dataUrl: string): Promise<SkinAnalysisResult> {
   const { openai, gemini } = getKeys();
   if (!openai && !gemini) {
-    return { available: false, reason: 'AI 비전 키가 설정되지 않았습니다. (AI 챗봇 설정에서 OpenAI 또는 Gemini 키 입력)' };
+    return { available: false, reason: 'AI 비전 키가 설정되지 않았습니다. (설정 > 연동 설정 > AI 피부분석에서 OpenAI 또는 Gemini 키 입력)' };
   }
   const errors: string[] = [];
   if (openai) {

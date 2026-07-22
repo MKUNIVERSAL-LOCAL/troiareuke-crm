@@ -9,6 +9,11 @@ const EVENT = 'feature-flags-changed';
 // 오픈 시 이 한 줄만 true로 바꾸면 챗봇이 활성화된다.
 export const AI_CHAT_ENABLED = false;
 
+// 구독 실결제 런치 게이트. 실 PG(포트원) 계약·검수 완료 전까지 false.
+// false면 설정>구독의 유료 플랜 "결제하기" 버튼이 "준비 중"으로 비활성화된다.
+// (현재 payment.ts는 테스트 PG라 결제해도 실청구 없이 '유료 활성' 기록만 생기는 문제 방지)
+export const PAYMENT_ENABLED = false;
+
 export function isBeaconConsultationEnabled(): boolean {
   try {
     return localStorage.getItem(BEACON_KEY) === '1';

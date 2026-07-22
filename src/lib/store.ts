@@ -14,6 +14,7 @@ import type {
 } from '../types';
 
 import { supabase, isSupabaseConfigured } from './supabase';
+import { isNasDataConfigured, nasLoad, nasUpsert, nasUpdate, nasDelete, nasBulkUpsert } from './nasData';
 
 // ─── 오프라인 배너용 동기화 타임스탬프 ────────────────────────
 // OfflineBanner.tsx의 recordSyncTimestamp와 동일 키를 직접 기록
@@ -132,6 +133,7 @@ function toDbCustomer(c: Partial<Customer>): Record<string, any> {
   if (c.name !== undefined) db.name = c.name;
   if (c.phone !== undefined) db.phone = c.phone;
   if (c.email !== undefined) db.email = c.email;
+  if (c.address !== undefined) db.address = c.address;
   if (c.birthDate !== undefined) db.birth_date = c.birthDate;
   if (c.gender !== undefined) db.gender = c.gender;
   if (c.grade !== undefined) db.grade = c.grade;
@@ -155,6 +157,7 @@ function fromDbCustomer(row: Record<string, any>): Customer {
     name: row.name,
     phone: row.phone || '',
     email: row.email,
+    address: row.address,
     birthDate: row.birth_date,
     gender: row.gender || '미입력',
     grade: row.grade || '일반',
@@ -608,10 +611,45 @@ let _initPromise: Promise<void> | null = null;
 let _initialized = false;
 
 // ─── Supabase 데이터 로드 함수들 ────────────────────────────────
+// NAS 최초 전환 시 localStorage 데이터를 서버로 1회 이관하기 위한
+// 테이블 ↔ 로컬 키 ↔ 직렬화 매핑 (로컬 키는 shopKey() 규칙과 일치해야 함)
+const NAS_LOCAL_KEYS: Record<string, { localKey: string; toDb: (row: any) => Record<string, any> }> = {
+  customers: { localKey: 'customers', toDb: toDbCustomer },
+  programs: { localKey: 'programs', toDb: toDbProgram },
+  customer_programs: { localKey: 'customer_programs', toDb: toDbCustomerProgram },
+  treatment_logs: { localKey: 'treatment_logs', toDb: toDbTreatmentLog },
+  products: { localKey: 'products', toDb: toDbProduct },
+  product_sales: { localKey: 'product_sales', toDb: toDbProductSale },
+  payments: { localKey: 'payments', toDb: toDbPayment },
+  staff: { localKey: 'staff', toDb: toDbStaff },
+  services: { localKey: 'services', toDb: toDbService },
+  reservations: { localKey: 'reservations', toDb: toDbReservation },
+  message_templates: { localKey: 'msg_templates', toDb: toDbMessageTemplate },
+  message_history: { localKey: 'msg_history', toDb: toDbMessageHistory },
+};
+
 async function loadFromSupabase<T>(
   table: string,
   fromDb: (row: Record<string, any>) => T,
 ): Promise<T[] | null> {
+  // NAS 중앙 서버가 설정되어 있으면 NAS가 우선 (서버가 지점 스코프 강제)
+  if (isNasDataConfigured) {
+    const rows = await nasLoad(table);
+    if (rows === null) return null;
+    if (rows.length > 0) return rows.map(fromDb);
+    // 서버가 비어 있음 — 기존 로컬 데이터가 있으면 1회 이관 후 로컬을 그대로 사용
+    // (NAS 전환 첫 로그인에서 기존 고객 데이터가 사라져 보이는 것 방지)
+    const spec = NAS_LOCAL_KEYS[table];
+    if (spec) {
+      const local = getList<any>(shopKey(spec.localKey))
+        .filter(r => r?.id && !String(r.id).startsWith('sample_'));
+      if (local.length > 0) {
+        nasBulkUpsert(table, local.map(r => spec.toDb(r)));
+        return local as T[];
+      }
+    }
+    return [];
+  }
   if (!isSupabaseConfigured) return null;
   try {
     const branchId = getShopId();
@@ -636,6 +674,10 @@ async function loadFromSupabase<T>(
 }
 
 async function loadSettingsFromSupabase(): Promise<ShopSettings | null> {
+  if (isNasDataConfigured) {
+    const rows = await nasLoad('shop_settings');
+    return rows && rows.length > 0 ? fromDbSettings(rows[0]) : null;
+  }
   if (!isSupabaseConfigured) return null;
   try {
     const branchId = getShopId();
@@ -657,7 +699,7 @@ export async function initializeStores(): Promise<void> {
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured && !isNasDataConfigured) {
       _initialized = true;
       return;
     }
@@ -736,6 +778,7 @@ export function resetStoreCache(): void {
 
 // ─── Supabase 비동기 쓰기 헬퍼 (fire-and-forget) ───────────────
 function sbInsert(table: string, row: Record<string, any>): void {
+  if (isNasDataConfigured) { nasUpsert(table, row); return; }
   if (!isSupabaseConfigured) return;
   // 슈퍼어드민이면 branch_id를 null로 처리
   const insertRow = isSuperadmin() && row.branch_id === 'superadmin'
@@ -747,6 +790,7 @@ function sbInsert(table: string, row: Record<string, any>): void {
 }
 
 function sbUpdate(table: string, id: string, updates: Record<string, any>): void {
+  if (isNasDataConfigured) { nasUpdate(table, id, updates); return; }
   if (!isSupabaseConfigured) return;
   supabase.from(table).update(updates).eq('id', id).then(({ error }) => {
     if (error) console.error(`[Store] ${table} update 실패:`, error.message);
@@ -754,6 +798,7 @@ function sbUpdate(table: string, id: string, updates: Record<string, any>): void
 }
 
 function sbDelete(table: string, id: string): void {
+  if (isNasDataConfigured) { nasDelete(table, id); return; }
   if (!isSupabaseConfigured) return;
   supabase.from(table).delete().eq('id', id).then(({ error }) => {
     if (error) console.error(`[Store] ${table} delete 실패:`, error.message);
@@ -761,6 +806,7 @@ function sbDelete(table: string, id: string): void {
 }
 
 function sbUpsert(table: string, row: Record<string, any>): void {
+  if (isNasDataConfigured) { nasUpsert(table, row); return; }
   if (!isSupabaseConfigured) return;
   supabase.from(table).upsert(row).then(({ error }) => {
     if (error) console.error(`[Store] ${table} upsert 실패:`, error.message);
@@ -1544,7 +1590,7 @@ export const SettingsStore = {
     _settings = updated;
     safeSetItem(shopKey('settings'), JSON.stringify(updated));
 
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured || isNasDataConfigured) {
       const dbRow = { ...toDbSettings(updated), branch_id: getShopId() };
       sbUpsert('shop_settings', dbRow);
     }

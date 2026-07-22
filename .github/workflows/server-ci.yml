@@ -1,0 +1,65 @@
+name: server-ci
+
+on:
+  push:
+    paths:
+      - 'server/**'
+      - '.github/workflows/server-ci.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - '.github/workflows/server-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: crm_auth
+          POSTGRES_USER: crm_auth
+          POSTGRES_PASSWORD: testpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crm_auth -d crm_auth"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://crm_auth:testpass@localhost:5432/crm_auth
+      PUBLIC_BASE_URL: http://localhost:8787
+      ALLOW_PUBLIC_SIGNUP: 'false'
+      ADMIN_EMAIL: owner@smoke.test
+      ADMIN_PASSWORD: admin-smoke-password-1
+      API_BASE_URL: http://localhost:8787
+      BACKUP_DIR: ${{ github.workspace }}/server/smoke-backup
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Syntax check
+        run: node --check src/server.js
+      - name: Start server
+        run: |
+          node src/server.js > server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8787/health > /dev/null; then
+              echo "server is up"; break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:8787/health
+      - name: Run smoke tests
+        run: node test/smoke.mjs
+      - name: Server log on failure
+        if: failure()
+        run: cat server.log || true

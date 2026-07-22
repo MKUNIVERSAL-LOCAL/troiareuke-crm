@@ -12,6 +12,7 @@
 import type { Consultation, BeaconMetrics } from '../types';
 import { supabase, isSupabaseConfigured } from './supabase';
 import { getShopId, safeSetItem } from './store';
+import { isNasDataConfigured, nasLoad, nasUpsert, nasUpdate, nasDelete } from './nasData';
 
 function genId(): string {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -77,8 +78,17 @@ function fromDbConsultation(row: Record<string, any>): Consultation {
 // ─── 메모리 캐시 ───────────────────────────────────────────────
 let _consultations: Consultation[] | null = null;
 
-/** 앱 시작/고객 진입 시 1회 Supabase 로드 (실패 시 localStorage 유지) */
+/** 앱 시작/고객 진입 시 1회 서버 로드 — NAS 우선, Supabase 폴백 (실패 시 localStorage 유지) */
 export async function loadConsultations(): Promise<void> {
+  // NAS 중앙 서버 모드: crm_records('consultations')에서 로드
+  if (isNasDataConfigured) {
+    const rows = await nasLoad('consultations');
+    if (rows) {
+      _consultations = rows.map(fromDbConsultation);
+      saveList(shopKey('consultations'), _consultations);
+    }
+    return;
+  }
   if (!isSupabaseConfigured) return;
   try {
     const branchId = getShopId();
@@ -99,10 +109,6 @@ export async function loadConsultations(): Promise<void> {
   } catch (e) {
     console.warn('[Consultation] 로드 예외(폴백):', e);
   }
-}
-
-export function resetConsultationCache(): void {
-  _consultations = null;
 }
 
 // ─── 진단 보조 로직 (관리사가 수정 가능한 "제안값") ──────────────
@@ -182,6 +188,10 @@ export const ConsultationStore = {
     const updated = [...all, consultation];
     _consultations = updated;
     saveList(shopKey('consultations'), updated);
+    if (isNasDataConfigured) {
+      nasUpsert('consultations', toDbConsultation(consultation));
+      return consultation;
+    }
     if (isSupabaseConfigured) {
       supabase.from('consultations').insert(toDbConsultation(consultation)).then(({ error }) => {
         if (error) console.warn('[Consultation] insert 실패(로컬 보존):', error.message);
@@ -197,6 +207,10 @@ export const ConsultationStore = {
     all[idx] = { ...all[idx], ...updates };
     _consultations = all;
     saveList(shopKey('consultations'), all);
+    if (isNasDataConfigured) {
+      nasUpdate('consultations', id, toDbConsultation(updates));
+      return all[idx];
+    }
     if (isSupabaseConfigured) {
       supabase.from('consultations').update(toDbConsultation(updates)).eq('id', id).then(({ error }) => {
         if (error) console.warn('[Consultation] update 실패:', error.message);
@@ -209,6 +223,10 @@ export const ConsultationStore = {
     const all = this.getAll().filter(c => c.id !== id);
     _consultations = all;
     saveList(shopKey('consultations'), all);
+    if (isNasDataConfigured) {
+      nasDelete('consultations', id);
+      return;
+    }
     if (isSupabaseConfigured) {
       supabase.from('consultations').delete().eq('id', id).then(({ error }) => {
         if (error) console.warn('[Consultation] delete 실패:', error.message);

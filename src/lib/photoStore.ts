@@ -11,11 +11,112 @@
 //    나머지 UI/호출부는 그대로 재사용 가능 (연동 지점 = 이 파일).
 // ═══════════════════════════════════════════════════════════════
 
+import { apiRequest, isAuthApiConfigured } from './authApi';
+
 const PREFIX = 'troiareuke_photos_';
+
+/** 사진이 NAS에서 갱신됐을 때 발생 (detail: { entityKeys: string[] }) — 필요 시 구독용 */
+const PHOTOS_CHANGED_EVENT = 'crm:photos-changed';
 
 /** 엔티티 키 규칙: `treatment:<logId>`, `customer:<customerId>` 등 */
 function storageKey(entityKey: string): string {
   return `${PREFIX}${entityKey}`;
+}
+
+// ── NAS 동기화 dirty 추적 ─────────────────────────────────────
+// 푸시가 실패한(오프라인 등) 엔티티는 dirty로 표시한다. dirty인 동안에는
+// 서버본이 로컬을 덮어쓰지 못하고(사진 유실 방지), 재푸시로 해소된다.
+const DIRTY_KEY = 'troiareuke_photos_dirty';
+
+function getDirtyKeys(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DIRTY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function setDirty(entityKey: string, dirty: boolean): void {
+  try {
+    const keys = new Set(getDirtyKeys());
+    if (dirty) keys.add(entityKey);
+    else keys.delete(entityKey);
+    localStorage.setItem(DIRTY_KEY, JSON.stringify([...keys]));
+  } catch { /* noop */ }
+}
+
+// NAS 중앙 서버로 사진 백업. 실패 시 dirty로 표시해 다음 sync에서 재푸시.
+function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
+  if (!isAuthApiConfigured) return;
+  apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ photos }),
+  })
+    .then(() => setDirty(entityKey, false))
+    .catch(e => {
+      setDirty(entityKey, true);
+      console.error(`[NAS] 사진 동기화 실패 (${entityKey}):`, e);
+    });
+}
+
+/**
+ * NAS에서 사진을 내려받아 로컬 캐시를 갱신한다 (다른 기기에서 올린 사진 반영).
+ * 규칙:
+ *  - dirty(푸시 실패분 보유) 키 → 로컬이 정본, 서버로 재푸시
+ *  - 서버에 행이 있으면(빈 배열 = 삭제 tombstone 포함) 서버가 정본
+ *  - 서버에 행이 없고 로컬에 사진이 있으면 로컬을 올린다 (최초 마이그레이션)
+ * @returns 로컬 캐시가 바뀌었으면 true
+ */
+export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> {
+  if (!isAuthApiConfigured || entityKeys.length === 0) return false;
+
+  const dirty = new Set(getDirtyKeys());
+  for (const key of entityKeys) {
+    if (dirty.has(key)) pushToNas(key, getPhotos(key));
+  }
+  const cleanKeys = entityKeys.filter(k => !dirty.has(k));
+  if (cleanKeys.length === 0) return false;
+
+  let changed = false;
+  const changedKeys: string[] = [];
+
+  // 배치 조회 (500키 단위) — 시술기록 수백 건에서 왕복 폭주 방지
+  for (let i = 0; i < cleanKeys.length; i += 500) {
+    const chunk = cleanKeys.slice(i, i + 500);
+    let entries: Record<string, PhotoEntry[]>;
+    try {
+      const response = await apiRequest<{ entries: Record<string, PhotoEntry[]> }>(
+        '/api/photos/batch',
+        { method: 'POST', body: JSON.stringify({ keys: chunk }) },
+      );
+      entries = response.entries;
+    } catch {
+      continue; // 네트워크 실패 — 로컬 캐시 그대로 사용
+    }
+
+    for (const entityKey of chunk) {
+      const remote = entries[entityKey]; // undefined = 서버에 행 없음
+      const local = getPhotos(entityKey);
+      if (remote !== undefined) {
+        if (JSON.stringify(remote) !== JSON.stringify(local)) {
+          try {
+            if (remote.length === 0) localStorage.removeItem(storageKey(entityKey));
+            else localStorage.setItem(storageKey(entityKey), JSON.stringify(remote));
+            changed = true;
+            changedKeys.push(entityKey);
+          } catch { /* 로컬 캐시 용량 초과 — 서버본은 남아 있으므로 무시 */ }
+        }
+      } else if (local.length > 0) {
+        pushToNas(entityKey, local);
+      }
+    }
+  }
+
+  if (changed) {
+    window.dispatchEvent(new CustomEvent(PHOTOS_CHANGED_EVENT, { detail: { entityKeys: changedKeys } }));
+  }
+  return changed;
 }
 
 /** 해당 엔티티에 저장된 사진(base64 data URL) 목록 반환 */
@@ -30,7 +131,7 @@ export function getPhotos(entityKey: string): PhotoEntry[] {
   }
 }
 
-/** 사진 목록 저장(덮어쓰기) */
+/** 사진 목록 저장(덮어쓰기) — NAS 설정 시 서버에도 백업 */
 export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
   try {
     if (photos.length === 0) {
@@ -40,27 +141,17 @@ export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
     }
   } catch (e) {
     // 용량 초과(QuotaExceeded) 등 — 조용히 실패하지 않고 상위에서 처리하도록 throw
+    // (NAS 백업은 아래에서 계속 시도)
+    pushToNas(entityKey, photos);
     throw e;
   }
+  pushToNas(entityKey, photos);
 }
 
-/** 사진 1장 추가 후 갱신된 목록 반환 */
-export function addPhoto(entityKey: string, photo: PhotoEntry): PhotoEntry[] {
-  const next = [...getPhotos(entityKey), photo];
-  setPhotos(entityKey, next);
-  return next;
-}
-
-/** 특정 사진 삭제 후 갱신된 목록 반환 */
-export function removePhoto(entityKey: string, photoId: string): PhotoEntry[] {
-  const next = getPhotos(entityKey).filter(p => p.id !== photoId);
-  setPhotos(entityKey, next);
-  return next;
-}
-
-/** 엔티티의 모든 사진 삭제 (레코드 삭제 시 정리용) */
+/** 엔티티의 모든 사진 삭제 (레코드 삭제 시 정리용) — NAS에서도 삭제 */
 export function clearPhotos(entityKey: string): void {
   try { localStorage.removeItem(storageKey(entityKey)); } catch { /* noop */ }
+  pushToNas(entityKey, []);
 }
 
 export interface PhotoEntry {

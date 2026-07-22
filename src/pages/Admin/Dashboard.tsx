@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
-import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle } from 'lucide-react';
+import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle, DatabaseBackup } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { isAuthApiConfigured, adminListUsers, apiRequest } from '../../lib/authApi';
 import { getLocalLogs } from '../../lib/loginLog';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -38,7 +39,34 @@ export default function AdminDashboard() {
   async function loadStats() {
     setLoading(true);
     try {
-      if (isSupabaseConfigured) {
+      if (isAuthApiConfigured) {
+        // NAS 중앙 서버 모드: 계정 목록에서 지점/사용자 집계 (로그인 로그는 이 기기 기준)
+        let totalBranches = 0, activeBranches = 0, totalUsers = 0;
+        try {
+          const users = await adminListUsers();
+          const nonAdmin = users.filter(u => u.role !== 'superadmin');
+          totalUsers = nonAdmin.length;
+          const byBranch = new Map<string, boolean>();
+          for (const u of nonAdmin) {
+            const bid = u.branchId || u.id;
+            byBranch.set(bid, (byBranch.get(bid) ?? false) || u.isActive !== false);
+          }
+          totalBranches = byBranch.size;
+          activeBranches = [...byBranch.values()].filter(Boolean).length;
+        } catch (e: any) {
+          console.warn('[AdminDashboard] NAS 계정 집계 실패:', e?.message);
+        }
+        const logs = getLocalLogs();
+        // "오늘"은 로컬(KST) 기준 — UTC 문자열 prefix 비교는 00~09시에 전날로 어긋남
+        const todayLocal = new Date().toDateString();
+        setStats({
+          totalBranches,
+          activeBranches,
+          totalUsers,
+          todayLogins: logs.filter(l => new Date(l.logged_in_at).toDateString() === todayLocal).length,
+          recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
+        });
+      } else if (isSupabaseConfigured) {
         const today = new Date().toISOString().split('T')[0];
 
         const [branches, users, allLogs, todayLogs] = await Promise.all([
@@ -74,6 +102,26 @@ export default function AdminDashboard() {
     }
   }
 
+  // NAS 서버 수동 백업 (기존엔 서버 라우트만 있고 UI가 없던 죽은 기능)
+  const [backupState, setBackupState] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [backupMessage, setBackupMessage] = useState('');
+  async function handleBackupNow() {
+    setBackupState('running');
+    try {
+      // 서버 runBackup() 응답 shape: { branches, files, date }
+      const result = await apiRequest<{ branches?: number; files?: number; date?: string }>('/api/admin/backup', { method: 'POST' });
+      setBackupState('done');
+      setBackupMessage(
+        typeof result?.branches === 'number'
+          ? `백업 완료: 지점 ${result.branches}곳, 파일 ${result.files ?? 0}개`
+          : '백업이 완료되었습니다.'
+      );
+    } catch (e: any) {
+      setBackupState('error');
+      setBackupMessage(`백업 실패: ${e?.message || '서버 오류'}`);
+    }
+  }
+
   const statCards = [
     { label: '전체 지점', value: stats.totalBranches, sub: `운영 중 ${stats.activeBranches}개`, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },
     { label: '등록 사용자', value: stats.totalUsers, sub: '전체 지점 합계', icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
@@ -84,9 +132,26 @@ export default function AdminDashboard() {
   return (
     <div className="p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">관리자 대시보드</h1>
-        <p className="text-slate-400 text-sm mt-1">전체 지점 현황을 한눈에 확인하세요</p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">관리자 대시보드</h1>
+          <p className="text-slate-400 text-sm mt-1">전체 지점 현황을 한눈에 확인하세요</p>
+        </div>
+        {isAuthApiConfigured && (
+          <div className="text-right">
+            <button
+              onClick={handleBackupNow}
+              disabled={backupState === 'running'}
+              className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+            >
+              <DatabaseBackup size={15} />
+              {backupState === 'running' ? '백업 중...' : '지금 서버 백업'}
+            </button>
+            {backupMessage && (
+              <p className={`text-[11px] mt-1.5 ${backupState === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{backupMessage}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -114,7 +179,10 @@ export default function AdminDashboard() {
           {/* Recent Login Logs */}
           <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-white">최근 로그인 기록</h2>
+              <h2 className="text-sm font-bold text-white">
+                최근 로그인 기록
+                {!isSupabaseConfigured && <span className="ml-2 text-[11px] font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
+              </h2>
               <a href="/admin/login-logs" className="text-xs text-blue-400 hover:text-blue-300">전체 보기 →</a>
             </div>
             <div className="overflow-x-auto">

@@ -150,7 +150,7 @@ export default function MobileTabBar() {
                   <span className="text-white text-sm font-bold">{(user?.name ?? 'U')[0]}</span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{user?.shopName}</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">{user?.shopName || '샵 정보 미설정'}</p>
                   <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                 </div>
                 {user?.role && (

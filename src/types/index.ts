@@ -15,6 +15,7 @@ export interface Customer {
   name: string;
   phone: string;
   email?: string;
+  address?: string;
   birthDate?: string;
   gender: Gender;
   grade: CustomerGrade;

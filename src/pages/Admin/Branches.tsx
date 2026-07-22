@@ -1,7 +1,12 @@
 ﻿import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
-import { createBranchAdmin } from '../../lib/adminApi';
+import { createBranchAdmin, type AdminApiResult } from '../../lib/adminApi';
+import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
+
+// NAS 모드에서는 지점의 진실이 서버 계정(auth_users)의 branch_id/branch_name이다.
+// 기존처럼 localStorage를 읽으면 기기마다 목록이 달라지는 문제가 있어 서버에서 파생한다.
+const NAS_MODE = isAuthApiConfigured;
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -37,15 +42,47 @@ export default function Branches() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [adminPending, setAdminPending] = useState(false);
+  const [adminNotice, setAdminNotice] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   useEffect(() => { loadBranches(); }, []);
 
+  const [nasUsersByBranch, setNasUsersByBranch] = useState<Record<string, AuthApiUser[]>>({});
+
   async function loadBranches() {
     setLoading(true);
-    if (isSupabaseConfigured) {
-      const { data } = await supabase.from('branches').select('*').order('created_at', { ascending: false });
+    if (NAS_MODE) {
+      // 서버 계정 목록에서 지점 파생 (Users 화면과 같은 소스 → 두 화면 목록 일치)
+      try {
+        const users = await adminListUsers();
+        const map: Record<string, AuthApiUser[]> = {};
+        for (const u of users.filter(u => u.role !== 'superadmin')) {
+          const bid = u.branchId || u.id;
+          (map[bid] ||= []).push(u);
+        }
+        setNasUsersByBranch(map);
+        setBranches(Object.entries(map).map(([bid, us]) => {
+          const primary = us.find(u => u.role === 'admin') || us[0];
+          return {
+            id: bid,
+            name: primary.branchName || primary.shopName || primary.email,
+            address: primary.shopAddress || '',
+            phone: primary.shopPhone || '',
+            shop_type: primary.shopType || '',
+            plan: primary.plan,
+            trial_ends_at: primary.trialEndsAt,
+            is_active: us.some(u => u.isActive !== false),
+            created_at: primary.createdAt,
+          } as Branch;
+        }).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')));
+      } catch (e: any) {
+        console.warn('[Branches] NAS 계정 목록 로드 실패:', e?.message);
+        setBranches([]);
+      }
+    } else if (isSupabaseConfigured) {
+      const { data, error } = await supabase.from('branches').select('*').order('created_at', { ascending: false });
+      if (error) console.warn('[Branches] 로드 실패:', error.message);
       setBranches(data || []);
     } else {
       // 로컬 폴백: localStorage에서 지점 목록 읽기
@@ -61,12 +98,31 @@ export default function Branches() {
     setEditTarget(null);
     setForm(emptyForm);
     setError('');
+    setAdminNotice('');
     setShowModal(true);
+  }
+
+  // 계정 발급 결과 반영. 모달을 열어둬야 하면 true를 반환한다.
+  function applyAdminResult(result: AdminApiResult): boolean {
+    if (result.pending) {
+      setAdminPending(true);
+      return true;
+    }
+    if (!result.ok) {
+      setError(`관리자 계정 생성 실패: ${result.reason || '알 수 없는 오류'}`);
+      return true;
+    }
+    if (result.temporaryPassword) {
+      setAdminNotice(`관리자 계정이 생성되었습니다. 임시 비밀번호: ${result.temporaryPassword} — 지금 복사해서 전달하세요. 창을 닫으면 다시 확인할 수 없습니다.`);
+      return true;
+    }
+    return false;
   }
 
   function openEdit(b: Branch) {
     setEditTarget(b);
     setForm({ name: b.name, address: b.address || '', phone: b.phone || '', shop_type: b.shop_type || '', plan: b.plan, admin_email: '' });
+    setAdminNotice('');
     setError('');
     setShowModal(true);
   }
@@ -80,6 +136,40 @@ export default function Branches() {
     let isPending = false;
 
     try {
+      if (NAS_MODE) {
+        if (editTarget) {
+          // 서버에는 지점 엔티티가 없어 계정 단위로만 반영 가능 — 플랜 변경만 서버 적용
+          const users = nasUsersByBranch[editTarget.id] || [];
+          for (const u of users) {
+            if (u.plan !== form.plan) await adminUpdateUser(u.id, { plan: form.plan });
+          }
+          if (form.name.trim() !== editTarget.name) {
+            setAdminNotice('지점명·주소·전화는 해당 지점 관리자가 CRM 설정에서 직접 변경해야 합니다. (플랜 변경은 반영됨)');
+            isPending = true;
+          }
+        } else {
+          // NAS 모드 신규 지점 = 관리자 계정 발급 (계정에 지점 정보가 실림)
+          if (!form.admin_email.trim()) {
+            setError('중앙 서버 모드에서는 관리자 이메일이 필요합니다. 계정 발급으로 지점이 생성됩니다.');
+            setSaving(false);
+            return;
+          }
+          const result = await createBranchAdmin({
+            email: form.admin_email.trim(),
+            branchId: crypto.randomUUID(),
+            branchName: form.name,
+            shopType: form.shop_type,
+            plan: form.plan,
+          });
+          if (applyAdminResult(result)) {
+            isPending = true;
+          }
+        }
+        if (!isPending) setShowModal(false);
+        loadBranches();
+        return;
+      }
+
       if (isSupabaseConfigured) {
         if (editTarget) {
           await supabase.from('branches').update({
@@ -103,11 +193,8 @@ export default function Branches() {
               shopType: form.shop_type,
               plan: form.plan,
             });
-            if (result.pending) {
+            if (applyAdminResult(result)) {
               isPending = true;
-              setAdminPending(true);
-            } else if (!result.ok) {
-              setError(`관리자 계정 생성 실패: ${result.reason || '알 수 없는 오류'}`);
             }
           }
         }
@@ -128,10 +215,18 @@ export default function Branches() {
           };
           localBranches.unshift(newBranch);
 
-          // 관리자 이메일 입력된 경우 — NAS 연동 전임을 표시
+          // 관리자 이메일 입력된 경우 — NAS 연동 시 즉시 발급, 아니면 pending 표시
           if (form.admin_email) {
-            isPending = true;
-            setAdminPending(true);
+            const result = await createBranchAdmin({
+              email: form.admin_email,
+              branchId: newBranch.id,
+              branchName: form.name,
+              shopType: form.shop_type,
+              plan: form.plan,
+            });
+            if (applyAdminResult(result)) {
+              isPending = true;
+            }
           }
         }
         localStorage.setItem('troiareuke_branches', JSON.stringify(localBranches));
@@ -150,8 +245,23 @@ export default function Branches() {
   }
 
   async function handleToggleActive(b: Branch) {
+    if (NAS_MODE) {
+      // 지점 토글 = 해당 지점의 서버 계정 전체 활성/비활성 (기존엔 localStorage만 바꿔 서버 무반영이던 죽은 버튼)
+      const users = nasUsersByBranch[b.id] || [];
+      if (users.length === 0) return;
+      const nextActive = !b.is_active;
+      if (!window.confirm(`${b.name} 지점의 계정 ${users.length}개를 ${nextActive ? '활성화' : '비활성화'}할까요?`)) return;
+      try {
+        for (const u of users) await adminUpdateUser(u.id, { isActive: nextActive });
+      } catch (e: any) {
+        alert(`변경 실패: ${e?.message || '서버 오류'}`);
+      }
+      loadBranches();
+      return;
+    }
     if (isSupabaseConfigured) {
-      await supabase.from('branches').update({ is_active: !b.is_active }).eq('id', b.id);
+      const { error } = await supabase.from('branches').update({ is_active: !b.is_active }).eq('id', b.id);
+      if (error) alert(`변경 실패: ${error.message}`);
     } else {
       const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
       const idx = localBranches.findIndex(x => x.id === b.id);
@@ -348,7 +458,9 @@ export default function Branches() {
                     <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-3">
                       <Info size={13} className="text-amber-500 mt-0.5 shrink-0" />
                       <p className="text-xs text-amber-600 leading-relaxed">
-                        관리자 계정 생성은 NAS 백엔드 연동 후 지원됩니다. 현재는 이메일만 기록되며, 연동 완료 후 일괄 발급합니다.
+                        {isAuthApiConfigured
+                          ? '이메일을 입력하면 중앙 서버에 관리자 계정이 즉시 발급되고 임시 비밀번호가 표시됩니다.'
+                          : '관리자 계정 생성은 중앙 서버(NAS) 연동 후 지원됩니다. 미연동 상태에서는 계정이 발급되지 않으니, 연동 후 지점 관리에서 다시 발급해주세요.'}
                       </p>
                     </div>
                   </div>
@@ -361,6 +473,12 @@ export default function Branches() {
                       <p className="text-xs text-blue-400 leading-relaxed">
                         지점이 저장되었습니다. 관리자 계정은 NAS 관리자 API 연동 후 생성됩니다.
                       </p>
+                    </div>
+                  )}
+                  {adminNotice && (
+                    <div className="flex items-start gap-2 px-3 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                      <CheckCircle size={13} className="text-emerald-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-emerald-500 leading-relaxed break-all">{adminNotice}</p>
                     </div>
                   )}
                 </>

@@ -1,5 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import DataBrowser from './DataBrowser';
 import { format, subDays, parseISO, startOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import {
@@ -16,6 +18,8 @@ const PLAN_COLORS: Record<string, string> = {
 };
 
 export default function Statistics() {
+  const [searchParams] = useSearchParams();
+  const isDataView = searchParams.get('view') === 'data';
   const [loading, setLoading] = useState(true);
   const [loginTrend, setLoginTrend] = useState<{ date: string; 성공: number; 실패: number }[]>([]);
   const [planDist, setPlanDist] = useState<{ name: string; value: number; color: string }[]>([]);
@@ -87,6 +91,9 @@ export default function Statistics() {
     setLoading(false);
   }
 
+  // 전체 데이터 조회 탭 (?view=data) — 모든 훅 선언 이후에 분기해야 훅 순서가 유지됨
+  if (isDataView) return <DataBrowser />;
+
   const statCards = [
     { label: '활성 지점', value: summary.totalBranches, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },
     { label: '전체 사용자', value: summary.totalUsers, icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
@@ -104,6 +111,14 @@ export default function Statistics() {
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : !isSupabaseConfigured ? (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-8 text-center">
+          <p className="text-amber-200 font-bold text-sm">이 통계 화면은 Supabase 백엔드 전용입니다</p>
+          <p className="text-slate-400 text-sm mt-2">
+            중앙 서버(NAS) 모드에서는 사이드바의 <strong className="text-white">전체 데이터</strong> 메뉴에서
+            지점별 실데이터와 현황을 확인할 수 있습니다.
+          </p>
         </div>
       ) : (
         <>

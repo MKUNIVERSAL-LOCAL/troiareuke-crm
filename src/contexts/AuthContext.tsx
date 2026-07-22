@@ -34,8 +34,10 @@ export interface AuthUser {
 interface SignupData {
   email: string;
   password: string;
-  name: string;
+  name: string; // 가입 화면에서는 샵명을 받는다 (계정 표시명 겸용)
   phone: string;
+  businessNumber?: string; // 사업자등록번호 (000-00-00000)
+  businessLicenseImage?: string; // 사업자등록증 사진 (data URL)
 }
 
 interface AuthContextType {
@@ -86,13 +88,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isAuthApiConfigured) {
       const timeout = setTimeout(() => setIsLoading(false), 5000);
       restoreAuthApiSession()
-        .then(profile => {
-          if (profile) {
-            saveUser(profile);
-          } else {
+        .then(result => {
+          if (result.status === 'ok') {
+            saveUser(result.user);
+          } else if (result.status === 'unauthenticated') {
             setUser(null);
             localStorage.removeItem(STORAGE_KEY);
           }
+          // 'offline': 서버 미접속 — 위에서 복원한 캐시 세션 유지 (강제 로그아웃 금지)
         })
         .finally(() => {
           clearTimeout(timeout);
@@ -265,7 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
-        options: { data: { name: data.name, phone: data.phone } },
+        options: { data: { name: data.name, phone: data.phone, business_number: data.businessNumber || null } },
       });
       if (error) throw new Error(error.message);
 
