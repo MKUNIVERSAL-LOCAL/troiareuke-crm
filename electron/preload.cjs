@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 어드민 전용 빌드 여부 — 렌더러가 프로그램(빌드) 단위로 화면을 분리할 수 있게 전달
   // (⚠️ sandbox된 preload에서는 require('../package.json')이 불가 — 메인 프로세스에 동기 질의)
   isAdminBuild: (() => { try { return ipcRenderer.sendSync('get-admin-build-flag') === true; } catch { return false; } })(),
+  // 포터블 단일 exe로 실행 중인지 — 이 경우에만 자기교체(자동 업데이트 적용)가 가능하다.
+  // 풀린 폴더 형태 실행본에서 업데이트 배너를 띄우면 재시작해도 적용이 안 되는 함정 방지.
+  isPortable: (() => { try { return Boolean(process.env.PORTABLE_EXECUTABLE_FILE); } catch { return false; } })(),
 
   // ── 앱 버전 조회 ──
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

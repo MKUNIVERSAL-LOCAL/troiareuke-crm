@@ -26,8 +26,9 @@ export default function UpdateBanner() {
   const api = (window as any).electronAPI;
 
   useEffect(() => {
-    // Electron 앱이 아니면 아무것도 안 함
-    if (!api?.isElectron) return;
+    // Electron 앱이 아니거나, 자기교체가 불가능한(포터블이 아닌) 실행 형태면 업데이트 UI를 띄우지 않는다.
+    // (풀린 폴더 실행본은 [지금 재시작]을 눌러도 적용이 안 되는 함정 — 해당 배포본은 수동 관리)
+    if (!api?.isElectron || !api?.isPortable) return;
 
     api.onUpdateAvailable((info: UpdateInfo) => {
       setUpdateInfo(info);
@@ -64,7 +65,7 @@ export default function UpdateBanner() {
   }, []);
 
   // 배너가 필요없는 상태
-  if (!api?.isElectron || state === 'idle' || dismissed) return null;
+  if (!api?.isElectron || !api?.isPortable || state === 'idle' || dismissed) return null;
 
   const handleInstall = () => {
     api.installUpdate();
