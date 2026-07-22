@@ -4,7 +4,7 @@ import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
-import { SettingsStore, ServiceStore } from '../../lib/store';
+import { SettingsStore, ServiceStore, getShopId } from '../../lib/store';
 import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
@@ -13,6 +13,65 @@ import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, PAYMENT_ENAB
 import clsx from 'clsx';
 
 const GOOGLE_OAUTH_READY = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim());
+const NAS_CONFIGURED = Boolean((import.meta.env.VITE_AUTH_API_URL as string | undefined)?.trim());
+
+// ─── 기존 계정(다른 지점 ID) 로컬 데이터 이관 ─────────────────────────
+// Supabase 베타 계정으로 쌓은 데이터는 crm_{옛지점ID}_* 키에 있어, 새 NAS 계정
+// (새 지점 ID)으로 로그인하면 보이지 않는다. 옛 키를 현재 지점 키로 복사해두면
+// 다음 실행 때 코어의 NAS 1회 이관 로직이 서버(NAS)로 밀어올린다.
+interface LegacyShopData { shopId: string; customerCount: number; keyCount: number }
+
+function findLegacyShopData(currentShopId: string): LegacyShopData[] {
+  const found = new Map<string, { customerCount: number; keyCount: number }>();
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key) continue;
+    const m = key.match(/^crm_(.+?)_([a-z_]+)$/);
+    if (!m || m[1] === currentShopId || m[1] === 'superadmin') continue;
+    const entry = found.get(m[1]) || { customerCount: 0, keyCount: 0 };
+    entry.keyCount++;
+    if (m[2] === 'customers') {
+      try {
+        const list = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(list)) {
+          entry.customerCount = list.filter((c: any) => c?.id && !String(c.id).startsWith('sample_')).length;
+        }
+      } catch { /* noop */ }
+    }
+    found.set(m[1], entry);
+  }
+  return [...found.entries()]
+    .map(([shopId, v]) => ({ shopId, ...v }))
+    .filter(s => s.customerCount > 0)
+    .sort((a, b) => b.customerCount - a.customerCount);
+}
+
+/** 옛 지점 키 → 현재 지점 키 복사 (현재 쪽에 이미 데이터가 있는 키는 건너뜀). 복사한 키 수 반환 */
+function importLegacyShopData(fromShopId: string, toShopId: string): number {
+  const prefix = `crm_${fromShopId}_`;
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(prefix)) keys.push(key);
+  }
+  let copied = 0;
+  for (const key of keys) {
+    const target = `crm_${toShopId}_${key.slice(prefix.length)}`;
+    let targetEmpty = true;
+    try {
+      const existing = localStorage.getItem(target);
+      const parsed = existing ? JSON.parse(existing) : null;
+      targetEmpty = parsed === null || (Array.isArray(parsed) && parsed.length === 0);
+    } catch { targetEmpty = false; }
+    if (!targetEmpty) continue; // 현재 계정 데이터를 절대 덮어쓰지 않음
+    const value = localStorage.getItem(key);
+    if (value !== null) {
+      localStorage.setItem(target, value);
+      copied++;
+    }
+  }
+  return copied;
+}
 
 type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup';
 
@@ -418,6 +477,23 @@ export default function Settings() {
   const handleSmsSave = () => {
     SettingsStore.save({ smsApiKey: settings.smsApiKey, smsCallerId: settings.smsCallerId });
     flash();
+  };
+
+  // ─── 기존 계정 데이터 이관 (베타 → NAS 컷오버) ───────────────
+  const [legacyCandidates] = useState<LegacyShopData[]>(() => {
+    try { return findLegacyShopData(getShopId()); } catch { return []; }
+  });
+  const handleLegacyImport = (candidate: LegacyShopData) => {
+    const current = getShopId();
+    if (!window.confirm(
+      `이 컴퓨터에 저장된 기존 계정 데이터(고객 ${candidate.customerCount}명 포함)를\n` +
+      `현재 계정으로 가져올까요?\n\n` +
+      `가져온 데이터는 중앙 서버(NAS)에 자동 저장됩니다.\n` +
+      `현재 계정에 이미 있는 항목은 덮어쓰지 않습니다.`
+    )) return;
+    const copied = importLegacyShopData(candidate.shopId, current);
+    alert(`${copied}개 항목을 가져왔습니다.\n프로그램을 다시 시작하면 중앙 서버 저장이 시작됩니다.`);
+    window.location.reload();
   };
 
   // ─── AI 분석 키 (피부분석·AI챗봇 공유) ──────────────────────
@@ -1202,6 +1278,35 @@ export default function Settings() {
 
             {tab === 'backup' && (
               <div className="space-y-4">
+                {NAS_CONFIGURED && legacyCandidates.length > 0 && (
+                  <SettingCard title="기존 계정 데이터 가져오기 (중앙 서버 이관)">
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
+                        <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+                        <span>
+                          이 컴퓨터에 이전 계정으로 사용하던 데이터가 남아 있습니다. 아래 버튼을
+                          누르면 현재 계정으로 가져오고, 중앙 서버(NAS)에 자동 저장되어 다른
+                          기기에서도 볼 수 있게 됩니다.
+                        </span>
+                      </div>
+                      {legacyCandidates.map(c => (
+                        <div key={c.shopId} className="flex items-center justify-between gap-3 p-3 border border-gray-200 rounded-xl">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-800">고객 {c.customerCount}명 · 데이터 {c.keyCount}종</p>
+                            <p className="text-[11px] text-gray-400 font-mono truncate">이전 지점 ID: {c.shopId}</p>
+                          </div>
+                          <button
+                            onClick={() => handleLegacyImport(c)}
+                            className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#0d2260] transition-colors"
+                          >
+                            가져오기
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </SettingCard>
+                )}
+
                 <SettingCard title="데이터 내보내기 (엑셀 다운로드)">
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">
