@@ -16,7 +16,7 @@ function resolveShopName(fallbackShopName?: string): string {
   return cleanShopName(fallbackShopName);
 }
 
-export function formatCrmProgramName(shopName?: string | null): string {
+function formatCrmProgramName(shopName?: string | null): string {
   const cleaned = cleanShopName(shopName);
   return cleaned ? `${cleaned} CRM` : DEFAULT_PROGRAM_NAME;
 }
