@@ -1,6 +1,6 @@
-﻿{
+{
   "name": "troiareuke-crm",
-  "productName": "?몃줈?댁븘瑜댁? CRM",
+  "productName": "트로이아르케 CRM",
   "private": true,
   "version": "1.0.30",
   "type": "module",
@@ -16,7 +16,7 @@
     "electron:installer": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis",
     "electron:build:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir",
     "electron:build:admin:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir --config electron-builder.admin.cjs",
-    "electron:zip": "npm run electron:build:dir && powershell -Command \"Remove-Item -Path 'release\\?몃줈?댁븘瑜댁?-CRM.zip' -ErrorAction SilentlyContinue; Compress-Archive -Path 'release\\win-unpacked\\*' -DestinationPath 'release\\?몃줈?댁븘瑜댁?-CRM.zip'; Write-Host '??ZIP ?꾨즺: release/?몃줈?댁븘瑜댁?-CRM.zip'\"",
+    "electron:zip": "npm run electron:build:dir && powershell -Command \"Remove-Item -Path 'release\\트로이아르케-CRM.zip' -ErrorAction SilentlyContinue; Compress-Archive -Path 'release\\win-unpacked\\*' -DestinationPath 'release\\트로이아르케-CRM.zip'; Write-Host '✅ ZIP 완료: release/트로이아르케-CRM.zip'\"",
     "electron:release": "npm run build && electron-builder --win --publish always",
     "release:stage": "node scripts/stage-nas-update.mjs",
     "release:nas": "npm run electron:installer && npm run release:stage",
@@ -56,8 +56,8 @@
   },
   "build": {
     "appId": "com.troiareuke.crm",
-    "productName": "?몃줈?댁븘瑜댁? CRM",
-    "copyright": "Copyright 짤 2024 TROIAREUKE",
+    "productName": "트로이아르케 CRM",
+    "copyright": "Copyright © 2024 TROIAREUKE",
     "publish": {
       "provider": "generic",
       "url": "https://crm-update.mkcorp.familyds.com"
@@ -93,14 +93,14 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "?몃줈?댁븘瑜댁? CRM",
+      "shortcutName": "트로이아르케 CRM",
       "installerLanguages": [
         "ko_KR"
       ],
       "language": "1042"
     },
     "portable": {
-      "artifactName": "?몃줈?댁븘瑜댁? CRM.exe",
+      "artifactName": "트로이아르케 CRM.exe",
       "requestExecutionLevel": "user"
     }
   }
