@@ -102,17 +102,8 @@ export default function AdminLayout() {
             })}
           </ul>
 
-          {/* 일반 CRM으로 이동 링크 */}
-          <div className="mt-6">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">바로가기</p>
-            <NavLink
-              to="/"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-all"
-            >
-              <ChevronRight size={15} className="text-slate-500" />
-              <span>CRM 메인으로</span>
-            </NavLink>
-          </div>
+          {/* 'CRM 메인으로' 링크 제거됨 — 슈퍼어드민은 코어 라우팅상 지점 화면 진입이 차단되어
+              무반응 죽은 버튼이었음 (QA④ 지적). 프로그램 분리 방침상 어드민 콘솔에 불필요. */}
         </nav>
 
         {/* Bottom */}
