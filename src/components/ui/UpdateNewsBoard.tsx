@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Megaphone, RefreshCw } from 'lucide-react';
+import bundledHistory from '../../data/releaseHistory';
 
 // 공지 게시판 — 업데이트 채널(NAS)의 누적 릴리스 로그를 사용자가 언제든 확인
 const HISTORY_URL = 'https://crm-update.mkcorp.familyds.com/portable/history.json';
@@ -20,8 +21,12 @@ export default function UpdateNewsBoard() {
     setError(false);
     fetch(`${HISTORY_URL}?t=${Date.now()}`)
       .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then(list => setEntries(Array.isArray(list) ? list : []))
-      .catch(() => setError(true))
+      .then(list => setEntries(Array.isArray(list) && list.length > 0 ? list : bundledHistory))
+      .catch(() => {
+        // 오프라인/차단 환경 — 앱에 내장된 릴리스 로그로 대체 (설치 버전 기준)
+        if (bundledHistory.length > 0) setEntries(bundledHistory);
+        else setError(true);
+      })
       .finally(() => setLoading(false));
   };
 

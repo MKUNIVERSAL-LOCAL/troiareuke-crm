@@ -64,6 +64,25 @@ if (notes && history[0]?.version !== packageJson.version) {
 }
 await fs.writeFile(path.join(stageDir, 'history.json'), `${JSON.stringify(history, null, 2)}\n`, 'utf8');
 
+// 앱 내장 fallback(src/data/releaseHistory.ts)도 함께 갱신 — exe(file://)에서 업데이트 채널이
+// CORS로 차단되어도 공지 게시판이 설치 시점 기준 로그를 표시할 수 있게 한다.
+const bundledPath = path.join(rootDir, 'src', 'data', 'releaseHistory.ts');
+const bundled = [
+  '// ⚠️ 자동 생성 파일 — scripts/prepare-portable-update.mjs가 릴리스 때마다 갱신.',
+  '// 공지 게시판의 오프라인/CORS 차단 시 fallback (서버 응답이 있으면 서버본 우선).',
+  'export interface ReleaseHistoryEntry {',
+  '  version: string;',
+  '  releaseDate?: string;',
+  '  notes?: string;',
+  '}',
+  '',
+  `const releaseHistory: ReleaseHistoryEntry[] = ${JSON.stringify(history, null, 2)};`,
+  '',
+  'export default releaseHistory;',
+  '',
+].join('\n');
+await fs.writeFile(bundledPath, bundled, 'utf8');
+
 const nasRoot = process.env.NAS_UPDATE_DIR;
 if (nasRoot) {
   const targetDir = path.join(nasRoot, 'portable');
