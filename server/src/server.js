@@ -11,11 +11,13 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
-const PORT = Number(process.env.PORT || 8787);
+const PORT = envInteger('PORT', 8787, 1, 65535);
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
-const SESSION_DAYS = Number(process.env.SESSION_DAYS || 30);
-const RESET_TOKEN_MINUTES = Number(process.env.RESET_TOKEN_MINUTES || 30);
+const SESSION_DAYS = envInteger('SESSION_DAYS', 30, 1, 365);
+const RESET_TOKEN_MINUTES = envInteger('RESET_TOKEN_MINUTES', 30, 5, 1440);
+const MAX_TEXT_LENGTH = 10_000;
+const MAX_ID_LENGTH = 200;
 // 상용 배포 기본값: 관리자 발급 계정만 허용 (공개 가입 차단)
 const ALLOW_PUBLIC_SIGNUP = String(process.env.ALLOW_PUBLIC_SIGNUP || 'false').toLowerCase() === 'true';
 const BOOTSTRAP_ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
@@ -30,7 +32,51 @@ const allowedOrigins = new Set(
 if (!DATABASE_URL) throw new Error('DATABASE_URL is required');
 if (!PUBLIC_BASE_URL) throw new Error('PUBLIC_BASE_URL is required');
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  max: envInteger('PG_POOL_MAX', 10, 1, 50),
+  connectionTimeoutMillis: envInteger('PG_CONNECT_TIMEOUT_MS', 5000, 1000, 60_000),
+  idleTimeoutMillis: envInteger('PG_IDLE_TIMEOUT_MS', 30_000, 1000, 300_000),
+  query_timeout: envInteger('PG_QUERY_TIMEOUT_MS', 60_000, 1000, 600_000),
+});
+
+function log(level, event, details = {}) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    level,
+    event,
+    ...details,
+  };
+  const output = JSON.stringify(payload);
+  if (level === 'error') console.error(output);
+  else if (level === 'warn') console.warn(output);
+  else console.log(output);
+}
+
+function envInteger(name, fallback, min, max) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    console.warn(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'warn',
+      event: 'invalid_environment_value',
+      name,
+      fallback,
+    }));
+    return fallback;
+  }
+  return parsed;
+}
+
+function errorDetails(error) {
+  return {
+    errorName: error?.name || 'Error',
+    errorMessage: error?.message || String(error),
+    ...(error?.code ? { errorCode: error.code } : {}),
+  };
+}
 
 const smtp = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -39,6 +85,9 @@ const smtp = nodemailer.createTransport({
   auth: process.env.SMTP_USER
     ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
     : undefined,
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 20_000,
 });
 
 const app = express();
@@ -63,6 +112,12 @@ app.use(cors({
 // 데이터 동기화(고객 엑셀 대량 업로드)와 시술 사진(base64)은 커질 수 있다
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: false, limit: '32kb' }));
+app.use((req, res, next) => {
+  req.requestId = req.get('x-request-id')?.slice(0, 100) || crypto.randomUUID();
+  res.set('x-request-id', req.requestId);
+  if (req.body === undefined) req.body = {};
+  next();
+});
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
 const resetLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false });
@@ -77,6 +132,24 @@ function isEmail(value) {
 
 function isStrongPassword(value) {
   return typeof value === 'string' && value.length >= 8 && value.length <= 128;
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
+
+function isValidId(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_ID_LENGTH;
+}
+
+function isValidBranchId(value) {
+  return isValidId(value) && /^[a-z0-9._:-]+$/i.test(value);
+}
+
+function isValidText(value, { required = false, max = MAX_TEXT_LENGTH } = {}) {
+  if (value === undefined || value === null) return !required;
+  if (typeof value !== 'string' || value.length > max) return false;
+  return !required || value.trim().length > 0;
 }
 
 function tokenHash(token) {
@@ -108,7 +181,6 @@ function publicUser(row) {
 // 데이터 스코프: 온보딩 전에는 user.id, 온보딩 후에는 branch_id.
 // 클라이언트 getShopId()의 `branchId || user.id` 규칙과 반드시 일치해야 한다.
 function branchScopeOf(user) {
-  if (user.role === 'superadmin') return 'superadmin';
   return user.branch_id || user.id;
 }
 
@@ -153,6 +225,7 @@ async function initializeDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions(user_id);
+    CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions(expires_at);
     CREATE INDEX IF NOT EXISTS password_reset_user_idx ON password_reset_tokens(user_id);
     CREATE INDEX IF NOT EXISTS password_reset_expiry_idx ON password_reset_tokens(expires_at);
 
@@ -172,6 +245,8 @@ async function initializeDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS crm_records_collection_idx ON crm_records(collection, updated_at);
+    CREATE INDEX IF NOT EXISTS crm_records_branch_collection_updated_idx
+      ON crm_records(branch_id, collection, updated_at DESC);
 
     CREATE TABLE IF NOT EXISTS message_send_log (
       id uuid PRIMARY KEY,
@@ -186,6 +261,8 @@ async function initializeDatabase() {
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS message_send_log_branch_idx ON message_send_log(branch_id, created_at);
+    CREATE INDEX IF NOT EXISTS message_send_log_reminder_idx
+      ON message_send_log(branch_id, type, status, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS scheduled_messages (
       id uuid PRIMARY KEY,
@@ -201,6 +278,8 @@ async function initializeDatabase() {
       created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS scheduled_messages_due_idx ON scheduled_messages(status, send_at);
+    CREATE INDEX IF NOT EXISTS scheduled_messages_branch_send_idx
+      ON scheduled_messages(branch_id, send_at DESC);
 
     CREATE TABLE IF NOT EXISTS crm_photos (
       branch_id text NOT NULL,
@@ -211,6 +290,15 @@ async function initializeDatabase() {
     );
 
     ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS locked_at timestamptz;
+    ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0;
+    ALTER TABLE message_send_log ADD COLUMN IF NOT EXISTS scheduled_message_id uuid;
+    CREATE INDEX IF NOT EXISTS scheduled_messages_stale_idx
+      ON scheduled_messages(locked_at) WHERE status = 'processing';
+    CREATE INDEX IF NOT EXISTS crm_photos_branch_updated_idx
+      ON crm_photos(branch_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS auth_users_branch_idx ON auth_users(branch_id);
+    CREATE INDEX IF NOT EXISTS message_send_log_scheduled_idx
+      ON message_send_log(scheduled_message_id) WHERE scheduled_message_id IS NOT NULL;
   `);
 }
 
@@ -218,7 +306,7 @@ async function initializeDatabase() {
 async function bootstrapSuperadmin() {
   if (!BOOTSTRAP_ADMIN_EMAIL || !BOOTSTRAP_ADMIN_PASSWORD) return;
   if (!isEmail(BOOTSTRAP_ADMIN_EMAIL) || !isStrongPassword(BOOTSTRAP_ADMIN_PASSWORD)) {
-    console.warn('ADMIN_EMAIL/ADMIN_PASSWORD 형식이 올바르지 않아 슈퍼어드민 생성을 건너뜁니다.');
+    log('warn', 'bootstrap_admin_skipped', { reason: 'invalid_credentials_format' });
     return;
   }
   const { rows } = await pool.query('SELECT id FROM auth_users WHERE email = $1 LIMIT 1', [BOOTSTRAP_ADMIN_EMAIL]);
@@ -228,7 +316,7 @@ async function bootstrapSuperadmin() {
     INSERT INTO auth_users (id, email, password_hash, name, trial_ends_at, role, plan, is_onboarded)
     VALUES ($1, $2, $3, '총괄 관리자', now() + interval '3650 days', 'superadmin', 'enterprise', true)
   `, [crypto.randomUUID(), BOOTSTRAP_ADMIN_EMAIL, passwordHash]);
-  console.log(`슈퍼어드민 계정 생성됨: ${BOOTSTRAP_ADMIN_EMAIL}`);
+  log('info', 'bootstrap_admin_created');
 }
 
 // 만료 세션·재설정 토큰 정리 (기동 시 + 매일)
@@ -237,14 +325,14 @@ async function cleanupExpired() {
     await pool.query("DELETE FROM password_reset_tokens WHERE expires_at < now() - interval '1 day'");
     await pool.query("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'");
   } catch (error) {
-    console.error('expired cleanup failed', error?.message || error);
+    log('error', 'expired_cleanup_failed', errorDetails(error));
   }
 }
 
-async function createSession(userId) {
+async function createSession(userId, database = pool) {
   const token = crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400000);
-  await pool.query(
+  await database.query(
     'INSERT INTO auth_sessions (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)',
     [crypto.randomUUID(), userId, tokenHash(token), expiresAt],
   );
@@ -269,7 +357,12 @@ async function requireSession(req, res, next) {
 
     req.authUser = rows[0];
     req.authSessionId = rows[0].session_id;
-    pool.query('UPDATE auth_sessions SET last_used_at = now() WHERE id = $1', [req.authSessionId]).catch(() => {});
+    pool.query('UPDATE auth_sessions SET last_used_at = now() WHERE id = $1', [req.authSessionId])
+      .catch(error => log('warn', 'session_touch_failed', {
+        requestId: req.requestId,
+        sessionId: req.authSessionId,
+        ...errorDetails(error),
+      }));
     next();
   } catch (error) {
     next(error);
@@ -329,7 +422,9 @@ async function consumeResetToken(token, password) {
     await client.query('UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [reset.user_id]);
     await client.query('COMMIT');
   } catch (error) {
-    await client.query('ROLLBACK');
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      log('error', 'password_reset_rollback_failed', errorDetails(rollbackError));
+    }
     throw error;
   } finally {
     client.release();
@@ -352,9 +447,10 @@ app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
     }
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
-    const name = String(req.body.name || '').trim(); // 가입 화면에서는 샵명
-    const phone = String(req.body.phone || '').trim();
-    if (!isEmail(email) || !name || !isStrongPassword(password)) {
+    const name = typeof req.body.name === 'string' ? req.body.name.trim() : ''; // 가입 화면에서는 샵명
+    const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
+    if (!isEmail(email) || !isValidText(name, { required: true, max: 200 }) ||
+        !isValidText(phone, { max: 50 }) || !isStrongPassword(password)) {
       return res.status(400).json({ error: '이메일, 샵명, 8자 이상의 비밀번호를 확인해주세요.' });
     }
 
@@ -376,12 +472,26 @@ app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const userId = crypto.randomUUID();
     const trialEndsAt = new Date(Date.now() + 14 * 86400000);
-    const { rows } = await pool.query(`
-      INSERT INTO auth_users (id, email, password_hash, name, phone, shop_name, business_number, business_license_image, trial_ends_at, role)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'admin')
-      RETURNING *
-    `, [userId, email, passwordHash, name, phone || null, name, businessNumber, licenseImage || null, trialEndsAt]);
-    const session = await createSession(userId);
+    const client = await pool.connect();
+    let rows;
+    let session;
+    try {
+      await client.query('BEGIN');
+      ({ rows } = await client.query(`
+        INSERT INTO auth_users (id, email, password_hash, name, phone, shop_name, business_number, business_license_image, trial_ends_at, role)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'admin')
+        RETURNING *
+      `, [userId, email, passwordHash, name, phone || null, name, businessNumber, licenseImage || null, trialEndsAt]));
+      session = await createSession(userId, client);
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (rollbackError) {
+        log('error', 'signup_rollback_failed', errorDetails(rollbackError));
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
     res.status(201).json({ user: publicUser(rows[0]), ...session });
   } catch (error) {
     if (error?.code === '23505') return res.status(409).json({ error: '이미 가입된 이메일입니다.' });
@@ -393,6 +503,9 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || '');
+    if (!isEmail(email) || !isStrongPassword(password)) {
+      return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+    }
     const { rows } = await pool.query('SELECT * FROM auth_users WHERE email = $1 LIMIT 1', [email]);
     const user = rows[0];
     const valid = user ? await bcrypt.compare(password, user.password_hash) : false;
@@ -412,11 +525,15 @@ app.get('/api/auth/me', requireSession, (req, res) => {
 
 app.patch('/api/auth/profile', requireSession, async (req, res, next) => {
   try {
-    const shopName = String(req.body.shopName || '').trim();
-    const shopType = String(req.body.shopType || '').trim();
-    const shopPhone = String(req.body.shopPhone || '').trim();
-    const shopAddress = String(req.body.shopAddress || '').trim();
-    if (!shopName || !shopType) return res.status(400).json({ error: '매장 이름과 유형을 입력해주세요.' });
+    const shopName = typeof req.body.shopName === 'string' ? req.body.shopName.trim() : '';
+    const shopType = typeof req.body.shopType === 'string' ? req.body.shopType.trim() : '';
+    const shopPhone = typeof req.body.shopPhone === 'string' ? req.body.shopPhone.trim() : '';
+    const shopAddress = typeof req.body.shopAddress === 'string' ? req.body.shopAddress.trim() : '';
+    if (!isValidText(shopName, { required: true, max: 200 }) ||
+        !isValidText(shopType, { required: true, max: 100 }) ||
+        !isValidText(shopPhone, { max: 50 }) || !isValidText(shopAddress, { max: 500 })) {
+      return res.status(400).json({ error: '매장 이름과 유형을 입력해주세요.' });
+    }
     // 온보딩 전 user.id 스코프로 쌓인 데이터가 유실되지 않도록 branch_id는 user.id로 고정
     const branchId = req.authUser.branch_id || req.authUser.id;
     const { rows } = await pool.query(`
@@ -452,13 +569,18 @@ app.get('/api/admin/users', requireSession, requireSuperadmin, async (_req, res,
 app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
-    const name = String(req.body.name || '').trim() || email.split('@')[0];
+    const requestedName = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    const name = requestedName || email.split('@')[0];
     const role = ['admin', 'staff'].includes(req.body.role) ? req.body.role : 'admin';
     const plan = ['trial', 'starter', 'pro', 'enterprise'].includes(req.body.plan) ? req.body.plan : 'trial';
-    const branchName = String(req.body.branchName || '').trim();
-    const shopType = String(req.body.shopType || '').trim();
-    const requestedBranchId = String(req.body.branchId || '').trim();
-    if (!isEmail(email)) return res.status(400).json({ error: '이메일 형식을 확인해주세요.' });
+    const branchName = typeof req.body.branchName === 'string' ? req.body.branchName.trim() : '';
+    const shopType = typeof req.body.shopType === 'string' ? req.body.shopType.trim() : '';
+    const requestedBranchId = typeof req.body.branchId === 'string' ? req.body.branchId.trim() : '';
+    if (!isEmail(email) || !isValidText(name, { required: true, max: 200 }) ||
+        !isValidText(branchName, { max: 200 }) || !isValidText(shopType, { max: 100 }) ||
+        (requestedBranchId && !isValidBranchId(requestedBranchId))) {
+      return res.status(400).json({ error: '이메일 형식을 확인해주세요.' });
+    }
 
     // 비밀번호를 직접 지정하지 않으면 임시 비밀번호를 발급해 1회 응답으로만 알려준다.
     const providedPassword = req.body.password;
@@ -494,7 +616,7 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
 app.post('/api/admin/backup', requireSession, requireSuperadmin, async (_req, res, next) => {
   try {
     if (!BACKUP_DIR) return res.status(400).json({ error: '서버에 BACKUP_DIR가 설정되지 않았습니다.' });
-    const result = await runBackup();
+    const result = await runBackupOnce();
     res.json(result);
   } catch (error) {
     next(error);
@@ -570,17 +692,18 @@ app.get('/api/admin/data/:branchId/:collection', requireSession, requireSuperadm
   try {
     const branchId = String(req.params.branchId || '');
     const collection = String(req.params.collection || '');
-    if (!DATA_COLLECTIONS.has(collection)) {
+    if (!isValidBranchId(branchId) || !DATA_COLLECTIONS.has(collection)) {
       return res.status(404).json({ error: '지원하지 않는 데이터 종류입니다.' });
     }
     const requestedLimit = Number.parseInt(req.query.limit, 10);
     const requestedOffset = Number.parseInt(req.query.offset, 10);
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 50;
-    const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
-    const query = String(req.query.q || '').trim();
-    const values = query ? [branchId, collection, `%${query}%`] : [branchId, collection];
+    const offset = Number.isFinite(requestedOffset) ? Math.min(Math.max(requestedOffset, 0), 1_000_000) : 0;
+    const query = String(req.query.q || '').trim().slice(0, 200);
+    const escapedQuery = query.replace(/[\\%_]/g, '\\$&');
+    const values = query ? [branchId, collection, `%${escapedQuery}%`] : [branchId, collection];
     const where = query
-      ? 'branch_id = $1 AND collection = $2 AND data::text ILIKE $3'
+      ? "branch_id = $1 AND collection = $2 AND data::text ILIKE $3 ESCAPE '\\'"
       : 'branch_id = $1 AND collection = $2';
     const { rows: countRows } = await pool.query(
       `SELECT count(*)::int AS total FROM crm_records WHERE ${where}`,
@@ -603,6 +726,7 @@ app.get('/api/admin/data/:branchId/:collection', requireSession, requireSuperadm
 app.get('/api/admin/messages/:branchId', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const branchId = String(req.params.branchId || '');
+    if (!isValidBranchId(branchId)) return res.status(400).json({ error: '지점 식별자를 확인해주세요.' });
     const requestedLimit = Number.parseInt(req.query.limit, 10);
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 100;
     const { rows: sendLog } = await pool.query(
@@ -645,6 +769,7 @@ app.get('/api/admin/messages/:branchId', requireSession, requireSuperadmin, asyn
 app.get('/api/admin/photos/:branchId', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const branchId = String(req.params.branchId || '');
+    if (!isValidBranchId(branchId)) return res.status(400).json({ error: '지점 식별자를 확인해주세요.' });
     const { rows } = await pool.query(`
       SELECT entity_key,
         CASE WHEN jsonb_typeof(photos) = 'array' THEN jsonb_array_length(photos) ELSE 0 END AS photo_count,
@@ -666,6 +791,7 @@ app.get('/api/admin/photos/:branchId', requireSession, requireSuperadmin, async 
 app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const targetId = String(req.params.id);
+    if (!isUuid(targetId)) return res.status(404).json({ error: '대상 계정을 찾을 수 없습니다.' });
     const fields = [];
     const values = [];
     const push = (column, value) => { values.push(value); fields.push(`${column} = $${values.length}`); };
@@ -679,8 +805,9 @@ app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req,
       push('plan', req.body.plan);
     }
     if (req.body.isActive !== undefined) {
+      if (typeof req.body.isActive !== 'boolean') return res.status(400).json({ error: '활성화 여부 값을 확인해주세요.' });
       if (targetId === req.authUser.id) return res.status(400).json({ error: '본인 계정은 비활성화할 수 없습니다.' });
-      push('is_active', Boolean(req.body.isActive));
+      push('is_active', req.body.isActive);
     }
     if (req.body.password !== undefined) {
       if (!isStrongPassword(req.body.password)) return res.status(400).json({ error: '비밀번호는 8자 이상 128자 이하여야 합니다.' });
@@ -689,15 +816,31 @@ app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req,
     if (fields.length === 0) return res.status(400).json({ error: '변경할 항목이 없습니다.' });
 
     values.push(targetId);
-    const { rows } = await pool.query(
-      `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now() WHERE id = $${values.length} AND role <> 'superadmin' RETURNING *`,
-      values,
-    );
-    if (!rows[0]) return res.status(404).json({ error: '대상 계정을 찾을 수 없습니다.' });
+    const client = await pool.connect();
+    let rows;
+    try {
+      await client.query('BEGIN');
+      ({ rows } = await client.query(
+        `UPDATE auth_users SET ${fields.join(', ')}, updated_at = now() WHERE id = $${values.length} AND role <> 'superadmin' RETURNING *`,
+        values,
+      ));
+      if (!rows[0]) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: '대상 계정을 찾을 수 없습니다.' });
+      }
 
-    // 비활성화 또는 비밀번호 변경 시 기존 세션 즉시 종료
-    if (req.body.isActive === false || req.body.password !== undefined) {
-      await pool.query('UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [targetId]);
+      // 비활성화 또는 비밀번호 변경 시 기존 세션 즉시 종료
+      if (req.body.isActive === false || req.body.password !== undefined) {
+        await client.query('UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [targetId]);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (rollbackError) {
+        log('error', 'admin_user_update_rollback_failed', errorDetails(rollbackError));
+      }
+      throw error;
+    } finally {
+      client.release();
     }
     res.json({ user: publicUser(rows[0]) });
   } catch (error) {
@@ -724,16 +867,26 @@ app.post('/api/auth/forgot-password', resetLimiter, async (req, res, next) => {
     if (user) {
       const token = crypto.randomBytes(32).toString('base64url');
       const expiresAt = new Date(Date.now() + RESET_TOKEN_MINUTES * 60000);
-      await pool.query('UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL', [user.id]);
-      await pool.query(
-        'INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, requested_ip) VALUES ($1, $2, $3, $4, $5)',
-        [crypto.randomUUID(), user.id, tokenHash(token), expiresAt, req.ip],
-      );
+      const client = await pool.connect();
       try {
-        await sendPasswordResetMail(user.email, user.name, token);
-      } catch (mailError) {
-        console.error('password reset mail failed', mailError?.message || mailError);
+        await client.query('BEGIN');
+        await client.query('UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL', [user.id]);
+        await client.query(
+          'INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, requested_ip) VALUES ($1, $2, $3, $4, $5)',
+          [crypto.randomUUID(), user.id, tokenHash(token), expiresAt, req.ip],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) {
+          log('error', 'password_reset_request_rollback_failed', errorDetails(rollbackError));
+        }
+        throw error;
+      } finally {
+        client.release();
       }
+      await sendPasswordResetMail(user.email, user.name, token).catch(mailError => {
+        log('error', 'password_reset_mail_failed', { userId: user.id, ...errorDetails(mailError) });
+      });
     }
 
     res.json({ message: '가입된 이메일이면 비밀번호 재설정 안내를 보내드렸습니다.' });
@@ -778,7 +931,7 @@ app.post('/reset-password', resetLimiter, async (req, res, next) => {
 // ── 메시지 발송 파이프라인 (SMS·카카오) ──────────────────────────
 // 발송사 API 키는 이 서버의 env에만 둔다. SMS_PROVIDER 미설정 시
 // 어떤 메시지도 나가지 않고 pending으로 정직하게 기록·응답한다.
-const MESSAGE_HOURLY_LIMIT = Number(process.env.MESSAGE_HOURLY_LIMIT || 500);
+const MESSAGE_HOURLY_LIMIT = envInteger('MESSAGE_HOURLY_LIMIT', 500, 1, 100_000);
 const MESSAGE_MAX_RECIPIENTS = 500;
 
 function normalizePhone(value) {
@@ -804,6 +957,7 @@ async function sendViaProvider({ type, title, content, phones }) {
     if (!process.env.SMS_HTTP_URL) throw new Error('SMS_HTTP_URL이 설정되지 않았습니다.');
     const response = await fetch(process.env.SMS_HTTP_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(15_000),
       headers: {
         'Content-Type': 'application/json',
         ...(process.env.SMS_HTTP_KEY ? { Authorization: `Bearer ${process.env.SMS_HTTP_KEY}` } : {}),
@@ -833,7 +987,7 @@ async function sendViaProvider({ type, title, content, phones }) {
 }
 
 // 검증 → 시간당 한도 → 발송 → 건별 로그. HTTP 라우트와 스케줄러가 공용.
-async function processSend({ authUser, type, title, content, phones }) {
+async function processSend({ authUser, type, title, content, phones, scheduledMessageId = null }) {
   const scope = branchScopeOf(authUser);
   const normalized = [...new Set(phones.map(normalizePhone).filter(Boolean))];
   if (normalized.length === 0) {
@@ -863,12 +1017,20 @@ async function processSend({ authUser, type, title, content, phones }) {
     };
   }
 
-  for (const result of outcome.results) {
-    await pool.query(
-      'INSERT INTO message_send_log (id, branch_id, user_id, type, title, content, phone, status, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-      [crypto.randomUUID(), scope, authUser.id, type, title || null, content, result.phone, result.status, result.reason || null],
-    );
-  }
+  const logRows = outcome.results.map(result => ({
+    id: crypto.randomUUID(),
+    phone: result.phone,
+    status: result.status,
+    reason: result.reason || null,
+  }));
+  await pool.query(`
+    INSERT INTO message_send_log
+      (id, branch_id, user_id, type, title, content, phone, status, reason, scheduled_message_id)
+    SELECT item.id::uuid, $2::text, $3::uuid, $4::text, $5::text, $6::text,
+      item.phone, item.status, item.reason, $7::uuid
+    FROM jsonb_to_recordset($1::jsonb)
+      AS item(id text, phone text, status text, reason text)
+  `, [JSON.stringify(logRows), scope, authUser.id, type, title || null, content, scheduledMessageId]);
 
   const sent = outcome.results.filter(r => r.status === 'sent').length;
   const failed = outcome.results.filter(r => r.status === 'failed').length;
@@ -886,7 +1048,10 @@ app.post('/api/messages/send', requireSession, messageLimiter, async (req, res, 
     const title = req.body.title ? String(req.body.title) : undefined;
     const content = String(req.body.content || '').trim();
     const phones = Array.isArray(req.body.phones) ? req.body.phones : [];
-    if (!content) return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
+    if (!isValidText(type, { required: true, max: 50 }) ||
+        !isValidText(title, { max: 200 }) || !isValidText(content, { required: true })) {
+      return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
+    }
     const { httpStatus, body } = await processSend({ authUser: req.authUser, type, title, content, phones });
     res.status(httpStatus).json(body);
   } catch (error) {
@@ -901,11 +1066,16 @@ app.post('/api/messages/schedule', requireSession, messageLimiter, async (req, r
     const type = String(req.body.type || 'sms');
     const title = req.body.title ? String(req.body.title) : null;
     const content = String(req.body.content || '').trim();
-    const phones = (Array.isArray(req.body.phones) ? req.body.phones : []).map(normalizePhone).filter(Boolean);
+    const phones = [...new Set(
+      (Array.isArray(req.body.phones) ? req.body.phones : []).map(normalizePhone).filter(Boolean),
+    )];
     if (Number.isNaN(sendAt.getTime())) return res.status(400).json({ error: '발송 시각을 확인해주세요.' });
     if (sendAt.getTime() < Date.now() + 60000) return res.status(400).json({ error: '발송 시각은 최소 1분 뒤여야 합니다.' });
     if (sendAt.getTime() > Date.now() + 30 * 86400000) return res.status(400).json({ error: '발송 예약은 30일 이내만 가능합니다.' });
-    if (!content) return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
+    if (!isValidText(type, { required: true, max: 50 }) ||
+        !isValidText(title, { max: 200 }) || !isValidText(content, { required: true })) {
+      return res.status(400).json({ error: '메시지 내용을 입력해주세요.' });
+    }
     if (phones.length === 0) return res.status(400).json({ error: '유효한 수신자 전화번호가 없습니다.' });
     if (phones.length > MESSAGE_MAX_RECIPIENTS) return res.status(400).json({ error: `한 번에 ${MESSAGE_MAX_RECIPIENTS}명까지만 예약할 수 있습니다.` });
 
@@ -935,6 +1105,7 @@ app.get('/api/messages/scheduled', requireSession, async (req, res, next) => {
 
 app.delete('/api/messages/scheduled/:id', requireSession, async (req, res, next) => {
   try {
+    if (!isUuid(req.params.id)) return res.status(404).json({ error: '취소할 수 있는 예약을 찾을 수 없습니다.' });
     const { rowCount } = await pool.query(
       `UPDATE scheduled_messages SET status = 'canceled' WHERE id = $1 AND branch_id = $2 AND status = 'pending'`,
       [req.params.id, branchScopeOf(req.authUser)],
@@ -952,21 +1123,31 @@ async function dispatchScheduledMessages() {
   // (재배포·정전으로 결과 UPDATE 전에 프로세스가 죽은 경우 — 영구 고착 방지)
   // 단, 잠금 이후 발송 로그가 이미 남아 있으면(발송 완료 후 결과 기록 직전 사망)
   // pending으로 되돌리는 순간 전체 수신자에게 이중 발송된다 → 수동 확인용 실패로 종결.
-  await pool.query(`
+  const { rowCount: finalizedStale } = await pool.query(`
     UPDATE scheduled_messages sm
     SET status = 'failed', locked_at = NULL,
         result = jsonb_build_object('error', '발송 도중 프로세스 중단 — 일부 발송됐을 수 있어 재발송하지 않음. 발송 로그를 확인하세요.')
     WHERE sm.status = 'processing' AND sm.locked_at < now() - interval '10 minutes'
       AND EXISTS (
         SELECT 1 FROM message_send_log l
-        WHERE l.branch_id = sm.branch_id AND l.content = sm.content
-          AND l.status = 'sent' AND l.created_at >= sm.locked_at
+        WHERE l.status = 'sent' AND (
+          l.scheduled_message_id = sm.id OR (
+            l.scheduled_message_id IS NULL AND l.branch_id = sm.branch_id
+            AND l.content = sm.content AND l.created_at >= sm.locked_at
+          )
+        )
       )
-  `).catch(e => console.error('stale processing finalize failed', e?.message || e));
-  await pool.query(`
+  `);
+  const { rowCount: recoveredStale } = await pool.query(`
     UPDATE scheduled_messages SET status = 'pending', locked_at = NULL
     WHERE status = 'processing' AND locked_at < now() - interval '10 minutes'
-  `).catch(e => console.error('stale processing recovery failed', e?.message || e));
+  `);
+  if (finalizedStale || recoveredStale) {
+    log('warn', 'scheduled_dispatch_stale_recovered', {
+      finalized: finalizedStale,
+      requeued: recoveredStale,
+    });
+  }
 
   const client = await pool.connect();
   let due = [];
@@ -985,36 +1166,57 @@ async function dispatchScheduledMessages() {
     await client.query('COMMIT');
     due = rows;
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('scheduled dispatch lock failed', error?.message || error);
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {
+      log('error', 'scheduled_dispatch_rollback_failed', errorDetails(rollbackError));
+    }
+    throw error;
   } finally {
     client.release();
   }
 
   for (const job of due) {
     try {
-      const { rows: userRows } = await pool.query('SELECT * FROM auth_users WHERE id = $1', [job.user_id]);
-      const authUser = userRows[0] || { id: job.user_id, role: 'admin', branch_id: job.branch_id };
+      const { rows: userRows } = await pool.query(
+        'SELECT * FROM auth_users WHERE id = $1 AND branch_id = $2 AND is_active',
+        [job.user_id, job.branch_id],
+      );
+      const authUser = userRows[0];
+      if (!authUser) throw new Error('예약을 등록한 계정이 없거나 비활성화되었습니다.');
       const { httpStatus, body } = await processSend({
-        authUser: { ...authUser, branch_id: job.branch_id },
+        authUser,
         type: job.type,
         title: job.title || undefined,
         content: job.content,
         phones: Array.isArray(job.phones) ? job.phones : [],
+        scheduledMessageId: job.id,
       });
       if (httpStatus === 429) {
         // 시간당 한도와 겹침 — 실패 처리하지 않고 5분 뒤 재시도
         await pool.query(
-          `UPDATE scheduled_messages SET status = 'pending', locked_at = NULL, send_at = now() + interval '5 minutes' WHERE id = $1`,
+          `UPDATE scheduled_messages
+           SET status = 'pending', locked_at = NULL, send_at = now() + interval '5 minutes'
+           WHERE id = $1`,
           [job.id]);
         continue;
       }
+      if (body.sent === 0 && body.failed > 0 && job.attempt_count < 2) {
+        await pool.query(
+          `UPDATE scheduled_messages
+           SET status = 'pending', locked_at = NULL, attempt_count = attempt_count + 1,
+               result = $1, send_at = now() + ((attempt_count + 1) * interval '5 minutes')
+           WHERE id = $2`,
+          [JSON.stringify(body), job.id],
+        );
+        log('warn', 'scheduled_dispatch_requeued', { jobId: job.id, attempt: job.attempt_count + 1 });
+        continue;
+      }
       const status = body.error ? 'failed' : body.pending ? 'failed' : body.failed === 0 ? 'sent' : 'partial';
-      await pool.query('UPDATE scheduled_messages SET result = $1, status = $2 WHERE id = $3',
+      await pool.query('UPDATE scheduled_messages SET result = $1, status = $2, locked_at = NULL WHERE id = $3',
         [JSON.stringify(body), status, job.id]);
     } catch (error) {
-      await pool.query('UPDATE scheduled_messages SET status = $1, result = $2 WHERE id = $3',
+      await pool.query('UPDATE scheduled_messages SET status = $1, result = $2, locked_at = NULL WHERE id = $3',
         ['failed', JSON.stringify({ error: error?.message || '발송 처리 실패' }), job.id]);
+      log('error', 'scheduled_dispatch_job_failed', { jobId: job.id, ...errorDetails(error) });
     }
   }
 }
@@ -1024,12 +1226,44 @@ async function dispatchScheduledMessages() {
 // JSON + 시술사진(jpg)을 내보낸다. File Station에서 바로 열람 가능.
 // 경로: BACKUP_DIR/<지점명_지점ID8자리>/<날짜>/<컬렉션>.json, photos/...
 const BACKUP_DIR = String(process.env.BACKUP_DIR || '').trim();
-const BACKUP_HOUR = Number(process.env.BACKUP_HOUR || 4);
-const BACKUP_KEEP_DAYS = Number(process.env.BACKUP_KEEP_DAYS || 14);
+const BACKUP_HOUR = envInteger('BACKUP_HOUR', 4, 0, 23);
+const BACKUP_KEEP_DAYS = envInteger('BACKUP_KEEP_DAYS', 14, 1, 3650);
 let backupLastRunDate = '';
+let backupRunPromise = null;
 
 function sanitizeFolderName(value) {
   return String(value || '').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 40) || 'branch';
+}
+
+async function pathExists(target) {
+  try {
+    await fs.access(target);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function publishBackupDirectory(stagedDir, finalDir) {
+  const previousDir = `${finalDir}.previous-${crypto.randomUUID()}`;
+  const hadPrevious = await pathExists(finalDir);
+  if (hadPrevious) await fs.rename(finalDir, previousDir);
+  try {
+    await fs.rename(stagedDir, finalDir);
+  } catch (error) {
+    if (hadPrevious && !(await pathExists(finalDir))) {
+      await fs.rename(previousDir, finalDir).catch(restoreError => {
+        log('error', 'backup_restore_failed', { finalDir, ...errorDetails(restoreError) });
+      });
+    }
+    throw error;
+  }
+  if (hadPrevious) {
+    await fs.rm(previousDir, { recursive: true, force: true }).catch(error => {
+      log('warn', 'backup_previous_cleanup_failed', { previousDir, ...errorDetails(error) });
+    });
+  }
 }
 
 async function runBackup() {
@@ -1039,92 +1273,122 @@ async function runBackup() {
   const { rows: branchRows } = await pool.query(`
     SELECT DISTINCT branch_id FROM crm_records
     UNION SELECT DISTINCT branch_id FROM crm_photos
+    UNION SELECT DISTINCT branch_id FROM auth_users WHERE branch_id IS NOT NULL
   `);
-  const { rows: userRows } = await pool.query(
-    'SELECT branch_id, branch_name FROM auth_users WHERE branch_id IS NOT NULL');
+  const { rows: userRows } = await pool.query(`
+    SELECT branch_id,
+      max(branch_name) FILTER (WHERE branch_name IS NOT NULL AND branch_name <> '') AS branch_name
+    FROM auth_users WHERE branch_id IS NOT NULL GROUP BY branch_id
+  `);
   const nameByBranch = new Map(userRows.map(u => [u.branch_id, u.branch_name]));
 
   let fileCount = 0;
   for (const { branch_id: branchId } of branchRows) {
-    const folder = `${sanitizeFolderName(nameByBranch.get(branchId) || '')}_${String(branchId).slice(0, 8)}`;
-    const dateDir = path.join(BACKUP_DIR, folder, date);
+    const folder = `${sanitizeFolderName(nameByBranch.get(branchId) || '')}_${sanitizeFolderName(branchId).slice(0, 8)}`;
+    const branchDir = path.join(BACKUP_DIR, folder);
+    const finalDateDir = path.join(branchDir, date);
+    const dateDir = path.join(branchDir, `.${date}.partial-${crypto.randomUUID()}`);
     await fs.mkdir(dateDir, { recursive: true });
-
-    // 컬렉션별 JSON
-    for (const collection of DATA_COLLECTIONS) {
-      const { rows } = await pool.query(
-        'SELECT data FROM crm_records WHERE branch_id = $1 AND collection = $2 ORDER BY updated_at',
-        [branchId, collection]);
-      if (rows.length === 0) continue;
-      await fs.writeFile(
-        path.join(dateDir, `${collection}.json`),
-        JSON.stringify(rows.map(r => r.data), null, 2), 'utf8');
-      fileCount += 1;
-    }
-
-    // 이 지점의 계정 목록 (비밀번호 해시 제외)
-    const { rows: accounts } = await pool.query(
-      'SELECT * FROM auth_users WHERE branch_id = $1', [branchId]);
-    if (accounts.length > 0) {
-      await fs.writeFile(path.join(dateDir, 'accounts.json'),
-        JSON.stringify(accounts.map(publicUser), null, 2), 'utf8');
-      fileCount += 1;
-    }
-
-    // 발송 로그 (최근 90일)
-    const { rows: sendLogs } = await pool.query(
-      `SELECT type, title, content, phone, status, reason, created_at FROM message_send_log
-       WHERE branch_id = $1 AND created_at > now() - interval '90 days' ORDER BY created_at`, [branchId]);
-    if (sendLogs.length > 0) {
-      await fs.writeFile(path.join(dateDir, 'message_send_log.json'),
-        JSON.stringify(sendLogs, null, 2), 'utf8');
-      fileCount += 1;
-    }
-
-    // 시술 사진 → jpg 파일
-    const { rows: photoRows } = await pool.query(
-      'SELECT entity_key, photos FROM crm_photos WHERE branch_id = $1', [branchId]);
-    for (const { entity_key: entityKey, photos } of photoRows) {
-      if (!Array.isArray(photos) || photos.length === 0) continue;
-      const photoDir = path.join(dateDir, 'photos', sanitizeFolderName(entityKey.replace(/:/g, '_')));
-      await fs.mkdir(photoDir, { recursive: true });
-      for (const photo of photos) {
-        const match = /^data:image\/(\w+);base64,(.+)$/.exec(photo?.dataUrl || '');
-        if (!match) continue;
-        const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+    try {
+      // 지점당 한 번만 읽고 컬렉션별로 묶어 불필요한 반복 조회를 피한다.
+      const { rows: recordRows } = await pool.query(
+        'SELECT collection, data FROM crm_records WHERE branch_id = $1 ORDER BY collection, updated_at',
+        [branchId],
+      );
+      const recordsByCollection = new Map();
+      for (const row of recordRows) {
+        if (!recordsByCollection.has(row.collection)) recordsByCollection.set(row.collection, []);
+        recordsByCollection.get(row.collection).push(row.data);
+      }
+      for (const [collection, records] of recordsByCollection) {
+        if (!DATA_COLLECTIONS.has(collection)) continue;
         await fs.writeFile(
-          path.join(photoDir, `${sanitizeFolderName(photo.id)}.${ext}`),
-          Buffer.from(match[2], 'base64'));
+          path.join(dateDir, `${collection}.json`),
+          JSON.stringify(records, null, 2), 'utf8');
         fileCount += 1;
       }
-    }
 
-    // 보존 기간 지난 날짜 폴더 정리
-    try {
-      const cutoff = new Date(Date.now() - BACKUP_KEEP_DAYS * 86400000).toISOString().slice(0, 10);
-      const entries = await fs.readdir(path.join(BACKUP_DIR, folder));
-      for (const entry of entries) {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(entry) && entry < cutoff) {
-          await fs.rm(path.join(BACKUP_DIR, folder, entry), { recursive: true, force: true });
+      // 이 지점의 계정 목록 (비밀번호 해시 제외)
+      const { rows: accounts } = await pool.query(
+        'SELECT * FROM auth_users WHERE branch_id = $1', [branchId]);
+      if (accounts.length > 0) {
+        await fs.writeFile(path.join(dateDir, 'accounts.json'),
+          JSON.stringify(accounts.map(publicUser), null, 2), 'utf8');
+        fileCount += 1;
+      }
+
+      // 발송 로그 (최근 90일)
+      const { rows: sendLogs } = await pool.query(
+        `SELECT type, title, content, phone, status, reason, created_at FROM message_send_log
+         WHERE branch_id = $1 AND created_at > now() - interval '90 days' ORDER BY created_at`, [branchId]);
+      if (sendLogs.length > 0) {
+        await fs.writeFile(path.join(dateDir, 'message_send_log.json'),
+          JSON.stringify(sendLogs, null, 2), 'utf8');
+        fileCount += 1;
+      }
+
+      // 시술 사진 → 이미지 파일
+      const { rows: photoRows } = await pool.query(
+        'SELECT entity_key, photos FROM crm_photos WHERE branch_id = $1', [branchId]);
+      for (const { entity_key: entityKey, photos } of photoRows) {
+        if (!Array.isArray(photos) || photos.length === 0) continue;
+        const photoDir = path.join(dateDir, 'photos', sanitizeFolderName(entityKey.replace(/:/g, '_')));
+        await fs.mkdir(photoDir, { recursive: true });
+        for (const photo of photos) {
+          const match = /^data:image\/(jpeg|png|webp|gif);base64,([a-z0-9+/=]+)$/i.exec(photo?.dataUrl || '');
+          if (!match || !isValidId(photo?.id)) continue;
+          const ext = match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
+          await fs.writeFile(
+            path.join(photoDir, `${sanitizeFolderName(photo.id)}.${ext}`),
+            Buffer.from(match[2], 'base64'));
+          fileCount += 1;
         }
       }
-    } catch { /* 정리 실패는 백업 자체를 막지 않음 */ }
+
+      await fs.writeFile(path.join(dateDir, '_SUCCESS.json'), JSON.stringify({ date, branchId }), 'utf8');
+      await publishBackupDirectory(dateDir, finalDateDir);
+
+      // 보존 기간 지난 날짜 폴더 정리
+      try {
+        const cutoff = new Date(Date.now() - BACKUP_KEEP_DAYS * 86400000).toISOString().slice(0, 10);
+        const entries = await fs.readdir(branchDir);
+        for (const entry of entries) {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(entry) && entry < cutoff) {
+            await fs.rm(path.join(branchDir, entry), { recursive: true, force: true });
+          }
+        }
+      } catch (error) {
+        log('warn', 'backup_retention_cleanup_failed', { branchId, ...errorDetails(error) });
+      }
+    } catch (error) {
+      await fs.rm(dateDir, { recursive: true, force: true }).catch(cleanupError => {
+        log('warn', 'backup_staging_cleanup_failed', { branchId, ...errorDetails(cleanupError) });
+      });
+      log('error', 'backup_branch_failed', { branchId, ...errorDetails(error) });
+      throw error;
+    }
   }
 
   return { branches: branchRows.length, files: fileCount, date };
+}
+
+async function runBackupOnce() {
+  if (backupRunPromise) return backupRunPromise;
+  backupRunPromise = runBackup().finally(() => { backupRunPromise = null; });
+  return backupRunPromise;
 }
 
 async function runDailyBackup() {
   if (!BACKUP_DIR) return;
   const now = new Date();
   const today = isoDate(now);
-  if (now.getHours() !== BACKUP_HOUR || backupLastRunDate === today) return;
-  backupLastRunDate = today;
+  if (now.getHours() < BACKUP_HOUR || backupLastRunDate === today) return;
   try {
-    const result = await runBackup();
-    console.log(`일일 백업 완료: 지점 ${result.branches}곳, 파일 ${result.files}개`);
+    const result = await runBackupOnce();
+    backupLastRunDate = today;
+    log('info', 'daily_backup_completed', { branches: result.branches, files: result.files, date: result.date });
   } catch (error) {
-    console.error('일일 백업 실패:', error?.message || error);
+    log('error', 'daily_backup_failed', errorDetails(error));
   }
 }
 
@@ -1132,14 +1396,17 @@ async function runDailyBackup() {
 // 앱이 꺼져 있어도 매일 REMINDER_HOUR시에 재방문 권장일이 지난 고객에게
 // 자동 발송한다. REMINDER_ENABLED=true + 발송사 설정 시에만 실동작.
 const REMINDER_ENABLED = String(process.env.REMINDER_ENABLED || 'false').toLowerCase() === 'true';
-const REMINDER_HOUR = Number(process.env.REMINDER_HOUR || 10);
-const REMINDER_CYCLE_DAYS = Number(process.env.REMINDER_CYCLE_DAYS || 28);
-const REMINDER_MIN_OVERDUE = Number(process.env.REMINDER_MIN_OVERDUE || 0);
-const REMINDER_COOLDOWN_DAYS = Number(process.env.REMINDER_COOLDOWN_DAYS || 7);
+const REMINDER_HOUR = envInteger('REMINDER_HOUR', 10, 0, 23);
+const REMINDER_CYCLE_DAYS = envInteger('REMINDER_CYCLE_DAYS', 28, 1, 3650);
+const REMINDER_MIN_OVERDUE = envInteger('REMINDER_MIN_OVERDUE', 0, 0, 3650);
+const REMINDER_COOLDOWN_DAYS = envInteger('REMINDER_COOLDOWN_DAYS', 7, 1, 3650);
 let reminderLastRunDate = '';
 
 function isoDate(d) {
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 async function loadCollection(branchId, collection) {
@@ -1154,16 +1421,25 @@ async function loadCollection(branchId, collection) {
 function computeRevisitDue({ customers, treatmentLogs, reservations }) {
   const today = isoDate(new Date());
   const due = [];
+  const upcomingCustomerIds = new Set();
+  for (const reservation of reservations) {
+    if (reservation?.customer_id && reservation.date >= today && reservation.status !== 'cancelled') {
+      upcomingCustomerIds.add(reservation.customer_id);
+    }
+  }
+  const latestLogByCustomer = new Map();
+  for (const treatment of treatmentLogs) {
+    if (!treatment?.customer_id) continue;
+    const current = latestLogByCustomer.get(treatment.customer_id);
+    if (!current || String(treatment.treatment_date || '') > String(current.treatment_date || '')) {
+      latestLogByCustomer.set(treatment.customer_id, treatment);
+    }
+  }
   for (const customer of customers) {
     if (!customer?.id || String(customer.id).startsWith('sample_') || !customer.phone) continue;
-    const hasUpcoming = reservations.some(r =>
-      r.customer_id === customer.id && r.date >= today && r.status !== 'cancelled');
-    if (hasUpcoming) continue;
+    if (upcomingCustomerIds.has(customer.id)) continue;
 
-    const logs = treatmentLogs
-      .filter(t => t.customer_id === customer.id)
-      .sort((a, b) => String(b.treatment_date || '').localeCompare(String(a.treatment_date || '')));
-    const lastLog = logs[0];
+    const lastLog = latestLogByCustomer.get(customer.id);
     const lastVisit = lastLog?.treatment_date || customer.last_visit_date || null;
 
     let dueDate;
@@ -1171,13 +1447,18 @@ function computeRevisitDue({ customers, treatmentLogs, reservations }) {
       dueDate = lastLog.next_appointment;
     } else if (lastVisit) {
       const d = new Date(`${lastVisit}T00:00:00Z`);
+      if (Number.isNaN(d.getTime())) continue;
       d.setUTCDate(d.getUTCDate() + REMINDER_CYCLE_DAYS);
-      dueDate = isoDate(d);
+      dueDate = d.toISOString().slice(0, 10);
     } else {
       continue;
     }
 
-    const overdueDays = Math.floor((new Date(today).getTime() - new Date(dueDate).getTime()) / 86400000);
+    const dueTime = /^\d{4}-\d{2}-\d{2}$/.test(String(dueDate))
+      ? new Date(`${dueDate}T00:00:00Z`).getTime()
+      : Number.NaN;
+    if (!Number.isFinite(dueTime)) continue;
+    const overdueDays = Math.floor((new Date(`${today}T00:00:00Z`).getTime() - dueTime) / 86400000);
     if (overdueDays < REMINDER_MIN_OVERDUE) continue;
     due.push({ customer, overdueDays });
   }
@@ -1188,13 +1469,13 @@ async function runRevisitReminders() {
   if (!REMINDER_ENABLED) return;
   const now = new Date();
   const today = isoDate(now);
-  if (now.getHours() !== REMINDER_HOUR || reminderLastRunDate === today) return;
-  reminderLastRunDate = today;
+  if (now.getHours() < REMINDER_HOUR || reminderLastRunDate === today) return;
 
   const { rows: branchRows } = await pool.query(
     "SELECT DISTINCT branch_id FROM crm_records WHERE collection = 'customers'",
   );
 
+  let failedBranches = 0;
   for (const { branch_id: branchId } of branchRows) {
     try {
       const [customers, treatmentLogs, reservations, settingsRows] = await Promise.all([
@@ -1230,18 +1511,24 @@ async function runRevisitReminders() {
           `[${shopName}] ${customer.name || '고객'}님, 안녕하세요 😊\n` +
           `피부 관리 주기가 다가왔어요. 그동안 관리하신 피부 컨디션을 이어가시려면 ` +
           `이번 주 방문을 추천드려요!\n예약 문의는 편하게 답장 주세요. 감사합니다.`;
-        await processSend({
+        const result = await processSend({
           authUser: { id: null, role: 'admin', branch_id: branchId },
           type: 'revisit-reminder',
           content,
           phones: [customer.phone],
         });
+        if (result.httpStatus !== 200 || result.body.error) {
+          throw new Error(result.body.error || `리마인더 발송 응답 오류: ${result.httpStatus}`);
+        }
       }
-      console.log(`재방문 리마인더: ${branchId} 지점 ${targets.length}명 처리`);
+      log('info', 'revisit_reminder_branch_completed', { branchId, targets: targets.length });
     } catch (error) {
-      console.error(`재방문 리마인더 실패 (${branchId}):`, error?.message || error);
+      failedBranches += 1;
+      log('error', 'revisit_reminder_branch_failed', { branchId, ...errorDetails(error) });
     }
   }
+  if (failedBranches > 0) throw new Error(`재방문 리마인더 ${failedBranches}개 지점 처리 실패`);
+  reminderLastRunDate = today;
 }
 
 // ── CRM 데이터 저장 API (사용 데이터가 NAS에 쌓이는 지점) ────────
@@ -1264,9 +1551,10 @@ function requireCollection(req, res, next) {
 app.get('/api/data/:collection', requireSession, requireCollection, async (req, res, next) => {
   try {
     const scope = branchScopeOf(req.authUser);
-    const { rows } = scope === 'superadmin'
-      ? await pool.query('SELECT data FROM crm_records WHERE collection = $1 ORDER BY updated_at', [req.params.collection])
-      : await pool.query('SELECT data FROM crm_records WHERE branch_id = $1 AND collection = $2 ORDER BY updated_at', [scope, req.params.collection]);
+    const { rows } = await pool.query(
+      'SELECT data FROM crm_records WHERE branch_id = $1 AND collection = $2 ORDER BY updated_at',
+      [scope, req.params.collection],
+    );
     res.json({ rows: rows.map(r => r.data) });
   } catch (error) {
     next(error);
@@ -1278,27 +1566,29 @@ app.put('/api/data/:collection', requireSession, requireCollection, async (req, 
     const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
     if (rows.length === 0) return res.status(400).json({ error: '저장할 행이 없습니다.' });
     if (rows.length > 2000) return res.status(400).json({ error: '한 번에 2,000행까지만 저장할 수 있습니다.' });
+    if (rows.some(row => !row || typeof row !== 'object' || Array.isArray(row) || !isValidId(row.id))) {
+      return res.status(400).json({ error: '각 행의 식별자를 확인해주세요.' });
+    }
     const scope = branchScopeOf(req.authUser);
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       for (const row of rows) {
-        const id = String(row?.id || '').trim();
-        if (!id) continue;
+        const id = row.id.trim();
         // 세션 스코프를 강제해 다른 지점 데이터를 덮어쓰지 못하게 한다.
-        // (슈퍼어드민은 행에 담긴 branch_id를 존중해 지점 대신 저장 가능)
-        const branchId = scope === 'superadmin' ? String(row.branch_id || 'superadmin') : scope;
         await client.query(`
           INSERT INTO crm_records (branch_id, collection, id, data, updated_at)
           VALUES ($1, $2, $3, $4, now())
           ON CONFLICT (branch_id, collection, id)
           DO UPDATE SET data = EXCLUDED.data, updated_at = now()
-        `, [branchId, req.params.collection, id, row]);
+        `, [scope, req.params.collection, id, row]);
       }
       await client.query('COMMIT');
     } catch (error) {
-      await client.query('ROLLBACK');
+      try { await client.query('ROLLBACK'); } catch (rollbackError) {
+        log('error', 'crm_bulk_upsert_rollback_failed', errorDetails(rollbackError));
+      }
       throw error;
     } finally {
       client.release();
@@ -1315,14 +1605,15 @@ app.patch('/api/data/:collection/:id', requireSession, requireCollection, async 
     if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
       return res.status(400).json({ error: '변경 내용을 확인해주세요.' });
     }
+    if (Object.keys(updates).length === 0 ||
+        (updates.id !== undefined && String(updates.id) !== String(req.params.id))) {
+      return res.status(400).json({ error: '변경 내용을 확인해주세요.' });
+    }
     const scope = branchScopeOf(req.authUser);
-    const { rowCount } = scope === 'superadmin'
-      ? await pool.query(
-          'UPDATE crm_records SET data = data || $1::jsonb, updated_at = now() WHERE collection = $2 AND id = $3',
-          [updates, req.params.collection, req.params.id])
-      : await pool.query(
-          'UPDATE crm_records SET data = data || $1::jsonb, updated_at = now() WHERE branch_id = $2 AND collection = $3 AND id = $4',
-          [updates, scope, req.params.collection, req.params.id]);
+    const { rowCount } = await pool.query(
+      'UPDATE crm_records SET data = data || $1::jsonb, updated_at = now() WHERE branch_id = $2 AND collection = $3 AND id = $4',
+      [updates, scope, req.params.collection, req.params.id],
+    );
     if (rowCount === 0) return res.status(404).json({ error: '대상 데이터를 찾을 수 없습니다.' });
     res.json({ updated: rowCount });
   } catch (error) {
@@ -1333,9 +1624,10 @@ app.patch('/api/data/:collection/:id', requireSession, requireCollection, async 
 app.delete('/api/data/:collection/:id', requireSession, requireCollection, async (req, res, next) => {
   try {
     const scope = branchScopeOf(req.authUser);
-    scope === 'superadmin'
-      ? await pool.query('DELETE FROM crm_records WHERE collection = $1 AND id = $2', [req.params.collection, req.params.id])
-      : await pool.query('DELETE FROM crm_records WHERE branch_id = $1 AND collection = $2 AND id = $3', [scope, req.params.collection, req.params.id]);
+    await pool.query(
+      'DELETE FROM crm_records WHERE branch_id = $1 AND collection = $2 AND id = $3',
+      [scope, req.params.collection, req.params.id],
+    );
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -1347,6 +1639,7 @@ app.delete('/api/data/:collection/:id', requireSession, requireCollection, async
 // 다른 기기의 옛 캐시가 삭제된 고객 사진을 서버에 되살리지 못한다.
 app.get('/api/photos/:entityKey', requireSession, async (req, res, next) => {
   try {
+    if (!isValidId(req.params.entityKey)) return res.status(400).json({ error: '사진 식별자를 확인해주세요.' });
     const scope = branchScopeOf(req.authUser);
     const { rows } = await pool.query(
       'SELECT photos FROM crm_photos WHERE branch_id = $1 AND entity_key = $2',
@@ -1361,7 +1654,11 @@ app.get('/api/photos/:entityKey', requireSession, async (req, res, next) => {
 // 배치 조회: 시술기록이 수백 건일 때 왕복 1회로 (keys 최대 500)
 app.post('/api/photos/batch', requireSession, async (req, res, next) => {
   try {
-    const keys = Array.isArray(req.body.keys) ? req.body.keys.map(String).slice(0, 500) : [];
+    const inputKeys = Array.isArray(req.body.keys) ? req.body.keys : [];
+    if (inputKeys.length > 500 || inputKeys.some(key => !isValidId(key))) {
+      return res.status(400).json({ error: '조회할 키가 없습니다.' });
+    }
+    const keys = [...new Set(inputKeys.map(key => key.trim()))];
     if (keys.length === 0) return res.status(400).json({ error: '조회할 키가 없습니다.' });
     const scope = branchScopeOf(req.authUser);
     const { rows } = await pool.query(
@@ -1379,7 +1676,14 @@ app.post('/api/photos/batch', requireSession, async (req, res, next) => {
 app.put('/api/photos/:entityKey', requireSession, async (req, res, next) => {
   try {
     const photos = Array.isArray(req.body.photos) ? req.body.photos : [];
+    if (!isValidId(req.params.entityKey)) return res.status(400).json({ error: '사진 식별자를 확인해주세요.' });
     if (photos.length > 100) return res.status(400).json({ error: '엔티티당 사진은 100장까지만 저장할 수 있습니다.' });
+    if (photos.some(photo => !photo || typeof photo !== 'object' || Array.isArray(photo) ||
+        !isValidId(photo.id) || typeof photo.dataUrl !== 'string' ||
+        !/^data:image\/(jpeg|png|webp|gif);base64,/i.test(photo.dataUrl) ||
+        photo.dataUrl.length > 7 * 1024 * 1024)) {
+      return res.status(400).json({ error: '사진 데이터 형식을 확인해주세요.' });
+    }
     const scope = branchScopeOf(req.authUser);
     await pool.query(`
       INSERT INTO crm_photos (branch_id, entity_key, photos, updated_at)
@@ -1393,23 +1697,65 @@ app.put('/api/photos/:entityKey', requireSession, async (req, res, next) => {
   }
 });
 
-app.use((error, _req, res, _next) => {
-  console.error(error);
-  res.status(500).json({ error: '서버 처리 중 문제가 발생했습니다.' });
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: '요청한 API를 찾을 수 없습니다.' });
 });
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const status = error?.type === 'entity.parse.failed' ? 400
+    : error?.type === 'entity.too.large' ? 413
+      : error?.message === '허용되지 않은 요청입니다.' ? 403
+        : 500;
+  log(status >= 500 ? 'error' : 'warn', 'http_request_failed', {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.path,
+    status,
+    ...errorDetails(error),
+  });
+  const message = status === 400 ? '요청 본문 형식을 확인해주세요.'
+    : status === 413 ? '요청 데이터가 너무 큽니다.'
+      : status === 403 ? '허용되지 않은 요청입니다.'
+        : '서버 처리 중 문제가 발생했습니다.';
+  res.status(status).json({ error: message });
+});
+
+const runningTasks = new Set();
+
+function runExclusive(taskName, task) {
+  if (runningTasks.has(taskName)) {
+    log('warn', 'scheduled_task_overlap_skipped', { task: taskName });
+    return;
+  }
+  runningTasks.add(taskName);
+  Promise.resolve()
+    .then(task)
+    .catch(error => log('error', 'scheduled_task_failed', { task: taskName, ...errorDetails(error) }))
+    .finally(() => runningTasks.delete(taskName));
+}
+
+pool.on('error', error => log('error', 'postgres_pool_error', errorDetails(error)));
 
 initializeDatabase()
   .then(async () => {
     await bootstrapSuperadmin();
     await cleanupExpired();
-    setInterval(cleanupExpired, 24 * 60 * 60 * 1000).unref();
-    setInterval(() => dispatchScheduledMessages().catch(e => console.error('dispatch error', e)), 60 * 1000).unref();
-    setInterval(() => runRevisitReminders().catch(e => console.error('reminder error', e)), 10 * 60 * 1000).unref();
-    setInterval(() => runDailyBackup().catch(e => console.error('backup error', e)), 10 * 60 * 1000).unref();
-    if (process.env.SMTP_HOST) await smtp.verify();
-    app.listen(PORT, '0.0.0.0', () => console.log(`Troiareuke auth server listening on ${PORT}`));
+    setInterval(() => runExclusive('cleanup', cleanupExpired), 24 * 60 * 60 * 1000).unref();
+    setInterval(() => runExclusive('dispatch', dispatchScheduledMessages), 60 * 1000).unref();
+    setInterval(() => runExclusive('reminder', runRevisitReminders), 10 * 60 * 1000).unref();
+    setInterval(() => runExclusive('backup', runDailyBackup), 10 * 60 * 1000).unref();
+    if (process.env.SMTP_HOST) {
+      await smtp.verify().catch(error => log('error', 'smtp_verify_failed', errorDetails(error)));
+    }
+    app.listen(PORT, '0.0.0.0', () => {
+      log('info', 'server_listening', { port: PORT });
+      runExclusive('dispatch', dispatchScheduledMessages);
+      runExclusive('reminder', runRevisitReminders);
+      runExclusive('backup', runDailyBackup);
+    });
   })
   .catch(error => {
-    console.error('auth server startup failed', error);
+    log('error', 'server_startup_failed', errorDetails(error));
     process.exit(1);
   });
