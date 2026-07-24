@@ -243,6 +243,20 @@ export default function Onboarding() {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
 
+    // 로컬(오프라인) 계정 DB에도 온보딩 완료를 반영 — 이걸 빠뜨리면 재로그인 시
+    // 온보딩이 다시 뜨고 데이터가 사라져 보이는 치명 버그가 됨 (QA⑤ 발견)
+    try {
+      const LOCAL_USERS_KEY = 'troiareuke_local_users';
+      const localUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+      const idx = localUsers.findIndex(
+        (r: any) => r?.user?.id === updatedUser.id || r?.email === updatedUser.email
+      );
+      if (idx !== -1) {
+        localUsers[idx] = { ...localUsers[idx], user: updatedUser };
+        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(localUsers));
+      }
+    } catch { /* 로컬 계정 DB 없음(NAS/Supabase 모드) — 무시 */ }
+
     // 첫 설정에서 입력한 샵명을 프로그램 표시명(“○○○ CRM”)으로 즉시 사용한다.
     SettingsStore.save({
       name: shopName.trim(),

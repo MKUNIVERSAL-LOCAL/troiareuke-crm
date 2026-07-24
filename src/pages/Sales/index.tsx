@@ -196,6 +196,16 @@ export default function Sales() {
     };
 
     if (editingId) {
+      // 제품 결제를 '환불'로 바꾸면 매출에선 빠지지만 재고·판매기록은 안 돌아오는
+      // 크로스 모듈 불일치(QA⑤) — 제품 환불은 판매 기록 삭제(재고 자동 복구)로 유도
+      const editingPayment = payments.find(p => p.id === editingId);
+      if (form.status === 'refunded' && editingPayment?.type === 'product') {
+        alert(
+          '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 해당 판매를 삭제해주세요.\n' +
+          '판매 기록을 삭제하면 재고 복구와 결제 취소가 함께 처리됩니다.'
+        );
+        return;
+      }
       PaymentStore.update(editingId, payload);
     } else {
       PaymentStore.save(payload);

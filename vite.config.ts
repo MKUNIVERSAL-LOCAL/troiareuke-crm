@@ -1,6 +1,17 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// 🛡️ 프로덕션 빌드 오염 방지 가드 (2026-07-24 실사고 재발 방지):
+// QA용 .env.local(서버 연결 오버라이드)이 남아있는 채로 빌드하면 서버 연결이 빠진
+// 오염 빌드가 배포됨. dev는 허용, build는 차단.
+const rootDir = path.dirname(fileURLToPath(import.meta.url))
+if (process.argv.includes('build') && fs.existsSync(path.join(rootDir, '.env.local'))) {
+  throw new Error('⚠️ .env.local이 존재합니다 — QA용 오버라이드가 프로덕션 빌드를 오염시킵니다. 삭제 후 다시 빌드하세요.')
+}
 
 // prod 빌드 시 index.html <head>에 CSP 메타 태그를 삽입하는 플러그인
 // dev 서버에서는 적용하지 않아 HMR/WS 차단 없음
