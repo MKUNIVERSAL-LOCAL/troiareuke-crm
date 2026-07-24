@@ -21,6 +21,13 @@
 - 배포·수정 내역은 `docs/DEPLOY-RECORD-*.md` 등 .md로 남기고 git에 커밋한다.
 - NAS 서버 배포는 `docs/NAS-REDEPLOY-RUNBOOK.md` 절차(작업 스케줄러, SSH 불필요)를 따른다.
 
+## 5. 릴리스·빌드 함정 (2026-07-24 실사고 기록)
+- **빌드 전 `.env.local` 삭제 필수** — QA용 오버라이드가 남으면 서버 연결이 빠진 오염 exe가 배포된다(v1.0.34 실사고). vite.config.ts가 빌드 시 존재하면 throw하는 가드 있음.
+- **ENV 마커 검증은 `release/win-unpacked/resources/app.asar`에서** — 포터블 exe는 7z 압축이라 Select-String이 항상 False(오탐). 검사 패턴: `hmgxhrtqfbffqrleorxf`(Supabase)와 `crm-api.mkcorp.familyds.com`(NAS).
+- **버전 범프·한글 파일 수정은 Edit 도구로만** — PowerShell `-replace | Set-Content`는 CP949로 한글을 파손시킨다.
+- **exe는 빌드 후 CDP 런타임 검증**(scratchpad verify-build.mjs 패턴): `--remote-debugging-port` + `window.electronAPI.isAdminBuild` 확인 (일반=false, 어드민=true).
+- **logout()의 localStorage wipe는 서버 모드 전용** — 로컬 모드에서 wipe하면 유일한 저장소가 지워져 데이터 영구 소실(QA⑤ 치명 버그로 수정됨). 로그아웃 관련 변경 시 로컬/NAS/Supabase 3모드 모두 검토.
+
 ## 참고 경로
 - 편집 정본: GitHub `MKUNIVERSAL-LOCAL/troiareuke-crm` main + 로컬 `F:\dev\crm-claude`
 - OneDrive `트로이아르케-CRM/`은 **빌드 배포본**(편집 금지), 배포는 robocopy(/MIR 절대 금지 — 고객 데이터 폴더 보존)
