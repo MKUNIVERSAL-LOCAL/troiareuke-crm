@@ -74,6 +74,23 @@ export function fetchAdminOverview() {
   return apiRequest<{ branches: AdminBranchOverview[] }>('/api/admin/overview');
 }
 
+export interface AdminBranchAnalytics {
+  branchId: string;
+  branchName: string | null;
+  customers: { total: number; new30d: number };
+  revenue: { total: number; refunded: number; paymentCount: number };
+  revenueMonthly: { month: string; revenue: number; refunded: number }[];
+  revenueDaily: { day: string; revenue: number }[];
+  reservations: { total: number; completed: number; upcoming: number };
+  treatments: number;
+}
+
+export function fetchAdminAnalytics() {
+  return apiRequest<{ generatedAt: string; branches: AdminBranchAnalytics[] }>(
+    '/api/admin/analytics'
+  );
+}
+
 export function fetchAdminBranchData(
   branchId: string,
   collection: string,

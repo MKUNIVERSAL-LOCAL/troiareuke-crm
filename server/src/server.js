@@ -688,6 +688,125 @@ app.get('/api/admin/overview', requireSession, requireSuperadmin, async (_req, r
   }
 });
 
+// 지점별/전체 애널리틱스 — 고객·매출·예약·시술 집계 (어드민 통계 화면 전용)
+// data(JSONB)의 amount/date 필드는 클라이언트 입력이므로 형식 가드 후 집계한다.
+app.get('/api/admin/analytics', requireSession, requireSuperadmin, async (_req, res, next) => {
+  try {
+    const now = new Date();
+    const todayIso = now.toISOString().slice(0, 10);
+    const since30d = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
+    const sinceMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1))
+      .toISOString().slice(0, 7);
+    // 결제 금액: 숫자 형식일 때만 합산 (비정상 입력이 전체 집계를 깨지 않게)
+    const AMOUNT = `(CASE WHEN (data->>'amount') ~ '^-?\\d+(\\.\\d+)?$' THEN (data->>'amount')::numeric ELSE 0 END)`;
+
+    const [customerRows, paymentTotalRows, monthlyRows, dailyRows, reservationRows, treatmentRows] =
+      await Promise.all([
+        pool.query(
+          `SELECT branch_id,
+             count(*)::int AS total,
+             count(*) FILTER (WHERE left(data->>'registeredAt', 10) >= $1)::int AS new_30d
+           FROM crm_records WHERE collection = 'customers' GROUP BY branch_id`,
+          [since30d],
+        ),
+        pool.query(
+          `SELECT branch_id,
+             coalesce(sum(${AMOUNT}) FILTER (WHERE data->>'status' = 'completed'), 0)::bigint AS revenue_total,
+             coalesce(sum(${AMOUNT}) FILTER (WHERE data->>'status' = 'refunded'), 0)::bigint AS refunded_total,
+             count(*) FILTER (WHERE data->>'status' = 'completed')::int AS payment_count
+           FROM crm_records WHERE collection = 'payments' GROUP BY branch_id`,
+        ),
+        pool.query(
+          `SELECT branch_id, left(data->>'paymentDate', 7) AS month,
+             coalesce(sum(${AMOUNT}) FILTER (WHERE data->>'status' = 'completed'), 0)::bigint AS revenue,
+             coalesce(sum(${AMOUNT}) FILTER (WHERE data->>'status' = 'refunded'), 0)::bigint AS refunded
+           FROM crm_records
+           WHERE collection = 'payments' AND left(data->>'paymentDate', 7) >= $1
+           GROUP BY branch_id, month ORDER BY month`,
+          [sinceMonth],
+        ),
+        pool.query(
+          `SELECT branch_id, left(data->>'paymentDate', 10) AS day,
+             coalesce(sum(${AMOUNT}) FILTER (WHERE data->>'status' = 'completed'), 0)::bigint AS revenue
+           FROM crm_records
+           WHERE collection = 'payments' AND left(data->>'paymentDate', 10) >= $1
+           GROUP BY branch_id, day ORDER BY day`,
+          [since30d],
+        ),
+        pool.query(
+          `SELECT branch_id,
+             count(*)::int AS total,
+             count(*) FILTER (WHERE data->>'status' = 'completed')::int AS completed,
+             count(*) FILTER (WHERE left(data->>'date', 10) >= $1
+               AND data->>'status' IN ('confirmed', 'pending'))::int AS upcoming
+           FROM crm_records WHERE collection = 'reservations' GROUP BY branch_id`,
+          [todayIso],
+        ),
+        pool.query(
+          `SELECT branch_id, count(*)::int AS total
+           FROM crm_records WHERE collection = 'treatment_logs' GROUP BY branch_id`,
+        ),
+      ]);
+
+    const { rows: nameRows } = await pool.query(`
+      SELECT branch_id,
+        max(branch_name) FILTER (WHERE branch_name IS NOT NULL AND branch_name <> '') AS branch_name
+      FROM auth_users WHERE branch_id IS NOT NULL GROUP BY branch_id
+    `);
+    const names = new Map(nameRows.map(row => [row.branch_id, row.branch_name]));
+
+    const byBranch = new Map();
+    const ensure = branchId => {
+      if (!byBranch.has(branchId)) {
+        byBranch.set(branchId, {
+          branchId,
+          branchName: names.get(branchId) || null,
+          customers: { total: 0, new30d: 0 },
+          revenue: { total: 0, refunded: 0, paymentCount: 0 },
+          revenueMonthly: [],
+          revenueDaily: [],
+          reservations: { total: 0, completed: 0, upcoming: 0 },
+          treatments: 0,
+        });
+      }
+      return byBranch.get(branchId);
+    };
+    for (const row of customerRows.rows) {
+      const b = ensure(row.branch_id);
+      b.customers = { total: row.total, new30d: row.new_30d };
+    }
+    for (const row of paymentTotalRows.rows) {
+      const b = ensure(row.branch_id);
+      b.revenue = {
+        total: Number(row.revenue_total),
+        refunded: Number(row.refunded_total),
+        paymentCount: row.payment_count,
+      };
+    }
+    for (const row of monthlyRows.rows) {
+      ensure(row.branch_id).revenueMonthly.push({
+        month: row.month,
+        revenue: Number(row.revenue),
+        refunded: Number(row.refunded),
+      });
+    }
+    for (const row of dailyRows.rows) {
+      ensure(row.branch_id).revenueDaily.push({ day: row.day, revenue: Number(row.revenue) });
+    }
+    for (const row of reservationRows.rows) {
+      const b = ensure(row.branch_id);
+      b.reservations = { total: row.total, completed: row.completed, upcoming: row.upcoming };
+    }
+    for (const row of treatmentRows.rows) {
+      ensure(row.branch_id).treatments = row.total;
+    }
+
+    res.json({ generatedAt: now.toISOString(), branches: [...byBranch.values()] });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/admin/data/:branchId/:collection', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const branchId = String(req.params.branchId || '');
