@@ -323,12 +323,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     resetStoreCache();
 
-    // allow-list 외 모든 localStorage 키 제거
-    // (troiareuke_* API 키/구독/로그, crm_* 고객 캐시, google_calendar_token, ai_key_* 등 전체)
-    const allKeys = Object.keys(localStorage);
-    for (const key of allKeys) {
-      if (!LOGOUT_PRESERVE.has(key)) {
-        localStorage.removeItem(key);
+    const isServerMode = isAuthApiConfigured || isSupabaseConfigured;
+    if (!isServerMode) {
+      // 로컬(오프라인) 모드: localStorage가 유일한 저장소 — 전체 삭제하면 고객·매출
+      // 데이터가 영구 소실된다 (QA⑤ 치명 버그). 세션 키만 제거하고 데이터는 보존.
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('troiareuke_auth_token');
+    } else {
+      // 서버 모드: 재로그인 시 서버에서 재동기화되므로 공용 PC 개인정보 보호를 위해
+      // allow-list 외 모든 localStorage 키 제거
+      // (troiareuke_* API 키/구독/로그, crm_* 고객 캐시, google_calendar_token, ai_key_* 등 전체)
+      const allKeys = Object.keys(localStorage);
+      for (const key of allKeys) {
+        if (!LOGOUT_PRESERVE.has(key)) {
+          localStorage.removeItem(key);
+        }
       }
     }
 
