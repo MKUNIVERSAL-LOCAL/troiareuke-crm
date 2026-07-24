@@ -270,7 +270,13 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
 
-    const details = treatmentDetails || selectedServices.join(', ') || undefined;
+    // 수정 모드 함정(QA② F1): textarea가 기존 값으로 채워져 있으면 체크박스 변경이 항상 무시됐음.
+    // 사용자가 textarea를 직접 고친 경우에만 textarea 우선, 아니면 체크박스 선택을 반영.
+    const initialDetails = editing?.treatmentDetails ?? '';
+    const userEditedText = treatmentDetails !== initialDetails;
+    const details = (userEditedText
+      ? treatmentDetails
+      : selectedServices.join(', ') || treatmentDetails) || undefined;
     const linkedProgram = customerProgramId ? activePrograms.find(cp => cp.id === customerProgramId) : undefined;
 
     if (isEdit && editing) {

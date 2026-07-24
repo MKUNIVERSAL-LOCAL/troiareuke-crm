@@ -854,7 +854,7 @@ export const CustomerStore = {
     const idx = all.findIndex(c => c.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
-    _customers = all;
+    _customers = [...all]; // 새 배열 참조 — React 리렌더 보장 (같은 참조면 화면 미갱신)
     saveList(shopKey('customers'), all);
     sbUpdate('customers', id, toDbCustomer(updates));
     return all[idx];
@@ -914,7 +914,7 @@ export const ProgramStore = {
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
-    _programs = all;
+    _programs = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('programs'), all);
     sbUpdate('programs', id, toDbProgram(updates));
     return all[idx];
@@ -993,7 +993,7 @@ export const CustomerProgramStore = {
     const newUsed = Math.max(0, cp.usedSessions + sessionsUsed);
     const isCompleted = cp.totalSessions !== null && newUsed >= cp.totalSessions;
     all[idx] = { ...cp, usedSessions: newUsed, isCompleted };
-    _customerPrograms = all;
+    _customerPrograms = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('customer_programs'), all);
     sbUpdate('customer_programs', id, { used_sessions: newUsed, is_completed: isCompleted });
     return all[idx];
@@ -1004,7 +1004,7 @@ export const CustomerProgramStore = {
     const idx = all.findIndex(cp => cp.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
-    _customerPrograms = all;
+    _customerPrograms = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('customer_programs'), all);
     sbUpdate('customer_programs', id, toDbCustomerProgram(updates));
     return all[idx];
@@ -1077,7 +1077,7 @@ export const TreatmentLogStore = {
     const prev = all[idx];
     const next = { ...prev, ...updates };
     all[idx] = next;
-    _treatmentLogs = all;
+    _treatmentLogs = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('treatment_logs'), all);
     sbUpdate('treatment_logs', id, toDbTreatmentLog(updates));
 
@@ -1162,7 +1162,7 @@ export const ProductStore = {
     const idx = all.findIndex(p => p.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
-    _products = all;
+    _products = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('products'), all);
     sbUpdate('products', id, toDbProduct(updates));
     return all[idx];
@@ -1310,7 +1310,7 @@ export const PaymentStore = {
     const prev = all[idx];
     const next = { ...prev, ...updates };
     all[idx] = next;
-    _payments = all;
+    _payments = [...all]; // 새 배열 참조 — React 리렌더 보장 (QA② F2: 결제 수정/환불 미반영 버그)
     saveList(shopKey('payments'), all);
     sbUpdate('payments', id, toDbPayment(updates));
 
@@ -1359,10 +1359,15 @@ export const PaymentStore = {
     const productRevenue = payments
       .filter(p => p.type === 'product')
       .reduce((sum, p) => sum + p.amount, 0);
+    // 기타(other) 유형 포함 — 매출 페이지 총매출과 대시보드 총매출이 일치해야 함 (QA② 지적)
+    const otherRevenue = payments
+      .filter(p => p.type === 'other')
+      .reduce((sum, p) => sum + p.amount, 0);
     return {
       treatmentRevenue,
       productRevenue,
-      totalRevenue: treatmentRevenue + productRevenue,
+      otherRevenue,
+      totalRevenue: treatmentRevenue + productRevenue + otherRevenue,
       paymentCount: payments.length,
     };
   },
@@ -1413,7 +1418,7 @@ export const StaffStore = {
     const idx = all.findIndex(s => s.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
-    _staff = all;
+    _staff = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('staff'), all);
     sbUpdate('staff', id, toDbStaff(updates));
     return all[idx];
@@ -1458,7 +1463,7 @@ export const ServiceStore = {
     const idx = all.findIndex(s => s.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
-    _services = all;
+    _services = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('services'), all);
     sbUpdate('services', id, toDbService(updates));
     return all[idx];
@@ -1507,7 +1512,7 @@ export const ReservationStore = {
     const idx = all.findIndex(r => r.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
-    _reservations = all;
+    _reservations = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('reservations'), all);
     sbUpdate('reservations', id, toDbReservation(updates));
     return all[idx];
@@ -1630,7 +1635,7 @@ export const MessageTemplateStore = {
     const idx = all.findIndex(t => t.id === id);
     if (idx === -1) return null;
     all[idx] = { ...all[idx], ...updates };
-    _messageTemplates = all;
+    _messageTemplates = [...all]; // 새 배열 참조 — React 리렌더 보장
     saveList(shopKey('msg_templates'), all);
     sbUpdate('message_templates', id, toDbMessageTemplate(updates));
     return all[idx];
