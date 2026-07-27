@@ -1,8 +1,8 @@
 ﻿import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Eye, EyeOff, Sparkles, CheckCircle, Mail, X } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, CheckCircle, Mail, Phone, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { requestPasswordReset, isAuthApiConfigured } from '../../lib/authApi';
+import { isAuthApiConfigured } from '../../lib/authApi';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 const features = [
@@ -48,10 +48,7 @@ export default function Login() {
     setResetLoading(true);
     setResetError('');
     try {
-      if (isAuthApiConfigured) {
-        // NAS 중앙 서버 (1회용 토큰 메일 발송)
-        await requestPasswordReset(normalizedEmail);
-      } else if (isSupabaseConfigured) {
+      if (isSupabaseConfigured) {
         // NAS 미배포 환경 폴백: Supabase 재설정 메일 (웹 /reset-password로 복귀)
         const configuredUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, '');
         const browserUrl = window.location.protocol === 'http:' || window.location.protocol === 'https:'
@@ -237,7 +234,7 @@ export default function Login() {
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#1a3a8f]">
-                <Mail size={20} />
+                {isAuthApiConfigured ? <Phone size={20} /> : <Mail size={20} />}
               </div>
               <button
                 type="button"
@@ -250,7 +247,23 @@ export default function Login() {
               </button>
             </div>
 
-            {resetSent ? (
+            {isAuthApiConfigured ? (
+              // 중앙서버 모드: 비밀번호 재설정은 본사 관리자 발급제 (오너 확정 2026-07-27 — 이메일 셀프 재설정 미도입)
+              <div className="mt-5">
+                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">비밀번호 재설정 안내</h2>
+                <p className="mt-2 text-sm leading-6 text-gray-500">
+                  비밀번호를 잊으셨다면 <span className="font-semibold text-gray-700">본사 관리자에게 연락</span>해주세요.
+                  본인 확인 후 임시 비밀번호를 발급해드리며, 로그인하신 뒤 설정에서 새 비밀번호로 변경하시면 됩니다.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setResetOpen(false)}
+                  className="mt-6 w-full rounded-xl bg-[#1a3a8f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0d2260]"
+                >
+                  확인
+                </button>
+              </div>
+            ) : resetSent ? (
               <div className="mt-5">
                 <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">메일을 확인해주세요</h2>
                 <p className="mt-2 text-sm leading-6 text-gray-500">

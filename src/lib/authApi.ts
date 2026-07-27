@@ -118,13 +118,6 @@ export async function logoutFromAuthApi() {
   }
 }
 
-export async function requestPasswordReset(email: string) {
-  return apiRequest<{ message: string }>('/api/auth/forgot-password', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  });
-}
-
 export async function updateAuthProfile(data: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) {
   const response = await apiRequest<{ user: AuthApiUser }>('/api/auth/profile', {
     method: 'PATCH',
