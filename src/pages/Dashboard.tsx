@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag, Store, Globe, Apple, Play } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Legend
@@ -272,6 +272,45 @@ export default function Dashboard() {
               <p className="text-xs text-gray-500">결제 건수 (이번 달)</p>
               <p className="text-xl font-black text-gray-900">{thisMonth.paymentCount}건</p>
             </div>
+          </div>
+        </div>
+
+        {/* 트로이몰 바로가기 — 링크는 Electron setWindowOpenHandler가 외부 브라우저로 위임 */}
+        <div className="bg-gradient-to-r from-[#1a3a8f] to-[#2b55c4] rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Store size={22} className="text-white" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white">트로이몰에서 제품 구매</p>
+              <p className="text-xs text-blue-100 mt-0.5">홈케어·시술 제품을 온라인몰과 앱에서 바로 주문하세요</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href="https://www.troimall.com/"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-semibold text-[#1a3a8f] hover:bg-blue-50 transition-colors"
+            >
+              <Globe size={14} /> 트로이몰 웹사이트
+            </a>
+            <a
+              href="https://play.google.com/store/apps/details?id=com.troimall"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/25 transition-colors"
+            >
+              <Play size={14} /> Google Play
+            </a>
+            <a
+              href="https://apps.apple.com/kr/app/%ED%8A%B8%EB%A1%9C%EC%9D%B4%EB%AA%B0/id1488430207"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/25 transition-colors"
+            >
+              <Apple size={14} /> App Store
+            </a>
           </div>
         </div>
 
