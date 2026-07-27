@@ -7,9 +7,13 @@ import { fileURLToPath } from 'node:url';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseDir = path.join(rootDir, 'release');
 const artifactName = '트로이아르케 CRM.exe';
+// 공개 채널 파일명은 ASCII 고정 — DSM 발행 스크립트가 이 이름으로 올리며,
+// 한글 파일명 URL은 채널에서 404가 나 앱 업데이트 다운로드가 실패한다 (v1.0.36 실사고).
+const publicArtifactName = 'TroiareukeCRM-portable.exe';
 const sourcePath = path.join(releaseDir, artifactName);
 const stageDir = path.join(releaseDir, 'portable-update');
 const stagedArtifactPath = path.join(stageDir, artifactName);
+const stagedPublicArtifactPath = path.join(stageDir, publicArtifactName);
 const publicBaseUrl = 'https://crm-update.mkcorp.familyds.com/portable';
 
 const packageJson = JSON.parse(await fs.readFile(path.join(rootDir, 'package.json'), 'utf8'));
@@ -38,7 +42,7 @@ const notes = await fs.readFile(notesPath, 'utf8')
 
 const manifest = {
   version: packageJson.version,
-  url: `${publicBaseUrl}/${encodeURIComponent(artifactName)}`,
+  url: `${publicBaseUrl}/${publicArtifactName}`,
   sha256,
   size: sourceStat.size,
   releaseDate: new Date().toISOString(),
@@ -47,6 +51,7 @@ const manifest = {
 
 await fs.mkdir(stageDir, { recursive: true });
 await fs.copyFile(sourcePath, stagedArtifactPath);
+await fs.copyFile(sourcePath, stagedPublicArtifactPath); // gh release 업로드용 (수동 cp 단계 제거)
 await fs.writeFile(path.join(stageDir, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
 // 공지 게시판용 누적 업데이트 로그 — docs/RELEASE-HISTORY.json이 정본(커밋됨),
@@ -96,7 +101,8 @@ if (nasRoot) {
     await fs.rename(temporaryPath, finalPath);
   }
 
-  await publishAtomically(artifactName);
+  await publishAtomically(publicArtifactName); // manifest.url이 가리키는 공개 파일명 — exe를 latest.json보다 먼저
+  await publishAtomically('history.json');
   await publishAtomically('latest.json');
   console.log(`NAS 게시 완료: ${targetDir}`);
 }
