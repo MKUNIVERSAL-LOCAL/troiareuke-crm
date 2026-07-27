@@ -1,3 +1,6 @@
+// 순환 import(authApi ↔ nasOutbox) 안전: 양쪽 모두 최상위에서 상대 바인딩을 평가하지 않는다
+import { flushNasOutbox } from './nasOutbox';
+
 export interface AuthApiUser {
   id: string;
   email: string;
@@ -104,6 +107,8 @@ export async function restoreAuthApiSession(): Promise<RestoreResult> {
 }
 
 export async function logoutFromAuthApi() {
+  // 미전송 outbox를 best-effort로 비운다 — 실패해도 로그아웃은 진행 (서버 모드 로그아웃 wipe 전 마지막 전송 기회)
+  try { await flushNasOutbox(); } catch {}
   try {
     if (localStorage.getItem(AUTH_TOKEN_KEY)) {
       await apiRequest<void>('/api/auth/logout', { method: 'POST' });
