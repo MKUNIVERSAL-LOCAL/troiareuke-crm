@@ -28,6 +28,9 @@ jobs:
       - name: TypeScript check (tsc --noEmit)
         run: npx tsc --noEmit
 
+      - name: NAS outbox smoke test
+        run: npm run test:outbox
+
       - name: PWA build check
         run: npm run build
         env:

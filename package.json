@@ -20,6 +20,7 @@
     "electron:release": "npm run build && electron-builder --win --publish always",
     "release:stage": "node scripts/stage-nas-update.mjs",
     "release:nas": "npm run electron:installer && npm run release:stage",
+    "test:outbox": "node scripts/test-nas-outbox.mjs",
     "deploy": "cross-env DEPLOY_TARGET=ghpages npm run build && gh-pages -d dist"
   },
   "dependencies": {
