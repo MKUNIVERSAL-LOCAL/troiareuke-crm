@@ -152,7 +152,7 @@ ipcMain.handle('start-google-oauth', async (_event, { authUrl }) => {
       if (req.url.startsWith('/google-callback')) {
         // HTML 페이지: URL fragment(#access_token=...)를 서버에 다시 POST
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`<!DOCTYPE html><html><head><title>트로이아르케 CRM - Google 연결</title></head>
+        res.end(`<!DOCTYPE html><html><head><title>더마노트 - Google 연결</title></head>
 <body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0f9ff;">
 <div style="text-align:center;">
   <h2 style="color:#1a3a8f;">✅ Google 캘린더 연결 완료!</h2>
@@ -224,7 +224,7 @@ function createWindow() {
       sandbox: true,
       preload: path.join(__dirname, 'preload.cjs'),
     },
-    title: isAdminBuild ? '트로이아르케 CRM 어드민' : '트로이아르케 CRM',
+    title: isAdminBuild ? '더마노트 어드민' : '더마노트',
     // icon: path.join(__dirname, '../public/icon.ico'),
     autoHideMenuBar: true,
     show: false,

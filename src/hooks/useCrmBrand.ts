@@ -4,7 +4,7 @@ import { SettingsStore } from '../lib/store';
 export const SHOP_SETTINGS_CHANGED_EVENT = 'crm:shop-settings-changed';
 
 const DEFAULT_SHOP_PLACEHOLDER = '내 에스테틱 샵';
-const DEFAULT_PROGRAM_NAME = '트로이아르케 CRM';
+const DEFAULT_PROGRAM_NAME = '더마노트';
 
 function cleanShopName(value?: string | null): string {
   return (value || '').trim().replace(/\s*CRM\s*$/i, '').trim();

@@ -32,7 +32,7 @@ export default function AdminLayout() {
           <h1 className="text-xl font-bold text-white">관리자 전용 기능입니다</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
             이 프로그램은 지점용 CRM입니다. 관리자 콘솔은
-            <strong className="text-white"> 트로이아르케 CRM 어드민 </strong>
+            <strong className="text-white"> 더마노트 어드민 </strong>
             프로그램에서 이용해주세요.
           </p>
           <button
@@ -67,10 +67,10 @@ export default function AdminLayout() {
         <div className="px-5 py-5 border-b border-slate-700/50">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm font-black">T</span>
+              <span className="text-white text-sm font-black">D</span>
             </div>
             <div>
-              <p className="text-xs font-black tracking-widest text-white leading-tight">TROIAREUKE</p>
+              <p className="text-xs font-black tracking-widest text-white leading-tight">DERMANOTE</p>
               <p className="text-xs text-blue-400 font-medium">관리자 콘솔</p>
             </div>
           </div>

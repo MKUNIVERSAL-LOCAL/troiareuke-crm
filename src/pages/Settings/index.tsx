@@ -125,7 +125,7 @@ export default function Settings() {
     const shopPhone = SettingsStore.get().phone;
     const result = await sendMessages({
       type: 'sms',
-      content: '[트로이아르케 CRM] 테스트 발송 메시지입니다.',
+      content: '[더마노트] 테스트 발송 메시지입니다.',
       recipients: 1,
       phones: shopPhone ? [shopPhone] : [],
     });
