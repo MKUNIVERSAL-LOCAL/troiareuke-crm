@@ -32,3 +32,10 @@
 - 편집 정본: GitHub `MKUNIVERSAL-LOCAL/troiareuke-crm` main + 로컬 `F:\dev\crm-claude`
 - OneDrive `트로이아르케-CRM/`은 **빌드 배포본**(편집 금지), 배포는 robocopy(/MIR 절대 금지 — 고객 데이터 폴더 보존)
 - 어드민 배포본: OneDrive `트로이아르케-CRM-어드민/`
+
+## 6. 배포 불변 원칙 — 재다운로드 절대 금지 (오너 상시 지시)
+- **사용자가 설치파일을 다시 받게 만드는 릴리스는 금지.** 설치는 매장당 평생 1회, 이후는 인앱 자동 업데이트로만.
+- 모든 릴리스는 직전 버전에서 인앱 업데이트로 도달 가능해야 한다 (포터블 exe + 폴더형 zip 양쪽).
+- 릴리스 검증 체크리스트와 상세 규칙: **`docs/DISTRIBUTION-POLICY.md` (필독)**.
+- 업데이트 메커니즘 변경 시 하위호환 브리지 필수 (v1.0.39 폴더형 실사고 재발 금지).
+- 신규 설치 안내는 배포 사이트(https://crm-update.mkcorp.familyds.com/)로만 — 파일 직접 전달 금지.
