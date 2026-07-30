@@ -119,8 +119,41 @@ app.use((req, res, next) => {
   next();
 });
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
+// 로그인·가입 남용 방어 2중 구조.
+// 프록시가 X-Forwarded-For를 안 넘기면 전 클라이언트가 IP 버킷 하나로 합쳐져
+// 한 매장의 실패가 전 지점 로그인을 잠근다(2026-07-30 실측). 그래서
+//  - IP 버킷은 실패만 집계 + 한도 완화(플러드 방어 역할)
+//  - 무차별 대입 방어는 계정(이메일) 단위 실패 버킷이 담당
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: envInteger('AUTH_IP_FAIL_LIMIT', 100, 10, 10000),
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res, _next, options) => {
+    log('warn', 'rate_limit_ip', { path: req.path, ip: req.ip, xff: req.get('x-forwarded-for') || null });
+    res.status(options.statusCode).json({ error: '요청이 너무 많습니다. 15분 후 다시 시도해주세요.' });
+  },
+});
+const loginEmailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: envInteger('AUTH_EMAIL_FAIL_LIMIT', 10, 3, 1000),
+  skipSuccessfulRequests: true,
+  standardHeaders: false,
+  legacyHeaders: false,
+  keyGenerator: req => `email:${normalizeEmail(req.body?.email) || 'missing'}`,
+  handler: (req, res, _next, options) => {
+    log('warn', 'rate_limit_email', { path: req.path, email: maskEmail(normalizeEmail(req.body?.email)), ip: req.ip });
+    res.status(options.statusCode).json({ error: '로그인 시도가 너무 많습니다. 15분 후 다시 시도해주세요.' });
+  },
+});
 const resetLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false });
+
+function maskEmail(value) {
+  if (!value || !value.includes('@')) return value || null;
+  const [local, domain] = value.split('@');
+  return `${local.slice(0, 2)}***@${domain}`;
+}
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -499,7 +532,7 @@ app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
   }
 });
 
-app.post('/api/auth/login', authLimiter, async (req, res, next) => {
+app.post('/api/auth/login', authLimiter, loginEmailLimiter, async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
     const password = String(req.body.password || '');
