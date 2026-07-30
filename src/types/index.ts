@@ -163,9 +163,9 @@ export interface KakaoSettings {
 export interface ShopSettings {
   id: string;
   name: string;
-  // 네일·피부관리(에스테틱) 업종만 취급 — 무관 업종(헤어 등) 제거 (2026-07-30 오너 지시).
+  // 피부관리(에스테틱) 업종 전용 — 무관 업종(헤어·네일·속눈썹·반영구 등) 제거 (2026-07-30 오너 지시).
   // UI 업종 목록('에스테틱샵' 등 Onboarding/Settings/Admin)과 커스텀 값을 모두 수용.
-  type: '피부관리실' | '에스테틱샵' | '네일샵' | '복합샵' | (string & {});
+  type: '피부관리실' | '에스테틱샵' | '복합샵' | (string & {});
   phone: string;
   address: string;
   businessHours: Record<string, { open: string; close: string; isOff: boolean }>;

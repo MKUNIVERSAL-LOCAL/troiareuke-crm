@@ -3,7 +3,7 @@ import { Plus, Package, Edit2, Trash2, CheckCircle, XCircle, Tag, Clock, Calenda
 import { ProgramStore } from '../../lib/store';
 import type { Program } from '../../types';
 
-const CATEGORIES = ['피부관리', '네일', '바디관리', '왁싱', '복합', '기타'];
+const CATEGORIES = ['피부관리', '바디관리', '왁싱', '복합', '기타'];
 // 과거 저장 데이터의 '마사지' 카테고리는 '바디관리'로 표시·분류 (2026-07-30 명칭 변경)
 const normalizeCategory = (c: string) => (c === '마사지' ? '바디관리' : c);
 const COLORS = ['#1a3a8f', '#7c3aed', '#dc2626', '#059669', '#d97706', '#0891b2', '#be185d'];

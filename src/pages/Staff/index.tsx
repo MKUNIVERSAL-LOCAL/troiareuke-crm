@@ -5,7 +5,7 @@ import Modal from '../../components/ui/Modal';
 import { StaffStore, ReservationStore } from '../../lib/store';
 import type { Staff } from '../../types';
 
-const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '네일', '왁싱', '눈썹관리', '각질관리'];
+const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '왁싱', '각질관리'];
 // 과거 저장 데이터의 '마사지' 전문분야는 '바디관리'로 표시 (2026-07-30 명칭 변경)
 const normalizeSpecialty = (s: string) => (s === '마사지' ? '바디관리' : s);
 const COLOR_OPTIONS = ['#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#6366F1', '#14B8A6'];
@@ -294,7 +294,6 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
               <option value="상담팀">상담팀</option>
               <option value="마케팅팀">마케팅팀</option>
               <option value="매니저">매니저</option>
-              <option value="네일아티스트">네일아티스트</option>
               <option value="인턴">인턴</option>
             </select>
           </div>
@@ -466,8 +465,7 @@ function StaffDetailModal({
                 <option value="상담팀">상담팀</option>
                 <option value="마케팅팀">마케팅팀</option>
                 <option value="매니저">매니저</option>
-                <option value="네일아티스트">네일아티스트</option>
-                <option value="인턴">인턴</option>
+                  <option value="인턴">인턴</option>
               </select>
             </div>
           </div>
