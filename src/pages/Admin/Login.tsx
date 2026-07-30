@@ -24,7 +24,7 @@ export default function AdminLogin() {
           <h1 className="text-xl font-bold text-white">관리자 로그인은 어드민 프로그램에서</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
             이 프로그램은 지점용 CRM입니다. 관리자는
-            <strong className="text-white"> 트로이아르케 CRM 어드민 </strong>
+            <strong className="text-white"> 더마노트 어드민 </strong>
             프로그램을 실행해주세요.
           </p>
           <button
@@ -69,10 +69,10 @@ export default function AdminLogin() {
         <div className="relative">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <span className="text-white text-base font-black">T</span>
+              <span className="text-white text-base font-black">D</span>
             </div>
             <div>
-              <p className="text-sm font-black tracking-widest text-white">TROIAREUKE</p>
+              <p className="text-sm font-black tracking-widest text-white">DERMANOTE</p>
               <p className="text-xs text-blue-400 font-medium tracking-wider">ADMIN CONSOLE</p>
             </div>
           </div>
@@ -89,7 +89,7 @@ export default function AdminLogin() {
             <span className="text-slate-400">콘솔</span>
           </h2>
           <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
-            트로이아르케 CRM 플랫폼의 지점, 사용자, 구독, 통계를 관리합니다.
+            더마노트 플랫폼의 지점, 사용자, 구독, 통계를 관리합니다.
           </p>
 
           {/* System status cards */}
@@ -119,7 +119,7 @@ export default function AdminLogin() {
 
         {/* Bottom */}
         <div className="relative">
-          <p className="text-[11px] text-slate-600">TROIAREUKE CRM Platform v1.0 — Superadmin Access</p>
+          <p className="text-[11px] text-slate-600">DERMANOTE Platform v1.0 — Superadmin Access</p>
         </div>
       </div>
 
@@ -130,10 +130,10 @@ export default function AdminLogin() {
           <div className="lg:hidden mb-8 flex justify-center">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-                <span className="text-white text-base font-black">T</span>
+                <span className="text-white text-base font-black">D</span>
               </div>
               <div>
-                <p className="text-sm font-black tracking-widest text-white">TROIAREUKE</p>
+                <p className="text-sm font-black tracking-widest text-white">DERMANOTE</p>
                 <p className="text-xs text-blue-400 font-medium">ADMIN CONSOLE</p>
               </div>
             </div>
