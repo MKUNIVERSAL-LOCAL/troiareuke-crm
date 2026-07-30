@@ -231,10 +231,21 @@ function createWindow() {
     backgroundColor: '#f9fafb',
   });
 
+  // 페일세이프: 렌더링이 첫 페인트에 실패하는 환경(GPU 캐시 손상 등)에서는 ready-to-show가
+  // 영영 안 와서 '프로세스만 살아있는 유령 앱'이 된다(2026-07-30 지점 실증). 7초 내 신호가
+  // 없으면 창을 강제 표시해 최소한 상태를 보이게 한다.
+  const showFailsafe = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  }, 7000);
   mainWindow.once('ready-to-show', () => {
+    clearTimeout(showFailsafe);
     mainWindow.show();
     mainWindow.focus();
   });
+  mainWindow.once('closed', () => clearTimeout(showFailsafe));
 
   // 어드민 빌드: 렌더러 document.title이 창 제목을 덮지 않게 고정 (직원용 창과 구분)
   if (isAdminBuild) {
