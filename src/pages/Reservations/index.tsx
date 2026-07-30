@@ -16,6 +16,7 @@ import {
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
+import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 
 const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
 
@@ -69,6 +70,7 @@ export default function Reservations() {
   const [googleEvents, setGoogleEvents] = useState<GoogleEventLike[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [staffFilter, setStaffFilter] = useState('all');
   const googleConnected = isGoogleCalendarConnected();
 
   const reloadReservations = useCallback(() => {
@@ -125,6 +127,7 @@ export default function Reservations() {
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const normalizedSearch = search.trim().toLowerCase();
   const filteredReservations = reservations.filter(r => {
+    const staffMatches = staffFilter === 'all' || r.staffId === staffFilter;
     const statusMatches = statusFilter === 'all' || r.status === statusFilter;
     const searchMatches = !normalizedSearch || [
       r.customerName,
@@ -133,7 +136,7 @@ export default function Reservations() {
       r.memo || '',
       ...r.services.map(service => service.serviceName),
     ].some(value => value.toLowerCase().includes(normalizedSearch));
-    return statusMatches && searchMatches;
+    return staffMatches && statusMatches && searchMatches;
   });
   const mobileFilteredReservations = (() => {
     if (mobileTab === 'today') {
@@ -214,6 +217,15 @@ export default function Reservations() {
               <option value="completed">완료</option>
               <option value="cancelled">취소</option>
               <option value="noshow">노쇼</option>
+            </select>
+            <select
+              value={staffFilter}
+              onChange={e => setStaffFilter(e.target.value)}
+              className="border border-gray-200 rounded-xl px-2 text-xs bg-white outline-none"
+              aria-label="담당 직원 필터"
+            >
+              <option value="all">전체 직원</option>
+              {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
         </div>
@@ -341,7 +353,44 @@ export default function Reservations() {
             <option value="cancelled">취소</option>
             <option value="noshow">노쇼</option>
           </select>
+          <select
+            value={staffFilter}
+            onChange={e => setStaffFilter(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
+            aria-label="담당 직원 필터"
+          >
+            <option value="all">전체 직원</option>
+            {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
           <span className="text-xs text-gray-400 whitespace-nowrap">{filteredReservations.length}건</span>
+        </div>
+
+        {/* 직원별 예약현황 요약 — 현재 필터(상태·검색) 기준, 직원 클릭 시 해당 직원만 보기 */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {staffList.map(s => {
+            const periodDates = viewMode === 'week'
+              ? weekDays.map(d => format(d, 'yyyy-MM-dd'))
+              : viewMode === 'day' ? [format(currentDate, 'yyyy-MM-dd')] : null;
+            const count = reservations.filter(r => {
+              if (r.staffId !== s.id) return false;
+              if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+              if (periodDates && !periodDates.includes(r.date)) return false;
+              return true;
+            }).length;
+            const active = staffFilter === s.id;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setStaffFilter(active ? 'all' : s.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  active ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                {s.name} {count}건
+              </button>
+            );
+          })}
         </div>
 
         {/* Calendar Views */}
@@ -849,6 +898,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     onUpdate();
   };
 
+  const [showPayModal, setShowPayModal] = useState(false);
+
   const handleComplete = () => {
     ReservationStore.updateStatus(r.id, 'completed');
     // 완료 → 결제 브리지: 기존엔 상태만 바뀌고 매출에 잡히지 않아 Sales에서 수기 재입력이 필요했음
@@ -856,23 +907,10 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
       const alreadyPaid = PaymentStore.getAll().some(p => p.referenceId === r.id);
       if (alreadyPaid) {
         alert('완료 처리했습니다. (이 예약의 결제는 이미 등록되어 있어 중복 등록하지 않았습니다)');
-      } else if (window.confirm(
-        `완료 처리했습니다.\n\n결제 ${r.totalPrice.toLocaleString()}원(카드)도 함께 등록할까요?\n` +
-        `(금액·결제수단 수정은 매출 화면에서 가능합니다)`
-      )) {
-        PaymentStore.save({
-          customerId: r.customerId,
-          customerName: r.customerName,
-          paymentDate: r.date,
-          type: 'single_treatment',
-          typeLabel: r.services.map(s => s.serviceName).join(', ') || '시술',
-          referenceId: r.id,
-          amount: r.totalPrice,
-          paymentMethod: '카드',
-          discountAmount: 0,
-          status: 'completed',
-          memo: '예약 완료 처리에서 자동 등록',
-        });
+      } else {
+        // 결제수단 선택 모달로 — 단일/복합(분할) 결제와 커스텀 수단 지원
+        setShowPayModal(true);
+        return; // 결제 모달이 닫힐 때 onUpdate 호출
       }
     }
     onUpdate();
@@ -958,6 +996,110 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
             <Trash2 size={14} /> 삭제
           </button>
           <button onClick={onEdit} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all">수정</button>
+        </div>
+      </div>
+      {showPayModal && (
+        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} />
+      )}
+    </Modal>
+  );
+}
+
+// 완료처리 결제 등록 모달 — 단일 결제 + 복합(2가지 수단 분할) + 커스텀 결제수단
+function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reservation; onDone: () => void }) {
+  const [mode, setMode] = useState<'single' | 'split'>('single');
+  const [method, setMethod] = useState('카드');
+  const [methodA, setMethodA] = useState('카드');
+  const [methodB, setMethodB] = useState('현금');
+  const [amountA, setAmountA] = useState(String(r.totalPrice));
+  const [amountB, setAmountB] = useState('0');
+
+  const basePayment = {
+    customerId: r.customerId,
+    customerName: r.customerName,
+    paymentDate: r.date,
+    type: 'single_treatment' as const,
+    typeLabel: r.services.map(s => s.serviceName).join(', ') || '시술',
+    referenceId: r.id,
+    discountAmount: 0,
+    status: 'completed' as const,
+  };
+
+  const handleSave = () => {
+    if (mode === 'single') {
+      PaymentStore.save({ ...basePayment, amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
+    } else {
+      const a = Math.max(0, Number(amountA.replace(/\D/g, '')) || 0);
+      const b = Math.max(0, Number(amountB.replace(/\D/g, '')) || 0);
+      if (a + b !== r.totalPrice) {
+        alert(`분할 금액 합계(${(a + b).toLocaleString()}원)가 결제 금액(${r.totalPrice.toLocaleString()}원)과 다릅니다.`);
+        return;
+      }
+      if (methodA === methodB) {
+        alert('두 결제수단이 같습니다. 단일 결제를 사용해주세요.');
+        return;
+      }
+      const splitMemo = `복합결제 (${methodA} ${a.toLocaleString()}원 + ${methodB} ${b.toLocaleString()}원)`;
+      if (a > 0) PaymentStore.save({ ...basePayment, amount: a, paymentMethod: methodA, memo: splitMemo });
+      if (b > 0) PaymentStore.save({ ...basePayment, amount: b, paymentMethod: methodB, memo: splitMemo });
+    }
+    onDone();
+  };
+
+  return (
+    <Modal isOpen={true} onClose={onDone} title="결제 등록" size="md">
+      <div className="space-y-4">
+        <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 text-sm text-gray-700">
+          완료 처리됐습니다. 결제 <span className="font-bold">{r.totalPrice.toLocaleString()}원</span>을 매출에 등록하세요.
+        </div>
+
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setMode('single')}
+            className={`flex-1 py-2 rounded-xl text-sm border ${mode === 'single' ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200'}`}>
+            단일 결제
+          </button>
+          <button type="button" onClick={() => setMode('split')}
+            className={`flex-1 py-2 rounded-xl text-sm border ${mode === 'split' ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200'}`}>
+            복합 결제 (카드+현금 등)
+          </button>
+        </div>
+
+        {mode === 'single' ? (
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-2">결제수단</p>
+            <PaymentMethodPicker value={method} onChange={setMethod} />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {[
+              { label: '결제수단 ①', m: methodA, setM: setMethodA, amt: amountA, setAmt: setAmountA },
+              { label: '결제수단 ②', m: methodB, setM: setMethodB, amt: amountB, setAmt: setAmountB },
+            ].map(row => (
+              <div key={row.label} className="border border-gray-100 rounded-xl p-3 space-y-2">
+                <p className="text-xs font-medium text-gray-500">{row.label}</p>
+                <PaymentMethodPicker value={row.m} onChange={row.setM} />
+                <input
+                  inputMode="numeric"
+                  value={row.amt}
+                  onChange={e => row.setAmt(e.target.value.replace(/[^\d]/g, ''))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="금액(원)"
+                />
+              </div>
+            ))}
+            <p className="text-xs text-gray-400 text-right">
+              합계 {((Number(amountA) || 0) + (Number(amountB) || 0)).toLocaleString()}원 / 결제 금액 {r.totalPrice.toLocaleString()}원
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onDone} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
+            결제 등록 없이 닫기
+          </button>
+          <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium hover:bg-green-600">
+            결제 등록
+          </button>
         </div>
       </div>
     </Modal>

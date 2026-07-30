@@ -19,6 +19,7 @@ import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/fe
 import * as XLSX from 'xlsx';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
 import { maskPhone } from '../../lib/masking';
+import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatPrice, formatDate, todayISO as today } from '../../lib/format';
 
@@ -68,7 +69,6 @@ const GRADE_COLORS: Record<CustomerGrade, string> = {
   신규: 'bg-green-100 text-green-700',
 };
 const GRADES: CustomerGrade[] = ['VIP', '골드', '일반', '신규'];
-const PAYMENT_METHODS: PaymentMethod[] = ['카드', '현금', '계좌이체', '카카오페이'];
 
 function getDaysSince(d?: string) {
   if (!d) return null;
@@ -132,6 +132,7 @@ export default function Customers() {
   // 고객 추가 모달
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+  const [addPrivacyConsent, setAddPrivacyConsent] = useState(false);
 
   // 고객 수정 모달
   const [showEditModal, setShowEditModal] = useState(false);
@@ -565,6 +566,10 @@ export default function Customers() {
       alert('이름과 전화번호는 필수입니다.');
       return;
     }
+    if (!addPrivacyConsent) {
+      alert('개인정보 수집·이용 동의가 필요합니다. 고객에게 동의를 받은 뒤 체크해주세요.');
+      return;
+    }
     const normalize = (p: string) => p.replace(/\D/g, '');
     const newPhone = normalize(addForm.phone);
     const dup = CustomerStore.getAll().find(c => normalize(c.phone) === newPhone && newPhone !== '');
@@ -581,9 +586,11 @@ export default function Customers() {
       email: addForm.email.trim() || undefined, allergies: undefined,
       address: addForm.address.trim() || undefined,
       tags: [], isActive: true,
+      privacyConsent: true, privacyConsentAt: new Date().toISOString(),
     });
     setShowAddModal(false);
     setAddForm({ name: '', phone: '', email: '', address: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '' });
+    setAddPrivacyConsent(false);
     loadAll();
   }
 
@@ -1032,6 +1039,11 @@ export default function Customers() {
                     </div>
                     <p className="text-sm text-gray-500">{maskPhone(selected.phone, user?.role ?? 'staff')}</p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}
+                    <p className={`text-xs mt-0.5 ${selected.privacyConsent ? 'text-green-600' : 'text-amber-500'}`}>
+                      개인정보 동의: {selected.privacyConsent
+                        ? `동의함${selected.privacyConsentAt ? ` (${selected.privacyConsentAt.slice(0, 10)})` : ''}`
+                        : '기록 없음 (구 등록 고객)'}
+                    </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -1257,6 +1269,30 @@ export default function Customers() {
                           <span>등록일: {formatDate(cp.purchaseDate)}</span>
                           {cp.expiryDate && <span>만료일: {formatDate(cp.expiryDate)}</span>}
                         </div>
+
+                        {/* 차감 내역 — 어떤 관리로 몇 회가 차감됐는지 (시술기록 연동) */}
+                        {(() => {
+                          const deductions = TreatmentLogStore.getByCustomer(selected.id)
+                            .filter(t => t.customerProgramId === cp.id && t.sessionsUsed > 0);
+                          if (deductions.length === 0) return null;
+                          return (
+                            <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+                              <p className="text-[11px] font-medium text-gray-400">차감 내역 ({deductions.length}건)</p>
+                              {deductions.slice(0, 10).map(t => (
+                                <div key={t.id} className="flex items-center justify-between text-[11px] text-gray-500">
+                                  <span className="truncate mr-2">
+                                    {formatDate(t.treatmentDate)} · {t.treatmentDetails || t.programName || '관리'}
+                                    {t.staffName ? ` (${t.staffName})` : ''}
+                                  </span>
+                                  <span className="font-semibold text-orange-500 whitespace-nowrap">-{t.sessionsUsed}회</span>
+                                </div>
+                              ))}
+                              {deductions.length > 10 && (
+                                <p className="text-[11px] text-gray-300">외 {deductions.length - 10}건 — 전체는 최근 시술 기록 참조</p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -1426,6 +1462,14 @@ export default function Customers() {
                   rows={2} placeholder="특이사항, 알레르기 등"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
+              <label className="flex items-start gap-2 p-3 bg-blue-50/60 border border-blue-100 rounded-xl cursor-pointer">
+                <input type="checkbox" checked={addPrivacyConsent} onChange={e => setAddPrivacyConsent(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-[#1a3a8f] focus:ring-blue-500" />
+                <span className="text-xs text-gray-700 leading-relaxed">
+                  <span className="font-semibold">[필수] 개인정보 수집·이용 동의</span><br />
+                  고객관리 목적으로 이름·연락처 등 개인정보를 수집·이용하는 것에 대해 고객 본인의 동의를 받았습니다.
+                </span>
+              </label>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">등록</button>
@@ -1584,7 +1628,7 @@ export default function Customers() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제 방법</label>
                   <select value={progForm.paymentMethod} onChange={e => setProgForm(f => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                    {getAllPaymentMethods().map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </div>
                 <div>

@@ -3,7 +3,9 @@ import { Plus, Package, Edit2, Trash2, CheckCircle, XCircle, Tag, Clock, Calenda
 import { ProgramStore } from '../../lib/store';
 import type { Program } from '../../types';
 
-const CATEGORIES = ['피부관리', '네일', '마사지', '왁싱', '복합', '기타'];
+const CATEGORIES = ['피부관리', '네일', '바디관리', '왁싱', '복합', '기타'];
+// 과거 저장 데이터의 '마사지' 카테고리는 '바디관리'로 표시·분류 (2026-07-30 명칭 변경)
+const normalizeCategory = (c: string) => (c === '마사지' ? '바디관리' : c);
 const COLORS = ['#1a3a8f', '#7c3aed', '#dc2626', '#059669', '#d97706', '#0891b2', '#be185d'];
 
 const COLOR_LABELS: Record<string, string> = {
@@ -101,7 +103,7 @@ export default function Programs() {
 
   const normalizedSearch = search.trim().toLowerCase();
   const filtered = programs.filter(p => {
-    const categoryMatches = filterCategory === '전체' || p.category === filterCategory;
+    const categoryMatches = filterCategory === '전체' || normalizeCategory(p.category) === filterCategory;
     const statusMatches = statusFilter === 'all'
       || (statusFilter === 'active' ? p.isActive : !p.isActive);
     const searchMatches = !normalizedSearch
@@ -199,7 +201,7 @@ export default function Programs() {
             {cat}
             {cat !== '전체' && (
               <span className="ml-1 text-xs opacity-70">
-                ({programs.filter(p => p.category === cat).length})
+                ({programs.filter(p => normalizeCategory(p.category) === cat).length})
               </span>
             )}
           </button>
@@ -228,7 +230,7 @@ export default function Programs() {
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: program.color }} />
                     <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                      {program.category}
+                      {normalizeCategory(program.category)}
                     </span>
                     {!program.isActive && (
                       <span className="text-xs text-red-400 bg-red-50 px-2 py-0.5 rounded-full">비활성</span>

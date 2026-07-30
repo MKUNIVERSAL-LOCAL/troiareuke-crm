@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  TrendingUp, TrendingDown, Plus, X, CheckCircle,
-  CreditCard, Banknote, Smartphone, DollarSign,
+  TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
   ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search
 } from 'lucide-react';
 import {
@@ -14,13 +13,11 @@ import {
 import type { Payment, PaymentMethod } from '../../types';
 
 import { formatPrice, todayISO as today } from '../../lib/format';
+import PaymentMethodPicker from '../../components/PaymentMethodPicker';
+import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
-const PAYMENT_METHODS: PaymentMethod[] = ['카드', '현금', '계좌이체', '카카오페이'];
-const METHOD_ICONS: Record<string, React.ElementType> = {
-  '카드': CreditCard, '현금': Banknote, '계좌이체': Banknote, '카카오페이': Smartphone,
-};
 
 export default function Sales() {
   const [tab, setTab] = useState<'overview' | 'list'>('overview');
@@ -411,7 +408,7 @@ export default function Sales() {
                 aria-label="결제 수단 필터"
               >
                 <option value="all">전체 결제수단</option>
-                {PAYMENT_METHODS.map(method => <option key={method} value={method}>{method}</option>)}
+                {getAllPaymentMethods().map(method => <option key={method} value={method}>{method}</option>)}
               </select>
             </div>
             <span className="text-xs text-gray-400 whitespace-nowrap">{listPayments.length}건 표시</span>
@@ -595,20 +592,10 @@ export default function Sales() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제 방법</label>
-                  <div className="flex gap-1 flex-wrap">
-                    {PAYMENT_METHODS.map(m => (
-                      <button
-                        type="button"
-                        key={m}
-                        onClick={() => setForm(f => ({ ...f, paymentMethod: m }))}
-                        className={`px-2.5 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
-                          form.paymentMethod === m ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
+                  <PaymentMethodPicker
+                    value={form.paymentMethod}
+                    onChange={m => setForm(f => ({ ...f, paymentMethod: m }))}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제일</label>

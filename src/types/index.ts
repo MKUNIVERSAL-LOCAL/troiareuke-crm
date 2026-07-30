@@ -5,7 +5,8 @@ export type CustomerGrade = 'VIP' | '골드' | '일반' | '신규';
 export type Gender = '여성' | '남성' | '미입력';
 export type ReservationStatus = 'confirmed' | 'pending' | 'completed' | 'cancelled' | 'noshow';
 export type ReservationSource = 'manual' | 'naver' | 'kakao' | 'phone' | 'walk-in' | 'app';
-export type PaymentMethod = '카드' | '현금' | '계좌이체' | '카카오페이' | '혼합';
+// (string & {}) — 매장이 직접 추가한 커스텀 결제수단(예: 상품권) 허용. 기본값 자동완성은 유지.
+export type PaymentMethod = '카드' | '현금' | '계좌이체' | '카카오페이' | '혼합' | (string & {});
 export type MessageType = 'sms' | 'lms' | 'mms' | 'kakao-channel' | 'kakao-openchat';
 export type MessageStatus = 'draft' | 'sending' | 'sent' | 'failed';
 
@@ -29,6 +30,9 @@ export interface Customer {
   tags: string[];
   isActive: boolean;
   referralSource?: string;
+  /** 개인정보 수집·이용 동의 (등록 시 필수 체크) */
+  privacyConsent?: boolean;
+  privacyConsentAt?: string;
 }
 
 export interface Service {
@@ -159,7 +163,9 @@ export interface KakaoSettings {
 export interface ShopSettings {
   id: string;
   name: string;
-  type: '피부관리실' | '네일샵' | '헤어샵' | '복합샵';
+  // 네일·피부관리(에스테틱) 업종만 취급 — 무관 업종(헤어 등) 제거 (2026-07-30 오너 지시).
+  // UI 업종 목록('에스테틱샵' 등 Onboarding/Settings/Admin)과 커스텀 값을 모두 수용.
+  type: '피부관리실' | '에스테틱샵' | '네일샵' | '복합샵' | (string & {});
   phone: string;
   address: string;
   businessHours: Record<string, { open: string; close: string; isOff: boolean }>;
