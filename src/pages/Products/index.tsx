@@ -2,13 +2,13 @@
 import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
+import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import { ProductStore, ProductSaleStore, CustomerStore } from '../../lib/store';
 import type { Product, ProductSale } from '../../types';
 import type { PaymentMethod } from '../../types';
 import clsx from 'clsx';
 
 const CATEGORIES = ['전체', '세럼', '크림', '스킨', '선케어', '앰플', '클렌저', '오일', '기타'];
-const PAYMENT_METHODS: PaymentMethod[] = ['카드', '현금', '계좌이체', '카카오페이'];
 
 type Tab = 'inventory' | 'sales';
 
@@ -695,22 +695,10 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
         {/* Payment Method */}
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">결제수단</label>
-          <div className="flex gap-2 flex-wrap">
-            {PAYMENT_METHODS.map(m => (
-              <button
-                key={m}
-                onClick={() => setForm(prev => ({ ...prev, paymentMethod: m }))}
-                className={clsx(
-                  'flex-1 py-2 text-sm font-medium rounded-xl border transition-all',
-                  form.paymentMethod === m
-                    ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-[#1a3a8f]/30'
-                )}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
+          <PaymentMethodPicker
+            value={form.paymentMethod}
+            onChange={m => setForm(prev => ({ ...prev, paymentMethod: m }))}
+          />
         </div>
 
         {/* Date */}

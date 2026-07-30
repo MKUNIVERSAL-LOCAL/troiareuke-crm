@@ -40,16 +40,39 @@ const notes = await fs.readFile(notesPath, 'utf8')
   .then(text => text.trim().slice(0, 2000))
   .catch(() => '');
 
+// 폴더형(win-unpacked) 설치용 전체 zip — 포터블 자가압축해제가 백신에 막히는 PC의 우회 설치본이며,
+// 인앱 업데이트도 이 zip으로 받는다 (zipUrl/zipSha256 매니페스트 필드).
+const publicZipName = 'TroiareukeCRM-win64.zip';
+const winUnpackedDir = path.join(releaseDir, 'win-unpacked');
+const stagedZipPath = path.join(stageDir, publicZipName);
+await fs.mkdir(stageDir, { recursive: true });
+const { execFileSync } = await import('node:child_process');
+execFileSync('powershell.exe', [
+  '-NoProfile', '-Command',
+  `Compress-Archive -Path '${winUnpackedDir.replace(/'/g, "''")}\\*' -DestinationPath '${stagedZipPath.replace(/'/g, "''")}' -Force`,
+], { stdio: 'inherit' });
+const zipHash = crypto.createHash('sha256');
+await new Promise((resolve, reject) => {
+  const stream = createReadStream(stagedZipPath);
+  stream.on('data', chunk => zipHash.update(chunk));
+  stream.on('end', resolve);
+  stream.on('error', reject);
+});
+const zipSha256 = zipHash.digest('hex');
+const zipStat = await fs.stat(stagedZipPath);
+
 const manifest = {
   version: packageJson.version,
   url: `${publicBaseUrl}/${publicArtifactName}`,
   sha256,
   size: sourceStat.size,
+  zipUrl: `${publicBaseUrl}/${publicZipName}`,
+  zipSha256,
+  zipSize: zipStat.size,
   releaseDate: new Date().toISOString(),
   ...(notes ? { notes } : {}),
 };
 
-await fs.mkdir(stageDir, { recursive: true });
 await fs.copyFile(sourcePath, stagedArtifactPath);
 await fs.copyFile(sourcePath, stagedPublicArtifactPath); // gh release 업로드용 (수동 cp 단계 제거)
 await fs.writeFile(path.join(stageDir, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -102,6 +125,7 @@ if (nasRoot) {
   }
 
   await publishAtomically(publicArtifactName); // manifest.url이 가리키는 공개 파일명 — exe를 latest.json보다 먼저
+  await publishAtomically(publicZipName); // 폴더형 설치 업데이트용 zip도 latest.json보다 먼저
   await publishAtomically('history.json');
   await publishAtomically('latest.json');
   console.log(`NAS 게시 완료: ${targetDir}`);

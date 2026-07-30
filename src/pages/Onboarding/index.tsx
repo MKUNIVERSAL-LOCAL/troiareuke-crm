@@ -458,7 +458,7 @@ export default function Onboarding() {
                       placeholder={`직원 ${i + 1} 이름`} />
                     <select value={s.role} onChange={e => updateStaff(i, 'role', e.target.value)}
                       className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300">
-                      {['대표', '원장', '부원장', '실장', '피부관리사', '에스테티션', '테라피스트', '상담팀', '마케팅팀', '매니저', '네일아티스트', '인턴'].map(r => <option key={r}>{r}</option>)}
+                      {['대표', '원장', '부원장', '실장', '피부관리사', '에스테티션', '테라피스트', '상담팀', '마케팅팀', '매니저', '인턴'].map(r => <option key={r}>{r}</option>)}
                     </select>
                   </div>
                 ))}

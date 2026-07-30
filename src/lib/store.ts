@@ -1690,8 +1690,7 @@ function getSamplePrograms(): Program[] {
   return [
     { id: 'sample_p1', shopId, name: '기본 피부관리 10회권', category: '피부관리', totalSessions: 10, validityDays: 180, price: 800000, costPrice: 300000, description: '기본 피부 클렌징 + 관리', color: '#1a3a8f', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
     { id: 'sample_p2', shopId, name: '프리미엄 피부관리 10회권', category: '피부관리', totalSessions: 10, validityDays: 180, price: 1200000, costPrice: 450000, description: '프리미엄 케어 + 앰플 포함', color: '#7c3aed', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
-    { id: 'sample_p3', shopId, name: '젤네일 10회권', category: '네일', totalSessions: 10, validityDays: 365, price: 350000, costPrice: 120000, description: '젤네일 손 10회', color: '#dc2626', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
-    { id: 'sample_p4', shopId, name: '림프 마사지 5회권', category: '마사지', totalSessions: 5, validityDays: 90, price: 300000, costPrice: 100000, color: '#059669', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
+    { id: 'sample_p4', shopId, name: '림프 바디관리 5회권', category: '바디관리', totalSessions: 5, validityDays: 90, price: 300000, costPrice: 100000, color: '#059669', isActive: true, createdAt: '2024-01-01T00:00:00Z' },
   ];
 }
 
@@ -1708,8 +1707,8 @@ function getSampleProducts(): Product[] {
 function getSampleStaff(): Staff[] {
   const shopId = getShopId();
   return [
-    { id: 'sample_s1', shopId, name: '김원장', role: '원장', phone: '010-1111-2222', specialty: ['피부관리', '마사지'], color: '#1a3a8f', isActive: true, hireDate: '2020-01-01' },
-    { id: 'sample_s2', shopId, name: '이소희', role: '직원', phone: '010-3333-4444', specialty: ['네일', '피부관리'], color: '#7c3aed', isActive: true, hireDate: '2022-03-01' },
+    { id: 'sample_s1', shopId, name: '김원장', role: '원장', phone: '010-1111-2222', specialty: ['피부관리', '바디관리'], color: '#1a3a8f', isActive: true, hireDate: '2020-01-01' },
+    { id: 'sample_s2', shopId, name: '이소희', role: '직원', phone: '010-3333-4444', specialty: ['피부관리', '바디관리'], color: '#7c3aed', isActive: true, hireDate: '2022-03-01' },
   ];
 }
 
@@ -1750,12 +1749,9 @@ function getSampleServices(): Service[] {
     { id: 'sample_sv1', name: '기본 피부관리', category: '피부관리', duration: 90, price: 80000, description: '클렌징 + 각질 + 수분케어', isActive: true },
     { id: 'sample_sv2', name: '프리미엄 피부관리', category: '피부관리', duration: 120, price: 120000, description: '기본관리 + 앰플 + 마스크팩', isActive: true },
     { id: 'sample_sv3', name: '메디컬 스킨케어', category: '피부관리', duration: 90, price: 150000, description: '의료기기 활용 피부케어', isActive: true },
-    { id: 'sample_sv4', name: '림프 마사지', category: '마사지', duration: 60, price: 70000, isActive: true },
-    { id: 'sample_sv5', name: '등·어깨 마사지', category: '마사지', duration: 60, price: 65000, isActive: true },
-    { id: 'sample_sv6', name: '젤네일 (손)', category: '네일', duration: 60, price: 45000, isActive: true },
-    { id: 'sample_sv7', name: '젤네일 (발)', category: '네일', duration: 60, price: 40000, isActive: true },
-    { id: 'sample_sv8', name: '네일아트 추가', category: '네일', duration: 30, price: 15000, isActive: true },
-    { id: 'sample_sv9', name: '왁싱 (눈썹)', category: '왁싱', duration: 30, price: 20000, isActive: true },
+    { id: 'sample_sv4', name: '림프 바디관리', category: '바디관리', duration: 60, price: 70000, isActive: true },
+    { id: 'sample_sv5', name: '등·어깨 바디관리', category: '바디관리', duration: 60, price: 65000, isActive: true },
+    { id: 'sample_sv9', name: '바디 왁싱', category: '왁싱', duration: 30, price: 20000, isActive: true },
     { id: 'sample_sv10', name: '왁싱 (팔/다리)', category: '왁싱', duration: 45, price: 35000, isActive: true },
   ];
 }

@@ -172,7 +172,16 @@ function createPortableUpdater({ app, getMainWindow }) {
         return null;
       }
 
-      availableUpdate = { ...manifest, url: downloadUrl.toString() };
+      // 폴더형(win-unpacked) 설치용 전체 zip — 매니페스트에 있으면 같은 호스트·sha 형식만 수용
+      let zipDownloadUrl = null;
+      if (manifest.zipUrl && /^[a-f0-9]{64}$/i.test(manifest.zipSha256 || '')) {
+        const zipUrl = new URL(manifest.zipUrl, MANIFEST_URL);
+        if (zipUrl.protocol === 'https:' && zipUrl.hostname === ALLOWED_DOWNLOAD_HOST) {
+          zipDownloadUrl = zipUrl.toString();
+        }
+      }
+
+      availableUpdate = { ...manifest, url: downloadUrl.toString(), zipUrl: zipDownloadUrl };
       log('update-available', { version: manifest.version });
       send('update-available', { version: manifest.version, releaseDate: manifest.releaseDate });
       return availableUpdate;
@@ -189,11 +198,20 @@ function createPortableUpdater({ app, getMainWindow }) {
       const update = availableUpdate || await check('manual');
       if (!update) throw new Error('설치할 업데이트가 없습니다.');
 
+      // 포터블 exe는 단일 exe 교체, 폴더형(win-unpacked)은 전체 zip 덮어쓰기 —
+      // 폴더형에서 exe만 갈면 resources가 구버전으로 남아 무결성 해시가 깨진다.
+      const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_FILE);
+      const sourceUrl = isPortable ? update.url : update.zipUrl;
+      const sourceSha = isPortable ? update.sha256 : update.zipSha256;
+      if (!sourceUrl) {
+        throw new Error('폴더형 설치용 업데이트 파일이 아직 게시되지 않았습니다. 관리자에게 문의해주세요.');
+      }
+
       const updateDir = path.join(app.getPath('userData'), 'updates');
       await fs.promises.mkdir(updateDir, { recursive: true });
-      const destination = path.join(updateDir, `troiareuke-crm-${update.version}.new.exe`);
+      const destination = path.join(updateDir, `troiareuke-crm-${update.version}.new.${isPortable ? 'exe' : 'zip'}`);
       await fs.promises.unlink(destination).catch(() => {});
-      await downloadFile(update.url, destination, update.sha256);
+      await downloadFile(sourceUrl, destination, sourceSha);
       downloadedUpdate = { ...update, filePath: destination };
       log('update-downloaded', { version: update.version, filePath: destination });
       send('update-downloaded', { version: update.version });
@@ -215,7 +233,39 @@ function createPortableUpdater({ app, getMainWindow }) {
     if (!downloadedUpdate?.filePath) throw new Error('다운로드된 업데이트가 없습니다.');
     const targetExecutable = process.env.PORTABLE_EXECUTABLE_FILE;
     if (!targetExecutable) {
-      throw new Error('지정 폴더의 단일 실행파일에서 실행해야 업데이트를 적용할 수 있습니다.');
+      // 폴더형(win-unpacked) 설치: 받은 zip을 앱 종료 후 설치 폴더에 덮어쓰고 재실행
+      const targetDir = path.dirname(process.execPath);
+      const exeName = path.basename(process.execPath);
+      const helperPath = path.join(app.getPath('temp'), `troiareuke-updater-${Date.now()}.ps1`);
+      const helperScript = [
+        'param([int]$AppProcessId, [string]$Zip, [string]$TargetDir, [string]$ExeName, [string]$SelfPath)',
+        'Wait-Process -Id $AppProcessId -ErrorAction SilentlyContinue',
+        '$updated = $false',
+        'for ($attempt = 0; $attempt -lt 30; $attempt++) {',
+        '  try { Expand-Archive -LiteralPath $Zip -DestinationPath $TargetDir -Force; $updated = $true; break } catch { Start-Sleep -Seconds 1 }',
+        '}',
+        'if ($updated) { Start-Process -FilePath (Join-Path $TargetDir $ExeName) }',
+        'Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue',
+        'Start-Sleep -Seconds 1',
+        'Remove-Item -LiteralPath $SelfPath -Force -ErrorAction SilentlyContinue',
+      ].join('\n');
+      await fs.promises.writeFile(helperPath, helperScript, 'utf8');
+
+      log('applying-update-zip', { version: downloadedUpdate.version, targetDir, exeName });
+      const helper = spawn('powershell.exe', [
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-WindowStyle', 'Hidden',
+        '-File', helperPath,
+        '-AppProcessId', String(process.pid),
+        '-Zip', downloadedUpdate.filePath,
+        '-TargetDir', targetDir,
+        '-ExeName', exeName,
+        '-SelfPath', helperPath,
+      ], { detached: true, stdio: 'ignore', windowsHide: true });
+      helper.unref();
+      setTimeout(() => app.quit(), 300);
+      return;
     }
 
     const helperPath = path.join(app.getPath('temp'), `troiareuke-updater-${Date.now()}.ps1`);

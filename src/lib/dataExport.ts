@@ -117,6 +117,10 @@ function buildSheet(key: string): ExportSheet | null {
           카드: sums['카드'] || 0, 현금: sums['현금'] || 0,
           계좌이체: sums['계좌이체'] || 0, 카카오페이: sums['카카오페이'] || 0,
           혼합: sums['혼합'] || 0,
+          // 매장이 직접 추가한 커스텀 결제수단(상품권 등)은 '기타'로 합산
+          기타: Object.entries(sums)
+            .filter(([k]) => !['카드', '현금', '계좌이체', '카카오페이', '혼합'].includes(k))
+            .reduce((a, [, v]) => a + v, 0),
           합계: Object.values(sums).reduce((a, b) => a + b, 0),
         })),
       };
