@@ -152,7 +152,7 @@ export default function Signup() {
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 * (8자 이상)</label>
                   <div className="relative">
                     <input type={showPw ? 'text' : 'password'} value={form.password} onChange={e => set('password', e.target.value)} className="auth-input pr-11" placeholder="비밀번호 (8자 이상)" required />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showPw ? <Eye size={16} /> : <EyeOff size={16} />}</button>
+                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showPw ? <EyeOff size={16} /> : <Eye size={16} />}</button>
                   </div>
                 </div>
                 <div>

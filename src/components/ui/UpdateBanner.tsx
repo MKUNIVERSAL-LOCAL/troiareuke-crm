@@ -49,8 +49,7 @@ export default function UpdateBanner() {
     api.onUpdateDownloaded((info: UpdateInfo) => {
       setUpdateInfo(info);
       setState('ready');
-      // 사용자가 이미 [지금 업데이트]를 눌러 시작한 흐름 — 완료되면 자동으로 적용(재시작)
-      setTimeout(() => api.installUpdate?.(), 1200);
+      // 자동 재시작 금지 — 입력 중 작업 유실 방지. [지금 재시작] 클릭 시에만 적용.
     });
 
     api.onUpdateError(() => {
@@ -81,7 +80,7 @@ export default function UpdateBanner() {
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
           <span>
-            <strong>v{updateInfo?.version}</strong> 업데이트가 적용됩니다 — 프로그램이 곧 자동으로 다시 시작됩니다
+            <strong>v{updateInfo?.version}</strong> 업데이트 다운로드 완료 — [지금 재시작]을 누르면 적용됩니다
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">

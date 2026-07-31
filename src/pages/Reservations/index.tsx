@@ -1,12 +1,12 @@
 ﻿import { useState, useCallback, useEffect, type CSSProperties } from 'react';
-import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore } from '../../lib/store';
-import type { Reservation, Staff, Service, Customer } from '../../types';
+import type { Reservation, Staff } from '../../types';
 import {
   isGoogleCalendarConnected,
   fetchCalendarEventsAsReservations,
@@ -592,7 +592,10 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                           href={ge.htmlLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block"
+                          className={clsx(
+                            'absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
+                            !ge.htmlLink && 'pointer-events-none', // 링크 없으면 클릭 무반응 앵커 방지
+                          )}
                           style={eventBlockStyle(ev, slotStartMin, ROW_H)}
                           title={`${ge.summary} · ${ge.startTime}~${ge.endTime}`}
                         >
@@ -691,7 +694,10 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                       href={ge.htmlLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block"
+                      className={clsx(
+                        'absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
+                        !ge.htmlLink && 'pointer-events-none', // 링크 없으면 클릭 무반응 앵커 방지
+                      )}
                       style={eventBlockStyle(ev, slotStartMin, ROW_H)}
                       title={`${ge.summary} · ${ge.startTime}~${ge.endTime}`}
                     >
@@ -753,7 +759,10 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
             href={ge.htmlLink}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full flex items-center gap-4 px-6 py-4 hover:bg-blue-50/50 transition-colors text-left"
+            className={clsx(
+              'w-full flex items-center gap-4 px-6 py-4 hover:bg-blue-50/50 transition-colors text-left',
+              !ge.htmlLink && 'pointer-events-none', // 링크 없으면 클릭 무반응 앵커 방지
+            )}
           >
             <div className="text-center w-20 flex-shrink-0">
               <p className="text-xs font-medium text-gray-500">{ge.date.slice(5).replace('-', '/')}</p>
@@ -821,10 +830,32 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
     const service = services.find(s => s.id === serviceId);
     if (!customer || !staff || !service) return;
 
-    // Calculate endTime from service duration
+    // 다중 시술 예약 보호 — 편집 폼은 services[0]만 로드하므로 그대로 저장하면
+    // 나머지 시술·금액이 소실됨. 시술을 안 바꿨으면 원본 전체 보존, 바꿨으면 확인 후 교체.
+    let servicesPayload = [{
+      serviceId: service.id,
+      serviceName: service.name,
+      price: service.price,
+      duration: service.duration,
+    }];
+    let totalPrice = service.price;
+    if (isEdit && editing && (editing.services?.length ?? 0) > 1) {
+      if (editing.services[0]?.serviceId === service.id) {
+        servicesPayload = editing.services;
+        totalPrice = editing.totalPrice;
+      } else {
+        const proceed = window.confirm(
+          `이 예약에는 시술이 ${editing.services.length}개 연결되어 있습니다. 선택한 시술 1개로 교체할까요?`
+        );
+        if (!proceed) return;
+      }
+    }
+
+    // Calculate endTime from total service duration
+    const totalDuration = servicesPayload.reduce((s, sv) => s + sv.duration, 0);
     const [h, m] = startTime.split(':').map(Number);
     const startDate = new Date(2000, 0, 1, h, m);
-    const endDate = addMinutes(startDate, service.duration);
+    const endDate = addMinutes(startDate, totalDuration);
     const endTime = format(endDate, 'HH:mm');
 
     // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외)
@@ -848,19 +879,14 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
       customerPhone: customer.phone,
       staffId: staff.id,
       staffName: staff.name,
-      services: [{
-        serviceId: service.id,
-        serviceName: service.name,
-        price: service.price,
-        duration: service.duration,
-      }],
+      services: servicesPayload,
       date,
       startTime,
       endTime,
       status: editing?.status ?? 'confirmed',
       source,
       memo: memo || undefined,
-      totalPrice: service.price,
+      totalPrice,
     };
 
     if (isEdit && editing) {
@@ -1012,6 +1038,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 }) {
   const { user } = useAuth();
   const handleCancel = () => {
+    // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행
+    if (!window.confirm('이 예약을 취소 처리하시겠습니까?')) return;
     ReservationStore.updateStatus(r.id, 'cancelled');
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     onUpdate();

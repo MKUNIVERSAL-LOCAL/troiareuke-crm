@@ -286,10 +286,13 @@ export function exportDatasetsToXlsx(keys: string[]): ExportResult {
     const rows = sheet.rows.length > 0
       ? sheet.rows
       : [{ 안내: '해당 데이터가 없습니다.' }];
-    const worksheet = XLSX.utils.json_to_sheet(rows);
+    let worksheet: XLSX.WorkSheet;
     if (sensitiveKeys.has(key) && sheet.rows.length > 0) {
-      // 민감정보 시트 상단에 경고행 삽입
-      XLSX.utils.sheet_add_aoa(worksheet, [[SENSITIVE_NOTICE]], { origin: -1 });
+      // 민감정보 경고행을 1행(최상단)에 두고, 데이터(헤더 포함)는 2행부터
+      worksheet = XLSX.utils.aoa_to_sheet([[SENSITIVE_NOTICE]]);
+      XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A2' });
+    } else {
+      worksheet = XLSX.utils.json_to_sheet(rows);
     }
     XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.slice(0, 31));
   });

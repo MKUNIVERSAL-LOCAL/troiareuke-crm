@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
-  ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search
+  ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search, Layers
 } from 'lucide-react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Legend
 } from 'recharts';
-import {
-  PaymentStore, CustomerStore, ProductStore, ProductSaleStore
-} from '../../lib/store';
+import { PaymentStore, CustomerStore } from '../../lib/store';
 import type { Payment, PaymentMethod } from '../../types';
 
 import { formatPrice, todayISO as today } from '../../lib/format';
@@ -43,6 +41,12 @@ export default function Sales() {
   });
 
   const customers = useMemo(() => CustomerStore.getAll(), []);
+
+  // 수정 중인 원본 결제 (환불 가드·프로그램 타입 유지에 사용)
+  const editingPayment = useMemo(
+    () => (editingId ? payments.find(p => p.id === editingId) : undefined),
+    [editingId, payments]
+  );
 
   useEffect(() => { loadPayments(); }, []);
 
@@ -159,8 +163,13 @@ export default function Sales() {
     setShowModal(true);
   }
 
-  // 결제 삭제
+  // 결제 삭제 — 제품 결제는 차단 (PaymentStore.delete는 재고·판매기록을 복구하지 않아
+  // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생)
   function handleDelete(p: Payment) {
+    if (p.type === 'product') {
+      alert('제품 결제는 여기서 삭제하면 재고·판매기록과 어긋납니다. 제품/재고 페이지의 판매 취소를 사용해주세요.');
+      return;
+    }
     if (!window.confirm(`${p.paymentDate} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
     PaymentStore.delete(p.id);
     loadPayments();
@@ -192,17 +201,18 @@ export default function Sales() {
       memo: form.memo || undefined,
     };
 
+    // 제품 결제를 '환불'로 저장하면 매출에선 빠지지만 재고·판매기록은 안 돌아오는
+    // 크로스 모듈 불일치(QA⑤) — 신규·수정 모두 차단, 판매 기록 삭제(재고 자동 복구)로 유도
+    const effectiveType = editingId ? editingPayment?.type : form.type;
+    if (form.status === 'refunded' && effectiveType === 'product') {
+      alert(
+        '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 해당 판매를 삭제해주세요.\n' +
+        '판매 기록을 삭제하면 재고 복구와 결제 취소가 함께 처리됩니다.'
+      );
+      return;
+    }
+
     if (editingId) {
-      // 제품 결제를 '환불'로 바꾸면 매출에선 빠지지만 재고·판매기록은 안 돌아오는
-      // 크로스 모듈 불일치(QA⑤) — 제품 환불은 판매 기록 삭제(재고 자동 복구)로 유도
-      const editingPayment = payments.find(p => p.id === editingId);
-      if (form.status === 'refunded' && editingPayment?.type === 'product') {
-        alert(
-          '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 해당 판매를 삭제해주세요.\n' +
-          '판매 기록을 삭제하면 재고 복구와 결제 취소가 함께 처리됩니다.'
-        );
-        return;
-      }
       PaymentStore.update(editingId, payload);
     } else {
       PaymentStore.save(payload);
@@ -483,9 +493,14 @@ export default function Sales() {
               {/* 구분 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">결제 구분</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className={`grid gap-2 ${editingPayment?.type === 'program' ? 'grid-cols-4' : 'grid-cols-3'}`}>
                   {[
                     { v: 'single_treatment', label: '단건 시술', icon: Scissors },
+                    // 프로그램 결제는 고객 페이지에서 생성 — 신규 등록엔 미노출,
+                    // 편집 대상이 프로그램일 때만 타입 유지를 위해 표시
+                    ...(editingPayment?.type === 'program'
+                      ? [{ v: 'program', label: '프로그램', icon: Layers }]
+                      : []),
                     { v: 'product', label: '제품 판매', icon: ShoppingBag },
                     { v: 'other', label: '기타', icon: DollarSign },
                   ].map(({ v, label, icon: Icon }) => (
@@ -523,7 +538,7 @@ export default function Sales() {
                   <input
                     required
                     type="text"
-                    value={form.amount ? parseInt(form.amount || '0').toLocaleString('ko-KR') : ''}
+                    value={form.amount && !Number.isNaN(parseInt(form.amount, 10)) ? parseInt(form.amount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setForm(f => ({ ...f, amount: e.target.value.replace(/,/g, '') }))}
                     className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
@@ -546,7 +561,7 @@ export default function Sales() {
                 <div className="relative">
                   <input
                     type="text"
-                    value={form.discountAmount && form.discountAmount !== '0' ? parseInt(form.discountAmount || '0').toLocaleString('ko-KR') : ''}
+                    value={form.discountAmount && form.discountAmount !== '0' && !Number.isNaN(parseInt(form.discountAmount, 10)) ? parseInt(form.discountAmount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value.replace(/,/g, '') || '0' }))}
                     className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0"

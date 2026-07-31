@@ -16,14 +16,19 @@ const sizes = {
   xl: 'max-w-4xl',
 };
 
+// 중첩 모달 대응 — 안쪽 모달이 닫힐 때 바깥 모달이 열려 있으면 스크롤 잠금을
+// 풀면 안 되므로, 열린 모달 수를 전역으로 세어 0이 될 때만 복원한다.
+let openModalCount = 0;
+
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => { document.body.style.overflow = ''; };
+    if (!isOpen) return;
+    openModalCount++;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      openModalCount = Math.max(0, openModalCount - 1);
+      if (openModalCount === 0) document.body.style.overflow = '';
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;

@@ -35,8 +35,13 @@ export interface DueCustomer {
   basis: 'recommended' | 'cycle'; // 권장일 기반인지, 주기 추정인지
 }
 
+// toISOString()은 UTC 기준이라 KST 자정~오전 9시에 전날로 어긋난다.
+// format.ts todayISO와 동일하게 로컬 y/m/d로 조립한다.
 function toISO(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function addDays(iso: string, days: number): string {

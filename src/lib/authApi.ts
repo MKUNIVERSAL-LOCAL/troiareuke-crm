@@ -40,17 +40,30 @@ export class AuthApiError extends Error {
   }
 }
 
+// 요청 타임아웃 — 서버 무응답 시 무한 대기 방지. 사진 업로드 등 큰 요청을 고려해 30초.
+// abort 시 fetch가 AbortError로 reject → AuthApiError가 아니므로 기존 네트워크 오류
+// 경로(outbox 큐 보존, restoreAuthApiSession의 'offline' 처리)와 동일하게 흐른다.
+const REQUEST_TIMEOUT_MS = 30_000;
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!isAuthApiConfigured) throw new Error('중앙 계정 서버가 설정되지 않았습니다.');
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers || {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init.headers || {}),
+      },
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (response.status === 204) return undefined as T;
   const data = await response.json().catch(() => ({}));

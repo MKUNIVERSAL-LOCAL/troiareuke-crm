@@ -110,10 +110,11 @@ async function analyzeWithOpenAI(apiKey: string, dataUrl: string): Promise<SkinA
 async function analyzeWithGemini(apiKey: string, dataUrl: string): Promise<SkinAnalysisResult> {
   const { mime, base64 } = splitDataUrl(dataUrl);
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // API 키는 URL 쿼리 대신 헤더로 전송 — 로그/히스토리에 키 노출 방지
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         contents: [{
           parts: [

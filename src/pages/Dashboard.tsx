@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag, Store, Globe, Apple, Play } from 'lucide-react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Legend
 } from 'recharts';
 import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
@@ -12,6 +12,27 @@ import StatCard from '../components/ui/StatCard';
 import RevisitReminderCard from '../components/RevisitReminderCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
+
+// 코어 PaymentStore.getDailyData()는 toISOString() 기반 UTC 날짜 키라
+// KST 0~9시에 당일 매출이 빠짐 — 코어 수정 금지이므로 페이지에서
+// 로컬 날짜 기준으로 동일 로직(완료 결제만, 시술/제품/합계) 재집계
+function getLocalDailyData(days: number) {
+  const all = PaymentStore.getAll();
+  const result: { date: string; treatment: number; product: number; total: number }[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = format(d, 'yyyy-MM-dd'); // date-fns format은 로컬 기준
+    const dayPayments = all.filter(p => p.paymentDate === dateStr && p.status === 'completed');
+    result.push({
+      date: dateStr,
+      treatment: dayPayments.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0),
+      product: dayPayments.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0),
+      total: dayPayments.reduce((s, p) => s + p.amount, 0),
+    });
+  }
+  return result;
+}
 
 function getDashboardData() {
   // 자정을 넘겨도 정확하도록 매 호출마다 오늘 날짜 계산
@@ -30,12 +51,13 @@ function getDashboardData() {
   const lastMonthEnd = format(endOfMonth(lastMonthDate), 'yyyy-MM-dd');
   const lastMonth = PaymentStore.summarize(lastMonthStart, lastMonthEnd);
 
-  const revenueGrowth = lastMonth.totalRevenue > 0
+  // 지난달 매출 0이면 성장률 계산 불가 — null로 두고 배지 숨김 (0% 오표시 방지)
+  const revenueGrowth: number | null = lastMonth.totalRevenue > 0
     ? Math.round(((thisMonth.totalRevenue - lastMonth.totalRevenue) / lastMonth.totalRevenue) * 100)
-    : 0;
+    : null;
 
-  // Weekly chart data (last 7 days)
-  const weeklyRaw = PaymentStore.getDailyData(7);
+  // Weekly chart data (last 7 days) — 로컬 날짜 기준 자체 집계 (UTC 함정 우회)
+  const weeklyRaw = getLocalDailyData(7);
   const weeklyData = weeklyRaw.map(d => ({
     date: format(new Date(d.date + 'T12:00:00'), 'M/d', { locale: ko }),
     시술: Math.round(d.treatment / 10000),
@@ -208,9 +230,9 @@ export default function Dashboard() {
             <StatCard
               title="이번 달 총 매출"
               value={`${Math.round(thisMonth.totalRevenue / 10000)}만원`}
-              subtitle={`전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}
+              subtitle={revenueGrowth === null ? '전월 매출 없음' : `전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}
               icon={<TrendingUp size={20} />}
-              trend={{ value: revenueGrowth, label: '전월 대비' }}
+              trend={revenueGrowth === null ? undefined : { value: revenueGrowth, label: '전월 대비' }}
               accent="purple"
             />
           </div>

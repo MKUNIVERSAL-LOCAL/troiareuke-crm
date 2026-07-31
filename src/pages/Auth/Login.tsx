@@ -48,6 +48,12 @@ export default function Login() {
     setResetLoading(true);
     setResetError('');
     try {
+      if (isAuthApiConfigured) {
+        // NAS 중앙서버 모드 우선: 계정이 본사 서버에 있어 Supabase 재설정 메일은 영원히 도착하지 않음.
+        // 이 모드에서는 렌더 분기의 "본사 안내 모달"이 표시되므로 여기서는 아무것도 보내지 않는다.
+        setResetLoading(false);
+        return;
+      }
       if (isSupabaseConfigured) {
         // NAS 미배포 환경 폴백: Supabase 재설정 메일 (웹 /reset-password로 복귀)
         const configuredUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, '');
@@ -182,11 +188,7 @@ export default function Login() {
                   </button>
                 </div>
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="rounded text-blue-500" />
-                  <span className="text-gray-500">자동 로그인</span>
-                </label>
+              <div className="flex items-center justify-end text-xs">
                 <button type="button" onClick={openPasswordReset} className="text-blue-600 hover:text-blue-700">
                   비밀번호 찾기
                 </button>

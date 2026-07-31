@@ -15,7 +15,8 @@ import { getShopId, safeSetItem } from './store';
 import { isNasDataConfigured, nasLoad, nasUpsert, nasUpdate, nasDelete } from './nasData';
 
 function genId(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+  return globalThis.crypto?.randomUUID?.()
+    || Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 function now(): string {
   return new Date().toISOString();
@@ -52,6 +53,10 @@ function toDbConsultation(c: Partial<Consultation>): Record<string, any> {
   if (c.recommendedProducts !== undefined) db.recommended_products = c.recommendedProducts;
   if (c.nextConsultDate !== undefined) db.next_consult_date = c.nextConsultDate;
   if (c.photos !== undefined) db.photos = c.photos;
+  // created_at 미포함 시 NAS 왕복(fromDbConsultation의 now() 폴백)마다 생성일이
+  // 바뀌는 문제가 있어 포함한다. 서버(crm_records)는 행 전체를 JSONB로 통짜
+  // 저장하므로(컬럼 스키마 없음) 필드 추가는 안전 — server.js PUT /api/data 확인.
+  if (c.createdAt !== undefined) db.created_at = c.createdAt;
   return db;
 }
 
@@ -204,19 +209,21 @@ export const ConsultationStore = {
     const all = this.getAll();
     const idx = all.findIndex(c => c.id === id);
     if (idx === -1) return null;
-    all[idx] = { ...all[idx], ...updates };
-    _consultations = all;
-    saveList(shopKey('consultations'), all);
+    // store.ts 규칙과 동일 — 기존 배열을 변형하지 않고 새 배열로 교체
+    const next = [...all];
+    next[idx] = { ...all[idx], ...updates };
+    _consultations = next;
+    saveList(shopKey('consultations'), next);
     if (isNasDataConfigured) {
       nasUpdate('consultations', id, toDbConsultation(updates));
-      return all[idx];
+      return next[idx];
     }
     if (isSupabaseConfigured) {
       supabase.from('consultations').update(toDbConsultation(updates)).eq('id', id).then(({ error }) => {
         if (error) console.warn('[Consultation] update 실패:', error.message);
       });
     }
-    return all[idx];
+    return next[idx];
   },
 
   delete(id: string): void {

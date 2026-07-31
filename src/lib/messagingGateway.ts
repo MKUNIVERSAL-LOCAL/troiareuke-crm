@@ -75,18 +75,18 @@ export async function sendMessages(payload: SendPayload): Promise<SendResult> {
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => res.statusText);
-      return { sent: 0, failed: payload.recipients, pending: false, reason: `게이트웨이 오류: ${res.status} ${errorText}` };
+      return { sent: 0, failed: phones.length, pending: false, reason: `게이트웨이 오류: ${res.status} ${errorText}` };
     }
 
     const data = (await res.json()) as { sent?: number; failed?: number };
     return {
       sent: data.sent ?? 0,
-      failed: data.failed ?? payload.recipients - (data.sent ?? 0),
+      failed: data.failed ?? phones.length - (data.sent ?? 0),
       pending: false,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { sent: 0, failed: payload.recipients, pending: false, reason: `네트워크 오류: ${message}` };
+    return { sent: 0, failed: phones.length, pending: false, reason: `네트워크 오류: ${message}` };
   }
 }
 

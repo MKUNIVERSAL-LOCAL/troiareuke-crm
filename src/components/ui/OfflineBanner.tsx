@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { WifiOff, UploadCloud } from 'lucide-react';
-import { pendingNasOutboxCount, OUTBOX_CHANGED_EVENT } from '../../lib/nasOutbox';
+import { WifiOff, UploadCloud, AlertTriangle } from 'lucide-react';
+import { pendingNasOutboxCount, OUTBOX_CHANGED_EVENT, OUTBOX_ERROR_EVENT } from '../../lib/nasOutbox';
 
+// 이 키의 기록(쓰기)은 코어 store.ts가 자체 복제본으로 직접 수행한다 — 여기서는 읽기만.
 const LAST_SYNC_KEY = 'crm_last_sync_at';
 
 function getMinutesSinceSync(): number | null {
@@ -14,33 +15,34 @@ function getMinutesSinceSync(): number | null {
   }
 }
 
-export function recordSyncTimestamp() {
-  try {
-    localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
-  } catch {}
-}
-
 export default function OfflineBanner() {
   const [offline, setOffline] = useState(!navigator.onLine);
   const [minutes, setMinutes] = useState<number | null>(null);
   const [pending, setPending] = useState(() => pendingNasOutboxCount());
+  const [sendFailed, setSendFailed] = useState(false);
 
   useEffect(() => {
     const onOffline = () => setOffline(true);
-    const onOnline = () => setOffline(false);
+    const onOnline = () => {
+      setOffline(false);
+      setSendFailed(false); // 연결 복구 — 자동 재시도되므로 실패 배너 해제
+    };
     const onOutboxChanged = (e: Event) => {
       const detail = (e as CustomEvent<{ count?: number }>).detail;
       setPending(typeof detail?.count === 'number' ? detail.count : pendingNasOutboxCount());
     };
+    const onOutboxError = () => setSendFailed(true);
 
     window.addEventListener('offline', onOffline);
     window.addEventListener('online', onOnline);
     window.addEventListener(OUTBOX_CHANGED_EVENT, onOutboxChanged);
+    window.addEventListener(OUTBOX_ERROR_EVENT, onOutboxError);
 
     return () => {
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('online', onOnline);
       window.removeEventListener(OUTBOX_CHANGED_EVENT, onOutboxChanged);
+      window.removeEventListener(OUTBOX_ERROR_EVENT, onOutboxError);
     };
   }, []);
 
@@ -50,7 +52,7 @@ export default function OfflineBanner() {
     }
   }, [offline]);
 
-  if (!offline && pending === 0) return null;
+  if (!offline && pending === 0 && !sendFailed) return null;
 
   const base = 'sticky top-0 z-30 border-b text-xs py-2 px-4 flex items-center gap-2';
 
@@ -71,6 +73,15 @@ export default function OfflineBanner() {
         <span className="ml-1 text-amber-600">
           {pending > 0 ? '연결이 복구되면 자동 전송됩니다' : '인터넷 연결을 확인해주세요'}
         </span>
+      </div>
+    );
+  }
+
+  if (sendFailed) {
+    return (
+      <div role="status" aria-live="polite" className={`${base} bg-amber-50 border-amber-200 text-amber-700`}>
+        <AlertTriangle size={14} className="flex-shrink-0" />
+        <span>일부 저장분 전송 실패 — 연결 확인 후 자동 재시도됩니다</span>
       </div>
     );
   }

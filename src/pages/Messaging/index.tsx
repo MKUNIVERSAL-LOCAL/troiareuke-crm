@@ -131,7 +131,7 @@ export default function Messaging() {
 
       {showSendModal && (
         <SendMessageModal
-          onClose={() => setShowSendModal(false)}
+          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); }}
           initialTemplate={selectedTemplate}
           initialSegment={sendSegment}
           onSent={reload}
@@ -239,12 +239,14 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
                       {MSG_TYPE_LABELS[m.type]}
                     </span>
                   </div>
+                  <p className="text-xs text-amber-600 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
                 <input
                   type="checkbox"
                   className="sr-only peer"
+                  disabled
                   checked={settings.notificationSettings[m.key]}
                   onChange={e => handleToggle(m.key, e.target.checked)}
                 />
@@ -284,6 +286,8 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
   });
 
   const handleDelete = (id: string) => {
+    const target = templates.find(t => t.id === id);
+    if (!window.confirm(`'${target?.name ?? '이 템플릿'}' 템플릿을 삭제하시겠습니까?`)) return;
     MessageTemplateStore.delete(id);
     setTemplates(MessageTemplateStore.getAll());
     onReload();
@@ -602,6 +606,12 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
   );
 }
 
+// 신규 이력은 ISO 저장, 기존 이력은 toLocaleString 문자열이라 파싱 실패 시 원문 유지
+function formatSentAt(value: string): string {
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? value : d.toLocaleString();
+}
+
 function HistoryPanel({ reloadKey }: { reloadKey: number }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const [search, setSearch] = useState('');
@@ -617,7 +627,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
     const searchMatches = !normalizedSearch || [
       item.templateName || '직접 작성',
       item.content,
-      item.sentAt,
+      formatSentAt(item.sentAt),
       MSG_TYPE_LABELS[item.type] || item.type,
     ].some(value => value.toLowerCase().includes(normalizedSearch));
     return statusMatches && searchMatches;
@@ -630,7 +640,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <p className="text-sm font-bold text-gray-900">발송 이력</p>
-            <p className="text-xs text-gray-400">최근 30일</p>
+            <p className="text-xs text-gray-400">전체 발송 이력</p>
           </div>
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
             <Clock size={40} className="mb-3 text-gray-300" />
@@ -648,7 +658,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <p className="text-sm font-bold text-gray-900">발송 이력</p>
-        <p className="text-xs text-gray-400">최근 30일</p>
+        <p className="text-xs text-gray-400">전체 발송 이력</p>
       </div>
       <div className="p-3 border-b border-gray-100 flex flex-col sm:flex-row gap-2 sm:items-center">
         <label className="relative flex-1">
@@ -703,7 +713,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
                         <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-700">미연동</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5">{h.sentAt}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatSentAt(h.sentAt)}</p>
                     {isGatewayPending && (
                       <p className="text-[11px] text-amber-600 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
                     )}
@@ -719,7 +729,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
                   }
                   {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-400">실패 {h.failCount}명</p>}
                   {h.status === 'sent' && h.cost !== undefined && h.cost > 0 && (
-                    <p className="text-[11px] text-gray-400 mt-1">{h.cost.toLocaleString()}원</p>
+                    <p className="text-[11px] text-gray-400 mt-1">예상 비용 {h.cost.toLocaleString()}원</p>
                   )}
                 </div>
               </div>
@@ -748,6 +758,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
 
   const customers = CustomerStore.getAll();
   const templates = MessageTemplateStore.getAll();
+  const kakaoSettings = SettingsStore.get().kakao;
 
   // Load initial template content
   useEffect(() => {
@@ -761,11 +772,11 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
     }
   }, [initialTemplate]);
 
-  const msgTypes: { key: MessageType; label: string }[] = [
+  const msgTypes: { key: MessageType; label: string; disabled?: boolean }[] = [
     { key: 'sms', label: 'SMS (단문)' },
     { key: 'lms', label: 'LMS (장문)' },
-    { key: 'kakao-channel', label: '카카오 채널' },
-    { key: 'kakao-openchat', label: '카카오 오픈채팅' },
+    { key: 'kakao-channel', label: `카카오 채널${kakaoSettings?.channelConnected ? '' : ' (채널 미연결)'}`, disabled: !kakaoSettings?.channelConnected },
+    { key: 'kakao-openchat', label: `카카오 오픈채팅${kakaoSettings?.openchatConnected ? '' : ' (채널 미연결)'}`, disabled: !kakaoSettings?.openchatConnected },
   ];
 
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준)
@@ -781,6 +792,11 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
+    // 치환 안 된 변수({고객명} 등)가 그대로 나가는 사고 방지 — 예약/즉시 발송 공통
+    if (/\{[^}]+\}/.test(content)) {
+      alert('메시지에 치환되지 않은 변수({고객명} 등)가 있습니다. 실제 값으로 바꾼 뒤 발송해주세요.');
+      return;
+    }
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
@@ -830,7 +846,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
         recipients: recipientCount,
         successCount: 0,
         failCount: recipientCount,
-        sentAt: new Date().toLocaleString(),
+        sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
       });
@@ -849,7 +865,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
         recipients: recipientCount,
         successCount: result.sent,
         failCount: result.failed,
-        sentAt: new Date().toLocaleString(),
+        sentAt: new Date().toISOString(),
         status: 'sent',
         cost: estimatedCost,
       });
@@ -873,7 +889,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
         recipients: recipientCount,
         successCount: 0,
         failCount: recipientCount,
-        sentAt: new Date().toLocaleString(),
+        sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
       });
@@ -921,11 +937,13 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                 <button
                   key={t.key}
                   onClick={() => setMsgType(t.key)}
+                  disabled={t.disabled}
                   className={clsx(
                     'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                     msgType === t.key
                       ? 'bg-purple-600 text-white border-purple-600'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300',
+                    t.disabled && 'opacity-50 cursor-not-allowed hover:border-gray-200'
                   )}
                 >
                   {t.label}

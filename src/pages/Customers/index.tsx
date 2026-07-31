@@ -1,10 +1,9 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Search, Plus, Phone, Star, Calendar, TrendingUp,
-  User, ChevronRight, AlertCircle, X, CheckCircle,
-  Scissors, ShoppingBag, ChevronDown, Tag, Clock, Minus,
-  Sparkles, Activity, Mail, Download, Pencil, Trash2, Upload, Camera, Loader2, Send
+  Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
+  Scissors, ChevronDown, Tag,
+  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -74,9 +73,9 @@ function getDaysSince(d?: string) {
   if (!d) return null;
   return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
 }
-function calcExpiryDate(days?: number | null) {
+function calcExpiryDate(days?: number | null, baseDate?: string) {
   if (!days) return undefined;
-  const d = new Date();
+  const d = baseDate ? new Date(baseDate) : new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().split('T')[0];
 }
@@ -148,9 +147,9 @@ export default function Customers() {
   function changeGrade(grade: CustomerGrade) {
     if (!selected || selected.grade === grade) { setShowGradeMenu(false); return; }
     CustomerStore.update(selected.id, { grade });
+    loadAll();          // 목록 뱃지도 갱신
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
-    loadAll();          // 목록 뱃지도 갱신
     setShowGradeMenu(false);
   }
 
@@ -175,6 +174,8 @@ export default function Customers() {
   const [showConsultModal, setShowConsultModal] = useState(false);
   const [consultForm, setConsultForm] = useState(emptyConsultForm());
   const [consultations, setConsultations] = useState<Consultation[]>([]);
+  // 같은 모달 세션에서 재저장 시 신규 생성 대신 갱신하기 위한 저장 id
+  const [savedConsultId, setSavedConsultId] = useState<string | null>(null);
 
   // AI 피부 분석 (킬러①) — 사진 업로드 → 비전 AI 분석 → 지표/소견 자동 반영
   const [aiPhoto, setAiPhoto] = useState<string | null>(null);
@@ -274,7 +275,7 @@ export default function Customers() {
   // 상담 내용 저장 (공통) — 저장만 수행하고 폼 초기화/모달 닫기는 호출부에서 결정
   function persistConsultation() {
     if (!selected) return;
-    ConsultationStore.save({
+    const payload = {
       customerId: selected.id,
       customerName: selected.name,
       consultDate: consultForm.consultDate,
@@ -289,7 +290,13 @@ export default function Customers() {
         : [],
       nextConsultDate: consultForm.nextConsultDate || undefined,
       photos: [],
-    });
+    };
+    if (savedConsultId && ConsultationStore.getById(savedConsultId)) {
+      ConsultationStore.update(savedConsultId, payload);
+    } else {
+      const saved = ConsultationStore.save(payload);
+      setSavedConsultId(saved.id);
+    }
     // 상담에서 판정한 피부타입을 고객 프로필에도 반영(있을 때)
     if (consultForm.skinTypeResult && consultForm.skinTypeResult !== selected.skinType) {
       CustomerStore.update(selected.id, { skinType: consultForm.skinTypeResult });
@@ -306,6 +313,7 @@ export default function Customers() {
     persistConsultation();
     setShowConsultModal(false);
     setConsultForm(emptyConsultForm());
+    setSavedConsultId(null);
   }
 
   // 상담 요약을 카카오 메시지 본문으로 구성
@@ -447,11 +455,12 @@ export default function Customers() {
   // 고객 기록 엑셀(xlsx) 다운로드 — 현재 필터된 목록을 이메일 포함 전체 항목으로 내보냄
   function exportToExcel() {
     if (filtered.length === 0) { window.alert('내보낼 고객이 없습니다.'); return; }
+    const role = user?.role ?? 'staff';
     const rows = filtered.map(c => ({
       '이름': c.name,
-      '전화번호': c.phone,
-      '이메일': c.email || '',
-      '주소': c.address || '',
+      '전화번호': maskPhone(c.phone, role),
+      '이메일': role !== 'staff' ? (c.email || '') : '',
+      '주소': role !== 'staff' ? (c.address || '') : '',
       '성별': c.gender,
       '등급': c.grade,
       '생년월일': c.birthDate || '',
@@ -466,9 +475,9 @@ export default function Customers() {
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [
-      { wch: 10 }, { wch: 15 }, { wch: 22 }, { wch: 6 }, { wch: 6 },
-      { wch: 12 }, { wch: 9 }, { wch: 9 }, { wch: 12 }, { wch: 12 },
-      { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 24 },
+      { wch: 10 }, { wch: 15 }, { wch: 22 }, { wch: 20 }, { wch: 6 },
+      { wch: 6 }, { wch: 12 }, { wch: 9 }, { wch: 9 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 24 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '고객목록');
@@ -528,18 +537,31 @@ export default function Customers() {
         let added = 0, skipped = 0;
         rows.forEach(r => {
           const name = pick(r, ['이름', '고객명', '성함', 'name']);
-          const phone = pick(r, ['전화번호', '연락처', '휴대폰', '전화', 'phone']);
+          let phone = pick(r, ['전화번호', '연락처', '휴대폰', '전화', 'phone']);
           if (!name || !phone) { skipped++; return; }
-          const digits = phone.replace(/[^0-9]/g, '');
+          let digits = phone.replace(/[^0-9]/g, '');
+          // 엑셀 숫자 셀 함정: 앞 0이 사라진 번호(10xxxxxxxx) 복원
+          if (digits.startsWith('10') && (digits.length === 9 || digits.length === 10)) {
+            digits = '0' + digits;
+            phone = digits;
+          }
           if (existingPhones.has(digits)) { skipped++; return; }
           existingPhones.add(digits);
+          // 엑셀 날짜 시리얼 숫자로 들어온 생년월일 변환
+          let birthDate = pick(r, ['생년월일', '생일', 'birthDate']);
+          if (/^\d+$/.test(birthDate)) {
+            const n = parseInt(birthDate, 10);
+            if (n >= 20000 && n <= 60000) {
+              birthDate = new Date(Date.UTC(1899, 11, 30) + n * 86400000).toISOString().split('T')[0];
+            }
+          }
           CustomerStore.save({
             name, phone,
             gender: normGender(pick(r, ['성별', 'gender'])),
             grade: normGrade(pick(r, ['등급', 'grade'])),
             skinType: pick(r, ['피부유형', '피부타입', 'skinType']),
             memo: pick(r, ['메모', '비고', 'memo']),
-            birthDate: pick(r, ['생년월일', '생일', 'birthDate']) || undefined,
+            birthDate: birthDate || undefined,
             referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
             email: pick(r, ['이메일', 'email']) || undefined,
             address: pick(r, ['주소', 'address']) || undefined,
@@ -664,7 +686,7 @@ export default function Customers() {
       pricePaid,
       paymentMethod: progForm.paymentMethod,
       purchaseDate: progForm.purchaseDate,
-      expiryDate: calcExpiryDate(prog.validityDays),
+      expiryDate: calcExpiryDate(prog.validityDays, progForm.purchaseDate),
       notes: progForm.notes || undefined,
     });
 
@@ -1048,7 +1070,7 @@ export default function Customers() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setKakaoMsg(null); setShowConsultModal(true); }}
+                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
                   >
                     <Sparkles size={12} />피부 상담
@@ -1114,7 +1136,7 @@ export default function Customers() {
                   <Sparkles size={16} className="text-indigo-600" />피부 상담 이력
                 </h3>
                 <button
-                  onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setShowConsultModal(true); }}
+                  onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
                   className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
                 >
                   <Plus size={12} />상담 기록
@@ -1125,7 +1147,7 @@ export default function Customers() {
                 <div className="text-center py-6">
                   <Activity size={28} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">상담 기록이 없어요</p>
-                  <button onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
+                  <button onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
                     첫 상담 시작하기
                   </button>
                 </div>
@@ -1609,7 +1631,7 @@ export default function Customers() {
                   <input
                     required
                     type="text"
-                    value={progForm.pricePaid ? parseInt(progForm.pricePaid || '0').toLocaleString('ko-KR') : ''}
+                    value={progForm.pricePaid && !Number.isNaN(parseInt(progForm.pricePaid)) ? parseInt(progForm.pricePaid).toLocaleString('ko-KR') : ''}
                     onChange={e => setProgForm(f => ({ ...f, pricePaid: e.target.value.replace(/,/g, '') }))}
                     className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
@@ -1746,7 +1768,7 @@ export default function Customers() {
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">{selected.name} 고객 · 1:1 맞춤 솔루션</p>
               </div>
-              <button onClick={() => setShowConsultModal(false)}><X size={18} className="text-gray-400" /></button>
+              <button onClick={() => { setShowConsultModal(false); setSavedConsultId(null); }}><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleSaveConsultation} className="p-5 space-y-5">
               {/* 상담일 / 담당 */}
@@ -1983,7 +2005,7 @@ export default function Customers() {
               )}
 
               <div className="flex gap-2">
-                <button type="button" onClick={() => setShowConsultModal(false)} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
+                <button type="button" onClick={() => { setShowConsultModal(false); setSavedConsultId(null); }} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button
                   type="button"
                   onClick={handleSaveAndSendKakao}

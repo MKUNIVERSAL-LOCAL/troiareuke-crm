@@ -57,7 +57,7 @@ export default function RevisitReminderCard({ compact = false }: { compact?: boo
           {list.map(d => (
             <div key={d.customer.id} className="flex items-center gap-3 py-2.5">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-300 to-orange-300 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-bold">{d.customer.name[0]}</span>
+                <span className="text-white text-xs font-bold">{(d.customer.name || '고')[0]}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">

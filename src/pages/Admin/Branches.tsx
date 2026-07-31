@@ -45,6 +45,7 @@ export default function Branches() {
   const [adminNotice, setAdminNotice] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => { loadBranches(); }, []);
 
@@ -52,6 +53,7 @@ export default function Branches() {
 
   async function loadBranches() {
     setLoading(true);
+    setLoadError('');
     if (NAS_MODE) {
       // 서버 계정 목록에서 지점 파생 (Users 화면과 같은 소스 → 두 화면 목록 일치)
       try {
@@ -78,11 +80,15 @@ export default function Branches() {
         }).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')));
       } catch (e: any) {
         console.warn('[Branches] NAS 계정 목록 로드 실패:', e?.message);
+        setLoadError(`지점 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
         setBranches([]);
       }
     } else if (isSupabaseConfigured) {
       const { data, error } = await supabase.from('branches').select('*').order('created_at', { ascending: false });
-      if (error) console.warn('[Branches] 로드 실패:', error.message);
+      if (error) {
+        console.warn('[Branches] 로드 실패:', error.message);
+        setLoadError(`지점 목록을 불러오지 못했습니다: ${error.message}`);
+      }
       setBranches(data || []);
     } else {
       // 로컬 폴백: localStorage에서 지점 목록 읽기
@@ -172,17 +178,26 @@ export default function Branches() {
 
       if (isSupabaseConfigured) {
         if (editTarget) {
-          await supabase.from('branches').update({
+          const { error: updateError } = await supabase.from('branches').update({
             name: form.name, address: form.address, phone: form.phone,
             shop_type: form.shop_type, plan: form.plan,
           }).eq('id', editTarget.id);
+          if (updateError) {
+            // 실패를 성공처럼 위장하지 않도록 — 모달 유지 + 오류 표시
+            setError(`저장 실패: ${updateError.message}`);
+            return;
+          }
         } else {
           // 지점 레코드 생성
-          const { data: branch } = await supabase.from('branches').insert({
+          const { data: branch, error: insertError } = await supabase.from('branches').insert({
             name: form.name, address: form.address, phone: form.phone,
             shop_type: form.shop_type, plan: form.plan,
             trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
           }).select().single();
+          if (insertError) {
+            setError(`저장 실패: ${insertError.message}`);
+            return;
+          }
 
           // 관리자 계정 생성은 NAS 관리자 API를 통해 수행 (auth.admin 직접 호출 금지)
           if (form.admin_email && branch) {
@@ -331,6 +346,13 @@ export default function Branches() {
         <span className="text-xs text-slate-500 whitespace-nowrap">{filteredBranches.length}개 지점</span>
       </div>
 
+      {loadError && !loading && (
+        <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-300">
+          {loadError}
+          <button onClick={loadBranches} className="ml-3 text-xs underline text-red-200 hover:text-white">다시 시도</button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -428,17 +450,26 @@ export default function Branches() {
             <div className="px-6 py-5 space-y-4">
               {error && <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">{error}</div>}
 
+              {NAS_MODE && editTarget && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                  <Info size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                  <p className="text-xs text-amber-600 leading-relaxed">
+                    NAS 모드에서는 지점명 외 정보(주소·전화·샵 유형)는 본사 서버에서 관리됩니다. 이 화면에서는 플랜 변경만 저장됩니다.
+                  </p>
+                </div>
+              )}
+
               <Field label="지점명 *">
                 <input className="admin-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="강남점" />
               </Field>
               <Field label="주소">
-                <input className="admin-input" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="서울시 강남구..." />
+                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="서울시 강남구..." />
               </Field>
               <Field label="전화번호">
-                <input className="admin-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="02-0000-0000" />
+                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="02-0000-0000" />
               </Field>
               <Field label="샵 유형">
-                <select className="admin-input" value={form.shop_type} onChange={e => setForm(f => ({ ...f, shop_type: e.target.value }))}>
+                <select className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.shop_type} onChange={e => setForm(f => ({ ...f, shop_type: e.target.value }))}>
                   {shopTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </Field>

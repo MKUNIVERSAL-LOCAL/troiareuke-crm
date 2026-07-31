@@ -7,6 +7,8 @@ import { ProductStore, ProductSaleStore, CustomerStore } from '../../lib/store';
 import type { Product, ProductSale } from '../../types';
 import type { PaymentMethod } from '../../types';
 import clsx from 'clsx';
+import { maskPhone } from '../../lib/masking';
+import { useAuth } from '../../contexts/AuthContext';
 
 const CATEGORIES = ['전체', '세럼', '크림', '스킨', '선케어', '앰플', '클렌저', '오일', '기타'];
 
@@ -214,7 +216,12 @@ export default function Products() {
                                 <Package size={16} className="text-[#1a3a8f]" />
                               </div>
                               <div>
-                                <p className="text-sm font-semibold text-gray-900">{p.name}</p>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {p.name}
+                                  {!p.isActive && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-[10px] font-medium align-middle">비활성</span>
+                                  )}
+                                </p>
                                 {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}
                               </div>
                             </div>
@@ -351,7 +358,7 @@ export default function Products() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-gray-100 bg-gray-50/50">
-                    <td colSpan={5} className="px-6 py-3 text-xs font-semibold text-gray-500 text-right">합계</td>
+                    <td colSpan={5} className="px-6 py-3 text-xs font-semibold text-gray-500 text-right">표시분 합계(최근 60건)</td>
                     <td className="px-4 py-3 text-sm font-black text-[#1a3a8f] text-right">
                       {visibleSalesRevenue.toLocaleString()}원
                     </td>
@@ -550,6 +557,15 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
           />
         </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={e => set('isActive', e.target.checked)}
+            className="rounded text-[#1a3a8f]"
+          />
+          <span className="text-sm text-gray-700">판매 활성</span>
+        </label>
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">
             취소
@@ -569,6 +585,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
 
 // ─── 제품 판매 모달 ──────────────────────────────────────────────
 function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
+  const { user: authUser } = useAuth();
   const customers = CustomerStore.getAll();
 
   const [form, setForm] = useState({
@@ -593,6 +610,11 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
   const handleSubmit = () => {
     if (!form.unitPrice || !form.quantity) {
       alert('수량과 단가를 입력해주세요.');
+      return;
+    }
+    const rawQty = parseInt(form.quantity, 10);
+    if (Number.isNaN(rawQty) || rawQty < 1) {
+      alert('수량은 1 이상이어야 합니다');
       return;
     }
     if (product.stock < qty) {
@@ -648,7 +670,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
           >
             <option value="">고객 선택 안함</option>
             {customers.map(c => (
-              <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+              <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>
             ))}
           </select>
         </div>
@@ -701,15 +723,27 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
           />
         </div>
 
-        {/* Date */}
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">판매일</label>
-          <input
-            type="date"
-            value={form.saleDate}
-            onChange={e => set('saleDate', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
-          />
+        {/* Date & Staff */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">판매일</label>
+            <input
+              type="date"
+              value={form.saleDate}
+              onChange={e => set('saleDate', e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">담당자</label>
+            <input
+              type="text"
+              placeholder="담당 직원(선택)"
+              value={form.staffName}
+              onChange={e => set('staffName', e.target.value)}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+            />
+          </div>
         </div>
 
         {/* Notes */}
