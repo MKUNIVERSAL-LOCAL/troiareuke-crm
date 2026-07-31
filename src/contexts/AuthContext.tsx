@@ -333,9 +333,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 서버 모드: 재로그인 시 서버에서 재동기화되므로 공용 PC 개인정보 보호를 위해
       // allow-list 외 모든 localStorage 키 제거
       // (troiareuke_* API 키/구독/로그, crm_* 고객 캐시, google_calendar_token, ai_key_* 등 전체)
+      // troiareuke_nas_outbox_*: 오프라인 중 미전송 저장분 — 지점 스코프 키라서
+      // 로그아웃해도 보존해야 재로그인 시 자동 전송된다 (타 지점 로그인 시엔 자기 키만 읽음)
       const allKeys = Object.keys(localStorage);
       for (const key of allKeys) {
-        if (!LOGOUT_PRESERVE.has(key)) {
+        if (!LOGOUT_PRESERVE.has(key) && !key.startsWith('troiareuke_nas_outbox_')) {
           localStorage.removeItem(key);
         }
       }
