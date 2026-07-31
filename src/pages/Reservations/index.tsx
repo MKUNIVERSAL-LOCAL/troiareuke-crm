@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect } from 'react';
+﻿import { useState, useCallback, useEffect, type CSSProperties } from 'react';
 import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -19,6 +19,74 @@ import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 
 const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
+
+// ── 스케줄러 시간 비례 렌더링 ─────────────────────────────────────
+// 예약 블록을 관리시간(startTime~endTime)에 비례한 높이로 그리기 위한 유틸.
+// 그리드 범위: 09:00 ~ 21:00 (마지막 슬롯 20:00의 끝)
+const GRID_START_MIN = 9 * 60;
+const GRID_END_MIN = 21 * 60;
+
+function timeToMin(t: string): number {
+  const [h, m] = String(t || '').split(':').map(Number);
+  if (Number.isNaN(h)) return NaN;
+  return h * 60 + (Number.isNaN(m) ? 0 : m);
+}
+
+interface ScheduleEvent<T> {
+  item: T;
+  startMin: number;
+  endMin: number;
+  lane: number;      // 같은 시간대에 겹치는 예약들의 가로 배치 순번
+  laneCount: number; // 겹침 그룹의 전체 칸 수 (가로 분할 개수)
+}
+
+/** 하루치 이벤트에 겹침 레인을 배정. 겹치는 예약은 가로로 분할해 나란히 표시. */
+function layoutDayEvents<T>(raw: { item: T; startMin: number; endMin: number }[]): ScheduleEvent<T>[] {
+  const events = raw
+    .filter(e => !Number.isNaN(e.startMin) && e.startMin < GRID_END_MIN)
+    .map(e => ({
+      ...e,
+      // endTime이 비었거나 역전이면 기본 1시간으로 보정, 그리드 범위로 클램프
+      startMin: Math.max(e.startMin, GRID_START_MIN),
+      endMin: Math.min(
+        (Number.isNaN(e.endMin) || e.endMin <= e.startMin) ? e.startMin + 60 : e.endMin,
+        GRID_END_MIN,
+      ),
+    }))
+    .filter(e => e.endMin > GRID_START_MIN)
+    .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+
+  const out: ScheduleEvent<T>[] = [];
+  let cluster: ScheduleEvent<T>[] = [];
+  let clusterEnd = -1;
+  const laneEnds: number[] = [];
+  const flush = () => {
+    for (const ev of cluster) { ev.laneCount = laneEnds.length; out.push(ev); }
+    cluster = [];
+    laneEnds.length = 0;
+  };
+  for (const e of events) {
+    if (cluster.length && e.startMin >= clusterEnd) flush();
+    let lane = laneEnds.findIndex(end => end <= e.startMin);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(e.endMin); }
+    else laneEnds[lane] = e.endMin;
+    const ev: ScheduleEvent<T> = { ...e, lane, laneCount: 1 };
+    cluster.push(ev);
+    clusterEnd = cluster.length === 1 ? e.endMin : Math.max(clusterEnd, e.endMin);
+  }
+  flush();
+  return out;
+}
+
+/** 이벤트 블록의 절대배치 스타일 — 시작 슬롯 셀 기준, 시간 길이에 비례한 높이 */
+function eventBlockStyle(ev: ScheduleEvent<unknown>, slotStartMin: number, rowH: number): CSSProperties {
+  return {
+    top: `${((ev.startMin - slotStartMin) / 60) * rowH + 2}px`,
+    height: `${Math.max(((ev.endMin - ev.startMin) / 60) * rowH - 4, 20)}px`,
+    left: `calc(${(ev.lane * 100) / ev.laneCount}% + 2px)`,
+    width: `calc(${100 / ev.laneCount}% - 4px)`,
+  };
+}
 
 // ── Google Calendar 이벤트 매핑 (reservationId → eventId) ─────────────────
 // 예약 수정/취소/삭제 시 캘린더의 유령 일정을 정리하기 위해 로컬에 매핑 보관.
@@ -437,6 +505,22 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
 }) {
   const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
   const today = new Date();
+  const ROW_H = 56; // h-14 — 슬롯 1시간의 픽셀 높이 (블록 높이 계산 기준)
+
+  // 요일별로 예약+Google 이벤트를 시간 비례 배치 (겹침 레인 포함)
+  const dayLayouts = weekDays.map(day => {
+    const dayKey = format(day, 'yyyy-MM-dd');
+    return layoutDayEvents<
+      { kind: 'reservation'; r: Reservation } | { kind: 'google'; ge: GoogleEventLike }
+    >([
+      ...reservations
+        .filter(r => r.date === dayKey)
+        .map(r => ({ item: { kind: 'reservation' as const, r }, startMin: timeToMin(r.startTime), endMin: timeToMin(r.endTime) })),
+      ...googleEvents
+        .filter(ge => ge.date === dayKey)
+        .map(ge => ({ item: { kind: 'google' as const, ge }, startMin: timeToMin(ge.startTime), endMin: timeToMin(ge.endTime) })),
+    ]);
+  });
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -462,59 +546,69 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
         })}
       </div>
 
-      {/* Time Grid */}
+      {/* Time Grid — 예약 블록은 관리시간(1시간=1칸, 2시간=2칸)에 비례한 높이로 표시 */}
       <div className="overflow-y-auto max-h-[550px]">
-        {TIME_SLOTS.map(time => (
-          <div key={time} className="grid grid-cols-8 border-b border-gray-50 min-h-[56px]">
-            <div className="py-2 px-3 text-[11px] text-gray-400 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
-              {time}
+        {TIME_SLOTS.map(time => {
+          const slotStartMin = timeToMin(time);
+          return (
+            <div key={time} className="grid grid-cols-8 border-b border-gray-50 h-14">
+              <div className="py-2 px-3 text-[11px] text-gray-400 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
+                {time}
+              </div>
+              {weekDays.map((day, di) => {
+                const isToday = isSameDay(day, today);
+                // 이 슬롯 시간대에 "시작"하는 이벤트만 여기서 그림 (블록이 아래 슬롯까지 이어짐)
+                const slotEvents = dayLayouts[di].filter(ev =>
+                  ev.startMin >= slotStartMin && ev.startMin < slotStartMin + 60
+                );
+                return (
+                  <div key={di} className={clsx(
+                    'border-r border-gray-50 last:border-r-0 relative',
+                    isToday && 'bg-purple-50/30'
+                  )}>
+                    {slotEvents.map(ev => {
+                      if (ev.item.kind === 'reservation') {
+                        const r = ev.item.r;
+                        const staff = staffList.find(s => s.id === r.staffId);
+                        const tall = ev.endMin - ev.startMin >= 90;
+                        return (
+                          <button
+                            key={r.id}
+                            onClick={() => onSelect(r)}
+                            className="absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
+                            style={{ backgroundColor: staff?.color || '#8B5CF6', ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
+                            title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
+                          >
+                            <p className="font-bold truncate">{r.customerName}</p>
+                            <p className="opacity-80 truncate">{r.services[0]?.serviceName}</p>
+                            {tall && <p className="opacity-70 truncate">{r.startTime}~{r.endTime}</p>}
+                          </button>
+                        );
+                      }
+                      const ge = ev.item.ge;
+                      return (
+                        <a
+                          key={`g-${ge.id}`}
+                          href={ge.htmlLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block"
+                          style={eventBlockStyle(ev, slotStartMin, ROW_H)}
+                          title={`${ge.summary} · ${ge.startTime}~${ge.endTime}`}
+                        >
+                          <p className="font-bold truncate flex items-center gap-0.5">
+                            <Calendar size={9} className="flex-shrink-0" />
+                            {ge.summary}
+                          </p>
+                        </a>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
-            {weekDays.map((day, di) => {
-              const isToday = isSameDay(day, today);
-              const slotReservations = reservations.filter(r =>
-                isSameDay(parseISO(r.date), day) && r.startTime === time
-              );
-              const slotGoogleEvents = googleEvents.filter(ge =>
-                ge.date === format(day, 'yyyy-MM-dd') && ge.startTime === time
-              );
-              return (
-                <div key={di} className={clsx(
-                  'border-r border-gray-50 last:border-r-0 p-1 relative',
-                  isToday && 'bg-purple-50/30'
-                )}>
-                  {slotReservations.map(r => {
-                    const staff = staffList.find(s => s.id === r.staffId);
-                    return (
-                      <button
-                        key={r.id}
-                        onClick={() => onSelect(r)}
-                        className="w-full text-left rounded-lg p-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80 shadow-sm"
-                        style={{ backgroundColor: staff?.color || '#8B5CF6' }}
-                      >
-                        <p className="font-bold truncate">{r.customerName}</p>
-                        <p className="opacity-80 truncate">{r.services[0]?.serviceName}</p>
-                      </button>
-                    );
-                  })}
-                  {slotGoogleEvents.map(ge => (
-                    <a
-                      key={`g-${ge.id}`}
-                      href={ge.htmlLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm block mt-0.5"
-                    >
-                      <p className="font-bold truncate flex items-center gap-0.5">
-                        <Calendar size={9} className="flex-shrink-0" />
-                        {ge.summary}
-                      </p>
-                    </a>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -529,6 +623,15 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
 }) {
   const dayReservations = reservations.filter(r => isSameDay(parseISO(r.date), date));
   const dayGoogleEvents = googleEvents.filter(ge => ge.date === format(date, 'yyyy-MM-dd'));
+  const ROW_H = 60; // h-[60px] — 슬롯 1시간의 픽셀 높이
+
+  // 시간 비례 배치 (겹침 레인 포함) — 주간 뷰와 동일한 방식
+  const dayLayout = layoutDayEvents<
+    { kind: 'reservation'; r: Reservation } | { kind: 'google'; ge: GoogleEventLike }
+  >([
+    ...dayReservations.map(r => ({ item: { kind: 'reservation' as const, r }, startMin: timeToMin(r.startTime), endMin: timeToMin(r.endTime) })),
+    ...dayGoogleEvents.map(ge => ({ item: { kind: 'google' as const, ge }, startMin: timeToMin(ge.startTime), endMin: timeToMin(ge.endTime) })),
+  ]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -546,44 +649,60 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
           ))}
         </div>
       </div>
+      {/* 예약 블록은 관리시간에 비례한 높이로 표시 (1시간=1칸, 2시간=2칸) */}
       <div className="overflow-y-auto max-h-[600px]">
         {TIME_SLOTS.map(time => {
-          const slotRes = dayReservations.filter(r => r.startTime === time);
-          const slotGoogle = dayGoogleEvents.filter(ge => ge.startTime === time);
+          const slotStartMin = timeToMin(time);
+          const slotEvents = dayLayout.filter(ev =>
+            ev.startMin >= slotStartMin && ev.startMin < slotStartMin + 60
+          );
           return (
-            <div key={time} className="flex border-b border-gray-50 min-h-[60px]">
+            <div key={time} className="flex border-b border-gray-50 h-[60px]">
               <div className="w-20 flex-shrink-0 py-3 px-4 text-xs text-gray-400 border-r border-gray-100 font-medium">
                 {time}
               </div>
-              <div className="flex-1 p-2 flex gap-2 flex-wrap">
-                {slotRes.map(r => {
-                  const staff = staffList.find(s => s.id === r.staffId);
+              <div className="flex-1 relative">
+                {slotEvents.map(ev => {
+                  if (ev.item.kind === 'reservation') {
+                    const r = ev.item.r;
+                    const staff = staffList.find(s => s.id === r.staffId);
+                    const tall = ev.endMin - ev.startMin >= 90;
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => onSelect(r)}
+                        className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
+                        style={{ backgroundColor: staff?.color || '#8B5CF6', ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
+                        title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
+                      >
+                        <p className="truncate">
+                          <span className="font-bold">{r.customerName}</span>
+                          <span className="text-white/80 text-xs ml-2">{r.services.map(s => s.serviceName).join(', ')}</span>
+                          <span className="text-white/70 text-xs ml-2">{r.staffName}</span>
+                        </p>
+                        {tall && <p className="text-white/70 text-xs mt-0.5">{r.startTime}~{r.endTime}</p>}
+                      </button>
+                    );
+                  }
+                  const ge = ev.item.ge;
                   return (
-                    <button
-                      key={r.id}
-                      onClick={() => onSelect(r)}
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-white transition-all hover:scale-[1.02] shadow-sm"
-                      style={{ backgroundColor: staff?.color || '#8B5CF6' }}
+                    <a
+                      key={`g-${ge.id}`}
+                      href={ge.htmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block"
+                      style={eventBlockStyle(ev, slotStartMin, ROW_H)}
+                      title={`${ge.summary} · ${ge.startTime}~${ge.endTime}`}
                     >
-                      <span className="font-bold">{r.customerName}</span>
-                      <span className="text-white/80 text-xs">{r.services.map(s => s.serviceName).join(', ')}</span>
-                      <span className="text-white/70 text-xs">{r.staffName}</span>
-                    </button>
+                      <p className="truncate flex items-center gap-2">
+                        <Calendar size={14} className="flex-shrink-0" />
+                        <span className="font-bold">{ge.summary}</span>
+                        <span className="text-white/80 text-xs">{ge.startTime}~{ge.endTime}</span>
+                      </p>
+                    </a>
                   );
                 })}
-                {slotGoogle.map(ge => (
-                  <a
-                    key={`g-${ge.id}`}
-                    href={ge.htmlLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white bg-blue-500 transition-all hover:scale-[1.02] shadow-sm"
-                  >
-                    <Calendar size={14} className="flex-shrink-0" />
-                    <span className="font-bold">{ge.summary}</span>
-                    <span className="text-white/80 text-xs">{ge.startTime}~{ge.endTime}</span>
-                  </a>
-                ))}
               </div>
             </div>
           );
