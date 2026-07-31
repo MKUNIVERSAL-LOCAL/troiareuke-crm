@@ -216,6 +216,7 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
   const [customerId, setCustomerId] = useState(editing?.customerId ?? '');
   const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? '');
   const [staffName, setStaffName] = useState(editing?.staffName ?? '');
+  const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? new Date().toISOString().slice(0, 10));
   // 수정 모드: 기존 시술 내용에서 시술 메뉴명과 일치하는 항목을 체크 상태로 복원
   const [selectedServices, setSelectedServices] = useState<string[]>(() => {
     if (!editing?.treatmentDetails) return [];
@@ -286,6 +287,7 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
         customerProgramId: customerProgramId || undefined,
         programName: linkedProgram?.programName || editing.programName || undefined,
         staffName: staffName || undefined,
+        treatmentDate,
         treatmentDetails: details,
         skinCondition: skinCondition || undefined,
         staffNotes: staffNotes || undefined,
@@ -299,7 +301,7 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
         customerProgramId: customerProgramId || undefined,
         programName: linkedProgram?.programName || undefined,
         staffName: staffName || undefined,
-        treatmentDate: new Date().toISOString().slice(0, 10),
+        treatmentDate,
         treatmentTime: new Date().toTimeString().slice(0, 5),
         sessionsUsed: 1,
         treatmentDetails: details,
@@ -323,7 +325,7 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
             <select
               value={customerId}
-              onChange={e => setCustomerId(e.target.value)}
+              onChange={e => { setCustomerId(e.target.value); setCustomerProgramId(''); }}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
             >
               <option value="">고객 선택</option>
@@ -345,6 +347,16 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
               ))}
             </select>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">시술일</label>
+          <input
+            type="date"
+            value={treatmentDate}
+            onChange={e => setTreatmentDate(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+          />
         </div>
 
         {/* 프로그램 연결 (회차 차감) */}

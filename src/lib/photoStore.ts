@@ -15,9 +15,6 @@ import { apiRequest, isAuthApiConfigured } from './authApi';
 
 const PREFIX = 'troiareuke_photos_';
 
-/** 사진이 NAS에서 갱신됐을 때 발생 (detail: { entityKeys: string[] }) — 필요 시 구독용 */
-const PHOTOS_CHANGED_EVENT = 'crm:photos-changed';
-
 /** 엔티티 키 규칙: `treatment:<logId>`, `customer:<customerId>` 등 */
 function storageKey(entityKey: string): string {
   return `${PREFIX}${entityKey}`;
@@ -46,6 +43,30 @@ function setDirty(entityKey: string, dirty: boolean): void {
   } catch { /* noop */ }
 }
 
+// ── 삭제 tombstone 재전송 대기 목록 ──────────────────────────────
+// clearPhotos의 빈 배열 push가 실패하면, 삭제된 엔티티 키는 현존 시술로그
+// 기반의 syncPhotosFromNas entityKeys에 다시 포함되지 않아 영영 재전송되지
+// 않는 문제가 있었다. 삭제 대기 키를 별도 보관해 sync 때마다 재시도한다.
+const TOMBSTONE_KEY = 'crm_photo_tombstones';
+
+function getTombstoneKeys(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TOMBSTONE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function setTombstone(entityKey: string, pending: boolean): void {
+  try {
+    const keys = new Set(getTombstoneKeys());
+    if (pending) keys.add(entityKey);
+    else keys.delete(entityKey);
+    localStorage.setItem(TOMBSTONE_KEY, JSON.stringify([...keys]));
+  } catch { /* noop */ }
+}
+
 // NAS 중앙 서버로 사진 백업. 실패 시 dirty로 표시해 다음 sync에서 재푸시.
 function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
   if (!isAuthApiConfigured) return;
@@ -53,7 +74,11 @@ function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
     method: 'PUT',
     body: JSON.stringify({ photos }),
   })
-    .then(() => setDirty(entityKey, false))
+    .then(() => {
+      setDirty(entityKey, false);
+      // 빈 배열(삭제 tombstone) 전송 성공 — 재전송 대기 목록에서 제거
+      if (photos.length === 0) setTombstone(entityKey, false);
+    })
     .catch(e => {
       setDirty(entityKey, true);
       console.error(`[NAS] 사진 동기화 실패 (${entityKey}):`, e);
@@ -69,7 +94,13 @@ function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
  * @returns 로컬 캐시가 바뀌었으면 true
  */
 export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> {
-  if (!isAuthApiConfigured || entityKeys.length === 0) return false;
+  if (!isAuthApiConfigured) return false;
+
+  // 삭제 tombstone 재전송 — 삭제된 엔티티는 entityKeys에 없으므로 여기서 재시도
+  for (const key of getTombstoneKeys()) {
+    pushToNas(key, []);
+  }
+  if (entityKeys.length === 0) return false;
 
   const dirty = new Set(getDirtyKeys());
   for (const key of entityKeys) {
@@ -79,7 +110,6 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
   if (cleanKeys.length === 0) return false;
 
   let changed = false;
-  const changedKeys: string[] = [];
 
   // 배치 조회 (500키 단위) — 시술기록 수백 건에서 왕복 폭주 방지
   for (let i = 0; i < cleanKeys.length; i += 500) {
@@ -104,7 +134,6 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
             if (remote.length === 0) localStorage.removeItem(storageKey(entityKey));
             else localStorage.setItem(storageKey(entityKey), JSON.stringify(remote));
             changed = true;
-            changedKeys.push(entityKey);
           } catch { /* 로컬 캐시 용량 초과 — 서버본은 남아 있으므로 무시 */ }
         }
       } else if (local.length > 0) {
@@ -113,9 +142,6 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
     }
   }
 
-  if (changed) {
-    window.dispatchEvent(new CustomEvent(PHOTOS_CHANGED_EVENT, { detail: { entityKeys: changedKeys } }));
-  }
   return changed;
 }
 
@@ -151,6 +177,9 @@ export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
 /** 엔티티의 모든 사진 삭제 (레코드 삭제 시 정리용) — NAS에서도 삭제 */
 export function clearPhotos(entityKey: string): void {
   try { localStorage.removeItem(storageKey(entityKey)); } catch { /* noop */ }
+  if (!isAuthApiConfigured) return;
+  // 즉시 push가 실패해도 sync 때 재전송되도록 먼저 tombstone 목록에 등재
+  setTombstone(entityKey, true);
   pushToNas(entityKey, []);
 }
 

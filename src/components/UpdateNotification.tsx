@@ -3,6 +3,7 @@ import { CheckCircle, Download, RefreshCw, X } from 'lucide-react';
 
 interface ElectronAPI {
   isElectron?: boolean;
+  isPortable?: boolean;
   getAppVersion?: () => Promise<string>;
   onUpdateAvailable?: (cb: (info: { version: string }) => void) => void;
   onUpdateDownloadProgress?: (cb: (progress: { percent: number }) => void) => void;
@@ -37,7 +38,10 @@ export default function UpdateNotification() {
 
   useEffect(() => {
     const api = window.electronAPI;
-    if (!api?.isElectron) return;
+    // 포터블 모드는 UpdateBanner(ui/UpdateBanner.tsx)가 업데이트 UI를 전담한다.
+    // preload의 removeUpdateListeners가 removeAllListeners라서 두 컴포넌트가
+    // 동시에 구독하면 한쪽 unmount 시 다른 쪽 리스너까지 전멸 — 모드당 구독 1개 보장.
+    if (!api?.isElectron || api.isPortable) return;
 
     api.onUpdateAvailable?.((info) => {
       setVersion(info.version);
@@ -62,6 +66,7 @@ export default function UpdateNotification() {
     return () => api.removeUpdateListeners?.();
   }, []);
 
+  if (window.electronAPI?.isPortable) return null; // 포터블은 UpdateBanner 전담
   if (state === 'idle' || dismissed) return null;
 
   const handleDownload = async () => {

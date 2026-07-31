@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { CreditCard, Plus, Pencil, AlertCircle, CheckCircle, Clock, Search } from 'lucide-react';
+import { CreditCard, Pencil, AlertCircle, CheckCircle, Clock, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
 import { format, parseISO } from 'date-fns';
@@ -23,8 +23,9 @@ interface Subscription {
 
 const planOptions = [
   { value: 'trial', label: '무료체험', color: 'bg-amber-500/10 text-amber-700', price: 0 },
-  { value: 'starter', label: '스타터', color: 'bg-blue-500/10 text-blue-400', price: 49000 },
-  { value: 'pro', label: '프로', color: 'bg-purple-500/10 text-purple-400', price: 99000 },
+  // 단가는 Signup.tsx 플랜 표기와 동일하게 유지 (29,000 / 59,000)
+  { value: 'starter', label: '스타터', color: 'bg-blue-500/10 text-blue-400', price: 29000 },
+  { value: 'pro', label: '프로', color: 'bg-purple-500/10 text-purple-400', price: 59000 },
   { value: 'enterprise', label: '엔터프라이즈', color: 'bg-emerald-500/10 text-emerald-400', price: 199000 },
 ];
 
@@ -296,14 +297,21 @@ export default function Subscriptions() {
                   <p className="text-[11px] text-slate-500 mt-1">중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다.</p>
                 )}
               </Field>
+              {NAS_MODE && (
+                <div className="px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                  <p className="text-xs text-amber-600 leading-relaxed">
+                    중앙 서버 모드에서는 플랜·상태만 저장됩니다. 월 금액·만료일·메모는 계정 정보에서 자동 파생되어 이 화면에서 수정할 수 없습니다.
+                  </p>
+                </div>
+              )}
               <Field label="월 금액 (원)">
-                <input className="admin-input" type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
               </Field>
               <Field label="만료일">
-                <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
+                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
               </Field>
               <Field label="메모">
-                <input className="admin-input" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="특이사항 입력" />
+                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="특이사항 입력" />
               </Field>
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">

@@ -4,7 +4,7 @@ import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, Cre
 import { useAuth } from '../../contexts/AuthContext';
 import { StaffStore, ServiceStore, ProgramStore, SettingsStore } from '../../lib/store';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
+import { PLANS } from '../../lib/payment';
 import type { ShopSettings, SubscriptionPlan } from '../../types';
 import * as XLSX from 'xlsx';
 
@@ -90,8 +90,6 @@ export default function Onboarding() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('trial');
-  const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const addStaff = () => setStaffList(p => [...p, { name: '', role: '피부관리사' }]);
   const updateStaff = (i: number, k: string, v: string) =>
@@ -121,9 +119,9 @@ export default function Onboarding() {
 
   // 엑셀 파일 업로드 처리
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
-    setExcelFileName(file.name);
 
     try {
       // xlsx/xls/csv 모두 SheetJS로 실제 파싱 (엑셀 바이너리를 텍스트로 잘못 읽는 문제 해결)
@@ -145,8 +143,13 @@ export default function Onboarding() {
         alert('시술 데이터를 찾지 못했습니다. 1행은 헤더, 2행부터 [시술명, 소요시간(분), 가격] 순으로 입력해주세요.');
       }
       setExcelServices(parsed);
+      // 파일명은 파싱 성공 후에만 표시 (실패한 파일명이 화면에 남는 문제 방지)
+      setExcelFileName(parsed.length > 0 ? file.name : '');
     } catch {
       alert('파일을 읽을 수 없습니다. 엑셀(.xlsx/.xls) 또는 CSV 파일을 올려주세요.');
+    } finally {
+      // 같은 파일을 다시 선택해도 onChange가 발생하도록 리셋 (Signup.tsx와 동일 방식)
+      input.value = '';
     }
   };
 
@@ -194,40 +197,6 @@ export default function Onboarding() {
     }));
   };
 
-  // 플랜 선택 후 결제 처리
-  const handlePlanSelect = async (plan: PlanInfo) => {
-    setSelectedPlan(plan.id);
-    setPaymentError(null);
-
-    if (plan.id === 'trial' || plan.id === 'enterprise') {
-      // 무료 체험 또는 Enterprise는 바로 진행
-      setStep(5);
-      return;
-    }
-
-    // 유료 플랜: 결제 진행
-    setPaymentLoading(true);
-    try {
-      const result = await requestPayment({
-        planName: plan.name,
-        amount: plan.price,
-        buyerEmail: user?.email || '',
-        buyerName: user?.name || '',
-      });
-
-      if (result.success) {
-        await saveSubscription(plan.id, result.impUid, result.merchantUid, plan.price);
-        setStep(5);
-      } else {
-        setPaymentError(result.error || '결제에 실패했습니다. 다시 시도해주세요.');
-      }
-    } catch {
-      setPaymentError('결제 처리 중 오류가 발생했습니다.');
-    } finally {
-      setPaymentLoading(false);
-    }
-  };
-
   const finish = async () => {
     // ★ 1단계: branchId를 먼저 확정한 후 localStorage에 저장
     // 이렇게 해야 이후 모든 Store.save()가 올바른 shopKey를 사용함
@@ -266,9 +235,35 @@ export default function Onboarding() {
     });
 
     // ★ 2단계: 이제 getShopId()가 fixedBranchId를 반환하므로 안전하게 데이터 저장
+    // finish() 재실행(서버 반영 실패 후 재로그인 → 온보딩 재표시) 시 같은 이름의
+    // 직원/시술이 중복 생성되지 않도록, 이미 저장된 이름은 건너뛴다.
+    const existingStaffNames = new Set(StaffStore.getAll().filter(s => !s.id.startsWith('sample_')).map(s => s.name));
+    const existingServiceNames = new Set(ServiceStore.getAll().filter(s => !s.id.startsWith('sample_')).map(s => s.name));
+    const existingProgramNames = new Set(ProgramStore.getAll().filter(p => !p.id.startsWith('sample_')).map(p => p.name));
+    const saveServiceOnce = (svc: { name: string; category: string; duration: number; price: number; description?: string }) => {
+      if (!existingServiceNames.has(svc.name)) {
+        ServiceStore.save({ name: svc.name, category: svc.category, duration: svc.duration, price: svc.price, isActive: true });
+        existingServiceNames.add(svc.name);
+      }
+      if (!existingProgramNames.has(svc.name)) {
+        ProgramStore.save({
+          name: svc.name,
+          category: svc.category,
+          totalSessions: null,
+          validityDays: null,
+          price: svc.price,
+          costPrice: 0,
+          description: svc.description,
+          color: '#1a3a8f',
+          isActive: true,
+        });
+        existingProgramNames.add(svc.name);
+      }
+    };
+
     // 직원 목록 저장
     staffList
-      .filter(s => s.name.trim() !== '')
+      .filter(s => s.name.trim() !== '' && !existingStaffNames.has(s.name.trim()))
       .forEach(s => {
         StaffStore.save({
           name: s.name,
@@ -283,25 +278,11 @@ export default function Onboarding() {
 
     // 직접 입력한 시술 항목 저장
     customServices.filter(s => s.name.trim()).forEach(s => {
-      const svcPrice = parseInt(s.price.replace(/,/g, ''), 10) || 0;
-      const svcDuration = parseInt(s.duration, 10) || 60;
-      ServiceStore.save({
+      saveServiceOnce({
         name: s.name.trim(),
         category: '직접 입력',
-        duration: svcDuration,
-        price: svcPrice,
-        isActive: true,
-      });
-      ProgramStore.save({
-        name: s.name.trim(),
-        category: '직접 입력',
-        totalSessions: null,
-        validityDays: null,
-        price: svcPrice,
-        costPrice: 0,
-        description: undefined,
-        color: '#1a3a8f',
-        isActive: true,
+        duration: parseInt(s.duration, 10) || 60,
+        price: parseInt(s.price.replace(/,/g, ''), 10) || 0,
       });
     });
 
@@ -309,23 +290,12 @@ export default function Onboarding() {
     TROIAREUKE_PROGRAMS.forEach(cat => {
       cat.programs.forEach(p => {
         if (selectedTroiPrograms.has(p.name)) {
-          ServiceStore.save({
+          saveServiceOnce({
             name: p.name,
             category: `트로이아르케 ${cat.label}`,
             duration: p.duration,
             price: p.price,
-            isActive: true,
-          });
-          ProgramStore.save({
-            name: p.name,
-            category: `트로이아르케 ${cat.label}`,
-            totalSessions: null,
-            validityDays: null,
-            price: p.price,
-            costPrice: 0,
             description: p.desc,
-            color: '#1a3a8f',
-            isActive: true,
           });
         }
       });
@@ -333,33 +303,27 @@ export default function Onboarding() {
 
     // 엑셀 업로드 시술 항목 저장
     excelServices.forEach(s => {
-      ServiceStore.save({
+      saveServiceOnce({
         name: s.name,
         category: '엑셀 업로드',
         duration: s.duration,
         price: s.price,
-        isActive: true,
-      });
-      ProgramStore.save({
-        name: s.name,
-        category: '엑셀 업로드',
-        totalSessions: null,
-        validityDays: null,
-        price: s.price,
-        costPrice: 0,
-        description: undefined,
-        color: '#1a3a8f',
-        isActive: true,
       });
     });
 
-    // ★ 3단계: Supabase 저장은 백그라운드 (실패해도 무시)
+    // ★ 3단계: 구독 저장은 백그라운드 (실패해도 무시)
     try {
       if (selectedPlan === 'trial' || selectedPlan === 'enterprise') {
         await saveSubscription(selectedPlan);
       }
-      await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
     } catch { /* 무시 */ }
+
+    // 온보딩 완료의 서버 반영 실패는 삼키지 않고 알린다 — 로컬 완료는 유지되므로 진행은 계속
+    try {
+      await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
+    } catch {
+      alert('온보딩 완료가 서버에 반영되지 않았습니다. 인터넷 연결 후 다시 로그인하면 온보딩이 다시 표시될 수 있습니다 — 그 경우 기존 입력은 보존됩니다.');
+    }
 
     // ★ 4단계: 강제 리로드로 대시보드 이동
     // ⚠️ Electron은 HashRouter(#/), 웹/PWA는 BrowserRouter(pathname) — App.tsx와 동일 감지.

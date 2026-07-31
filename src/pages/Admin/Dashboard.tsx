@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle, DatabaseBackup } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, apiRequest } from '../../lib/authApi';
@@ -31,6 +32,7 @@ export default function AdminDashboard() {
     recentLogs: [],
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     loadStats();
@@ -38,6 +40,7 @@ export default function AdminDashboard() {
 
   async function loadStats() {
     setLoading(true);
+    setLoadError('');
     try {
       if (isAuthApiConfigured) {
         // NAS 중앙 서버 모드: 계정 목록에서 지점/사용자 집계 (로그인 로그는 이 기기 기준)
@@ -55,6 +58,7 @@ export default function AdminDashboard() {
           activeBranches = [...byBranch.values()].filter(Boolean).length;
         } catch (e: any) {
           console.warn('[AdminDashboard] NAS 계정 집계 실패:', e?.message);
+          setLoadError(`지점/사용자 집계를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
         }
         const logs = getLocalLogs();
         // "오늘"은 로컬(KST) 기준 — UTC 문자열 prefix 비교는 00~09시에 전날로 어긋남
@@ -63,7 +67,7 @@ export default function AdminDashboard() {
           totalBranches,
           activeBranches,
           totalUsers,
-          todayLogins: logs.filter(l => new Date(l.logged_in_at).toDateString() === todayLocal).length,
+          todayLogins: logs.filter(l => l.status === 'success' && new Date(l.logged_in_at).toDateString() === todayLocal).length,
           recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
         });
       } else if (isSupabaseConfigured) {
@@ -73,7 +77,7 @@ export default function AdminDashboard() {
           supabase.from('branches').select('id, is_active'),
           supabase.from('user_profiles').select('id'),
           supabase.from('login_logs').select('id, email, branch_name, status, logged_in_at').order('logged_in_at', { ascending: false }).limit(20),
-          supabase.from('login_logs').select('id', { count: 'exact' }).gte('logged_in_at', today),
+          supabase.from('login_logs').select('id', { count: 'exact' }).eq('status', 'success').gte('logged_in_at', today),
         ]);
 
         setStats({
@@ -87,7 +91,7 @@ export default function AdminDashboard() {
         // 로컬 데이터 폴백
         const logs = getLocalLogs();
         const today = new Date().toISOString().split('T')[0];
-        const todayCount = logs.filter(l => l.logged_in_at.startsWith(today)).length;
+        const todayCount = logs.filter(l => l.status === 'success' && l.logged_in_at.startsWith(today)).length;
 
         setStats({
           totalBranches: 0,
@@ -160,6 +164,12 @@ export default function AdminDashboard() {
         </div>
       ) : (
         <>
+          {loadError && (
+            <div className="mb-6 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-300">
+              {loadError}
+              <button onClick={loadStats} className="ml-3 text-xs underline text-red-200 hover:text-white">다시 시도</button>
+            </div>
+          )}
           {/* Stat Cards */}
           <div className="grid grid-cols-4 gap-4 mb-8">
             {statCards.map(card => (
@@ -183,7 +193,7 @@ export default function AdminDashboard() {
                 최근 로그인 기록
                 {!isSupabaseConfigured && <span className="ml-2 text-[11px] font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
               </h2>
-              <a href="/admin/login-logs" className="text-xs text-blue-400 hover:text-blue-300">전체 보기 →</a>
+              <Link to="/admin/login-logs" className="text-xs text-blue-400 hover:text-blue-300">전체 보기 →</Link>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">

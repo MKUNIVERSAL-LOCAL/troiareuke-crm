@@ -33,6 +33,7 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -42,6 +43,7 @@ export default function AdminUsers() {
 
   async function loadData() {
     setLoading(true);
+    setLoadError('');
     try {
       if (isAuthApiConfigured) {
         // NAS 중앙 서버: 전체 계정 목록 (슈퍼어드민 전용 API)
@@ -97,6 +99,8 @@ export default function AdminUsers() {
         })));
         setBranches(localBranches);
       }
+    } catch (e: any) {
+      setLoadError(`사용자 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
     } finally {
       setLoading(false);
     }
@@ -212,6 +216,13 @@ export default function AdminUsers() {
           <p className="text-slate-400 text-sm mt-1">전체 지점의 계정 현황을 확인하세요</p>
         </div>
       </div>
+
+      {loadError && !loading && (
+        <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-300">
+          {loadError}
+          <button onClick={loadData} className="ml-3 text-xs underline text-red-200 hover:text-white">다시 시도</button>
+        </div>
+      )}
 
       <div className="relative mb-4 max-w-xl">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />

@@ -74,10 +74,15 @@ export default function Programs() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const sessions = form.isTimed ? null : parseInt(form.totalSessions);
+    if (sessions !== null && (Number.isNaN(sessions) || sessions < 1)) {
+      alert('회차는 1 이상이어야 합니다');
+      return;
+    }
     const data: Omit<Program, 'id' | 'shopId' | 'createdAt'> = {
       name: form.name,
       category: form.category,
-      totalSessions: form.isTimed ? null : parseInt(form.totalSessions) || 10,
+      totalSessions: sessions,
       validityDays: form.validityDays ? parseInt(form.validityDays) : null,
       price: parseInt(form.price.replace(/,/g, '')) || 0,
       costPrice: parseInt(form.costPrice.replace(/,/g, '')) || 0,

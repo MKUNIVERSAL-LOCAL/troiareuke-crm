@@ -301,6 +301,7 @@ function NasAnalytics() {
 // ── (레거시) Supabase 백엔드 서비스 지표 ───────────────────────────────
 function SupabaseStats() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [loginTrend, setLoginTrend] = useState<{ date: string; 성공: number; 실패: number }[]>([]);
   const [planDist, setPlanDist] = useState<{ name: string; value: number; color: string }[]>([]);
   const [branchGrowth, setBranchGrowth] = useState<{ date: string; 누적지점: number }[]>([]);
@@ -316,6 +317,10 @@ function SupabaseStats() {
       supabase.from('user_profiles').select('id'),
       supabase.from('login_logs').select('status, logged_in_at').order('logged_in_at', { ascending: true }),
     ]);
+
+    // 쿼리 실패를 빈 데이터(0)로 위장하지 않도록 화면에 표시
+    const queryError = branches.error || users.error || logs.error;
+    setLoadError(queryError ? `통계 데이터를 불러오지 못했습니다: ${queryError.message}` : '');
 
     // 요약
     const totalLogins = logs.data?.length || 0;
@@ -383,6 +388,10 @@ function SupabaseStats() {
         <h1 className="text-2xl font-bold text-white">통계 / 분석</h1>
         <p className="text-slate-400 text-sm mt-1">전체 서비스 현황을 한눈에 파악하세요</p>
       </div>
+
+      {loadError && !loading && (
+        <p className="mb-4 text-sm text-red-400">{loadError}</p>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center h-64">

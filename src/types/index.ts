@@ -76,26 +76,6 @@ export interface Reservation {
   naverBookingId?: string;
 }
 
-export interface TreatmentRecord {
-  id: string;
-  customerId: string;
-  customerName: string;
-  reservationId?: string;
-  date: string;
-  services: { serviceId: string; serviceName: string; price: number }[];
-  staffId: string;
-  staffName: string;
-  totalAmount: number;
-  paidAmount: number;
-  paymentMethod: PaymentMethod;
-  memo?: string;
-  skinCondition?: string;
-  nextVisitRecommended?: string;
-  photos: string[];
-  usedPoints: number;
-  earnedPoints: number;
-}
-
 export interface Product {
   id: string;
   shopId: string;
@@ -134,15 +114,6 @@ export interface MessageHistory {
   sentAt: string;
   status: MessageStatus;
   cost?: number;
-}
-
-export interface SalesData {
-  date: string;
-  revenue: number;
-  cost: number;
-  profit: number;
-  reservationCount: number;
-  newCustomers: number;
 }
 
 export interface NaverBookingSettings {
@@ -316,15 +287,6 @@ export interface Consultation {
   /** 전/후 사진 URL */
   photos: string[];
   createdAt: string;
-}
-
-/** 일별 매출 집계 */
-export interface DailySales {
-  date: string;
-  treatmentRevenue: number;
-  productRevenue: number;
-  totalRevenue: number;
-  paymentCount: number;
 }
 
 // =============================================

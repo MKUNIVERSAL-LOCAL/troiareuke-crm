@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Shield, Lock, Server, Activity } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff, Shield, Lock, Server } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 
@@ -92,27 +92,11 @@ export default function AdminLogin() {
             더마노트 플랫폼의 지점, 사용자, 구독, 통계를 관리합니다.
           </p>
 
-          {/* System status cards */}
-          <div className="grid grid-cols-2 gap-3 pt-4 max-w-sm">
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3.5">
-              <div className="flex items-center gap-2 mb-2">
-                <Server size={14} className="text-emerald-400" />
-                <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">System</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
-                <span className="text-xs text-emerald-400 font-semibold">Online</span>
-              </div>
-            </div>
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3.5">
-              <div className="flex items-center gap-2 mb-2">
-                <Activity size={14} className="text-blue-400" />
-                <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Database</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse"></span>
-                <span className="text-xs text-blue-400 font-semibold">Connected</span>
-              </div>
+          {/* 장식 배너 — 실제 서버 상태를 주장하는 문구(Online/Connected)는 표시하지 않는다 */}
+          <div className="pt-4 max-w-sm">
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3.5 flex items-center gap-2.5">
+              <Server size={14} className="text-blue-400" />
+              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Troiareuke Admin Console</span>
             </div>
           </div>
         </div>
@@ -203,9 +187,9 @@ export default function AdminLogin() {
             </form>
 
             <div className="mt-6 pt-5 border-t border-slate-700/50 text-center">
-              <a href="#/login" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+              <Link to="/login" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
                 일반 사용자 로그인으로 돌아가기
-              </a>
+              </Link>
             </div>
           </div>
 

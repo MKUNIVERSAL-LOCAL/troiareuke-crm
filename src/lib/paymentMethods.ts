@@ -25,7 +25,11 @@ export function addCustomPaymentMethod(name: string): boolean {
   if (!trimmed || trimmed.length > 20) return false;
   if (getAllPaymentMethods().includes(trimmed) || trimmed === '혼합') return false;
   const next = [...getCustomPaymentMethods(), trimmed];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    return false; // 용량 초과 등 저장 실패 — 호출측(alert) 기존 실패 경로로 처리
+  }
   return true;
 }
 

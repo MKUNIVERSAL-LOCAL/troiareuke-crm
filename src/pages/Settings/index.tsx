@@ -1065,11 +1065,13 @@ export default function Settings() {
                       <div>
                         <p className="text-sm font-semibold text-gray-900">{n.label}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{n.desc}</p>
+                        <p className="text-xs text-amber-600 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
                       </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
+                      <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
                         <input
                           type="checkbox"
                           className="sr-only peer"
+                          disabled
                           checked={settings.notificationSettings[n.key]}
                           onChange={() => toggleNotification(n.key)}
                         />

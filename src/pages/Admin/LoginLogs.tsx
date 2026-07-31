@@ -19,6 +19,7 @@ export default function LoginLogs() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filtered, setFiltered] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
   const [page, setPage] = useState(0);
@@ -41,13 +42,15 @@ export default function LoginLogs() {
 
   async function loadLogs() {
     setLoading(true);
+    setLoadError('');
     try {
       if (isSupabaseConfigured) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('login_logs')
           .select('*')
           .order('logged_in_at', { ascending: false })
           .limit(500);
+        if (error) setLoadError(`로그인 기록을 불러오지 못했습니다: ${error.message}`);
         setLogs(data || []);
       } else {
         const local = getLocalLogs();
@@ -83,6 +86,10 @@ export default function LoginLogs() {
           새로고침
         </button>
       </div>
+
+      {loadError && !loading && (
+        <p className="mb-4 text-sm text-red-400">{loadError}</p>
+      )}
 
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4 mb-6">

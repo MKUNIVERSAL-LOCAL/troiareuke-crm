@@ -3,6 +3,7 @@ import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { StaffStore, ReservationStore } from '../../lib/store';
+import { todayISO, thisYearMonthISO } from '../../lib/format';
 import type { Staff } from '../../types';
 
 const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '왁싱', '각질관리'];
@@ -10,12 +11,13 @@ const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '왁싱', '각질관�
 const normalizeSpecialty = (s: string) => (s === '마사지' ? '바디관리' : s);
 const COLOR_OPTIONS = ['#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#6366F1', '#14B8A6'];
 
+// 로컬(KST) 기준 — toISOString()은 UTC라 0~9시(KST)에 전날/지난달로 어긋남 (Sales 페이지와 동일 수정)
 function getToday() {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 function getYearMonth() {
-  return new Date().toISOString().slice(0, 7);
+  return thisYearMonthISO();
 }
 
 export default function StaffPage() {
@@ -122,7 +124,8 @@ export default function StaffPage() {
                   </div>
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center">
                     <p className="text-base font-bold text-gray-800">{(monthlyRevenue / 10000).toFixed(0)}만</p>
-                    <p className="text-xs text-gray-400">이번달 매출</p>
+                    <p className="text-xs text-gray-400">이번달 예약액</p>
+                    <p className="text-[10px] text-gray-300">(완료·예정 포함, 취소·노쇼 제외)</p>
                   </div>
                 </div>
 
@@ -568,7 +571,8 @@ function StaffDetailModal({
           </div>
           <div className="bg-pink-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-pink-700">{(monthRevenue / 10000).toFixed(0)}만</p>
-            <p className="text-[11px] text-pink-400 mt-0.5">이번달 매출</p>
+            <p className="text-[11px] text-pink-400 mt-0.5">이번달 예약액</p>
+            <p className="text-[10px] text-pink-300">(완료·예정 포함, 취소·노쇼 제외)</p>
           </div>
           <div className="bg-blue-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-blue-700">{staff.hireDate.split('-')[0]}</p>
