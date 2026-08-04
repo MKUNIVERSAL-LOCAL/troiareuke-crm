@@ -13,6 +13,7 @@ interface UserRow {
   branch_name: string | null;
   is_onboarded: boolean;
   is_active: boolean;
+  service_ends_at: string | null; // 사용기간 만료일 (null = 무제한)
   created_at: string;
 }
 
@@ -56,6 +57,7 @@ export default function AdminUsers() {
           branch_name: u.branchName || null,
           is_onboarded: u.isOnboarded,
           is_active: u.isActive !== false,
+          service_ends_at: u.serviceEndsAt || null,
           created_at: u.createdAt,
         })));
         // 지점 필터는 계정에 등록된 지점명으로 구성
@@ -79,6 +81,7 @@ export default function AdminUsers() {
           branch_name: u.branches?.name || null,
           is_onboarded: u.is_onboarded,
           is_active: true,
+          service_ends_at: null,
           created_at: u.created_at,
         })));
         setBranches(branchesRes.data || []);
@@ -95,6 +98,7 @@ export default function AdminUsers() {
           branch_name: u.user.branchName || null,
           is_onboarded: u.user.isOnboarded,
           is_active: true,
+          service_ends_at: null,
           created_at: u.user.createdAt,
         })));
         setBranches(localBranches);
@@ -155,6 +159,48 @@ export default function AdminUsers() {
     }
   }
 
+  // ── 사용기간 수정 모달 ──────────────────────────────────────
+  const [periodTarget, setPeriodTarget] = useState<UserRow | null>(null);
+  const [periodDate, setPeriodDate] = useState('');
+  const [periodBusy, setPeriodBusy] = useState(false);
+
+  function openPeriodModal(user: UserRow) {
+    setPeriodTarget(user);
+    setPeriodDate(user.service_ends_at ? user.service_ends_at.slice(0, 10) : '');
+  }
+
+  async function savePeriod(unlimited: boolean) {
+    if (!periodTarget) return;
+    if (!unlimited && !periodDate) {
+      alert('만료일을 선택하거나 [무제한으로 설정]을 눌러주세요.');
+      return;
+    }
+    const value = unlimited ? null : periodDate;
+    if (value && value < new Date().toISOString().slice(0, 10)) {
+      if (!confirm('과거 날짜입니다. 저장 즉시 해당 계정이 로그아웃되고 로그인할 수 없게 됩니다. 계속할까요?')) return;
+    }
+    setPeriodBusy(true);
+    try {
+      await adminUpdateUser(periodTarget.id, { serviceEndsAt: value });
+      setPeriodTarget(null);
+      await loadData();
+    } catch (e: any) {
+      alert(e?.message || '사용기간 변경에 실패했습니다.');
+    } finally {
+      setPeriodBusy(false);
+    }
+  }
+
+  function periodStatus(u: UserRow): { label: string; className: string } {
+    if (!u.service_ends_at) return { label: '무제한', className: 'text-slate-500' };
+    const endDate = u.service_ends_at.slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    if (endDate < today) return { label: `${endDate.replace(/-/g, '.')} 만료됨`, className: 'text-red-400 font-semibold' };
+    const daysLeft = Math.ceil((new Date(u.service_ends_at).getTime() - Date.now()) / 86400000);
+    if (daysLeft <= 14) return { label: `~${endDate.replace(/-/g, '.')} (D-${daysLeft})`, className: 'text-amber-400' };
+    return { label: `~${endDate.replace(/-/g, '.')}`, className: 'text-slate-300' };
+  }
+
   const normalizedSearch = search.trim().toLowerCase();
   const filtered = users.filter(user => {
     const branchMatches = branchFilter === 'all' || user.branch_name === branchFilter;
@@ -205,6 +251,72 @@ export default function AdminUsers() {
               >
                 닫기
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 사용기간 수정 모달 */}
+      {periodTarget && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="px-6 py-5 border-b border-slate-700">
+              <h2 className="text-base font-bold text-white">사용기간 설정</h2>
+              <p className="text-xs text-slate-400 mt-1">{periodTarget.name || ''} · {periodTarget.email}</p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <label className="block text-xs font-medium text-slate-400">만료일 (그날 자정까지 사용 가능)</label>
+              <input
+                type="date"
+                value={periodDate}
+                onChange={e => setPeriodDate(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-sm text-white outline-none focus:border-blue-500"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 3, 6, 12].map(months => (
+                  <button
+                    key={months}
+                    onClick={() => {
+                      const base = periodDate && periodDate >= new Date().toISOString().slice(0, 10)
+                        ? new Date(periodDate) : new Date();
+                      base.setMonth(base.getMonth() + months);
+                      setPeriodDate(base.toISOString().slice(0, 10));
+                    }}
+                    className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  >
+                    +{months}개월
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                만료일이 지나면 해당 계정은 로그인할 수 없습니다 (저장된 데이터는 유지).
+                무제한으로 설정하면 기간 제한이 해제됩니다.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-700 flex items-center justify-between gap-2">
+              <button
+                onClick={() => savePeriod(true)}
+                disabled={periodBusy}
+                className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+              >
+                무제한으로 설정
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPeriodTarget(null)}
+                  disabled={periodBusy}
+                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => savePeriod(false)}
+                  disabled={periodBusy}
+                  className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50"
+                >
+                  {periodBusy ? '저장 중…' : '저장'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -274,6 +386,9 @@ export default function AdminUsers() {
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">역할</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">소속 지점</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">온보딩</th>
+                {isAuthApiConfigured && (
+                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">사용기간</th>
+                )}
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">가입일</th>
                 {isAuthApiConfigured && (
                   <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">관리</th>
@@ -307,6 +422,15 @@ export default function AdminUsers() {
                         <span className="text-xs text-amber-700">미완료</span>
                       )}
                     </td>
+                    {isAuthApiConfigured && (
+                      <td className="px-6 py-4">
+                        {u.role === 'superadmin' ? (
+                          <span className="text-xs text-slate-600">—</span>
+                        ) : (
+                          <span className={`text-xs ${periodStatus(u).className}`}>{periodStatus(u).label}</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-xs text-slate-500">
                       {format(parseISO(u.created_at), 'yyyy.MM.dd', { locale: ko })}
                     </td>
@@ -333,6 +457,13 @@ export default function AdminUsers() {
                               className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50"
                             >
                               비밀번호 재설정
+                            </button>
+                            <button
+                              onClick={() => openPeriodModal(u)}
+                              disabled={actionBusy === u.id}
+                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+                            >
+                              사용기간
                             </button>
                           </div>
                         )}

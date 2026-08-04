@@ -26,11 +26,13 @@ interface BranchForm {
   shop_type: string;
   plan: string;
   admin_email: string;
+  /** NAS 모드: 지점 전체 계정에 일괄 적용할 사용기간 만료일 (YYYY-MM-DD, 빈 값 = 무제한) */
+  service_ends_at: string;
 }
 
 const emptyForm: BranchForm = {
   name: '', address: '', phone: '', shop_type: '피부관리실',
-  plan: 'trial', admin_email: '',
+  plan: 'trial', admin_email: '', service_ends_at: '',
 };
 
 export default function Branches() {
@@ -127,7 +129,15 @@ export default function Branches() {
 
   function openEdit(b: Branch) {
     setEditTarget(b);
-    setForm({ name: b.name, address: b.address || '', phone: b.phone || '', shop_type: b.shop_type || '', plan: b.plan, admin_email: '' });
+    // NAS 모드: 지점 대표(관리자) 계정에 설정된 사용기간을 프리필
+    const primary = NAS_MODE
+      ? ((nasUsersByBranch[b.id] || []).find(u => u.role === 'admin') || (nasUsersByBranch[b.id] || [])[0])
+      : undefined;
+    setForm({
+      name: b.name, address: b.address || '', phone: b.phone || '',
+      shop_type: b.shop_type || '', plan: b.plan, admin_email: '',
+      service_ends_at: primary?.serviceEndsAt ? primary.serviceEndsAt.slice(0, 10) : '',
+    });
     setAdminNotice('');
     setError('');
     setShowModal(true);
@@ -144,13 +154,25 @@ export default function Branches() {
     try {
       if (NAS_MODE) {
         if (editTarget) {
-          // 서버에는 지점 엔티티가 없어 계정 단위로만 반영 가능 — 플랜 변경만 서버 적용
+          // 서버에는 지점 엔티티가 없어 계정 단위로만 반영 가능 — 플랜·사용기간을 지점 전 계정에 적용
           const users = nasUsersByBranch[editTarget.id] || [];
+          const nextEndsAt = form.service_ends_at || null;
+          const currentPrimary = users.find(u => u.role === 'admin') || users[0];
+          const currentEndsAt = currentPrimary?.serviceEndsAt ? currentPrimary.serviceEndsAt.slice(0, 10) : null;
+          const periodChanged = nextEndsAt !== currentEndsAt;
+          if (periodChanged && nextEndsAt && nextEndsAt < new Date().toISOString().slice(0, 10)
+              && !window.confirm('사용기간 만료일이 과거입니다. 저장 즉시 이 지점의 모든 계정이 로그아웃되고 로그인할 수 없게 됩니다. 계속할까요?')) {
+            setSaving(false);
+            return;
+          }
           for (const u of users) {
-            if (u.plan !== form.plan) await adminUpdateUser(u.id, { plan: form.plan });
+            const updates: { plan?: string; serviceEndsAt?: string | null } = {};
+            if (u.plan !== form.plan) updates.plan = form.plan;
+            if (periodChanged) updates.serviceEndsAt = nextEndsAt;
+            if (Object.keys(updates).length > 0) await adminUpdateUser(u.id, updates);
           }
           if (form.name.trim() !== editTarget.name) {
-            setAdminNotice('지점명·주소·전화는 해당 지점 관리자가 CRM 설정에서 직접 변경해야 합니다. (플랜 변경은 반영됨)');
+            setAdminNotice('지점명·주소·전화는 해당 지점 관리자가 CRM 설정에서 직접 변경해야 합니다. (플랜·사용기간 변경은 반영됨)');
             isPending = true;
           }
         } else {
@@ -454,7 +476,7 @@ export default function Branches() {
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                   <Info size={13} className="text-amber-500 mt-0.5 shrink-0" />
                   <p className="text-xs text-amber-600 leading-relaxed">
-                    NAS 모드에서는 지점명 외 정보(주소·전화·샵 유형)는 본사 서버에서 관리됩니다. 이 화면에서는 플랜 변경만 저장됩니다.
+                    NAS 모드에서는 지점명 외 정보(주소·전화·샵 유형)는 본사 서버에서 관리됩니다. 이 화면에서는 플랜·사용기간 변경만 저장됩니다.
                   </p>
                 </div>
               )}
@@ -481,6 +503,19 @@ export default function Branches() {
                   <option value="enterprise">엔터프라이즈</option>
                 </select>
               </Field>
+              {NAS_MODE && editTarget && (
+                <Field label="사용기간 만료일 (비우면 무제한)">
+                  <input
+                    className="admin-input"
+                    type="date"
+                    value={form.service_ends_at}
+                    onChange={e => setForm(f => ({ ...f, service_ends_at: e.target.value }))}
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    이 지점의 모든 계정에 일괄 적용됩니다. 만료일이 지나면 로그인할 수 없습니다 (데이터는 유지).
+                  </p>
+                </Field>
+              )}
 
               {!editTarget && (
                 <>

@@ -39,6 +39,13 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
     ? Math.ceil((parseISO(user.trialEndsAt).getTime() - Date.now()) / 86400000)
     : null;
 
+  // 어드민이 설정한 사용기간(serviceEndsAt) — NAS 서버 응답에 실려 오는 필드로,
+  // 코어(AuthContext) 타입에는 없어 런타임 값으로만 읽는다. 만료 14일 전부터 안내.
+  const serviceEndsAt = (user as { serviceEndsAt?: string | null } | null)?.serviceEndsAt || null;
+  const serviceDaysLeft = serviceEndsAt
+    ? Math.ceil((parseISO(serviceEndsAt).getTime() - Date.now()) / 86400000)
+    : null;
+
   const handleNavClick = () => {
     // 모바일에서 메뉴 클릭 시 사이드바 닫기
     if (onClose) onClose();
@@ -108,6 +115,15 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
 
       {/* Bottom */}
       <div className="px-4 py-4 border-t border-gray-100 space-y-3">
+        {serviceDaysLeft !== null && serviceDaysLeft >= 0 && serviceDaysLeft <= 14 && (
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl px-4 py-3">
+            <p className="text-[11px] font-bold text-amber-700">⏰ 사용기간 만료 예정</p>
+            <p className="text-xs text-amber-500 mt-0.5">
+              {serviceEndsAt!.slice(0, 10).replace(/-/g, '.')}까지 (D-{serviceDaysLeft})
+            </p>
+            <p className="text-[10px] text-amber-400 mt-1">연장은 본사에 문의해주세요</p>
+          </div>
+        )}
         {user?.plan === 'trial' && trialDaysLeft !== null && trialDaysLeft >= 0 && (
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl px-4 py-3">
             <p className="text-[11px] font-bold text-blue-700">🎁 무료 체험 중</p>

@@ -207,8 +207,22 @@ function publicUser(row) {
     shopAddress: row.shop_address || undefined,
     businessNumber: row.business_number || undefined,
     isActive: row.is_active !== false,
+    serviceEndsAt: row.service_ends_at ? new Date(row.service_ends_at).toISOString() : null,
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+/**
+ * 사용기간 입력 파서 — undefined(미변경) / null·''(무제한 해제) / 'YYYY-MM-DD'(그날 KST 자정까지) / ISO.
+ * 잘못된 값이면 { invalid: true } 반환.
+ */
+function parseServiceEndsAt(value) {
+  if (value === null || value === '') return { value: null };
+  const raw = String(value).trim();
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T23:59:59+09:00` : raw;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return { invalid: true };
+  return { value: date.toISOString() };
 }
 
 // 데이터 스코프: 온보딩 전에는 user.id, 온보딩 후에는 branch_id.
@@ -267,6 +281,8 @@ async function initializeDatabase() {
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS business_number text;
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS business_license_image text;
+    -- 사용기간(구독 만료일). NULL = 무제한(기간 미설정) — 기존 계정 동작 불변.
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS service_ends_at timestamptz;
 
     CREATE TABLE IF NOT EXISTS crm_records (
       branch_id text NOT NULL,
@@ -544,6 +560,11 @@ app.post('/api/auth/login', authLimiter, loginEmailLimiter, async (req, res, nex
     const valid = user ? await bcrypt.compare(password, user.password_hash) : false;
     if (!valid) return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
     if (user.is_active === false) return res.status(403).json({ error: '비활성화된 계정입니다. 관리자에게 문의해주세요.' });
+    // 사용기간 만료 차단 — service_ends_at 미설정(null) 계정은 기존과 동일하게 무제한
+    if (user.role !== 'superadmin' && user.service_ends_at
+        && new Date(user.service_ends_at).getTime() < Date.now()) {
+      return res.status(403).json({ error: '사용 기간이 만료되었습니다. 본사에 연장을 문의해주세요.' });
+    }
 
     const session = await createSession(user.id);
     res.json({ user: publicUser(user), ...session });
@@ -623,17 +644,25 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
     const temporaryPassword = providedPassword || crypto.randomBytes(9).toString('base64url');
     const passwordHash = await bcrypt.hash(temporaryPassword, 12);
 
+    // 사용기간(선택) — 미지정 시 무제한(null)
+    let serviceEndsAt = null;
+    if (req.body.serviceEndsAt !== undefined) {
+      const parsed = parseServiceEndsAt(req.body.serviceEndsAt);
+      if (parsed.invalid) return res.status(400).json({ error: '사용기간 날짜 형식을 확인해주세요. (YYYY-MM-DD)' });
+      serviceEndsAt = parsed.value;
+    }
+
     const userId = crypto.randomUUID();
     // 같은 지점에 직원 계정을 추가할 땐 branchId를 넘겨 기존 지점에 합류시킨다.
     const branchId = requestedBranchId || userId;
     const isOnboarded = Boolean(branchName);
     const { rows } = await pool.query(`
       INSERT INTO auth_users (id, email, password_hash, name, role, plan,
-        shop_name, shop_type, branch_id, branch_name, is_onboarded, trial_ends_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + interval '14 days')
+        shop_name, shop_type, branch_id, branch_name, is_onboarded, trial_ends_at, service_ends_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + interval '14 days', $12)
       RETURNING *
     `, [userId, email, passwordHash, name, role, plan,
-        branchName, shopType, branchId, branchName || null, isOnboarded]);
+        branchName, shopType, branchId, branchName || null, isOnboarded, serviceEndsAt]);
 
     res.status(201).json({
       user: publicUser(rows[0]),
@@ -965,6 +994,13 @@ app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req,
       if (!isStrongPassword(req.body.password)) return res.status(400).json({ error: '비밀번호는 8자 이상 128자 이하여야 합니다.' });
       push('password_hash', await bcrypt.hash(req.body.password, 12));
     }
+    let serviceEndsAtExpired = false;
+    if (req.body.serviceEndsAt !== undefined) {
+      const parsed = parseServiceEndsAt(req.body.serviceEndsAt);
+      if (parsed.invalid) return res.status(400).json({ error: '사용기간 날짜 형식을 확인해주세요. (YYYY-MM-DD)' });
+      serviceEndsAtExpired = Boolean(parsed.value) && new Date(parsed.value).getTime() < Date.now();
+      push('service_ends_at', parsed.value);
+    }
     if (fields.length === 0) return res.status(400).json({ error: '변경할 항목이 없습니다.' });
 
     values.push(targetId);
@@ -981,8 +1017,8 @@ app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req,
         return res.status(404).json({ error: '대상 계정을 찾을 수 없습니다.' });
       }
 
-      // 비활성화 또는 비밀번호 변경 시 기존 세션 즉시 종료
-      if (req.body.isActive === false || req.body.password !== undefined) {
+      // 비활성화·비밀번호 변경·사용기간을 과거로 단축 시 기존 세션 즉시 종료
+      if (req.body.isActive === false || req.body.password !== undefined || serviceEndsAtExpired) {
         await client.query('UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [targetId]);
       }
       await client.query('COMMIT');
