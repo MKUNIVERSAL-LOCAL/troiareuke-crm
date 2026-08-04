@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
   ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search, Layers,
-  Receipt, FileText
+  Receipt, FileText, CreditCard
 } from 'lucide-react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -15,6 +15,8 @@ import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
 import { formatPrice, todayISO as today } from '../../lib/format';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
+import PaymentLinkModal from '../../components/PaymentLinkModal';
+import { isPaymentLinkAvailable } from '../../lib/paymentLinks';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -61,6 +63,9 @@ export default function Sales() {
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<'all' | ExpenseCategory>('all');
   const [pnlMode, setPnlMode] = useState<PnlPeriodMode>('month');
+
+  // 결제 요청 링크 (NAS 서버 모드 전용)
+  const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
 
   const emptyExpenseForm = {
     expenseDate: today(),
@@ -421,7 +426,15 @@ export default function Sales() {
           <h1 className="text-2xl font-bold text-gray-900">매출·손익 관리</h1>
           <p className="text-sm text-gray-400 mt-0.5">매출 · 지출(매입) · 손익계산서 통합 현황</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {isPaymentLinkAvailable && (
+            <button
+              onClick={() => setShowPaymentLinkModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              <CreditCard size={16} />결제 요청
+            </button>
+          )}
           <button
             onClick={() => setShowExpenseModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
@@ -1068,6 +1081,13 @@ export default function Sales() {
           </div>
         </div>
       )}
+
+      {/* 결제 요청 링크 모달 (카드·무통장입금) */}
+      <PaymentLinkModal
+        open={showPaymentLinkModal}
+        onClose={() => setShowPaymentLinkModal(false)}
+        customers={customers}
+      />
 
       {/* 지출(매입) 등록 모달 */}
       {showExpenseModal && (

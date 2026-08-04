@@ -36,6 +36,9 @@ jobs:
       ADMIN_PASSWORD: admin-smoke-password-1
       API_BASE_URL: http://localhost:8787
       BACKUP_DIR: ${{ github.workspace }}/server/smoke-backup
+      # 결제 링크 스모크용 더미값(실키 아님) — 승인(confirm)은 호출하지 않으므로 외부 API에 닿지 않음
+      TOSS_CLIENT_KEY: smoke-dummy-client
+      TOSS_SECRET_KEY: smoke-dummy-secret
     defaults:
       run:
         working-directory: server
