@@ -47,12 +47,14 @@ export default function AdminLayout() {
     );
   }
 
+  // 같은 pathname을 view 쿼리로 나눠 쓰는 항목들(통계/손익/전체 데이터)이 있으므로
+  // view 값까지 정확히 일치할 때만 활성으로 본다 (한 번에 두 항목이 켜지는 문제 방지)
   const isNavActive = (to: string) => {
     const [path, search] = to.split('?');
     if (location.pathname !== path) return false;
-    const wantsDataView = search?.includes('view=data') ?? false;
-    const hasDataView = new URLSearchParams(location.search).get('view') === 'data';
-    return wantsDataView === hasDataView;
+    const wantsView = search ? new URLSearchParams(search).get('view') : null;
+    const currentView = new URLSearchParams(location.search).get('view');
+    return wantsView === currentView;
   };
 
   const handleLogout = async () => {

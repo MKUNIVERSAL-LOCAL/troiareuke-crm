@@ -4,6 +4,8 @@ import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase'
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
+// 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
+import { todayISO } from '../../lib/format';
 
 interface UserRow {
   id: string;
@@ -176,7 +178,7 @@ export default function AdminUsers() {
       return;
     }
     const value = unlimited ? null : periodDate;
-    if (value && value < new Date().toISOString().slice(0, 10)) {
+    if (value && value < todayISO()) {
       if (!confirm('과거 날짜입니다. 저장 즉시 해당 계정이 로그아웃되고 로그인할 수 없게 됩니다. 계속할까요?')) return;
     }
     setPeriodBusy(true);
@@ -194,7 +196,7 @@ export default function AdminUsers() {
   function periodStatus(u: UserRow): { label: string; className: string } {
     if (!u.service_ends_at) return { label: '무제한', className: 'text-slate-500' };
     const endDate = u.service_ends_at.slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     if (endDate < today) return { label: `${endDate.replace(/-/g, '.')} 만료됨`, className: 'text-red-400 font-semibold' };
     const daysLeft = Math.ceil((new Date(u.service_ends_at).getTime() - Date.now()) / 86400000);
     if (daysLeft <= 14) return { label: `~${endDate.replace(/-/g, '.')} (D-${daysLeft})`, className: 'text-amber-400' };
@@ -277,7 +279,7 @@ export default function AdminUsers() {
                   <button
                     key={months}
                     onClick={() => {
-                      const base = periodDate && periodDate >= new Date().toISOString().slice(0, 10)
+                      const base = periodDate && periodDate >= todayISO()
                         ? new Date(periodDate) : new Date();
                       base.setMonth(base.getMonth() + months);
                       setPeriodDate(base.toISOString().slice(0, 10));

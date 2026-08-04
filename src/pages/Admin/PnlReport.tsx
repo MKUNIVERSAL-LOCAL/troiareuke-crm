@@ -142,7 +142,14 @@ export default function PnlReport() {
     }).sort((a, b) => b.영업이익 - a.영업이익);
   }, [data, branchIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeCategories = EXPENSE_CATEGORIES.filter(c => (yearTotal.byCategory[c] || 0) > 0);
+  // 등록된 분류 중 금액이 있는 것 전부 — 표준 9개에 없는 값(구버전·수기 입력)도 빠뜨리지 않아야
+  // 상세 항목 합계가 총지출과 어긋나지 않는다
+  const activeCategories = [
+    ...EXPENSE_CATEGORIES.filter(c => (yearTotal.byCategory[c] || 0) > 0),
+    ...Object.keys(yearTotal.byCategory)
+      .filter(c => !EXPENSE_CATEGORIES.includes(c as ExpenseCategory) && (yearTotal.byCategory[c] || 0) > 0)
+      .sort((a, b) => a.localeCompare(b, 'ko')),
+  ];
 
   return (
     <div className="p-8">
@@ -340,7 +347,7 @@ export default function PnlReport() {
                 <BarChart
                   data={selected === 'all'
                     ? branchCompare
-                    : (mode === 'year' ? rows : rows).map(r => ({ name: r.label, 매출: r.revenue.total, 지출: r.totalExpense, 영업이익: r.operatingProfit }))}
+                    : rows.map(r => ({ name: r.label, 매출: r.revenue.total, 지출: r.totalExpense, 영업이익: r.operatingProfit }))}
                   margin={{ top: 0, right: 0, left: 8, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
