@@ -120,6 +120,47 @@ export function fetchAdminPnl(year: string) {
   return apiRequest<AdminPnlResponse>(`/api/admin/pnl?year=${encodeURIComponent(year)}`);
 }
 
+// ── 공지사항 (본사 → 전 지점, NAS announcements 테이블) ────────
+export interface AnnouncementRow {
+  id: string;
+  title: string;
+  content: string;
+  type: 'info' | 'update' | 'warning' | 'event';
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 지점: 게시 중 공지 (로그인 세션 필요) */
+export function fetchAnnouncements() {
+  return apiRequest<{ announcements: AnnouncementRow[] }>('/api/announcements');
+}
+
+export function adminListAnnouncements() {
+  return apiRequest<{ announcements: AnnouncementRow[] }>('/api/admin/announcements');
+}
+
+export function adminCreateAnnouncement(payload: { title: string; content: string; type: string; isActive: boolean }) {
+  return apiRequest<{ announcement: AnnouncementRow }>('/api/admin/announcements', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function adminUpdateAnnouncement(
+  id: string,
+  updates: Partial<{ title: string; content: string; type: string; isActive: boolean }>,
+) {
+  return apiRequest<{ announcement: AnnouncementRow }>(`/api/admin/announcements/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+}
+
+export function adminDeleteAnnouncement(id: string) {
+  return apiRequest<void>(`/api/admin/announcements/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 export function fetchAdminBranchData(
   branchId: string,
   collection: string,

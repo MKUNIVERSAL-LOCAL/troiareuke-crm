@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { isAuthApiConfigured } from '../../lib/authApi';
+import { fetchAnnouncements } from '../../lib/adminApi';
 import { X, Megaphone, AlertTriangle, RefreshCw, Gift } from 'lucide-react';
 
 interface Announcement {
@@ -22,11 +24,23 @@ export default function AnnouncementBanner() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isAuthApiConfigured && !isSupabaseConfigured) return;
     loadAnnouncements();
   }, []);
 
   async function loadAnnouncements() {
+    // NAS 중앙 서버 우선 — Supabase 경로는 NAS 미설정 구빌드 폴백
+    if (isAuthApiConfigured) {
+      try {
+        const { announcements } = await fetchAnnouncements();
+        setAnnouncements(announcements.slice(0, 5).map(a => ({
+          id: a.id, title: a.title, content: a.content, type: a.type,
+        })));
+      } catch (e: any) {
+        console.warn('[Announcement] NAS 공지 로드 실패(배너 생략):', e?.message);
+      }
+      return;
+    }
     const { data, error } = await supabase
       .from('announcements')
       .select('id, title, content, type')

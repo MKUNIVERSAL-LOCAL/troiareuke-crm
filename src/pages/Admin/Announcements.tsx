@@ -1,8 +1,18 @@
 ﻿import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { isAuthApiConfigured } from '../../lib/authApi';
+import {
+  adminListAnnouncements, adminCreateAnnouncement,
+  adminUpdateAnnouncement, adminDeleteAnnouncement,
+} from '../../lib/adminApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
+
+// NAS 중앙 서버 모드에서는 announcements 테이블(NAS Postgres)이 진실.
+// Supabase 경로는 NAS 미설정 구빌드 폴백으로만 유지한다.
+const NAS_MODE = isAuthApiConfigured;
+const BACKEND_READY = NAS_MODE || isSupabaseConfigured;
 
 interface Announcement {
   id: string;
@@ -34,6 +44,21 @@ export default function Announcements() {
 
   async function load() {
     setLoading(true);
+    if (NAS_MODE) {
+      try {
+        const { announcements } = await adminListAnnouncements();
+        setList(announcements.map(a => ({
+          id: a.id, title: a.title, content: a.content, type: a.type,
+          is_active: a.isActive, created_at: a.createdAt,
+        })));
+      } catch (e: any) {
+        console.warn('[Announcements] NAS 로드 실패:', e?.message);
+        alert(`공지 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+        setList([]);
+      }
+      setLoading(false);
+      return;
+    }
     if (!isSupabaseConfigured) { setList([]); setLoading(false); return; }
     const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
     if (error) console.warn('[Announcements] 로드 실패:', error.message);
@@ -54,8 +79,23 @@ export default function Announcements() {
   }
 
   async function handleSave() {
-    if (!isSupabaseConfigured) return;
+    if (!BACKEND_READY) return;
     setSaving(true);
+    if (NAS_MODE) {
+      try {
+        const payload = { title: form.title, content: form.content, type: form.type, isActive: form.is_active };
+        if (editTarget) await adminUpdateAnnouncement(editTarget.id, payload);
+        else await adminCreateAnnouncement(payload);
+      } catch (e: any) {
+        setSaving(false);
+        alert(`공지 저장에 실패했습니다: ${e?.message || '서버 오류'}`);
+        return; // 저장 실패 시 모달을 닫지 않아 내용이 유실되지 않게 함
+      }
+      setSaving(false);
+      setShowModal(false);
+      load();
+      return;
+    }
     const { error } = editTarget
       ? await supabase.from('announcements').update(form).eq('id', editTarget.id)
       : await supabase.from('announcements').insert(form);
@@ -69,15 +109,33 @@ export default function Announcements() {
   }
 
   async function handleDelete(id: string) {
-    if (!isSupabaseConfigured) return;
+    if (!BACKEND_READY) return;
     if (!window.confirm('이 공지를 삭제할까요?')) return;
+    if (NAS_MODE) {
+      try {
+        await adminDeleteAnnouncement(id);
+      } catch (e: any) {
+        alert(`삭제 실패: ${e?.message || '서버 오류'}`);
+      }
+      load();
+      return;
+    }
     const { error } = await supabase.from('announcements').delete().eq('id', id);
     if (error) alert(`삭제 실패: ${error.message}`);
     load();
   }
 
   async function handleToggle(a: Announcement) {
-    if (!isSupabaseConfigured) return;
+    if (!BACKEND_READY) return;
+    if (NAS_MODE) {
+      try {
+        await adminUpdateAnnouncement(a.id, { isActive: !a.is_active });
+      } catch (e: any) {
+        alert(`변경 실패: ${e?.message || '서버 오류'}`);
+      }
+      load();
+      return;
+    }
     const { error } = await supabase.from('announcements').update({ is_active: !a.is_active }).eq('id', a.id);
     if (error) alert(`변경 실패: ${error.message}`);
     load();
@@ -92,7 +150,7 @@ export default function Announcements() {
         </div>
         <button
           onClick={openAdd}
-          disabled={!isSupabaseConfigured}
+          disabled={!BACKEND_READY}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={16} />
@@ -100,10 +158,9 @@ export default function Announcements() {
         </button>
       </div>
 
-      {!isSupabaseConfigured && (
+      {!BACKEND_READY && (
         <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-4 text-sm text-amber-200">
-          공지사항 저장소(Supabase)가 이 빌드에 연결되어 있지 않아 공지 기능을 사용할 수 없습니다.
-          (NAS 중앙 서버로의 공지 이관은 준비 중)
+          공지사항 저장소(NAS 중앙 서버)가 이 빌드에 연결되어 있지 않아 공지 기능을 사용할 수 없습니다.
         </div>
       )}
 
