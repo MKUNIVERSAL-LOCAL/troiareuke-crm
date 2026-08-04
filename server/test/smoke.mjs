@@ -529,6 +529,56 @@ await test('어드민 통계·손익이 실데이터 형태(snake_case)를 집�
   assert(forbidden.status === 403, `pnl forbidden status=${forbidden.status}`);
 });
 
+await test('결제 요청 링크 생성·페이지·취소가 동작한다', async () => {
+  // pg-config: CI는 더미 TOSS 키가 설정돼 enabled=true
+  const config = await call('/api/payments/pg-config', { token: shopToken });
+  assert(config.status === 200 && config.data.enabled === true, `config=${JSON.stringify(config.data)}`);
+
+  // 금액 검증
+  const badAmount = await call('/api/payments/requests', {
+    method: 'POST', token: shopToken, body: { amount: 500, orderName: '소액' },
+  });
+  assert(badAmount.status === 400, `bad amount status=${badAmount.status}`);
+
+  // 생성
+  const created = await call('/api/payments/requests', {
+    method: 'POST', token: shopToken,
+    body: { amount: 55000, orderName: '아쿠아필 1회', method: 'both', customerName: '김테스트' },
+  });
+  assert(created.status === 201, `create status=${created.status} ${JSON.stringify(created.data)}`);
+  const request = created.data.request;
+  assert(request.url.includes(`/pay/${request.id}`), `url=${request.url}`);
+
+  // 고객용 결제 페이지 (공개, HTML)
+  const pageResponse = await fetch(`${API}/pay/${request.id}`);
+  const pageHtml = await pageResponse.text();
+  assert(pageResponse.status === 200, `page status=${pageResponse.status}`);
+  assert(pageHtml.includes('아쿠아필 1회') && pageHtml.includes('55,000'), '결제 페이지에 주문 정보 누락');
+  assert(pageHtml.includes('tosspayments.com/v1/payment'), '결제 SDK 미포함');
+
+  // 목록 (지점 스코프)
+  const list = await call('/api/payments/requests', { token: shopToken });
+  assert(list.status === 200 && list.data.requests.some(r => r.id === request.id), '목록에 없음');
+  const otherList = await call('/api/payments/requests', { token: shop2Token });
+  assert(!otherList.data.requests.some(r => r.id === request.id), '다른 지점에 결제 요청 노출');
+
+  // 타 지점은 취소 불가
+  const crossCancel = await call(`/api/payments/requests/${request.id}/cancel`, { method: 'POST', token: shop2Token });
+  assert(crossCancel.status === 404, `cross cancel status=${crossCancel.status}`);
+
+  // 취소 → 페이지가 취소 안내로 바뀐다
+  const cancel = await call(`/api/payments/requests/${request.id}/cancel`, { method: 'POST', token: shopToken });
+  assert(cancel.status === 200 && cancel.data.request.status === 'canceled', `cancel=${JSON.stringify(cancel.data)}`);
+  const canceledHtml = await (await fetch(`${API}/pay/${request.id}`)).text();
+  assert(canceledHtml.includes('취소'), '취소 페이지 미표시');
+
+  // 웹훅은 검증 실패 시에도 200 (토스 재시도 폭주 방지) + 상태 불변
+  const webhook = await call('/api/payments/webhook', { method: 'POST', body: { orderId: request.id, status: 'DONE' } });
+  assert(webhook.status === 200, `webhook status=${webhook.status}`);
+  const after = await call('/api/payments/requests', { token: shopToken });
+  assert(after.data.requests.find(r => r.id === request.id)?.status === 'canceled', '웹훅이 취소 건을 변조함');
+});
+
 await test('공지사항 생성·게시·수정·삭제가 동작한다', async () => {
   // 어드민이 공지 생성
   const created = await call('/api/admin/announcements', {

@@ -309,6 +309,29 @@ async function initializeDatabase() {
     );
     CREATE INDEX IF NOT EXISTS announcements_active_idx ON announcements(is_active, created_at DESC);
 
+    -- 지점 → 고객 결제 요청 링크 (토스페이먼츠 카드/가상계좌 수납)
+    CREATE TABLE IF NOT EXISTS payment_requests (
+      id uuid PRIMARY KEY,
+      branch_id text NOT NULL,
+      created_by uuid,
+      customer_id text,
+      customer_name text,
+      order_name text NOT NULL,
+      amount bigint NOT NULL,
+      method text NOT NULL DEFAULT 'both',
+      memo text,
+      status text NOT NULL DEFAULT 'pending',
+      payment_key text,
+      paid_method text,
+      vbank_info jsonb,
+      vbank_secret text,
+      paid_at timestamptz,
+      expires_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS payment_requests_branch_idx ON payment_requests(branch_id, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS message_send_log (
       id uuid PRIMARY KEY,
       branch_id text NOT NULL,
@@ -1221,6 +1244,420 @@ app.delete('/api/admin/announcements/:id', requireSession, requireSuperadmin, as
     res.status(204).end();
   } catch (error) {
     next(error);
+  }
+});
+
+// ── 결제 요청 링크 (토스페이먼츠 카드/가상계좌 수납) ─────────────
+// 활성 조건: TOSS_CLIENT_KEY + TOSS_SECRET_KEY 환경변수 설정 (docs/PAYMENT-INTEGRATION.md).
+// 키 미설정 시 생성 API가 503으로 정직하게 안내한다 — 가짜 성공 없음.
+const TOSS_CLIENT_KEY = String(process.env.TOSS_CLIENT_KEY || '').trim();
+const TOSS_SECRET_KEY = String(process.env.TOSS_SECRET_KEY || '').trim();
+const TOSS_API_BASE = (process.env.TOSS_API_BASE || 'https://api.tosspayments.com').replace(/\/$/, '');
+const PAY_REQUEST_EXPIRE_HOURS = envInteger('PAY_REQUEST_EXPIRE_HOURS', 72, 1, 720);
+const PG_ENABLED = Boolean(TOSS_CLIENT_KEY && TOSS_SECRET_KEY);
+const PAY_METHODS = new Set(['card', 'vbank', 'both']);
+
+const payPageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: envInteger('PAY_PAGE_LIMIT', 120, 10, 10000),
+  standardHeaders: false,
+  legacyHeaders: false,
+});
+
+function kstDateString(date = new Date()) {
+  return new Date(date.getTime() + 9 * 3600000).toISOString().slice(0, 10);
+}
+
+function publicPaymentRequest(row) {
+  return {
+    id: row.id,
+    customerId: row.customer_id || undefined,
+    customerName: row.customer_name || undefined,
+    orderName: row.order_name,
+    amount: Number(row.amount),
+    method: row.method,
+    memo: row.memo || undefined,
+    status: row.status,
+    paidMethod: row.paid_method || undefined,
+    vbank: row.vbank_info || undefined,
+    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : null,
+    expiresAt: new Date(row.expires_at).toISOString(),
+    createdAt: new Date(row.created_at).toISOString(),
+    url: `${PUBLIC_BASE_URL}/pay/${row.id}`,
+  };
+}
+
+/** 결제 완료 시 지점 매출(crm_records payments)에 자동 기록 — 클라이언트 toDbPayment와 동일한 snake_case */
+async function recordPaidPayment(client, request, paidMethodLabel) {
+  const paymentRow = {
+    id: `pg_${request.id}`,
+    branch_id: request.branch_id,
+    customer_id: request.customer_id || undefined,
+    customer_name: request.customer_name || undefined,
+    payment_date: kstDateString(),
+    type: 'other',
+    type_label: paidMethodLabel === '카드' ? '온라인 결제(카드)' : '온라인 결제(가상계좌)',
+    reference_id: request.id,
+    amount: Number(request.amount),
+    payment_method: paidMethodLabel,
+    discount_amount: 0,
+    status: 'completed',
+    memo: request.memo ? `${request.order_name} · ${request.memo}` : request.order_name,
+    created_at: new Date().toISOString(),
+  };
+  await client.query(`
+    INSERT INTO crm_records (branch_id, collection, id, data, updated_at)
+    VALUES ($1, 'payments', $2, $3, now())
+    ON CONFLICT (branch_id, collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+  `, [request.branch_id, paymentRow.id, paymentRow]);
+}
+
+/** 토스 결제 승인/조회 API 호출 (시크릿 키는 서버에만 존재) */
+async function tossApi(pathName, options = {}) {
+  const auth = Buffer.from(`${TOSS_SECRET_KEY}:`).toString('base64');
+  const response = await fetch(`${TOSS_API_BASE}${pathName}`, {
+    method: options.method || 'GET',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/json',
+    },
+    ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data?.message || `토스 API 오류 (${response.status})`);
+    error.tossCode = data?.code;
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+// PG 연결 상태 (지점 클라이언트가 버튼 노출 여부 판단)
+app.get('/api/payments/pg-config', requireSession, (_req, res) => {
+  res.json({ enabled: PG_ENABLED, methods: PG_ENABLED ? ['card', 'vbank'] : [] });
+});
+
+// 결제 요청 생성
+app.post('/api/payments/requests', requireSession, async (req, res, next) => {
+  try {
+    if (!PG_ENABLED) {
+      return res.status(503).json({
+        error: 'PG(토스페이먼츠) 연동 키가 아직 설정되지 않았습니다. 본사에서 가맹 계약 후 활성화됩니다.',
+      });
+    }
+    const amount = Number(req.body.amount);
+    if (!Number.isInteger(amount) || amount < 1000 || amount > 100_000_000) {
+      return res.status(400).json({ error: '결제 금액은 1,000원 이상 1억원 이하여야 합니다.' });
+    }
+    const orderName = typeof req.body.orderName === 'string' ? req.body.orderName.trim() : '';
+    if (!isValidText(orderName, { required: true, max: 100 })) {
+      return res.status(400).json({ error: '결제 내용을 입력해주세요. (100자 이하)' });
+    }
+    const method = PAY_METHODS.has(req.body.method) ? req.body.method : 'both';
+    const customerName = typeof req.body.customerName === 'string' ? req.body.customerName.trim().slice(0, 100) : '';
+    const customerId = isValidId(req.body.customerId || '') ? String(req.body.customerId) : '';
+    const memo = typeof req.body.memo === 'string' ? req.body.memo.trim().slice(0, 500) : '';
+
+    const { rows } = await pool.query(`
+      INSERT INTO payment_requests
+        (id, branch_id, created_by, customer_id, customer_name, order_name, amount, method, memo, expires_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now() + ($10 || ' hours')::interval)
+      RETURNING *
+    `, [crypto.randomUUID(), branchScopeOf(req.authUser), req.authUser.id,
+        customerId || null, customerName || null, orderName, amount, method, memo || null,
+        String(PAY_REQUEST_EXPIRE_HOURS)]);
+    res.status(201).json({ request: publicPaymentRequest(rows[0]) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 결제 요청 목록 (지점 스코프)
+app.get('/api/payments/requests', requireSession, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT * FROM payment_requests WHERE branch_id = $1 ORDER BY created_at DESC LIMIT 100
+    `, [branchScopeOf(req.authUser)]);
+    // 만료 반영 (표시용 — 실제 차단은 결제 페이지에서도 검사)
+    res.json({
+      enabled: PG_ENABLED,
+      requests: rows.map(row => {
+        const expired = row.status === 'pending' && new Date(row.expires_at).getTime() < Date.now();
+        return publicPaymentRequest(expired ? { ...row, status: 'expired' } : row);
+      }),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 결제 요청 취소 (대기 상태만)
+app.post('/api/payments/requests/:id/cancel', requireSession, async (req, res, next) => {
+  try {
+    if (!isUuid(String(req.params.id))) return res.status(404).json({ error: '결제 요청을 찾을 수 없습니다.' });
+    const { rows } = await pool.query(`
+      UPDATE payment_requests SET status = 'canceled', updated_at = now()
+      WHERE id = $1 AND branch_id = $2 AND status IN ('pending', 'vbank_wait')
+      RETURNING *
+    `, [req.params.id, branchScopeOf(req.authUser)]);
+    if (!rows[0]) return res.status(404).json({ error: '취소할 수 있는 결제 요청이 없습니다.' });
+    res.json({ request: publicPaymentRequest(rows[0]) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 고객용 결제 페이지 (공개, 링크 소지자만 접근) ────────────────
+function payPageHtml(title, bodyHtml, extraHead = '') {
+  return `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(title)}</title>
+${extraHead}
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; background: #f4f6fb; color: #1e293b;
+         display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
+  .card { background: #fff; border-radius: 20px; box-shadow: 0 8px 30px rgba(26,58,143,.08); width: 100%; max-width: 420px; padding: 28px; }
+  .brand { font-size: 13px; font-weight: 800; color: #1a3a8f; letter-spacing: .5px; margin-bottom: 18px; }
+  h1 { font-size: 18px; margin-bottom: 6px; }
+  .sub { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+  .row { display: flex; justify-content: space-between; font-size: 14px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+  .row .label { color: #64748b; }
+  .amount { font-size: 24px; font-weight: 800; color: #1a3a8f; text-align: right; padding: 14px 0 20px; }
+  button { width: 100%; padding: 14px; border: 0; border-radius: 14px; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 10px; }
+  .btn-card { background: #1a3a8f; color: #fff; }
+  .btn-vbank { background: #eef2ff; color: #1a3a8f; }
+  .note { font-size: 11px; color: #94a3b8; margin-top: 16px; line-height: 1.6; }
+  .status { text-align: center; padding: 26px 0 8px; font-size: 15px; font-weight: 700; }
+  .ok { color: #059669; } .bad { color: #dc2626; } .wait { color: #d97706; }
+  .vbank-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 14px; padding: 14px; margin-top: 14px; font-size: 13px; line-height: 1.9; }
+  .err { background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; color: #b91c1c; font-size: 12px; padding: 10px 12px; margin-top: 12px; display: none; }
+</style>
+</head>
+<body><div class="card"><div class="brand">DERMANOTE 더마노트</div>${bodyHtml}</div></body>
+</html>`;
+}
+
+function payInfoRows(request) {
+  return `
+  ${request.customer_name ? `<div class="row"><span class="label">고객명</span><span>${escapeHtml(request.customer_name)}</span></div>` : ''}
+  <div class="row"><span class="label">결제 내용</span><span>${escapeHtml(request.order_name)}</span></div>
+  <div class="row"><span class="label">요청일</span><span>${escapeHtml(new Date(request.created_at).toISOString().slice(0, 10))}</span></div>
+  <div class="amount">${Number(request.amount).toLocaleString('ko-KR')}원</div>`;
+}
+
+app.get('/pay/:id', payPageLimiter, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    if (!isUuid(String(req.params.id))) {
+      return res.status(404).send(payPageHtml('결제 요청 없음', '<div class="status bad">유효하지 않은 결제 링크입니다</div>'));
+    }
+    const { rows } = await pool.query('SELECT * FROM payment_requests WHERE id = $1', [req.params.id]);
+    const request = rows[0];
+    if (!request) {
+      return res.status(404).send(payPageHtml('결제 요청 없음', '<div class="status bad">결제 요청을 찾을 수 없습니다</div>'));
+    }
+    if (request.status === 'paid') {
+      return res.send(payPageHtml('결제 완료', `${payInfoRows(request)}<div class="status ok">✓ 결제가 완료되었습니다</div><p class="note" style="text-align:center">이용해주셔서 감사합니다.</p>`));
+    }
+    if (request.status === 'canceled') {
+      return res.send(payPageHtml('결제 취소됨', `${payInfoRows(request)}<div class="status bad">이 결제 요청은 취소되었습니다</div><p class="note" style="text-align:center">매장에 문의해주세요.</p>`));
+    }
+    if (request.status === 'vbank_wait' && request.vbank_info) {
+      const vb = request.vbank_info;
+      return res.send(payPageHtml('입금 대기 중', `${payInfoRows(request)}
+        <div class="status wait">가상계좌 입금 대기 중</div>
+        <div class="vbank-box">
+          <strong>${escapeHtml(vb.bankName || vb.bank || '')} ${escapeHtml(vb.accountNumber || '')}</strong><br>
+          예금주: ${escapeHtml(vb.customerName || '토스페이먼츠')}<br>
+          입금 금액: ${Number(request.amount).toLocaleString('ko-KR')}원<br>
+          ${vb.dueDate ? `입금 기한: ${escapeHtml(String(vb.dueDate).replace('T', ' ').slice(0, 16))}` : ''}
+        </div>
+        <p class="note">입금이 확인되면 자동으로 결제 완료 처리됩니다.</p>`));
+    }
+    if (new Date(request.expires_at).getTime() < Date.now()) {
+      return res.send(payPageHtml('결제 기한 만료', `${payInfoRows(request)}<div class="status bad">결제 가능 기한이 지났습니다</div><p class="note" style="text-align:center">매장에 새 결제 링크를 요청해주세요.</p>`));
+    }
+    if (!PG_ENABLED) {
+      return res.send(payPageHtml('결제 준비 중', `${payInfoRows(request)}<div class="status wait">온라인 결제 준비 중입니다</div><p class="note" style="text-align:center">매장에 문의해주세요.</p>`));
+    }
+
+    const failReason = typeof req.query.fail === 'string' ? req.query.fail.slice(0, 200) : '';
+    const showCard = request.method === 'card' || request.method === 'both';
+    const showVbank = request.method === 'vbank' || request.method === 'both';
+    const body = `${payInfoRows(request)}
+      ${showCard ? '<button class="btn-card" onclick="pay(\'카드\')">💳 카드로 결제하기</button>' : ''}
+      ${showVbank ? '<button class="btn-vbank" onclick="pay(\'가상계좌\')">🏦 무통장입금 (가상계좌)</button>' : ''}
+      <div class="err" id="err">${escapeHtml(failReason)}</div>
+      <p class="note">안전한 결제를 위해 토스페이먼츠 결제창으로 연결됩니다.<br>결제 정보(카드번호)는 매장과 더마노트에 저장되지 않습니다.</p>
+      <script>
+        var tossPayments = TossPayments('${TOSS_CLIENT_KEY}');
+        var errorBox = document.getElementById('err');
+        if (${JSON.stringify(Boolean(failReason))}) errorBox.style.display = 'block';
+        function pay(method) {
+          tossPayments.requestPayment(method, {
+            amount: ${Number(request.amount)},
+            orderId: '${request.id}',
+            orderName: ${JSON.stringify(String(request.order_name))},
+            customerName: ${JSON.stringify(String(request.customer_name || ''))} || undefined,
+            successUrl: '${PUBLIC_BASE_URL}/pay/${request.id}/success',
+            failUrl: '${PUBLIC_BASE_URL}/pay/${request.id}/fail',
+            ...(method === '가상계좌' ? { validHours: 48 } : {}),
+          }).catch(function (error) {
+            if (error && error.code === 'USER_CANCEL') return;
+            errorBox.textContent = (error && error.message) || '결제창을 열지 못했습니다.';
+            errorBox.style.display = 'block';
+          });
+        }
+      </script>`;
+    res.send(payPageHtml('결제하기 — 더마노트', body,
+      '<script src="https://js.tosspayments.com/v1/payment"></script>'));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 결제창 실패 리다이렉트 → 사유를 붙여 결제 페이지로 복귀
+app.get('/pay/:id/fail', payPageLimiter, (req, res) => {
+  const message = typeof req.query.message === 'string' ? req.query.message.slice(0, 200) : '결제가 완료되지 않았습니다.';
+  res.redirect(`/pay/${encodeURIComponent(req.params.id)}?fail=${encodeURIComponent(message)}`);
+});
+
+// 결제창 성공 리다이렉트 → 서버 승인(confirm) 후 결과 표시
+app.get('/pay/:id/success', payPageLimiter, async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    const requestId = String(req.params.id);
+    const paymentKey = String(req.query.paymentKey || '');
+    const orderId = String(req.query.orderId || '');
+    const amount = Number(req.query.amount);
+    if (!isUuid(requestId) || !paymentKey || orderId !== requestId) {
+      return res.status(400).send(payPageHtml('결제 확인 실패', '<div class="status bad">결제 확인 정보가 올바르지 않습니다</div>'));
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query('SELECT * FROM payment_requests WHERE id = $1 FOR UPDATE', [requestId]);
+      const request = rows[0];
+      if (!request) {
+        await client.query('ROLLBACK');
+        return res.status(404).send(payPageHtml('결제 요청 없음', '<div class="status bad">결제 요청을 찾을 수 없습니다</div>'));
+      }
+      if (request.status === 'paid') {
+        await client.query('ROLLBACK');
+        return res.redirect(`/pay/${requestId}`);
+      }
+      if (Number(request.amount) !== amount) {
+        await client.query('ROLLBACK');
+        log('warn', 'pay_amount_mismatch', { requestId, expected: Number(request.amount), got: amount });
+        return res.status(400).send(payPageHtml('결제 확인 실패', '<div class="status bad">결제 금액이 일치하지 않습니다. 매장에 문의해주세요.</div>'));
+      }
+
+      // 토스 승인 — 여기서 확정되기 전까지는 어떤 상태도 바꾸지 않는다
+      const payment = await tossApi('/v1/payments/confirm', {
+        method: 'POST',
+        body: { paymentKey, orderId, amount },
+      });
+
+      if (payment.status === 'WAITING_FOR_DEPOSIT' && payment.virtualAccount) {
+        await client.query(`
+          UPDATE payment_requests
+          SET status = 'vbank_wait', payment_key = $2, vbank_info = $3, vbank_secret = $4, updated_at = now()
+          WHERE id = $1
+        `, [requestId, paymentKey, JSON.stringify({
+          bankName: payment.virtualAccount.bankCode || '',
+          bank: payment.virtualAccount.bank || '',
+          accountNumber: payment.virtualAccount.accountNumber || '',
+          customerName: payment.virtualAccount.customerName || '',
+          dueDate: payment.virtualAccount.dueDate || '',
+        }), payment.secret || null]);
+        await client.query('COMMIT');
+        return res.redirect(`/pay/${requestId}`);
+      }
+
+      if (payment.status === 'DONE') {
+        const paidMethodLabel = payment.method === '카드' || payment.method === 'card' ? '카드' : '계좌이체';
+        await client.query(`
+          UPDATE payment_requests
+          SET status = 'paid', payment_key = $2, paid_method = $3, paid_at = now(), updated_at = now()
+          WHERE id = $1
+        `, [requestId, paymentKey, paidMethodLabel]);
+        await recordPaidPayment(client, request, paidMethodLabel);
+        await client.query('COMMIT');
+        log('info', 'pay_completed', { requestId, branchId: request.branch_id, amount, method: paidMethodLabel });
+        return res.redirect(`/pay/${requestId}`);
+      }
+
+      await client.query('ROLLBACK');
+      log('warn', 'pay_unexpected_status', { requestId, tossStatus: payment.status });
+      return res.status(400).send(payPageHtml('결제 확인 필요', '<div class="status wait">결제 상태를 확인 중입니다. 매장에 문의해주세요.</div>'));
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* noop */ }
+      if (error?.tossCode) {
+        log('warn', 'pay_confirm_rejected', { requestId, tossCode: error.tossCode, message: error.message });
+        return res.status(400).send(payPageHtml('결제 승인 실패',
+          `<div class="status bad">결제 승인에 실패했습니다</div><p class="note" style="text-align:center">${escapeHtml(error.message)}</p>`));
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 가상계좌 입금 통지 웹훅 (토스 → 서버). 본문을 신뢰하지 않고 secret 대조 + API 재조회로 검증.
+app.post('/api/payments/webhook', payPageLimiter, async (req, res) => {
+  try {
+    if (!PG_ENABLED) return res.status(200).end();
+    const orderId = String(req.body?.orderId || '');
+    if (!isUuid(orderId)) return res.status(200).end();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query('SELECT * FROM payment_requests WHERE id = $1 FOR UPDATE', [orderId]);
+      const request = rows[0];
+      if (!request || request.status !== 'vbank_wait') {
+        await client.query('ROLLBACK');
+        return res.status(200).end();
+      }
+      // 1차: 웹훅 secret 대조 (가상계좌 웹훅에 포함), 2차: 토스 API 재조회로 상태 확정
+      if (request.vbank_secret && req.body?.secret && req.body.secret !== request.vbank_secret) {
+        await client.query('ROLLBACK');
+        log('warn', 'pay_webhook_secret_mismatch', { orderId });
+        return res.status(200).end();
+      }
+      const payment = await tossApi(`/v1/payments/${encodeURIComponent(request.payment_key)}`);
+      if (payment.status !== 'DONE' || Number(payment.totalAmount) !== Number(request.amount)) {
+        await client.query('ROLLBACK');
+        return res.status(200).end();
+      }
+      await client.query(`
+        UPDATE payment_requests
+        SET status = 'paid', paid_method = '계좌이체', paid_at = now(), updated_at = now()
+        WHERE id = $1
+      `, [orderId]);
+      await recordPaidPayment(client, request, '계좌이체');
+      await client.query('COMMIT');
+      log('info', 'pay_vbank_deposit', { orderId, branchId: request.branch_id, amount: Number(request.amount) });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* noop */ }
+      log('error', 'pay_webhook_failed', { orderId, ...errorDetails(error) });
+    } finally {
+      client.release();
+    }
+    res.status(200).end();
+  } catch (error) {
+    log('error', 'pay_webhook_error', errorDetails(error));
+    res.status(200).end();
   }
 });
 
