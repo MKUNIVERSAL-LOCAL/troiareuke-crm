@@ -589,11 +589,13 @@ await test('결제 페이지가 스크립트 주입을 이스케이프한다 (XS
   const id = created.data.request.id;
 
   const html = await (await fetch(`${API}/pay/${id}`)).text();
+  // 위험한 것은 "이스케이프되지 않은 태그"다. 텍스트가 &lt;img ...&gt;로 남는 것은 정상.
   assert(!html.includes('</scr' + 'ipt><img'), '스크립트 종료 태그가 그대로 출력됨(XSS)');
-  assert(!html.includes('onerror=alert(1)'), '이벤트 핸들러가 원문으로 출력됨(XSS)');
+  assert(!/<img\s/i.test(html), '주입된 태그가 실제 HTML로 렌더됨(XSS)');
+  // 인라인 스크립트에 들어간 값은 유니코드 이스케이프여야 한다
   assert(html.includes('\\u003c'), '인라인 스크립트 값이 유니코드 이스케이프되지 않음');
   // 본문 표시부는 HTML 엔티티로 이스케이프되어야 한다
-  assert(html.includes('&lt;') , '본문 표시부 이스케이프 누락');
+  assert(html.includes('&lt;'), '본문 표시부 이스케이프 누락');
 
   await call(`/api/payments/requests/${id}/cancel`, { method: 'POST', token: shopToken });
 });
