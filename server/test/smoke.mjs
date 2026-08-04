@@ -483,6 +483,52 @@ await test('사용기간(serviceEndsAt) 설정·만료 차단·해제가 동작�
   shopToken = restored.data.token;
 });
 
+await test('어드민 통계·손익이 실데이터 형태(snake_case)를 집계한다', async () => {
+  // 클라이언트 toDbPayment/toDbExpense와 동일한 snake_case 행을 심는다
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const year = thisMonth.slice(0, 4);
+  await call('/api/data/payments', {
+    method: 'PUT', token: shopToken,
+    body: {
+      rows: [{
+        id: 'pnl-pay-1', payment_date: `${thisMonth}-05`, type: 'single_treatment',
+        type_label: '단건 시술', amount: 110000, payment_method: '카드',
+        discount_amount: 0, status: 'completed', created_at: new Date().toISOString(),
+      }],
+    },
+  });
+  await call('/api/data/expenses', {
+    method: 'PUT', token: shopToken,
+    body: {
+      rows: [{
+        id: 'pnl-exp-1', expense_date: `${thisMonth}-06`, category: '제품 매입',
+        description: '테스트 매입', amount: 40000, payment_method: '계좌이체',
+        created_at: new Date().toISOString(),
+      }],
+    },
+  });
+
+  // analytics: 월별 매출 버킷에 잡혀야 한다 (camelCase 조회 회귀 방지)
+  const analytics = await call('/api/admin/analytics', { token: adminToken });
+  assert(analytics.status === 200, `analytics status=${analytics.status}`);
+  const branch = analytics.data.branches.find(b => b.branchId === shopBranchId);
+  assert(branch, '지점 누락');
+  const monthBucket = branch.revenueMonthly.find(m => m.month === thisMonth);
+  assert(monthBucket && monthBucket.revenue >= 110000, `월별 매출 미집계: ${JSON.stringify(branch.revenueMonthly)}`);
+
+  // pnl: 매출 구분·지출 분류가 월 단위로 집계돼야 한다
+  const pnl = await call(`/api/admin/pnl?year=${year}`, { token: adminToken });
+  assert(pnl.status === 200, `pnl status=${pnl.status}`);
+  const rev = pnl.data.revenue.find(r => r.branchId === shopBranchId && r.month === thisMonth && r.type === 'treatment');
+  assert(rev && rev.amount >= 110000, `pnl 매출 미집계: ${JSON.stringify(pnl.data.revenue)}`);
+  const exp = pnl.data.expenses.find(x => x.branchId === shopBranchId && x.month === thisMonth && x.category === '제품 매입');
+  assert(exp && exp.amount >= 40000, `pnl 지출 미집계: ${JSON.stringify(pnl.data.expenses)}`);
+
+  // 일반 계정 접근 차단
+  const forbidden = await call(`/api/admin/pnl?year=${year}`, { token: shopToken });
+  assert(forbidden.status === 403, `pnl forbidden status=${forbidden.status}`);
+});
+
 await test('공지사항 생성·게시·수정·삭제가 동작한다', async () => {
   // 어드민이 공지 생성
   const created = await call('/api/admin/announcements', {

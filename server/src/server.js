@@ -773,13 +773,17 @@ app.get('/api/admin/analytics', requireSession, requireSuperadmin, async (_req, 
       .toISOString().slice(0, 7);
     // 결제 금액: 숫자 형식일 때만 합산 (비정상 입력이 전체 집계를 깨지 않게)
     const AMOUNT = `(CASE WHEN (data->>'amount') ~ '^-?\\d+(\\.\\d+)?$' THEN (data->>'amount')::numeric ELSE 0 END)`;
+    // 클라이언트 toDb*는 snake_case로 저장(payment_date/registered_at) — 종전 camelCase 조회는
+    // 항상 NULL이라 월별/일별/신규30일 집계가 0으로 나오던 결함. camelCase는 구형 행 폴백으로 유지.
+    const PAYMENT_DATE = `coalesce(data->>'payment_date', data->>'paymentDate')`;
+    const REGISTERED_AT = `coalesce(data->>'registered_at', data->>'registeredAt')`;
 
     const [customerRows, paymentTotalRows, monthlyRows, dailyRows, reservationRows, treatmentRows] =
       await Promise.all([
         pool.query(
           `SELECT branch_id,
              count(*)::int AS total,
-             count(*) FILTER (WHERE left(data->>'registeredAt', 10) >= $1)::int AS new_30d
+             count(*) FILTER (WHERE left(${REGISTERED_AT}, 10) >= $1)::int AS new_30d
            FROM crm_records WHERE collection = 'customers' GROUP BY branch_id`,
           [since30d],
         ),
@@ -791,19 +795,19 @@ app.get('/api/admin/analytics', requireSession, requireSuperadmin, async (_req, 
            FROM crm_records WHERE collection = 'payments' GROUP BY branch_id`,
         ),
         pool.query(
-          `SELECT branch_id, left(data->>'paymentDate', 7) AS month,
+          `SELECT branch_id, left(${PAYMENT_DATE}, 7) AS month,
              coalesce(sum(${AMOUNT}) FILTER (WHERE data->>'status' = 'completed'), 0)::bigint AS revenue,
              coalesce(sum(${AMOUNT}) FILTER (WHERE data->>'status' = 'refunded'), 0)::bigint AS refunded
            FROM crm_records
-           WHERE collection = 'payments' AND left(data->>'paymentDate', 7) >= $1
+           WHERE collection = 'payments' AND left(${PAYMENT_DATE}, 7) >= $1
            GROUP BY branch_id, month ORDER BY month`,
           [sinceMonth],
         ),
         pool.query(
-          `SELECT branch_id, left(data->>'paymentDate', 10) AS day,
+          `SELECT branch_id, left(${PAYMENT_DATE}, 10) AS day,
              coalesce(sum(${AMOUNT}) FILTER (WHERE data->>'status' = 'completed'), 0)::bigint AS revenue
            FROM crm_records
-           WHERE collection = 'payments' AND left(data->>'paymentDate', 10) >= $1
+           WHERE collection = 'payments' AND left(${PAYMENT_DATE}, 10) >= $1
            GROUP BY branch_id, day ORDER BY day`,
           [since30d],
         ),
@@ -889,9 +893,11 @@ app.get('/api/admin/pnl', requireSession, requireSuperadmin, async (req, res, ne
     const year = /^\d{4}$/.test(requestedYear) ? requestedYear : String(new Date().getFullYear());
     const AMOUNT = `(CASE WHEN (data->>'amount') ~ '^-?\\d+(\\.\\d+)?$' THEN (data->>'amount')::numeric ELSE 0 END)`;
 
+    // 클라이언트 toDbPayment는 snake_case(payment_date)로 저장 — camelCase는 혹시 모를 구형 행 폴백
+    const PAYMENT_DATE = `coalesce(data->>'payment_date', data->>'paymentDate')`;
     const [revenueRows, expenseRows, nameRows] = await Promise.all([
       pool.query(
-        `SELECT branch_id, left(data->>'paymentDate', 7) AS month,
+        `SELECT branch_id, left(${PAYMENT_DATE}, 7) AS month,
            CASE WHEN data->>'type' IN ('program', 'single_treatment') THEN 'treatment'
                 WHEN data->>'type' = 'product' THEN 'product'
                 ELSE 'other' END AS revenue_type,
@@ -899,7 +905,7 @@ app.get('/api/admin/pnl', requireSession, requireSuperadmin, async (req, res, ne
            count(*)::int AS count
          FROM crm_records
          WHERE collection = 'payments' AND data->>'status' = 'completed'
-           AND left(data->>'paymentDate', 4) = $1
+           AND left(${PAYMENT_DATE}, 4) = $1
          GROUP BY branch_id, month, revenue_type ORDER BY month`,
         [year],
       ),
