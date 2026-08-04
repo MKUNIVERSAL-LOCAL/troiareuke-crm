@@ -1,5 +1,5 @@
 ﻿import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2, Database } from 'lucide-react';
+import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2, Database, FileText } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
@@ -13,6 +13,7 @@ const adminNav = [
   { to: '/admin/login-logs', label: '로그인 기록', icon: LogIn },
   { to: '/admin/users', label: '사용자 관리', icon: Users },
   { to: '/admin/statistics', label: '통계 / 분석', icon: BarChart2 },
+  { to: '/admin/statistics?view=pnl', label: '지점 손익계산서', icon: FileText },
   { to: '/admin/statistics?view=data', label: '전체 데이터', icon: Database },
 ];
 

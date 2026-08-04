@@ -4,6 +4,7 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { fetchAdminAnalytics, type AdminBranchAnalytics } from '../../lib/adminApi';
 import DataBrowser from './DataBrowser';
+import PnlReport from './PnlReport';
 import { format, subDays, parseISO } from 'date-fns';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -25,6 +26,17 @@ const wonShort = (n: number) =>
 export default function Statistics() {
   const [searchParams] = useSearchParams();
   if (searchParams.get('view') === 'data') return <DataBrowser />;
+  if (searchParams.get('view') === 'pnl') {
+    if (isAuthApiConfigured) return <PnlReport />;
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-bold text-white mb-8">지점 손익계산서</h1>
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-8 text-center">
+          <p className="text-amber-200 font-bold text-sm">중앙 서버(NAS) 연결 후 이용할 수 있습니다</p>
+        </div>
+      </div>
+    );
+  }
   if (isAuthApiConfigured) return <NasAnalytics />;
   if (isSupabaseConfigured) return <SupabaseStats />;
   return (

@@ -869,6 +869,69 @@ app.get('/api/admin/analytics', requireSession, requireSuperadmin, async (_req, 
   }
 });
 
+// 지점별 손익계산서 원자료 — 연 단위로 월별 매출(구분별)·지출(분류별)을 반환.
+// 월/분기/연 집계·매출원가 구분은 클라이언트(어드민 통계 화면)에서 조합한다.
+app.get('/api/admin/pnl', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const requestedYear = String(req.query.year || '');
+    const year = /^\d{4}$/.test(requestedYear) ? requestedYear : String(new Date().getFullYear());
+    const AMOUNT = `(CASE WHEN (data->>'amount') ~ '^-?\\d+(\\.\\d+)?$' THEN (data->>'amount')::numeric ELSE 0 END)`;
+
+    const [revenueRows, expenseRows, nameRows] = await Promise.all([
+      pool.query(
+        `SELECT branch_id, left(data->>'paymentDate', 7) AS month,
+           CASE WHEN data->>'type' IN ('program', 'single_treatment') THEN 'treatment'
+                WHEN data->>'type' = 'product' THEN 'product'
+                ELSE 'other' END AS revenue_type,
+           coalesce(sum(${AMOUNT}), 0)::bigint AS amount,
+           count(*)::int AS count
+         FROM crm_records
+         WHERE collection = 'payments' AND data->>'status' = 'completed'
+           AND left(data->>'paymentDate', 4) = $1
+         GROUP BY branch_id, month, revenue_type ORDER BY month`,
+        [year],
+      ),
+      pool.query(
+        `SELECT branch_id, left(data->>'expense_date', 7) AS month,
+           coalesce(nullif(data->>'category', ''), '기타') AS category,
+           coalesce(sum(${AMOUNT}), 0)::bigint AS amount,
+           count(*)::int AS count
+         FROM crm_records
+         WHERE collection = 'expenses' AND left(data->>'expense_date', 4) = $1
+         GROUP BY branch_id, month, category ORDER BY month`,
+        [year],
+      ),
+      pool.query(`
+        SELECT branch_id,
+          max(branch_name) FILTER (WHERE branch_name IS NOT NULL AND branch_name <> '') AS branch_name
+        FROM auth_users WHERE branch_id IS NOT NULL GROUP BY branch_id
+      `),
+    ]);
+
+    res.json({
+      year,
+      generatedAt: new Date().toISOString(),
+      branchNames: Object.fromEntries(nameRows.rows.map(row => [row.branch_id, row.branch_name])),
+      revenue: revenueRows.rows.map(row => ({
+        branchId: row.branch_id,
+        month: row.month,
+        type: row.revenue_type,
+        amount: Number(row.amount),
+        count: row.count,
+      })),
+      expenses: expenseRows.rows.map(row => ({
+        branchId: row.branch_id,
+        month: row.month,
+        category: row.category,
+        amount: Number(row.amount),
+        count: row.count,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/admin/data/:branchId/:collection', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const branchId = String(req.params.branchId || '');
