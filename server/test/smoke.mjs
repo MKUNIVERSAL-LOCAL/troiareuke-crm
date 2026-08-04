@@ -483,6 +483,43 @@ await test('사용기간(serviceEndsAt) 설정·만료 차단·해제가 동작�
   shopToken = restored.data.token;
 });
 
+await test('공지사항 생성·게시·수정·삭제가 동작한다', async () => {
+  // 어드민이 공지 생성
+  const created = await call('/api/admin/announcements', {
+    method: 'POST', token: adminToken,
+    body: { title: 'v-test 업데이트 안내', content: '지출·손익계산서 기능이 추가되었습니다.', type: 'update', isActive: true },
+  });
+  assert(created.status === 201, `create status=${created.status} ${JSON.stringify(created.data)}`);
+  const annId = created.data.announcement.id;
+
+  // 지점 계정에서 게시 중 공지가 보인다
+  const visible = await call('/api/announcements', { token: shopToken });
+  assert(visible.status === 200, `list status=${visible.status}`);
+  assert(visible.data.announcements.some(a => a.id === annId), '지점에 공지가 안 보임');
+
+  // 숨기면 지점 목록에서 사라진다
+  const hide = await call(`/api/admin/announcements/${annId}`, {
+    method: 'PATCH', token: adminToken, body: { isActive: false },
+  });
+  assert(hide.status === 200, `hide status=${hide.status}`);
+  const hidden = await call('/api/announcements', { token: shopToken });
+  assert(!hidden.data.announcements.some(a => a.id === annId), '숨긴 공지가 지점에 보임');
+
+  // 일반 계정은 어드민 공지 API 접근 불가
+  const forbidden = await call('/api/admin/announcements', { token: shopToken });
+  assert(forbidden.status === 403, `forbidden status=${forbidden.status}`);
+
+  // 빈 제목은 400
+  const invalid = await call('/api/admin/announcements', {
+    method: 'POST', token: adminToken, body: { title: '', content: 'x' },
+  });
+  assert(invalid.status === 400, `invalid status=${invalid.status}`);
+
+  // 삭제
+  const del = await call(`/api/admin/announcements/${annId}`, { method: 'DELETE', token: adminToken });
+  assert(del.status === 204, `delete status=${del.status}`);
+});
+
 await test('운영 조회용 인덱스와 복구 컬럼이 생성된다', async () => {
   const { rows: indexRows } = await pool.query(`
     SELECT indexname FROM pg_indexes

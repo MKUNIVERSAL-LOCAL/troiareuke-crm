@@ -297,6 +297,18 @@ async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS crm_records_branch_collection_updated_idx
       ON crm_records(branch_id, collection, updated_at DESC);
 
+    -- 본사 → 전 지점 공지사항 (Supabase announcements 대체)
+    CREATE TABLE IF NOT EXISTS announcements (
+      id uuid PRIMARY KEY,
+      title text NOT NULL,
+      content text NOT NULL,
+      type text NOT NULL DEFAULT 'info',
+      is_active boolean NOT NULL DEFAULT true,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS announcements_active_idx ON announcements(is_active, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS message_send_log (
       id uuid PRIMARY KEY,
       branch_id text NOT NULL,
@@ -1094,6 +1106,113 @@ app.patch('/api/admin/users/:id', requireSession, requireSuperadmin, async (req,
       client.release();
     }
     res.json({ user: publicUser(rows[0]) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── 공지사항 (본사 → 전 지점) ───────────────────────────────────
+const ANNOUNCEMENT_TYPES = new Set(['info', 'update', 'warning', 'event']);
+
+function publicAnnouncement(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    type: row.type,
+    isActive: row.is_active,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+// 지점: 게시 중 공지 조회 (로그인 필요)
+app.get('/api/announcements', requireSession, async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM announcements WHERE is_active = true ORDER BY created_at DESC LIMIT 20',
+    );
+    res.json({ announcements: rows.map(publicAnnouncement) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 어드민: 전체 목록
+app.get('/api/admin/announcements', requireSession, requireSuperadmin, async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM announcements ORDER BY created_at DESC LIMIT 200');
+    res.json({ announcements: rows.map(publicAnnouncement) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+function validateAnnouncementInput(body, { partial = false } = {}) {
+  const out = {};
+  if (body.title !== undefined || !partial) {
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    if (!isValidText(title, { required: true, max: 200 })) return { error: '공지 제목을 입력해주세요. (200자 이하)' };
+    out.title = title;
+  }
+  if (body.content !== undefined || !partial) {
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    if (!isValidText(content, { required: true, max: 5000 })) return { error: '공지 내용을 입력해주세요. (5000자 이하)' };
+    out.content = content;
+  }
+  if (body.type !== undefined) {
+    if (!ANNOUNCEMENT_TYPES.has(body.type)) return { error: '공지 유형 값을 확인해주세요.' };
+    out.type = body.type;
+  }
+  if (body.isActive !== undefined) {
+    if (typeof body.isActive !== 'boolean') return { error: '게시 여부 값을 확인해주세요.' };
+    out.is_active = body.isActive;
+  }
+  return { value: out };
+}
+
+app.post('/api/admin/announcements', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const parsed = validateAnnouncementInput(req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { rows } = await pool.query(`
+      INSERT INTO announcements (id, title, content, type, is_active)
+      VALUES ($1, $2, $3, $4, $5) RETURNING *
+    `, [crypto.randomUUID(), parsed.value.title, parsed.value.content,
+        parsed.value.type || 'info', parsed.value.is_active !== false]);
+    res.status(201).json({ announcement: publicAnnouncement(rows[0]) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch('/api/admin/announcements/:id', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    if (!isUuid(String(req.params.id))) return res.status(404).json({ error: '공지를 찾을 수 없습니다.' });
+    const parsed = validateAnnouncementInput(req.body, { partial: true });
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const entries = Object.entries(parsed.value);
+    if (entries.length === 0) return res.status(400).json({ error: '변경할 항목이 없습니다.' });
+    const fields = entries.map(([column], i) => `${column} = $${i + 1}`);
+    const values = entries.map(([, value]) => value);
+    values.push(req.params.id);
+    const { rows } = await pool.query(
+      `UPDATE announcements SET ${fields.join(', ')}, updated_at = now() WHERE id = $${values.length} RETURNING *`,
+      values,
+    );
+    if (!rows[0]) return res.status(404).json({ error: '공지를 찾을 수 없습니다.' });
+    res.json({ announcement: publicAnnouncement(rows[0]) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/admin/announcements/:id', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    if (!isUuid(String(req.params.id))) return res.status(404).json({ error: '공지를 찾을 수 없습니다.' });
+    const { rowCount } = await pool.query('DELETE FROM announcements WHERE id = $1', [req.params.id]);
+    if (rowCount === 0) return res.status(404).json({ error: '공지를 찾을 수 없습니다.' });
+    res.status(204).end();
   } catch (error) {
     next(error);
   }
