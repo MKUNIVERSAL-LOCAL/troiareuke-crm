@@ -91,6 +91,35 @@ export function fetchAdminAnalytics() {
   );
 }
 
+// ── 지점별 손익계산서 원자료 (연 단위 월별 매출·지출) ──────────
+export interface AdminPnlRevenueRow {
+  branchId: string;
+  month: string; // YYYY-MM
+  type: 'treatment' | 'product' | 'other';
+  amount: number;
+  count: number;
+}
+
+export interface AdminPnlExpenseRow {
+  branchId: string;
+  month: string; // YYYY-MM
+  category: string;
+  amount: number;
+  count: number;
+}
+
+export interface AdminPnlResponse {
+  year: string;
+  generatedAt: string;
+  branchNames: Record<string, string | null>;
+  revenue: AdminPnlRevenueRow[];
+  expenses: AdminPnlExpenseRow[];
+}
+
+export function fetchAdminPnl(year: string) {
+  return apiRequest<AdminPnlResponse>(`/api/admin/pnl?year=${encodeURIComponent(year)}`);
+}
+
 export function fetchAdminBranchData(
   branchId: string,
   collection: string,
