@@ -17,7 +17,7 @@ const navItems = [
   { to: '/treatments', label: '시술 기록', icon: ClipboardList, badge: null },
   { to: '/staff', label: '직원 관리', icon: UserCog, badge: null },
   { to: '/products', label: '제품/재고', icon: Package, badge: null },
-  { to: '/sales', label: '매출 관리', icon: TrendingUp, badge: null },
+  { to: '/sales', label: '매출·손익 관리', icon: TrendingUp, badge: null },
   { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, badge: null },
   { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, badge: 'SOON' },
   { to: '/api-guide', label: 'API 연동 가이드', icon: Link2, badge: null },

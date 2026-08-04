@@ -13,8 +13,10 @@ import {
   StaffStore, ServiceStore, MessageHistoryStore, SettingsStore,
 } from './store';
 import { ConsultationStore } from './consultationStore';
+import { ExpenseStore } from './expenseStore';
 import { getLocalLogs } from './loginLog';
 import type { BeaconMetrics } from '../types';
+import { COGS_CATEGORIES } from '../types';
 
 export interface ExportDataset {
   key: string;
@@ -29,6 +31,7 @@ export const EXPORT_DATASETS: ExportDataset[] = [
   { key: 'consultations', label: '고객 상담 내역', description: '피부 고민·비컨 측정값·피부타입 판정·소견·추천 솔루션', sensitive: true },
   { key: 'payments', label: '매출(결제·환불) 데이터', description: '결제일·고객·구분·금액·할인·결제수단·상태' },
   { key: 'sales_by_method', label: '결제수단별 매출 집계', description: '일자별 카드/현금/계좌이체/카카오페이 합계 — 부가세 신고용' },
+  { key: 'expenses', label: '지출(매입·비용) 데이터', description: '지출일·분류·거래처·내용·금액·지불수단 — 손익계산서 원장' },
   { key: 'customer_programs', label: '정액권(회권) 잔여 원장', description: '고객별 구매 회권의 총/사용/잔여 회차와 잔여금액 — 선수금 관리' },
   { key: 'products', label: '상품(제품) 재고', description: '제품명·카테고리·가격·원가·현재고·안전재고' },
   { key: 'product_sales', label: '상품 판매 내역', description: '판매일·제품·고객·수량·금액·결제수단' },
@@ -100,6 +103,19 @@ function buildSheet(key: string): ExportSheet | null {
           상태: p.status === 'completed' ? '완료' : p.status === 'refunded' ? '환불' : '대기',
           메모: p.memo || '',
         })),
+      };
+    case 'expenses':
+      return {
+        name: '지출(매입)',
+        rows: ExpenseStore.getAll()
+          .slice()
+          .sort((a, b) => a.expenseDate.localeCompare(b.expenseDate))
+          .map(x => ({
+            지출일: x.expenseDate, 분류: x.category,
+            손익구분: COGS_CATEGORIES.includes(x.category) ? '매출원가' : '판매비와관리비',
+            거래처: x.vendor || '', 내용: x.description,
+            금액: x.amount, 지불수단: x.paymentMethod, 메모: x.memo || '',
+          })),
       };
     case 'sales_by_method': {
       // 일자 × 결제수단 집계 (완료 결제만) — 부가세 신고 대사용

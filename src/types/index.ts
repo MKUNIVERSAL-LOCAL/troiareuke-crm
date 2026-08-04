@@ -249,6 +249,40 @@ export interface Payment {
   createdAt: string;
 }
 
+/** 지출(매입·비용) 분류 — 매출원가성 2종 + 판매비와관리비 */
+export type ExpenseCategory =
+  | '제품 매입'      // 판매용 화장품 등 (매출원가)
+  | '소모품 매입'    // 시술 소모품·비품 (매출원가)
+  | '인건비'
+  | '임대료'
+  | '관리비'         // 수도·전기·통신 등
+  | '마케팅·광고'
+  | '수수료'         // 카드·플랫폼 수수료
+  | '세금·공과'
+  | '기타';
+
+/** 매출원가로 분류되는 지출 카테고리 (나머지는 판매비와관리비) */
+export const COGS_CATEGORIES: ExpenseCategory[] = ['제품 매입', '소모품 매입'];
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  '제품 매입', '소모품 매입', '인건비', '임대료', '관리비',
+  '마케팅·광고', '수수료', '세금·공과', '기타',
+];
+
+/** 지출(매입) 기록 — 손익계산서의 비용 원장 */
+export interface Expense {
+  id: string;
+  shopId: string;
+  expenseDate: string;       // YYYY-MM-DD
+  category: ExpenseCategory;
+  vendor?: string;           // 거래처
+  description: string;       // 내용
+  amount: number;
+  paymentMethod: PaymentMethod;
+  memo?: string;
+  createdAt: string;
+}
+
 /** 비컨(AI 피부진단기) 측정 지표 — 각 0~100 점수 (없으면 미측정) */
 export interface BeaconMetrics {
   moisture?: number;     // 수분
