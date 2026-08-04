@@ -45,6 +45,16 @@ services:
       BACKUP_HOUR: ${BACKUP_HOUR:-4}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
       TZ: Asia/Seoul
+      # 결제(토스페이먼츠) — .env에 키를 넣어도 여기서 전달하지 않으면 컨테이너가 못 읽어
+      # PG가 영영 "준비 중"으로 남는다 (docs/PAYMENT-INTEGRATION.md 2단계)
+      TOSS_CLIENT_KEY: ${TOSS_CLIENT_KEY}
+      TOSS_SECRET_KEY: ${TOSS_SECRET_KEY}
+      TOSS_API_BASE: ${TOSS_API_BASE:-https://api.tosspayments.com}
+      TOSS_TIMEOUT_MS: ${TOSS_TIMEOUT_MS:-15000}
+      PAY_REQUEST_EXPIRE_HOURS: ${PAY_REQUEST_EXPIRE_HOURS:-72}
+      PAY_PAGE_LIMIT: ${PAY_PAGE_LIMIT:-120}
+      PAY_WEBHOOK_LIMIT: ${PAY_WEBHOOK_LIMIT:-600}
+      PAY_CREATE_LIMIT: ${PAY_CREATE_LIMIT:-200}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}

@@ -46,8 +46,16 @@ TOSS_SECRET_KEY=live_sk_여기에_시크릿키
 # PAY_REQUEST_EXPIRE_HOURS=72
 ```
 
-적용: `auth-api` 컨테이너 재시작 (DSM Container Manager 또는
-`sudo /usr/local/bin/docker restart troiareuke-crm_auth-api_1`).
+적용: **`docker-compose up -d`로 재생성해야 한다** (단순 restart는 새 환경변수를 읽지 않음):
+
+```sh
+cd /volume1/docker/troiareuke-crm-server
+/usr/local/bin/docker-compose -p troiareuke-crm up -d
+```
+
+DSM 작업 스케줄러의 `CRM-server-update` 작업을 한 번 실행해도 동일하게 적용된다.
+(compose 파일이 TOSS_* 변수를 컨테이너로 전달하도록 되어 있는지는 server/docker-compose.yml 참고 —
+전달 목록에 없으면 .env에 키를 넣어도 서버가 못 읽어 계속 "준비 중"으로 보인다.)
 
 ### 3. 토스 개발자센터에 웹훅 등록 (가상계좌 입금통지)
 - [개발자센터 > 웹훅] → 웹훅 URL 등록:
@@ -61,6 +69,12 @@ TOSS_SECRET_KEY=live_sk_여기에_시크릿키
    "온라인 결제(카드)" 1,000원 기록 확인
 4. 테스트 건은 토스 상점관리자에서 결제 취소(환불) 처리
 5. 가상계좌도 동일하게 1회: 발급 → 입금 → 자동 완료 확인 (웹훅 검증)
+
+### 5. 환불은 현재 토스 상점관리자에서 (앱 내 환불 미구현)
+결제 링크로 받은 건을 환불할 때는 토스 상점관리자에서 취소한 뒤,
+지점 CRM의 매출 관리에서 해당 "온라인 결제" 기록을 환불 상태로 바꿔주세요.
+(앱에서 버튼 한 번으로 환불하는 기능은 실사용 데이터가 쌓인 뒤 추가 예정 — 지금 만들면
+검증되지 않은 자동 환불 경로가 생겨 위험합니다.)
 
 > 라이브 키 대신 **테스트 키(test_ck/test_sk)** 를 넣으면 실청구 없이 전체 흐름을
 > 미리 연습할 수 있습니다 (가맹 계약 전에도 발급 가능).
