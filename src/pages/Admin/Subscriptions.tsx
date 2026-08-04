@@ -17,6 +17,8 @@ interface Subscription {
   status: string;
   started_at: string;
   expires_at: string | null;
+  /** NAS 모드: 어드민이 설정한 사용기간(service_ends_at) 원본 — 표시용 expires_at과 구분 */
+  service_ends_at?: string | null;
   amount: number;
   notes: string | null;
 }
@@ -56,17 +58,23 @@ export default function Subscriptions() {
         const priceOf = (plan: string) => planOptions.find(p => p.value === plan)?.price ?? 0;
         setSubs(users
           .filter(u => u.role !== 'superadmin')
-          .map(u => ({
-            id: u.id,
-            branch_id: u.branchId || u.id,
-            branch_name: u.branchName || u.shopName || u.email,
-            plan: u.plan,
-            status: u.isActive === false ? 'cancelled' : 'active',
-            started_at: u.createdAt,
-            expires_at: u.plan === 'trial' ? u.trialEndsAt : null,
-            amount: priceOf(u.plan),
-            notes: u.email,
-          })));
+          .map(u => {
+            const serviceEndsAt = u.serviceEndsAt || null;
+            const isExpired = Boolean(serviceEndsAt && new Date(serviceEndsAt).getTime() < Date.now());
+            return {
+              id: u.id,
+              branch_id: u.branchId || u.id,
+              branch_name: u.branchName || u.shopName || u.email,
+              plan: u.plan,
+              status: u.isActive === false ? 'cancelled' : isExpired ? 'expired' : 'active',
+              started_at: u.createdAt,
+              // 표시 우선순위: 어드민 설정 사용기간 > (trial이면) 체험 만료일
+              expires_at: serviceEndsAt || (u.plan === 'trial' ? u.trialEndsAt : null),
+              service_ends_at: serviceEndsAt,
+              amount: priceOf(u.plan),
+              notes: u.email,
+            };
+          }));
       } catch (e: any) {
         console.warn('[Subscriptions] NAS 계정 목록 로드 실패:', e?.message);
         setSubs([]);
@@ -86,8 +94,12 @@ export default function Subscriptions() {
     setEditTarget(s);
     setForm({
       plan: s.plan,
-      status: s.status,
-      expires_at: s.expires_at ? s.expires_at.split('T')[0] : '',
+      status: s.status === 'expired' ? 'active' : s.status,
+      // NAS 모드: 어드민이 실제 설정한 사용기간만 프리필 — trial 파생 만료일을 그대로 저장해
+      // 의도치 않게 체험 만료가 강제 차단으로 굳는 것을 방지
+      expires_at: NAS_MODE
+        ? (s.service_ends_at ? s.service_ends_at.split('T')[0] : '')
+        : (s.expires_at ? s.expires_at.split('T')[0] : ''),
       amount: String(s.amount),
       notes: s.notes || '',
     });
@@ -107,10 +119,17 @@ export default function Subscriptions() {
         setSaving(false);
         return;
       }
+      const nextEndsAt = form.expires_at || null;
+      if (nextEndsAt && nextEndsAt < new Date().toISOString().slice(0, 10)
+          && !window.confirm('만료일이 과거입니다. 저장 즉시 해당 지점 계정의 로그인이 차단됩니다. 계속할까요?')) {
+        setSaving(false);
+        return;
+      }
       try {
         await adminUpdateUser(editTarget.id, {
           plan: form.plan,
           isActive: form.status === 'active',
+          serviceEndsAt: nextEndsAt,
         });
       } catch (e: any) {
         setSaving(false);
@@ -300,15 +319,18 @@ export default function Subscriptions() {
               {NAS_MODE && (
                 <div className="px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                   <p className="text-xs text-amber-600 leading-relaxed">
-                    중앙 서버 모드에서는 플랜·상태만 저장됩니다. 월 금액·만료일·메모는 계정 정보에서 자동 파생되어 이 화면에서 수정할 수 없습니다.
+                    중앙 서버 모드에서는 플랜·상태·사용기간이 저장됩니다. 월 금액·메모는 자동 파생되어 수정할 수 없습니다.
                   </p>
                 </div>
               )}
               <Field label="월 금액 (원)">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
               </Field>
-              <Field label="만료일">
-                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
+              <Field label={NAS_MODE ? '사용기간 만료일 (비우면 무제한)' : '만료일'}>
+                <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
+                {NAS_MODE && (
+                  <p className="text-[11px] text-slate-500 mt-1">만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.</p>
+                )}
               </Field>
               <Field label="메모">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="특이사항 입력" />

@@ -439,6 +439,50 @@ await test('지점별 백업이 CRM-BACKUP 구조로 파일을 만든다', async
   assert(successMarkerFound, '완료 마커가 없거나 지점 정보가 다름');
 });
 
+await test('사용기간(serviceEndsAt) 설정·만료 차단·해제가 동작한다', async () => {
+  // 1) 미래 날짜 설정 — 로그인 유지, 응답에 serviceEndsAt 노출
+  const future = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const setFuture = await call(`/api/admin/users/${shopUserId}`, {
+    method: 'PATCH', token: adminToken, body: { serviceEndsAt: future },
+  });
+  assert(setFuture.status === 200, `set status=${setFuture.status} ${JSON.stringify(setFuture.data)}`);
+  assert(typeof setFuture.data.user.serviceEndsAt === 'string', 'serviceEndsAt 미노출');
+  const okLogin = await call('/api/auth/login', {
+    method: 'POST', body: { email: shopEmail, password: 'new-password-123' },
+  });
+  assert(okLogin.status === 200, `future login status=${okLogin.status}`);
+
+  // 2) 과거 날짜로 단축 — 기존 세션 즉시 종료 + 로그인 403
+  const setPast = await call(`/api/admin/users/${shopUserId}`, {
+    method: 'PATCH', token: adminToken, body: { serviceEndsAt: '2020-01-01' },
+  });
+  assert(setPast.status === 200, `past status=${setPast.status}`);
+  const revoked = await call('/api/auth/me', { token: okLogin.data.token });
+  assert(revoked.status === 401, `revoked status=${revoked.status}`);
+  const blockedLogin = await call('/api/auth/login', {
+    method: 'POST', body: { email: shopEmail, password: 'new-password-123' },
+  });
+  assert(blockedLogin.status === 403, `expired login status=${blockedLogin.status}`);
+  assert(String(blockedLogin.data?.error || '').includes('사용 기간'), `error=${blockedLogin.data?.error}`);
+
+  // 3) 잘못된 날짜는 400
+  const invalid = await call(`/api/admin/users/${shopUserId}`, {
+    method: 'PATCH', token: adminToken, body: { serviceEndsAt: 'not-a-date' },
+  });
+  assert(invalid.status === 400, `invalid status=${invalid.status}`);
+
+  // 4) null로 해제 — 무제한 복귀, 로그인 가능 (이후 테스트를 위해 shopToken 갱신)
+  const clear = await call(`/api/admin/users/${shopUserId}`, {
+    method: 'PATCH', token: adminToken, body: { serviceEndsAt: null },
+  });
+  assert(clear.status === 200 && clear.data.user.serviceEndsAt === null, `clear status=${clear.status}`);
+  const restored = await call('/api/auth/login', {
+    method: 'POST', body: { email: shopEmail, password: 'new-password-123' },
+  });
+  assert(restored.status === 200, `restored login status=${restored.status}`);
+  shopToken = restored.data.token;
+});
+
 await test('운영 조회용 인덱스와 복구 컬럼이 생성된다', async () => {
   const { rows: indexRows } = await pool.query(`
     SELECT indexname FROM pg_indexes

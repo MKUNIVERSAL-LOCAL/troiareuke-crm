@@ -17,6 +17,8 @@ export interface AuthApiUser {
   shopPhone?: string;
   shopAddress?: string;
   isActive?: boolean;
+  /** 사용기간 만료일 (ISO). null/미설정 = 무제한 */
+  serviceEndsAt?: string | null;
   createdAt: string;
 }
 
@@ -149,6 +151,7 @@ export interface AdminCreateUserPayload {
   branchId?: string; // 기존 지점에 직원을 추가할 때
   branchName?: string;
   shopType?: string;
+  serviceEndsAt?: string | null; // YYYY-MM-DD (그날까지 사용 가능), null = 무제한
 }
 
 export async function adminListUsers() {
@@ -165,7 +168,7 @@ export async function adminCreateUser(payload: AdminCreateUserPayload) {
 
 export async function adminUpdateUser(
   id: string,
-  updates: { role?: 'admin' | 'staff'; plan?: string; isActive?: boolean; password?: string },
+  updates: { role?: 'admin' | 'staff'; plan?: string; isActive?: boolean; password?: string; serviceEndsAt?: string | null },
 ) {
   const response = await apiRequest<{ user: AuthApiUser }>(`/api/admin/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
