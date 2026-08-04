@@ -579,6 +579,25 @@ await test('결제 요청 링크 생성·페이지·취소가 동작한다', asy
   assert(after.data.requests.find(r => r.id === request.id)?.status === 'canceled', '웹훅이 취소 건을 변조함');
 });
 
+await test('결제 페이지가 스크립트 주입을 이스케이프한다 (XSS 회귀 방지)', async () => {
+  const payload = '</scr' + 'ipt><img src=x onerror=alert(1)>';
+  const created = await call('/api/payments/requests', {
+    method: 'POST', token: shopToken,
+    body: { amount: 12000, orderName: payload, method: 'card', customerName: payload },
+  });
+  assert(created.status === 201, `create status=${created.status}`);
+  const id = created.data.request.id;
+
+  const html = await (await fetch(`${API}/pay/${id}`)).text();
+  assert(!html.includes('</scr' + 'ipt><img'), '스크립트 종료 태그가 그대로 출력됨(XSS)');
+  assert(!html.includes('onerror=alert(1)'), '이벤트 핸들러가 원문으로 출력됨(XSS)');
+  assert(html.includes('\\u003c'), '인라인 스크립트 값이 유니코드 이스케이프되지 않음');
+  // 본문 표시부는 HTML 엔티티로 이스케이프되어야 한다
+  assert(html.includes('&lt;') , '본문 표시부 이스케이프 누락');
+
+  await call(`/api/payments/requests/${id}/cancel`, { method: 'POST', token: shopToken });
+});
+
 await test('공지사항 생성·게시·수정·삭제가 동작한다', async () => {
   // 어드민이 공지 생성
   const created = await call('/api/admin/announcements', {

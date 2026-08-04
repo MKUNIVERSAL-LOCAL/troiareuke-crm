@@ -4,6 +4,8 @@ import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
+// 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
+import { todayISO } from '../../lib/format';
 
 // NAS 중앙 서버 모드에서는 구독 테이블이 없고 계정(auth_users)의 plan이 진실이다.
 // 이 화면은 NAS 모드일 때 계정 목록에서 구독 뷰를 파생하고, 수정은 plan/활성만 반영한다.
@@ -120,7 +122,7 @@ export default function Subscriptions() {
         return;
       }
       const nextEndsAt = form.expires_at || null;
-      if (nextEndsAt && nextEndsAt < new Date().toISOString().slice(0, 10)
+      if (nextEndsAt && nextEndsAt < todayISO()
           && !window.confirm('만료일이 과거입니다. 저장 즉시 해당 지점 계정의 로그인이 차단됩니다. 계속할까요?')) {
         setSaving(false);
         return;

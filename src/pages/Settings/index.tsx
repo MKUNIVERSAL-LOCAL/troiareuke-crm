@@ -162,6 +162,11 @@ export default function Settings() {
     setExportMessage(null);
     try {
       const keys = EXPORT_DATASETS.filter(d => exportSelection.has(d.key)).map(d => d.key);
+      // 지출 원장은 매출 페이지에 들른 적이 있어야 캐시에 있다. 다른 기기에서 로그인 직후
+      // 바로 내보내면 0건으로 조용히 빠지므로 서버에서 먼저 채운다 (실패 시 로컬 캐시 사용).
+      if (keys.includes('expenses')) {
+        await (await import('../../lib/expenseStore')).loadExpenses().catch(() => {});
+      }
       const result = exportFormat === 'pdf'
         ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys)
         : exportDatasetsToXlsx(keys);

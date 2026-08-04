@@ -11,7 +11,7 @@
  */
 import type { Expense } from '../types';
 import { getShopId, safeSetItem } from './store';
-import { isNasDataConfigured, nasLoad, nasUpsert, nasUpdate, nasDelete } from './nasData';
+import { isNasDataConfigured, nasLoad, nasUpsert, nasDelete } from './nasData';
 
 function genId(): string {
   return globalThis.crypto?.randomUUID?.()
@@ -69,23 +69,39 @@ function fromDbExpense(row: Record<string, any>): Expense {
 }
 
 // ─── 메모리 캐시 ───────────────────────────────────────────────
+// 지점(shopId)을 키로 함께 들고 있어야 한다. 앱 재시작 없이 계정을 바꾸면
+// 이전 지점 데이터가 그대로 보이고, 그 상태로 저장하면 새 지점 키에 기록되어 오염된다.
 let _expenses: Expense[] | null = null;
+let _expensesShopId: string | null = null;
+
+function cacheFor(shopId: string): Expense[] | null {
+  return _expenses !== null && _expensesShopId === shopId ? _expenses : null;
+}
+
+function setCache(shopId: string, rows: Expense[]): void {
+  _expenses = rows;
+  _expensesShopId = shopId;
+}
 
 /** 페이지 진입 시 1회 서버 로드 — NAS 우선 (실패 시 localStorage 유지) */
 export async function loadExpenses(): Promise<void> {
   if (!isNasDataConfigured) return;
   const rows = await nasLoad('expenses');
   if (rows) {
-    _expenses = rows.map(fromDbExpense);
-    saveList(shopKey(), _expenses);
+    const shopId = getShopId();
+    const parsed = rows.map(fromDbExpense);
+    setCache(shopId, parsed);
+    saveList(shopKey(), parsed);
   }
 }
 
 export const ExpenseStore = {
   getAll(): Expense[] {
-    if (_expenses !== null) return _expenses;
+    const shopId = getShopId();
+    const cached = cacheFor(shopId);
+    if (cached !== null) return cached;
     const stored = getList(shopKey());
-    _expenses = stored;
+    setCache(shopId, stored);
     return stored;
   },
 
@@ -95,14 +111,15 @@ export const ExpenseStore = {
 
   save(data: Omit<Expense, 'id' | 'shopId' | 'createdAt'>): Expense {
     const all = this.getAll();
+    const shopId = getShopId();
     const expense: Expense = {
       id: genId(),
-      shopId: getShopId(),
+      shopId,
       createdAt: now(),
       ...data,
     };
     const updated = [...all, expense];
-    _expenses = updated;
+    setCache(shopId, updated);
     saveList(shopKey(), updated);
     if (isNasDataConfigured) {
       nasUpsert('expenses', toDbExpense(expense));
@@ -117,17 +134,19 @@ export const ExpenseStore = {
     // store.ts 규칙과 동일 — 기존 배열을 변형하지 않고 새 배열로 교체
     const next = [...all];
     next[idx] = { ...all[idx], ...updates };
-    _expenses = next;
+    setCache(getShopId(), next);
     saveList(shopKey(), next);
     if (isNasDataConfigured) {
-      nasUpdate('expenses', id, toDbExpense(updates));
+      // PATCH는 서버에서 기존 행과 병합되므로, 거래처·메모를 비운 수정이 반영되지 않고
+      // 다시 로드하면 지운 값이 되살아난다. 행 전체를 upsert해 지운 필드를 확정 반영한다.
+      nasUpsert('expenses', toDbExpense(next[idx]));
     }
     return next[idx];
   },
 
   delete(id: string): void {
     const all = this.getAll().filter(e => e.id !== id);
-    _expenses = all;
+    setCache(getShopId(), all);
     saveList(shopKey(), all);
     if (isNasDataConfigured) {
       nasDelete('expenses', id);

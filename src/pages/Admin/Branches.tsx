@@ -9,6 +9,8 @@ import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser 
 const NAS_MODE = isAuthApiConfigured;
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
+// 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
+import { todayISO } from '../../lib/format';
 
 const planLabels: Record<string, { label: string; color: string }> = {
   trial: { label: '무료체험', color: 'bg-amber-500/10 text-amber-700' },
@@ -160,7 +162,7 @@ export default function Branches() {
           const currentPrimary = users.find(u => u.role === 'admin') || users[0];
           const currentEndsAt = currentPrimary?.serviceEndsAt ? currentPrimary.serviceEndsAt.slice(0, 10) : null;
           const periodChanged = nextEndsAt !== currentEndsAt;
-          if (periodChanged && nextEndsAt && nextEndsAt < new Date().toISOString().slice(0, 10)
+          if (periodChanged && nextEndsAt && nextEndsAt < todayISO()
               && !window.confirm('사용기간 만료일이 과거입니다. 저장 즉시 이 지점의 모든 계정이 로그아웃되고 로그인할 수 없게 됩니다. 계속할까요?')) {
             setSaving(false);
             return;
