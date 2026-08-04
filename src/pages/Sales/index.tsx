@@ -1,14 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
-  ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search, Layers
+  ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search, Layers,
+  Receipt, FileText
 } from 'lucide-react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Legend
 } from 'recharts';
 import { PaymentStore, CustomerStore } from '../../lib/store';
-import type { Payment, PaymentMethod } from '../../types';
+import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
+import type { Payment, PaymentMethod, Expense, ExpenseCategory } from '../../types';
+import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
 import { formatPrice, todayISO as today } from '../../lib/format';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -16,9 +19,34 @@ import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
+type PnlPeriodMode = 'month' | 'quarter' | 'year';
+
+/** 기준 월(YYYY-MM)과 기간 모드로 손익 집계 대상 월 목록을 만든다 */
+function periodMonths(viewMonth: string, mode: PnlPeriodMode, shift = 0): string[] {
+  const [y, m] = viewMonth.split('-').map(Number);
+  if (mode === 'month') {
+    const d = new Date(y, m - 1 + shift, 1);
+    return [getYearMonth(d)];
+  }
+  if (mode === 'quarter') {
+    const qStartMonth = Math.floor((m - 1) / 3) * 3; // 0,3,6,9
+    const start = new Date(y, qStartMonth + shift * 3, 1);
+    return [0, 1, 2].map(i => getYearMonth(new Date(start.getFullYear(), start.getMonth() + i, 1)));
+  }
+  const year = y + shift;
+  return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+}
+
+function periodLabel(months: string[], mode: PnlPeriodMode): string {
+  const [y, m] = months[0].split('-').map(Number);
+  if (mode === 'month') return `${y}년 ${m}월`;
+  if (mode === 'quarter') return `${y}년 ${Math.floor((m - 1) / 3) + 1}분기`;
+  return `${y}년`;
+}
+
 
 export default function Sales() {
-  const [tab, setTab] = useState<'overview' | 'list'>('overview');
+  const [tab, setTab] = useState<'overview' | 'list' | 'expense' | 'pnl'>('overview');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -26,6 +54,24 @@ export default function Sales() {
   const [listSearch, setListSearch] = useState('');
   const [listType, setListType] = useState<'all' | Payment['type']>('all');
   const [listMethod, setListMethod] = useState<'all' | PaymentMethod>('all');
+
+  // 지출(매입) 상태
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<'all' | ExpenseCategory>('all');
+  const [pnlMode, setPnlMode] = useState<PnlPeriodMode>('month');
+
+  const emptyExpenseForm = {
+    expenseDate: today(),
+    category: '제품 매입' as ExpenseCategory,
+    vendor: '',
+    description: '',
+    amount: '',
+    paymentMethod: '카드' as PaymentMethod,
+    memo: '',
+  };
+  const [expenseForm, setExpenseForm] = useState(emptyExpenseForm);
 
   // 결제 등록 폼
   const [form, setForm] = useState({
@@ -48,10 +94,19 @@ export default function Sales() {
     [editingId, payments]
   );
 
-  useEffect(() => { loadPayments(); }, []);
+  useEffect(() => {
+    loadPayments();
+    refreshExpenses();
+    // NAS 서버에서 지출 원장 최신화 (실패 시 localStorage 캐시 유지)
+    loadExpenses().then(refreshExpenses).catch(() => {});
+  }, []);
 
   function loadPayments() {
     setPayments(PaymentStore.getAll());
+  }
+
+  function refreshExpenses() {
+    setExpenses(ExpenseStore.getAll());
   }
 
   // 현재 보는 월 데이터
@@ -131,10 +186,82 @@ export default function Sales() {
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [monthPayments]);
 
-  // 월 이동
+  // ─── 지출(매입) 집계 — 지출 탭은 월 단위 ─────────────────────
+  const monthExpenses = useMemo(
+    () => expenses.filter(x => x.expenseDate.startsWith(viewMonth)),
+    [expenses, viewMonth]
+  );
+
+  const expenseList = useMemo(
+    () => monthExpenses
+      .filter(x => expenseCategoryFilter === 'all' || x.category === expenseCategoryFilter)
+      .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate)),
+    [monthExpenses, expenseCategoryFilter]
+  );
+
+  const expenseSummary = useMemo(() => {
+    const cogs = monthExpenses.filter(x => COGS_CATEGORIES.includes(x.category)).reduce((s, x) => s + x.amount, 0);
+    const total = monthExpenses.reduce((s, x) => s + x.amount, 0);
+    return { total, cogs, sga: total - cogs, count: monthExpenses.length };
+  }, [monthExpenses]);
+
+  // ─── 손익계산서 집계 (월/분기/연도) ──────────────────────────
+  const pnl = useMemo(() => {
+    const months = periodMonths(viewMonth, pnlMode);
+    const prevMonths = periodMonths(viewMonth, pnlMode, -1);
+    const calc = (ms: string[]) => {
+      const set = new Set(ms);
+      const pays = payments.filter(p => p.status === 'completed' && set.has(p.paymentDate.slice(0, 7)));
+      const exps = expenses.filter(x => set.has(x.expenseDate.slice(0, 7)));
+      const revenue = {
+        treatment: pays.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0),
+        product: pays.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0),
+        other: pays.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0),
+        total: pays.reduce((s, p) => s + p.amount, 0),
+      };
+      const byCategory: Partial<Record<ExpenseCategory, number>> = {};
+      exps.forEach(x => { byCategory[x.category] = (byCategory[x.category] || 0) + x.amount; });
+      const totalExpense = exps.reduce((s, x) => s + x.amount, 0);
+      const cogs = COGS_CATEGORIES.reduce((s, c) => s + (byCategory[c] || 0), 0);
+      const sga = totalExpense - cogs;
+      const grossProfit = revenue.total - cogs;
+      const operatingProfit = grossProfit - sga;
+      return { revenue, byCategory, totalExpense, cogs, sga, grossProfit, operatingProfit };
+    };
+    return {
+      months,
+      label: periodLabel(months, pnlMode),
+      prevLabel: periodLabel(prevMonths, pnlMode),
+      cur: calc(months),
+      prev: calc(prevMonths),
+    };
+  }, [payments, expenses, viewMonth, pnlMode]);
+
+  // 손익 추이 차트 — 월간 모드는 최근 6개월, 분기/연간은 기간 내 월별 (만원)
+  const pnlTrend = useMemo(() => {
+    const months = pnlMode === 'month'
+      ? Array.from({ length: 6 }, (_, i) => {
+          const [y, m] = viewMonth.split('-').map(Number);
+          return getYearMonth(new Date(y, m - 1 - (5 - i), 1));
+        })
+      : pnl.months;
+    return months.map(mo => {
+      const rev = payments.filter(p => p.status === 'completed' && p.paymentDate.startsWith(mo)).reduce((s, p) => s + p.amount, 0);
+      const exp = expenses.filter(x => x.expenseDate.startsWith(mo)).reduce((s, x) => s + x.amount, 0);
+      return {
+        month: `${parseInt(mo.split('-')[1], 10)}월`,
+        매출: Math.round(rev / 10000),
+        지출: Math.round(exp / 10000),
+        이익: Math.round((rev - exp) / 10000),
+      };
+    });
+  }, [pnlMode, pnl.months, payments, expenses, viewMonth]);
+
+  // 월 이동 — 손익 탭에서는 선택한 기간 단위(분기/연도)만큼 이동
   function changeMonth(delta: number) {
+    const step = tab === 'pnl' ? (pnlMode === 'quarter' ? 3 : pnlMode === 'year' ? 12 : 1) : 1;
     const d = new Date(viewMonth + '-01');
-    d.setMonth(d.getMonth() + delta);
+    d.setMonth(d.getMonth() + delta * step);
     setViewMonth(getYearMonth(d));
   }
 
@@ -222,27 +349,92 @@ export default function Sales() {
     loadPayments();
   }
 
+  // ─── 지출(매입) 등록/수정/삭제 ─────────────────────────────
+  function closeExpenseModal() {
+    setShowExpenseModal(false);
+    setEditingExpenseId(null);
+    setExpenseForm(emptyExpenseForm);
+  }
+
+  function openExpenseEdit(x: Expense) {
+    setExpenseForm({
+      expenseDate: x.expenseDate,
+      category: x.category,
+      vendor: x.vendor || '',
+      description: x.description,
+      amount: String(x.amount),
+      paymentMethod: x.paymentMethod,
+      memo: x.memo || '',
+    });
+    setEditingExpenseId(x.id);
+    setShowExpenseModal(true);
+  }
+
+  function handleExpenseDelete(x: Expense) {
+    if (!window.confirm(`${x.expenseDate} · ${x.category} · ${formatPrice(x.amount)} 지출을 삭제할까요?`)) return;
+    ExpenseStore.delete(x.id);
+    refreshExpenses();
+  }
+
+  function handleExpenseSave(e: React.FormEvent) {
+    e.preventDefault();
+    const amount = parseInt(expenseForm.amount.replace(/,/g, ''), 10);
+    if (Number.isNaN(amount) || amount <= 0) {
+      alert('지출 금액을 0보다 큰 숫자로 입력해주세요.');
+      return;
+    }
+    const description = expenseForm.description.trim();
+    if (!description) {
+      alert('지출 내용을 입력해주세요. (예: 앰플 20개 매입)');
+      return;
+    }
+    const payload = {
+      expenseDate: expenseForm.expenseDate,
+      category: expenseForm.category,
+      vendor: expenseForm.vendor.trim() || undefined,
+      description,
+      amount,
+      paymentMethod: expenseForm.paymentMethod,
+      memo: expenseForm.memo.trim() || undefined,
+    };
+    if (editingExpenseId) {
+      ExpenseStore.update(editingExpenseId, payload);
+    } else {
+      ExpenseStore.save(payload);
+    }
+    closeExpenseModal();
+    refreshExpenses();
+  }
+
   const growthRate = lastSummary.total > 0
     ? Math.round(((thisSummary.total - lastSummary.total) / lastSummary.total) * 100)
     : 0;
 
   const [viewDate] = viewMonth.split('-');
-  const monthLabel = `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
+  const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       {/* 헤더 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">매출 관리</h1>
-          <p className="text-sm text-gray-400 mt-0.5">시술 + 제품 판매 통합 매출 현황</p>
+          <h1 className="text-2xl font-bold text-gray-900">매출·손익 관리</h1>
+          <p className="text-sm text-gray-400 mt-0.5">매출 · 지출(매입) · 손익계산서 통합 현황</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors shadow-md shadow-blue-200"
-        >
-          <Plus size={16} />결제 등록
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowExpenseModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
+            <Receipt size={16} />지출 등록
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors shadow-md shadow-blue-200"
+          >
+            <Plus size={16} />결제 등록
+          </button>
+        </div>
       </div>
 
       {/* 월 선택 */}
@@ -257,12 +449,18 @@ export default function Sales() {
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
-        <button onClick={() => setTab('overview')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'overview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto no-scrollbar max-w-full">
+        <button onClick={() => setTab('overview')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'overview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
           매출 현황
         </button>
-        <button onClick={() => setTab('list')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setTab('list')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
           결제 내역 ({monthAllPayments.length})
+        </button>
+        <button onClick={() => setTab('expense')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+          지출 내역 ({monthExpenses.length})
+        </button>
+        <button onClick={() => setTab('pnl')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'pnl' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+          손익계산서
         </button>
       </div>
 
@@ -481,6 +679,239 @@ export default function Sales() {
         </div>
       )}
 
+      {tab === 'expense' && (
+        <div className="space-y-5">
+          {/* 지출 요약 카드 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-white rounded-2xl border border-gray-100 p-4">
+              <p className="text-xs text-gray-400 mb-2">총 지출</p>
+              <p className="text-2xl font-bold text-gray-900">{formatPrice(expenseSummary.total)}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 p-4">
+              <p className="text-xs text-gray-400 mb-2">매입 (매출원가)</p>
+              <p className="text-2xl font-bold text-orange-600">{formatPrice(expenseSummary.cogs)}</p>
+              <p className="text-xs text-gray-300 mt-1">제품·소모품 매입</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 p-4">
+              <p className="text-xs text-gray-400 mb-2">판매비·관리비</p>
+              <p className="text-2xl font-bold text-rose-500">{formatPrice(expenseSummary.sga)}</p>
+              <p className="text-xs text-gray-300 mt-1">인건비·임대료 등</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 p-4">
+              <p className="text-xs text-gray-400 mb-2">지출 건수</p>
+              <p className="text-2xl font-bold text-gray-900">{expenseSummary.count}건</p>
+            </div>
+          </div>
+
+          {/* 지출 목록 */}
+          <div className="bg-white rounded-2xl border border-gray-100">
+            <div className="p-3 border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <button
+                onClick={() => setExpenseCategoryFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === 'all' ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              >
+                전체
+              </button>
+              {EXPENSE_CATEGORIES.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setExpenseCategoryFilter(c)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === c ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            {expenseList.length === 0 ? (
+              <div className="text-center py-12">
+                <Receipt size={40} className="text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-400">
+                  {expenseCategoryFilter === 'all' ? '이번 달 지출 내역이 없어요' : '해당 분류의 지출이 없어요'}
+                </p>
+                <p className="text-xs text-gray-300 mt-1">제품 매입, 임대료, 인건비 등을 기록하면 손익계산서가 자동 작성돼요</p>
+                <button onClick={() => setShowExpenseModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
+                  지출 등록하기
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="overflow-auto max-h-[65vh]">
+                  <div className="min-w-[720px]">
+                    <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
+                      <span>날짜</span>
+                      <span>분류</span>
+                      <span className="col-span-2">내용 / 거래처</span>
+                      <span>결제 수단</span>
+                      <span className="text-right">금액</span>
+                    </div>
+                    {expenseList.map(x => (
+                      <div key={x.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
+                        <span className="text-gray-500 text-xs">{x.expenseDate}</span>
+                        <span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-600' : 'bg-rose-50 text-rose-500'}`}>
+                            {x.category}
+                          </span>
+                        </span>
+                        <span className="col-span-2 font-medium text-gray-800 truncate">
+                          {x.description}
+                          {x.vendor && <span className="ml-1.5 text-xs text-gray-400">· {x.vendor}</span>}
+                        </span>
+                        <span className="text-gray-500 text-xs">{x.paymentMethod}</span>
+                        <span className="flex items-center justify-end gap-1.5">
+                          <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
+                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="지출 수정">
+                            <Pencil size={13} />
+                          </button>
+                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="지출 삭제">
+                            <Trash2 size={13} />
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="px-4 py-3 bg-gray-50 rounded-b-2xl flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-600">표시 {expenseList.length}건 합계</span>
+                  <span className="text-base font-bold text-gray-900">
+                    {formatPrice(expenseList.reduce((s, x) => s + x.amount, 0))}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'pnl' && (
+        <div className="space-y-5">
+          {/* 기간 단위 선택 */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+              {([
+                { v: 'month', label: '월간' },
+                { v: 'quarter', label: '분기' },
+                { v: 'year', label: '연간' },
+              ] as { v: PnlPeriodMode; label: string }[]).map(({ v, label }) => (
+                <button
+                  key={v}
+                  onClick={() => setPnlMode(v)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${pnlMode === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400">
+              결제(완료)와 지출 기록 기준의 운영 참고용 간이 손익계산서입니다 · 세무 신고 자료는 세무사와 확인하세요
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            {/* 손익계산서 본문 */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-900 flex items-center gap-2"><FileText size={16} className="text-[#1a3a8f]" />손익계산서</h3>
+                <span className="text-xs text-gray-400">{pnl.label}</span>
+              </div>
+              <div className="text-sm">
+                {/* 매출 */}
+                <div className="flex justify-between py-2 font-bold text-gray-900 border-b border-gray-100">
+                  <span>매출액</span><span>{formatPrice(pnl.cur.revenue.total)}</span>
+                </div>
+                <div className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
+                  <span>시술 매출</span><span>{formatPrice(pnl.cur.revenue.treatment)}</span>
+                </div>
+                <div className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
+                  <span>제품 매출</span><span>{formatPrice(pnl.cur.revenue.product)}</span>
+                </div>
+                {pnl.cur.revenue.other > 0 && (
+                  <div className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
+                    <span>기타 매출</span><span>{formatPrice(pnl.cur.revenue.other)}</span>
+                  </div>
+                )}
+                {/* 매출원가 */}
+                <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100 mt-1">
+                  <span>매출원가 (매입)</span><span className="text-orange-600">−{formatPrice(pnl.cur.cogs)}</span>
+                </div>
+                {COGS_CATEGORIES.map(c => (pnl.cur.byCategory[c] || 0) > 0 && (
+                  <div key={c} className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
+                    <span>{c}</span><span>{formatPrice(pnl.cur.byCategory[c] || 0)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between py-2 font-bold text-gray-900 bg-gray-50 -mx-2 px-2 rounded-lg my-1">
+                  <span>매출총이익</span>
+                  <span className={pnl.cur.grossProfit >= 0 ? 'text-gray-900' : 'text-red-500'}>{formatPrice(pnl.cur.grossProfit)}</span>
+                </div>
+                {/* 판관비 */}
+                <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100">
+                  <span>판매비와 관리비</span><span className="text-rose-500">−{formatPrice(pnl.cur.sga)}</span>
+                </div>
+                {EXPENSE_CATEGORIES.filter(c => !COGS_CATEGORIES.includes(c)).map(c => (pnl.cur.byCategory[c] || 0) > 0 && (
+                  <div key={c} className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
+                    <span>{c}</span><span>{formatPrice(pnl.cur.byCategory[c] || 0)}</span>
+                  </div>
+                ))}
+                {/* 영업이익 */}
+                <div className={`flex justify-between py-3 font-bold text-base -mx-2 px-2 rounded-lg mt-1 ${pnl.cur.operatingProfit >= 0 ? 'bg-blue-50 text-[#1a3a8f]' : 'bg-red-50 text-red-600'}`}>
+                  <span>영업이익</span><span>{formatPrice(pnl.cur.operatingProfit)}</span>
+                </div>
+                <div className="flex justify-between pt-2 text-xs text-gray-400">
+                  <span>영업이익률</span>
+                  <span>{pnl.cur.revenue.total > 0 ? `${Math.round((pnl.cur.operatingProfit / pnl.cur.revenue.total) * 100)}%` : '—'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* 전기 대비 */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <h3 className="font-bold text-gray-900 mb-3">전기 대비 ({pnl.prevLabel})</h3>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {([
+                    { label: '매출', cur: pnl.cur.revenue.total, prev: pnl.prev.revenue.total },
+                    { label: '지출', cur: pnl.cur.totalExpense, prev: pnl.prev.totalExpense },
+                    { label: '영업이익', cur: pnl.cur.operatingProfit, prev: pnl.prev.operatingProfit },
+                  ]).map(({ label, cur, prev }) => {
+                    const diff = cur - prev;
+                    return (
+                      <div key={label} className="bg-gray-50 rounded-xl p-3">
+                        <p className="text-xs text-gray-400 mb-1">{label}</p>
+                        <p className="text-sm font-bold text-gray-900">{formatPrice(cur)}</p>
+                        <p className={`text-[11px] mt-1 font-medium ${diff > 0 ? 'text-green-500' : diff < 0 ? 'text-red-400' : 'text-gray-300'}`}>
+                          {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatPrice(diff)}`}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 추이 차트 */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <h3 className="font-bold text-gray-900 mb-4">
+                  {pnlMode === 'month' ? '최근 6개월 손익 추이 (만원)' : `${pnl.label} 월별 손익 (만원)`}
+                </h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={pnlTrend} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
+                    <Tooltip
+                      formatter={(v: number, name: string) => [`${v.toLocaleString('ko-KR')}만원`, name]}
+                      contentStyle={{ borderRadius: 12, border: '1px solid #f0f0f0', fontSize: 12 }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="매출" fill="#1a3a8f" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="지출" fill="#f97316" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="이익" fill="#10b981" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 결제 등록 모달 */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -631,6 +1062,120 @@ export default function Sales() {
                 <button type="button" onClick={closeModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
                   <CheckCircle size={14} />{editingId ? '수정 저장' : '결제 등록'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 지출(매입) 등록 모달 */}
+      {showExpenseModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">{editingExpenseId ? '지출 수정' : '지출(매입) 등록'}</h2>
+              <button onClick={closeExpenseModal}><X size={18} className="text-gray-400" /></button>
+            </div>
+            <form onSubmit={handleExpenseSave} className="p-5 space-y-4">
+              {/* 분류 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">지출 분류 *</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {EXPENSE_CATEGORIES.map(c => (
+                    <button
+                      type="button"
+                      key={c}
+                      onClick={() => setExpenseForm(f => ({ ...f, category: c }))}
+                      className={`py-2 rounded-xl border text-xs font-medium transition-colors ${
+                        expenseForm.category === c
+                          ? COGS_CATEGORIES.includes(c)
+                            ? 'border-orange-400 bg-orange-50 text-orange-600'
+                            : 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  제품·소모품 매입은 손익계산서에서 매출원가로, 나머지는 판매비·관리비로 집계돼요
+                </p>
+              </div>
+
+              {/* 내용 & 거래처 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">내용 *</label>
+                <input
+                  required
+                  value={expenseForm.description}
+                  onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="예: 트로이아르케 앰플 20개 매입, 8월 임대료"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">거래처</label>
+                <input
+                  value={expenseForm.vendor}
+                  onChange={e => setExpenseForm(f => ({ ...f, vendor: e.target.value }))}
+                  placeholder="예: 트로이아르케 본사, 건물주 (선택)"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* 금액 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">금액 *</label>
+                <div className="relative">
+                  <input
+                    required
+                    type="text"
+                    value={expenseForm.amount && !Number.isNaN(parseInt(expenseForm.amount, 10)) ? parseInt(expenseForm.amount, 10).toLocaleString('ko-KR') : ''}
+                    onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value.replace(/,/g, '') }))}
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
+                </div>
+              </div>
+
+              {/* 결제 수단 & 날짜 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">지불 수단</label>
+                  <PaymentMethodPicker
+                    value={expenseForm.paymentMethod}
+                    onChange={m => setExpenseForm(f => ({ ...f, paymentMethod: m }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">지출일</label>
+                  <input
+                    type="date"
+                    value={expenseForm.expenseDate}
+                    onChange={e => setExpenseForm(f => ({ ...f, expenseDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* 메모 */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
+                <input
+                  value={expenseForm.memo}
+                  onChange={e => setExpenseForm(f => ({ ...f, memo: e.target.value }))}
+                  placeholder="세금계산서 발행 여부 등 (선택)"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button type="button" onClick={closeExpenseModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
+                <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
+                  <CheckCircle size={14} />{editingExpenseId ? '수정 저장' : '지출 등록'}
                 </button>
               </div>
             </form>

@@ -118,7 +118,7 @@ export default function MobileTabBar() {
                   <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center">
                     <TrendingUp size={20} className="text-purple-600" />
                   </div>
-                  <span className="text-sm font-medium text-gray-800">매출</span>
+                  <span className="text-sm font-medium text-gray-800">매출·손익</span>
                 </button>
               )}
 
