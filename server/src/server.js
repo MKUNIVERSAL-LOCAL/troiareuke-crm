@@ -1521,19 +1521,139 @@ ${extraHead}
   .ok { color: #059669; } .bad { color: #dc2626; } .wait { color: #d97706; }
   .vbank-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 14px; padding: 14px; margin-top: 14px; font-size: 13px; line-height: 1.9; }
   .err { background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; color: #b91c1c; font-size: 12px; padding: 10px 12px; margin-top: 12px; display: none; }
+  .legal { margin-top: 22px; padding-top: 14px; border-top: 1px solid #eef2f7; font-size: 10.5px; color: #94a3b8; line-height: 1.75; }
+  .legal a { color: #64748b; text-decoration: none; margin-right: 10px; }
+  .legal a:hover { text-decoration: underline; }
+  .legal .biz { margin-top: 8px; }
+  .prose { font-size: 13px; line-height: 1.85; color: #334155; }
+  .prose h2 { font-size: 15px; margin: 18px 0 6px; color: #1e293b; }
+  .prose p, .prose li { margin-bottom: 6px; }
+  .prose ul { padding-left: 18px; }
+  .back { display: inline-block; margin-top: 20px; font-size: 12px; color: #1a3a8f; text-decoration: none; }
 </style>
 </head>
-<body><div class="card"><div class="brand">DERMANOTE 더마노트</div>${bodyHtml}</div></body>
+<body><div class="card"><div class="brand">DERMANOTE 더마노트</div>${bodyHtml}${merchantFooterHtml()}</div></body>
 </html>`;
 }
 
-function payInfoRows(request) {
+// ── 전자상거래법 표시사항 (PG·카드사 심사 필수 항목) ──────────────
+// 결제가 일어나는 화면에는 판매자 신원과 취소·환불 기준이 표시되어야 한다.
+// 값은 .env로 주입 — 미설정 시 문구가 비어 심사에서 반려되므로 배포 전 반드시 채울 것.
+const MERCHANT = {
+  name: String(process.env.PAY_MERCHANT_NAME || '').trim(),
+  ceo: String(process.env.PAY_MERCHANT_CEO || '').trim(),
+  bizNo: String(process.env.PAY_MERCHANT_BIZ_NO || '').trim(),
+  mailOrderNo: String(process.env.PAY_MERCHANT_MAIL_ORDER_NO || '').trim(),
+  address: String(process.env.PAY_MERCHANT_ADDRESS || '').trim(),
+  tel: String(process.env.PAY_MERCHANT_TEL || '').trim(),
+  email: String(process.env.PAY_MERCHANT_EMAIL || '').trim(),
+  privacyOfficer: String(process.env.PAY_MERCHANT_PRIVACY_OFFICER || '').trim(),
+};
+
+function merchantFooterHtml() {
+  if (!MERCHANT.name) return '';
+  const parts = [
+    MERCHANT.ceo && `대표 ${escapeHtml(MERCHANT.ceo)}`,
+    MERCHANT.bizNo && `사업자등록번호 ${escapeHtml(MERCHANT.bizNo)}`,
+    MERCHANT.mailOrderNo && `통신판매업신고 ${escapeHtml(MERCHANT.mailOrderNo)}`,
+  ].filter(Boolean).join(' · ');
+  const contact = [
+    MERCHANT.address && escapeHtml(MERCHANT.address),
+    MERCHANT.tel && `대표전화 ${escapeHtml(MERCHANT.tel)}`,
+    MERCHANT.email && escapeHtml(MERCHANT.email),
+  ].filter(Boolean).join(' · ');
+  return `<div class="legal">
+    <a href="/pay-info/terms">이용약관</a><a href="/pay-info/privacy">개인정보처리방침</a><a href="/pay-info/refund">취소·환불 규정</a>
+    <div class="biz"><strong>${escapeHtml(MERCHANT.name)}</strong>${parts ? ' · ' + parts : ''}</div>
+    ${contact ? `<div>${contact}</div>` : ''}
+    ${MERCHANT.privacyOfficer ? `<div>개인정보관리책임자 ${escapeHtml(MERCHANT.privacyOfficer)}</div>` : ''}
+    <div>결제 처리는 토스페이먼츠(주)를 통해 이뤄지며, 카드정보는 당사에 저장되지 않습니다.</div>
+  </div>`;
+}
+
+function payInfoRows(request, branchName = '') {
   return `
+  ${branchName ? `<div class="row"><span class="label">이용 매장</span><span>${escapeHtml(branchName)}</span></div>` : ''}
   ${request.customer_name ? `<div class="row"><span class="label">고객명</span><span>${escapeHtml(request.customer_name)}</span></div>` : ''}
   <div class="row"><span class="label">결제 내용</span><span>${escapeHtml(request.order_name)}</span></div>
-  <div class="row"><span class="label">요청일</span><span>${escapeHtml(new Date(request.created_at).toISOString().slice(0, 10))}</span></div>
+  <div class="row"><span class="label">요청일</span><span>${escapeHtml(kstDateString(new Date(request.created_at)))}</span></div>
   <div class="amount">${Number(request.amount).toLocaleString('ko-KR')}원</div>`;
 }
+
+/** 결제 페이지에 표시할 매장명 — 실제 용역 제공처를 고객이 알 수 있어야 한다 */
+async function branchNameOf(branchId) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT max(branch_name) FILTER (WHERE branch_name IS NOT NULL AND branch_name <> '') AS name
+       FROM auth_users WHERE branch_id = $1`, [branchId]);
+    return rows[0]?.name || '';
+  } catch {
+    return '';
+  }
+}
+
+// ── 결제 관련 고지 페이지 (PG·카드사 심사에서 확인하는 화면) ──────
+const PAY_INFO_PAGES = {
+  terms: {
+    title: '이용약관',
+    body: `
+      <h2>제1조 (목적)</h2>
+      <p>본 약관은 ${escapeHtml(MERCHANT.name || '회사')}(이하 "회사")가 제공하는 결제 서비스를 이용하는 고객("이용자")과 회사의 권리·의무를 정합니다.</p>
+      <h2>제2조 (서비스 내용)</h2>
+      <p>회사는 제휴 피부관리실·에스테틱샵이 이용자에게 제공하는 관리 서비스 및 제품에 대한 대금을 온라인으로 결제할 수 있는 수단을 제공합니다. 결제 대상 용역의 실제 제공 주체와 내용은 각 결제 요청 화면에 표시됩니다.</p>
+      <h2>제3조 (결제 수단)</h2>
+      <p>신용·체크카드 및 가상계좌(무통장입금)를 지원하며, 결제 처리는 전자지급결제대행사인 토스페이먼츠(주)를 통해 이뤄집니다. 이용자의 카드정보는 회사 서버에 저장되지 않습니다.</p>
+      <h2>제4조 (결제 링크의 유효기간)</h2>
+      <p>결제 링크는 발급 시점부터 회사가 정한 기간(기본 72시간) 동안 유효하며, 기간이 지나면 결제할 수 없습니다. 이 경우 이용자는 해당 매장에 재발급을 요청할 수 있습니다.</p>
+      <h2>제5조 (취소 및 환불)</h2>
+      <p>취소·환불은 별도로 게시된 「취소·환불 규정」에 따릅니다.</p>
+      <h2>제6조 (문의)</h2>
+      <p>결제 및 서비스 관련 문의는 결제 대상 매장 또는 회사 대표 연락처로 하실 수 있습니다.</p>`,
+  },
+  privacy: {
+    title: '개인정보처리방침',
+    body: `
+      <h2>1. 수집하는 개인정보 항목</h2>
+      <ul>
+        <li>결제 시: 주문번호, 결제금액, 결제수단, 결제일시, (매장이 입력한 경우) 고객 성명</li>
+        <li>가상계좌 이용 시: 발급 계좌정보, 입금자명</li>
+      </ul>
+      <p>카드번호·유효기간 등 결제수단 정보는 토스페이먼츠(주)가 처리하며 회사는 수집·보관하지 않습니다.</p>
+      <h2>2. 이용 목적</h2>
+      <p>결제 처리 및 결제 결과 확인, 매출 기록 생성, 환불·분쟁 처리, 관련 법령상 기록 보존</p>
+      <h2>3. 보유 및 이용 기간</h2>
+      <p>전자상거래 등에서의 소비자보호에 관한 법률에 따라 대금결제 및 재화 등의 공급에 관한 기록은 5년, 소비자 불만 또는 분쟁처리에 관한 기록은 3년간 보관 후 파기합니다.</p>
+      <h2>4. 제3자 제공 및 처리위탁</h2>
+      <p>결제 처리를 위해 토스페이먼츠(주)에 결제 정보를 제공합니다. 그 외 이용자의 동의 없이 제3자에게 제공하지 않습니다.</p>
+      <h2>5. 이용자의 권리</h2>
+      <p>이용자는 자신의 개인정보에 대한 열람·정정·삭제·처리정지를 요구할 수 있으며, 아래 책임자에게 연락하시면 지체 없이 조치합니다.</p>
+      <p>${MERCHANT.privacyOfficer ? `개인정보관리책임자: ${escapeHtml(MERCHANT.privacyOfficer)}<br>` : ''}${MERCHANT.email ? `연락처: ${escapeHtml(MERCHANT.email)}` : ''}</p>`,
+  },
+  refund: {
+    title: '취소·환불 규정',
+    body: `
+      <h2>1. 서비스 이용 전 취소</h2>
+      <p>결제한 관리·시술을 받기 전이라면 해당 매장에 요청하여 전액 환불받으실 수 있습니다.</p>
+      <h2>2. 서비스 이용 후</h2>
+      <p>이미 제공된 관리·시술 회차분은 환불 대상에서 제외되며, 잔여 회차가 있는 정액권(회수권)은 잔여분에 대해 환불이 가능합니다. 구체적인 정산 기준은 매장의 안내에 따릅니다.</p>
+      <h2>3. 제품 구매</h2>
+      <p>미개봉·미사용 제품은 수령일로부터 7일 이내 환불이 가능합니다. 다만 개봉하여 사용하였거나 이용자의 책임 있는 사유로 제품이 훼손된 경우에는 제한될 수 있습니다.</p>
+      <h2>4. 환불 방법</h2>
+      <ul>
+        <li>카드결제: 카드 승인 취소로 처리되며, 카드사 사정에 따라 통상 3~5영업일이 소요됩니다.</li>
+        <li>가상계좌(무통장입금): 이용자가 지정한 계좌로 환급합니다.</li>
+      </ul>
+      <h2>5. 환불 요청 방법</h2>
+      <p>결제하신 매장에 직접 요청하시거나${MERCHANT.tel ? `, 회사 대표전화(${escapeHtml(MERCHANT.tel)})로` : ''}${MERCHANT.email ? ` 또는 ${escapeHtml(MERCHANT.email)}으로` : ''} 문의해주시기 바랍니다.</p>`,
+  },
+};
+
+app.get('/pay-info/:page', payPageLimiter, (req, res) => {
+  const page = PAY_INFO_PAGES[String(req.params.page)];
+  if (!page) return res.status(404).send(payPageHtml('페이지 없음', '<div class="status bad">요청하신 페이지를 찾을 수 없습니다</div>'));
+  res.set('Cache-Control', 'public, max-age=300');
+  res.send(payPageHtml(page.title, `<h1>${escapeHtml(page.title)}</h1><div class="prose">${page.body}</div>`));
+});
 
 app.get('/pay/:id', payPageLimiter, async (req, res, next) => {
   try {
@@ -1546,15 +1666,16 @@ app.get('/pay/:id', payPageLimiter, async (req, res, next) => {
     if (!request) {
       return res.status(404).send(payPageHtml('결제 요청 없음', '<div class="status bad">결제 요청을 찾을 수 없습니다</div>'));
     }
+    const branchName = await branchNameOf(request.branch_id);
     if (request.status === 'paid') {
-      return res.send(payPageHtml('결제 완료', `${payInfoRows(request)}<div class="status ok">✓ 결제가 완료되었습니다</div><p class="note" style="text-align:center">이용해주셔서 감사합니다.</p>`));
+      return res.send(payPageHtml('결제 완료', `${payInfoRows(request, branchName)}<div class="status ok">✓ 결제가 완료되었습니다</div><p class="note" style="text-align:center">이용해주셔서 감사합니다.</p>`));
     }
     if (request.status === 'canceled') {
-      return res.send(payPageHtml('결제 취소됨', `${payInfoRows(request)}<div class="status bad">이 결제 요청은 취소되었습니다</div><p class="note" style="text-align:center">매장에 문의해주세요.</p>`));
+      return res.send(payPageHtml('결제 취소됨', `${payInfoRows(request, branchName)}<div class="status bad">이 결제 요청은 취소되었습니다</div><p class="note" style="text-align:center">매장에 문의해주세요.</p>`));
     }
     if (request.status === 'vbank_wait' && request.vbank_info) {
       const vb = request.vbank_info;
-      return res.send(payPageHtml('입금 대기 중', `${payInfoRows(request)}
+      return res.send(payPageHtml('입금 대기 중', `${payInfoRows(request, branchName)}
         <div class="status wait">가상계좌 입금 대기 중</div>
         <div class="vbank-box">
           <strong>${escapeHtml(vb.bankName || vb.bank || '')} ${escapeHtml(vb.accountNumber || '')}</strong><br>
@@ -1565,20 +1686,20 @@ app.get('/pay/:id', payPageLimiter, async (req, res, next) => {
         <p class="note">입금이 확인되면 자동으로 결제 완료 처리됩니다.</p>`));
     }
     if (new Date(request.expires_at).getTime() < Date.now()) {
-      return res.send(payPageHtml('결제 기한 만료', `${payInfoRows(request)}<div class="status bad">결제 가능 기한이 지났습니다</div><p class="note" style="text-align:center">매장에 새 결제 링크를 요청해주세요.</p>`));
+      return res.send(payPageHtml('결제 기한 만료', `${payInfoRows(request, branchName)}<div class="status bad">결제 가능 기한이 지났습니다</div><p class="note" style="text-align:center">매장에 새 결제 링크를 요청해주세요.</p>`));
     }
     if (!PG_ENABLED) {
-      return res.send(payPageHtml('결제 준비 중', `${payInfoRows(request)}<div class="status wait">온라인 결제 준비 중입니다</div><p class="note" style="text-align:center">매장에 문의해주세요.</p>`));
+      return res.send(payPageHtml('결제 준비 중', `${payInfoRows(request, branchName)}<div class="status wait">온라인 결제 준비 중입니다</div><p class="note" style="text-align:center">매장에 문의해주세요.</p>`));
     }
 
     const failReason = typeof req.query.fail === 'string' ? req.query.fail.slice(0, 200) : '';
     const showCard = request.method === 'card' || request.method === 'both';
     const showVbank = request.method === 'vbank' || request.method === 'both';
-    const body = `${payInfoRows(request)}
+    const body = `${payInfoRows(request, branchName)}
       ${showCard ? '<button class="btn-card" onclick="pay(\'카드\')">💳 카드로 결제하기</button>' : ''}
       ${showVbank ? '<button class="btn-vbank" onclick="pay(\'가상계좌\')">🏦 무통장입금 (가상계좌)</button>' : ''}
       <div class="err" id="err">${escapeHtml(failReason)}</div>
-      <p class="note">안전한 결제를 위해 토스페이먼츠 결제창으로 연결됩니다.<br>결제 정보(카드번호)는 매장과 더마노트에 저장되지 않습니다.</p>
+      <p class="note">결제 버튼을 누르면 <a href="/pay-info/terms" style="color:#64748b">이용약관</a> 및 <a href="/pay-info/refund" style="color:#64748b">취소·환불 규정</a>에 동의하는 것으로 봅니다.<br>안전한 결제를 위해 토스페이먼츠 결제창으로 연결되며, 카드정보는 매장과 더마노트에 저장되지 않습니다.</p>
       <script>
         var errorBox = document.getElementById('err');
         var payConfig = ${jsonForScript({
