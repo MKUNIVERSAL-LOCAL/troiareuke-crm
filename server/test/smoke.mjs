@@ -579,6 +579,19 @@ await test('결제 요청 링크 생성·페이지·취소가 동작한다', asy
   assert(after.data.requests.find(r => r.id === request.id)?.status === 'canceled', '웹훅이 취소 건을 변조함');
 });
 
+await test('결제 고지 페이지(약관·개인정보·환불)가 제공된다', async () => {
+  for (const page of ['terms', 'privacy', 'refund']) {
+    const res = await fetch(`${API}/pay-info/${page}`);
+    const html = await res.text();
+    assert(res.status === 200, `${page} status=${res.status}`);
+    assert(html.length > 500, `${page} 본문이 비어 있음`);
+  }
+  const refund = await (await fetch(`${API}/pay-info/refund`)).text();
+  assert(refund.includes('환불'), '환불 규정 본문 누락');
+  const unknown = await fetch(`${API}/pay-info/nope`);
+  assert(unknown.status === 404, `unknown status=${unknown.status}`);
+});
+
 await test('결제 페이지가 스크립트 주입을 이스케이프한다 (XSS 회귀 방지)', async () => {
   const payload = '</scr' + 'ipt><img src=x onerror=alert(1)>';
   const created = await call('/api/payments/requests', {
