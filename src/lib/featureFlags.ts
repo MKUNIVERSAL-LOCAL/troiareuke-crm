@@ -98,6 +98,20 @@ export async function refreshFeatureFlags(): Promise<void> {
   }
 }
 
+/**
+ * 로그아웃 시 호출 — 같은 기기에서 다른 계정으로 로그인할 때
+ * 이전 계정의 지점 플래그가 메모리/캐시에 잔류하는 것을 방지.
+ */
+export function resetFeatureFlags(): void {
+  remote = { global: {}, branch: {} };
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch {
+    /* localStorage 불가 환경 무시 */
+  }
+  emit();
+}
+
 // ── 하위호환 API (기존 호출부: Customers/Settings) ────────────────
 export function isBeaconConsultationEnabled(): boolean {
   return isFeatureEnabled('customers.beacon');

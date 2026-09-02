@@ -9,7 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { differenceInDays, parseISO } from 'date-fns';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { featureForPath } from '../../lib/featureRegistry';
-import { isFeatureEnabled } from '../../lib/featureFlags';
+import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
 import { useFeatureFlagsTick } from '../../hooks/useFeature';
 
 const navItems = [
@@ -157,7 +157,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
           </div>
         </div>
         <button
-          onClick={logout}
+          onClick={() => { resetFeatureFlags(); logout(); }}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
         >
           <LogOut size={14} />

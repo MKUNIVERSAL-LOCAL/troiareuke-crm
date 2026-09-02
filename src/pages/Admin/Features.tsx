@@ -46,15 +46,29 @@ export default function AdminFeatures() {
     setLoading(false);
   }
 
-  // 스코프 전환 시 서버 값으로 초안 리셋
+  // 스코프 전환/서버 값 갱신 시 초안 리셋 (savedAt은 여기서 건드리지 않는다 —
+  // 저장 직후 scopes 갱신으로 이 효과가 재실행돼 '저장됨' 배지가 사라지는 문제 방지)
   useEffect(() => {
     setDraft({ ...(scopes[selected] || {}) });
-    setSavedAt(null);
   }, [selected, scopes]);
 
-  const dirty = useMemo(
-    () => JSON.stringify(draft) !== JSON.stringify(scopes[selected] || {}),
-    [draft, scopes, selected],
+  function selectScope(scope: string) {
+    setSelected(scope);
+    setSavedAt(null);
+  }
+
+  // 키 순서에 무관한 내용 비교 (JSON.stringify는 삭제 후 재추가 시 순서가 달라져 오탐)
+  const dirty = useMemo(() => {
+    const saved = scopes[selected] || {};
+    const keys = new Set([...Object.keys(saved), ...Object.keys(draft)]);
+    return [...keys].some((k) => saved[k] !== draft[k]);
+  }, [draft, scopes, selected]);
+
+  // NAS에 저장돼 있으나 현재 계정 목록에서 파생되지 않는 스코프(계정 삭제 등) —
+  // 숨기면 지점 클라이언트에 계속 적용되는데 해제할 방법이 없어지므로 노출한다
+  const orphanScopes = useMemo(
+    () => Object.keys(scopes).filter((s) => s !== GLOBAL_SCOPE && !branches.some((b) => b.id === s)),
+    [scopes, branches],
   );
 
   /** 어드민 관점 유효값: 초안 → (지점이면 전역) → 레지스트리 기본값 */
@@ -72,6 +86,7 @@ export default function AdminFeatures() {
   }
 
   function setState(def: FeatureDef, state: 'inherit' | 'on' | 'off') {
+    setSavedAt(null);
     setDraft((prev) => {
       const next = { ...prev };
       if (state === 'inherit') delete next[def.id];
@@ -140,7 +155,7 @@ export default function AdminFeatures() {
       {/* 스코프 선택: 전역 + 지점 */}
       <div className="flex flex-wrap gap-2 mb-8">
         <button
-          onClick={() => setSelected(GLOBAL_SCOPE)}
+          onClick={() => selectScope(GLOBAL_SCOPE)}
           className={clsx(
             'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors',
             selected === GLOBAL_SCOPE
@@ -154,7 +169,7 @@ export default function AdminFeatures() {
         {branches.map((b) => (
           <button
             key={b.id}
-            onClick={() => setSelected(b.id)}
+            onClick={() => selectScope(b.id)}
             className={clsx(
               'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors',
               selected === b.id
@@ -167,6 +182,22 @@ export default function AdminFeatures() {
             {Object.keys(scopes[b.id] || {}).length > 0 && (
               <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" title="지점 오버라이드 있음" />
             )}
+          </button>
+        ))}
+        {orphanScopes.map((s) => (
+          <button
+            key={s}
+            onClick={() => selectScope(s)}
+            title={`스코프 ID: ${s}`}
+            className={clsx(
+              'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-colors',
+              selected === s
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-900 border border-amber-500/40 text-amber-300 hover:bg-slate-800',
+            )}
+          >
+            <Building2 size={14} />
+            {s.slice(0, 8)}… (연결 계정 없음)
           </button>
         ))}
       </div>

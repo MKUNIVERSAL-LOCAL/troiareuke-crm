@@ -3,6 +3,7 @@ import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditC
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
+import { resetFeatureFlags } from '../../lib/featureFlags';
 
 // search가 있는 항목은 pathname+search까지 일치해야 활성 (통계 vs 전체 데이터 구분)
 const adminNav = [
@@ -59,6 +60,7 @@ export default function AdminLayout() {
   };
 
   const handleLogout = async () => {
+    resetFeatureFlags(); // 같은 기기에서 지점 계정 재로그인 시 플래그 잔류 방지
     await logout();
     navigate('/admin/login');
   };

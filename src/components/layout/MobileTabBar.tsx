@@ -7,7 +7,7 @@ import {
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { featureForPath } from '../../lib/featureRegistry';
-import { isFeatureEnabled } from '../../lib/featureFlags';
+import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
 import { useFeatureFlagsTick } from '../../hooks/useFeature';
 
 const TAB_ITEMS = [
@@ -32,6 +32,7 @@ export default function MobileTabBar() {
 
   const handleLogout = () => {
     setMoreOpen(false);
+    resetFeatureFlags(); // 계정 간 플래그 잔류 방지
     logout();
   };
 

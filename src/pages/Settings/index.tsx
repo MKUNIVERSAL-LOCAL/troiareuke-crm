@@ -9,7 +9,7 @@ import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
-import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, PAYMENT_ENABLED } from '../../lib/featureFlags';
+import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFlagsChanged, PAYMENT_ENABLED } from '../../lib/featureFlags';
 import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import clsx from 'clsx';
@@ -107,6 +107,8 @@ export default function Settings() {
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
   const beaconAllowed = useFeatureAllowed('customers.beacon');
+  // 원격 플래그가 마운트 이후 도착해도 토글 표시가 실제 값과 어긋나지 않게 구독
+  useEffect(() => onFeatureFlagsChanged(() => setBeaconOn(isBeaconConsultationEnabled())), []);
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
   const [saved, setSaved] = useState<string | null>(null);
 
