@@ -1131,7 +1131,7 @@ export default function Sales() {
                   required
                   value={expenseForm.description}
                   onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="예: 트로이아르케 앰플 20개 매입, 8월 임대료"
+                  placeholder="예: 앰플 20개 매입, 8월 임대료"
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1140,7 +1140,7 @@ export default function Sales() {
                 <input
                   value={expenseForm.vendor}
                   onChange={e => setExpenseForm(f => ({ ...f, vendor: e.target.value }))}
-                  placeholder="예: 트로이아르케 본사, 건물주 (선택)"
+                  placeholder="예: 본사, 건물주 (선택)"
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

@@ -292,7 +292,7 @@ export default function Onboarding() {
         if (selectedTroiPrograms.has(p.name)) {
           saveServiceOnce({
             name: p.name,
-            category: `트로이아르케 ${cat.label}`,
+            category: `공식 프로그램 ${cat.label}`,
             duration: p.duration,
             price: p.price,
             description: p.desc,
@@ -383,7 +383,7 @@ export default function Onboarding() {
               <div className="space-y-4">
                 <div>
                   <label className="ob-label">샵 이름 *</label>
-                  <input value={shopName} onChange={e => setShopName(e.target.value)} className="ob-input" placeholder="예: 트로이아르케 에스테틱" />
+                  <input value={shopName} onChange={e => setShopName(e.target.value)} className="ob-input" placeholder="예: 더마 에스테틱" />
                 </div>
                 <div>
                   <label className="ob-label">샵 유형 *</label>
@@ -436,7 +436,7 @@ export default function Onboarding() {
 
           {/* Step 2: 시술 항목 */}
           {step === 2 && (
-            <StepWrapper title="시술 항목 등록" subtitle="직접 입력하거나, 트로이아르케 프로그램을 선택하거나, 엑셀 파일을 업로드하세요">
+            <StepWrapper title="시술 항목 등록" subtitle="직접 입력하거나, 공식 프로그램을 선택하거나, 엑셀 파일을 업로드하세요">
               <div className="space-y-6">
 
                 {/* ① 직접 입력 */}
@@ -471,7 +471,7 @@ export default function Onboarding() {
                 {/* ② 트로이아르케 프로그램 선택 */}
                 <div>
                   <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <Sparkles size={14} className="text-[#1a3a8f]" /> 트로이아르케 프로그램 선택하기
+                    <Sparkles size={14} className="text-[#1a3a8f]" /> 공식 프로그램 선택하기
                   </h3>
                   <div className="space-y-2">
                     {TROIAREUKE_PROGRAMS.map(cat => (
@@ -658,7 +658,7 @@ export default function Onboarding() {
                 ))}
               </div>
               <button onClick={finish} className="w-full py-3.5 bg-[#1a3a8f] text-white font-bold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 text-base">
-                트로이아르케 에스테틱 CRM 시작하기
+                더마솔루션 시작하기
               </button>
             </div>
           )}

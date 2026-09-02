@@ -68,7 +68,7 @@ export default function Signup() {
       const status = e?.status;
       if (status === 403 || /공개 가입이 비활성|가입이 허용되지 않/i.test(msg)) {
         // NAS 중앙 서버는 계정 발급제(공개 가입 차단) — 막다른 오류 대신 발급 안내
-        setError('이 서비스는 관리자 발급제로 운영됩니다. 본사(트로이아르케)에 계정 발급을 요청해주세요.');
+        setError('이 서비스는 관리자 발급제로 운영됩니다. 본사에 계정 발급을 요청해주세요.');
       } else if (/already registered|user already exists|duplicate/i.test(msg)) {
         setError('이미 가입된 이메일입니다. 로그인 페이지에서 시도해주세요.');
       } else if (/Email not confirmed/i.test(msg)) {

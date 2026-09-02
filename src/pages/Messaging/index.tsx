@@ -495,7 +495,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
               value={title}
               onChange={e => setTitle(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
-              placeholder="예: [트로이아르케] 예약 안내"
+              placeholder="예: [우리샵] 예약 안내"
             />
           </div>
         )}

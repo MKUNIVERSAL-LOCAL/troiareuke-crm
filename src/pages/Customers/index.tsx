@@ -318,7 +318,7 @@ export default function Customers() {
 
   // 상담 요약을 카카오 메시지 본문으로 구성
   function buildConsultationMessage(): string {
-    const shopName = SettingsStore.get()?.name || '트로이아르케';
+    const shopName = SettingsStore.get()?.name || '더마솔루션';
     const lines = [`[${shopName}] ${selected?.name}님 피부 상담 결과`, ''];
     lines.push(`· 상담일: ${consultForm.consultDate}`);
     if (consultForm.skinTypeResult) lines.push(`· 피부 타입: ${consultForm.skinTypeResult}`);

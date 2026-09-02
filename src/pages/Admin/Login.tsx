@@ -96,7 +96,7 @@ export default function AdminLogin() {
           <div className="pt-4 max-w-sm">
             <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3.5 flex items-center gap-2.5">
               <Server size={14} className="text-blue-400" />
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Troiareuke Admin Console</span>
+              <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">Dermasolution Admin Console</span>
             </div>
           </div>
         </div>

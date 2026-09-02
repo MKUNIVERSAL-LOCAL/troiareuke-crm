@@ -1697,10 +1697,10 @@ function getSamplePrograms(): Program[] {
 function getSampleProducts(): Product[] {
   const shopId = getShopId();
   return [
-    { id: 'sample_pr1', shopId, name: '히알루론산 세럼 50ml', category: '세럼', brand: '트로이아르케', price: 65000, cost: 25000, stock: 15, minStock: 5, unit: '개', isActive: true },
-    { id: 'sample_pr2', shopId, name: '수분 크림 50ml', category: '크림', brand: '트로이아르케', price: 78000, cost: 30000, stock: 8, minStock: 5, unit: '개', isActive: true },
-    { id: 'sample_pr3', shopId, name: '폼 클렌저 150ml', category: '클렌저', brand: '트로이아르케', price: 42000, cost: 15000, stock: 3, minStock: 5, unit: '개', isActive: true },
-    { id: 'sample_pr4', shopId, name: 'SPF50 선크림 50ml', category: '선케어', brand: '트로이아르케', price: 55000, cost: 20000, stock: 12, minStock: 5, unit: '개', isActive: true },
+    { id: 'sample_pr1', shopId, name: '히알루론산 세럼 50ml', category: '세럼', brand: '더마솔루션', price: 65000, cost: 25000, stock: 15, minStock: 5, unit: '개', isActive: true },
+    { id: 'sample_pr2', shopId, name: '수분 크림 50ml', category: '크림', brand: '더마솔루션', price: 78000, cost: 30000, stock: 8, minStock: 5, unit: '개', isActive: true },
+    { id: 'sample_pr3', shopId, name: '폼 클렌저 150ml', category: '클렌저', brand: '더마솔루션', price: 42000, cost: 15000, stock: 3, minStock: 5, unit: '개', isActive: true },
+    { id: 'sample_pr4', shopId, name: 'SPF50 선크림 50ml', category: '선케어', brand: '더마솔루션', price: 55000, cost: 20000, stock: 12, minStock: 5, unit: '개', isActive: true },
   ];
 }
 
