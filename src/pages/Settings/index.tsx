@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, PAYMENT_ENABLED } from '../../lib/featureFlags';
+import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import clsx from 'clsx';
 
@@ -105,6 +106,7 @@ export default function Settings() {
   });
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
+  const beaconAllowed = useFeatureAllowed('customers.beacon');
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -744,8 +746,8 @@ export default function Settings() {
 
             {tab === 'integrations' && (
               <div className="space-y-4">
-                {/* 비컨 점수(AI 피부진단 수치) 기능 ON/OFF — 관리자 전용 */}
-                {isAdmin && (
+                {/* 비컨 점수(AI 피부진단 수치) 기능 ON/OFF — 관리자 전용, 본사(어드민 콘솔)가 허용한 경우에만 노출 */}
+                {isAdmin && beaconAllowed && (
                   <SettingCard title="비컨 점수 기록 (AI 피부진단기)">
                     <div className={clsx(
                       'flex items-center gap-3 p-4 rounded-xl border',

@@ -7,7 +7,7 @@ const IS_ELECTRON =
   /Electron/i.test(navigator.userAgent) &&
   !!(window as any).electronAPI;
 import Header from '../../components/layout/Header';
-import { AI_CHAT_ENABLED } from '../../lib/featureFlags';
+import { useFeature } from '../../hooks/useFeature';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
 import { format, subMonths, parseISO, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -207,7 +207,9 @@ function AiChatComingSoon() {
 }
 
 export default function AiChat() {
-  if (!AI_CHAT_ENABLED) return <AiChatComingSoon />;
+  // 어드민 콘솔(기능 관리)에서 원격으로 오픈/클로즈 제어
+  const enabled = useFeature('module.aiChat');
+  if (!enabled) return <AiChatComingSoon />;
 
   return <AiChatInner />;
 }

@@ -28,6 +28,7 @@ import LoginLogs from './pages/Admin/LoginLogs';
 import AdminUsers from './pages/Admin/Users';
 import Subscriptions from './pages/Admin/Subscriptions';
 import Announcements from './pages/Admin/Announcements';
+import AdminFeatures from './pages/Admin/Features';
 import Statistics from './pages/Admin/Statistics';
 import AdminLogin from './pages/Admin/Login';
 import UpdateNotification from './components/UpdateNotification';
@@ -93,6 +94,7 @@ function AppRoutes() {
         <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="branches" element={<Branches />} />
         <Route path="subscriptions" element={<Subscriptions />} />
+        <Route path="features" element={<AdminFeatures />} />
         <Route path="announcements" element={<Announcements />} />
         <Route path="login-logs" element={<LoginLogs />} />
         <Route path="users" element={<AdminUsers />} />

@@ -8,20 +8,23 @@ import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { differenceInDays, parseISO } from 'date-fns';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
+import { featureForPath } from '../../lib/featureRegistry';
+import { isFeatureEnabled } from '../../lib/featureFlags';
+import { useFeatureFlagsTick } from '../../hooks/useFeature';
 
 const navItems = [
-  { to: '/', label: '대시보드', icon: LayoutDashboard, badge: null },
-  { to: '/customers', label: '고객 관리', icon: Users, badge: null },
-  { to: '/programs', label: '시술 프로그램', icon: Tag, badge: null },
-  { to: '/reservations', label: '예약 관리', icon: Calendar, badge: null },
-  { to: '/treatments', label: '시술 기록', icon: ClipboardList, badge: null },
-  { to: '/staff', label: '직원 관리', icon: UserCog, badge: null },
-  { to: '/products', label: '제품/재고', icon: Package, badge: null },
-  { to: '/sales', label: '매출·손익 관리', icon: TrendingUp, badge: null },
-  { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, badge: null },
-  { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, badge: 'SOON' },
-  { to: '/api-guide', label: 'API 연동 가이드', icon: Link2, badge: null },
-  { to: '/settings', label: '설정', icon: Settings, badge: null },
+  { to: '/', label: '대시보드', icon: LayoutDashboard },
+  { to: '/customers', label: '고객 관리', icon: Users },
+  { to: '/programs', label: '시술 프로그램', icon: Tag },
+  { to: '/reservations', label: '예약 관리', icon: Calendar },
+  { to: '/treatments', label: '시술 기록', icon: ClipboardList },
+  { to: '/staff', label: '직원 관리', icon: UserCog },
+  { to: '/products', label: '제품/재고', icon: Package },
+  { to: '/sales', label: '매출·손익 관리', icon: TrendingUp },
+  { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare },
+  { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot },
+  { to: '/api-guide', label: 'API 연동 가이드', icon: Link2 },
+  { to: '/settings', label: '설정', icon: Settings },
 ];
 
 interface SidebarProps {
@@ -33,6 +36,18 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { shopName, programName } = useCrmBrand(user?.shopName);
+  useFeatureFlagsTick();
+
+  // 어드민이 끈 모듈은 메뉴에서 제외. selfGated(AI 챗봇)는 남기되 SOON 배지 표시.
+  const visibleNavItems = navItems
+    .map((item) => {
+      const def = featureForPath(item.to);
+      if (!def) return { ...item, badge: null as string | null };
+      const enabled = isFeatureEnabled(def.id);
+      if (def.selfGated) return { ...item, badge: enabled ? null : 'SOON' };
+      return enabled ? { ...item, badge: null as string | null } : null;
+    })
+    .filter((item): item is typeof navItems[number] & { badge: string | null } => item !== null);
 
   // 올림 기준 — 가입 당일 "14일"로 표시 (내림이면 13일로 보이는 off-by-one)
   const trialDaysLeft = user?.trialEndsAt
@@ -82,7 +97,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
         <ul className="space-y-0.5">
-          {navItems.map(({ to, label, icon: Icon, badge }) => {
+          {visibleNavItems.map(({ to, label, icon: Icon, badge }) => {
             const isActive = to === '/'
               ? location.pathname === '/'
               : location.pathname.startsWith(to);

@@ -5,9 +5,11 @@ import MobileTabBar from './MobileTabBar';
 import UpdateBanner from '../ui/UpdateBanner';
 import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
+import FeatureRouteGate from '../FeatureGate';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { BLOCK_STAFF_UI } from '../../lib/buildTarget';
+import { refreshFeatureFlags } from '../../lib/featureFlags';
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -17,6 +19,11 @@ export default function Layout() {
   useEffect(() => {
     document.title = programName;
   }, [programName]);
+
+  // 어드민 원격 기능 플래그 동기화 — 실패해도 캐시/기본값으로 동작
+  useEffect(() => {
+    refreshFeatureFlags();
+  }, []);
 
   // 프로그램 분리: 어드민 전용 exe에서는 지점(일반 CRM) 화면을 표시하지 않는다
   if (BLOCK_STAFF_UI) {
@@ -91,7 +98,9 @@ export default function Layout() {
           </div>
         </div>
 
-        <Outlet />
+        <FeatureRouteGate>
+          <Outlet />
+        </FeatureRouteGate>
       </main>
 
       {/* 하단 탭바 — 모바일 전용 (내부에서 lg:hidden 처리) */}
