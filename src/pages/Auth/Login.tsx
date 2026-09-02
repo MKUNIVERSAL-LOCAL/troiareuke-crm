@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, Phone, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -152,7 +152,7 @@ export default function Login() {
           </div>
           <div className="bg-white rounded-3xl shadow-xl p-8">
             <h1 className="text-2xl font-bold text-gray-900 mb-1">로그인</h1>
-            <p className="text-sm text-gray-400 mb-8">더마노트에 오신 것을 환영합니다</p>
+            <p className="text-sm text-gray-400 mb-8">더마솔루션에 오신 것을 환영합니다</p>
 
             {error && (
               <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>
@@ -323,7 +323,7 @@ export function TroiareukeLogo({ white = false }: { white?: boolean }) {
         <Sparkles size={18} className={white ? 'text-white' : 'text-white'} />
       </div>
       <div>
-        <p className={`text-sm font-black tracking-wider leading-tight ${white ? 'text-white' : 'text-[#1a3a8f]'}`}>DERMANOTE</p>
+        <p className={`text-sm font-black tracking-wider leading-tight ${white ? 'text-white' : 'text-[#1a3a8f]'}`}>DERMASOLUTION</p>
         <p className={`text-xs font-medium tracking-wide ${white ? 'text-blue-200' : 'text-gray-400'}`}>에스테틱 전용 CRM</p>
       </div>
     </div>

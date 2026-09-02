@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -129,7 +129,7 @@ export default function Settings() {
     const shopPhone = SettingsStore.get().phone;
     const result = await sendMessages({
       type: 'sms',
-      content: '[더마노트] 테스트 발송 메시지입니다.',
+      content: '[더마솔루션] 테스트 발송 메시지입니다.',
       recipients: 1,
       phones: shopPhone ? [shopPhone] : [],
     });

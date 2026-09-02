@@ -111,7 +111,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
       return;
     }
     setBusy(true);
-    const content = `[더마노트] ${selectedCustomer.name}님, 결제 요청이 도착했어요.\n아래 링크에서 카드/무통장으로 결제하실 수 있습니다.\n${url}`;
+    const content = `[더마솔루션] ${selectedCustomer.name}님, 결제 요청이 도착했어요.\n아래 링크에서 카드/무통장으로 결제하실 수 있습니다.\n${url}`;
     const result = await sendMessages({ type: 'sms', content, recipients: 1, phones: [selectedCustomer.phone] });
     setBusy(false);
     if (result.pending) setSmsResult(`문자 발송 대기: ${result.reason || '발송사 미설정'}`);

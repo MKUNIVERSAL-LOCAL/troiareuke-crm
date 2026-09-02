@@ -36,7 +36,7 @@ export default function Layout() {
           <h1 className="text-xl font-bold text-gray-900">관리자 전용 프로그램입니다</h1>
           <p className="text-sm text-gray-500 leading-relaxed">
             이 프로그램은 관리자 콘솔 전용입니다. 지점 업무는
-            <strong className="text-gray-900"> 더마노트 </strong>
+            <strong className="text-gray-900"> 더마솔루션 </strong>
             프로그램을 사용해주세요.
           </p>
           <button

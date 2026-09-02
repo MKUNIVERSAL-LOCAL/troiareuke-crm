@@ -1,4 +1,4 @@
-﻿import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2, Database, FileText, SlidersHorizontal } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -35,7 +35,7 @@ export default function AdminLayout() {
           <h1 className="text-xl font-bold text-white">관리자 전용 기능입니다</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
             이 프로그램은 지점용 CRM입니다. 관리자 콘솔은
-            <strong className="text-white"> 더마노트 어드민 </strong>
+            <strong className="text-white"> 더마솔루션 어드민 </strong>
             프로그램에서 이용해주세요.
           </p>
           <button
@@ -76,7 +76,7 @@ export default function AdminLayout() {
               <span className="text-white text-sm font-black">D</span>
             </div>
             <div>
-              <p className="text-xs font-black tracking-widest text-white leading-tight">DERMANOTE</p>
+              <p className="text-xs font-black tracking-widest text-white leading-tight">DERMASOLUTION</p>
               <p className="text-xs text-blue-400 font-medium">관리자 콘솔</p>
             </div>
           </div>

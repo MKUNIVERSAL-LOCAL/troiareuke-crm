@@ -1607,7 +1607,7 @@ ${extraHead}
   .back { display: inline-block; margin-top: 20px; font-size: 12px; color: #1a3a8f; text-decoration: none; }
 </style>
 </head>
-<body><div class="card"><div class="brand">DERMANOTE 더마노트</div>${bodyHtml}${merchantFooterHtml()}</div></body>
+<body><div class="card"><div class="brand">DERMASOLUTION 더마솔루션</div>${bodyHtml}${merchantFooterHtml()}</div></body>
 </html>`;
 }
 
@@ -1774,7 +1774,7 @@ app.get('/pay/:id', payPageLimiter, async (req, res, next) => {
       ${showCard ? '<button class="btn-card" onclick="pay(\'카드\')">💳 카드로 결제하기</button>' : ''}
       ${showVbank ? '<button class="btn-vbank" onclick="pay(\'가상계좌\')">🏦 무통장입금 (가상계좌)</button>' : ''}
       <div class="err" id="err">${escapeHtml(failReason)}</div>
-      <p class="note">결제 버튼을 누르면 <a href="/pay-info/terms" style="color:#64748b">이용약관</a> 및 <a href="/pay-info/refund" style="color:#64748b">취소·환불 규정</a>에 동의하는 것으로 봅니다.<br>안전한 결제를 위해 토스페이먼츠 결제창으로 연결되며, 카드정보는 매장과 더마노트에 저장되지 않습니다.</p>
+      <p class="note">결제 버튼을 누르면 <a href="/pay-info/terms" style="color:#64748b">이용약관</a> 및 <a href="/pay-info/refund" style="color:#64748b">취소·환불 규정</a>에 동의하는 것으로 봅니다.<br>안전한 결제를 위해 토스페이먼츠 결제창으로 연결되며, 카드정보는 매장과 더마솔루션에 저장되지 않습니다.</p>
       <script>
         var errorBox = document.getElementById('err');
         var payConfig = ${jsonForScript({
@@ -1813,7 +1813,7 @@ app.get('/pay/:id', payPageLimiter, async (req, res, next) => {
           });
         }
       </script>`;
-    res.send(payPageHtml('결제하기 — 더마노트', body,
+    res.send(payPageHtml('결제하기 — 더마솔루션', body,
       '<script src="https://js.tosspayments.com/v1/payment"></script>'));
   } catch (error) {
     next(error);
