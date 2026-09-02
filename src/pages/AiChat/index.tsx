@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check, Zap, AlertTriangle, Monitor } from 'lucide-react';
 
 // 웹(브라우저) 환경 감지 — Electron IPC 없으면 Claude API CORS 차단됨
@@ -7,7 +7,7 @@ const IS_ELECTRON =
   /Electron/i.test(navigator.userAgent) &&
   !!(window as any).electronAPI;
 import Header from '../../components/layout/Header';
-import { AI_CHAT_ENABLED } from '../../lib/featureFlags';
+import { useFeature } from '../../hooks/useFeature';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
 import { format, subMonths, parseISO, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -66,7 +66,7 @@ function buildCrmContext(): string {
   const lowStock = products.filter(p => p.stock <= p.minStock);
 
   return `
-=== 더마노트 데이터 (${format(today, 'yyyy년 MM월 dd일', { locale: ko })} 기준) ===
+=== 더마솔루션 데이터 (${format(today, 'yyyy년 MM월 dd일', { locale: ko })} 기준) ===
 
 【고객 현황】
 - 전체 고객 수: ${customers.length}명
@@ -112,7 +112,7 @@ ${treatmentLogs.map((t: any) => `- ${t.date} | ${t.customerName} | ${Array.isArr
 }
 
 async function callClaude(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
-  const systemPrompt = `당신은 더마노트의 AI 분석 어시스턴트입니다.
+  const systemPrompt = `당신은 더마솔루션의 AI 분석 어시스턴트입니다.
 아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요.
 데이터에 없는 내용은 추측하지 말고, 있는 데이터만으로 답변해주세요.
 숫자는 정확하게, 금액은 천 단위 쉼표를 사용해주세요.
@@ -144,7 +144,7 @@ async function callOpenAI(apiKey: string, messages: { role: string; content: str
     body: JSON.stringify({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: `당신은 더마노트의 AI 분석 어시스턴트입니다. 아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요.\n\n${crmContext}` },
+        { role: 'system', content: `당신은 더마솔루션의 AI 분석 어시스턴트입니다. 아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요.\n\n${crmContext}` },
         ...messages,
       ],
       temperature: 0.7,
@@ -171,7 +171,7 @@ async function callGemini(apiKey: string, messages: { role: string; content: str
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents,
-        systemInstruction: { parts: [{ text: '당신은 더마노트 AI 어시스턴트입니다. CRM 데이터를 바탕으로 한국어로 친절하고 정확하게 답변해주세요.' }] },
+        systemInstruction: { parts: [{ text: '당신은 더마솔루션 AI 어시스턴트입니다. CRM 데이터를 바탕으로 한국어로 친절하고 정확하게 답변해주세요.' }] },
         generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
       }),
     }
@@ -207,7 +207,9 @@ function AiChatComingSoon() {
 }
 
 export default function AiChat() {
-  if (!AI_CHAT_ENABLED) return <AiChatComingSoon />;
+  // 어드민 콘솔(기능 관리)에서 원격으로 오픈/클로즈 제어
+  const enabled = useFeature('module.aiChat');
+  if (!enabled) return <AiChatComingSoon />;
 
   return <AiChatInner />;
 }
@@ -217,7 +219,7 @@ function AiChatInner() {
     {
       id: '0',
       role: 'assistant',
-      content: '안녕하세요! 더마노트 AI 어시스턴트입니다.\n\nClaude (Anthropic) AI를 기반으로 CRM 데이터를 분석하여 고객 현황, 매출, 이탈 고객, 재고 등 다양한 질문에 답변해드립니다.\n\nAPI 키를 설정하고 질문해주세요!',
+      content: '안녕하세요! 더마솔루션 AI 어시스턴트입니다.\n\nClaude (Anthropic) AI를 기반으로 CRM 데이터를 분석하여 고객 현황, 매출, 이탈 고객, 재고 등 다양한 질문에 답변해드립니다.\n\nAPI 키를 설정하고 질문해주세요!',
       timestamp: new Date(),
     },
   ]);

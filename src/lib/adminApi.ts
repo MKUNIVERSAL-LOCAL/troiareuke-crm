@@ -161,6 +161,22 @@ export function adminDeleteAnnouncement(id: string) {
   return apiRequest<void>(`/api/admin/announcements/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+// ── 기능 플래그 (본사 → 전 지점 원격 기능 제어, NAS feature_flags 테이블) ──
+// scope: 'global'(전역 기본값) 또는 branchId(지점 오버라이드).
+// flags: { 기능id: boolean } — 명시된 키만 오버라이드, 없는 키는 상속.
+export type FeatureFlagMap = Record<string, boolean>;
+
+export function adminGetFeatureFlags() {
+  return apiRequest<{ scopes: Record<string, FeatureFlagMap> }>('/api/admin/feature-flags');
+}
+
+export function adminSaveFeatureFlags(scope: string, flags: FeatureFlagMap) {
+  return apiRequest<{ scope: string; flags: FeatureFlagMap }>(
+    `/api/admin/feature-flags/${encodeURIComponent(scope)}`,
+    { method: 'PUT', body: JSON.stringify({ flags }) },
+  );
+}
+
 export function fetchAdminBranchData(
   branchId: string,
   collection: string,

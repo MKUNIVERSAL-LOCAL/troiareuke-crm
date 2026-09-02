@@ -309,6 +309,14 @@ async function initializeDatabase() {
     );
     CREATE INDEX IF NOT EXISTS announcements_active_idx ON announcements(is_active, created_at DESC);
 
+    -- 본사 → 전 지점 원격 기능 제어. scope = 'global'(전역 기본값) 또는 branch_id(지점 오버라이드).
+    -- flags = { 기능id: boolean } — 명시된 키만 오버라이드, 없는 키는 상속(전역 → 클라이언트 기본값).
+    CREATE TABLE IF NOT EXISTS feature_flags (
+      scope text PRIMARY KEY,
+      flags jsonb NOT NULL DEFAULT '{}',
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+
     -- 지점 → 고객 결제 요청 링크 (토스페이먼츠 카드/가상계좌 수납)
     CREATE TABLE IF NOT EXISTS payment_requests (
       id uuid PRIMARY KEY,
@@ -1259,6 +1267,73 @@ app.delete('/api/admin/announcements/:id', requireSession, requireSuperadmin, as
   }
 });
 
+// ── 기능 플래그 (본사 → 전 지점 원격 기능 제어) ──────────────────
+const FLAG_SCOPE_RE = /^[A-Za-z0-9_:-]{1,64}$/; // 'global' 또는 branch_id
+const FLAG_KEY_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+
+function validateFlagsInput(body) {
+  const flags = body?.flags;
+  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) {
+    return { error: 'flags 객체가 필요합니다.' };
+  }
+  const entries = Object.entries(flags);
+  if (entries.length > 100) return { error: '기능 항목이 너무 많습니다. (100개 이하)' };
+  const out = {};
+  for (const [key, value] of entries) {
+    if (!FLAG_KEY_RE.test(key)) return { error: `기능 id 형식이 올바르지 않습니다: ${key.slice(0, 80)}` };
+    if (typeof value !== 'boolean') return { error: `기능 값은 true/false여야 합니다: ${key}` };
+    out[key] = value;
+  }
+  return { value: out };
+}
+
+// 지점: 자기 지점에 적용될 전역+지점 플래그 조회 (클라이언트가 기본값과 병합)
+app.get('/api/feature-flags', requireSession, async (req, res, next) => {
+  try {
+    const branchId = req.authUser.branch_id || '';
+    const { rows } = await pool.query(
+      'SELECT scope, flags FROM feature_flags WHERE scope = $1 OR scope = $2',
+      ['global', branchId || 'global'],
+    );
+    const byScope = Object.fromEntries(rows.map((r) => [r.scope, r.flags || {}]));
+    res.json({
+      global: byScope.global || {},
+      branch: (branchId && byScope[branchId]) || {},
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 어드민: 전체 스코프 조회
+app.get('/api/admin/feature-flags', requireSession, requireSuperadmin, async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query('SELECT scope, flags FROM feature_flags ORDER BY scope');
+    res.json({ scopes: Object.fromEntries(rows.map((r) => [r.scope, r.flags || {}])) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 어드민: 스코프 단위 전체 교체 저장 (빈 flags = 해당 스코프 오버라이드 전부 해제)
+app.put('/api/admin/feature-flags/:scope', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const scope = String(req.params.scope || '');
+    if (!FLAG_SCOPE_RE.test(scope)) return res.status(400).json({ error: '스코프 형식이 올바르지 않습니다.' });
+    const parsed = validateFlagsInput(req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const { rows } = await pool.query(`
+      INSERT INTO feature_flags (scope, flags, updated_at)
+      VALUES ($1, $2::jsonb, now())
+      ON CONFLICT (scope) DO UPDATE SET flags = EXCLUDED.flags, updated_at = now()
+      RETURNING scope, flags
+    `, [scope, JSON.stringify(parsed.value)]);
+    res.json({ scope: rows[0].scope, flags: rows[0].flags });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── 결제 요청 링크 (토스페이먼츠 카드/가상계좌 수납) ─────────────
 // 활성 조건: TOSS_CLIENT_KEY + TOSS_SECRET_KEY 환경변수 설정 (docs/PAYMENT-INTEGRATION.md).
 // 키 미설정 시 생성 API가 503으로 정직하게 안내한다 — 가짜 성공 없음.
@@ -1532,7 +1607,7 @@ ${extraHead}
   .back { display: inline-block; margin-top: 20px; font-size: 12px; color: #1a3a8f; text-decoration: none; }
 </style>
 </head>
-<body><div class="card"><div class="brand">DERMANOTE 더마노트</div>${bodyHtml}${merchantFooterHtml()}</div></body>
+<body><div class="card"><div class="brand">DERMASOLUTION 더마솔루션</div>${bodyHtml}${merchantFooterHtml()}</div></body>
 </html>`;
 }
 
@@ -1699,7 +1774,7 @@ app.get('/pay/:id', payPageLimiter, async (req, res, next) => {
       ${showCard ? '<button class="btn-card" onclick="pay(\'카드\')">💳 카드로 결제하기</button>' : ''}
       ${showVbank ? '<button class="btn-vbank" onclick="pay(\'가상계좌\')">🏦 무통장입금 (가상계좌)</button>' : ''}
       <div class="err" id="err">${escapeHtml(failReason)}</div>
-      <p class="note">결제 버튼을 누르면 <a href="/pay-info/terms" style="color:#64748b">이용약관</a> 및 <a href="/pay-info/refund" style="color:#64748b">취소·환불 규정</a>에 동의하는 것으로 봅니다.<br>안전한 결제를 위해 토스페이먼츠 결제창으로 연결되며, 카드정보는 매장과 더마노트에 저장되지 않습니다.</p>
+      <p class="note">결제 버튼을 누르면 <a href="/pay-info/terms" style="color:#64748b">이용약관</a> 및 <a href="/pay-info/refund" style="color:#64748b">취소·환불 규정</a>에 동의하는 것으로 봅니다.<br>안전한 결제를 위해 토스페이먼츠 결제창으로 연결되며, 카드정보는 매장과 더마솔루션에 저장되지 않습니다.</p>
       <script>
         var errorBox = document.getElementById('err');
         var payConfig = ${jsonForScript({
@@ -1738,7 +1813,7 @@ app.get('/pay/:id', payPageLimiter, async (req, res, next) => {
           });
         }
       </script>`;
-    res.send(payPageHtml('결제하기 — 더마노트', body,
+    res.send(payPageHtml('결제하기 — 더마솔루션', body,
       '<script src="https://js.tosspayments.com/v1/payment"></script>'));
   } catch (error) {
     next(error);

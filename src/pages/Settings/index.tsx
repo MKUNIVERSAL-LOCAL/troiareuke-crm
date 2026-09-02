@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -9,7 +9,8 @@ import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
-import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, PAYMENT_ENABLED } from '../../lib/featureFlags';
+import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFlagsChanged, PAYMENT_ENABLED } from '../../lib/featureFlags';
+import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import clsx from 'clsx';
 
@@ -105,6 +106,9 @@ export default function Settings() {
   });
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
+  const beaconAllowed = useFeatureAllowed('customers.beacon');
+  // 원격 플래그가 마운트 이후 도착해도 토글 표시가 실제 값과 어긋나지 않게 구독
+  useEffect(() => onFeatureFlagsChanged(() => setBeaconOn(isBeaconConsultationEnabled())), []);
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -125,7 +129,7 @@ export default function Settings() {
     const shopPhone = SettingsStore.get().phone;
     const result = await sendMessages({
       type: 'sms',
-      content: '[더마노트] 테스트 발송 메시지입니다.',
+      content: '[더마솔루션] 테스트 발송 메시지입니다.',
       recipients: 1,
       phones: shopPhone ? [shopPhone] : [],
     });
@@ -744,8 +748,8 @@ export default function Settings() {
 
             {tab === 'integrations' && (
               <div className="space-y-4">
-                {/* 비컨 점수(AI 피부진단 수치) 기능 ON/OFF — 관리자 전용 */}
-                {isAdmin && (
+                {/* 비컨 점수(AI 피부진단 수치) 기능 ON/OFF — 관리자 전용, 본사(어드민 콘솔)가 허용한 경우에만 노출 */}
+                {isAdmin && beaconAllowed && (
                   <SettingCard title="비컨 점수 기록 (AI 피부진단기)">
                     <div className={clsx(
                       'flex items-center gap-3 p-4 rounded-xl border',

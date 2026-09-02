@@ -6,6 +6,9 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
+import { featureForPath } from '../../lib/featureRegistry';
+import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
+import { useFeatureFlagsTick } from '../../hooks/useFeature';
 
 const TAB_ITEMS = [
   { to: '/', label: '홈', icon: LayoutDashboard, ariaLabel: '홈으로 이동' },
@@ -18,9 +21,18 @@ export default function MobileTabBar() {
   const [moreOpen, setMoreOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  useFeatureFlagsTick();
+
+  // 어드민이 끈 모듈은 탭에서 제외
+  const visibleTabs = TAB_ITEMS.filter((item) => {
+    const def = featureForPath(item.to);
+    return !def || isFeatureEnabled(def.id);
+  });
+  const salesEnabled = isFeatureEnabled('module.sales');
 
   const handleLogout = () => {
     setMoreOpen(false);
+    resetFeatureFlags(); // 계정 간 플래그 잔류 방지
     logout();
   };
 
@@ -37,7 +49,7 @@ export default function MobileTabBar() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="flex h-14">
-          {TAB_ITEMS.map(({ to, label, icon: Icon, ariaLabel }) => (
+          {visibleTabs.map(({ to, label, icon: Icon, ariaLabel }) => (
             <NavLink
               key={to}
               to={to}
@@ -109,8 +121,8 @@ export default function MobileTabBar() {
 
             {/* 메뉴 목록 */}
             <div className="py-2">
-              {/* 매출 — admin 이상만 */}
-              {user?.role !== 'staff' && (
+              {/* 매출 — admin 이상 + 어드민 허용 시만 */}
+              {user?.role !== 'staff' && salesEnabled && (
                 <button
                   onClick={() => handleNavigate('/sales')}
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors text-left"

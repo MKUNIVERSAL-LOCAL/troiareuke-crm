@@ -12,6 +12,7 @@ import StatCard from '../components/ui/StatCard';
 import RevisitReminderCard from '../components/RevisitReminderCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
+import { useFeature } from '../hooks/useFeature';
 
 // 코어 PaymentStore.getDailyData()는 toISOString() 기반 UTC 날짜 키라
 // KST 0~9시에 당일 매출이 빠짐 — 코어 수정 금지이므로 페이지에서
@@ -101,6 +102,12 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(() => getDashboardData());
 
+  // 어드민이 끈 모듈의 데이터·링크는 대시보드에서도 숨긴다 (게이트 화면 dead-end 방지)
+  const salesOn = useFeature('module.sales');
+  const reservationsOn = useFeature('module.reservations');
+  const customersOn = useFeature('module.customers');
+  const productsOn = useFeature('module.products');
+
   // 다른 페이지에서 CRUD 후 돌아오거나 창에 포커스가 돌아오면 최신 데이터로 재계산 (stale 방지)
   useEffect(() => {
     const refresh = () => setData(getDashboardData());
@@ -132,25 +139,34 @@ export default function Dashboard() {
       <div className="block lg:hidden px-4 py-3 space-y-4">
         {/* StatCards 2열 */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <p className="text-xs text-gray-500">이번 달 총 매출</p>
-            <p className="text-lg font-black text-gray-900 mt-1">{Math.round(thisMonth.totalRevenue / 10000)}만원</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <p className="text-xs text-gray-500">오늘 예약</p>
-            <p className="text-lg font-black text-gray-900 mt-1">{todayActiveReservations.length}건</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <p className="text-xs text-gray-500">전체 고객</p>
-            <p className="text-lg font-black text-gray-900 mt-1">{totalCustomers}명</p>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <p className="text-xs text-gray-500">VIP 고객</p>
-            <p className="text-lg font-black text-gray-900 mt-1">{vipCount}명</p>
-          </div>
+          {salesOn && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+              <p className="text-xs text-gray-500">이번 달 총 매출</p>
+              <p className="text-lg font-black text-gray-900 mt-1">{Math.round(thisMonth.totalRevenue / 10000)}만원</p>
+            </div>
+          )}
+          {reservationsOn && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+              <p className="text-xs text-gray-500">오늘 예약</p>
+              <p className="text-lg font-black text-gray-900 mt-1">{todayActiveReservations.length}건</p>
+            </div>
+          )}
+          {customersOn && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+              <p className="text-xs text-gray-500">전체 고객</p>
+              <p className="text-lg font-black text-gray-900 mt-1">{totalCustomers}명</p>
+            </div>
+          )}
+          {customersOn && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+              <p className="text-xs text-gray-500">VIP 고객</p>
+              <p className="text-lg font-black text-gray-900 mt-1">{vipCount}명</p>
+            </div>
+          )}
         </div>
 
         {/* 오늘 예약 현황 */}
+        {reservationsOn && (
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-bold text-gray-900">오늘 예약 현황</p>
@@ -184,8 +200,10 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+        )}
 
         {/* 주간 매출 차트 */}
+        {salesOn && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm font-bold text-gray-900 mb-3">주간 매출 현황</p>
           <ResponsiveContainer width="100%" height={180}>
@@ -202,9 +220,10 @@ export default function Dashboard() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        )}
 
         {/* 재고 부족 알림 */}
-        {lowStockProducts.length > 0 && (
+        {productsOn && lowStockProducts.length > 0 && (
           <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
             <p className="text-sm font-bold text-amber-800 mb-2">재고 부족 알림</p>
             <div className="space-y-1.5">
@@ -226,6 +245,7 @@ export default function Dashboard() {
       <div className="hidden lg:block p-8 space-y-6 flex-1">
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {salesOn && (
           <div className="cursor-pointer" onClick={() => navigate('/sales')}>
             <StatCard
               title="이번 달 총 매출"
@@ -236,6 +256,8 @@ export default function Dashboard() {
               accent="purple"
             />
           </div>
+          )}
+          {reservationsOn && (
           <div className="cursor-pointer" onClick={() => navigate('/reservations')}>
             <StatCard
               title="오늘 예약"
@@ -245,6 +267,8 @@ export default function Dashboard() {
               accent="pink"
             />
           </div>
+          )}
+          {customersOn && (
           <div className="cursor-pointer" onClick={() => navigate('/customers')}>
             <StatCard
               title="전체 고객"
@@ -255,6 +279,8 @@ export default function Dashboard() {
               accent="blue"
             />
           </div>
+          )}
+          {customersOn && (
           <div className="cursor-pointer" onClick={() => navigate('/customers')}>
             <StatCard
               title="VIP 고객"
@@ -264,9 +290,11 @@ export default function Dashboard() {
               accent="orange"
             />
           </div>
+          )}
         </div>
 
-        {/* Revenue Breakdown */}
+        {/* Revenue Breakdown — 매출 데이터라 module.sales 게이트 */}
+        {salesOn && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>
             <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -277,7 +305,7 @@ export default function Dashboard() {
               <p className="text-xl font-black text-gray-900">{Math.round(thisMonth.treatmentRevenue / 10000)}만원</p>
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/products')}>
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(productsOn ? '/products' : '/sales')}>
             <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
               <Package size={22} className="text-[#1a3a8f]" />
             </div>
@@ -296,6 +324,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        )}
 
         {/* 트로이몰 바로가기 — 링크는 Electron setWindowOpenHandler가 외부 브라우저로 위임 */}
         <div className="bg-gradient-to-r from-[#1a3a8f] to-[#2b55c4] rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4">
@@ -336,6 +365,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {salesOn && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Revenue Chart */}
           <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -389,9 +419,11 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Today's Reservations */}
+          {reservationsOn && (
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
               <h3 className="text-sm font-bold text-gray-900">오늘 예약 현황</h3>
@@ -428,6 +460,7 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+          )}
 
           {/* Alerts */}
           <div className="space-y-4">
@@ -435,6 +468,7 @@ export default function Dashboard() {
             <RevisitReminderCard />
 
             {/* Low Stock Alert */}
+            {productsOn && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">
                 <AlertCircle size={15} className="text-orange-500" />
@@ -464,8 +498,10 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+            )}
 
             {/* Today's Timeline */}
+            {reservationsOn && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">
                 <Clock size={15} className="text-[#1a3a8f]" />
@@ -487,6 +523,7 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>

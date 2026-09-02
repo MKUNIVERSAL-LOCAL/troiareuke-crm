@@ -347,7 +347,7 @@ export default function Onboarding() {
               <Sparkles size={20} className="text-white" />
             </div>
             <div className="text-left">
-              <p className="text-sm font-black tracking-wider text-[#1a3a8f] leading-tight">DERMANOTE</p>
+              <p className="text-sm font-black tracking-wider text-[#1a3a8f] leading-tight">DERMASOLUTION</p>
               <p className="text-xs text-gray-400">에스테틱 전용 CRM</p>
             </div>
           </div>

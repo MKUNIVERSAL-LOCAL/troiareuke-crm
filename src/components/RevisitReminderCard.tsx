@@ -4,13 +4,21 @@ import { BellRing, Copy, Check, MessageSquare, X } from 'lucide-react';
 import { getRevisitDueCustomers, buildReminderMessage, type DueCustomer } from '../lib/reminderEngine';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
+import { useFeature } from '../hooks/useFeature';
 
 /**
  * 자동 재방문 리마인더 카드 (킬러 기능 ③)
  * - 권장 재방문일이 지난 고객을 산출해 보여준다.
  * - 각 고객별 메시지 초안 생성/복사(실제 자동발송은 NAS 게이트웨이 연동 후).
  */
-export default function RevisitReminderCard({ compact = false }: { compact?: boolean }) {
+export default function RevisitReminderCard(props: { compact?: boolean }) {
+  // 훅 순서 보존을 위해 게이트를 래퍼로 분리 — 어드민이 끄면 카드 자체를 렌더하지 않는다
+  const enabled = useFeature('dashboard.revisitReminder');
+  if (!enabled) return null;
+  return <RevisitReminderCardInner {...props} />;
+}
+
+function RevisitReminderCardInner({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [due] = useState<DueCustomer[]>(() => getRevisitDueCustomers(0));

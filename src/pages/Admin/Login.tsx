@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, Shield, Lock, Server } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -24,7 +24,7 @@ export default function AdminLogin() {
           <h1 className="text-xl font-bold text-white">관리자 로그인은 어드민 프로그램에서</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
             이 프로그램은 지점용 CRM입니다. 관리자는
-            <strong className="text-white"> 더마노트 어드민 </strong>
+            <strong className="text-white"> 더마솔루션 어드민 </strong>
             프로그램을 실행해주세요.
           </p>
           <button
@@ -72,7 +72,7 @@ export default function AdminLogin() {
               <span className="text-white text-base font-black">D</span>
             </div>
             <div>
-              <p className="text-sm font-black tracking-widest text-white">DERMANOTE</p>
+              <p className="text-sm font-black tracking-widest text-white">DERMASOLUTION</p>
               <p className="text-xs text-blue-400 font-medium tracking-wider">ADMIN CONSOLE</p>
             </div>
           </div>
@@ -89,7 +89,7 @@ export default function AdminLogin() {
             <span className="text-slate-400">콘솔</span>
           </h2>
           <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
-            더마노트 플랫폼의 지점, 사용자, 구독, 통계를 관리합니다.
+            더마솔루션 플랫폼의 지점, 사용자, 구독, 통계를 관리합니다.
           </p>
 
           {/* 장식 배너 — 실제 서버 상태를 주장하는 문구(Online/Connected)는 표시하지 않는다 */}
@@ -103,7 +103,7 @@ export default function AdminLogin() {
 
         {/* Bottom */}
         <div className="relative">
-          <p className="text-[11px] text-slate-600">DERMANOTE Platform v1.0 — Superadmin Access</p>
+          <p className="text-[11px] text-slate-600">DERMASOLUTION Platform v1.0 — Superadmin Access</p>
         </div>
       </div>
 
@@ -117,7 +117,7 @@ export default function AdminLogin() {
                 <span className="text-white text-base font-black">D</span>
               </div>
               <div>
-                <p className="text-sm font-black tracking-widest text-white">DERMANOTE</p>
+                <p className="text-sm font-black tracking-widest text-white">DERMASOLUTION</p>
                 <p className="text-xs text-blue-400 font-medium">ADMIN CONSOLE</p>
               </div>
             </div>
