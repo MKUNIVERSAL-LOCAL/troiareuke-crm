@@ -13,6 +13,7 @@
     "electron:build": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win",
     "electron:build:portable": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win portable",
     "electron:portable:prepare": "node scripts/prepare-portable-update.mjs",
+    "release:all": "npm run electron:build:portable && npm run electron:portable:prepare && node scripts/create-github-release.mjs",
     "electron:installer": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis",
     "electron:build:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir",
     "electron:build:admin:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir --config electron-builder.admin.cjs",
