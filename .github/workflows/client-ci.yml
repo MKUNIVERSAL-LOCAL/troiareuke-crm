@@ -1,0 +1,43 @@
+name: client-ci
+
+# 지점 프로그램(프론트) 검증 게이트 — main에 코드가 들어올 때마다
+# 타입검사 + 프로덕션 빌드 + 죽은 라우트 검사를 자동 수행해 회귀를 머지 단계에서 차단한다.
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'electron/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'vite.config.*'
+      - 'scripts/check-routes.mjs'
+      - '.github/workflows/client-ci.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'electron/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'vite.config.*'
+      - 'scripts/check-routes.mjs'
+      - '.github/workflows/client-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Type check + production build (tsc && vite build)
+        run: npm run build
+      - name: Dead-route static check
+        run: node scripts/check-routes.mjs
