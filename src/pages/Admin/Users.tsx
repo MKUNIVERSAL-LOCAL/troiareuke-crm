@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
-import { Users, Building2, Search } from 'lucide-react';
+import { Users, Building2, Search, UserPlus } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
-import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
+import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser } from '../../lib/authApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
@@ -130,7 +130,7 @@ export default function AdminUsers() {
   }
 
   // 재설정된 임시 비밀번호 표시 (alert는 텍스트 복사가 안 되는 함정 — 복사 버튼 모달로 대체)
-  const [tempPwResult, setTempPwResult] = useState<{ email: string; password: string } | null>(null);
+  const [tempPwResult, setTempPwResult] = useState<{ email: string; password: string; invited?: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
 
   async function copyTempPassword() {
@@ -158,6 +158,34 @@ export default function AdminUsers() {
       alert(e?.message || '비밀번호 재설정에 실패했습니다.');
     } finally {
       setActionBusy(null);
+    }
+  }
+
+  // ── 관리자(슈퍼어드민) 초대 ─────────────────────────────────
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+
+  async function handleInvite() {
+    const email = inviteEmail.trim();
+    if (!email) { alert('초대할 이메일을 입력해주세요.'); return; }
+    if (!confirm(`${email} 을(를) 슈퍼어드민(관리자 콘솔 전체 권한)으로 초대할까요?`)) return;
+    setInviteBusy(true);
+    try {
+      const result = await adminCreateUser({ email, name: inviteName.trim() || undefined, role: 'superadmin' });
+      setInviteOpen(false);
+      setInviteEmail('');
+      setInviteName('');
+      setCopied(false);
+      if (result.temporaryPassword) {
+        setTempPwResult({ email, password: result.temporaryPassword, invited: true });
+      }
+      await loadData();
+    } catch (e: any) {
+      alert(e?.message || '관리자 초대에 실패했습니다.');
+    } finally {
+      setInviteBusy(false);
     }
   }
 
@@ -242,8 +270,9 @@ export default function AdminUsers() {
                 </button>
               </div>
               <p className="text-[11px] text-amber-400/90 leading-relaxed">
-                이 창을 닫으면 다시 확인할 수 없습니다. 지금 복사해서 해당 지점에 전달하세요.
-                (첫 로그인 후 비밀번호 변경을 안내해주세요)
+                {tempPwResult.invited
+                  ? '이 창을 닫으면 다시 확인할 수 없습니다. 지금 복사해서 초대한 관리자에게 전달하세요. 첫 로그인 시 비밀번호 변경이 자동으로 강제됩니다.'
+                  : '이 창을 닫으면 다시 확인할 수 없습니다. 지금 복사해서 해당 지점에 전달하세요. (첫 로그인 후 비밀번호 변경을 안내해주세요)'}
               </p>
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end">
@@ -329,7 +358,70 @@ export default function AdminUsers() {
           <h1 className="text-2xl font-bold text-white">사용자 관리</h1>
           <p className="text-slate-400 text-sm mt-1">전체 지점의 계정 현황을 확인하세요</p>
         </div>
+        {isAuthApiConfigured && (
+          <button
+            onClick={() => setInviteOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <UserPlus size={16} />
+            관리자 초대
+          </button>
+        )}
       </div>
+
+      {/* 관리자 초대 모달 */}
+      {inviteOpen && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="px-6 py-5 border-b border-slate-700">
+              <h2 className="text-base font-bold text-white">관리자 초대</h2>
+              <p className="text-xs text-slate-400 mt-1">관리자 콘솔 전체 권한(슈퍼어드민) 계정을 발급합니다</p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">이메일 *</label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="invite@example.com"
+                  className="w-full px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-sm text-white outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">이름 (선택)</label>
+                <input
+                  value={inviteName}
+                  onChange={e => setInviteName(e.target.value)}
+                  placeholder="홍길동"
+                  className="w-full px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-sm text-white outline-none focus:border-blue-500"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                발급 즉시 임시 비밀번호가 1회 표시됩니다. 초대받은 관리자는 첫 로그인 시
+                비밀번호 변경이 강제되며, 지점 데이터·기능 관리 등 콘솔 전체에 접근할 수 있습니다.
+                초대한 기록은 서버 감사 로그에 남습니다.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-2">
+              <button
+                onClick={() => setInviteOpen(false)}
+                disabled={inviteBusy}
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleInvite}
+                disabled={inviteBusy}
+                className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50"
+              >
+                {inviteBusy ? '발급 중…' : '초대 (임시 비밀번호 발급)'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loadError && !loading && (
         <div className="mb-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-300">

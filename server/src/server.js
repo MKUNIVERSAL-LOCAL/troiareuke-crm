@@ -208,6 +208,7 @@ function publicUser(row) {
     businessNumber: row.business_number || undefined,
     isActive: row.is_active !== false,
     serviceEndsAt: row.service_ends_at ? new Date(row.service_ends_at).toISOString() : null,
+    mustChangePassword: row.must_change_password === true,
     createdAt: new Date(row.created_at).toISOString(),
   };
 }
@@ -387,6 +388,7 @@ async function initializeDatabase() {
       PRIMARY KEY (branch_id, entity_key)
     );
 
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
     ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS locked_at timestamptz;
     ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0;
     ALTER TABLE message_send_log ADD COLUMN IF NOT EXISTS scheduled_message_id uuid;
@@ -632,6 +634,33 @@ app.get('/api/auth/me', requireSession, (req, res) => {
   res.json({ user: publicUser(req.authUser) });
 });
 
+// 본인 비밀번호 변경 — 초대된 관리자의 첫 로그인 강제 변경에도 사용된다.
+app.post('/api/auth/change-password', requireSession, async (req, res, next) => {
+  try {
+    const currentPassword = String(req.body.currentPassword || '');
+    const newPassword = req.body.newPassword;
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({ error: '새 비밀번호는 8자 이상 128자 이하여야 합니다.' });
+    }
+    const valid = await bcrypt.compare(currentPassword, req.authUser.password_hash);
+    if (!valid) return res.status(401).json({ error: '현재 비밀번호가 올바르지 않습니다.' });
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const { rows } = await pool.query(
+      'UPDATE auth_users SET password_hash = $1, must_change_password = false, updated_at = now() WHERE id = $2 RETURNING *',
+      [passwordHash, req.authUser.id],
+    );
+    // 현재 세션만 남기고 다른 기기 세션은 종료 (탈취 대비)
+    await pool.query(
+      'UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND id <> $2 AND revoked_at IS NULL',
+      [req.authUser.id, req.authSessionId],
+    );
+    res.json({ user: publicUser(rows[0]) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.patch('/api/auth/profile', requireSession, async (req, res, next) => {
   try {
     const shopName = typeof req.body.shopName === 'string' ? req.body.shopName.trim() : '';
@@ -680,7 +709,9 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
     const email = normalizeEmail(req.body.email);
     const requestedName = typeof req.body.name === 'string' ? req.body.name.trim() : '';
     const name = requestedName || email.split('@')[0];
-    const role = ['admin', 'staff'].includes(req.body.role) ? req.body.role : 'admin';
+    // superadmin 초대: 지점 없이 관리자 콘솔 접근 계정 발급 (임시 비밀번호는 첫 로그인 시 변경 강제)
+    const role = ['admin', 'staff', 'superadmin'].includes(req.body.role) ? req.body.role : 'admin';
+    const isSuperadminInvite = role === 'superadmin';
     const plan = ['trial', 'starter', 'pro', 'enterprise'].includes(req.body.plan) ? req.body.plan : 'trial';
     const branchName = typeof req.body.branchName === 'string' ? req.body.branchName.trim() : '';
     const shopType = typeof req.body.shopType === 'string' ? req.body.shopType.trim() : '';
@@ -709,15 +740,23 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
 
     const userId = crypto.randomUUID();
     // 같은 지점에 직원 계정을 추가할 땐 branchId를 넘겨 기존 지점에 합류시킨다.
-    const branchId = requestedBranchId || userId;
-    const isOnboarded = Boolean(branchName);
+    // superadmin은 지점 소속이 없다(branch_id null, 온보딩 완료 취급).
+    const branchId = isSuperadminInvite ? null : (requestedBranchId || userId);
+    const isOnboarded = isSuperadminInvite ? true : Boolean(branchName);
+    const mustChangePassword = isSuperadminInvite && !providedPassword;
     const { rows } = await pool.query(`
       INSERT INTO auth_users (id, email, password_hash, name, role, plan,
-        shop_name, shop_type, branch_id, branch_name, is_onboarded, trial_ends_at, service_ends_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + interval '14 days', $12)
+        shop_name, shop_type, branch_id, branch_name, is_onboarded, trial_ends_at, service_ends_at,
+        must_change_password)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now() + interval '14 days', $12, $13)
       RETURNING *
-    `, [userId, email, passwordHash, name, role, plan,
-        branchName, shopType, branchId, branchName || null, isOnboarded, serviceEndsAt]);
+    `, [userId, email, passwordHash, name, role, isSuperadminInvite ? 'enterprise' : plan,
+        branchName, shopType, branchId, isSuperadminInvite ? null : (branchName || null), isOnboarded,
+        serviceEndsAt, mustChangePassword]);
+
+    if (isSuperadminInvite) {
+      log('info', 'superadmin_invited', { invitedBy: req.authUser.id, invitedEmail: email });
+    }
 
     res.status(201).json({
       user: publicUser(rows[0]),
@@ -2008,7 +2047,12 @@ app.post('/api/auth/forgot-password', resetLimiter, async (req, res, next) => {
     const email = normalizeEmail(req.body.email);
     if (!isEmail(email)) return res.status(400).json({ error: '이메일 형식을 확인해주세요.' });
 
-    const { rows } = await pool.query('SELECT id, email, name FROM auth_users WHERE email = $1 LIMIT 1', [email]);
+    // 정책(2026-07-27 오너 결정): 지점 계정은 어드민 발급제 — 이메일 셀프 재설정은 슈퍼어드민 전용.
+    // 존재 여부 노출 방지를 위해 응답 메시지는 역할과 무관하게 동일하다.
+    const { rows } = await pool.query(
+      "SELECT id, email, name FROM auth_users WHERE email = $1 AND role = 'superadmin' LIMIT 1",
+      [email],
+    );
     const user = rows[0];
     if (user) {
       const token = crypto.randomBytes(32).toString('base64url');

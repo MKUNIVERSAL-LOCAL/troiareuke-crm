@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 import { resetFeatureFlags } from '../../lib/featureFlags';
+import PasswordChangeGate from '../../components/PasswordChangeGate';
 
 // search가 있는 항목은 pathname+search까지 일치해야 활성 (통계 vs 전체 데이터 구분)
 const adminNav = [
@@ -47,6 +48,12 @@ export default function AdminLayout() {
         </div>
       </div>
     );
+  }
+
+  // 초대된 관리자: 임시 비밀번호 상태면 콘솔 진입 전 변경 강제
+  // (mustChangePassword는 NAS 응답의 런타임 필드 — 코어 AuthContext 타입엔 없어 런타임으로 읽는다)
+  if ((user as { mustChangePassword?: boolean } | null)?.mustChangePassword) {
+    return <PasswordChangeGate />;
   }
 
   // 같은 pathname을 view 쿼리로 나눠 쓰는 항목들(통계/손익/전체 데이터)이 있으므로

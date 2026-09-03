@@ -19,6 +19,8 @@ export interface AuthApiUser {
   isActive?: boolean;
   /** 사용기간 만료일 (ISO). null/미설정 = 무제한 */
   serviceEndsAt?: string | null;
+  /** 초대된 관리자 첫 로그인 시 비밀번호 변경 강제 플래그 */
+  mustChangePassword?: boolean;
   createdAt: string;
 }
 
@@ -133,6 +135,23 @@ export async function logoutFromAuthApi() {
   }
 }
 
+/** 본인 비밀번호 변경 (초대 관리자 첫 로그인 강제 변경 포함) */
+export async function changePassword(currentPassword: string, newPassword: string) {
+  const response = await apiRequest<{ user: AuthApiUser }>('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  return response.user;
+}
+
+/** 슈퍼어드민 이메일 재설정 요청 (지점 계정은 정책상 어드민 발급제) */
+export function requestPasswordReset(email: string) {
+  return apiRequest<{ message: string }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
 export async function updateAuthProfile(data: { shopName: string; shopType: string; shopPhone?: string; shopAddress?: string }) {
   const response = await apiRequest<{ user: AuthApiUser }>('/api/auth/profile', {
     method: 'PATCH',
@@ -146,7 +165,7 @@ export interface AdminCreateUserPayload {
   email: string;
   name?: string;
   password?: string; // 미지정 시 서버가 임시 비밀번호 발급
-  role?: 'admin' | 'staff';
+  role?: 'admin' | 'staff' | 'superadmin';
   plan?: string;
   branchId?: string; // 기존 지점에 직원을 추가할 때
   branchName?: string;

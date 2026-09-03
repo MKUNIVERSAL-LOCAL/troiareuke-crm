@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, Shield, Lock, Server } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
+import { requestPasswordReset, isAuthApiConfigured } from '../../lib/authApi';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -12,6 +13,25 @@ export default function AdminLogin() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // 슈퍼어드민 셀프 비밀번호 재설정 (이메일 링크, 지점 계정은 정책상 발급제)
+  const [resetMode, setResetMode] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetSending, setResetSending] = useState(false);
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail) return;
+    setResetSending(true); setResetMessage('');
+    try {
+      const r = await requestPasswordReset(resetEmail);
+      setResetMessage(r.message);
+    } catch (err: any) {
+      setResetMessage(err?.message || '요청에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setResetSending(false);
+    }
+  };
 
   // 프로그램 분리: 일반(지점용) exe에서는 관리자 로그인 입구 자체를 막는다
   if (BLOCK_ADMIN_UI) {
@@ -186,7 +206,45 @@ export default function AdminLogin() {
               </button>
             </form>
 
-            <div className="mt-6 pt-5 border-t border-slate-700/50 text-center">
+            {/* 슈퍼어드민 비밀번호 재설정 (NAS 모드 전용) */}
+            {isAuthApiConfigured && (
+              <div className="mt-5 pt-4 border-t border-slate-700/50">
+                {!resetMode ? (
+                  <button
+                    type="button"
+                    onClick={() => { setResetMode(true); setResetEmail(email); setResetMessage(''); }}
+                    className="w-full text-center text-xs text-slate-500 hover:text-blue-400 transition-colors"
+                  >
+                    비밀번호를 잊으셨나요? 이메일로 재설정
+                  </button>
+                ) : (
+                  <form onSubmit={handleReset} className="space-y-2.5">
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      관리자 이메일을 입력하면 재설정 링크를 보내드립니다. (30분 내 1회 사용)
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)}
+                        className="flex-1 px-3 py-2 text-xs bg-slate-900/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40"
+                        placeholder="관리자 이메일"
+                      />
+                      <button
+                        type="submit" disabled={resetSending}
+                        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {resetSending ? '전송 중...' : '메일 발송'}
+                      </button>
+                    </div>
+                    {resetMessage && <p className="text-[11px] text-blue-300">{resetMessage}</p>}
+                    <button type="button" onClick={() => setResetMode(false)} className="text-[11px] text-slate-500 hover:text-slate-300">
+                      ← 로그인으로 돌아가기
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t border-slate-700/50 text-center">
               <Link to="/login" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
                 일반 사용자 로그인으로 돌아가기
               </Link>
