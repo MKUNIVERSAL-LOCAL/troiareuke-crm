@@ -21,7 +21,35 @@ export interface AuthApiUser {
   serviceEndsAt?: string | null;
   /** 초대된 관리자 첫 로그인 시 비밀번호 변경 강제 플래그 */
   mustChangePassword?: boolean;
+  /** 이 계정이 마지막으로 서버에 접속했을 때의 프로그램 버전 (배포 불변 원칙 — 구버전 지점 조기 발견용) */
+  lastAppVersion?: string | null;
+  /** 실행 형태: portable(단일 exe) / folder(폴더형) / admin(어드민 빌드) / web(브라우저) */
+  lastAppMode?: string | null;
+  /** 마지막 서버 접속 시각 (ISO) */
+  lastSeenAt?: string | null;
   createdAt: string;
+}
+
+// ── 프로그램 버전 헤더 ─────────────────────────────────────────────
+// 모든 API 호출에 실행 중인 프로그램 버전·형태를 실어 보낸다. 서버는 계정별 마지막 버전을 기록하고
+// 어드민 콘솔이 "구버전으로 남은 지점"을 보여준다 → 재다운로드 안내가 필요해지기 전에 발견.
+let appVersionHeader = '';
+const appModeHeader = (() => {
+  const api = (window as any).electronAPI;
+  if (!api?.isElectron) return 'web';
+  if (api.isAdminBuild) return 'admin';
+  return api.isPortable ? 'portable' : 'folder';
+})();
+try {
+  (window as any).electronAPI?.getAppVersion?.()
+    .then((v: unknown) => { if (typeof v === 'string' && /^\d+\.\d+\.\d+/.test(v)) appVersionHeader = v.slice(0, 32); })
+    .catch(() => {});
+} catch { /* 브라우저 실행 등 — 버전 헤더 없이 동작 */ }
+
+function appVersionHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'X-App-Mode': appModeHeader };
+  if (appVersionHeader) headers['X-App-Version'] = appVersionHeader;
+  return headers;
 }
 
 interface AuthResponse {
@@ -61,6 +89,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...appVersionHeaders(),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init.headers || {}),
       },

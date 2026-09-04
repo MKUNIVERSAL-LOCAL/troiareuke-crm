@@ -89,7 +89,7 @@ export default function UpdateNotification() {
             <Download className="w-5 h-5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-semibold">새 업데이트 v{version}</p>
-              <p className="text-xs text-blue-100">버튼을 누르면 NAS에서 내려받습니다.</p>
+              <p className="text-xs text-blue-100">자동으로 내려받아 프로그램을 닫을 때 적용됩니다.</p>
             </div>
             <button
               onClick={handleDownload}
@@ -121,7 +121,7 @@ export default function UpdateNotification() {
             <CheckCircle className="w-6 h-6 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-bold">v{version} 업데이트 준비 완료</p>
-              <p className="text-xs text-emerald-100">적용하면 앱이 자동으로 다시 실행됩니다.</p>
+              <p className="text-xs text-emerald-100">프로그램을 닫으면 자동 적용됩니다. 지금 적용하면 바로 다시 실행됩니다.</p>
             </div>
             <button
               onClick={() => window.electronAPI?.installUpdate?.()}

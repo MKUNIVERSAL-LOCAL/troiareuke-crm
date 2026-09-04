@@ -209,8 +209,33 @@ function publicUser(row) {
     isActive: row.is_active !== false,
     serviceEndsAt: row.service_ends_at ? new Date(row.service_ends_at).toISOString() : null,
     mustChangePassword: row.must_change_password === true,
+    // 프로그램 버전 텔레메트리 (배포 불변 원칙 — 구버전으로 남은 지점을 본사가 먼저 발견)
+    lastAppVersion: row.last_app_version || null,
+    lastAppMode: row.last_app_mode || null,
+    lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null,
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+// ── 프로그램 버전 헤더 기록 ─────────────────────────────────────────
+// 클라이언트(authApi.ts)가 매 요청에 X-App-Version / X-App-Mode를 실어 보낸다.
+// 값이 바뀌었거나 마지막 기록이 5분 이상 지났을 때만 UPDATE (요청마다 쓰지 않음).
+const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}([-.][0-9A-Za-z.-]{0,20})?$/;
+const APP_MODES = new Set(['portable', 'folder', 'admin', 'web']);
+const APP_SEEN_REFRESH_MS = 5 * 60 * 1000;
+function recordAppVersion(req, userRow) {
+  const version = String(req.get('x-app-version') || '').trim();
+  const mode = String(req.get('x-app-mode') || '').trim();
+  if (!APP_VERSION_RE.test(version) && !APP_MODES.has(mode)) return;
+  const nextVersion = APP_VERSION_RE.test(version) ? version : null;
+  const nextMode = APP_MODES.has(mode) ? mode : null;
+  const lastSeen = userRow.last_seen_at ? new Date(userRow.last_seen_at).getTime() : 0;
+  const unchanged = (userRow.last_app_version || null) === nextVersion && (userRow.last_app_mode || null) === nextMode;
+  if (unchanged && Date.now() - lastSeen < APP_SEEN_REFRESH_MS) return;
+  pool.query(
+    'UPDATE auth_users SET last_app_version = COALESCE($2, last_app_version), last_app_mode = COALESCE($3, last_app_mode), last_seen_at = now() WHERE id = $1',
+    [userRow.id, nextVersion, nextMode],
+  ).catch(error => log('warn', 'app_version_record_failed', { requestId: req.requestId, userId: userRow.id, ...errorDetails(error) }));
 }
 
 /**
@@ -389,6 +414,9 @@ async function initializeDatabase() {
     );
 
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_version text;
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_mode text;
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_seen_at timestamptz;
     ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS locked_at timestamptz;
     ALTER TABLE scheduled_messages ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0;
     ALTER TABLE message_send_log ADD COLUMN IF NOT EXISTS scheduled_message_id uuid;
@@ -463,6 +491,7 @@ async function requireSession(req, res, next) {
 
     req.authUser = rows[0];
     req.authSessionId = rows[0].session_id;
+    recordAppVersion(req, rows[0]);
     pool.query('UPDATE auth_sessions SET last_used_at = now() WHERE id = $1', [req.authSessionId])
       .catch(error => log('warn', 'session_touch_failed', {
         requestId: req.requestId,

@@ -2,6 +2,7 @@
 import { Users, Building2, Search, UserPlus } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser } from '../../lib/authApi';
+import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
@@ -17,6 +18,10 @@ interface UserRow {
   is_active: boolean;
   service_ends_at: string | null; // 사용기간 만료일 (null = 무제한)
   created_at: string;
+  // 프로그램 버전 텔레메트리 (NAS 모드) — 구버전으로 남은 계정을 본사가 먼저 발견
+  last_app_version?: string | null;
+  last_app_mode?: string | null;
+  last_seen_at?: string | null;
 }
 
 // 어드민이 계정 관리 시 발급하는 임시 비밀번호 (표시는 1회)
@@ -39,6 +44,7 @@ export default function AdminUsers() {
   const [loadError, setLoadError] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -61,7 +67,11 @@ export default function AdminUsers() {
           is_active: u.isActive !== false,
           service_ends_at: u.serviceEndsAt || null,
           created_at: u.createdAt,
+          last_app_version: u.lastAppVersion || null,
+          last_app_mode: u.lastAppMode || null,
+          last_seen_at: u.lastSeenAt || null,
         })));
+        fetchLatestChannelVersion().then(m => setLatestVersion(m?.version || null));
         // 지점 필터는 계정에 등록된 지점명으로 구성
         const branchNames = [...new Set(list.map(u => u.branchName).filter(Boolean))] as string[];
         setBranches(branchNames.map(name => ({ id: name, name } as Branch)));
@@ -483,6 +493,11 @@ export default function AdminUsers() {
                 {isAuthApiConfigured && (
                   <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">사용기간</th>
                 )}
+                {isAuthApiConfigured && (
+                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    프로그램 버전{latestVersion && <span className="ml-1 normal-case text-slate-600">(최신 v{latestVersion})</span>}
+                  </th>
+                )}
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">가입일</th>
                 {isAuthApiConfigured && (
                   <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">관리</th>
@@ -522,6 +537,26 @@ export default function AdminUsers() {
                           <span className="text-xs text-slate-600">—</span>
                         ) : (
                           <span className={`text-xs ${periodStatus(u).className}`}>{periodStatus(u).label}</span>
+                        )}
+                      </td>
+                    )}
+                    {isAuthApiConfigured && (
+                      <td className="px-6 py-4">
+                        {!u.last_app_version ? (
+                          <span className="text-xs text-slate-600" title="이 계정으로 v1.0.48 이상 프로그램이 서버에 접속한 기록이 없습니다">기록 없음</span>
+                        ) : (
+                          <div className="text-xs">
+                            <span className={isOutdated(u.last_app_version, latestVersion) ? 'font-bold text-red-400' : 'text-emerald-400'}>
+                              v{u.last_app_version}
+                            </span>
+                            {isOutdated(u.last_app_version, latestVersion) && (
+                              <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
+                            )}
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {appModeLabel[u.last_app_mode || ''] || u.last_app_mode || ''}
+                              {u.last_seen_at && ` · ${format(parseISO(u.last_seen_at), 'MM/dd HH:mm', { locale: ko })}`}
+                            </p>
+                          </div>
                         )}
                       </td>
                     )}

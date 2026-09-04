@@ -20,6 +20,27 @@ NAS에서: CRM-publish-update / CRM-server-update 가 최신 릴리스를 자동
 4. (권장) 완전 자동화: 작업 PC 공개키를 NAS 계정 `~/.ssh/authorized_keys`에 등록하면
    이후 Claude가 DSM 로그인 없이 게시·배포·검증까지 직접 수행 가능.
 
+## 채널 루트 정리 (1회, 2026-09-04 발견 — 오너 실행)
+
+루트에 7월 구버전 `트로이아르케 CRM.exe`(v1.0.25)와 `latest.json`이 남아 있어 옛 링크로 받으면 구버전이 설치된다.
+SSH(`ssh ys-lee0223@mkcorp.familyds.com`) 또는 DSM 작업 스케줄러(사용자 ys-lee0223)에서 아래를 한 번 실행:
+
+```sh
+cd /volume1/CRM-UPDATES
+mkdir -p _legacy-2026-07
+mv "트로이아르케 CRM.exe" latest.json _legacy-2026-07/
+ln -s portable/TroiareukeCRM-portable.exe "트로이아르케 CRM.exe"
+ln -s portable/latest.json latest.json
+# 검증 — 둘 다 HTTP 200이고 latest.json 버전이 portable/latest.json과 같아야 한다
+curl -sI http://127.0.0.1:18080/latest.json | head -1
+curl -s  http://127.0.0.1:18080/latest.json | grep version
+curl -sI "http://127.0.0.1:18080/%ED%8A%B8%EB%A1%9C%EC%9D%B4%EC%95%84%EB%A5%B4%EC%BC%80%20CRM.exe" | head -1
+```
+
+심링크가 200이 아니면(정적 서버가 심링크를 안 따라가면) `ln -s` 대신 `cp portable/... ./`로 복사하고,
+`CRM-publish-update` 스크립트 끝에 같은 `cp` 두 줄을 추가해 릴리스마다 루트도 갱신되게 한다.
+결과는 docs/DISTRIBUTION-POLICY.md 규칙 9에 "완료"로 기록.
+
 ## 주의
 
 - 스크립트는 `.env`를 절대 덮어쓰지 않는다(rsync --exclude).

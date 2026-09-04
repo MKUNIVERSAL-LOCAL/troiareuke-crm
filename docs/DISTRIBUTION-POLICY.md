@@ -27,8 +27,33 @@
    실행 문제는 프로세스 종료·캐시 정리·기존 파일로 해결을 우선하고,
    재다운로드가 불가피했다면 그 원인을 이 문서의 재발 방지 규칙으로 추가한다.
 
-## 근거 구조 (v1.0.40 확립)
+7. **업데이트는 무인(無人)이다 — 직원 클릭에 의존하지 않는다.** (2026-09-04, v1.0.48)
+   새 버전 발견 → 자동 다운로드 → 프로그램을 닫을 때 자동 적용. [지금 재시작]은 선택.
+   ⚠️ 실사고: 2026-09-04 박재영에스테틱에 재다운로드 링크 안내가 발생. 조사 결과 업데이트가
+   [지금 업데이트]·[지금 재시작] 두 번의 클릭에 의존했고 "나중에"를 누르면 영원히 구버전으로 남는 구조였다.
+   본사는 지점이 어떤 버전을 쓰는지 볼 방법도 없었다. 아래 8·9·10으로 구조적으로 막았다.
 
-- `electron/portable-updater.cjs`: 포터블=단일 exe 교체 / 폴더형=zip 전체 덮어쓰기(Expand-Archive) 자동 적용
+8. **지점별 실행 버전을 본사가 본다.** 프로그램은 API 호출마다 `X-App-Version`/`X-App-Mode`를 보내고
+   서버가 계정별로 기록한다(`auth_users.last_app_version/last_app_mode/last_seen_at`).
+   어드민 대시보드·지점 관리·사용자 관리에 표시되며 채널 최신 버전보다 낮으면 **구버전** 배지.
+   **릴리스 후 48시간 안에 구버전 지점 0곳을 확인**하는 것이 릴리스 완료 조건이다 (docs/BRANCH-INSTALL-GUIDE.md).
+
+9. **업데이트 채널 루트에 구버전 파일을 두지 않는다.** 2026-09-04 점검에서 루트(`/volume1/CRM-UPDATES/`)에
+   7월 v1.0.25 `트로이아르케 CRM.exe`와 `latest.json`이 그대로 노출돼 있었다(옛 링크로 받으면 구버전 설치).
+   ⏳ **오너 1회 실행 필요** (자동 모드는 NAS 파일 이동을 차단): `scripts/nas-tasks/README.md` "채널 루트 정리" 명령 —
+   구파일을 `_legacy-2026-07/`로 옮기고 옛 경로를 `portable/` 최신 파일 심링크로 대체한다. 이후 어떤 옛 주소로 받아도 최신.
+
+10. **신규 PC 설치 안내는 어드민 대시보드 [주소 복사]로.** 오너가 주소를 기억하거나 찾아 헤매지 않는다.
+    표준 안내 문구(`src/lib/updateChannel.ts` INSTALL_GUIDE_MESSAGE)에 "기존 PC는 다시 받을 필요 없음"이 명시돼 있다.
+
+11. **적용 헬퍼(PowerShell) 변경 시 `npm run test:updater` 필수.** `release:all`이 이 테스트를 게이트로 포함하므로
+    실패하면 릴리스가 만들어지지 않는다. 테스트는 exe 교체·잠금 재시도·해시 불일치·zip 스테이징·잘못된 zip 거부를 더미 파일로 검증한다.
+
+## 근거 구조 (v1.0.40 확립, v1.0.48 강화)
+
+- `electron/portable-updater.cjs`: 포터블=단일 exe 교체 / 폴더형=zip을 임시 폴더에 풀어 복사(부분 덮어쓰기 방지).
+  자동 다운로드 + `before-quit` 자동 적용 + 헬퍼 최대 2분 재시도 + 적용 후 해시 검증 + `updater.log` 기록.
+- `scripts/test-updater-helpers.mjs`: 헬퍼 스크립트 단독 테스트 (release:all 게이트).
+- `src/lib/authApi.ts` → `server/src/server.js recordAppVersion()`: 버전 텔레메트리. `src/lib/updateChannel.ts`: 어드민 비교 유틸.
 - `scripts/prepare-portable-update.mjs`: 빌드마다 포터블 exe + win64 zip을 스테이징하고 매니페스트에 양쪽 sha 기록
-- DSM `CRM-publish-update`: exe·zip·매니페스트·사이트를 채널에 게시 (TAG 한 줄만 갱신)
+- DSM `CRM-publish-update`: exe·zip·매니페스트·사이트를 채널에 게시 (최신 릴리스 자동 조회)

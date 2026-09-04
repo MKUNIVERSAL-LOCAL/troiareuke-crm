@@ -325,6 +325,31 @@ await test('시술 사진이 저장·조회·삭제된다 (지점 격리 포함)
   assert(after.data.exists === true && after.data.photos.length === 0, 'tombstone이 유지되지 않음');
 });
 
+await test('프로그램 버전 헤더가 계정에 기록되고 어드민 목록에 노출된다', async () => {
+  // 클라이언트(authApi.ts)는 매 요청에 X-App-Version / X-App-Mode를 보낸다 → requireSession이 기록
+  const me = await fetch(`${API}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${shopToken}`, 'X-App-Version': '1.0.48', 'X-App-Mode': 'portable' },
+  });
+  assert(me.status === 200, `me status=${me.status}`);
+  await new Promise(r => setTimeout(r, 300)); // fire-and-forget UPDATE 대기
+  const { status, data } = await call('/api/admin/users', { token: adminToken });
+  assert(status === 200, `status=${status}`);
+  const row = data.users.find(u => u.id === shopUserId);
+  assert(row?.lastAppVersion === '1.0.48', `lastAppVersion=${row?.lastAppVersion}`);
+  assert(row?.lastAppMode === 'portable', `lastAppMode=${row?.lastAppMode}`);
+  assert(typeof row?.lastSeenAt === 'string', 'lastSeenAt 누락');
+
+  // 형식이 어긋난 값은 무시되어 기존 기록이 유지된다
+  const bad = await fetch(`${API}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${shopToken}`, 'X-App-Version': '<script>', 'X-App-Mode': 'hacker' },
+  });
+  assert(bad.status === 200, `bad status=${bad.status}`);
+  await new Promise(r => setTimeout(r, 300));
+  const after = await call('/api/admin/users', { token: adminToken });
+  const row2 = after.data.users.find(u => u.id === shopUserId);
+  assert(row2?.lastAppVersion === '1.0.48' && row2?.lastAppMode === 'portable', '비정상 헤더가 기록을 덮어씀');
+});
+
 await test('프로필(매장 전화·주소)이 저장된다', async () => {
   const patch = await call('/api/auth/profile', {
     method: 'PATCH',

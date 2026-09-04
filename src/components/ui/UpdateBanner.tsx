@@ -26,8 +26,10 @@ export default function UpdateBanner() {
   const api = (window as any).electronAPI;
 
   useEffect(() => {
-    // Electron 앱이 아니거나, 자기교체가 불가능한(포터블이 아닌) 실행 형태면 업데이트 UI를 띄우지 않는다.
-    // (풀린 폴더 실행본은 [지금 재시작]을 눌러도 적용이 안 되는 함정 — 해당 배포본은 수동 관리)
+    // 포터블(단일 exe) 실행본 전용 배너. 폴더형(win-unpacked) 실행본은 UpdateNotification이 담당한다
+    // (preload의 removeUpdateListeners가 removeAllListeners라서 모드당 구독은 1개만).
+    // 2026-09-04: 다운로드·적용은 메인 프로세스가 무인으로 처리(자동 다운로드 → 종료 시 자동 적용).
+    // 이 배너는 진행 상황 안내 + [지금 재시작] 선택지만 제공한다.
     if (!api?.isElectron || !api?.isPortable) return;
 
     api.onUpdateAvailable((info: UpdateInfo) => {
@@ -49,7 +51,8 @@ export default function UpdateBanner() {
     api.onUpdateDownloaded((info: UpdateInfo) => {
       setUpdateInfo(info);
       setState('ready');
-      // 자동 재시작 금지 — 입력 중 작업 유실 방지. [지금 재시작] 클릭 시에만 적용.
+      // 자동 재시작 금지 — 입력 중 작업 유실 방지. 프로그램을 닫을 때 메인 프로세스가 자동 적용하고,
+      // [지금 재시작]을 누르면 즉시 적용된다.
     });
 
     api.onUpdateError(() => {
@@ -80,7 +83,7 @@ export default function UpdateBanner() {
             <polyline points="22 4 12 14.01 9 11.01" />
           </svg>
           <span>
-            <strong>v{updateInfo?.version}</strong> 업데이트 다운로드 완료 — [지금 재시작]을 누르면 적용됩니다
+            <strong>v{updateInfo?.version}</strong> 업데이트 준비 완료 — 프로그램을 닫으면 자동 적용됩니다 (지금 바로 적용하려면 [지금 재시작])
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -116,7 +119,7 @@ export default function UpdateBanner() {
         </svg>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between text-xs mb-1">
-            <span>업데이트가 진행됩니다... 잠시만 기다려주세요</span>
+            <span>새 버전을 자동으로 내려받는 중입니다 — 작업을 계속하셔도 됩니다</span>
             <span className="font-bold">{progress?.percent ?? 0}%</span>
           </div>
           <div className="w-full bg-white/20 rounded-full h-1">
@@ -130,7 +133,7 @@ export default function UpdateBanner() {
     );
   }
 
-  // ── 업데이트 발견 배너 — 변경 내용 확인 후 사용자가 직접 [지금 업데이트] 클릭 ──
+  // ── 업데이트 발견 배너 — 다운로드는 자동으로 시작되며, 버튼은 즉시 시작을 원할 때만 ──
   if (state === 'available') {
     return (
       <div className="w-full bg-[#1a3a8f] text-white shadow-sm">
@@ -142,7 +145,7 @@ export default function UpdateBanner() {
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
             <span className="truncate">
-              새 버전 <strong>v{updateInfo?.version}</strong> 업데이트가 있습니다
+              새 버전 <strong>v{updateInfo?.version}</strong> 발견 — 자동으로 내려받아 프로그램을 닫을 때 적용됩니다
             </span>
             {notes && (
               <button

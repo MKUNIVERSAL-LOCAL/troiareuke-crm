@@ -2,7 +2,7 @@
   "name": "troiareuke-crm",
   "productName": "트로이아르케 CRM",
   "private": true,
-  "version": "1.0.47",
+  "version": "1.0.48",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -13,7 +13,7 @@
     "electron:build": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win",
     "electron:build:portable": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win portable",
     "electron:portable:prepare": "node scripts/prepare-portable-update.mjs",
-    "release:all": "node scripts/check-routes.mjs && npm run electron:build:portable && npm run electron:portable:prepare && node scripts/create-github-release.mjs",
+    "release:all": "node scripts/check-routes.mjs && node scripts/test-updater-helpers.mjs && npm run electron:build:portable && npm run electron:portable:prepare && node scripts/create-github-release.mjs",
     "verify:nas": "node scripts/verify-nas-deploy.mjs",
     "check:routes": "node scripts/check-routes.mjs",
     "electron:installer": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis",
@@ -24,7 +24,8 @@
     "release:stage": "node scripts/stage-nas-update.mjs",
     "release:nas": "npm run electron:installer && npm run release:stage",
     "test:outbox": "node scripts/test-nas-outbox.mjs",
-    "deploy": "cross-env DEPLOY_TARGET=ghpages npm run build && gh-pages -d dist"
+    "deploy": "cross-env DEPLOY_TARGET=ghpages npm run build && gh-pages -d dist",
+    "test:updater": "node scripts/test-updater-helpers.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",

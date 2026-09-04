@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } f
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { createBranchAdmin, type AdminApiResult } from '../../lib/adminApi';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
+import { fetchLatestChannelVersion, compareVersions, isOutdated, appModeLabel } from '../../lib/updateChannel';
 
 // NAS 모드에서는 지점의 진실이 서버 계정(auth_users)의 branch_id/branch_name이다.
 // 기존처럼 localStorage를 읽으면 기기마다 목록이 달라지는 문제가 있어 서버에서 파생한다.
@@ -54,6 +55,18 @@ export default function Branches() {
   useEffect(() => { loadBranches(); }, []);
 
   const [nasUsersByBranch, setNasUsersByBranch] = useState<Record<string, AuthApiUser[]>>({});
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
+
+  /** 지점의 실행 버전 = 소속 계정 중 가장 최근 접속 기록의 버전 (없으면 null) */
+  function branchVersionInfo(branchId: string) {
+    const seen = (nasUsersByBranch[branchId] || []).filter(u => u.lastAppVersion);
+    if (seen.length === 0) return null;
+    seen.sort((a, b) => (b.lastSeenAt || '').localeCompare(a.lastSeenAt || ''));
+    const latestSeen = seen[0];
+    // 같은 지점 안에 더 낮은 버전으로 접속한 PC가 있으면 그것을 경고 대상으로 본다
+    const lowest = seen.reduce((acc, u) => (compareVersions(u.lastAppVersion, acc.lastAppVersion) < 0 ? u : acc), latestSeen);
+    return { version: lowest.lastAppVersion!, mode: lowest.lastAppMode || '', lastSeenAt: latestSeen.lastSeenAt || null };
+  }
 
   async function loadBranches() {
     setLoading(true);
@@ -68,6 +81,7 @@ export default function Branches() {
           (map[bid] ||= []).push(u);
         }
         setNasUsersByBranch(map);
+        fetchLatestChannelVersion().then(m => setLatestVersion(m?.version || null));
         setBranches(Object.entries(map).map(([bid, us]) => {
           const primary = us.find(u => u.role === 'admin') || us[0];
           return {
@@ -397,6 +411,11 @@ export default function Branches() {
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">유형</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">플랜</th>
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">상태</th>
+                {NAS_MODE && (
+                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    프로그램 버전{latestVersion && <span className="ml-1 normal-case text-slate-600">(최신 v{latestVersion})</span>}
+                  </th>
+                )}
                 <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">등록일</th>
                 <th className="text-right px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">액션</th>
               </tr>
@@ -429,6 +448,28 @@ export default function Branches() {
                         </span>
                       )}
                     </td>
+                    {NAS_MODE && (() => {
+                      const info = branchVersionInfo(b.id);
+                      const outdated = info ? isOutdated(info.version, latestVersion) : false;
+                      return (
+                        <td className="px-6 py-4">
+                          {!info ? (
+                            <span className="text-xs text-slate-600" title="v1.0.48 이상 프로그램이 접속하면 표시됩니다">기록 없음</span>
+                          ) : (
+                            <div className="text-xs">
+                              <span className={outdated ? 'font-bold text-red-400' : 'text-emerald-400'}>v{info.version}</span>
+                              {outdated && (
+                                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
+                              )}
+                              <p className="text-[11px] text-slate-500 mt-0.5">
+                                {appModeLabel[info.mode] || info.mode}
+                                {info.lastSeenAt && ` · ${format(parseISO(info.lastSeenAt), 'MM/dd HH:mm', { locale: ko })}`}
+                              </p>
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })()}
                     <td className="px-6 py-4 text-xs text-slate-500">
                       {format(parseISO(b.created_at), 'yyyy.MM.dd', { locale: ko })}
                     </td>
