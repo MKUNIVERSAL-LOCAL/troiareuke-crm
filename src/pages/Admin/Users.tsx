@@ -3,6 +3,8 @@ import { Users, Building2, Search, UserPlus } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser } from '../../lib/authApi';
 import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
+import { adminDeleteUser } from '../../lib/adminApi';
+import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
@@ -124,6 +126,26 @@ export default function AdminUsers() {
 
   // ── NAS 계정 관리 액션 (활성/비활성 · 비밀번호 재설정) ─────────
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+
+  // ── 계정 완전 삭제 (개인정보 삭제 요청 대응) — 타이핑 확인, 지점의 마지막 계정이면 지점 데이터도 삭제 옵션 ──
+  const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+  const [purgeBranchData, setPurgeBranchData] = useState(false);
+  const [deleteNotice, setDeleteNotice] = useState('');
+  const sameBranchCount = deleteTarget
+    ? users.filter(x => x.branch_name && x.branch_name === deleteTarget.branch_name && x.role !== 'superadmin').length
+    : 0;
+
+  async function runDeleteUser() {
+    if (!deleteTarget) return;
+    const r = await adminDeleteUser(deleteTarget.id, { confirmEmail: deleteTarget.email, purgeBranchData });
+    const purgedText = r.purged
+      ? ` 지점 데이터도 삭제됨(레코드 ${r.purged.records}, 사진 ${r.purged.photos}). 삭제 직전 스냅샷: ${r.snapshot}.`
+      : '';
+    setDeleteNotice(`${deleteTarget.email} 계정을 삭제했습니다.${purgedText}`);
+    setDeleteTarget(null);
+    setPurgeBranchData(false);
+    await loadData();
+  }
 
   async function handleToggleActive(user: UserRow) {
     const next = !user.is_active;
@@ -256,6 +278,39 @@ export default function AdminUsers() {
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       {/* 임시 비밀번호 결과 모달 — 복사 버튼 포함 */}
+      {deleteNotice && (
+        <div className="fixed bottom-6 right-6 z-40 max-w-md bg-slate-900 border border-emerald-500/40 rounded-2xl px-5 py-3 text-sm text-emerald-300 shadow-xl">
+          {deleteNotice}
+          <button onClick={() => setDeleteNotice('')} className="ml-3 text-xs text-slate-400 underline">닫기</button>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <DangerConfirmModal
+          title="계정 완전 삭제"
+          expected={deleteTarget.email}
+          expectedLabel="이메일"
+          confirmLabel="영구 삭제"
+          description={
+            <>
+              <p><b className="text-white">{deleteTarget.name || deleteTarget.email}</b> 계정을 서버에서 완전히 삭제합니다. 로그인 세션·재설정 토큰이 함께 삭제되고, 로그인 기록의 이메일은 마스킹됩니다.</p>
+              <p className="mt-2 text-xs text-slate-400">
+                이 계정이 속한 지점 <b className="text-slate-200">{deleteTarget.branch_name || '(지점 없음)'}</b>에는 이 계정을 포함해 {sameBranchCount}개 계정이 있습니다.
+                {sameBranchCount > 1 ? ' 다른 계정이 남아 있어 지점 데이터(고객·예약 등)는 유지됩니다.' : ' 마지막 계정입니다 — 아래 옵션을 켜면 지점 데이터도 함께 삭제됩니다.'}
+              </p>
+            </>
+          }
+          extra={sameBranchCount <= 1 && deleteTarget.branch_name ? (
+            <label className="flex items-start gap-2 text-xs text-slate-300 bg-red-500/5 border border-red-500/20 rounded-xl px-3 py-2 cursor-pointer">
+              <input type="checkbox" checked={purgeBranchData} onChange={e => setPurgeBranchData(e.target.checked)} className="mt-0.5" />
+              <span>지점 데이터(고객·예약·시술기록·사진·메시지 기록)도 함께 완전 삭제 — 삭제 직전 상태는 서버 백업 폴더에 자동 스냅샷으로 보관되며, 결제 요청 기록은 법정 보존 의무로 고객 식별 정보만 지운 채 남습니다.</span>
+            </label>
+          ) : undefined}
+          onConfirm={runDeleteUser}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
+
       {tempPwResult && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
@@ -593,6 +648,14 @@ export default function AdminUsers() {
                               className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
                             >
                               사용기간
+                            </button>
+                            <button
+                              onClick={() => { setDeleteTarget(u); setPurgeBranchData(false); }}
+                              disabled={actionBusy === u.id}
+                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                              title="계정과 개인정보를 완전히 삭제합니다 (되돌릴 수 없음, 삭제 직전 스냅샷 자동 보관)"
+                            >
+                              완전 삭제
                             </button>
                           </div>
                         )}

@@ -1,7 +1,8 @@
 ﻿import { useState, useEffect } from 'react';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
-import { createBranchAdmin, type AdminApiResult } from '../../lib/adminApi';
+import { createBranchAdmin, adminDeleteBranch, type AdminApiResult } from '../../lib/adminApi';
+import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
 import { fetchLatestChannelVersion, compareVersions, isOutdated, appModeLabel } from '../../lib/updateChannel';
 
@@ -56,6 +57,17 @@ export default function Branches() {
 
   const [nasUsersByBranch, setNasUsersByBranch] = useState<Record<string, AuthApiUser[]>>({});
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+
+  // ── 지점 완전 삭제 (폐업·계약 종료) — 지점명 타이핑 확인, 서버가 삭제 직전 스냅샷 보관 ──
+  const [deleteBranchTarget, setDeleteBranchTarget] = useState<Branch | null>(null);
+  const [deleteBranchNotice, setDeleteBranchNotice] = useState('');
+  async function runDeleteBranch() {
+    if (!deleteBranchTarget) return;
+    const r = await adminDeleteBranch(deleteBranchTarget.id, { confirmName: deleteBranchTarget.name });
+    setDeleteBranchNotice(`${deleteBranchTarget.name} 지점을 삭제했습니다 — 계정 ${r.accounts}개, 레코드 ${r.purged.records}건, 사진 ${r.purged.photos}건. 삭제 직전 스냅샷: ${r.snapshot}`);
+    setDeleteBranchTarget(null);
+    await loadBranches();
+  }
 
   /** 지점의 실행 버전 = 소속 계정 중 가장 최근 접속 기록의 버전 (없으면 null) */
   function branchVersionInfo(branchId: string) {
@@ -491,6 +503,15 @@ export default function Branches() {
                         >
                           {b.is_active ? '비활성화' : '활성화'}
                         </button>
+                        {NAS_MODE && (
+                          <button
+                            onClick={() => setDeleteBranchTarget(b)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400/70 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+                            title="지점 완전 삭제 (계정·데이터 전부, 되돌릴 수 없음 — 삭제 직전 스냅샷 자동 보관)"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -498,6 +519,28 @@ export default function Branches() {
               })}
             </tbody>
           </table>
+          {deleteBranchNotice && (
+            <div className="px-6 py-3 border-t border-emerald-500/30 text-sm text-emerald-300 flex items-center justify-between">
+              <span>{deleteBranchNotice}</span>
+              <button onClick={() => setDeleteBranchNotice('')} className="text-xs text-slate-400 underline">닫기</button>
+            </div>
+          )}
+          {deleteBranchTarget && (
+            <DangerConfirmModal
+              title="지점 완전 삭제"
+              expected={deleteBranchTarget.name}
+              expectedLabel="지점명"
+              confirmLabel="지점 영구 삭제"
+              description={
+                <>
+                  <p><b className="text-white">{deleteBranchTarget.name}</b> 지점의 계정 {(nasUsersByBranch[deleteBranchTarget.id] || []).length}개와 모든 데이터(고객·예약·시술기록·사진·메시지 기록·기능 설정)를 서버에서 완전히 삭제합니다.</p>
+                  <p className="mt-2 text-xs text-slate-400">삭제 직전 상태는 서버 백업 폴더에 자동 스냅샷으로 보관됩니다(백업 보존 기간 내 복원 가능). 결제 요청 기록은 법정 보존 의무로 고객 식별 정보만 지운 채 남습니다. 폐업·계약 종료 시에만 사용하세요.</p>
+                </>
+              }
+              onConfirm={runDeleteBranch}
+              onClose={() => setDeleteBranchTarget(null)}
+            />
+          )}
           </div>
         </div>
       )}

@@ -899,6 +899,307 @@ app.post('/api/admin/backup', requireSession, requireSuperadmin, async (_req, re
   }
 });
 
+// ── 운영 안전망 (2026-09-07, 파일럿 준비): 백업 목록·복원 / 데이터 반출 / 계정·지점 완전 삭제 ──
+// 원칙: 되돌릴 수 없는 작업(복원·삭제) 직전에 반드시 스냅샷을 BACKUP_DIR에 남긴다.
+//       삭제는 타이핑 확인(이메일/지점명)을 요구한다. 결제요청(payment_requests)은 전자상거래법 보존 의무로 남긴다.
+
+// branchNameOf(branchId)는 결제 페이지 절에 이미 정의돼 있다(호이스팅으로 여기서도 사용 가능).
+
+function backupFolderFor(branchName, branchId) {
+  return `${sanitizeFolderName(branchName || '')}_${sanitizeFolderName(branchId).slice(0, 8)}`;
+}
+
+/** BACKUP_DIR 전체를 훑어 이 지점의 백업(일일 + 스냅샷) 목록을 만든다. _SUCCESS.json의 branchId로 매칭. */
+async function listBackupsForBranch(branchId) {
+  if (!BACKUP_DIR) return [];
+  const result = [];
+  const folders = await fs.readdir(BACKUP_DIR, { withFileTypes: true }).catch(() => []);
+  for (const folder of folders) {
+    if (!folder.isDirectory()) continue;
+    const branchDir = path.join(BACKUP_DIR, folder.name);
+    const entries = await fs.readdir(branchDir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const dir = path.join(branchDir, entry.name);
+      let success;
+      try { success = JSON.parse(await fs.readFile(path.join(dir, '_SUCCESS.json'), 'utf8')); } catch { continue; }
+      if (success?.branchId !== branchId) continue;
+      const files = await fs.readdir(dir).catch(() => []);
+      result.push({
+        label: entry.name,
+        dir,
+        kind: /^\d{4}-\d{2}-\d{2}$/.test(entry.name) ? 'daily' : 'snapshot',
+        collections: files.filter(f => f.endsWith('.json') && DATA_COLLECTIONS.has(f.slice(0, -5))).map(f => f.slice(0, -5)),
+        hasPhotos: files.includes('crm_photos.json') || files.includes('photos_index.json'),
+        createdAt: success.createdAt || null,
+      });
+    }
+  }
+  return result.sort((a, b) => String(b.createdAt || b.label).localeCompare(String(a.createdAt || a.label)));
+}
+
+/** 복원·삭제 직전 안전 스냅샷 — 컬렉션 JSON + crm_photos.json(원본 행 그대로). 반환: 폴더 라벨 또는 null(BACKUP_DIR 없음). */
+async function snapshotBranch(branchId, kind) {
+  if (!BACKUP_DIR) return null;
+  const label = `${kind}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  const branchDir = path.join(BACKUP_DIR, backupFolderFor(await branchNameOf(branchId), branchId));
+  const dir = path.join(branchDir, label);
+  await fs.mkdir(dir, { recursive: true });
+  const { rows: recordRows } = await pool.query(
+    'SELECT collection, data FROM crm_records WHERE branch_id = $1 ORDER BY collection', [branchId]);
+  const byCollection = new Map();
+  for (const row of recordRows) {
+    if (!byCollection.has(row.collection)) byCollection.set(row.collection, []);
+    byCollection.get(row.collection).push(row.data);
+  }
+  for (const [collection, records] of byCollection) {
+    await fs.writeFile(path.join(dir, `${collection}.json`), JSON.stringify(records), 'utf8');
+  }
+  const { rows: photoRows } = await pool.query('SELECT entity_key, photos FROM crm_photos WHERE branch_id = $1', [branchId]);
+  if (photoRows.length > 0) {
+    await fs.writeFile(path.join(dir, 'crm_photos.json'), JSON.stringify(photoRows), 'utf8');
+  }
+  const { rows: accounts } = await pool.query('SELECT * FROM auth_users WHERE branch_id = $1', [branchId]);
+  if (accounts.length > 0) {
+    await fs.writeFile(path.join(dir, 'accounts.json'), JSON.stringify(accounts.map(publicUser)), 'utf8');
+  }
+  await fs.writeFile(path.join(dir, '_SUCCESS.json'),
+    JSON.stringify({ date: isoDate(new Date()), branchId, createdAt: new Date().toISOString(), kind }), 'utf8');
+  return label;
+}
+
+/** 백업 폴더에서 사진 행을 읽는다 — 스냅샷(crm_photos.json) 우선, 없으면 일일 백업(photos_index.json + 이미지 파일). */
+async function loadBackupPhotos(backup) {
+  const snapshotPath = path.join(backup.dir, 'crm_photos.json');
+  if (await pathExists(snapshotPath)) {
+    const rows = JSON.parse(await fs.readFile(snapshotPath, 'utf8'));
+    return Array.isArray(rows) ? rows.filter(r => isValidId(r?.entity_key) && Array.isArray(r.photos)) : [];
+  }
+  const indexPath = path.join(backup.dir, 'photos_index.json');
+  if (!(await pathExists(indexPath))) return [];
+  const index = JSON.parse(await fs.readFile(indexPath, 'utf8'));
+  const rows = [];
+  for (const entity of Array.isArray(index) ? index : []) {
+    if (!isValidId(entity?.entityKey) || !Array.isArray(entity.photos)) continue;
+    const photos = [];
+    for (const meta of entity.photos) {
+      if (!isValidId(meta?.id) || !meta.ext) continue;
+      const file = path.join(backup.dir, 'photos', sanitizeFolderName(entity.folder || ''), `${sanitizeFolderName(meta.id)}.${meta.ext}`);
+      try {
+        const buffer = await fs.readFile(file);
+        const mime = meta.ext === 'jpg' ? 'jpeg' : meta.ext;
+        const { ext, ...rest } = meta;
+        photos.push({ ...rest, dataUrl: `data:image/${mime};base64,${buffer.toString('base64')}` });
+      } catch { /* 파일 누락 시 해당 사진만 건너뜀 */ }
+    }
+    if (photos.length > 0) rows.push({ entity_key: entity.entityKey, photos });
+  }
+  return rows;
+}
+
+/** 지점 데이터 완전 삭제(트랜잭션 클라이언트 필요). payment_requests는 법정 보존으로 남기되 고객 식별 필드만 비운다. */
+async function purgeBranchData(client, branchId) {
+  const counts = {};
+  const del = async (label, sql) => { const r = await client.query(sql, [branchId]); counts[label] = r.rowCount; };
+  await del('records', 'DELETE FROM crm_records WHERE branch_id = $1');
+  await del('photos', 'DELETE FROM crm_photos WHERE branch_id = $1');
+  await del('messageLogs', 'DELETE FROM message_send_log WHERE branch_id = $1');
+  await del('scheduledMessages', 'DELETE FROM scheduled_messages WHERE branch_id = $1');
+  await del('featureFlags', 'DELETE FROM feature_flags WHERE branch_id = $1 OR scope = $1');
+  const anonymized = await client.query(
+    "UPDATE payment_requests SET customer_name = '(삭제됨)', customer_id = NULL, memo = NULL WHERE branch_id = $1 AND customer_name IS DISTINCT FROM '(삭제됨)'",
+    [branchId]);
+  counts.paymentRequestsAnonymized = anonymized.rowCount;
+  return counts;
+}
+
+/** 계정 1개 삭제(트랜잭션 클라이언트 필요) — 세션·토큰 삭제, 로그인 기록은 감사용으로 남기되 이메일을 마스킹. */
+async function deleteAccount(client, user) {
+  await client.query('DELETE FROM auth_sessions WHERE user_id = $1', [user.id]);
+  await client.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [user.id]);
+  await client.query('UPDATE auth_login_log SET email = $2, user_id = NULL, device_info = NULL, ip = NULL WHERE user_id = $1 OR email = $3',
+    [user.id, maskEmail(user.email) || '(삭제됨)', user.email]);
+  await client.query('DELETE FROM auth_users WHERE id = $1', [user.id]);
+}
+
+app.get('/api/admin/backups/:branchId', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    if (!isValidBranchId(req.params.branchId)) return res.status(400).json({ error: '지점 식별자를 확인해주세요.' });
+    const backups = await listBackupsForBranch(req.params.branchId);
+    res.json({ backupDirConfigured: Boolean(BACKUP_DIR), backups: backups.map(({ dir, ...rest }) => rest) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/restore', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    if (!BACKUP_DIR) return res.status(400).json({ error: '서버에 BACKUP_DIR가 설정되지 않았습니다.' });
+    const branchId = String(req.body.branchId || '').trim();
+    const label = String(req.body.label || '').trim();
+    if (!isValidBranchId(branchId) || !/^[A-Za-z0-9._:-]{1,80}$/.test(label)) {
+      return res.status(400).json({ error: '지점 식별자 또는 백업 이름을 확인해주세요.' });
+    }
+    const includePhotos = req.body.includePhotos !== false;
+    const requested = Array.isArray(req.body.collections)
+      ? req.body.collections.filter(c => typeof c === 'string' && DATA_COLLECTIONS.has(c)) : null;
+
+    const backup = (await listBackupsForBranch(branchId)).find(b => b.label === label);
+    if (!backup) return res.status(404).json({ error: '해당 백업을 찾을 수 없습니다.' });
+    const collections = requested?.length ? requested.filter(c => backup.collections.includes(c)) : backup.collections;
+    const photoRows = includePhotos && backup.hasPhotos ? await loadBackupPhotos(backup) : [];
+    if (collections.length === 0 && photoRows.length === 0) {
+      return res.status(400).json({ error: '복원할 데이터가 없습니다.' });
+    }
+
+    // 컬렉션 파일을 먼저 전부 읽고 검증 — 중간에 깨진 파일이 있으면 아무것도 바꾸지 않는다
+    const loaded = new Map();
+    for (const collection of collections) {
+      const rows = JSON.parse(await fs.readFile(path.join(backup.dir, `${collection}.json`), 'utf8'));
+      if (!Array.isArray(rows) || rows.some(row => !row || typeof row !== 'object' || Array.isArray(row) || !isValidId(row.id))) {
+        return res.status(422).json({ error: `백업 파일이 손상되었습니다: ${collection}.json` });
+      }
+      loaded.set(collection, rows);
+    }
+
+    const snapshot = await snapshotBranch(branchId, 'pre-restore');
+    const restored = {};
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const [collection, rows] of loaded) {
+        await client.query('DELETE FROM crm_records WHERE branch_id = $1 AND collection = $2', [branchId, collection]);
+        for (const row of rows) {
+          await client.query(`
+            INSERT INTO crm_records (branch_id, collection, id, data, updated_at) VALUES ($1, $2, $3, $4, now())
+            ON CONFLICT (branch_id, collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+          `, [branchId, collection, String(row.id).trim(), row]);
+        }
+        restored[collection] = rows.length;
+      }
+      if (photoRows.length > 0) {
+        await client.query('DELETE FROM crm_photos WHERE branch_id = $1', [branchId]);
+        for (const row of photoRows) {
+          await client.query(`
+            INSERT INTO crm_photos (branch_id, entity_key, photos, updated_at) VALUES ($1, $2, $3, now())
+            ON CONFLICT (branch_id, entity_key) DO UPDATE SET photos = EXCLUDED.photos, updated_at = now()
+          `, [branchId, row.entity_key, JSON.stringify(row.photos)]);
+        }
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+    log('warn', 'branch_restored', { branchId, label, restored, photos: photoRows.length, snapshot, by: req.authUser.id });
+    res.json({ restored, photos: photoRows.length, snapshot });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 지점 데이터 반출(JSON 번들) — 개인정보 열람·이관 요청 대응. 사진 본문은 용량 때문에 제외(개수만).
+app.get('/api/admin/export/:branchId', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const branchId = req.params.branchId;
+    if (!isValidBranchId(branchId)) return res.status(400).json({ error: '지점 식별자를 확인해주세요.' });
+    const { rows: recordRows } = await pool.query(
+      'SELECT collection, data FROM crm_records WHERE branch_id = $1 ORDER BY collection, updated_at', [branchId]);
+    const collections = {};
+    for (const row of recordRows) (collections[row.collection] ||= []).push(row.data);
+    const { rows: accounts } = await pool.query('SELECT * FROM auth_users WHERE branch_id = $1', [branchId]);
+    const { rows: [{ count: photoCount }] } = await pool.query(
+      "SELECT coalesce(sum(jsonb_array_length(photos)), 0)::int AS count FROM crm_photos WHERE branch_id = $1", [branchId]);
+    const { rows: messageSendLog } = await pool.query(
+      `SELECT type, title, content, phone, status, reason, created_at FROM message_send_log
+       WHERE branch_id = $1 AND created_at > now() - interval '90 days' ORDER BY created_at`, [branchId]);
+    log('info', 'branch_exported', { branchId, by: req.authUser.id, records: recordRows.length });
+    res.json({
+      exportedAt: new Date().toISOString(), branchId, branchName: await branchNameOf(branchId),
+      accounts: accounts.map(publicUser), collections, photoCount, messageSendLog,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 계정 완전 삭제 — 본문 confirmEmail이 정확히 일치해야 한다. 지점의 마지막 계정이고 purgeBranchData=true면 지점 데이터도 삭제.
+app.delete('/api/admin/users/:id', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: '계정 식별자를 확인해주세요.' });
+    const { rows } = await pool.query('SELECT * FROM auth_users WHERE id = $1', [req.params.id]);
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: '계정을 찾을 수 없습니다.' });
+    if (user.role === 'superadmin') return res.status(403).json({ error: '슈퍼어드민 계정은 삭제할 수 없습니다.' });
+    if (normalizeEmail(req.body.confirmEmail) !== user.email) {
+      return res.status(400).json({ error: '확인용 이메일이 일치하지 않습니다.' });
+    }
+    const purgeRequested = req.body.purgeBranchData === true;
+    let remaining = 0;
+    if (user.branch_id) {
+      const { rows: [{ count }] } = await pool.query(
+        'SELECT count(*)::int AS count FROM auth_users WHERE branch_id = $1 AND id <> $2', [user.branch_id, user.id]);
+      remaining = count;
+    }
+    const willPurge = purgeRequested && user.branch_id && remaining === 0;
+    const snapshot = willPurge ? await snapshotBranch(user.branch_id, 'pre-delete') : null;
+
+    let purged = null;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await deleteAccount(client, user);
+      if (willPurge) purged = await purgeBranchData(client, user.branch_id);
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+    log('warn', 'account_deleted', { userId: user.id, email: maskEmail(user.email), branchId: user.branch_id, purged, snapshot, by: req.authUser.id });
+    res.json({ deleted: true, purged, snapshot, remainingAccountsInBranch: remaining });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 지점 완전 삭제 — 지점의 모든 계정 + 데이터. confirmName은 지점명(계정에 기록된 branch_name)과 정확히 일치해야 한다.
+app.delete('/api/admin/branches/:branchId', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const branchId = req.params.branchId;
+    if (!isValidBranchId(branchId)) return res.status(400).json({ error: '지점 식별자를 확인해주세요.' });
+    const { rows: users } = await pool.query('SELECT * FROM auth_users WHERE branch_id = $1', [branchId]);
+    if (users.some(u => u.role === 'superadmin')) return res.status(403).json({ error: '슈퍼어드민이 속한 지점은 삭제할 수 없습니다.' });
+    const branchName = await branchNameOf(branchId);
+    const expected = String(branchName || branchId).trim();
+    if (String(req.body.confirmName || '').trim() !== expected) {
+      return res.status(400).json({ error: '확인용 지점명이 일치하지 않습니다.' });
+    }
+    const snapshot = await snapshotBranch(branchId, 'pre-delete');
+    let purged;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const user of users) await deleteAccount(client, user);
+      purged = await purgeBranchData(client, branchId);
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+    log('warn', 'branch_deleted', { branchId, branchName, accounts: users.length, purged, snapshot, by: req.authUser.id });
+    notifyOps('branch_deleted', { branchId, branchName, accounts: users.length, purged, snapshot });
+    res.json({ deleted: true, accounts: users.length, purged, snapshot });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // 슈퍼어드민 전용 읽기 API — 모든 지점의 현황과 원본 데이터를 조회한다.
 app.get('/api/admin/overview', requireSession, requireSuperadmin, async (_req, res, next) => {
   try {
@@ -2657,7 +2958,24 @@ async function runBackup() {
         }
       }
 
-      await fs.writeFile(path.join(dateDir, '_SUCCESS.json'), JSON.stringify({ date, branchId }), 'utf8');
+      // 사진 메타 인덱스 — 복원 시 이미지 파일을 entity_key로 되돌리기 위해 (폴더명은 sanitize로 비가역)
+      if (photoRows.some(r => Array.isArray(r.photos) && r.photos.length > 0)) {
+        const photosIndex = photoRows
+          .filter(r => Array.isArray(r.photos) && r.photos.length > 0)
+          .map(({ entity_key: entityKey, photos }) => ({
+            entityKey,
+            folder: sanitizeFolderName(entityKey.replace(/:/g, '_')),
+            photos: photos.map(photo => {
+              const match = /^data:image\/(jpeg|png|webp|gif);base64,/i.exec(photo?.dataUrl || '');
+              const { dataUrl, ...meta } = photo || {};
+              return { ...meta, ext: match ? (match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase()) : null };
+            }),
+          }));
+        await fs.writeFile(path.join(dateDir, 'photos_index.json'), JSON.stringify(photosIndex), 'utf8');
+        fileCount += 1;
+      }
+
+      await fs.writeFile(path.join(dateDir, '_SUCCESS.json'), JSON.stringify({ date, branchId, createdAt: new Date().toISOString(), kind: 'daily' }), 'utf8');
       await publishBackupDirectory(dateDir, finalDateDir);
 
       // 보존 기간 지난 날짜 폴더 정리

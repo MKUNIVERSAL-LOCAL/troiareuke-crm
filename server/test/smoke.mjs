@@ -371,6 +371,93 @@ await test('로그인 성공·실패가 서버 로그인 기록에 남고 어드
   assert(denied.status === 403, `denied status=${denied.status}`);
 });
 
+await test('백업 목록 조회 → 복원이 스냅샷을 남기고 데이터를 되돌린다', async () => {
+  // 현재 상태를 백업(일일 백업 실행) → 데이터 변경 → 백업으로 복원 → 원상 확인
+  const before = await call('/api/data/customers', { token: shopToken });
+  assert(before.status === 200, `before status=${before.status}`);
+  const baseline = before.data.rows.map(r => r.id).sort();
+  const backupRun = await call('/api/admin/backup', { method: 'POST', token: adminToken });
+  assert(backupRun.status === 200, `backup status=${backupRun.status} ${JSON.stringify(backupRun.data)}`);
+
+  const list = await call(`/api/admin/backups/${encodeURIComponent(shopBranchId)}`, { token: adminToken });
+  assert(list.status === 200 && list.data.backupDirConfigured === true, `list status=${list.status}`);
+  const daily = list.data.backups.find(b => b.kind === 'daily' && b.collections.includes('customers'));
+  assert(daily, `일일 백업 없음: ${JSON.stringify(list.data.backups)}`);
+
+  // 변경: 고객 1명 추가
+  const added = await call('/api/data/customers', { method: 'PUT', token: shopToken, body: { rows: [{ id: 'restore-victim', name: '복원테스트' }] } });
+  assert(added.status === 200, `put status=${added.status}`);
+
+  const restore = await call('/api/admin/restore', {
+    method: 'POST', token: adminToken, body: { branchId: shopBranchId, label: daily.label, collections: ['customers'] },
+  });
+  assert(restore.status === 200, `restore status=${restore.status} ${JSON.stringify(restore.data)}`);
+  assert(typeof restore.data.snapshot === 'string' && restore.data.snapshot.startsWith('pre-restore-'), '복원 전 스냅샷 없음');
+  assert(restore.data.restored.customers === baseline.length, `복원 행수 ${restore.data.restored.customers} != ${baseline.length}`);
+
+  const after = await call('/api/data/customers', { token: shopToken });
+  assert(JSON.stringify(after.data.rows.map(r => r.id).sort()) === JSON.stringify(baseline), '복원 후 데이터가 백업 시점과 다름');
+
+  // 스냅샷도 목록에 보이고, 일반 계정은 접근 불가
+  const list2 = await call(`/api/admin/backups/${encodeURIComponent(shopBranchId)}`, { token: adminToken });
+  assert(list2.data.backups.some(b => b.label === restore.data.snapshot && b.kind === 'snapshot'), '스냅샷이 목록에 없음');
+  const denied = await call('/api/admin/restore', { method: 'POST', token: shopToken, body: { branchId: shopBranchId, label: daily.label } });
+  assert(denied.status === 403, `denied status=${denied.status}`);
+});
+
+await test('지점 데이터 반출(JSON)이 컬렉션·계정·사진 개수를 담는다', async () => {
+  const { status, data } = await call(`/api/admin/export/${encodeURIComponent(shopBranchId)}`, { token: adminToken });
+  assert(status === 200, `status=${status}`);
+  assert(data.branchId === shopBranchId && Array.isArray(data.collections.customers), '컬렉션 누락');
+  assert(Array.isArray(data.accounts) && data.accounts.every(a => a.passwordHash === undefined && a.password_hash === undefined), '계정에 비밀번호 해시 노출');
+  assert(typeof data.photoCount === 'number', 'photoCount 누락');
+});
+
+await test('지점 완전 삭제는 지점명 확인이 맞을 때만 계정·데이터를 지우고 스냅샷을 남긴다', async () => {
+  // 삭제 전용 지점 생성
+  const created = await call('/api/admin/users', {
+    method: 'POST', token: adminToken,
+    body: { email: 'purge@smoke.test', name: '삭제지점장', branchName: '삭제테스트지점', shopType: '에스테틱샵', plan: 'trial' },
+  });
+  assert(created.status === 201, `create status=${created.status}`);
+  const purgeBranchId = created.data.user.branchId;
+  const login = await call('/api/auth/login', { method: 'POST', body: { email: 'purge@smoke.test', password: created.data.temporaryPassword } });
+  assert(login.status === 200, `login status=${login.status}`);
+  const put = await call('/api/data/customers', { method: 'PUT', token: login.data.token, body: { rows: [{ id: 'purge-c1', name: '지워질고객' }] } });
+  assert(put.status === 200, `put status=${put.status}`);
+
+  const wrong = await call(`/api/admin/branches/${encodeURIComponent(purgeBranchId)}`, { method: 'DELETE', token: adminToken, body: { confirmName: '다른이름' } });
+  assert(wrong.status === 400, `wrong-name status=${wrong.status}`);
+
+  const del = await call(`/api/admin/branches/${encodeURIComponent(purgeBranchId)}`, { method: 'DELETE', token: adminToken, body: { confirmName: '삭제테스트지점' } });
+  assert(del.status === 200 && del.data.deleted === true, `delete status=${del.status} ${JSON.stringify(del.data)}`);
+  assert(del.data.accounts === 1 && del.data.purged.records === 1, `purge 결과 이상: ${JSON.stringify(del.data)}`);
+  assert(typeof del.data.snapshot === 'string' && del.data.snapshot.startsWith('pre-delete-'), '삭제 전 스냅샷 없음');
+
+  const relogin = await call('/api/auth/login', { method: 'POST', body: { email: 'purge@smoke.test', password: created.data.temporaryPassword } });
+  assert(relogin.status === 401, `삭제된 계정 로그인 status=${relogin.status}`);
+  const gone = await call(`/api/admin/data/${encodeURIComponent(purgeBranchId)}/customers`, { token: adminToken });
+  assert(gone.status === 200 && gone.data.total === 0, `데이터 잔존: ${JSON.stringify(gone.data)}`);
+});
+
+await test('계정 완전 삭제는 이메일 확인이 맞을 때만 동작하고 슈퍼어드민은 거부된다', async () => {
+  const created = await call('/api/admin/users', {
+    method: 'POST', token: adminToken,
+    body: { email: 'staff-del@smoke.test', name: '삭제직원', branchId: shopBranchId, branchName: '아르케스파 1호점', role: 'staff' },
+  });
+  assert(created.status === 201, `create status=${created.status}`);
+  const wrong = await call(`/api/admin/users/${created.data.user.id}`, { method: 'DELETE', token: adminToken, body: { confirmEmail: 'nope@smoke.test', purgeBranchData: true } });
+  assert(wrong.status === 400, `wrong-email status=${wrong.status}`);
+  const del = await call(`/api/admin/users/${created.data.user.id}`, { method: 'DELETE', token: adminToken, body: { confirmEmail: 'staff-del@smoke.test', purgeBranchData: true } });
+  assert(del.status === 200 && del.data.deleted === true && del.data.purged === null, `delete: ${JSON.stringify(del.data)}`);
+  // 같은 지점에 다른 계정(shopUserId)이 남아 있으므로 지점 데이터는 보존된다
+  const kept = await call('/api/data/customers', { token: shopToken });
+  assert(kept.status === 200 && kept.data.rows.length > 0, '다른 계정이 남았는데 지점 데이터가 지워짐');
+  const me = await call('/api/auth/me', { token: adminToken });
+  const superDel = await call(`/api/admin/users/${me.data.user.id}`, { method: 'DELETE', token: adminToken, body: { confirmEmail: me.data.user.email } });
+  assert(superDel.status === 403, `superadmin delete status=${superDel.status}`);
+});
+
 await test('프로필(매장 전화·주소)이 저장된다', async () => {
   const patch = await call('/api/auth/profile', {
     method: 'PATCH',

@@ -8,9 +8,11 @@ import clsx from 'clsx';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import {
   fetchAdminOverview, fetchAdminBranchData, fetchAdminBranchMessages, fetchAdminBranchPhotos,
+  adminListBackups, adminRestoreBackup, adminExportBranch, downloadJsonFile,
   type AdminBranchOverview, type AdminDataRow, type AdminMessageLogRow,
-  type AdminScheduledRow, type AdminPhotoEntity,
+  type AdminScheduledRow, type AdminPhotoEntity, type AdminBackupEntry,
 } from '../../lib/adminApi';
+import BackupRestoreView from '../../components/admin/BackupRestoreView';
 
 const COLLECTION_LABELS: Record<string, string> = {
   customers: '고객',
@@ -78,8 +80,25 @@ export default function DataBrowser() {
   const [sendLog, setSendLog] = useState<AdminMessageLogRow[]>([]);
   const [scheduled, setScheduled] = useState<AdminScheduledRow[]>([]);
   const [photoEntities, setPhotoEntities] = useState<AdminPhotoEntity[]>([]);
+  const [backups, setBackups] = useState<AdminBackupEntry[]>([]);
+  const [backupDirConfigured, setBackupDirConfigured] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   const [detailRow, setDetailRow] = useState<AdminDataRow | null>(null);
+
+  async function handleExport(branch: AdminBranchOverview) {
+    setExporting(true);
+    setError(null);
+    try {
+      const bundle = await adminExportBranch(branch.branchId);
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJsonFile(`더마솔루션-지점데이터-${(branch.branchName || branch.branchId).replace(/[\\/:*?"<>|]/g, '')}-${stamp}.json`, bundle);
+    } catch (e: any) {
+      setError(e?.message || '데이터 반출에 실패했습니다.');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const loadOverview = useCallback(async () => {
     if (!isAuthApiConfigured) { setLoadingBranches(false); return; }
@@ -108,6 +127,10 @@ export default function DataBrowser() {
       } else if (collection === '__photos') {
         const res = await fetchAdminBranchPhotos(branch.branchId);
         setPhotoEntities(res.entities);
+      } else if (collection === '__backups') {
+        const res = await adminListBackups(branch.branchId);
+        setBackups(res.backups);
+        setBackupDirConfigured(res.backupDirConfigured);
       } else {
         const res = await fetchAdminBranchData(branch.branchId, collection, { limit: PAGE_SIZE, offset: off, q: q || undefined });
         setRows(res.rows);
@@ -268,6 +291,23 @@ export default function DataBrowser() {
                 >
                   <ImageIcon size={11} /> 사진
                 </button>
+                <button
+                  onClick={() => changeTab('__backups')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1',
+                    tab === '__backups' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-amber-400/80 hover:text-amber-300'
+                  )}
+                >
+                  <RefreshCw size={11} /> 백업·복원
+                </button>
+                <button
+                  onClick={() => handleExport(selectedBranch)}
+                  disabled={exporting}
+                  className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:text-white transition-colors disabled:opacity-50"
+                  title="이 지점의 전체 데이터(사진 제외)를 JSON 파일로 저장 — 개인정보 열람·이관 요청 대응"
+                >
+                  {exporting ? '반출 중…' : '데이터 반출(JSON)'}
+                </button>
               </div>
 
               {loadingRows ? (
@@ -278,6 +318,18 @@ export default function DataBrowser() {
                 <MessagesView sendLog={sendLog} scheduled={scheduled} />
               ) : tab === '__photos' ? (
                 <PhotosView entities={photoEntities} />
+              ) : tab === '__backups' ? (
+                <BackupRestoreView
+                  branch={selectedBranch}
+                  backups={backups}
+                  backupDirConfigured={backupDirConfigured}
+                  onRestore={async payload => {
+                    const result = await adminRestoreBackup(payload);
+                    await loadOverview();
+                    await loadRows(selectedBranch, '__backups', 0, '');
+                    return result;
+                  }}
+                />
               ) : (
                 <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
                   {/* 검색 */}

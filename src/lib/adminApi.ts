@@ -221,6 +221,70 @@ export function fetchAdminBranchPhotos(branchId: string) {
   );
 }
 
+// ── 운영 안전망: 백업 목록·복원·반출·완전 삭제 (2026-09-07, 파일럿 준비) ──────────
+export interface AdminBackupEntry {
+  /** 폴더명 — 일일 백업은 'YYYY-MM-DD', 자동 스냅샷은 'pre-restore-…' / 'pre-delete-…' */
+  label: string;
+  kind: 'daily' | 'snapshot';
+  collections: string[];
+  hasPhotos: boolean;
+  createdAt: string | null;
+}
+
+export function adminListBackups(branchId: string) {
+  return apiRequest<{ backups: AdminBackupEntry[]; backupDirConfigured: boolean }>(
+    `/api/admin/backups/${encodeURIComponent(branchId)}`
+  );
+}
+
+export function adminRestoreBackup(payload: { branchId: string; label: string; collections?: string[]; includePhotos?: boolean }) {
+  return apiRequest<{ restored: Record<string, number>; photos: number; snapshot: string | null }>(
+    '/api/admin/restore',
+    { method: 'POST', body: JSON.stringify(payload) }
+  );
+}
+
+export interface AdminBranchExport {
+  exportedAt: string;
+  branchId: string;
+  branchName: string | null;
+  accounts: unknown[];
+  collections: Record<string, unknown[]>;
+  photoCount: number;
+  messageSendLog: unknown[];
+}
+
+export function adminExportBranch(branchId: string) {
+  return apiRequest<AdminBranchExport>(`/api/admin/export/${encodeURIComponent(branchId)}`);
+}
+
+export function adminDeleteUser(userId: string, payload: { confirmEmail: string; purgeBranchData: boolean }) {
+  return apiRequest<{ deleted: boolean; purged: Record<string, number> | null; snapshot: string | null }>(
+    `/api/admin/users/${encodeURIComponent(userId)}`,
+    { method: 'DELETE', body: JSON.stringify(payload) }
+  );
+}
+
+export function adminDeleteBranch(branchId: string, payload: { confirmName: string }) {
+  return apiRequest<{ deleted: boolean; accounts: number; purged: Record<string, number>; snapshot: string | null }>(
+    `/api/admin/branches/${encodeURIComponent(branchId)}`,
+    { method: 'DELETE', body: JSON.stringify(payload) }
+  );
+}
+
+/** 반출 JSON을 파일로 저장 (브라우저·Electron 공통) */
+export function downloadJsonFile(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function createBranchAdmin(
   payload: CreateBranchAdminPayload
 ): Promise<AdminApiResult> {
