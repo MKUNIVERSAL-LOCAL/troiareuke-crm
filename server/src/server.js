@@ -4,7 +4,7 @@ import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
@@ -177,7 +177,7 @@ const dataLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: req => {
     const authorization = req.get('authorization') || '';
-    return authorization.startsWith('Bearer ') ? `sess:${tokenHash(authorization.slice(7))}` : `ip:${req.ip}`;
+    return authorization.startsWith('Bearer ') ? `sess:${tokenHash(authorization.slice(7))}` : `ip:${ipKeyGenerator(req.ip)}`;
   },
   handler: (req, res, _next, options) => {
     log('warn', 'rate_limit_data', { path: req.path, ip: req.ip });
@@ -1005,7 +1005,7 @@ async function purgeBranchData(client, branchId) {
   await del('photos', 'DELETE FROM crm_photos WHERE branch_id = $1');
   await del('messageLogs', 'DELETE FROM message_send_log WHERE branch_id = $1');
   await del('scheduledMessages', 'DELETE FROM scheduled_messages WHERE branch_id = $1');
-  await del('featureFlags', 'DELETE FROM feature_flags WHERE branch_id = $1 OR scope = $1');
+  await del('featureFlags', 'DELETE FROM feature_flags WHERE scope = $1');
   const anonymized = await client.query(
     "UPDATE payment_requests SET customer_name = '(삭제됨)', customer_id = NULL, memo = NULL WHERE branch_id = $1 AND customer_name IS DISTINCT FROM '(삭제됨)'",
     [branchId]);

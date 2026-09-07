@@ -372,10 +372,14 @@ await test('로그인 성공·실패가 서버 로그인 기록에 남고 어드
 });
 
 await test('백업 목록 조회 → 복원이 스냅샷을 남기고 데이터를 되돌린다', async () => {
-  // 현재 상태를 백업(일일 백업 실행) → 데이터 변경 → 백업으로 복원 → 원상 확인
+  // 기준 데이터를 심고 백업(일일 백업 실행) → 데이터 변경 → 백업으로 복원 → 원상 확인
+  // (앞선 테스트들이 이 지점의 고객을 비워 둘 수 있으므로 이 테스트는 자기 데이터를 스스로 만든다)
+  const seed = await call('/api/data/customers', { method: 'PUT', token: shopToken, body: { rows: [{ id: 'restore-base', name: '복원기준' }] } });
+  assert(seed.status === 200, `seed status=${seed.status}`);
   const before = await call('/api/data/customers', { token: shopToken });
   assert(before.status === 200, `before status=${before.status}`);
   const baseline = before.data.rows.map(r => r.id).sort();
+  assert(baseline.includes('restore-base'), '기준 데이터 저장 실패');
   const backupRun = await call('/api/admin/backup', { method: 'POST', token: adminToken });
   assert(backupRun.status === 200, `backup status=${backupRun.status} ${JSON.stringify(backupRun.data)}`);
 
@@ -397,6 +401,7 @@ await test('백업 목록 조회 → 복원이 스냅샷을 남기고 데이터�
 
   const after = await call('/api/data/customers', { token: shopToken });
   assert(JSON.stringify(after.data.rows.map(r => r.id).sort()) === JSON.stringify(baseline), '복원 후 데이터가 백업 시점과 다름');
+  assert(!after.data.rows.some(r => r.id === 'restore-victim'), '백업 이후 추가된 행이 복원 후에도 남아 있음');
 
   // 스냅샷도 목록에 보이고, 일반 계정은 접근 불가
   const list2 = await call(`/api/admin/backups/${encodeURIComponent(shopBranchId)}`, { token: adminToken });
@@ -408,7 +413,8 @@ await test('백업 목록 조회 → 복원이 스냅샷을 남기고 데이터�
 await test('지점 데이터 반출(JSON)이 컬렉션·계정·사진 개수를 담는다', async () => {
   const { status, data } = await call(`/api/admin/export/${encodeURIComponent(shopBranchId)}`, { token: adminToken });
   assert(status === 200, `status=${status}`);
-  assert(data.branchId === shopBranchId && Array.isArray(data.collections.customers), '컬렉션 누락');
+  assert(data.branchId === shopBranchId && Array.isArray(data.collections.customers), `컬렉션 누락: ${Object.keys(data.collections || {}).join(',')}`);
+  assert(data.collections.customers.some(c => c.id === 'restore-base'), '반출 데이터에 기준 고객 없음');
   assert(Array.isArray(data.accounts) && data.accounts.every(a => a.passwordHash === undefined && a.password_hash === undefined), '계정에 비밀번호 해시 노출');
   assert(typeof data.photoCount === 'number', 'photoCount 누락');
 });
@@ -452,7 +458,7 @@ await test('계정 완전 삭제는 이메일 확인이 맞을 때만 동작하�
   assert(del.status === 200 && del.data.deleted === true && del.data.purged === null, `delete: ${JSON.stringify(del.data)}`);
   // 같은 지점에 다른 계정(shopUserId)이 남아 있으므로 지점 데이터는 보존된다
   const kept = await call('/api/data/customers', { token: shopToken });
-  assert(kept.status === 200 && kept.data.rows.length > 0, '다른 계정이 남았는데 지점 데이터가 지워짐');
+  assert(kept.status === 200 && kept.data.rows.some(r => r.id === 'restore-base'), '다른 계정이 남았는데 지점 데이터가 지워짐');
   const me = await call('/api/auth/me', { token: adminToken });
   const superDel = await call(`/api/admin/users/${me.data.user.id}`, { method: 'DELETE', token: adminToken, body: { confirmEmail: me.data.user.email } });
   assert(superDel.status === 403, `superadmin delete status=${superDel.status}`);
