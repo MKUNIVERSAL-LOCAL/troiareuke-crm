@@ -44,10 +44,10 @@
 
 | 항목 | 기획 근거 | 현재 | 막힌 이유 / 필요한 결정 |
 |---|---|---|---|
-| 킬러① AI 피부진단 (Perfect Corp 등 전문 API) | PRODUCT-VISION, RESEARCH-AI-SKIN-API | OpenAI/Gemini 비전 대체, 기본 숨김 | 전문 API 계약·개인정보 국외이전 동의 UI. 또는 현행 유지하고 **기기 토글 기본 ON + 본사 키 서버 프록시**로 노출할지 |
+| 킬러① AI 피부진단 (Perfect Corp 등 전문 API) | PRODUCT-VISION, RESEARCH-AI-SKIN-API | ✅ v1.0.55 본사 키 서버 중계(/api/ai/*, 지점별 월 한도) + AI 사용 가능 시 카드 자동 노출 | 남은 것: 본사 AI 키 `.env` 투입(비용 발생, 오너). 전문 API(Perfect Corp)는 별도 결정 |
 | 킬러② Before/After 타임랩스 | PRODUCT-VISION | 뷰어만 | 촬영 정렬 가이드·카톡 공유 링크 미구현 — 우선순위 결정 |
 | 킬러③ 자동 재방문 알림 | PRODUCT-VISION | 서버 포트 존재, OFF | **발송사 계약**(SOLAPI 알림톡 8원/건, 비즈채널·템플릿 심사 2~3주) → `.env` 4개 + `REMINDER_ENABLED=true` |
-| 문자·알림톡 실발송 | RESEARCH-KAKAO-ALIMTALK | pending 정직 표기 | 같은 발송사 계약. 서버 어댑터는 범용 HTTP 중계만 있어 **SOLAPI 전용 어댑터 1개 구현** 필요(작음) |
+| 문자·알림톡 실발송 | RESEARCH-KAKAO-ALIMTALK | ✅ v1.0.55 SOLAPI 어댑터(SMS/LMS) 구현 — `.env` SOLAPI_API_KEY/SECRET/SENDER + SMS_PROVIDER=solapi 로 즉시 발송 | 남은 것: 발송사 계약(오너). 알림톡은 템플릿 승인 후 별도 |
 | PG 실개통(결제 링크) | PAYMENT-INTEGRATION | 코드 완료, 키 대기 | 토스 계약·전자상거래 표시사항 `.env` 8개. 정산 주체 A(본사 일괄) 확정됐는지 |
 | 네이버 예약 동기화 | 미구현기능_점검 ⑤ | 배지 "준비 중" | 솔루션 파트너센터 승인 신청 여부 |
 | Google 캘린더 | REMEDIATION 단계2 | 코드 완료, 클라이언트 ID 없음 | Google Cloud 콘솔 OAuth 클라이언트 생성 → 빌드 env. 무료, 반나절 |

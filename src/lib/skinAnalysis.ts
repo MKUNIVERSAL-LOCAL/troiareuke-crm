@@ -10,6 +10,7 @@
 // ⚠️ NAS 백엔드 준비 시: 키를 서버에 두고 이 파일의 fetch를 NAS 프록시로
 //    교체하면 클라이언트에 키 노출 없이 동작(연동 지점 = 이 파일).
 // ═══════════════════════════════════════════════════════════════
+import { isAiProxyEnabled, aiProxySkinAnalysis } from './aiProxy';
 
 export interface SkinScores {
   moisture: number;      // 수분
@@ -44,8 +45,9 @@ function getKeys() {
   return { openai, gemini };
 }
 
-/** 비전 지원 AI 키가 하나라도 있는지 */
+/** 사용 가능 여부 — 본사 AI 중계가 켜져 있거나, 이 기기에 비전 키가 있으면 true */
 export function isSkinAnalysisAvailable(): boolean {
+  if (isAiProxyEnabled()) return true;
   const { openai, gemini } = getKeys();
   return !!(openai || gemini);
 }
@@ -138,11 +140,27 @@ async function analyzeWithGemini(apiKey: string, dataUrl: string): Promise<SkinA
  * 비전 키 우선순위: OpenAI(gpt-4o) → Gemini(1.5-flash). 둘 다 없으면 available:false.
  */
 export async function analyzeSkinPhoto(dataUrl: string): Promise<SkinAnalysisResult> {
+  const errors: string[] = [];
+  // 1순위: 본사 AI 중계 (지점 키 불필요, 지점별 월 한도)
+  if (isAiProxyEnabled()) {
+    try {
+      const r = await aiProxySkinAnalysis(dataUrl, PROMPT);
+      const parsed = parseResult(r.text);
+      if (!parsed) throw new Error('분석 결과 파싱 실패');
+      return { available: true, scores: parsed.scores, comment: parsed.comment, provider: r.provider === 'gemini' ? 'gemini' : 'openai' };
+    } catch (e: any) {
+      errors.push(`본사 AI: ${e?.message || e}`);
+    }
+  }
   const { openai, gemini } = getKeys();
   if (!openai && !gemini) {
-    return { available: false, reason: 'AI 비전 키가 설정되지 않았습니다. (설정 > 연동 설정 > AI 피부분석에서 OpenAI 또는 Gemini 키 입력)' };
+    return {
+      available: false,
+      reason: errors.length
+        ? `본사 AI 호출에 실패했습니다 — ${errors[0]}`
+        : 'AI 비전 키가 설정되지 않았습니다. (본사 AI 미설정 시 설정 > 연동 설정 > AI 피부분석에서 OpenAI 또는 Gemini 키 입력)',
+    };
   }
-  const errors: string[] = [];
   if (openai) {
     try { return await analyzeWithOpenAI(openai, dataUrl); }
     catch (e: any) { errors.push(`OpenAI: ${e?.message || e}`); }

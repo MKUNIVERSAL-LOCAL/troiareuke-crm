@@ -15,6 +15,7 @@ import TimelapseViewer from '../../components/TimelapseViewer';
 import { resizeImageFile } from '../../lib/photoStore';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
+import { refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
 import * as XLSX from 'xlsx';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
 import { maskPhone } from '../../lib/masking';
@@ -232,6 +233,12 @@ export default function Customers() {
   // 비컨(피부 상담) 기능 노출 — 관리자가 설정에서 토글. 기본 OFF(숨김).
   const [beaconEnabled, setBeaconEnabled] = useState(isBeaconConsultationEnabled());
   useEffect(() => onFeatureFlagsChanged(() => setBeaconEnabled(isBeaconConsultationEnabled())), []);
+  // AI 피부분석 사용 가능 여부(본사 AI 중계 또는 지점 키) — 중계 상태는 비동기 조회라 변경 이벤트를 구독
+  const [skinAiAvailable, setSkinAiAvailable] = useState(isSkinAnalysisAvailable());
+  useEffect(() => {
+    void refreshAiProxyStatus().then(() => setSkinAiAvailable(isSkinAnalysisAvailable()));
+    return onAiProxyStatusChanged(() => setSkinAiAvailable(isSkinAnalysisAvailable()));
+  }, []);
 
   useEffect(() => {
     loadAll();
@@ -1791,8 +1798,8 @@ export default function Customers() {
                 </div>
               </div>
 
-              {/* AI 피부 분석 (킬러①) — 사진 → 비전 AI 분석. 비컨 진단기기 API 연동 전까지 숨김(beaconEnabled 게이트) */}
-              {beaconEnabled && (
+              {/* AI 피부 분석 (킬러①) — 사진 → 비전 AI 분석. 비컨 토글이 켜졌거나 AI(본사 중계·지점 키)를 쓸 수 있으면 노출 (2026-09-07) */}
+              {(beaconEnabled || skinAiAvailable) && (
               <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-indigo-100 rounded-xl p-3.5">
                 <div className="flex items-center gap-1.5 mb-2">
                   <Sparkles size={14} className="text-violet-600" />
@@ -1824,7 +1831,7 @@ export default function Customers() {
                     {!aiPhoto && (
                       <p className="text-[11px] text-gray-500 leading-relaxed">
                         고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다.
-                        {!isSkinAnalysisAvailable() && ' (설정 > 연동 설정 > AI 피부분석에서 OpenAI/Gemini 키 입력 필요)'}
+                        {!skinAiAvailable && ' (본사 AI 미설정 — 설정 > 연동 설정 > AI 피부분석에서 OpenAI/Gemini 키 입력 필요)'}
                       </p>
                     )}
                     {aiResult && !aiResult.available && (

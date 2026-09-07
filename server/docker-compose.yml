@@ -80,6 +80,17 @@ services:
       # 운영 경보 수신 메일(미설정 시 ADMIN_EMAIL) — 백업 실패·예약발송 실패·취소된 결제요청 입금
       OPS_ALERT_EMAIL: ${OPS_ALERT_EMAIL:-}
       DATA_RATE_LIMIT: ${DATA_RATE_LIMIT:-600}
+      # 발송사 SOLAPI (SMS_PROVIDER=solapi 일 때) — 계약 후 3개 값만 넣으면 문자 발송이 켜진다
+      SOLAPI_API_KEY: ${SOLAPI_API_KEY:-}
+      SOLAPI_API_SECRET: ${SOLAPI_API_SECRET:-}
+      SOLAPI_SENDER: ${SOLAPI_SENDER:-}
+      # 본사 AI 키 중계 — 하나라도 넣으면 전 지점 AI 챗봇·피부분석이 지점 키 없이 동작 (지점별 월 한도)
+      AI_OPENAI_API_KEY: ${AI_OPENAI_API_KEY:-}
+      AI_GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+      AI_OPENAI_CHAT_MODEL: ${AI_OPENAI_CHAT_MODEL:-gpt-4o-mini}
+      AI_OPENAI_VISION_MODEL: ${AI_OPENAI_VISION_MODEL:-gpt-4o}
+      AI_GEMINI_MODEL: ${AI_GEMINI_MODEL:-gemini-1.5-flash}
+      AI_MONTHLY_LIMIT_PER_BRANCH: ${AI_MONTHLY_LIMIT_PER_BRANCH:-300}
     volumes:
       # File Station의 CRM-BACKUP 공유폴더 — 지점별/날짜별 백업이 여기 쌓인다
       - ${BACKUP_HOST_DIR:-/volume1/CRM-BACKUP}/troiareuke-crm:/backup

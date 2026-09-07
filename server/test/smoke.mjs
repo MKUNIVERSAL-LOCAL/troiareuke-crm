@@ -464,6 +464,17 @@ await test('계정 완전 삭제는 이메일 확인이 맞을 때만 동작하�
   assert(superDel.status === 403, `superadmin delete status=${superDel.status}`);
 });
 
+await test('AI 중계는 본사 키가 없으면 status enabled=false, 호출은 503으로 정직 응답한다', async () => {
+  const status = await call('/api/ai/status', { token: shopToken });
+  assert(status.status === 200 && status.data.enabled === false && Array.isArray(status.data.providers), `status=${JSON.stringify(status.data)}`);
+  const chat = await call('/api/ai/chat', { method: 'POST', token: shopToken, body: { messages: [{ role: 'user', content: '안녕' }] } });
+  assert(chat.status === 503 && chat.data.enabled === false, `chat status=${chat.status}`);
+  const bad = await call('/api/ai/chat', { method: 'POST', token: shopToken, body: { messages: 'x' } });
+  assert(bad.status === 400, `bad status=${bad.status}`);
+  const anon = await call('/api/ai/status');
+  assert(anon.status === 401, `anon status=${anon.status}`);
+});
+
 await test('프로필(매장 전화·주소)이 저장된다', async () => {
   const patch = await call('/api/auth/profile', {
     method: 'PATCH',

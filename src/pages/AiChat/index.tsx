@@ -11,6 +11,8 @@ import { useFeature } from '../../hooks/useFeature';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
 // 외부 LLM으로 나가는 프롬프트에는 전화번호를 항상 마스킹한다(권한 무관) — 다른 화면과 개인정보 정책 일치
 import { maskPhone } from '../../lib/masking';
+// 본사 AI 키 중계 — 서버에 키가 있으면 지점 키 없이 동작 (없으면 아래 지점 키 경로)
+import { isAiProxyEnabled, aiProxyChat, refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
 import { format, subMonths, parseISO, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -19,7 +21,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-  usedProvider?: 'claude' | 'openai' | 'gemini';
+  usedProvider?: 'claude' | 'openai' | 'gemini' | 'server';
 }
 
 const QUICK_QUESTIONS = [
@@ -233,6 +235,11 @@ function AiChatInner() {
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('ai_key_gemini') || '');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [proxyEnabled, setProxyEnabled] = useState(() => isAiProxyEnabled());
+  useEffect(() => {
+    void refreshAiProxyStatus().then(() => setProxyEnabled(isAiProxyEnabled()));
+    return onAiProxyStatusChanged(() => setProxyEnabled(isAiProxyEnabled()));
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -245,7 +252,7 @@ function AiChatInner() {
     setShowSettings(false);
   };
 
-  const hasAnyKey = !!(claudeKey || openaiKey || geminiKey);
+  const hasAnyKey = proxyEnabled || !!(claudeKey || openaiKey || geminiKey);
 
   const sendMessage = async (text?: string) => {
     const userText = (text || input).trim();
@@ -263,10 +270,25 @@ function AiChatInner() {
         .filter(m => m.id !== '0')
         .map(m => ({ role: m.role, content: m.content }));
 
+      // 1순위: 본사 AI 중계(지점 키 불필요). 실패하거나 꺼져 있으면 지점 키 경로.
+      let proxyText: string | null = null;
+      if (proxyEnabled) {
+        try {
+          const r = await aiProxyChat(history, `당신은 더마솔루션의 AI 분석 어시스턴트입니다.\n아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요.\n데이터에 없는 내용은 추측하지 말고, 있는 데이터만으로 답변해주세요.\n숫자는 정확하게, 금액은 천 단위 쉼표를 사용해주세요.\n\n${crmContext}`);
+          proxyText = r.text;
+        } catch (e: any) {
+          if (!(claudeKey || openaiKey || geminiKey)) throw new Error(e?.message || '본사 AI 호출에 실패했습니다.');
+        }
+      }
+      if (proxyText !== null) {
+        setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: proxyText!, timestamp: new Date(), usedProvider: 'server' }]);
+        return;
+      }
+
       // AI 선택 (Claude 우선)
       const provider = selectProvider(userText, claudeKey, openaiKey, geminiKey);
       let responseText: string;
-      let usedProvider: 'claude' | 'openai' | 'gemini' = provider;
+      let usedProvider: 'claude' | 'openai' | 'gemini' | 'server' = provider;
 
       try {
         if (provider === 'claude') {
@@ -498,7 +520,7 @@ function AiChatInner() {
                         msg.usedProvider === 'openai' ? 'bg-emerald-100 text-emerald-600' :
                         'bg-blue-100 text-blue-600'
                       }`}>
-                        {msg.usedProvider === 'claude' ? 'Claude' : msg.usedProvider === 'openai' ? 'GPT' : 'Gemini'}
+                        {msg.usedProvider === 'claude' ? 'Claude' : msg.usedProvider === 'openai' ? 'GPT' : msg.usedProvider === 'server' ? '본사 AI' : 'Gemini'}
                       </span>
                     )}
                     {msg.role === 'assistant' && msg.id !== '0' && (

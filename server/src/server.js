@@ -479,6 +479,17 @@ async function initializeDatabase() {
     );
     CREATE INDEX IF NOT EXISTS auth_login_log_time_idx ON auth_login_log(logged_in_at DESC);
 
+    -- 본사 AI 키 중계 사용량 (지점별 월 한도) — 2026-09-07
+    CREATE TABLE IF NOT EXISTS ai_usage (
+      id uuid PRIMARY KEY,
+      branch_id text NOT NULL,
+      user_id uuid,
+      kind text NOT NULL,
+      provider text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS ai_usage_branch_month_idx ON ai_usage(branch_id, created_at DESC);
+
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_version text;
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_mode text;
@@ -893,6 +904,181 @@ app.post('/api/admin/backup', requireSession, requireSuperadmin, async (_req, re
   try {
     if (!BACKUP_DIR) return res.status(400).json({ error: '서버에 BACKUP_DIR가 설정되지 않았습니다.' });
     const result = await runBackupOnce();
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── AI 중계 (2026-09-07, 파일럿 준비 3/5): 본사 키 하나로 전 지점 AI 기능 ─────────────────────
+// 지점 PC에 AI 키를 두지 않고, 서버 .env의 AI_OPENAI_API_KEY / AI_GEMINI_API_KEY로 대신 호출한다.
+// 키가 없으면 /api/ai/status가 enabled:false를 돌려주고 클라이언트는 기존(지점 키 입력) 경로로 동작한다.
+// 지점별 월 호출 한도(AI_MONTHLY_LIMIT_PER_BRANCH, 기본 300)로 비용을 통제한다.
+const AI_OPENAI_KEY = String(process.env.AI_OPENAI_API_KEY || '').trim();
+const AI_GEMINI_KEY = String(process.env.AI_GEMINI_API_KEY || '').trim();
+const AI_OPENAI_CHAT_MODEL = String(process.env.AI_OPENAI_CHAT_MODEL || 'gpt-4o-mini');
+const AI_OPENAI_VISION_MODEL = String(process.env.AI_OPENAI_VISION_MODEL || 'gpt-4o');
+const AI_GEMINI_MODEL = String(process.env.AI_GEMINI_MODEL || 'gemini-1.5-flash');
+const AI_MONTHLY_LIMIT_PER_BRANCH = envInteger('AI_MONTHLY_LIMIT_PER_BRANCH', 300, 0, 1_000_000);
+const AI_ENABLED = Boolean(AI_OPENAI_KEY || AI_GEMINI_KEY);
+const AI_PROVIDERS = [AI_OPENAI_KEY ? 'openai' : null, AI_GEMINI_KEY ? 'gemini' : null].filter(Boolean);
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: envInteger('AI_RATE_LIMIT_PER_MINUTE', 20, 1, 1000),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: req => {
+    const authorization = req.get('authorization') || '';
+    return authorization.startsWith('Bearer ') ? `ai:${tokenHash(authorization.slice(7))}` : `ip:${ipKeyGenerator(req.ip)}`;
+  },
+  handler: (req, res, _next, options) => {
+    res.status(options.statusCode).json({ error: 'AI 요청이 너무 잦습니다. 잠시 후 다시 시도해주세요.' });
+  },
+});
+
+function aiScopeOf(user) {
+  return user.branch_id || user.id;
+}
+
+async function aiUsageThisMonth(scope) {
+  const { rows: [{ count }] } = await pool.query(
+    "SELECT count(*)::int AS count FROM ai_usage WHERE branch_id = $1 AND created_at >= date_trunc('month', now())", [scope]);
+  return count;
+}
+
+async function aiCallWithFallback({ scope, userId, kind, openaiCall, geminiCall }) {
+  const errors = [];
+  if (AI_OPENAI_KEY) {
+    try {
+      const text = await openaiCall();
+      await pool.query('INSERT INTO ai_usage (id, branch_id, user_id, kind, provider) VALUES ($1, $2, $3, $4, $5)',
+        [crypto.randomUUID(), scope, userId, kind, 'openai']);
+      return { text, provider: 'openai' };
+    } catch (error) { errors.push(`OpenAI: ${error.message}`); }
+  }
+  if (AI_GEMINI_KEY) {
+    try {
+      const text = await geminiCall();
+      await pool.query('INSERT INTO ai_usage (id, branch_id, user_id, kind, provider) VALUES ($1, $2, $3, $4, $5)',
+        [crypto.randomUUID(), scope, userId, kind, 'gemini']);
+      return { text, provider: 'gemini' };
+    } catch (error) { errors.push(`Gemini: ${error.message}`); }
+  }
+  throw new Error(`AI 호출 실패 — ${errors.join(' / ')}`);
+}
+
+async function openaiChat(body) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    signal: AbortSignal.timeout(60_000),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${AI_OPENAI_KEY}` },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+  const text = data?.choices?.[0]?.message?.content;
+  if (typeof text !== 'string') throw new Error('빈 응답');
+  return text;
+}
+
+async function geminiGenerate(body) {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_GEMINI_MODEL}:generateContent`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(60_000),
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': AI_GEMINI_KEY },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (typeof text !== 'string') throw new Error('빈 응답');
+  return text;
+}
+
+async function aiGate(req, res) {
+  if (!AI_ENABLED) {
+    res.status(503).json({ error: '본사 AI 키가 설정되지 않았습니다. 설정에서 직접 키를 입력하거나 본사에 문의하세요.', enabled: false });
+    return null;
+  }
+  const scope = aiScopeOf(req.authUser);
+  if (AI_MONTHLY_LIMIT_PER_BRANCH > 0) {
+    const used = await aiUsageThisMonth(scope);
+    if (used >= AI_MONTHLY_LIMIT_PER_BRANCH) {
+      res.status(429).json({ error: `이번 달 AI 사용 한도(${AI_MONTHLY_LIMIT_PER_BRANCH}회)를 모두 사용했습니다. 다음 달 1일에 초기화됩니다.`, used, limit: AI_MONTHLY_LIMIT_PER_BRANCH });
+      return null;
+    }
+  }
+  return scope;
+}
+
+app.get('/api/ai/status', requireSession, async (req, res, next) => {
+  try {
+    const scope = aiScopeOf(req.authUser);
+    const used = AI_ENABLED ? await aiUsageThisMonth(scope) : 0;
+    res.json({
+      enabled: AI_ENABLED,
+      providers: AI_PROVIDERS,
+      monthlyLimit: AI_MONTHLY_LIMIT_PER_BRANCH,
+      usedThisMonth: used,
+      remaining: AI_MONTHLY_LIMIT_PER_BRANCH > 0 ? Math.max(0, AI_MONTHLY_LIMIT_PER_BRANCH - used) : null,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/ai/chat', requireSession, aiLimiter, async (req, res, next) => {
+  try {
+    const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
+    const systemPrompt = typeof req.body.systemPrompt === 'string' ? req.body.systemPrompt.slice(0, 60_000) : '';
+    if (messages.length === 0 || messages.length > 40 ||
+        messages.some(m => !m || !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 20_000)) {
+      return res.status(400).json({ error: '메시지 형식을 확인해주세요.' });
+    }
+    const scope = await aiGate(req, res);
+    if (!scope) return;
+    const result = await aiCallWithFallback({
+      scope, userId: req.authUser.id, kind: 'chat',
+      openaiCall: () => openaiChat({
+        model: AI_OPENAI_CHAT_MODEL,
+        messages: [...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []), ...messages.map(m => ({ role: m.role, content: m.content }))],
+        temperature: 0.7,
+        max_tokens: 2000,
+      }),
+      geminiCall: () => geminiGenerate({
+        contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
+        ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+        generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
+      }),
+    });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/ai/skin-analysis', requireSession, aiLimiter, async (req, res, next) => {
+  try {
+    const imageDataUrl = String(req.body.imageDataUrl || '');
+    const prompt = typeof req.body.prompt === 'string' ? req.body.prompt.slice(0, 4000) : '';
+    const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(imageDataUrl);
+    if (!match || imageDataUrl.length > 8 * 1024 * 1024 || !prompt) {
+      return res.status(400).json({ error: '이미지(jpeg/png/webp, 8MB 이하)와 분석 지시문이 필요합니다.' });
+    }
+    const scope = await aiGate(req, res);
+    if (!scope) return;
+    const result = await aiCallWithFallback({
+      scope, userId: req.authUser.id, kind: 'skin-analysis',
+      openaiCall: () => openaiChat({
+        model: AI_OPENAI_VISION_MODEL,
+        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: imageDataUrl } }] }],
+        max_tokens: 300,
+      }),
+      geminiCall: () => geminiGenerate({
+        contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: `image/${match[1]}`, data: match[2] } }] }],
+      }),
+    });
     res.json(result);
   } catch (error) {
     next(error);
@@ -2592,6 +2778,50 @@ async function sendViaProvider({ type, title, content, phones }) {
     return {
       pending: false,
       results: phones.map((phone, index) => ({ phone, status: index < sentCount ? 'sent' : 'failed' })),
+    };
+  }
+
+  // SOLAPI(솔라피) 어댑터 — 리서치(RESEARCH-KAKAO-ALIMTALK) 1순위 발송사. 계약 후 .env 3개만 넣으면 연결된다:
+  //   SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER(사전 등록한 발신번호)
+  // 문자(SMS/LMS)는 템플릿 심사 없이 즉시 발송 가능. 알림톡은 템플릿 사전 승인이 필요해 이 어댑터는
+  // 모든 유형을 문자로 보낸다(kakao-* 유형도 문자 폴백). 알림톡 전환은 SOLAPI_KAKAO_PFID·템플릿 승인 후 별도 단계.
+  if (provider === 'solapi') {
+    const apiKey = String(process.env.SOLAPI_API_KEY || '').trim();
+    const apiSecret = String(process.env.SOLAPI_API_SECRET || '').trim();
+    const from = normalizePhone(process.env.SOLAPI_SENDER);
+    if (!apiKey || !apiSecret || !from) {
+      throw new Error('SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER 설정이 필요합니다.');
+    }
+    const date = new Date().toISOString();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const signature = crypto.createHmac('sha256', apiSecret).update(date + salt).digest('hex');
+    // 발송사는 EUC-KR 기준 90바이트를 SMS 한도로 본다(한글 2바이트). 넘으면 LMS(제목 필요).
+    const eucKrBytes = [...content].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 0x7f ? 2 : 1), 0);
+    const isLong = eucKrBytes > 90;
+    const subject = String(title || '더마솔루션').slice(0, 40);
+    const messages = phones.map(to => ({
+      to, from, text: content, type: isLong ? 'LMS' : 'SMS', ...(isLong ? { subject } : {}),
+    }));
+    const response = await fetch('https://api.solapi.com/messages/v4/send-many/detail', {
+      method: 'POST',
+      signal: AbortSignal.timeout(20_000),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`,
+      },
+      body: JSON.stringify({ messages }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`SOLAPI 응답 오류 ${response.status}: ${data?.errorMessage || data?.errorCode || ''}`.trim());
+    }
+    const failedByPhone = new Map((Array.isArray(data.failedMessageList) ? data.failedMessageList : [])
+      .map(f => [normalizePhone(f.to), f.statusMessage || f.errorMessage || '발송 실패']));
+    return {
+      pending: false,
+      results: phones.map(phone => (failedByPhone.has(phone)
+        ? { phone, status: 'failed', reason: failedByPhone.get(phone) }
+        : { phone, status: 'sent' })),
     };
   }
 

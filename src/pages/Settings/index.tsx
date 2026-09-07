@@ -1032,6 +1032,7 @@ export default function Settings() {
                       <span>
                         고객 상세의 AI 피부분석 기능이 사용할 키입니다. OpenAI 또는 Gemini 중 하나만
                         입력해도 동작합니다. 키는 이 기기에만 저장됩니다.
+                        <b> 본사가 서버에 AI 키를 설정한 경우에는 여기 키를 넣지 않아도 AI 피부분석·AI 챗봇이 동작합니다</b>(지점별 월 사용 한도 적용).
                       </span>
                     </div>
                     <FormRow label="OpenAI API Key">
