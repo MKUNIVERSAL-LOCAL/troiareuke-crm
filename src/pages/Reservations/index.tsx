@@ -1,4 +1,5 @@
 ﻿import { useState, useCallback, useEffect, type CSSProperties } from 'react';
+import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -1053,7 +1054,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (r.totalPrice > 0) {
       const alreadyPaid = PaymentStore.getAll().some(p => p.referenceId === r.id);
       if (alreadyPaid) {
-        alert('완료 처리했습니다. (이 예약의 결제는 이미 등록되어 있어 중복 등록하지 않았습니다)');
+        notify('완료 처리했습니다. (이 예약의 결제는 이미 등록되어 있어 중복 등록하지 않았습니다)');
       } else {
         // 결제수단 선택 모달로 — 단일/복합(분할) 결제와 커스텀 수단 지원
         setShowPayModal(true);
@@ -1179,11 +1180,11 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
       const a = Math.max(0, Number(amountA.replace(/\D/g, '')) || 0);
       const b = Math.max(0, Number(amountB.replace(/\D/g, '')) || 0);
       if (a + b !== r.totalPrice) {
-        alert(`분할 금액 합계(${(a + b).toLocaleString()}원)가 결제 금액(${r.totalPrice.toLocaleString()}원)과 다릅니다.`);
+        notify(`분할 금액 합계(${(a + b).toLocaleString()}원)가 결제 금액(${r.totalPrice.toLocaleString()}원)과 다릅니다.`);
         return;
       }
       if (methodA === methodB) {
-        alert('두 결제수단이 같습니다. 단일 결제를 사용해주세요.');
+        notify('두 결제수단이 같습니다. 단일 결제를 사용해주세요.');
         return;
       }
       const splitMemo = `복합결제 (${methodA} ${a.toLocaleString()}원 + ${methodB} ${b.toLocaleString()}원)`;

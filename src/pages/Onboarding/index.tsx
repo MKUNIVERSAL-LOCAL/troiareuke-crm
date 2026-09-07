@@ -1,3 +1,4 @@
+import { notify } from '../../lib/notify';
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
@@ -140,13 +141,13 @@ export default function Onboarding() {
         if (name) parsed.push({ name, duration, price });
       }
       if (parsed.length === 0) {
-        alert('시술 데이터를 찾지 못했습니다. 1행은 헤더, 2행부터 [시술명, 소요시간(분), 가격] 순으로 입력해주세요.');
+        notify('시술 데이터를 찾지 못했습니다. 1행은 헤더, 2행부터 [시술명, 소요시간(분), 가격] 순으로 입력해주세요.');
       }
       setExcelServices(parsed);
       // 파일명은 파싱 성공 후에만 표시 (실패한 파일명이 화면에 남는 문제 방지)
       setExcelFileName(parsed.length > 0 ? file.name : '');
     } catch {
-      alert('파일을 읽을 수 없습니다. 엑셀(.xlsx/.xls) 또는 CSV 파일을 올려주세요.');
+      notify('파일을 읽을 수 없습니다. 엑셀(.xlsx/.xls) 또는 CSV 파일을 올려주세요.');
     } finally {
       // 같은 파일을 다시 선택해도 onChange가 발생하도록 리셋 (Signup.tsx와 동일 방식)
       input.value = '';
@@ -322,7 +323,7 @@ export default function Onboarding() {
     try {
       await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
     } catch {
-      alert('온보딩 완료가 서버에 반영되지 않았습니다. 인터넷 연결 후 다시 로그인하면 온보딩이 다시 표시될 수 있습니다 — 그 경우 기존 입력은 보존됩니다.');
+      notify('온보딩 완료가 서버에 반영되지 않았습니다. 인터넷 연결 후 다시 로그인하면 온보딩이 다시 표시될 수 있습니다 — 그 경우 기존 입력은 보존됩니다.');
     }
 
     // ★ 4단계: 강제 리로드로 대시보드 이동

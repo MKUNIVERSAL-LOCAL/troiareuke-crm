@@ -1,3 +1,4 @@
+import { notify } from '../../lib/notify';
 import { useState, useEffect, useRef } from 'react';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
@@ -293,7 +294,7 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
         staffNotes: staffNotes || undefined,
         nextAppointment: nextAppointment || undefined,
       });
-      try { savePhotos(`treatment:${editing.id}`, photos); } catch { alert('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
+      try { savePhotos(`treatment:${editing.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
     } else {
       const saved = TreatmentLogStore.save({
         customerId,
@@ -310,7 +311,7 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
         nextAppointment: nextAppointment || undefined,
       });
       if (saved && photos.length > 0) {
-        try { savePhotos(`treatment:${saved.id}`, photos); } catch { alert('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
+        try { savePhotos(`treatment:${saved.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
       }
     }
 

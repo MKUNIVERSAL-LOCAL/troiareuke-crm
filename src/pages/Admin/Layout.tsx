@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 import { resetFeatureFlags } from '../../lib/featureFlags';
 import PasswordChangeGate from '../../components/PasswordChangeGate';
+import ToastHost from '../../components/ui/ToastHost';
 
 // search가 있는 항목은 pathname+search까지 일치해야 활성 (통계 vs 전체 데이터 구분)
 const adminNav = [
@@ -141,6 +142,7 @@ export default function AdminLayout() {
 
       {/* Main Content */}
       <main className="flex-1 ml-64 min-h-screen overflow-x-hidden bg-slate-950">
+        <ToastHost />
         <Outlet />
       </main>
     </div>

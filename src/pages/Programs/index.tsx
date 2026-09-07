@@ -1,3 +1,4 @@
+import { notify } from '../../lib/notify';
 import { useState, useEffect } from 'react';
 import { Plus, Package, Edit2, Trash2, CheckCircle, XCircle, Tag, Clock, Calendar, Search } from 'lucide-react';
 import { ProgramStore } from '../../lib/store';
@@ -76,7 +77,7 @@ export default function Programs() {
     e.preventDefault();
     const sessions = form.isTimed ? null : parseInt(form.totalSessions);
     if (sessions !== null && (Number.isNaN(sessions) || sessions < 1)) {
-      alert('회차는 1 이상이어야 합니다');
+      notify('회차는 1 이상이어야 합니다');
       return;
     }
     const data: Omit<Program, 'id' | 'shopId' | 'createdAt'> = {

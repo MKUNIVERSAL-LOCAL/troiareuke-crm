@@ -1,3 +1,4 @@
+import { notify } from '../lib/notify';
 import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { getAllPaymentMethods, getCustomPaymentMethods, addCustomPaymentMethod, removeCustomPaymentMethod } from '../lib/paymentMethods';
@@ -23,7 +24,7 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
       setNewName('');
       setAdding(false);
     } else {
-      alert('이미 있는 이름이거나 사용할 수 없는 이름입니다. (20자 이내)');
+      notify('이미 있는 이름이거나 사용할 수 없는 이름입니다. (20자 이내)');
     }
   };
 

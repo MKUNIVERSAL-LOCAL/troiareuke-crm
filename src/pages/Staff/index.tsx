@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { notify } from '../../lib/notify';
 import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -250,7 +251,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
 
   const handleSave = () => {
     if (!name.trim() || !phone.trim()) {
-      alert('이름과 전화번호는 필수입니다.');
+      notify('이름과 전화번호는 필수입니다.');
       return;
     }
     StaffStore.save({
@@ -416,7 +417,7 @@ function StaffDetailModal({
 
   const handleUpdate = () => {
     if (!name.trim() || !phone.trim()) {
-      alert('이름과 전화번호는 필수입니다.');
+      notify('이름과 전화번호는 필수입니다.');
       return;
     }
     StaffStore.update(staff.id, {

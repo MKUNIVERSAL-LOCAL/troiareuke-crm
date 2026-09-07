@@ -1,4 +1,5 @@
 ﻿import { useState, useCallback } from 'react';
+import { notify } from '../../lib/notify';
 import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -417,7 +418,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
 
   const handleSubmit = () => {
     if (!form.name.trim() || !form.price || !form.stock) {
-      alert('제품명, 판매가, 재고는 필수 입력 항목입니다.');
+      notify('제품명, 판매가, 재고는 필수 입력 항목입니다.');
       return;
     }
     const price = parseInt(form.price, 10);
@@ -425,7 +426,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
     const stock = parseInt(form.stock, 10);
     const minStock = form.minStock ? parseInt(form.minStock, 10) : 5;
     if ([price, cost, stock, minStock].some(n => Number.isNaN(n) || n < 0)) {
-      alert('판매가·원가·재고·최소재고는 0 이상 숫자로 입력해주세요.');
+      notify('판매가·원가·재고·최소재고는 0 이상 숫자로 입력해주세요.');
       return;
     }
     setSaving(true);
@@ -609,16 +610,16 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
 
   const handleSubmit = () => {
     if (!form.unitPrice || !form.quantity) {
-      alert('수량과 단가를 입력해주세요.');
+      notify('수량과 단가를 입력해주세요.');
       return;
     }
     const rawQty = parseInt(form.quantity, 10);
     if (Number.isNaN(rawQty) || rawQty < 1) {
-      alert('수량은 1 이상이어야 합니다');
+      notify('수량은 1 이상이어야 합니다');
       return;
     }
     if (product.stock < qty) {
-      alert(`재고가 부족합니다. (현재 재고: ${product.stock}${product.unit})`);
+      notify(`재고가 부족합니다. (현재 재고: ${product.stock}${product.unit})`);
       return;
     }
     setSaving(true);

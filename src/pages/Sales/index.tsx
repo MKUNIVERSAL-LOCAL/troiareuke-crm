@@ -1,3 +1,4 @@
+import { notify } from '../../lib/notify';
 import { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
@@ -299,7 +300,7 @@ export default function Sales() {
   // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생)
   function handleDelete(p: Payment) {
     if (p.type === 'product') {
-      alert('제품 결제는 여기서 삭제하면 재고·판매기록과 어긋납니다. 제품/재고 페이지의 판매 취소를 사용해주세요.');
+      notify('제품 결제는 여기서 삭제하면 재고·판매기록과 어긋납니다. 제품/재고 페이지의 판매 취소를 사용해주세요.');
       return;
     }
     if (!window.confirm(`${p.paymentDate} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
@@ -315,7 +316,7 @@ export default function Sales() {
 
     const amount = parseInt(form.amount.replace(/,/g, ''), 10);
     if (Number.isNaN(amount) || amount <= 0) {
-      alert('결제 금액을 0보다 큰 숫자로 입력해주세요.');
+      notify('결제 금액을 0보다 큰 숫자로 입력해주세요.');
       return;
     }
     const discountAmount = Math.max(0, parseInt(form.discountAmount.replace(/,/g, ''), 10) || 0);
@@ -337,7 +338,7 @@ export default function Sales() {
     // 크로스 모듈 불일치(QA⑤) — 신규·수정 모두 차단, 판매 기록 삭제(재고 자동 복구)로 유도
     const effectiveType = editingId ? editingPayment?.type : form.type;
     if (form.status === 'refunded' && effectiveType === 'product') {
-      alert(
+      notify(
         '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 해당 판매를 삭제해주세요.\n' +
         '판매 기록을 삭제하면 재고 복구와 결제 취소가 함께 처리됩니다.'
       );
@@ -385,12 +386,12 @@ export default function Sales() {
     e.preventDefault();
     const amount = parseInt(expenseForm.amount.replace(/,/g, ''), 10);
     if (Number.isNaN(amount) || amount <= 0) {
-      alert('지출 금액을 0보다 큰 숫자로 입력해주세요.');
+      notify('지출 금액을 0보다 큰 숫자로 입력해주세요.');
       return;
     }
     const description = expenseForm.description.trim();
     if (!description) {
-      alert('지출 내용을 입력해주세요. (예: 앰플 20개 매입)');
+      notify('지출 내용을 입력해주세요. (예: 앰플 20개 매입)');
       return;
     }
     const payload = {

@@ -5,6 +5,7 @@
  * 완료되면 서버가 이 지점 매출에 자동 기록한다 (앱 재시작/동기화 시 매출 반영).
  * PG 키 미설정이면 서버가 enabled=false를 내려 생성 버튼이 준비 중으로 표시된다.
  */
+import { notify } from '../lib/notify';
 import { useState, useEffect } from 'react';
 import { X, Link2, Copy, CheckCircle, MessageSquare, RefreshCw, Ban } from 'lucide-react';
 import type { Customer } from '../types';
@@ -67,11 +68,11 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
     e.preventDefault();
     const amount = parseInt(form.amount.replace(/,/g, ''), 10);
     if (Number.isNaN(amount) || amount < 1000) {
-      alert('결제 금액을 1,000원 이상으로 입력해주세요.');
+      notify('결제 금액을 1,000원 이상으로 입력해주세요.');
       return;
     }
     if (!form.orderName.trim()) {
-      alert('결제 내용을 입력해주세요. (예: 아쿠아필 1회)');
+      notify('결제 내용을 입력해주세요. (예: 아쿠아필 1회)');
       return;
     }
     setBusy(true);
@@ -89,7 +90,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
       setForm(f => ({ ...f, amount: '', orderName: '', memo: '' }));
       refresh();
     } catch (err: any) {
-      alert(err?.message || '결제 요청 생성에 실패했습니다.');
+      notify(err?.message || '결제 요청 생성에 실패했습니다.');
     } finally {
       setBusy(false);
     }
@@ -107,7 +108,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
 
   async function sendLinkSms(url: string) {
     if (!selectedCustomer?.phone) {
-      alert('고객을 선택하면 문자로 바로 보낼 수 있어요.');
+      notify('고객을 선택하면 문자로 바로 보낼 수 있어요.');
       return;
     }
     setBusy(true);
@@ -125,7 +126,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
       await cancelPaymentRequest(r.id);
       refresh();
     } catch (e: any) {
-      alert(e?.message || '취소에 실패했습니다.');
+      notify(e?.message || '취소에 실패했습니다.');
     }
   }
 

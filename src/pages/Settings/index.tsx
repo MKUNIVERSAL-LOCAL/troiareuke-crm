@@ -1,3 +1,4 @@
+import { notify } from '../../lib/notify';
 import { useState, useEffect, useCallback } from 'react';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
@@ -505,7 +506,7 @@ export default function Settings() {
       `현재 계정에 이미 있는 항목은 덮어쓰지 않습니다.`
     )) return;
     const copied = importLegacyShopData(candidate.shopId, current);
-    alert(`${copied}개 항목을 가져왔습니다.\n프로그램을 다시 시작하면 중앙 서버 저장이 시작됩니다.`);
+    notify(`${copied}개 항목을 가져왔습니다.\n프로그램을 다시 시작하면 중앙 서버 저장이 시작됩니다.`);
     window.location.reload();
   };
 

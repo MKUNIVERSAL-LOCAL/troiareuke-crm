@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react';
+import { notify } from '../../lib/notify';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
@@ -196,7 +197,7 @@ export default function Customers() {
       setAiPhoto(dataUrl);
       setAiResult(null);
     } catch {
-      window.alert('사진을 불러오지 못했습니다.');
+      notify('사진을 불러오지 못했습니다.');
     } finally {
       if (consultPhotoRef.current) consultPhotoRef.current.value = '';
     }
@@ -461,7 +462,7 @@ export default function Customers() {
 
   // 고객 기록 엑셀(xlsx) 다운로드 — 현재 필터된 목록을 이메일 포함 전체 항목으로 내보냄
   function exportToExcel() {
-    if (filtered.length === 0) { window.alert('내보낼 고객이 없습니다.'); return; }
+    if (filtered.length === 0) { notify('내보낼 고객이 없습니다.'); return; }
     const role = user?.role ?? 'staff';
     const rows = filtered.map(c => ({
       '이름': c.name,
@@ -527,7 +528,7 @@ export default function Customers() {
         const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
-        if (rows.length === 0) { window.alert('시트에 데이터가 없습니다.'); return; }
+        if (rows.length === 0) { notify('시트에 데이터가 없습니다.'); return; }
 
         const pick = (r: Record<string, any>, keys: string[]) => {
           for (const k of keys) {
@@ -577,9 +578,9 @@ export default function Customers() {
           added++;
         });
         loadAll();
-        window.alert(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 중복).`);
+        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 중복).`);
       } catch (err) {
-        window.alert('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
+        notify('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
       } finally {
         if (importInputRef.current) importInputRef.current.value = '';
       }
@@ -592,18 +593,18 @@ export default function Customers() {
     e.preventDefault();
     // 필수값 + 전화번호 중복 방지 (같은 고객이 두 레코드로 쪼개지지 않도록)
     if (!addForm.name.trim() || !addForm.phone.trim()) {
-      alert('이름과 전화번호는 필수입니다.');
+      notify('이름과 전화번호는 필수입니다.');
       return;
     }
     if (!addPrivacyConsent) {
-      alert('개인정보 수집·이용 동의가 필요합니다. 고객에게 동의를 받은 뒤 체크해주세요.');
+      notify('개인정보 수집·이용 동의가 필요합니다. 고객에게 동의를 받은 뒤 체크해주세요.');
       return;
     }
     const normalize = (p: string) => p.replace(/\D/g, '');
     const newPhone = normalize(addForm.phone);
     const dup = CustomerStore.getAll().find(c => normalize(c.phone) === newPhone && newPhone !== '');
     if (dup) {
-      alert(`이미 등록된 번호입니다: ${dup.name} (${dup.phone})\n기존 고객 정보를 사용해주세요.`);
+      notify(`이미 등록된 번호입니다: ${dup.name} (${dup.phone})\n기존 고객 정보를 사용해주세요.`);
       return;
     }
     CustomerStore.save({
@@ -677,7 +678,7 @@ export default function Customers() {
     if (rawPrice !== '') {
       const parsed = parseInt(rawPrice, 10);
       if (Number.isNaN(parsed) || parsed < 0) {
-        alert('결제 금액을 올바르게 입력해주세요. (0 이상 숫자)');
+        notify('결제 금액을 올바르게 입력해주세요. (0 이상 숫자)');
         return;
       }
       pricePaid = parsed;

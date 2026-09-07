@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileTabBar from './MobileTabBar';
 import UpdateBanner from '../ui/UpdateBanner';
+import ToastHost from '../ui/ToastHost';
 import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
 import FeatureRouteGate from '../FeatureGate';
@@ -66,6 +67,8 @@ export default function Layout() {
       {/* 메인 콘텐츠 */}
       {/* pb-16 lg:pb-0: 모바일 탭바(h-14=56px) + safe-area 여백 / 데스크톱은 0 */}
       <main className="flex-1 lg:ml-64 min-h-screen overflow-x-hidden pb-16 lg:pb-0">
+        {/* 공통 알림(토스트) — notify() 표시 영역 */}
+        <ToastHost />
         {/* 업데이트 배너 */}
         <UpdateBanner />
         {/* 공지사항 배너 */}

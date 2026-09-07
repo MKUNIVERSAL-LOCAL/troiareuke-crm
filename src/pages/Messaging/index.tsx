@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
+import { notify } from '../../lib/notify';
 import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -565,7 +566,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
       await cancelScheduledMessage(id);
       refresh();
     } catch (e: any) {
-      alert(e?.message || '예약 취소에 실패했습니다.');
+      notify(e?.message || '예약 취소에 실패했습니다.');
     }
   };
 
@@ -794,7 +795,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
     if (!content.trim() || recipientCount === 0) return;
     // 치환 안 된 변수({고객명} 등)가 그대로 나가는 사고 방지 — 예약/즉시 발송 공통
     if (/\{[^}]+\}/.test(content)) {
-      alert('메시지에 치환되지 않은 변수({고객명} 등)가 있습니다. 실제 값으로 바꾼 뒤 발송해주세요.');
+      notify('메시지에 치환되지 않은 변수({고객명} 등)가 있습니다. 실제 값으로 바꾼 뒤 발송해주세요.');
       return;
     }
     setSending(true);
