@@ -2,7 +2,7 @@
   "name": "troiareuke-crm",
   "productName": "트로이아르케 CRM",
   "private": true,
-  "version": "1.0.48",
+  "version": "1.0.49",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -63,7 +63,7 @@
   "build": {
     "appId": "com.troiareuke.crm",
     "productName": "트로이아르케 CRM",
-    "copyright": "Copyright © 2024 TROIAREUKE",
+    "copyright": "Copyright © 2024-2026 TROIAREUKE",
     "publish": {
       "provider": "generic",
       "url": "https://crm-update.mkcorp.familyds.com"
@@ -90,7 +90,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": true,
@@ -109,5 +110,10 @@
       "artifactName": "트로이아르케 CRM.exe",
       "requestExecutionLevel": "user"
     }
+  },
+  "description": "더마솔루션(DERMASOLUTION) CRM — 피부관리실 고객·예약·매출 관리 프로그램",
+  "author": {
+    "name": "TROIAREUKE (MK Universal)",
+    "email": "mkclub21@gmail.com"
   }
 }

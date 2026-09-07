@@ -1,5 +1,5 @@
 // 🔒 CORE — 보호 파일(코어 잠금). 수정 금지. 변경 필요 시 docs/CORE-LOCK.md 의 CORE_EDIT=1 우회 절차.
-const { app, BrowserWindow, shell, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Menu, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -373,6 +373,9 @@ ipcMain.handle('backup-open-folder', async () => {
   shell.openPath(backupDir);
   return { success: true };
 });
+
+// IPC: 백신 예외 등록 안내 도우미(경로 계산·복사·Windows 보안 화면 열기) — 설정 > 데이터 백업. 로직은 electron/security-guide.cjs
+require('./security-guide.cjs').registerSecurityGuideIpc({ app, ipcMain, shell, clipboard });
 
 // ─── 앱 이벤트 ──────────────────────────────────────────────────
 app.whenReady().then(() => {

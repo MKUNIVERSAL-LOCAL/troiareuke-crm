@@ -125,6 +125,7 @@
       <a href="#features">주요 기능</a>
       <a href="#steps">도입 절차</a>
       <a href="#download">다운로드</a>
+      <a href="#antivirus">백신 예외 등록</a>
       <a href="#faq">자주 묻는 질문</a>
     </nav>
     <a class="btn btn-primary" href="#download">프로그램 다운로드</a>
@@ -234,7 +235,7 @@
   <div class="wrap">
     <p class="kicker">다운로드</p>
     <h2>설치는 이번 한 번뿐입니다</h2>
-    <p class="section-sub">이후 업데이트는 프로그램 안에서 버튼 한 번으로 자동 적용됩니다. 다시 내려받을 일이 없습니다.</p>
+    <p class="section-sub">이후 업데이트는 프로그램이 스스로 내려받아 닫을 때 자동 적용됩니다. 다시 내려받을 일이 없습니다.</p>
     <div class="dl-box">
       <div class="dl-main">
         <h3>Windows용 프로그램 받기</h3>
@@ -250,8 +251,32 @@
         <p>일부 PC의 보안 프로그램이 실행을 막는 경우, 압축 해제 방식의 폴더형 버전을 사용하세요. 기능은 동일합니다.</p>
         <a class="btn btn-ghost" style="padding:12px 20px;font-size:15px" href="/portable/TroiareukeCRM-win64.zip" download>폴더형(ZIP) 다운로드</a>
         <p style="margin-top:16px;font-size:13px;color:#9ca3af">압축을 푼 뒤 폴더 안의 '트로이아르케 CRM.exe'를 실행하세요. 다운로드가 안 보이면 Ctrl+J를 눌러 브라우저 다운로드 목록에서 [계속]을 눌러주세요.</p>
+        <p style="margin-top:10px;font-size:13px"><a href="#antivirus" style="color:#93c5fd;text-decoration:underline">설치 후 백신 예외 등록 방법 보기 →</a></p>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="antivirus">
+  <div class="wrap">
+    <p class="kicker">설치 후 1분</p>
+    <h2>백신이 프로그램을 막지 않도록 예외 등록</h2>
+    <p class="section-sub">일부 PC의 백신이 새 프로그램이나 자동 업데이트 파일을 오탐해 지우는 경우가 있습니다. 설치 직후 한 번만 아래 중 하나를 해 두면 이후 재설치가 필요한 일이 생기지 않습니다.</p>
+    <div class="grid" style="margin-top:32px">
+      <div class="card">
+        <h3>가장 쉬운 방법 — 프로그램 안에서</h3>
+        <p>더마솔루션 실행 → 왼쪽 메뉴 <b>설정</b> → <b>데이터 백업</b> 탭 → <b>백신·보안 예외 등록</b> 카드.<br>등록할 폴더 2개가 표시되고 <b>[Windows 보안 예외 설정 화면 열기]</b>를 누르면 경로가 복사된 채 Windows 보안 화면이 바로 열립니다. 붙여넣기 두 번이면 끝.</p>
+      </div>
+      <div class="card">
+        <h3>Windows 보안 수동 등록 (Windows 11 / 10)</h3>
+        <p>① <b>설정</b> → <b>개인 정보 및 보안</b>(Windows 10은 <b>업데이트 및 보안</b>) → <b>Windows 보안</b> → <b>바이러스 및 위협 방지</b><br>② "바이러스 및 위협 방지 설정"의 <b>설정 관리</b> → 맨 아래 "제외"의 <b>제외 추가 또는 제거</b> → 관리자 확인 창 <b>[예]</b><br>③ <b>제외 사항 추가</b> → <b>폴더</b> → 프로그램이 있는 폴더와 <code>%APPDATA%\트로이아르케 CRM</code> 폴더를 각각 추가</p>
+      </div>
+      <div class="card">
+        <h3>안랩 V3 Lite / V3 365 수동 등록</h3>
+        <p>① V3 창 오른쪽 위 <b>환경 설정</b>(톱니바퀴) → 왼쪽 <b>검사 예외 설정</b><br>② "검사 예외 대상"에서 <b>폴더 추가</b> → 프로그램이 있는 폴더와 <code>%APPDATA%\트로이아르케 CRM</code> 폴더를 각각 선택 → <b>확인</b><br>③ "실시간 검사 예외" 항목이 따로 있는 버전은 같은 폴더를 한 번 더 추가</p>
+      </div>
+    </div>
+    <p style="margin-top:24px;font-size:14px;color:#6b7280">처음 실행 때 "Windows의 PC 보호" 파란 창이 뜨면 <b>추가 정보</b> → <b>실행</b>을 누르세요. 처음 한 번만 나옵니다. 폴더 경로는 프로그램 안 <b>설정 → 데이터 백업 → 백신·보안 예외 등록</b> 카드에서 복사할 수 있습니다.</p>
   </div>
 </section>
 

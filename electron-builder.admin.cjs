@@ -4,11 +4,12 @@
 module.exports = {
   appId: 'com.troiareuke.crm.admin',
   productName: '트로이아르케 CRM 어드민',
-  copyright: 'Copyright © 2024 TROIAREUKE',
+  copyright: 'Copyright © 2024-2026 TROIAREUKE',
   directories: { output: 'release-admin' },
   files: ['dist/**/*', 'electron/**/*'],
   extraMetadata: { adminBuild: true },
   win: {
+    icon: 'build/icon.png',
     target: [{ target: 'portable', arch: ['x64'] }],
   },
   portable: {

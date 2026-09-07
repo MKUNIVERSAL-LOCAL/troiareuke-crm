@@ -51,6 +51,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // ── 백신 예외 등록 안내 도우미 (설정 > 데이터 백업) — 경로 계산·복사·Windows 보안 화면 열기 ──
+  securityGuide: {
+    targets: () => ipcRenderer.invoke('security-guide-targets'),
+    openDefender: () => ipcRenderer.invoke('security-guide-open-defender'),
+    copyPaths: () => ipcRenderer.invoke('security-guide-copy-paths'),
+  },
+
   // ── 리스너 정리 (메모리 누수 방지) ──
   removeUpdateListeners: () => {
     ipcRenderer.removeAllListeners('update-available');

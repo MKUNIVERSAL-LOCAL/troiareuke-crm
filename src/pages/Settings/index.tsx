@@ -12,6 +12,7 @@ import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFlagsChanged, PAYMENT_ENABLED } from '../../lib/featureFlags';
 import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
+import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
 import clsx from 'clsx';
 
 const GOOGLE_OAUTH_READY = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim());
@@ -1405,6 +1406,9 @@ export default function Settings() {
                     </div>
                   </div>
                 </SettingCard>
+
+                {/* 백신 예외 등록 안내 — Electron에서만 렌더(electronAPI.securityGuide 없으면 카드가 스스로 null) */}
+                <SecurityGuideCard />
 
                 <SettingCard title="데이터 백업">
                   {isElectron ? (
