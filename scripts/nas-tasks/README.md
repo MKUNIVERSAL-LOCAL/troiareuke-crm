@@ -20,7 +20,7 @@ NAS에서: CRM-publish-update / CRM-server-update 가 최신 릴리스를 자동
 4. (권장) 완전 자동화: 작업 PC 공개키를 NAS 계정 `~/.ssh/authorized_keys`에 등록하면
    이후 Claude가 DSM 로그인 없이 게시·배포·검증까지 직접 수행 가능.
 
-## 채널 루트 정리 (1회, 2026-09-04 발견 — 오너 실행)
+## 채널 루트 정리 (1회, 2026-09-04 발견 — ✅ 2026-09-07 오너 실행 완료, 기록용)
 
 루트에 7월 구버전 `트로이아르케 CRM.exe`(v1.0.25)와 `latest.json`이 남아 있어 옛 링크로 받으면 구버전이 설치된다.
 SSH(`ssh ys-lee0223@mkcorp.familyds.com`) 또는 DSM 작업 스케줄러(사용자 ys-lee0223)에서 아래를 한 번 실행:
