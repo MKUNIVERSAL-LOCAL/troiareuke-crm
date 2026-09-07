@@ -20,6 +20,10 @@ export const CORE_FILES = [
   'src/main.tsx',              // 부트스트랩 + OAuth 콜백
   'electron/main.cjs',         // Electron 메인(백업·IPC·autoUpdater)
   'electron/preload.cjs',      // Electron preload 브리지
+  // ── 배포 불변 원칙(재다운로드 0) 보호 — docs/DISTRIBUTION-POLICY.md, 2026-09-07 추가 ──
+  'electron/portable-updater.cjs',        // 인앱 자동 업데이트(자동 다운로드·종료 시 적용·헬퍼)
+  'scripts/prepare-portable-update.mjs',  // 매니페스트(latest.json) 필드·zip 구조 — 구버전 파서 호환
+  'src/lib/updateChannel.ts',             // 설치 안내 주소·버전 비교(어드민 구버전 표시)
 ];
 
 // ── 보호 대상 디렉터리 (이 prefix 하위 전부) ─────────────────────

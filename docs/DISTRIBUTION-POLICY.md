@@ -49,6 +49,11 @@
 11. **적용 헬퍼(PowerShell) 변경 시 `npm run test:updater` 필수.** `release:all`이 이 테스트를 게이트로 포함하므로
     실패하면 릴리스가 만들어지지 않는다. 테스트는 exe 교체·잠금 재시도·해시 불일치·zip 스테이징·잘못된 zip 거부를 더미 파일로 검증한다.
 
+12. **자동 점검 + 코어 잠금 (2026-09-07).** `scripts/check-distribution-invariants.mjs`가 위 규칙의 코드 흔적
+    (매니페스트 주소·자동 다운로드·종료 시 적용·헬퍼 재시도·매니페스트 필드·텔레메트리·릴리스 게이트)을 정적으로 검사하며
+    client-ci와 release:all에서 실행된다. 실패 시 머지·릴리스 불가. 업데이터·스테이징 스크립트·updateChannel.ts는
+    코어 잠금(`scripts/core-lock.mjs`) — `CORE_EDIT=1`+오너 승인 없이 수정 불가. 규칙을 바꿔야 하면 이 문서·점검 스크립트·코드를 한 커밋에서 함께 바꾼다.
+
 ## 근거 구조 (v1.0.40 확립, v1.0.48 강화)
 
 - `electron/portable-updater.cjs`: 포터블=단일 exe 교체 / 폴더형=zip을 임시 폴더에 풀어 복사(부분 덮어쓰기 방지).

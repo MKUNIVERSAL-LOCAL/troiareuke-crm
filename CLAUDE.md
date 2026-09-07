@@ -39,3 +39,8 @@
 - 릴리스 검증 체크리스트와 상세 규칙: **`docs/DISTRIBUTION-POLICY.md` (필독)**.
 - 업데이트 메커니즘 변경 시 하위호환 브리지 필수 (v1.0.39 폴더형 실사고 재발 금지).
 - 신규 설치 안내는 배포 사이트(https://crm-update.mkcorp.familyds.com/)로만 — 파일 직접 전달 금지.
+- **v1.0.48부터 업데이트는 무인**: 자동 다운로드 → 프로그램 종료 시 자동 적용. 직원 클릭에 의존하는 흐름으로 되돌리지 않는다.
+- `electron/portable-updater.cjs`·`scripts/prepare-portable-update.mjs`·`src/lib/updateChannel.ts`는 **코어 잠금** — `CORE_EDIT=1` + 오너 승인 없이 수정 금지.
+- 자동 점검: `node scripts/check-distribution-invariants.mjs` (client-ci·release:all 게이트). 헬퍼 수정 시 `npm run test:updater`.
+- 릴리스 완료 조건: 채널 라이브 + 배포 검증(`npm run verify:nas`) + **48시간 내 어드민 대시보드 구버전 지점 0곳**.
+- 지점 대응 카드: `docs/BRANCH-INSTALL-GUIDE.md` — "다시 받으세요"는 새 PC·포맷·백신 삭제일 때만, 원인은 정책 문서 실사고에 기록.

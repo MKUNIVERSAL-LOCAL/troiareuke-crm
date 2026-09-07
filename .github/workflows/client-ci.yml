@@ -41,3 +41,5 @@ jobs:
         run: npm run build
       - name: Dead-route static check
         run: node scripts/check-routes.mjs
+      - name: Distribution invariants (no-redownload policy)
+        run: node scripts/check-distribution-invariants.mjs
