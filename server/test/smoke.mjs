@@ -351,21 +351,21 @@ await test('프로그램 버전 헤더가 계정에 기록되고 어드민 목�
 });
 
 await test('로그인 성공·실패가 서버 로그인 기록에 남고 어드민이 조회한다', async () => {
-  // 실패 1건(틀린 비밀번호) + 성공 1건을 만든 뒤 조회
+  // 실패 1건(지점 계정, 틀린 비밀번호) + 성공 1건(슈퍼어드민 — 지점 계정 비밀번호는 앞선 재설정 테스트로 바뀌어 있음)
   await call('/api/auth/login', { method: 'POST', body: { email: shopEmail, password: 'wrong-password-123' } });
   const ok = await fetch(`${API}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-App-Version': '1.0.51', 'X-App-Mode': 'folder' },
-    body: JSON.stringify({ email: shopEmail, password: temporaryPassword }),
+    headers: { 'Content-Type': 'application/json', 'X-App-Version': '1.0.51', 'X-App-Mode': 'admin' },
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
   });
   assert(ok.status === 200, `login status=${ok.status}`);
   await new Promise(r => setTimeout(r, 300)); // fire-and-forget INSERT 대기
   const { status, data } = await call('/api/admin/login-logs?limit=50', { token: adminToken });
   assert(status === 200 && Array.isArray(data.logs), `status=${status}`);
-  const mine = data.logs.filter(l => l.email === shopEmail);
-  assert(mine.some(l => l.status === 'failed' && l.fail_reason), '실패 기록 없음');
-  const success = mine.find(l => l.status === 'success');
-  assert(success && /v1\.0\.51/.test(success.device_info || ''), `성공 기록/버전 표기 없음: ${JSON.stringify(success)}`);
+  const failed = data.logs.find(l => l.email === shopEmail && l.status === 'failed');
+  assert(failed && failed.fail_reason, '실패 기록 없음');
+  const success = data.logs.find(l => l.email === String(ADMIN_EMAIL).toLowerCase() && l.status === 'success' && /v1\.0\.51/.test(l.device_info || ''));
+  assert(success, `성공 기록/버전 표기 없음: ${JSON.stringify(data.logs.slice(0, 3))}`);
   // 일반 계정은 조회 불가
   const denied = await call('/api/admin/login-logs', { token: shopToken });
   assert(denied.status === 403, `denied status=${denied.status}`);
