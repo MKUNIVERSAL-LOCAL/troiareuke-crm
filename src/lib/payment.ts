@@ -41,11 +41,21 @@ declare global {
   }
 }
 
-// ── 상수 ──────────────────────────────────────────────────────────
-const IMP_CODE = import.meta.env.VITE_PORTONE_IMP_CODE || 'imp19424728';
+// ── 설정 (PG 계약 후 빌드 env로 주입 — 오너 결정 2026-09-07: 테스트 PG 하드코딩 제거) ──
+// VITE_PORTONE_IMP_CODE : 포트원 고객사 식별코드 (imp로 시작)
+// VITE_PORTONE_PG       : 계약한 PG 식별자 (예: 'html5_inicis.MID', 'tosspayments.MID', 'kcp.MID')
+// 둘 중 하나라도 없으면 결제 기능은 "준비 중"으로 표시되고 어떤 결제 요청도 시작되지 않는다.
+const IMP_CODE = String(import.meta.env.VITE_PORTONE_IMP_CODE || '').trim();
+const PG_PROVIDER = String(import.meta.env.VITE_PORTONE_PG || '').trim();
+
+/** PG 계약 정보가 빌드에 주입되어 실제 결제를 시작할 수 있는 상태인지 */
+export const isPaymentConfigured = /^imp\w+$/i.test(IMP_CODE) && PG_PROVIDER.length > 0;
 
 // ── IMP 초기화 ────────────────────────────────────────────────────
 function getIMP(): IMPInstance {
+  if (!isPaymentConfigured) {
+    throw new Error('결제 설정(PG 계약 정보)이 없습니다. 본사에서 PG 계약 후 활성화됩니다.');
+  }
   if (!window.IMP) {
     throw new Error('포트원 SDK가 로드되지 않았습니다. index.html에 스크립트를 확인해주세요.');
   }
@@ -53,9 +63,9 @@ function getIMP(): IMPInstance {
   return window.IMP;
 }
 
-// ── 고유 주문번호 생성 ────────────────────────────────────────────
+// ── 고유 주문번호 생성 (예측 불가 — Math.random 대신 crypto) ──────
 function generateMerchantUid(): string {
-  return `order_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  return `order_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 }
 
 // ── 일반 결제 요청 ────────────────────────────────────────────────
@@ -82,7 +92,7 @@ export async function requestPayment(params: PaymentParams): Promise<PaymentResu
 
       imp.request_pay(
         {
-          pg: 'html5_inicis.INIpayTest',
+          pg: PG_PROVIDER,
           pay_method: 'card',
           merchant_uid: merchantUid,
           name: `더마솔루션 - ${params.planName}`,
@@ -137,11 +147,11 @@ export async function requestSubscription(params: SubscriptionParams): Promise<S
     try {
       const imp = getIMP();
       const merchantUid = generateMerchantUid();
-      const customerUid = `customer_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      const customerUid = `customer_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
 
       imp.request_pay(
         {
-          pg: 'html5_inicis.INIpayTest',
+          pg: PG_PROVIDER,
           pay_method: 'card',
           merchant_uid: merchantUid,
           name: `더마솔루션 - ${params.planName} (정기결제)`,

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Search, RefreshCw, Filter } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { getLocalLogs } from '../../lib/loginLog';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { adminListLoginLogs } from '../../lib/adminApi';
@@ -54,14 +53,6 @@ export default function LoginLogs() {
           setLoadError(`로그인 기록을 불러오지 못했습니다: ${e?.message || '서버 오류'} (구버전 서버면 배포 후 표시됩니다)`);
           setLogs(getLocalLogs().map(l => ({ ...l })));
         }
-      } else if (isSupabaseConfigured) {
-        const { data, error } = await supabase
-          .from('login_logs')
-          .select('*')
-          .order('logged_in_at', { ascending: false })
-          .limit(500);
-        if (error) setLoadError(`로그인 기록을 불러오지 못했습니다: ${error.message}`);
-        setLogs(data || []);
       } else {
         const local = getLocalLogs();
         setLogs(local.map(l => ({ ...l })));
@@ -83,9 +74,9 @@ export default function LoginLogs() {
         <div>
           <h1 className="text-2xl font-bold text-white">로그인 기록</h1>
           <p className="text-slate-400 text-sm mt-1">
-            {isSupabaseConfigured
-              ? '전체 지점의 로그인 이력을 확인하세요'
-              : '로그인 이력을 확인하세요 (중앙 서버 모드에서는 이 기기에서 기록된 로그인만 표시됩니다)'}
+            {isAuthApiConfigured
+              ? '전체 지점의 로그인 이력 (중앙 서버 기록 — 성공·실패 사유·프로그램 버전)'
+              : '이 기기에서 기록된 로그인 이력'}
           </p>
         </div>
         <button

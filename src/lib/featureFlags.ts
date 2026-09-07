@@ -10,9 +10,10 @@ import { apiRequest, isAuthApiConfigured } from './authApi';
 const EVENT = 'feature-flags-changed';
 const CACHE_KEY = 'crm_feature_flags_cache_v1';
 
-// 구독 실결제 런치 게이트. 실 PG(포트원) 계약·검수 완료 전까지 false.
-// 어드민 원격 제어 대상이 아님 — 계약 전 원격 실수로 켜지는 사고를 막기 위해 하드코딩 유지.
-export const PAYMENT_ENABLED = false;
+// 구독 실결제 런치 게이트 — PG 계약 정보(VITE_PORTONE_IMP_CODE + VITE_PORTONE_PG)가 빌드에 주입된 경우에만 true.
+// 어드민 원격 제어 대상이 아님(계약 전 원격 실수로 켜지는 사고 방지). 테스트 PG 하드코딩은 2026-09-07 제거.
+import { isPaymentConfigured } from './payment';
+export const PAYMENT_ENABLED = isPaymentConfigured;
 
 type FlagMap = Record<string, boolean>;
 

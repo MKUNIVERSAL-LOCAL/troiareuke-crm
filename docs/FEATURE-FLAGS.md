@@ -41,7 +41,7 @@ localStorage 키는 기존 `feature_beacon_consultation` 그대로 유지(하위
 
 ## 의도적으로 제외한 것
 
-- `PAYMENT_ENABLED`(구독 실결제)는 하드코딩 유지 — PG 계약 전 원격 실수 방지.
+- `PAYMENT_ENABLED`(구독 실결제)는 어드민 원격 제어 대상이 아니다 — 빌드 env `VITE_PORTONE_IMP_CODE`+`VITE_PORTONE_PG`가 있을 때만 true (2026-09-07: 테스트 PG 하드코딩 제거, PG 계약 정보만 넣으면 연결되는 구조).
 - 대시보드/설정 페이지는 제어 대상 아님(항상 표시).
 
 ## 새 기능을 어드민 제어에 추가하는 법

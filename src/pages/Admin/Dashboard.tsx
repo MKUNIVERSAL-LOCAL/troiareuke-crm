@@ -105,21 +105,21 @@ export default function AdminDashboard() {
           recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
         });
       } else if (isSupabaseConfigured) {
-        const today = new Date().toISOString().split('T')[0];
-
-        const [branches, users, allLogs, todayLogs] = await Promise.all([
+        // Supabase 단독 모드(레거시): 지점·사용자 집계만 Supabase, 로그인 기록은 이 기기 로컬
+        // (login_logs 테이블 기록은 2026-09-07 서버 정본 도입으로 제거됨)
+        const [branches, users] = await Promise.all([
           supabase.from('branches').select('id, is_active'),
           supabase.from('user_profiles').select('id'),
-          supabase.from('login_logs').select('id, email, branch_name, status, logged_in_at').order('logged_in_at', { ascending: false }).limit(20),
-          supabase.from('login_logs').select('id', { count: 'exact' }).eq('status', 'success').gte('logged_in_at', today),
         ]);
+        const logs = getLocalLogs();
+        const todayLocal = new Date().toDateString();
 
         setStats({
           totalBranches: branches.data?.length || 0,
           activeBranches: branches.data?.filter(b => b.is_active).length || 0,
           totalUsers: users.data?.length || 0,
-          todayLogins: todayLogs.count || 0,
-          recentLogs: allLogs.data || [],
+          todayLogins: logs.filter(l => l.status === 'success' && new Date(l.logged_in_at).toDateString() === todayLocal).length,
+          recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
         });
       } else {
         // 로컬 데이터 폴백
