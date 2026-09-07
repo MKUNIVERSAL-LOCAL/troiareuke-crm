@@ -29,3 +29,8 @@ Thumbs.db
 상품,교육,이미지등 자료/
 .vercel
 release-admin
+
+# E2E 산출물
+dist-e2e
+playwright-report
+test-results

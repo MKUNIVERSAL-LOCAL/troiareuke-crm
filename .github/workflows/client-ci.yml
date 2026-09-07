@@ -13,6 +13,9 @@ on:
       - 'tsconfig*.json'
       - 'vite.config.*'
       - 'scripts/check-routes.mjs'
+      - 'e2e/**'
+      - 'playwright.config.ts'
+      - '.env.e2e'
       - '.github/workflows/client-ci.yml'
   pull_request:
     paths:
@@ -43,3 +46,30 @@ jobs:
         run: node scripts/check-routes.mjs
       - name: Distribution invariants (no-redownload policy)
         run: node scripts/check-distribution-invariants.mjs
+
+  # 핵심 사용 흐름 E2E 스모크 (파일럿 준비 5/5) — 로컬 모드 빌드를 브라우저로 통과시켜
+  # 가입→온보딩→고객 등록→예약→결제가 릴리스마다 깨지지 않았음을 보장한다.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build (local mode, .env.e2e)
+        run: npm run build:e2e
+      - name: Run E2E smoke
+        run: npm run test:e2e
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
