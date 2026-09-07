@@ -57,11 +57,11 @@
 | 모바일 앱 | MOBILE-APP-PLAN | 미착수 | 오너 D1~D6 결정 반영된 계획 있음, 착수 여부 |
 | 브랜드 "또봬요"/DERMAVIA | NAMING-PROPOSAL, BRAND-DIRECTION | 더마솔루션 확정 | 종결로 간주(문서만 아카이브) |
 
-## 5. 코어 잠금 파일 안의 정리 대상 (오너 승인 시 CORE_EDIT=1)
+## 5. 코어 잠금 파일 안의 정리 대상 — ✅ 2026-09-07 오너 승인 후 전부 처리 (v1.0.52)
 
-- `src/lib/payment.ts:45,85` — 포트원 IMP 코드 하드코딩 + PG `html5_inicis.INIpayTest`(테스트). `PAYMENT_ENABLED=false`라 현재 도달 불가지만 실개통 전 반드시 env화.
-- `src/lib/store.ts` — 호출되지 않는 샘플데이터 생성 함수 묶음(약 95줄) 삭제 후보, `:748` 로그 문구 "Supabase에서 로드"가 NAS 모드에서도 출력.
-- `src/lib/loginLog.ts` — 클라이언트 측 로그인 기록은 이제 서버 정본이 있으므로 Supabase 경로 정리 가능.
+- ✅ `src/lib/payment.ts` — 테스트 PG·IMP 하드코딩 제거. `VITE_PORTONE_IMP_CODE`+`VITE_PORTONE_PG` 주입 시에만 결제 활성(PAYMENT_ENABLED 파생). 오너 지시: "PG 계약 시 연결만 가능한 구조, 테스트 제외".
+- ✅ `src/lib/store.ts` — 미사용 샘플데이터 함수 112줄 삭제, 로드 로그 문구 정정.
+- ✅ `src/lib/loginLog.ts` — Supabase 경로 제거, 로컬 폴백만 유지. 어드민 화면의 Supabase login_logs 조회도 제거.
 
 ## 6. 경미(추후)
 
