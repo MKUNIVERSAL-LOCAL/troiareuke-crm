@@ -61,6 +61,28 @@ await new Promise((resolve, reject) => {
 const zipSha256 = zipHash.digest('hex');
 const zipStat = await fs.stat(stagedZipPath);
 
+// 설치파일(NSIS, 사용자 폴더 설치·관리자 권한 불필요) — 2026-09-07 오너 결정으로 배포 사이트 기본 다운로드.
+// 설치된 프로그램은 폴더형과 같은 구조라 인앱 업데이트는 zipUrl 경로로 받는다(추가 메커니즘 없음).
+// 채널 파일명은 버전 없는 ASCII 고정(항상 최신을 서빙) — 매니페스트 필드는 추가만(installer*).
+const installerSourceName = `TroiareukeCRM-Setup-${packageJson.version}.exe`;
+const publicInstallerName = 'TroiareukeCRM-Setup.exe';
+const installerSourcePath = path.join(releaseDir, installerSourceName);
+const installerStat = await fs.stat(installerSourcePath).catch(() => null);
+if (!installerStat?.isFile() || installerStat.size === 0) {
+  console.error(`설치파일이 없습니다: ${installerSourcePath}`);
+  console.error('먼저 npm run electron:build:release (nsis + portable) 를 실행하세요.');
+  process.exit(1);
+}
+const installerHash = crypto.createHash('sha256');
+await new Promise((resolve, reject) => {
+  const stream = createReadStream(installerSourcePath);
+  stream.on('data', chunk => installerHash.update(chunk));
+  stream.on('end', resolve);
+  stream.on('error', reject);
+});
+const installerSha256 = installerHash.digest('hex');
+const stagedInstallerPath = path.join(stageDir, publicInstallerName);
+
 const manifest = {
   version: packageJson.version,
   url: `${publicBaseUrl}/${publicArtifactName}`,
@@ -69,12 +91,16 @@ const manifest = {
   zipUrl: `${publicBaseUrl}/${publicZipName}`,
   zipSha256,
   zipSize: zipStat.size,
+  installerUrl: `${publicBaseUrl}/${publicInstallerName}`,
+  installerSha256,
+  installerSize: installerStat.size,
   releaseDate: new Date().toISOString(),
   ...(notes ? { notes } : {}),
 };
 
 await fs.copyFile(sourcePath, stagedArtifactPath);
 await fs.copyFile(sourcePath, stagedPublicArtifactPath); // gh release 업로드용 (수동 cp 단계 제거)
+await fs.copyFile(installerSourcePath, stagedInstallerPath);
 await fs.writeFile(path.join(stageDir, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
 // 공지 게시판용 누적 업데이트 로그 — docs/RELEASE-HISTORY.json이 정본(커밋됨),
@@ -126,6 +152,7 @@ if (nasRoot) {
 
   await publishAtomically(publicArtifactName); // manifest.url이 가리키는 공개 파일명 — exe를 latest.json보다 먼저
   await publishAtomically(publicZipName); // 폴더형 설치 업데이트용 zip도 latest.json보다 먼저
+  await publishAtomically(publicInstallerName); // 설치파일(사이트 기본 다운로드)
   await publishAtomically('history.json');
   await publishAtomically('latest.json');
   console.log(`NAS 게시 완료: ${targetDir}`);
@@ -134,3 +161,4 @@ if (nasRoot) {
 console.log(`포터블 업데이트 준비 완료: ${stageDir}`);
 console.log(`버전: ${manifest.version}`);
 console.log(`SHA-256: ${manifest.sha256}`);
+console.log(`설치파일 SHA-256: ${manifest.installerSha256} (${publicInstallerName})`);

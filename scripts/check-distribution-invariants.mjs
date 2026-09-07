@@ -34,9 +34,13 @@ check('적용 후 해시 검증 + updater.log 기록', /Get-FileHash -LiteralPat
 check('주기 확인 유지 (시작 5초 후 + 10분 간격)', /check\('startup'\), 5000\)/.test(updater) && /10 \* 60 \* 1000/.test(updater));
 
 const prepare = read('scripts/prepare-portable-update.mjs');
-for (const field of ['url', 'sha256', 'zipUrl', 'zipSha256', 'version']) {
+for (const field of ['url', 'sha256', 'zipUrl', 'zipSha256', 'installerUrl', 'installerSha256', 'version']) {
   check(`매니페스트 필드 유지: ${field} (필드 제거·개명 금지)`, new RegExp(`\\b${field}\\b`).test(prepare));
 }
+check('채널 파일명 고정 (Setup/portable/win64.zip — 옛 링크가 항상 최신을 받도록)',
+  /'TroiareukeCRM-Setup\.exe'/.test(prepare) && /'TroiareukeCRM-portable\.exe'/.test(prepare) && /'TroiareukeCRM-win64\.zip'/.test(prepare));
+const ghRelease = read('scripts/create-github-release.mjs');
+check('GitHub Release 산출물 5종 (설치파일 포함)', ['TroiareukeCRM-Setup.exe', 'TroiareukeCRM-portable.exe', 'TroiareukeCRM-win64.zip', 'latest.json', 'history.json'].every(n => ghRelease.includes(`'${n}'`)));
 check('폴더형 zip은 win-unpacked 루트 내용물로 압축 (중첩 폴더 금지)', /win-unpacked/.test(prepare) && /\\\\\*'/.test(prepare) || /win-unpacked[^\n]*\*/.test(prepare));
 
 const pkg = JSON.parse(read('package.json'));
@@ -45,6 +49,8 @@ check('release:all 게이트: 라우트 검사', releaseAll.includes('check-rout
 check('release:all 게이트: 업데이터 헬퍼 테스트', releaseAll.includes('test-updater-helpers.mjs'));
 check('release:all 게이트: 배포 불변 원칙 점검(이 스크립트)', releaseAll.includes('check-distribution-invariants.mjs'));
 check('release:all: 스테이징(prepare) 후 GitHub Release', releaseAll.indexOf('prepare-portable-update') !== -1 || releaseAll.includes('electron:portable:prepare'));
+check('release:all: 설치파일(nsis)+포터블 동시 빌드', releaseAll.includes('electron:build:release') && /nsis portable/.test(pkg.scripts['electron:build:release'] || ''));
+check('NSIS: 사용자 폴더 설치·관리자 권한 불필요(perMachine=false)·데이터 보존', pkg.build?.nsis?.perMachine === false && pkg.build?.nsis?.deleteAppDataOnUninstall === false);
 
 const authApi = read('src/lib/authApi.ts');
 check('지점 버전 텔레메트리 헤더 전송 (X-App-Version / X-App-Mode)', authApi.includes("'X-App-Version'") && authApi.includes("'X-App-Mode'"));

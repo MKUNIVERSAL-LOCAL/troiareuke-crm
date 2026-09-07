@@ -16,7 +16,10 @@ NAS에서: CRM-publish-update / CRM-server-update 가 최신 릴리스를 자동
    `CRM-server-update.sh` 내용 전체를 붙여넣기(기존 스크립트 대체).
 2. `CRM-publish-update`는 기존 스크립트에서 `TAG=v…` 한 줄만 아래로 교체:
    `TAG=$(wget -qO- https://api.github.com/repos/MKUNIVERSAL-LOCAL/troiareuke-crm/releases/latest | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')`
-3. (선택) 두 작업의 '활성화됨' 체크 → 매일 00:00 자동 실행. 새 릴리스가 없으면 같은 버전 재게시라 무해.
+3. (선택) 두 작업의 '활성화됨' 체크 → 매일 00:00 자동 실행. 새 릴리스가 없으면 같은 버전 재게시라 무해. (✅ 2026-09-07 오너 활성화)
+4. **v1.0.50부터 설치파일 추가 (오너 1회 수정 필요)**: `CRM-publish-update` 스크립트에서 `TroiareukeCRM-portable.exe`를
+   내려받는 줄을 복사해 파일명만 `TroiareukeCRM-Setup.exe`로 바꾼 줄을 바로 아래에 추가한다 (sha 검증 줄이 있으면 그것도 같이).
+   이 줄이 없으면 사이트 기본 다운로드 버튼(/portable/TroiareukeCRM-Setup.exe)이 404가 난다. 확인: `npm run verify:nas`.
 4. (권장) 완전 자동화: 작업 PC 공개키를 NAS 계정 `~/.ssh/authorized_keys`에 등록하면
    이후 Claude가 DSM 로그인 없이 게시·배포·검증까지 직접 수행 가능.
 

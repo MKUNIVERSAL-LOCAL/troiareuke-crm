@@ -54,7 +54,8 @@ if (!skipChannel) {
     const r = await fetch(CHANNEL);
     const j = await r.json();
     if (j.version !== version) throw new Error(`채널=${j.version}, 로컬=${version} — 게시 작업 실행 필요`);
-    for (const url of [j.url, j.zipUrl]) {
+    // installerUrl은 v1.0.50부터 (추가 필드) — 매니페스트에 있으면 함께 검증
+    for (const url of [j.url, j.zipUrl, j.installerUrl].filter(Boolean)) {
       const head = await fetch(url, { method: 'HEAD' });
       if (head.status !== 200) throw new Error(`${url} → ${head.status}`);
     }

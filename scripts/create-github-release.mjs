@@ -12,7 +12,7 @@ const tag = `v${version}`;
 const stageDir = path.join(rootDir, 'release', 'portable-update');
 const notesPath = path.join(rootDir, 'docs', 'RELEASE-NOTES-CURRENT.md');
 
-const assets = ['TroiareukeCRM-portable.exe', 'TroiareukeCRM-win64.zip', 'latest.json', 'history.json']
+const assets = ['TroiareukeCRM-Setup.exe', 'TroiareukeCRM-portable.exe', 'TroiareukeCRM-win64.zip', 'latest.json', 'history.json']
   .map((name) => path.join(stageDir, name));
 for (const asset of assets) {
   if (!fs.existsSync(asset)) {
