@@ -152,6 +152,22 @@ export interface ShopSettings {
     birthdayMessage: boolean;
     novisitMessage: boolean;
   };
+  /**
+   * 지점 환경설정 묶음 — 예전엔 PC별 localStorage에만 있어 PC를 바꾸면 사라지던 값들 (2026-09-07 서버 저장으로 승격).
+   * shop_settings 행에 preferences JSON으로 함께 저장·동기화된다.
+   */
+  preferences?: ShopPreferences;
+}
+
+export interface ShopPreferences {
+  /** 매장이 직접 추가한 결제수단 (기본 4종 제외) */
+  customPaymentMethods?: string[];
+  /** 재방문 권장 주기(일). 시술기록에 다음 방문일이 없을 때 이 주기로 권장일을 계산 */
+  revisitCycleDays?: number;
+  /** 기능 키 → 지점 사용 여부 (본사 허용 범위 안에서 지점이 켜고 끄는 토글, 예: customers.beacon) */
+  deviceFeatures?: Record<string, boolean>;
+  /** API 연동 가이드 체크리스트 상태 */
+  apiGuideStatus?: Record<string, 'connected' | 'pending' | 'not-started'>;
 }
 
 // =============================================

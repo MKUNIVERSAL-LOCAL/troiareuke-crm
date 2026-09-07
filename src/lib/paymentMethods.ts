@@ -1,17 +1,22 @@
 // 결제수단 공용 목록 — 기본 4종 + 매장에서 직접 추가한 커스텀 수단.
-// 커스텀 수단은 이 기기의 localStorage에 저장된다(기기별). 서버 동기화 대상 아님.
+// 커스텀 수단은 지점 환경설정(shop_settings.preferences.customPaymentMethods)에 저장되어
+// NAS로 동기화된다 — 어느 PC에서 추가해도 같은 지점의 모든 PC에서 보인다 (2026-09-07 승격).
+// 예전 PC별 localStorage 값은 첫 조회 시 한 번 이관된다.
+import { getPreference, setPreference, migrateLegacyPreference } from './shopPreferences';
+
 export const BASE_PAYMENT_METHODS = ['카드', '현금', '계좌이체', '카카오페이'] as const;
 
-const STORAGE_KEY = 'crm_custom_payment_methods';
+const LEGACY_STORAGE_KEY = 'crm_custom_payment_methods';
+
+function sanitize(list: unknown): string[] {
+  return Array.isArray(list) ? list.filter((v): v is string => typeof v === 'string' && v.trim().length > 0) : [];
+}
 
 export function getCustomPaymentMethods(): string[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter(v => typeof v === 'string' && v.trim()) : [];
-  } catch {
-    return [];
-  }
+  const migrated = migrateLegacyPreference('customPaymentMethods', LEGACY_STORAGE_KEY, raw => {
+    try { const parsed = sanitize(JSON.parse(raw)); return parsed.length > 0 ? parsed : null; } catch { return null; }
+  });
+  return sanitize(migrated ?? getPreference('customPaymentMethods'));
 }
 
 export function getAllPaymentMethods(): string[] {
@@ -24,16 +29,14 @@ export function addCustomPaymentMethod(name: string): boolean {
   const trimmed = name.trim();
   if (!trimmed || trimmed.length > 20) return false;
   if (getAllPaymentMethods().includes(trimmed) || trimmed === '혼합') return false;
-  const next = [...getCustomPaymentMethods(), trimmed];
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setPreference('customPaymentMethods', [...getCustomPaymentMethods(), trimmed]);
   } catch {
-    return false; // 용량 초과 등 저장 실패 — 호출측(alert) 기존 실패 경로로 처리
+    return false;
   }
   return true;
 }
 
 export function removeCustomPaymentMethod(name: string): void {
-  const next = getCustomPaymentMethods().filter(m => m !== name);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  setPreference('customPaymentMethods', getCustomPaymentMethods().filter(m => m !== name));
 }

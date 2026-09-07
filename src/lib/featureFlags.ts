@@ -6,6 +6,7 @@
 
 import { FEATURE_MAP } from './featureRegistry';
 import { apiRequest, isAuthApiConfigured } from './authApi';
+import { getPreference, setPreference } from './shopPreferences';
 
 const EVENT = 'feature-flags-changed';
 const CACHE_KEY = 'crm_feature_flags_cache_v1';
@@ -51,14 +52,25 @@ export function isFeatureAllowed(id: string): boolean {
   return remote.branch[id] ?? remote.global[id] ?? def.defaultOn;
 }
 
-/** 최종 사용 여부 = 어드민 허용 && (기기 토글 있으면 그 값) */
+/**
+ * 최종 사용 여부 = 어드민 허용 && (지점 토글 있으면 그 값)
+ * 지점 토글은 2026-09-07부터 지점 환경설정(shop_settings.preferences.deviceFeatures, 서버 동기)에 저장 —
+ * 같은 지점의 모든 PC에 같은 값. 예전 PC별 localStorage 값은 첫 조회 때 한 번 이관된다.
+ */
 export function isFeatureEnabled(id: string): boolean {
   if (!isFeatureAllowed(id)) return false;
   const def = FEATURE_MAP.get(id);
   if (def?.deviceToggle) {
+    const prefs = getPreference('deviceFeatures');
+    if (prefs && typeof prefs[id] === 'boolean') return prefs[id];
     try {
-      const v = localStorage.getItem(def.deviceToggle.key);
-      if (v !== null) return v === '1';
+      const legacy = localStorage.getItem(def.deviceToggle.key);
+      if (legacy !== null) {
+        const on = legacy === '1';
+        setPreference('deviceFeatures', { ...(prefs || {}), [id]: on }); // 1회 이관
+        localStorage.removeItem(def.deviceToggle.key);
+        return on;
+      }
     } catch {
       /* localStorage 불가 환경 */
     }
@@ -67,15 +79,11 @@ export function isFeatureEnabled(id: string): boolean {
   return true;
 }
 
-/** 기기별 사용 토글 저장 (deviceToggle 정의된 기능만 의미 있음) */
+/** 지점 사용 토글 저장 (deviceToggle 정의된 기능만 의미 있음) — 서버 동기 설정에 기록 */
 export function setDeviceFeatureEnabled(id: string, on: boolean): void {
   const def = FEATURE_MAP.get(id);
   if (!def?.deviceToggle) return;
-  try {
-    localStorage.setItem(def.deviceToggle.key, on ? '1' : '0');
-  } catch {
-    /* localStorage 불가 환경 무시 */
-  }
+  setPreference('deviceFeatures', { ...(getPreference('deviceFeatures') || {}), [id]: on });
   emit();
 }
 

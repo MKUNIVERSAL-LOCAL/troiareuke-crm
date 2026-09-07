@@ -13,18 +13,28 @@
 
 import { CustomerStore, TreatmentLogStore, ReservationStore, SettingsStore } from './store';
 import type { Customer } from '../types';
+import { getPreference, setPreference, migrateLegacyPreference } from './shopPreferences';
 
-const CYCLE_KEY = 'troiareuke_revisit_cycle_days';
-const DEFAULT_CYCLE_DAYS = 28;
+const LEGACY_CYCLE_KEY = 'troiareuke_revisit_cycle_days';
+export const DEFAULT_CYCLE_DAYS = 28;
+export const MIN_CYCLE_DAYS = 7;
+export const MAX_CYCLE_DAYS = 365;
 
-/** 기본 재방문 주기(일) — 설정에서 변경 가능(기기별 localStorage) */
-function getRevisitCycleDays(): number {
-  try {
-    const v = parseInt(localStorage.getItem(CYCLE_KEY) || '', 10);
-    return Number.isFinite(v) && v > 0 ? v : DEFAULT_CYCLE_DAYS;
-  } catch {
-    return DEFAULT_CYCLE_DAYS;
-  }
+/** 재방문 권장 주기(일) — 지점 환경설정(서버 동기). 설정 > 알림 설정에서 변경. 예전 PC별 값은 1회 이관. */
+export function getRevisitCycleDays(): number {
+  const migrated = migrateLegacyPreference('revisitCycleDays', LEGACY_CYCLE_KEY, raw => {
+    const v = parseInt(raw, 10);
+    return Number.isFinite(v) && v >= MIN_CYCLE_DAYS && v <= MAX_CYCLE_DAYS ? v : null;
+  });
+  const v = migrated ?? getPreference('revisitCycleDays');
+  return typeof v === 'number' && Number.isFinite(v) && v >= MIN_CYCLE_DAYS && v <= MAX_CYCLE_DAYS ? v : DEFAULT_CYCLE_DAYS;
+}
+
+/** 재방문 권장 주기 저장(7~365일). 범위 밖이면 false. 서버 리마인더도 같은 값을 읽는다. */
+export function setRevisitCycleDays(days: number): boolean {
+  if (!Number.isInteger(days) || days < MIN_CYCLE_DAYS || days > MAX_CYCLE_DAYS) return false;
+  setPreference('revisitCycleDays', days);
+  return true;
 }
 
 export interface DueCustomer {

@@ -2,6 +2,7 @@
 import { CheckCircle2, Circle, ExternalLink, ChevronDown, ChevronUp, AlertCircle, CreditCard } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import clsx from 'clsx';
+import { getPreference, setPreference, migrateLegacyPreference } from '../../lib/shopPreferences';
 
 type Status = 'connected' | 'pending' | 'not-started';
 
@@ -218,14 +219,17 @@ const categories = ['전체', '예약', '메시지', '인증', '결제', '연동
 const priorities = { must: { label: '필수', color: 'bg-red-100 text-red-700' }, recommended: { label: '권장', color: 'bg-orange-100 text-orange-700' }, optional: { label: '선택', color: 'bg-gray-100 text-gray-600' } };
 const statuses = { connected: { label: '✅ 연동완료', color: 'text-green-600' }, pending: { label: '⏳ 진행중', color: 'text-orange-500' }, 'not-started': { label: '⬜ 미시작', color: 'text-gray-400' } };
 
-const API_STATUS_KEY = 'crm_api_guide_status';
+const LEGACY_API_STATUS_KEY = 'crm_api_guide_status';
 
 export default function ApiGuide() {
   const [category, setCategory] = useState('전체');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // 체크한 연동 상태를 localStorage에 보존 (기존엔 새로고침 시 초기화되던 비영속 상태)
+  // 체크한 연동 상태는 지점 환경설정(서버 동기)에 보존 — PC를 바꿔도 유지. 예전 PC별 값은 1회 이관.
   const [localStatus, setLocalStatus] = useState<Record<string, Status>>(() => {
-    try { return JSON.parse(localStorage.getItem(API_STATUS_KEY) || '{}'); } catch { return {}; }
+    const migrated = migrateLegacyPreference('apiGuideStatus', LEGACY_API_STATUS_KEY, raw => {
+      try { const parsed = JSON.parse(raw); return parsed && typeof parsed === 'object' ? parsed : null; } catch { return null; }
+    });
+    return (migrated ?? getPreference('apiGuideStatus') ?? {}) as Record<string, Status>;
   });
 
   const getStatus = (api: ApiItem): Status => localStatus[api.id] ?? api.status;
@@ -237,7 +241,7 @@ export default function ApiGuide() {
     const next: Status = current === 'not-started' ? 'pending' : current === 'pending' ? 'connected' : 'not-started';
     setLocalStatus(p => {
       const updated = { ...p, [id]: next };
-      try { localStorage.setItem(API_STATUS_KEY, JSON.stringify(updated)); } catch { /* noop */ }
+      try { setPreference('apiGuideStatus', updated); } catch { /* 저장 실패 시 화면 상태만 유지 */ }
       return updated;
     });
   };

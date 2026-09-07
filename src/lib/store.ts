@@ -511,6 +511,7 @@ function toDbSettings(s: Partial<ShopSettings>): Record<string, any> {
   if (s.smsCallerId !== undefined) db.sms_caller_id = s.smsCallerId;
   if (s.pointRate !== undefined) db.point_rate = s.pointRate;
   if (s.notificationSettings !== undefined) db.notification_settings = s.notificationSettings;
+  if (s.preferences !== undefined) db.preferences = s.preferences; // 지점 환경설정 묶음 (2026-09-07, PC 교체 시 유실 방지)
   return db;
 }
 
@@ -529,6 +530,7 @@ function fromDbSettings(row: Record<string, any>): ShopSettings {
     smsCallerId: row.sms_caller_id,
     pointRate: row.point_rate ?? 1,
     notificationSettings: row.notification_settings || getDefaultSettings().notificationSettings,
+    preferences: row.preferences && typeof row.preferences === 'object' ? row.preferences : undefined,
   };
 }
 

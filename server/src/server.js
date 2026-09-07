@@ -3049,7 +3049,7 @@ async function loadCollection(branchId, collection) {
 }
 
 // 권장 재방문일이 지난 고객 산출 (행 형식 = 클라이언트 toDb*의 snake_case)
-function computeRevisitDue({ customers, treatmentLogs, reservations }) {
+function computeRevisitDue({ customers, treatmentLogs, reservations, cycleDays = REMINDER_CYCLE_DAYS }) {
   const today = isoDate(new Date());
   const due = [];
   const upcomingCustomerIds = new Set();
@@ -3079,7 +3079,7 @@ function computeRevisitDue({ customers, treatmentLogs, reservations }) {
     } else if (lastVisit) {
       const d = new Date(`${lastVisit}T00:00:00Z`);
       if (Number.isNaN(d.getTime())) continue;
-      d.setUTCDate(d.getUTCDate() + REMINDER_CYCLE_DAYS);
+      d.setUTCDate(d.getUTCDate() + cycleDays);
       dueDate = d.toISOString().slice(0, 10);
     } else {
       continue;
@@ -3115,7 +3115,10 @@ async function runRevisitReminders() {
         loadCollection(branchId, 'reservations'),
         loadCollection(branchId, 'shop_settings'),
       ]);
-      const due = computeRevisitDue({ customers, treatmentLogs, reservations });
+      // 지점이 설정한 재방문 주기(shop_settings.preferences.revisitCycleDays, 7~365일) 우선, 없으면 서버 기본값
+      const branchCycle = Number(settingsRows[0]?.preferences?.revisitCycleDays);
+      const cycleDays = Number.isInteger(branchCycle) && branchCycle >= 7 && branchCycle <= 365 ? branchCycle : REMINDER_CYCLE_DAYS;
+      const due = computeRevisitDue({ customers, treatmentLogs, reservations, cycleDays });
       if (due.length === 0) continue;
 
       // 쿨다운: 최근 N일 내 리마인더를 받은 번호는 제외 (매일 재발송 금지)
