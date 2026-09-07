@@ -74,6 +74,24 @@ export function fetchAdminOverview() {
   return apiRequest<{ branches: AdminBranchOverview[] }>('/api/admin/overview');
 }
 
+/** 서버 정본 로그인 기록 (auth_login_log). 어드민 "로그인 기록"·대시보드 최근 로그인. */
+export interface AdminLoginLog {
+  id: string;
+  user_id: string | null;
+  email: string;
+  branch_id: string | null;
+  branch_name: string | null;
+  status: 'success' | 'failed';
+  fail_reason: string | null;
+  device_info: string | null;
+  logged_in_at: string;
+}
+
+export async function adminListLoginLogs(limit = 500) {
+  const r = await apiRequest<{ logs: AdminLoginLog[] }>(`/api/admin/login-logs?limit=${limit}`);
+  return r.logs;
+}
+
 export interface AdminBranchAnalytics {
   branchId: string;
   branchName: string | null;

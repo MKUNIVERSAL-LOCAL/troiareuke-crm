@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Search, RefreshCw, Filter } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { getLocalLogs } from '../../lib/loginLog';
+import { isAuthApiConfigured } from '../../lib/authApi';
+import { adminListLoginLogs } from '../../lib/adminApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -44,7 +46,15 @@ export default function LoginLogs() {
     setLoading(true);
     setLoadError('');
     try {
-      if (isSupabaseConfigured) {
+      if (isAuthApiConfigured) {
+        // NAS 모드: 서버 정본(auth_login_log). 기존엔 이 분기가 없어 기기 로컬 500건만 보였다.
+        try {
+          setLogs(await adminListLoginLogs(500));
+        } catch (e: any) {
+          setLoadError(`로그인 기록을 불러오지 못했습니다: ${e?.message || '서버 오류'} (구버전 서버면 배포 후 표시됩니다)`);
+          setLogs(getLocalLogs().map(l => ({ ...l })));
+        }
+      } else if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from('login_logs')
           .select('*')

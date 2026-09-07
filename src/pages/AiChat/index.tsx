@@ -9,6 +9,8 @@ const IS_ELECTRON =
 import Header from '../../components/layout/Header';
 import { useFeature } from '../../hooks/useFeature';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
+// 외부 LLM으로 나가는 프롬프트에는 전화번호를 항상 마스킹한다(권한 무관) — 다른 화면과 개인정보 정책 일치
+import { maskPhone } from '../../lib/masking';
 import { format, subMonths, parseISO, differenceInDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
@@ -76,12 +78,12 @@ function buildCrmContext(): string {
 - 이탈 위험 고객 (3개월 이상 미방문): ${churned.length}명
 
 【전체 고객 목록】
-${customers.map(c => `- ${c.name} (${c.phone}) | 등급:${c.grade} | 피부타입:${c.skinType || '-'} | 총방문:${c.totalVisits}회 | 총결제:${c.totalSpent.toLocaleString()}원 | 마지막방문:${c.lastVisitDate || '없음'} | 가입:${c.registeredAt} | 유입경로:${c.referralSource || '-'}`).join('\n')}
+${customers.map(c => `- ${c.name} (${maskPhone(c.phone || '', 'staff')}) | 등급:${c.grade} | 피부타입:${c.skinType || '-'} | 총방문:${c.totalVisits}회 | 총결제:${c.totalSpent.toLocaleString()}원 | 마지막방문:${c.lastVisitDate || '없음'} | 가입:${c.registeredAt} | 유입경로:${c.referralSource || '-'}`).join('\n')}
 
 【이탈 고객 상세 (3개월 이상 미방문)】
 ${churned.length === 0 ? '해당 없음' : churned.map(c => {
     const days = differenceInDays(today, parseISO(c.lastVisitDate!));
-    return `- ${c.name} (${c.phone}) | ${days}일 미방문 | 등급:${c.grade} | 총방문:${c.totalVisits}회 | 마지막방문:${c.lastVisitDate}`;
+    return `- ${c.name} (${maskPhone(c.phone || '', 'staff')}) | ${days}일 미방문 | 등급:${c.grade} | 총방문:${c.totalVisits}회 | 마지막방문:${c.lastVisitDate}`;
   }).join('\n')}
 
 【이번 달 매출】

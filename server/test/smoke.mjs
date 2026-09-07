@@ -350,6 +350,27 @@ await test('프로그램 버전 헤더가 계정에 기록되고 어드민 목�
   assert(row2?.lastAppVersion === '1.0.48' && row2?.lastAppMode === 'portable', '비정상 헤더가 기록을 덮어씀');
 });
 
+await test('로그인 성공·실패가 서버 로그인 기록에 남고 어드민이 조회한다', async () => {
+  // 실패 1건(틀린 비밀번호) + 성공 1건을 만든 뒤 조회
+  await call('/api/auth/login', { method: 'POST', body: { email: shopEmail, password: 'wrong-password-123' } });
+  const ok = await fetch(`${API}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-App-Version': '1.0.51', 'X-App-Mode': 'folder' },
+    body: JSON.stringify({ email: shopEmail, password: temporaryPassword }),
+  });
+  assert(ok.status === 200, `login status=${ok.status}`);
+  await new Promise(r => setTimeout(r, 300)); // fire-and-forget INSERT 대기
+  const { status, data } = await call('/api/admin/login-logs?limit=50', { token: adminToken });
+  assert(status === 200 && Array.isArray(data.logs), `status=${status}`);
+  const mine = data.logs.filter(l => l.email === shopEmail);
+  assert(mine.some(l => l.status === 'failed' && l.fail_reason), '실패 기록 없음');
+  const success = mine.find(l => l.status === 'success');
+  assert(success && /v1\.0\.51/.test(success.device_info || ''), `성공 기록/버전 표기 없음: ${JSON.stringify(success)}`);
+  // 일반 계정은 조회 불가
+  const denied = await call('/api/admin/login-logs', { token: shopToken });
+  assert(denied.status === 403, `denied status=${denied.status}`);
+});
+
 await test('프로필(매장 전화·주소)이 저장된다', async () => {
   const patch = await call('/api/auth/profile', {
     method: 'PATCH',

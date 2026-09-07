@@ -90,6 +90,25 @@ const smtp = nodemailer.createTransport({
   socketTimeout: 20_000,
 });
 
+// ── 운영 경보 메일 ─────────────────────────────────────────────────
+// 백업 실패·예약발송 실패·취소된 결제요청 입금 등은 지금까지 stdout 로그에만 남아 아무도 보지 못했다.
+// SMTP가 설정돼 있으면 OPS_ALERT_EMAIL(기본 ADMIN_EMAIL)로 보낸다. 같은 이벤트는 1시간에 1회만(폭주 방지).
+const OPS_ALERT_EMAIL = String(process.env.OPS_ALERT_EMAIL || process.env.ADMIN_EMAIL || '').trim();
+const OPS_ALERT_THROTTLE_MS = 60 * 60 * 1000;
+const opsAlertLastSent = new Map();
+function notifyOps(event, details = {}) {
+  if (!OPS_ALERT_EMAIL || !process.env.SMTP_HOST) return;
+  const last = opsAlertLastSent.get(event) || 0;
+  if (Date.now() - last < OPS_ALERT_THROTTLE_MS) return;
+  opsAlertLastSent.set(event, Date.now());
+  smtp.sendMail({
+    from: process.env.MAIL_FROM,
+    to: OPS_ALERT_EMAIL,
+    subject: `[더마솔루션 서버 경보] ${event}`,
+    text: `${new Date().toISOString()}\n이벤트: ${event}\n\n${JSON.stringify(details, null, 2)}\n\n같은 종류의 경보는 1시간에 한 번만 발송됩니다. 자세한 내용은 서버 로그(docker logs)를 확인하세요.`,
+  }).catch(error => log('warn', 'ops_alert_failed', { event, ...errorDetails(error) }));
+}
+
 const app = express();
 // 역방향 프록시(DSM) 뒤에서만 1로 둔다. 8787 포트를 직접 노출하는 구성이면
 // TRUST_PROXY=0으로 꺼야 X-Forwarded-For 위조로 rate limit이 우회되지 않는다.
@@ -148,6 +167,23 @@ const loginEmailLimiter = rateLimit({
   },
 });
 const resetLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false });
+
+// 데이터·사진 동기화 API 남용 방어 — 세션(토큰) 단위 분당 한도. 정상 동기화는 컬렉션 15종 + 사진 배치로
+// 분당 수십 회 수준이라 600은 넉넉하다. 토큰이 없으면 IP 단위(어차피 401).
+const dataLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: envInteger('DATA_RATE_LIMIT', 600, 60, 100000),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: req => {
+    const authorization = req.get('authorization') || '';
+    return authorization.startsWith('Bearer ') ? `sess:${tokenHash(authorization.slice(7))}` : `ip:${req.ip}`;
+  },
+  handler: (req, res, _next, options) => {
+    log('warn', 'rate_limit_data', { path: req.path, ip: req.ip });
+    res.status(options.statusCode).json({ error: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' });
+  },
+});
 
 function maskEmail(value) {
   if (!value || !value.includes('@')) return value || null;
@@ -223,6 +259,21 @@ function publicUser(row) {
 const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}([-.][0-9A-Za-z.-]{0,20})?$/;
 const APP_MODES = new Set(['portable', 'folder', 'admin', 'web']);
 const APP_SEEN_REFRESH_MS = 5 * 60 * 1000;
+/** 로그인 시도 기록(성공·실패 모두). 실패해도 로그인 흐름을 막지 않는다(fire-and-forget). */
+function recordLoginAttempt(req, { userId = null, email, branchId = null, branchName = null, status, failReason = null }) {
+  const appVersion = String(req.get('x-app-version') || '').trim();
+  const device = [
+    String(req.get('x-app-mode') || '').trim() || null,
+    appVersion ? `v${appVersion}` : null,
+    String(req.get('user-agent') || '').slice(0, 200) || null,
+  ].filter(Boolean).join(' · ');
+  pool.query(`
+    INSERT INTO auth_login_log (id, user_id, email, branch_id, branch_name, status, fail_reason, device_info, ip)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  `, [crypto.randomUUID(), userId, email, branchId || null, branchName || null, status, failReason, device || null, req.ip || null])
+    .catch(error => log('warn', 'login_log_failed', { requestId: req.requestId, ...errorDetails(error) }));
+}
+
 function recordAppVersion(req, userRow) {
   const version = String(req.get('x-app-version') || '').trim();
   const mode = String(req.get('x-app-mode') || '').trim();
@@ -413,6 +464,21 @@ async function initializeDatabase() {
       PRIMARY KEY (branch_id, entity_key)
     );
 
+    -- 로그인 기록(서버 정본) — 어드민 콘솔 "로그인 기록"이 NAS 모드에서 기기 로컬 500건만 보던 문제 해소 (2026-09-07)
+    CREATE TABLE IF NOT EXISTS auth_login_log (
+      id uuid PRIMARY KEY,
+      user_id uuid,
+      email text NOT NULL,
+      branch_id text,
+      branch_name text,
+      status text NOT NULL,
+      fail_reason text,
+      device_info text,
+      ip text,
+      logged_in_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS auth_login_log_time_idx ON auth_login_log(logged_in_at DESC);
+
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_version text;
     ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS last_app_mode text;
@@ -452,6 +518,8 @@ async function cleanupExpired() {
   try {
     await pool.query("DELETE FROM password_reset_tokens WHERE expires_at < now() - interval '1 day'");
     await pool.query("DELETE FROM auth_sessions WHERE expires_at < now() - interval '7 days'");
+    // 로그인 기록 보존 180일 (개인정보 최소 보유)
+    await pool.query("DELETE FROM auth_login_log WHERE logged_in_at < now() - interval '180 days'");
   } catch (error) {
     log('error', 'expired_cleanup_failed', errorDetails(error));
   }
@@ -644,15 +712,23 @@ app.post('/api/auth/login', authLimiter, loginEmailLimiter, async (req, res, nex
     const { rows } = await pool.query('SELECT * FROM auth_users WHERE email = $1 LIMIT 1', [email]);
     const user = rows[0];
     const valid = user ? await bcrypt.compare(password, user.password_hash) : false;
-    if (!valid) return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
-    if (user.is_active === false) return res.status(403).json({ error: '비활성화된 계정입니다. 관리자에게 문의해주세요.' });
+    if (!valid) {
+      recordLoginAttempt(req, { userId: user?.id || null, email, branchId: user?.branch_id, branchName: user?.branch_name, status: 'failed', failReason: '이메일 또는 비밀번호 불일치' });
+      return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+    }
+    if (user.is_active === false) {
+      recordLoginAttempt(req, { userId: user.id, email, branchId: user.branch_id, branchName: user.branch_name, status: 'failed', failReason: '비활성 계정' });
+      return res.status(403).json({ error: '비활성화된 계정입니다. 관리자에게 문의해주세요.' });
+    }
     // 사용기간 만료 차단 — service_ends_at 미설정(null) 계정은 기존과 동일하게 무제한
     if (user.role !== 'superadmin' && user.service_ends_at
         && new Date(user.service_ends_at).getTime() < Date.now()) {
+      recordLoginAttempt(req, { userId: user.id, email, branchId: user.branch_id, branchName: user.branch_name, status: 'failed', failReason: '사용기간 만료' });
       return res.status(403).json({ error: '사용 기간이 만료되었습니다. 본사에 연장을 문의해주세요.' });
     }
 
     const session = await createSession(user.id);
+    recordLoginAttempt(req, { userId: user.id, email, branchId: user.branch_id, branchName: user.branch_name, status: 'success' });
     res.json({ user: publicUser(user), ...session });
   } catch (error) {
     next(error);
@@ -733,6 +809,21 @@ app.get('/api/admin/users', requireSession, requireSuperadmin, async (_req, res,
   }
 });
 
+// 로그인 기록(서버 정본) — 어드민 콘솔 "로그인 기록"·대시보드 최근 로그인. 최근 N건(기본 500, 최대 2000).
+app.get('/api/admin/login-logs', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const requested = Number.parseInt(String(req.query.limit || ''), 10);
+    const limit = Number.isInteger(requested) ? Math.min(Math.max(requested, 1), 2000) : 500;
+    const { rows } = await pool.query(`
+      SELECT id, user_id, email, branch_id, branch_name, status, fail_reason, device_info, logged_in_at
+      FROM auth_login_log ORDER BY logged_in_at DESC LIMIT $1
+    `, [limit]);
+    res.json({ logs: rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body.email);
@@ -784,7 +875,7 @@ app.post('/api/admin/users', requireSession, requireSuperadmin, async (req, res,
         serviceEndsAt, mustChangePassword]);
 
     if (isSuperadminInvite) {
-      log('info', 'superadmin_invited', { invitedBy: req.authUser.id, invitedEmail: email });
+      log('info', 'superadmin_invited', { invitedBy: req.authUser.id, invitedEmail: maskEmail(email) });
     }
 
     res.status(201).json({
@@ -1543,7 +1634,7 @@ app.get('/api/payments/pg-config', requireSession, (_req, res) => {
 });
 
 // 결제 요청 생성
-app.post('/api/payments/requests', payCreateLimiter, requireSession, async (req, res, next) => {
+app.post('/api/payments/requests', requireSession, payCreateLimiter, async (req, res, next) => {
   try {
     if (!PG_ENABLED) {
       return res.status(503).json({
@@ -2016,6 +2107,7 @@ app.post('/api/payments/webhook', webhookLimiter, async (req, res) => {
         log('error', 'pay_webhook_on_canceled', {
           orderId, branchId: request.branch_id, amount: Number(request.amount),
         });
+        notifyOps('pay_webhook_on_canceled', { orderId, branchId: request.branch_id, amount: Number(request.amount) });
       }
       return res.status(200).end();
     }
@@ -2436,6 +2528,7 @@ async function dispatchScheduledMessages() {
       await pool.query('UPDATE scheduled_messages SET status = $1, result = $2, locked_at = NULL WHERE id = $3',
         ['failed', JSON.stringify({ error: error?.message || '발송 처리 실패' }), job.id]);
       log('error', 'scheduled_dispatch_job_failed', { jobId: job.id, ...errorDetails(error) });
+      notifyOps('scheduled_dispatch_job_failed', { jobId: job.id, ...errorDetails(error) });
     }
   }
 }
@@ -2608,6 +2701,7 @@ async function runDailyBackup() {
     log('info', 'daily_backup_completed', { branches: result.branches, files: result.files, date: result.date });
   } catch (error) {
     log('error', 'daily_backup_failed', errorDetails(error));
+    notifyOps('daily_backup_failed', errorDetails(error));
   }
 }
 
@@ -2744,6 +2838,7 @@ async function runRevisitReminders() {
     } catch (error) {
       failedBranches += 1;
       log('error', 'revisit_reminder_branch_failed', { branchId, ...errorDetails(error) });
+      notifyOps('revisit_reminder_branch_failed', { branchId, ...errorDetails(error) });
     }
   }
   if (failedBranches > 0) throw new Error(`재방문 리마인더 ${failedBranches}개 지점 처리 실패`);
@@ -2767,7 +2862,7 @@ function requireCollection(req, res, next) {
   next();
 }
 
-app.get('/api/data/:collection', requireSession, requireCollection, async (req, res, next) => {
+app.get('/api/data/:collection', dataLimiter, requireSession, requireCollection, async (req, res, next) => {
   try {
     const scope = branchScopeOf(req.authUser);
     const { rows } = await pool.query(
@@ -2780,7 +2875,7 @@ app.get('/api/data/:collection', requireSession, requireCollection, async (req, 
   }
 });
 
-app.put('/api/data/:collection', requireSession, requireCollection, async (req, res, next) => {
+app.put('/api/data/:collection', dataLimiter, requireSession, requireCollection, async (req, res, next) => {
   try {
     const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
     if (rows.length === 0) return res.status(400).json({ error: '저장할 행이 없습니다.' });
@@ -2818,7 +2913,7 @@ app.put('/api/data/:collection', requireSession, requireCollection, async (req, 
   }
 });
 
-app.patch('/api/data/:collection/:id', requireSession, requireCollection, async (req, res, next) => {
+app.patch('/api/data/:collection/:id', dataLimiter, requireSession, requireCollection, async (req, res, next) => {
   try {
     const updates = req.body.updates;
     if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
@@ -2840,7 +2935,7 @@ app.patch('/api/data/:collection/:id', requireSession, requireCollection, async 
   }
 });
 
-app.delete('/api/data/:collection/:id', requireSession, requireCollection, async (req, res, next) => {
+app.delete('/api/data/:collection/:id', dataLimiter, requireSession, requireCollection, async (req, res, next) => {
   try {
     const scope = branchScopeOf(req.authUser);
     await pool.query(
@@ -2856,7 +2951,7 @@ app.delete('/api/data/:collection/:id', requireSession, requireCollection, async
 // ── 시술 사진 저장 (기기 간 공유 — 고객 얼굴 사진 = 민감 PII, 세션 인증 필수) ──
 // 빈 배열도 행으로 저장한다(tombstone). "삭제됨"과 "원래 없음"을 구분해야
 // 다른 기기의 옛 캐시가 삭제된 고객 사진을 서버에 되살리지 못한다.
-app.get('/api/photos/:entityKey', requireSession, async (req, res, next) => {
+app.get('/api/photos/:entityKey', dataLimiter, requireSession, async (req, res, next) => {
   try {
     if (!isValidId(req.params.entityKey)) return res.status(400).json({ error: '사진 식별자를 확인해주세요.' });
     const scope = branchScopeOf(req.authUser);
@@ -2871,7 +2966,7 @@ app.get('/api/photos/:entityKey', requireSession, async (req, res, next) => {
 });
 
 // 배치 조회: 시술기록이 수백 건일 때 왕복 1회로 (keys 최대 500)
-app.post('/api/photos/batch', requireSession, async (req, res, next) => {
+app.post('/api/photos/batch', dataLimiter, requireSession, async (req, res, next) => {
   try {
     const inputKeys = Array.isArray(req.body.keys) ? req.body.keys : [];
     if (inputKeys.length > 500 || inputKeys.some(key => !isValidId(key))) {
@@ -2892,7 +2987,7 @@ app.post('/api/photos/batch', requireSession, async (req, res, next) => {
   }
 });
 
-app.put('/api/photos/:entityKey', requireSession, async (req, res, next) => {
+app.put('/api/photos/:entityKey', dataLimiter, requireSession, async (req, res, next) => {
   try {
     const photos = Array.isArray(req.body.photos) ? req.body.photos : [];
     if (!isValidId(req.params.entityKey)) return res.status(400).json({ error: '사진 식별자를 확인해주세요.' });

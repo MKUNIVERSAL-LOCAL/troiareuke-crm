@@ -6,6 +6,7 @@ import { isAuthApiConfigured, adminListUsers, apiRequest, type AuthApiUser } fro
 import {
   INSTALL_SITE_URL, INSTALL_GUIDE_MESSAGE, fetchLatestChannelVersion, isOutdated, appModeLabel, type ChannelManifest,
 } from '../../lib/updateChannel';
+import { adminListLoginLogs } from '../../lib/adminApi';
 import { getLocalLogs } from '../../lib/loginLog';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -40,6 +41,7 @@ export default function AdminDashboard() {
   const [branchUsers, setBranchUsers] = useState<AuthApiUser[]>([]);
   const [latest, setLatest] = useState<ChannelManifest | null | undefined>(undefined);
   const [copied, setCopied] = useState<'url' | 'message' | ''>('');
+  const [logsFromServer, setLogsFromServer] = useState(false);
 
   useEffect(() => {
     loadStats();
@@ -84,7 +86,15 @@ export default function AdminDashboard() {
           console.warn('[AdminDashboard] NAS 계정 집계 실패:', e?.message);
           setLoadError(`지점/사용자 집계를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
         }
-        const logs = getLocalLogs();
+        // 로그인 기록: 서버 정본(auth_login_log) 우선, 구버전 서버면 이 기기 로컬 기록으로 폴백
+        let logs: RecentLog[] = getLocalLogs();
+        try {
+          const serverLogs = await adminListLoginLogs(200);
+          logs = serverLogs;
+          setLogsFromServer(true);
+        } catch {
+          setLogsFromServer(false);
+        }
         // "오늘"은 로컬(KST) 기준 — UTC 문자열 prefix 비교는 00~09시에 전날로 어긋남
         const todayLocal = new Date().toDateString();
         setStats({
@@ -309,7 +319,7 @@ export default function AdminDashboard() {
             <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
               <h2 className="text-sm font-bold text-white">
                 최근 로그인 기록
-                {!isSupabaseConfigured && <span className="ml-2 text-[11px] font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
+                {!isSupabaseConfigured && !logsFromServer && <span className="ml-2 text-[11px] font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
               </h2>
               <Link to="/admin/login-logs" className="text-xs text-blue-400 hover:text-blue-300">전체 보기 →</Link>
             </div>

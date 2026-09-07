@@ -1059,9 +1059,9 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
               ) : (
                 <button
                   type="button"
-                  onClick={() => alert('예약 발송은 NAS 서버 연동 후 지원됩니다.')}
+                  disabled
                   className="px-4 py-2 text-sm font-medium bg-white text-gray-400 rounded-xl border border-gray-200 flex items-center gap-1.5 cursor-not-allowed opacity-60"
-                  title="NAS 서버 연동 후 지원 예정"
+                  title="중앙 서버(NAS) 연동 후 지원됩니다"
                 >
                   예약 발송
                   <HelpCircle size={12} className="text-gray-400" />

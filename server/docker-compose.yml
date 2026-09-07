@@ -20,6 +20,13 @@ services:
     depends_on:
       database:
         condition: service_healthy
+    # 앱 컨테이너 헬스체크 — 지금까지는 postgres에만 있었다. 응답이 멎으면 restart 정책이 살린다.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     environment:
       NODE_ENV: production
       PORT: 8787
@@ -70,6 +77,9 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       MAIL_FROM: ${MAIL_FROM}
+      # 운영 경보 수신 메일(미설정 시 ADMIN_EMAIL) — 백업 실패·예약발송 실패·취소된 결제요청 입금
+      OPS_ALERT_EMAIL: ${OPS_ALERT_EMAIL:-}
+      DATA_RATE_LIMIT: ${DATA_RATE_LIMIT:-600}
     volumes:
       # File Station의 CRM-BACKUP 공유폴더 — 지점별/날짜별 백업이 여기 쌓인다
       - ${BACKUP_HOST_DIR:-/volume1/CRM-BACKUP}/troiareuke-crm:/backup
