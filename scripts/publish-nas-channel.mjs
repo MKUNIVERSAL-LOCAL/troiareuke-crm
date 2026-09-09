@@ -64,6 +64,7 @@ const res = await fetch(`https://crm-update.mkcorp.familyds.com/portable/latest.
 const live = await res.json();
 if (live.version !== version) {
   console.error(`❌ 채널 버전 불일치: 채널=${live.version}, 기대=${version}`);
-  process.exit(1);
+  process.exitCode = 1;
+} else {
+  console.log(`✅ 채널 라이브 v${live.version}`);
 }
-console.log(`✅ 채널 라이브 v${live.version}`);

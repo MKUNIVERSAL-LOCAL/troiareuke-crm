@@ -25,9 +25,14 @@ try {
 } catch { /* 채널에 아직 없음 */ }
 
 const notesPath = path.join(root, 'docs', 'RELEASE-NOTES-CURRENT.md');
-const notes = fs.existsSync(notesPath)
-  ? fs.readFileSync(notesPath, 'utf8').trim().split('\n')[0].replace(/^v[\d.]+\s*/, '').slice(0, 200)
-  : '';
+// 릴리스 노트의 첫 항목(■ 제목 + 첫 •)을 요약으로 — 첫 줄("vX 업데이트 내용")은 제목이라 제외
+const notes = (() => {
+  if (!fs.existsSync(notesPath)) return '';
+  const lines = fs.readFileSync(notesPath, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const head = lines.find((l) => l.startsWith('■'))?.replace(/^■\s*/, '') || '';
+  const first = lines.find((l) => l.startsWith('•'))?.replace(/^•\s*/, '') || '';
+  return [head, first].filter(Boolean).join(' — ').slice(0, 200);
+})();
 const releaseBase = `https://github.com/MKUNIVERSAL-LOCAL/troiareuke-crm/releases/download/v${version}`;
 
 const manifest = {

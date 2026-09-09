@@ -37,10 +37,12 @@ try {
 
 // 컨테이너 재시작 대기 후 검증
 for (let i = 0; i < 12 && ok; i += 1) {
-  if (await serverIsCurrent()) { console.log('✅ 서버 최신 코드 응답 확인'); process.exit(0); }
+  if (await serverIsCurrent()) { console.log('✅ 서버 최신 코드 응답 확인'); ok = false; break; }
   await new Promise(r => setTimeout(r, 5000));
 }
-if (await serverIsCurrent()) { console.log('✅ 서버 최신 코드 응답 확인'); process.exit(0); }
+if (await serverIsCurrent()) {
+  console.log('✅ 서버 최신 코드 응답 확인');
+} else {
 
 console.log([
   '⚠️ 서버 재배포는 관리자 권한이 필요해 자동으로 끝내지 못했습니다. 두 가지 중 하나:',
@@ -48,4 +50,7 @@ console.log([
   '     → 이후 릴리스는 이 스크립트가 서버까지 자동 재배포합니다.',
   '  2) 지금 한 번만: DSM > 작업 스케줄러 > CRM-server-update [실행]',
 ].join('\n'));
-process.exit(0); // 채널 게시는 성공했으므로 릴리스 자체는 실패로 만들지 않는다
+}
+// process.exit()를 쓰지 않는다 — 열린 fetch 핸들과 겹치면 Windows에서 libuv assertion(exit 127)이 난다(2026-09-09 v1.0.58 릴리스에서 발생).
+// 채널 게시는 성공했으므로 릴리스 자체는 실패로 만들지 않는다(exitCode 0).
+process.exitCode = 0;
