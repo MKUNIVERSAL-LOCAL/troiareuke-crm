@@ -1,3 +1,4 @@
+import { HIDE_ON_MOBILE } from '../../lib/platform';
 import { notify } from '../../lib/notify';
 import { useState, useEffect, useCallback } from 'react';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
@@ -80,7 +81,7 @@ function importLegacyShopData(fromShopId: string, toShopId: string): number {
 
 type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup' | 'notice';
 
-const tabs = [
+const allTabs = [
   { key: 'shop' as SettingTab, label: '샵 정보', icon: <Store size={16} /> },
   { key: 'hours' as SettingTab, label: '영업시간', icon: <Clock size={16} /> },
   { key: 'integrations' as SettingTab, label: '연동 설정', icon: <Link2 size={16} /> },
@@ -90,6 +91,8 @@ const tabs = [
   { key: 'backup' as SettingTab, label: '데이터 백업', icon: <HardDrive size={16} /> },
   { key: 'notice' as SettingTab, label: '공지사항', icon: <Bell size={16} /> },
 ];
+// 모바일 앱(스토어 빌드)에서는 결제 유도 화면을 노출하지 않는다 — Apple 3.1.1 / Google Play 결제 정책 (src/lib/platform.ts)
+const tabs = allTabs.filter(t => !(t.key === 'subscription' && HIDE_ON_MOBILE.subscription));
 
 const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -176,7 +179,7 @@ export default function Settings() {
       }
       const result = exportFormat === 'pdf'
         ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys)
-        : exportDatasetsToXlsx(keys);
+        : await exportDatasetsToXlsx(keys);
       const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
       setExportMessage(`다운로드 완료: ${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행`);
     } catch (e: any) {

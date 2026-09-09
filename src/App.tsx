@@ -1,5 +1,7 @@
 // 🔒 CORE — 보호 파일(코어 잠금). 수정 금지. 변경 필요 시 docs/CORE-LOCK.md 의 CORE_EDIT=1 우회 절차.
 import { HashRouter, BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { USE_HASH_ROUTER } from './lib/platform';
+import { installMobileBridge } from './lib/mobileBridge';
 import { useEffect, useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/layout/Layout';
@@ -161,13 +163,10 @@ function SystemListeners() {
   );
 }
 
-// Electron 환경 감지 — HashRouter 사용 (file:// 프로토콜 필요)
-// 웹/PWA 환경 — BrowserRouter 사용
-const IS_ELECTRON =
-  typeof navigator !== 'undefined' &&
-  navigator.userAgent.includes('Electron');
-
-const Router = IS_ELECTRON ? HashRouter : BrowserRouter;
+// Electron(file://)·모바일 앱(capacitor 스킴) — HashRouter / 웹·PWA — BrowserRouter
+// 판별은 src/lib/platform.ts 한 곳에서만 한다.
+const Router = USE_HASH_ROUTER ? HashRouter : BrowserRouter;
+installMobileBridge(); // 모바일 앱에서만 동작(외부 링크·뒤로가기·파일 공유), PC/웹에서는 no-op
 
 export default function App() {
   return (

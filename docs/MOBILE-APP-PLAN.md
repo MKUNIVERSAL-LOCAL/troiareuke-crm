@@ -214,3 +214,33 @@ Google Play도 유사하다.
 8. 촬영 가이드(직전 사진 오버레이) + 로컬 알림 → Apple 4.2 대응 근거
 9. D6 업데이트 2단 구조 구현 (`mobile-latest.json` + OTA)
 10. 스토어 등록 서류(개인정보·데이터안전·건강앱 선언) → 제출
+
+
+---
+
+## 📌 진행 현황 (2026-09-09, v1.0.58 착수)
+
+오너 지시: "플레이스토어·앱스토어에 등록할 수 있는 어플 버전 + 업데이트마다 모바일 최적화 무조건". 1차 구현 완료 항목:
+
+| 항목 | 상태 | 위치 |
+|---|---|---|
+| Capacitor 래퍼(android/, ios/ 네이티브 프로젝트) | ✅ | `capacitor.config.ts` appId `com.troiareuke.crm` |
+| 모바일 빌드 모드(base './', PWA 비활성, iamport 제외, viewport-fit=cover) | ✅ | `vite.config.ts` BUILD_TARGET=capacitor → `dist-mobile` |
+| 플랫폼 감지 일원화 + HashRouter | ✅ | `src/lib/platform.ts`, `App.tsx` |
+| 외부 링크→시스템 브라우저, Android 뒤로가기, 파일 공유 | ✅ | `src/lib/mobileBridge.ts` |
+| 엑셀·PDF 내보내기 → Filesystem+Share | ✅ | `dataExport.ts`, `pdfExport.ts` |
+| 구독/플랜 탭·타사 스토어 링크 숨김 | ✅ | Settings, Dashboard (HIDE_ON_MOBILE) |
+| D6 1단계: mobile-latest.json + 안내 배너(optional/required) | ✅ | `mobileUpdate.ts`, `MobileUpdateBanner.tsx`, `prepare-mobile-update.mjs` |
+| 버전 텔레메트리 X-App-Mode=android/ios | ✅ | `authApi.ts` |
+| 안드로이드 CI 빌드(APK/AAB → 릴리스 자산) | ✅ | `.github/workflows/mobile-android.yml` |
+| 모바일 폭 E2E 게이트(Pixel 7) | ✅ | `e2e/mobile.spec.ts`, release:all |
+| 네이티브 버전 자동 동기(versionCode=1000000·major+1000·minor+patch) | ✅ | `scripts/sync-mobile-version.mjs` |
+
+**다음 단계 (완성도 → 스토어 제출)**
+1. P0-D4 사진 저장: localStorage → Capacitor Filesystem/IndexedDB 이관(WebView 저장 한도·iOS 퍼지 대비). 오너 결정 A안 권고 그대로.
+2. P1: 카메라(@capacitor/camera) 촬영 → 시술 전후 사진 바로 첨부, 로컬 알림(예약 리마인드), 딥링크.
+3. P2: Sales/Products/Settings 모바일 레이아웃 정리(현재 E2E는 가로 넘침·탭 이동만 검사 — 화면 밀도 개선은 별도).
+4. iOS: macOS 러너 워크플로(`mobile-ios.yml`) + Apple Developer 계정(오너, D-U-N-S 선행) 후 TestFlight.
+5. 안드로이드 서명 키스토어 생성(오너 보관) → GitHub Secrets 4개 등록 → 릴리스 서명 AAB → Play Console 내부 테스트.
+
+**오너 준비물**: Google Play 개발자 계정($25 1회) / Apple Developer($99/년, D-U-N-S) / 앱 아이콘 1024px / 스토어 스크린샷 / 개인정보처리방침 URL(배포 사이트에 게시).

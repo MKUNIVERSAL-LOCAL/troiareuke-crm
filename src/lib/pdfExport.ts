@@ -5,6 +5,8 @@
  * 누르기 전에는 메인 번들 크기에 영향이 없다. 시트 구성은 엑셀 내보내기
  * (dataExport.buildExportSheets)와 동일한 데이터 경로를 공유한다.
  */
+import { IS_MOBILE_APP } from './platform';
+import { saveOrShareFile } from './mobileBridge';
 import { buildExportSheets, EXPORT_DATASETS, type ExportResult } from './dataExport';
 import { SettingsStore } from './store';
 
@@ -79,6 +81,11 @@ export async function exportDatasetsToPdf(keys: string[]): Promise<ExportResult>
 
   const safeShopName = shopName.replace(/[\\/:*?"<>|]/g, '');
   const fileName = `${safeShopName}_데이터내보내기_${date}.pdf`;
-  doc.save(fileName);
+  if (IS_MOBILE_APP) {
+    const base64 = doc.output('datauristring').replace(/^data:[^;]*;base64,/, '');
+    await saveOrShareFile(fileName, base64, 'application/pdf');
+  } else {
+    doc.save(fileName);
+  }
   return { fileName, counts };
 }

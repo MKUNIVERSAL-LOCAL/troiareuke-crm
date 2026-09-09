@@ -43,13 +43,35 @@ function cspMetaPlugin(): Plugin {
 
 // Electron 빌드 여부 — BUILD_TARGET=electron npm run build 로 전달
 const isElectronBuild = process.env.BUILD_TARGET === 'electron'
+// 모바일 앱(Capacitor) 빌드 — BUILD_TARGET=capacitor npm run build:mobile → dist-mobile
+// 상대 base, PWA 서비스워커 비활성(네이티브 셸이 캐시·업데이트 담당), 결제 스크립트 제외(스토어 정책)
+const isCapacitorBuild = process.env.BUILD_TARGET === 'capacitor'
+const isPackagedBuild = isElectronBuild || isCapacitorBuild
+
+function mobileIndexHtmlPlugin(): Plugin {
+  return {
+    name: 'vite-plugin-mobile-index',
+    apply: 'build',
+    transformIndexHtml(html) {
+      if (!isCapacitorBuild) return html
+      return html
+        .replace(/\s*<script src="https:\/\/cdn\.iamport\.kr\/v1\/iamport\.js"><\/script>/, '')
+        .replace(/\s*<link rel="manifest"[^>]*>/, '')
+        .replace(
+          '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+          '<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />',
+        )
+    },
+  }
+}
 
 export default defineConfig({
   plugins: [
     react(),
     cspMetaPlugin(),
-    // PWA는 웹 빌드 전용. Electron 빌드에서는 비활성.
-    ...(!isElectronBuild
+    mobileIndexHtmlPlugin(),
+    // PWA는 웹 빌드 전용. Electron·모바일 앱 빌드에서는 비활성.
+    ...(!isPackagedBuild
       ? [
           VitePWA({
             registerType: 'autoUpdate',
@@ -146,11 +168,11 @@ export default defineConfig({
   base:
     process.env.DEPLOY_TARGET === 'ghpages'
       ? '/troiareuke-crm/'
-      : isElectronBuild
+      : isPackagedBuild
         ? './'
         : '/',
   build: {
-    outDir: 'dist',
+    outDir: isCapacitorBuild ? 'dist-mobile' : 'dist',
     emptyOutDir: true,
   },
 })

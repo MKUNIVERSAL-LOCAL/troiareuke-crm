@@ -1,4 +1,5 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { HIDE_ON_MOBILE } from '../lib/platform';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag, Store, Globe, Apple, Play } from 'lucide-react';
 import {
@@ -346,6 +347,7 @@ export default function Dashboard() {
             >
               <Globe size={14} /> 트로이몰 웹사이트
             </a>
+            {!HIDE_ON_MOBILE.storeLinks && (<>
             <a
               href="https://play.google.com/store/apps/details?id=com.troimall"
               target="_blank"
@@ -362,6 +364,7 @@ export default function Dashboard() {
             >
               <Apple size={14} /> App Store
             </a>
+            </>)}
           </div>
         </div>
 

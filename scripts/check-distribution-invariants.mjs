@@ -66,5 +66,30 @@ const lock = read('scripts/core-lock.mjs');
 check('업데이터·스테이징 스크립트가 코어 잠금 목록에 있음', lock.includes("'electron/portable-updater.cjs'") && lock.includes("'scripts/prepare-portable-update.mjs'"),
   'CORE_EDIT=1 없이 수정되면 안 되는 파일');
 
+// ── 규칙 14: 모바일 앱(스토어) 동반 갱신 — 오너 지시 2026-09-09 "업데이트마다 모바일 최적화는 무조건" ──
+const capConfig = read('capacitor.config.ts');
+check('모바일 appId 고정 (com.troiareuke.crm — 스토어 등록 후 변경 = 다른 앱)', capConfig.includes("appId: 'com.troiareuke.crm'"),
+  'appId를 바꾸면 기존 설치자가 업데이트를 못 받는다');
+check('모바일 webDir = dist-mobile (BUILD_TARGET=capacitor 산출물)', capConfig.includes("webDir: 'dist-mobile'"));
+const viteCfg = read('vite.config.ts');
+check('Capacitor 빌드: 상대 base + PWA 비활성 + 결제 스크립트 제외', /isCapacitorBuild/.test(viteCfg) && /isPackagedBuild/.test(viteCfg) && /iamport/.test(viteCfg) && /viewport-fit=cover/.test(viteCfg));
+const appTsx = read('src/App.tsx');
+check('라우터 선택은 platform.ts(USE_HASH_ROUTER) 한 곳 — userAgent 직접 판별 금지', appTsx.includes('USE_HASH_ROUTER') && !/navigator\.userAgent\.includes\('Electron'\)/.test(appTsx) && appTsx.includes('installMobileBridge()'));
+const platform = read('src/lib/platform.ts');
+check('모바일 앱에서 구독/결제 화면·타사 스토어 링크 숨김 (Apple 3.1.1 / Play 결제 정책)', /subscription: IS_MOBILE_APP/.test(platform) && /storeLinks: IS_MOBILE_APP/.test(platform) && read('src/pages/Settings/index.tsx').includes('HIDE_ON_MOBILE.subscription'));
+const mobileUpdate = read('src/lib/mobileUpdate.ts');
+check('모바일 매니페스트 주소 고정 (NAS /mobile/latest.json → GitHub latest 백업)',
+  mobileUpdate.includes("'https://crm-update.mkcorp.familyds.com/mobile/latest.json'") && mobileUpdate.includes('/releases/latest/download/mobile-latest.json'));
+const prepareMobile = read('scripts/prepare-mobile-update.mjs');
+for (const field of ['version', 'minSupportedVersion', 'releasedAt', 'notes', 'storeUrl', 'apkUrl', 'testflightUrl']) {
+  check(`모바일 매니페스트 필드 유지: ${field}`, new RegExp(`\\b${field}\\b`).test(prepareMobile));
+}
+check('release:all: 모바일 번들·버전 동기·매니페스트(mobile:prepare) 포함', releaseAll.includes('mobile:prepare') && /sync-mobile-version/.test(pkg.scripts['mobile:prepare'] || '') && /prepare-mobile-update/.test(pkg.scripts['mobile:prepare'] || ''));
+check('release:all: NAS 채널 게시·서버 재배포를 PC에서 직접 수행 (DSM 스케줄 단독 의존 금지)', releaseAll.includes('publish-nas-channel.mjs') && releaseAll.includes('deploy-nas-server.mjs'));
+const pw = read('playwright.config.ts');
+check('E2E 모바일 폭 프로젝트 존재 (Pixel 7) — 릴리스 게이트', /name: 'mobile'/.test(pw) && /Pixel 7/.test(pw) && fs.existsSync(path.join(root, 'e2e/mobile.spec.ts')));
+check('안드로이드 CI 빌드 워크플로 존재 (릴리스마다 APK/AAB)', fs.existsSync(path.join(root, '.github/workflows/mobile-android.yml')) && /TroiareukeCRM-android\.apk/.test(read('.github/workflows/mobile-android.yml')));
+check('버전 헤더가 모바일 모드(android/ios)도 보고', authApi.includes('APP_MODE_HEADER'));
+
 if (failures) { console.error(`\n배포 불변 원칙 점검 실패 ${failures}건 — docs/DISTRIBUTION-POLICY.md 참조`); process.exit(1); }
 console.log('\n✅ 배포 불변 원칙 점검 전부 통과');

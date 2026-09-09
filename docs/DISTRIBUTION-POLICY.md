@@ -61,6 +61,21 @@
     **오너 결정 2026-09-07 (2건)**: ① 사이트 기본 다운로드는 **설치파일(NSIS)** — 실행마다 임시 폴더에 풀리는 포터블보다 오탐이 적고 바로가기·고정 경로 제공(v1.0.50).
     포터블·zip은 대안으로 유지. ② **업데이트 적용 방식(PowerShell 헬퍼)은 현행 유지** — 고장 사례 없음. 백신이 업데이트 적용을 막은 증거(지점 버전 정체·updater.log FAILED)가 나올 때만 재검토.
 
+14. **모바일 앱(Play 스토어·App Store)은 PC 프로그램과 같은 코드, 같은 릴리스에서 함께 나간다 (오너 지시 2026-09-09).**
+    "업데이트마다 모바일 최적화는 무조건" — 문서 약속이 아니라 게이트로 강제한다:
+    - `release:all`은 PC 흐름 E2E와 함께 **모바일 폭(Pixel 7) E2E(`e2e/mobile.spec.ts`)** 를 통과해야만 진행한다. 핵심 화면에 가로 스크롤이 생기거나 하단 탭 이동이 깨지면 릴리스가 만들어지지 않는다.
+    - `release:all`은 `mobile:prepare`(Capacitor 번들 `dist-mobile` + 네이티브 버전 동기 + `mobile-latest.json`)를 포함하고, GitHub Release 게시 시 CI(`mobile-android.yml`)가 APK/AAB를 같은 릴리스에 붙인다.
+    - 플랫폼 분기는 `src/lib/platform.ts` 한 곳(IS_ELECTRON / IS_MOBILE_APP / USE_HASH_ROUTER / HIDE_ON_MOBILE). userAgent 직접 판별·페이지별 즉흥 분기 금지.
+    - 모바일 앱에는 **구독/결제 화면·타사 스토어 링크·PC 자가 업데이트 UI·관리자 콘솔**을 노출하지 않는다(Apple 3.1.1, Google Play 결제 정책). 결제는 PC/웹에서만.
+    - 앱 자체 교체는 스토어가 담당하므로, 앱은 `mobile/latest.json`(NAS 채널, 백업 GitHub latest)의 `version`/`minSupportedVersion`을 읽어 "새 버전 안내"(닫기 가능) / "업데이트 필요"(닫기 불가) 배너를 띄운다. `minSupportedVersion`은 서버 API 호환이 깨지는 릴리스에서만 올린다.
+    - `appId = com.troiareuke.crm` 은 스토어 등록 후 영구 고정. 서명 키스토어(안드로이드)·배포 인증서(iOS)는 분실 시 앱 업데이트 자체가 불가능하므로 오너 보관 + GitHub Secrets 등록.
+    - 자동 점검: `check-distribution-invariants.mjs`의 "규칙 14" 블록.
+
+15. **NAS 자동화는 PC 없이 돌아야 한다 — 그러나 릴리스 순간에는 PC가 직접 게시한다 (2026-09-09 사고 후).**
+    09-07~09 이틀간 DSM 스케줄이 돌지 않아 채널이 v1.0.48에 머문 원인은 두 작업의 반복 설정이 **"매일"이 아니라 "2026-09-07 1회"** 로 저장된 것이었다(NAS crontab `0 0 7 9 *`).
+    - 무인 경로(정본): DSM `CRM-publish-update` / `CRM-server-update` **매일 00:00** — 오너가 반복 설정을 "매일"로 바꿔야 유효. 확인은 SSH에서 `grep synoschedtask /etc/crontab` 의 두 작업 줄이 `0 0 * * *`인지.
+    - 즉시 경로(보조): `release:all` 마지막에 `publish-nas-channel.mjs`(SSH, 해시 검증 후 원자적 교체)와 `deploy-nas-server.mjs`가 실행된다. 빌드 때문에 PC가 켜져 있는 순간이므로 채널이 즉시 최신이 된다. 서버 재배포는 root가 필요해 오너가 1회 `scripts/nas-tasks/grant-deploy-sudo.sh`를 DSM(root)에서 실행해 주면 이후 자동, 아니면 안내만 출력하고 릴리스는 성공 처리.
+
 ## 근거 구조 (v1.0.40 확립, v1.0.48 강화)
 
 - `electron/portable-updater.cjs`: 포터블=단일 exe 교체 / 폴더형=zip을 임시 폴더에 풀어 복사(부분 덮어쓰기 방지).

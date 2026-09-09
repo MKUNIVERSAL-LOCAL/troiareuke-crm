@@ -6,6 +6,8 @@
  * 시트 구성은 세무(결제수단별 집계·정액권 선수금 원장)·PIPA(민감정보 경고)·
  * 마이그레이션(마스터+이력 전체) 관점을 반영했다.
  */
+import { IS_MOBILE_APP } from './platform';
+import { saveOrShareFile } from './mobileBridge';
 import * as XLSX from 'xlsx';
 import {
   CustomerStore, PaymentStore, ProductStore, ProductSaleStore,
@@ -285,7 +287,7 @@ export interface ExportResult {
 }
 
 /** 선택 데이터셋을 하나의 xlsx 파일로 다운로드 */
-export function exportDatasetsToXlsx(keys: string[]): ExportResult {
+export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult> {
   const sheets = buildExportSheets(keys);
   if (sheets.length === 0) throw new Error('내보낼 데이터를 선택해주세요.');
 
@@ -316,6 +318,12 @@ export function exportDatasetsToXlsx(keys: string[]): ExportResult {
   const shopName = (SettingsStore.get().name || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const date = new Date().toISOString().slice(0, 10);
   const fileName = `${shopName}_데이터내보내기_${date}.xlsx`;
-  XLSX.writeFile(workbook, fileName);
+  if (IS_MOBILE_APP) {
+    // WebView는 <a download>를 지원하지 않음 → 캐시에 쓰고 공유 시트(카카오톡·메일·파일 앱)
+    const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' }) as string;
+    await saveOrShareFile(fileName, base64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  } else {
+    XLSX.writeFile(workbook, fileName);
+  }
   return { fileName, counts };
 }

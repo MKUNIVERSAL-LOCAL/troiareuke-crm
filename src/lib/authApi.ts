@@ -1,4 +1,6 @@
 // 순환 import(authApi ↔ nasOutbox) 안전: 양쪽 모두 최상위에서 상대 바인딩을 평가하지 않는다
+import { APP_MODE_HEADER, IS_MOBILE_APP } from './platform';
+import { getMobileAppVersion } from './mobileBridge';
 import { flushNasOutbox } from './nasOutbox';
 
 export interface AuthApiUser {
@@ -36,7 +38,7 @@ export interface AuthApiUser {
 let appVersionHeader = '';
 const appModeHeader = (() => {
   const api = (window as any).electronAPI;
-  if (!api?.isElectron) return 'web';
+  if (!api?.isElectron) return APP_MODE_HEADER; // web | android | ios
   if (api.isAdminBuild) return 'admin';
   return api.isPortable ? 'portable' : 'folder';
 })();
@@ -45,6 +47,9 @@ try {
     .then((v: unknown) => { if (typeof v === 'string' && /^\d+\.\d+\.\d+/.test(v)) appVersionHeader = v.slice(0, 32); })
     .catch(() => {});
 } catch { /* 브라우저 실행 등 — 버전 헤더 없이 동작 */ }
+if (IS_MOBILE_APP) {
+  getMobileAppVersion().then((v) => { if (/^\d+\.\d+\.\d+/.test(v)) appVersionHeader = v.slice(0, 32); }).catch(() => {});
+}
 
 function appVersionHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'X-App-Mode': appModeHeader };

@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileTabBar from './MobileTabBar';
 import UpdateBanner from '../ui/UpdateBanner';
+import MobileUpdateBanner from '../ui/MobileUpdateBanner';
 import ToastHost from '../ui/ToastHost';
 import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
@@ -69,8 +70,9 @@ export default function Layout() {
       <main className="flex-1 lg:ml-64 min-h-screen overflow-x-hidden pb-16 lg:pb-0">
         {/* 공통 알림(토스트) — notify() 표시 영역 */}
         <ToastHost />
-        {/* 업데이트 배너 */}
+        {/* 업데이트 배너 — PC(포터블) / 모바일 앱(스토어 버전 안내), 각자 해당 플랫폼에서만 렌더 */}
         <UpdateBanner />
+        <MobileUpdateBanner />
         {/* 공지사항 배너 */}
         <AnnouncementBanner />
         {/* 오프라인 배너 (모바일 전용 — lg:hidden) */}

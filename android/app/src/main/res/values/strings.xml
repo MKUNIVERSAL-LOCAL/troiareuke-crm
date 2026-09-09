@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">더마솔루션</string>
+    <string name="title_activity_main">더마솔루션</string>
+    <string name="package_name">com.troiareuke.crm</string>
+    <string name="custom_url_scheme">com.troiareuke.crm</string>
+</resources>

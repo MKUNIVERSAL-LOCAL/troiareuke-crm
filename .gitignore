@@ -34,3 +34,9 @@ release-admin
 dist-e2e
 playwright-report
 test-results
+
+# 모바일 앱(Capacitor) 산출물 — 네이티브 프로젝트(android/, ios/)는 커밋, 빌드 결과·키스토어는 제외
+dist-mobile
+android/app/release.keystore
+*.keystore
+*.jks

@@ -14,6 +14,9 @@ const notesPath = path.join(rootDir, 'docs', 'RELEASE-NOTES-CURRENT.md');
 
 const assets = ['TroiareukeCRM-Setup.exe', 'TroiareukeCRM-portable.exe', 'TroiareukeCRM-win64.zip', 'latest.json', 'history.json']
   .map((name) => path.join(stageDir, name));
+// 모바일 매니페스트(mobile-latest.json) — mobile:prepare가 만들었을 때만 자산에 포함(스토어 앱 버전 안내용)
+const mobileManifest = path.join(stageDir, 'mobile-latest.json');
+if (fs.existsSync(mobileManifest)) assets.push(mobileManifest);
 for (const asset of assets) {
   if (!fs.existsSync(asset)) {
     console.error(`산출물 없음: ${asset}\n먼저 npm run electron:build:portable && npm run electron:portable:prepare 를 실행하세요.`);

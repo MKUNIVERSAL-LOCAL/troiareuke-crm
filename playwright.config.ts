@@ -20,7 +20,12 @@ export default defineConfig({
     timezoneId: 'Asia/Seoul',
     viewport: { width: 1366, height: 900 },
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    // PC 흐름(smoke.spec) — 데스크톱 폭
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /mobile.spec.ts/ },
+    // 모바일 최적화 게이트(mobile.spec) — 스토어 앱과 같은 화면 폭. 오너 원칙: 릴리스마다 필수 통과
+    { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /mobile.spec.ts/ },
+  ],
   webServer: {
     command: 'npx vite preview --outDir dist-e2e --port 4173 --strictPort --host 127.0.0.1',
     url: 'http://127.0.0.1:4173',
