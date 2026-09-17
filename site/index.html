@@ -5,118 +5,504 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>더마솔루션 — 피부관리실 운영, 하나로 끝</title>
 <meta name="description" content="피부관리실 전용 고객·예약·매출·회원권 관리 프로그램. 중앙 서버 자동 저장, 매일 백업, 자동 업데이트. 설치 한 번이면 끝.">
+<meta name="theme-color" content="#0a0f28">
+<meta property="og:title" content="더마솔루션 — 피부관리실 운영, 하나로 끝">
+<meta property="og:description" content="고객·예약·매출·회원권을 하나로. 설치는 한 번, 이후는 자동 업데이트.">
+<meta property="og:type" content="website">
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+
 <style>
   :root{
-    --navy:#1a3a8f; --navy-dark:#152f75; --ink:#111827; --body:#374151; --muted:#6b7280;
-    --line:#e5e7eb; --bg:#ffffff; --bg-soft:#f6f8fc; --accent:#2563eb; --green:#059669;
+    /* Dark premium base */
+    --bg-0:#05070f;
+    --bg-1:#0a0f28;
+    --bg-2:#0f1638;
+    --ink:#f5f7ff;
+    --body:#b7bfd8;
+    --muted:#7d87a8;
+    --line:rgba(255,255,255,.08);
+    --line-strong:rgba(255,255,255,.16);
+    --glass:rgba(255,255,255,.045);
+    --glass-strong:rgba(255,255,255,.08);
+
+    /* Iridescent accents (skin-tech tone) */
+    --c-rose:#ff7ea8;
+    --c-lav:#a78bff;
+    --c-cyan:#5ed8ff;
+    --c-mint:#7bf5c9;
+    --c-navy:#4c6cff;
+
+    /* Light surfaces (used in some sections) */
+    --surface:#0d1230;
+    --surface-2:#111737;
+    --green:#22c993;
   }
+
   *{margin:0;padding:0;box-sizing:border-box}
-  html{scroll-behavior:smooth}
+  html{scroll-behavior:smooth;background:var(--bg-0)}
   body{
-    font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic','맑은 고딕',system-ui,sans-serif;
-    color:var(--body); background:var(--bg); font-size:18px; line-height:1.7;
+    font-family:'Pretendard Variable','Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+    color:var(--body); background:var(--bg-0);
+    font-size:17px; line-height:1.68;
     word-break:keep-all; -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
   }
-  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px;position:relative;z-index:2}
   a{color:inherit;text-decoration:none}
+  img,svg{display:block;max-width:100%}
 
-  /* ── 상단 바 ── */
-  header{position:sticky;top:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:10}
-  .nav{display:flex;align-items:center;justify-content:space-between;height:64px}
-  .logo{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--ink);font-size:19px}
-  .logo-mark{width:32px;height:32px;border-radius:9px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px}
-  .nav-links{display:flex;gap:26px;font-size:15px;color:var(--muted)}
-  .nav-links a:hover{color:var(--navy)}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;font-weight:700;cursor:pointer;transition:all .15s ease}
-  .btn-primary{background:var(--navy);color:#fff;padding:12px 22px;font-size:16px}
-  .btn-primary:hover{background:var(--navy-dark);transform:translateY(-1px);box-shadow:0 6px 16px rgba(26,58,143,.25)}
-  .btn-ghost{border:1.5px solid var(--line);color:var(--ink);padding:12px 22px;font-size:16px;background:#fff}
-  .btn-ghost:hover{border-color:var(--navy);color:var(--navy)}
-  .nav .btn-primary{padding:9px 18px;font-size:14px}
+  /* ============ AURORA BACKGROUND (site-wide) ============ */
+  .aurora{
+    position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+    background:
+      radial-gradient(1200px 700px at 15% -10%, rgba(76,108,255,.28), transparent 60%),
+      radial-gradient(900px 600px at 85% 5%, rgba(167,139,255,.22), transparent 60%),
+      radial-gradient(1000px 700px at 50% 100%, rgba(94,216,255,.18), transparent 60%),
+      linear-gradient(180deg, #05070f 0%, #070b1e 40%, #05070f 100%);
+  }
+  .aurora .blob{
+    position:absolute;border-radius:50%;filter:blur(80px);opacity:.55;mix-blend-mode:screen;
+    animation:float 22s ease-in-out infinite;
+  }
+  .aurora .b1{width:520px;height:520px;background:radial-gradient(circle,#4c6cff 0%,transparent 60%);top:-120px;left:-80px}
+  .aurora .b2{width:600px;height:600px;background:radial-gradient(circle,#a78bff 0%,transparent 60%);top:200px;right:-160px;animation-delay:-6s;animation-duration:28s}
+  .aurora .b3{width:480px;height:480px;background:radial-gradient(circle,#5ed8ff 0%,transparent 60%);top:60%;left:20%;animation-delay:-12s;animation-duration:32s}
+  .aurora .b4{width:420px;height:420px;background:radial-gradient(circle,#ff7ea8 0%,transparent 60%);top:120%;right:10%;animation-delay:-4s;animation-duration:26s;opacity:.4}
+  @keyframes float{
+    0%,100%{transform:translate(0,0) scale(1)}
+    33%{transform:translate(40px,-30px) scale(1.08)}
+    66%{transform:translate(-30px,40px) scale(.94)}
+  }
+  .grid-mask{
+    position:fixed;inset:0;z-index:1;pointer-events:none;
+    background-image:
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size:56px 56px;
+    -webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 30%, #000 30%, transparent 80%);
+            mask-image:radial-gradient(ellipse 80% 60% at 50% 30%, #000 30%, transparent 80%);
+    opacity:.55;
+  }
 
-  /* ── 히어로 ── */
-  .hero{padding:88px 0 72px;text-align:center;background:
-    radial-gradient(60% 50% at 50% 0%, #eaf0ff 0%, rgba(255,255,255,0) 70%)}
-  .badge{display:inline-flex;align-items:center;gap:7px;background:#eef3ff;color:var(--navy);
-    border:1px solid #d6e2ff;border-radius:999px;padding:6px 14px;font-size:13.5px;font-weight:600;margin-bottom:22px}
-  .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
-  h1{font-size:clamp(32px,5.4vw,54px);line-height:1.25;color:var(--ink);font-weight:800;letter-spacing:-.02em}
-  h1 .em{color:var(--navy)}
-  .hero p.sub{margin:22px auto 0;max-width:640px;font-size:clamp(16px,2.2vw,19px);color:var(--muted)}
-  .hero-cta{margin-top:36px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-  .hero-note{margin-top:14px;font-size:13.5px;color:#9ca3af}
+  /* ============ HEADER ============ */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:rgba(5,7,15,.55);
+    backdrop-filter:saturate(160%) blur(14px);
+    -webkit-backdrop-filter:saturate(160%) blur(14px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav{display:flex;align-items:center;justify-content:space-between;height:68px}
+  .logo{display:flex;align-items:center;gap:11px;font-weight:800;color:var(--ink);font-size:19px;letter-spacing:-.01em}
+  .logo-mark{
+    width:34px;height:34px;border-radius:10px;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;
+    background:conic-gradient(from 210deg,#4c6cff,#a78bff,#5ed8ff,#4c6cff);
+    box-shadow:0 6px 18px rgba(76,108,255,.45), inset 0 0 0 1px rgba(255,255,255,.25);
+  }
+  .nav-links{display:flex;gap:30px;font-size:14.5px;color:var(--muted);font-weight:500}
+  .nav-links a{transition:color .15s ease;position:relative}
+  .nav-links a:hover{color:var(--ink)}
 
-  /* ── 신뢰 스트립 ── */
-  .trust{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg-soft)}
-  .trust-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:22px 0}
-  .trust-item{display:flex;align-items:center;justify-content:center;gap:9px;font-size:14.5px;font-weight:600;color:var(--ink)}
+  /* ============ BUTTONS ============ */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:9px;
+    border-radius:14px;font-weight:700;cursor:pointer;
+    transition:transform .18s ease, box-shadow .18s ease, background .18s ease;
+    white-space:nowrap;
+  }
+  .btn-primary{
+    background:linear-gradient(135deg,#4c6cff 0%,#7c5cff 55%,#a78bff 100%);
+    color:#fff;padding:13px 24px;font-size:15px;
+    box-shadow:
+      0 10px 26px rgba(76,108,255,.42),
+      inset 0 0 0 1px rgba(255,255,255,.18),
+      inset 0 -8px 20px rgba(0,0,0,.15);
+    position:relative;overflow:hidden;
+  }
+  .btn-primary::before{
+    content:"";position:absolute;inset:-2px;border-radius:inherit;
+    background:conic-gradient(from 0deg,transparent 60%,rgba(255,255,255,.55),transparent 100%);
+    opacity:0;transition:opacity .3s ease;pointer-events:none;
+    animation:spin 4s linear infinite;
+  }
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 32px rgba(124,92,255,.55), inset 0 0 0 1px rgba(255,255,255,.28)}
+  .btn-primary:hover::before{opacity:.35}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .btn-ghost{
+    background:var(--glass);
+    border:1px solid var(--line-strong);
+    color:var(--ink);padding:13px 24px;font-size:15px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  }
+  .btn-ghost:hover{background:var(--glass-strong);border-color:rgba(255,255,255,.28);transform:translateY(-1px)}
+
+  .nav .btn-primary{padding:10px 18px;font-size:13.5px;border-radius:11px}
+
+  /* ============ HERO ============ */
+  .hero{padding:110px 0 100px;text-align:left;position:relative}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+  .badge{
+    display:inline-flex;align-items:center;gap:8px;
+    background:var(--glass);border:1px solid var(--line-strong);
+    color:var(--ink);border-radius:999px;padding:7px 15px;font-size:13px;font-weight:600;
+    margin-bottom:26px;letter-spacing:-.005em;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  }
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+  h1{
+    font-size:clamp(38px,5.8vw,68px);line-height:1.1;color:var(--ink);
+    font-weight:800;letter-spacing:-.035em;
+  }
+  h1 .em{
+    background:linear-gradient(120deg,#5ed8ff 0%,#a78bff 45%,#ff7ea8 100%);
+    background-size:200% 200%;
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    -webkit-text-fill-color:transparent;
+    animation:shift 8s ease-in-out infinite;
+    display:inline-block;
+  }
+  @keyframes shift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+  .hero p.sub{margin:26px 0 0;max-width:520px;font-size:clamp(16px,1.9vw,19px);color:var(--body)}
+  .hero-cta{margin-top:38px;display:flex;gap:12px;flex-wrap:wrap}
+  .hero-note{margin-top:20px;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--c-mint);box-shadow:0 0 12px var(--c-mint);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+
+  /* Floating 3D CRM mockup */
+  .mockup-wrap{position:relative;perspective:1600px;height:520px}
+  .mockup{
+    position:absolute;inset:0;
+    transform-style:preserve-3d;
+    transform:rotateX(6deg) rotateY(-14deg) rotateZ(1deg);
+    animation:sway 8s ease-in-out infinite;
+  }
+  @keyframes sway{
+    0%,100%{transform:rotateX(6deg) rotateY(-14deg) rotateZ(1deg) translateY(0)}
+    50%{transform:rotateX(4deg) rotateY(-12deg) rotateZ(0deg) translateY(-14px)}
+  }
+  .m-window{
+    position:absolute;top:20px;left:0;right:0;
+    border-radius:20px;overflow:hidden;
+    background:linear-gradient(180deg,#101642 0%,#0b1130 100%);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:
+      0 40px 80px rgba(0,0,0,.55),
+      0 20px 40px rgba(76,108,255,.28),
+      inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  .m-titlebar{
+    display:flex;align-items:center;gap:8px;
+    padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.06);
+    background:rgba(255,255,255,.02);
+  }
+  .m-titlebar .dot{width:11px;height:11px;border-radius:50%}
+  .m-titlebar .d1{background:#ff5f57}.m-titlebar .d2{background:#febc2e}.m-titlebar .d3{background:#28c840}
+  .m-titlebar .title{margin-left:14px;font-size:12px;color:var(--muted);font-weight:600}
+  .m-body{padding:22px;display:grid;grid-template-columns:150px 1fr;gap:18px;min-height:400px}
+  .m-side{
+    background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);
+    border-radius:12px;padding:14px 12px;display:flex;flex-direction:column;gap:8px;
+  }
+  .m-nav-item{
+    display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;
+    font-size:12px;color:var(--muted);font-weight:600;
+  }
+  .m-nav-item.active{background:linear-gradient(135deg,rgba(76,108,255,.28),rgba(167,139,255,.2));color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
+  .m-nav-item .ni{width:14px;height:14px;border-radius:4px;background:rgba(255,255,255,.15)}
+  .m-nav-item.active .ni{background:linear-gradient(135deg,#5ed8ff,#a78bff)}
+  .m-main{display:flex;flex-direction:column;gap:14px}
+  .m-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .m-stat{
+    background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));
+    border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px;
+  }
+  .m-stat .l{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .m-stat .v{font-size:20px;color:#fff;font-weight:800;margin-top:6px;letter-spacing:-.02em}
+  .m-stat .t{font-size:10px;color:var(--c-mint);margin-top:4px;font-weight:700}
+  .m-stat.g1 .v{background:linear-gradient(135deg,#5ed8ff,#a78bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .m-chart{
+    background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));
+    border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:16px;height:130px;
+    position:relative;overflow:hidden;
+  }
+  .m-chart .cl{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px}
+  .m-chart svg{width:100%;height:80px}
+  .m-list{
+    background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01));
+    border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;flex:1;
+  }
+  .m-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,.06);font-size:11.5px}
+  .m-row:last-child{border-bottom:0}
+  .m-row .nm{color:#fff;font-weight:600}
+  .m-row .tg{color:var(--c-cyan);font-weight:600;padding:3px 8px;border-radius:6px;background:rgba(94,216,255,.12)}
+  .m-row .tg.gold{color:#ffd97a;background:rgba(255,217,122,.12)}
+
+  /* Floating card fragments */
+  .m-float{
+    position:absolute;background:rgba(15,22,56,.85);
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:16px;padding:14px 18px;
+    box-shadow:0 20px 40px rgba(0,0,0,.4);
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    display:flex;align-items:center;gap:12px;
+  }
+  .m-float .ic{
+    width:36px;height:36px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#5ed8ff,#a78bff);
+    color:#fff;flex-shrink:0;
+  }
+  .m-float .lbl{font-size:11px;color:var(--muted);font-weight:600}
+  .m-float .val{font-size:14px;color:#fff;font-weight:700}
+  .float-top{top:-10px;right:-30px;transform:rotate(3deg);animation:sway2 7s ease-in-out infinite}
+  .float-btm{bottom:20px;left:-40px;transform:rotate(-2deg);animation:sway2 9s ease-in-out infinite reverse}
+  @keyframes sway2{0%,100%{transform:translateY(0) rotate(3deg)}50%{transform:translateY(-10px) rotate(4deg)}}
+
+  /* ============ TRUST STRIP ============ */
+  .trust{
+    padding:22px 0;margin-top:20px;
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    background:rgba(255,255,255,.015);
+  }
+  .trust-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .trust-item{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    font-size:14px;font-weight:600;color:var(--ink);
+    padding:6px 10px;
+  }
   .trust-item svg{flex-shrink:0}
 
-  /* ── 섹션 공통 ── */
-  section{padding:84px 0}
-  .kicker{color:var(--navy);font-weight:700;font-size:14.5px;letter-spacing:.06em;margin-bottom:10px}
-  h2{font-size:clamp(25px,3.6vw,36px);color:var(--ink);font-weight:800;line-height:1.35;letter-spacing:-.01em}
-  .section-sub{margin-top:12px;color:var(--muted);max-width:620px}
+  /* ============ SECTIONS ============ */
+  section{padding:110px 0;position:relative;z-index:2}
+  .kicker{
+    color:transparent;font-weight:700;font-size:13px;letter-spacing:.12em;margin-bottom:14px;
+    text-transform:uppercase;
+    background:linear-gradient(90deg,#5ed8ff,#a78bff,#ff7ea8);
+    -webkit-background-clip:text;background-clip:text;
+    display:inline-block;
+  }
+  h2{
+    font-size:clamp(28px,3.8vw,44px);color:var(--ink);
+    font-weight:800;line-height:1.25;letter-spacing:-.025em;
+  }
+  .section-sub{margin-top:14px;color:var(--body);max-width:640px;font-size:16.5px}
 
-  /* ── 기능 카드 ── */
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:44px}
-  .card{border:1px solid var(--line);border-radius:18px;padding:28px 24px;background:#fff;transition:all .18s ease}
-  .card:hover{border-color:#c7d4f5;box-shadow:0 10px 28px rgba(26,58,143,.08);transform:translateY(-3px)}
-  .card .ic{width:44px;height:44px;border-radius:12px;background:#eef3ff;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
-  .card h3{font-size:18.5px;color:var(--ink);margin-bottom:8px;font-weight:700}
-  .card p{font-size:15px;color:var(--muted);line-height:1.65}
+  /* ============ FEATURE CARDS (3D tilt) ============ */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:52px}
+  .card{
+    position:relative;
+    border:1px solid var(--line-strong);
+    border-radius:22px;padding:32px 26px;
+    background:linear-gradient(180deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.015) 100%);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    transition:transform .3s cubic-bezier(.22,.61,.36,1), border-color .2s ease, box-shadow .3s ease;
+    transform-style:preserve-3d;
+    overflow:hidden;
+  }
+  .card::before{
+    content:"";position:absolute;top:0;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
+  }
+  .card::after{
+    content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:radial-gradient(400px circle at var(--mx,50%) var(--my,50%), rgba(124,92,255,.14), transparent 40%);
+    opacity:0;transition:opacity .3s ease;
+  }
+  .card:hover{
+    border-color:rgba(167,139,255,.35);
+    box-shadow:0 24px 60px rgba(76,108,255,.22), 0 0 0 1px rgba(167,139,255,.15);
+    transform:translateY(-6px);
+  }
+  .card:hover::after{opacity:1}
+  .card .ic{
+    width:52px;height:52px;border-radius:14px;
+    background:linear-gradient(135deg,rgba(94,216,255,.22),rgba(167,139,255,.22));
+    border:1px solid rgba(255,255,255,.12);
+    display:flex;align-items:center;justify-content:center;margin-bottom:20px;
+    box-shadow:inset 0 0 20px rgba(94,216,255,.12);
+  }
+  .card h3{font-size:19px;color:var(--ink);margin-bottom:10px;font-weight:700;letter-spacing:-.015em}
+  .card p{font-size:14.5px;color:var(--body);line-height:1.7}
 
-  /* ── 도입 절차 ── */
-  .steps{background:var(--bg-soft)}
-  .step-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:44px}
-  .step{background:#fff;border:1px solid var(--line);border-radius:18px;padding:30px 26px;position:relative}
-  .step .num{position:absolute;top:-16px;left:24px;width:34px;height:34px;border-radius:50%;background:var(--navy);color:#fff;
-    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;box-shadow:0 4px 10px rgba(26,58,143,.3)}
-  .step h3{font-size:17.5px;color:var(--ink);margin:8px 0 8px;font-weight:700}
-  .step p{font-size:14.5px;color:var(--muted)}
+  /* ============ STEPS ============ */
+  .steps{background:linear-gradient(180deg,transparent 0%, rgba(76,108,255,.05) 50%, transparent 100%)}
+  .step-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:52px;position:relative}
+  .step-grid::before{
+    content:"";position:absolute;top:36px;left:8%;right:8%;height:2px;
+    background:linear-gradient(90deg,transparent,rgba(167,139,255,.35),rgba(94,216,255,.35),rgba(167,139,255,.35),transparent);
+    z-index:0;
+  }
+  .step{
+    position:relative;background:linear-gradient(180deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,.02) 100%);
+    border:1px solid var(--line-strong);border-radius:22px;padding:56px 28px 28px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:1;
+  }
+  .step .num{
+    position:absolute;top:-2px;left:50%;transform:translate(-50%,-50%);
+    width:52px;height:52px;border-radius:50%;
+    background:linear-gradient(135deg,#4c6cff,#a78bff);
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:19px;
+    box-shadow:0 10px 26px rgba(124,92,255,.55), inset 0 0 0 2px rgba(255,255,255,.2);
+  }
+  .step h3{font-size:18px;color:var(--ink);margin:0 0 10px;font-weight:700;text-align:center}
+  .step p{font-size:14.5px;color:var(--body);text-align:center}
 
-  /* ── 다운로드 ── */
-  .dl-box{margin-top:44px;display:grid;grid-template-columns:1.4fr 1fr;gap:18px}
-  .dl-main{background:linear-gradient(135deg,var(--navy) 0%,#27469e 100%);border-radius:22px;padding:38px 34px;color:#fff}
-  .dl-main h3{font-size:22px;font-weight:800;margin-bottom:8px}
-  .dl-main p{font-size:15px;color:#c9d6f5;margin-bottom:24px}
-  .btn-white{background:#fff;color:var(--navy);padding:14px 26px;font-size:16.5px;border-radius:13px}
-  .btn-white:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,0,0,.25)}
-  .dl-main .ver{margin-top:18px;font-size:13px;color:#a9bce8}
-  .dl-alt{background:#fff;border:1px solid var(--line);border-radius:22px;padding:32px 28px}
-  .dl-alt h3{font-size:17px;color:var(--ink);font-weight:700;margin-bottom:8px}
-  .dl-alt p{font-size:14px;color:var(--muted);margin-bottom:18px}
-  .dl-alt a{color:var(--navy);font-weight:700;font-size:15px;display:inline-flex;align-items:center;gap:6px}
-  .dl-alt a:hover{text-decoration:underline}
+  /* ============ DOWNLOAD ============ */
+  .dl-box{margin-top:52px;display:grid;grid-template-columns:1.5fr 1fr;gap:22px}
+  .dl-main{
+    position:relative;overflow:hidden;
+    background:
+      radial-gradient(600px 300px at 100% 0%, rgba(167,139,255,.35), transparent 60%),
+      radial-gradient(500px 300px at 0% 100%, rgba(94,216,255,.25), transparent 60%),
+      linear-gradient(135deg,#131a45 0%,#0c1130 100%);
+    border:1px solid rgba(255,255,255,.15);
+    border-radius:26px;padding:44px 40px;color:#fff;
+    box-shadow:0 30px 60px rgba(0,0,0,.4);
+  }
+  .dl-main::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:
+      linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+    background-size:32px 32px;
+    -webkit-mask-image:radial-gradient(ellipse 80% 60% at 100% 0%,#000 20%,transparent 70%);
+            mask-image:radial-gradient(ellipse 80% 60% at 100% 0%,#000 20%,transparent 70%);
+  }
+  .dl-main > *{position:relative;z-index:1}
+  .dl-main h3{font-size:24px;font-weight:800;margin-bottom:10px;letter-spacing:-.02em}
+  .dl-main p{font-size:15px;color:#c9d1ee;margin-bottom:28px;max-width:520px}
+  .btn-white{
+    background:#fff;color:#0a0f28;padding:15px 28px;font-size:16px;border-radius:14px;
+    font-weight:800;letter-spacing:-.005em;
+    box-shadow:0 10px 30px rgba(255,255,255,.2), inset 0 0 0 1px rgba(0,0,0,.03);
+    position:relative;overflow:hidden;
+  }
+  .btn-white::after{
+    content:"";position:absolute;top:0;left:-100%;width:60%;height:100%;
+    background:linear-gradient(90deg,transparent,rgba(94,216,255,.5),transparent);
+    animation:sheen 3s ease-in-out infinite;
+  }
+  @keyframes sheen{0%{left:-100%}50%,100%{left:150%}}
+  .btn-white:hover{transform:translateY(-2px);box-shadow:0 14px 36px rgba(255,255,255,.28)}
+  .dl-main .ver{margin-top:20px;font-size:12.5px;color:#8a95bd;font-weight:500}
 
-  /* ── FAQ ── */
-  details{border:1px solid var(--line);border-radius:14px;padding:0;margin-top:12px;background:#fff;overflow:hidden}
-  summary{padding:18px 22px;font-weight:700;color:var(--ink);font-size:16.5px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+  .dl-alt{
+    background:linear-gradient(180deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,.02) 100%);
+    border:1px solid var(--line-strong);border-radius:26px;padding:36px 30px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  }
+  .dl-alt h3{font-size:18px;color:var(--ink);font-weight:700;margin-bottom:10px;letter-spacing:-.015em}
+  .dl-alt p{font-size:14px;color:var(--body);margin-bottom:20px}
+  .dl-alt a.link{color:var(--c-cyan);font-weight:700;font-size:14.5px;display:inline-flex;align-items:center;gap:6px}
+  .dl-alt a.link:hover{text-decoration:underline}
+
+  /* ============ ANTIVIRUS ============ */
+  .antivirus code{
+    background:rgba(94,216,255,.1);color:var(--c-cyan);
+    padding:2px 8px;border-radius:6px;font-size:13px;
+    font-family:'JetBrains Mono','Consolas',monospace;
+    border:1px solid rgba(94,216,255,.2);
+  }
+  .antivirus .card b{color:var(--ink);font-weight:700}
+
+  /* ============ FAQ ============ */
+  .faq-list{margin-top:44px;max-width:820px}
+  details{
+    border:1px solid var(--line-strong);border-radius:16px;
+    padding:0;margin-top:12px;
+    background:linear-gradient(180deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.01) 100%);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    overflow:hidden;transition:border-color .2s ease;
+  }
+  details[open]{border-color:rgba(167,139,255,.3)}
+  summary{
+    padding:20px 24px;font-weight:700;color:var(--ink);font-size:16px;
+    cursor:pointer;list-style:none;
+    display:flex;justify-content:space-between;align-items:center;gap:14px;
+    letter-spacing:-.01em;
+  }
   summary::-webkit-details-marker{display:none}
-  summary:after{content:'+';font-size:22px;color:var(--muted);font-weight:400;transition:transform .2s}
+  summary:after{
+    content:"+";font-size:22px;color:var(--c-lav);font-weight:400;
+    transition:transform .25s ease;flex-shrink:0;
+    width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+    border-radius:8px;background:rgba(167,139,255,.12);
+  }
   details[open] summary:after{transform:rotate(45deg)}
-  details .a{padding:0 22px 20px;font-size:15.5px;color:var(--muted)}
+  details .a{padding:0 24px 22px;font-size:15px;color:var(--body);line-height:1.75}
 
-  /* ── 하단 CTA + 푸터 ── */
-  .final{background:var(--bg-soft);text-align:center}
-  footer{border-top:1px solid var(--line);padding:34px 0;font-size:13.5px;color:#9ca3af}
-  .foot{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  /* ============ FINAL CTA ============ */
+  .final{text-align:center;padding:120px 0 130px}
+  .final::before{
+    content:"";position:absolute;inset:0;
+    background:radial-gradient(600px 400px at 50% 50%, rgba(167,139,255,.18), transparent 60%);
+    pointer-events:none;
+  }
+  .final h2{font-size:clamp(30px,4.2vw,52px);letter-spacing:-.03em}
+  .final .section-sub{margin-left:auto;margin-right:auto;text-align:center}
+  .final .hero-cta{justify-content:center;margin-top:38px}
 
+  /* ============ FOOTER ============ */
+  footer{
+    border-top:1px solid var(--line);padding:38px 0;
+    font-size:13px;color:var(--muted);position:relative;z-index:2;
+    background:rgba(5,7,15,.5);
+  }
+  .foot{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  .foot a{color:var(--muted)}
+  .foot a:hover{color:var(--ink)}
+
+  /* ============ REVEAL ANIMATIONS ============ */
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .8s ease, transform .8s cubic-bezier(.22,.61,.36,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  /* ============ RESPONSIVE ============ */
+  @media (max-width:960px){
+    .hero-grid{grid-template-columns:1fr;gap:60px}
+    .mockup-wrap{height:440px;max-width:520px;margin:0 auto}
+    .float-top{right:0}.float-btm{left:0}
+  }
   @media (max-width:820px){
-    body{font-size:17px}
+    body{font-size:16px}
     .nav-links{display:none}
     .grid,.step-grid{grid-template-columns:1fr 1fr}
+    .step-grid::before{display:none}
     .dl-box{grid-template-columns:1fr}
     .trust-grid{grid-template-columns:1fr 1fr;gap:14px}
-    section{padding:64px 0}
+    section{padding:80px 0}
+    .hero{padding:72px 0 60px}
+    .dl-main{padding:34px 28px}
+    .dl-alt{padding:28px 24px}
   }
   @media (max-width:540px){
     .grid,.step-grid{grid-template-columns:1fr}
-    .hero{padding:64px 0 56px}
+    .hero{padding:56px 0 40px}
+    .mockup-wrap{height:380px}
+    .m-body{grid-template-columns:1fr;gap:12px}
+    .m-side{display:none}
+    .float-top,.float-btm{display:none}
+    .final{padding:80px 0 90px}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none !important;transition:none !important}
   }
 </style>
 </head>
 <body>
+
+<div class="aurora" aria-hidden="true">
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+  <div class="blob b4"></div>
+</div>
+<div class="grid-mask" aria-hidden="true"></div>
 
 <header>
   <div class="wrap nav">
@@ -125,7 +511,7 @@
       <a href="#features">주요 기능</a>
       <a href="#steps">도입 절차</a>
       <a href="#download">다운로드</a>
-      <a href="#antivirus">백신 예외 등록</a>
+      <a href="#antivirus">백신 예외</a>
       <a href="#faq">자주 묻는 질문</a>
     </nav>
     <a class="btn btn-primary" href="#download">프로그램 다운로드</a>
@@ -134,74 +520,163 @@
 
 <section class="hero">
   <div class="wrap">
-    <div class="badge"><span class="dot"></span>피부관리실 전용 · 중앙 서버 자동 저장</div>
-    <h1>피부관리실 운영,<br><span class="em">프로그램 하나</span>로 끝.</h1>
-    <p class="sub">고객 카드부터 예약, 회원권 회차 차감, 매출 통계까지 —
-      복잡한 수기 장부와 엑셀 없이, 더마솔루션 한 화면에서 관리하세요.</p>
-    <div class="hero-cta">
-      <a class="btn btn-primary" style="padding:15px 30px;font-size:17px" href="#download">무료 다운로드</a>
-      <a class="btn btn-ghost" style="padding:15px 30px;font-size:17px" href="mailto:mkclub21@gmail.com?subject=%EB%8D%94%EB%A7%88%EC%86%94%EB%A3%A8%EC%85%98%20CRM%20%EB%8F%84%EC%9E%85%20%EB%AC%B8%EC%9D%98">도입 문의</a>
+    <div class="hero-grid">
+      <div class="reveal">
+        <div class="badge"><span class="dot"></span>피부관리실 전용 · 중앙 서버 자동 저장</div>
+        <h1>피부관리실 운영,<br><span class="em">프로그램 하나</span>로 끝.</h1>
+        <p class="sub">고객 카드, 예약, 회원권 회차, 매출 통계 — 한 화면에서 관리합니다.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" style="padding:16px 32px;font-size:16px" href="#download">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0-4-4m4 4 4-4"/><path d="M4 21h16"/></svg>
+            무료 다운로드
+          </a>
+          <a class="btn btn-ghost" style="padding:16px 32px;font-size:16px" href="mailto:mkclub21@gmail.com?subject=%EB%8D%94%EB%A7%88%EC%86%94%EB%A3%A8%EC%85%98%20CRM%20%EB%8F%84%EC%9E%85%20%EB%AC%B8%EC%9D%98">도입 문의</a>
+        </div>
+        <p class="hero-note"><span class="pulse"></span>Windows 전용 · 설치 후 본사 발급 계정으로 로그인 · <span id="ver-hero">최신 버전 확인 중…</span></p>
+      </div>
+
+      <div class="reveal" style="transition-delay:.15s">
+        <div class="mockup-wrap">
+          <div class="mockup">
+            <div class="m-window">
+              <div class="m-titlebar">
+                <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+                <span class="title">더마솔루션 — 오늘의 매장</span>
+              </div>
+              <div class="m-body">
+                <div class="m-side">
+                  <div class="m-nav-item active"><span class="ni"></span>대시보드</div>
+                  <div class="m-nav-item"><span class="ni"></span>고객</div>
+                  <div class="m-nav-item"><span class="ni"></span>예약</div>
+                  <div class="m-nav-item"><span class="ni"></span>회원권</div>
+                  <div class="m-nav-item"><span class="ni"></span>매출</div>
+                  <div class="m-nav-item"><span class="ni"></span>통계</div>
+                </div>
+                <div class="m-main">
+                  <div class="m-stats">
+                    <div class="m-stat g1">
+                      <div class="l">오늘 매출</div>
+                      <div class="v">₩ 1,284K</div>
+                      <div class="t">▲ 12% vs 어제</div>
+                    </div>
+                    <div class="m-stat">
+                      <div class="l">예약</div>
+                      <div class="v">18건</div>
+                      <div class="t">완료 11 · 대기 7</div>
+                    </div>
+                    <div class="m-stat">
+                      <div class="l">신규 고객</div>
+                      <div class="v">4명</div>
+                      <div class="t">이번 주 21명</div>
+                    </div>
+                  </div>
+                  <div class="m-chart">
+                    <div class="cl">주간 매출 추이</div>
+                    <svg viewBox="0 0 300 80" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stop-color="#a78bff" stop-opacity=".6"/>
+                          <stop offset="100%" stop-color="#a78bff" stop-opacity="0"/>
+                        </linearGradient>
+                      </defs>
+                      <path d="M 0 60 L 40 50 L 80 55 L 120 30 L 160 40 L 200 20 L 240 25 L 300 10 L 300 80 L 0 80 Z" fill="url(#g1)"/>
+                      <path d="M 0 60 L 40 50 L 80 55 L 120 30 L 160 40 L 200 20 L 240 25 L 300 10" fill="none" stroke="#5ed8ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                  <div class="m-list">
+                    <div class="m-row"><span class="nm">김O정 · 딥클렌징</span><span class="tg">완료</span></div>
+                    <div class="m-row"><span class="nm">박O은 · 여드름관리</span><span class="tg gold">진행중</span></div>
+                    <div class="m-row"><span class="nm">이O미 · 리프팅</span><span class="tg">완료</span></div>
+                    <div class="m-row"><span class="nm">최O연 · 10회권 3/10</span><span class="tg">완료</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="m-float float-top">
+              <div class="ic">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+              </div>
+              <div>
+                <div class="lbl">데이터 안전</div>
+                <div class="val">중앙 서버 저장 · 실시간</div>
+              </div>
+            </div>
+
+            <div class="m-float float-btm">
+              <div class="ic" style="background:linear-gradient(135deg,#7bf5c9,#5ed8ff)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+              </div>
+              <div>
+                <div class="lbl">자동 업데이트</div>
+                <div class="val">닫을 때 조용히 적용</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <p class="hero-note">Windows 전용 · 설치 후 본사 발급 계정으로 로그인 · <span id="ver-hero">최신 버전 확인 중…</span></p>
+
+    <div class="trust reveal">
+      <div class="trust-grid">
+        <div class="trust-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7bf5c9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          중앙 서버 자동 저장
+        </div>
+        <div class="trust-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7bf5c9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+          매일 자동 백업
+        </div>
+        <div class="trust-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7bf5c9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12h6m10 0h6"/><circle cx="12" cy="12" r="4"/></svg>
+          인터넷 끊겨도 입력 보존
+        </div>
+        <div class="trust-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7bf5c9" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0 -4-4m4 4 4-4"/><path d="M4 21h16"/></svg>
+          버튼 한 번 자동 업데이트
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
-<div class="trust">
-  <div class="wrap trust-grid">
-    <div class="trust-item">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      중앙 서버 자동 저장
-    </div>
-    <div class="trust-item">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
-      매일 자동 백업
-    </div>
-    <div class="trust-item">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12h6m10 0h6"/><circle cx="12" cy="12" r="4"/></svg>
-      인터넷 끊겨도 입력 보존
-    </div>
-    <div class="trust-item">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0 -4-4m4 4 4-4"/><path d="M4 21h16"/></svg>
-      버튼 한 번 자동 업데이트
-    </div>
-  </div>
-</div>
-
 <section id="features">
   <div class="wrap">
-    <p class="kicker">주요 기능</p>
-    <h2>매일 하는 일이 다 들어있습니다</h2>
-    <p class="section-sub">피부관리실 현장에서 실제로 쓰는 기능만, 군더더기 없이.</p>
+    <div class="reveal">
+      <p class="kicker">주요 기능</p>
+      <h2>제공 기능</h2>
+      <p class="section-sub">현장에서 쓰는 기능.</p>
+    </div>
     <div class="grid">
-      <div class="card">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a3a8f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+      <div class="card reveal">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
         <h3>고객 관리</h3>
-        <p>피부 타입·등급·방문 이력을 한 장의 고객 카드로. 개인정보 동의 기록까지 자동 관리되어 법적 리스크를 줄입니다.</p>
+        <p>피부 타입·등급·방문 이력을 한 장의 고객 카드에. 개인정보 동의 기록도 같은 카드에 남습니다.</p>
       </div>
-      <div class="card">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a3a8f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+      <div class="card reveal">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5ed8ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
         <h3>예약 관리</h3>
-        <p>주간·일간 캘린더와 직원별 예약 현황을 한눈에. 완료 처리하면 결제까지 바로 매출에 잡힙니다.</p>
+        <p>주간·일간 캘린더, 직원별 예약 현황. 완료 처리하면 결제가 매출에 바로 잡힙니다.</p>
       </div>
-      <div class="card">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a3a8f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="2"/><path d="M2 11h20"/></svg></div>
+      <div class="card reveal">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff7ea8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="12" rx="2"/><path d="M2 11h20"/></svg></div>
         <h3>회원권 · 티켓</h3>
-        <p>10회권·정액권 회차가 시술 기록과 함께 자동 차감. 어떤 관리로 몇 회를 썼는지 고객별로 투명하게 남습니다.</p>
+        <p>10회권·정액권 회차가 시술 기록과 함께 자동 차감. 어떤 관리로 몇 회를 썼는지 고객별로 남습니다.</p>
       </div>
-      <div class="card">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a3a8f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg></div>
+      <div class="card reveal">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7bf5c9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-6"/></svg></div>
         <h3>매출 · 통계</h3>
-        <p>일·월 매출과 결제수단별 집계를 자동으로. 카드+현금 복합 결제, 매장별 커스텀 결제수단도 지원합니다.</p>
+        <p>일·월 매출, 결제수단별 집계. 카드+현금 복합 결제와 매장별 커스텀 결제수단을 지원합니다.</p>
       </div>
-      <div class="card">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a3a8f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+      <div class="card reveal">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
         <h3>시술 기록 · 사진</h3>
-        <p>시술 내용과 Before/After 사진을 고객 카드에 차곡차곡. 관리 경과를 고객에게 보여주며 재방문을 만듭니다.</p>
+        <p>시술 내용과 Before/After 사진을 고객 카드에 저장. 방문 때 경과를 함께 확인할 수 있습니다.</p>
       </div>
-      <div class="card">
-        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a3a8f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
-        <h3>데이터 안심 보관</h3>
-        <p>모든 기록은 회사 중앙 서버에 저장되고 매일 백업됩니다. PC가 고장 나도, 인터넷이 끊겨도 데이터는 안전합니다.</p>
+      <div class="card reveal">
+        <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5ed8ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <h3>데이터 보관</h3>
+        <p>모든 기록은 중앙 서버에 저장되고 매일 백업됩니다. PC가 고장 나거나 인터넷이 끊겨도 데이터는 보존됩니다.</p>
       </div>
     </div>
   </div>
@@ -209,23 +684,25 @@
 
 <section class="steps" id="steps">
   <div class="wrap">
-    <p class="kicker">도입 절차</p>
-    <h2>오늘 문의하면, 바로 시작합니다</h2>
+    <div class="reveal">
+      <p class="kicker">도입 절차</p>
+      <h2>3단계</h2>
+    </div>
     <div class="step-grid">
-      <div class="step">
+      <div class="step reveal">
         <div class="num">1</div>
         <h3>도입 문의</h3>
-        <p>이메일로 매장 이름과 연락처를 보내주세요. 본사에서 안내를 드립니다.</p>
+        <p>이메일로 매장 이름과 연락처를 보내주세요.</p>
       </div>
-      <div class="step">
+      <div class="step reveal" style="transition-delay:.1s">
         <div class="num">2</div>
         <h3>계정 발급</h3>
-        <p>본사가 매장 전용 계정과 임시 비밀번호를 발급해 드립니다.</p>
+        <p>매장 전용 계정과 임시 비밀번호를 발급합니다.</p>
       </div>
-      <div class="step">
+      <div class="step reveal" style="transition-delay:.2s">
         <div class="num">3</div>
         <h3>설치 후 로그인</h3>
-        <p>설치파일을 내려받아 더블클릭하면 자동으로 설치되고 바로 켜집니다. 본사 계정으로 로그인하면 끝.</p>
+        <p>설치파일을 더블클릭하면 자동 설치되고 바로 실행됩니다. 계정으로 로그인하면 끝.</p>
       </div>
     </div>
   </div>
@@ -233,89 +710,98 @@
 
 <section id="download">
   <div class="wrap">
-    <p class="kicker">다운로드</p>
-    <h2>설치는 이번 한 번뿐입니다</h2>
-    <p class="section-sub">이후 업데이트는 프로그램이 스스로 내려받아 닫을 때 자동 적용됩니다. 다시 내려받을 일이 없습니다.</p>
+    <div class="reveal">
+      <p class="kicker">다운로드</p>
+      <h2>설치는 한 번</h2>
+      <p class="section-sub">이후 업데이트는 프로그램이 스스로 받아 닫을 때 자동 적용됩니다. 다시 받을 필요 없습니다.</p>
+    </div>
     <div class="dl-box">
-      <div class="dl-main">
-        <h3>Windows용 설치파일 받기</h3>
-        <p id="dl-main-desc">내려받은 파일을 더블클릭하면 자동으로 설치되고 바탕화면에 '더마솔루션 CRM' 아이콘이 생깁니다. 관리자 권한 불필요, 클릭 한 번이면 끝.</p>
+      <div class="dl-main reveal">
+        <h3>Windows 설치파일</h3>
+        <p id="dl-main-desc">파일을 더블클릭하면 설치되고 바탕화면에 아이콘이 생깁니다. 관리자 권한 불필요.</p>
         <a class="btn btn-white" id="dl-main-btn" href="/portable/TroiareukeCRM-Setup.exe" download>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0-4-4m4 4 4-4"/><path d="M4 21h16"/></svg>
           설치파일 다운로드 (무료)
         </a>
         <p class="ver" id="ver-dl">최신 버전 확인 중…</p>
       </div>
-      <div class="dl-alt">
-        <h3>설치 없이 바로 실행하려면</h3>
-        <p>USB나 공용 PC처럼 설치가 어려운 경우, 단일 실행 파일 버전을 사용하세요. 기능과 자동 업데이트는 동일합니다.</p>
-        <a class="btn btn-ghost" style="padding:12px 20px;font-size:15px" href="/portable/TroiareukeCRM-portable.exe" download>단일 실행 파일(포터블) 다운로드</a>
-        <p style="margin-top:16px;font-size:13px;color:#9ca3af">보안 프로그램이 두 파일을 모두 막으면 <a href="/portable/TroiareukeCRM-win64.zip" download style="color:#93c5fd">폴더형(ZIP)</a>을 받아 압축을 푼 뒤 '트로이아르케 CRM.exe'를 실행하세요. 다운로드가 안 보이면 Ctrl+J를 눌러 브라우저 다운로드 목록에서 [계속]을 눌러주세요.</p>
-        <p style="margin-top:10px;font-size:13px"><a href="#antivirus" style="color:#93c5fd;text-decoration:underline">설치 후 백신 예외 등록 방법 보기 →</a></p>
+      <div class="dl-alt reveal" style="transition-delay:.1s">
+        <h3>설치 없이 실행</h3>
+        <p>USB·공용 PC처럼 설치가 어려운 경우 단일 실행 파일을 사용하세요. 기능과 자동 업데이트는 동일합니다.</p>
+        <a class="btn btn-ghost" style="padding:12px 20px;font-size:14.5px" href="/portable/TroiareukeCRM-portable.exe" download>단일 실행 파일(포터블) 다운로드</a>
+        <p style="margin-top:18px;font-size:13px;color:var(--muted)">보안 프로그램이 두 파일을 모두 막으면 <a href="/portable/TroiareukeCRM-win64.zip" download class="link">폴더형(ZIP)</a>을 받아 압축을 푼 뒤 '트로이아르케 CRM.exe'를 실행하세요. 다운로드가 안 보이면 Ctrl+J를 눌러 브라우저 다운로드 목록에서 [계속]을 눌러주세요.</p>
+        <p style="margin-top:12px;font-size:13.5px"><a href="#antivirus" class="link">설치 후 백신 예외 등록 방법 보기 →</a></p>
       </div>
     </div>
   </div>
 </section>
 
-<section id="antivirus">
+<section id="antivirus" class="antivirus">
   <div class="wrap">
-    <p class="kicker">설치 후 1분</p>
-    <h2>백신이 프로그램을 막지 않도록 예외 등록</h2>
-    <p class="section-sub">일부 PC의 백신이 새 프로그램이나 자동 업데이트 파일을 오탐해 지우는 경우가 있습니다. 설치 직후 한 번만 아래 중 하나를 해 두면 이후 재설치가 필요한 일이 생기지 않습니다.</p>
-    <div class="grid" style="margin-top:32px">
-      <div class="card">
-        <h3>가장 쉬운 방법 — 프로그램 안에서</h3>
-        <p>더마솔루션 실행 → 왼쪽 메뉴 <b>설정</b> → <b>데이터 백업</b> 탭 → <b>백신·보안 예외 등록</b> 카드.<br>등록할 폴더 2개가 표시되고 <b>[Windows 보안 예외 설정 화면 열기]</b>를 누르면 경로가 복사된 채 Windows 보안 화면이 바로 열립니다. 붙여넣기 두 번이면 끝.</p>
+    <div class="reveal">
+      <p class="kicker">백신 예외</p>
+      <h2>백신 예외 등록</h2>
+      <p class="section-sub">일부 PC의 백신이 자동 업데이트 파일을 오탐할 수 있습니다. 설치 직후 아래 중 하나를 한 번만 하면 됩니다.</p>
+    </div>
+    <div class="grid">
+      <div class="card reveal">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7bf5c9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+        <h3>프로그램 안에서 (권장)</h3>
+        <p>더마솔루션 실행 → 왼쪽 <b>설정</b> → <b>데이터 백업</b> → <b>백신·보안 예외 등록</b>.<br>등록할 폴더 2개가 표시되고 <b>[Windows 보안 예외 설정 화면 열기]</b>를 누르면 경로가 복사된 채 Windows 보안 화면이 열립니다. 붙여넣기 두 번.</p>
       </div>
-      <div class="card">
-        <h3>Windows 보안 수동 등록 (Windows 11 / 10)</h3>
-        <p>① <b>설정</b> → <b>개인 정보 및 보안</b>(Windows 10은 <b>업데이트 및 보안</b>) → <b>Windows 보안</b> → <b>바이러스 및 위협 방지</b><br>② "바이러스 및 위협 방지 설정"의 <b>설정 관리</b> → 맨 아래 "제외"의 <b>제외 추가 또는 제거</b> → 관리자 확인 창 <b>[예]</b><br>③ <b>제외 사항 추가</b> → <b>폴더</b> → 프로그램이 있는 폴더와 <code>%APPDATA%\트로이아르케 CRM</code> 폴더를 각각 추가</p>
+      <div class="card reveal" style="transition-delay:.08s">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5ed8ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></div>
+        <h3>Windows 보안 수동 등록 (Win 11 / 10)</h3>
+        <p>① <b>설정</b> → <b>개인 정보 및 보안</b>(Windows 10은 <b>업데이트 및 보안</b>) → <b>Windows 보안</b> → <b>바이러스 및 위협 방지</b><br>② "설정 관리" → 맨 아래 "제외"의 <b>제외 추가 또는 제거</b> → 관리자 확인 <b>[예]</b><br>③ <b>제외 사항 추가</b> → <b>폴더</b> → 프로그램 폴더와 <code>%APPDATA%\트로이아르케 CRM</code>을 각각 추가</p>
       </div>
-      <div class="card">
+      <div class="card reveal" style="transition-delay:.16s">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a78bff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></div>
         <h3>안랩 V3 Lite / V3 365 수동 등록</h3>
-        <p>① V3 창 오른쪽 위 <b>환경 설정</b>(톱니바퀴) → 왼쪽 <b>검사 예외 설정</b><br>② "검사 예외 대상"에서 <b>폴더 추가</b> → 프로그램이 있는 폴더와 <code>%APPDATA%\트로이아르케 CRM</code> 폴더를 각각 선택 → <b>확인</b><br>③ "실시간 검사 예외" 항목이 따로 있는 버전은 같은 폴더를 한 번 더 추가</p>
+        <p>① V3 창 오른쪽 위 <b>환경 설정</b>(톱니바퀴) → 왼쪽 <b>검사 예외 설정</b><br>② "검사 예외 대상"에서 <b>폴더 추가</b> → 프로그램 폴더와 <code>%APPDATA%\트로이아르케 CRM</code>을 각각 선택 → <b>확인</b><br>③ "실시간 검사 예외" 항목이 따로 있는 버전은 같은 폴더를 한 번 더 추가</p>
       </div>
     </div>
-    <p style="margin-top:24px;font-size:14px;color:#6b7280">처음 실행 때 "Windows의 PC 보호" 파란 창이 뜨면 <b>추가 정보</b> → <b>실행</b>을 누르세요. 처음 한 번만 나옵니다. 폴더 경로는 프로그램 안 <b>설정 → 데이터 백업 → 백신·보안 예외 등록</b> 카드에서 복사할 수 있습니다.</p>
+    <p style="margin-top:28px;font-size:14px;color:var(--muted);max-width:820px">처음 실행 때 "Windows의 PC 보호" 파란 창이 뜨면 <b style="color:var(--ink)">추가 정보</b> → <b style="color:var(--ink)">실행</b>. 처음 한 번만 나옵니다. 폴더 경로는 프로그램 안 <b style="color:var(--ink)">설정 → 데이터 백업 → 백신·보안 예외 등록</b>에서 복사할 수 있습니다.</p>
   </div>
 </section>
 
 <section id="faq">
   <div class="wrap">
-    <p class="kicker">자주 묻는 질문</p>
-    <h2>궁금하신 점</h2>
-    <div style="margin-top:32px;max-width:760px">
-      <details>
+    <div class="reveal">
+      <p class="kicker">자주 묻는 질문</p>
+      <h2>궁금하신 점</h2>
+    </div>
+    <div class="faq-list">
+      <details class="reveal">
         <summary>계정은 어떻게 만드나요?</summary>
-        <div class="a">보안을 위해 자체 가입은 받지 않습니다. 도입 문의를 주시면 본사에서 매장 전용 계정과 임시 비밀번호를 발급해 드리며, 첫 로그인 후 비밀번호를 직접 변경하시면 됩니다.</div>
+        <div class="a">자체 가입은 받지 않습니다. 도입 문의를 주시면 매장 전용 계정과 임시 비밀번호를 발급합니다. 첫 로그인 후 비밀번호를 변경하세요.</div>
       </details>
-      <details>
+      <details class="reveal">
         <summary>데이터는 어디에 저장되나요? PC가 고장 나면요?</summary>
-        <div class="a">모든 기록은 회사 중앙 서버에 실시간 저장되고 매일 백업됩니다. PC를 바꾸거나 프로그램을 다시 설치해도 로그인만 하면 데이터가 그대로 있습니다.</div>
+        <div class="a">모든 기록은 중앙 서버에 실시간 저장되고 매일 백업됩니다. PC를 바꾸거나 프로그램을 다시 설치해도 로그인하면 데이터가 그대로 있습니다.</div>
       </details>
-      <details>
+      <details class="reveal">
         <summary>인터넷이 끊기면 입력한 내용이 사라지나요?</summary>
-        <div class="a">아니요. 인터넷이 끊긴 동안 저장한 내용은 PC에 안전하게 보관되고, 연결이 돌아오면 자동으로 서버에 전송됩니다. 화면 상단에 전송 대기 상태가 표시됩니다.</div>
+        <div class="a">아니요. 인터넷이 끊긴 동안 저장한 내용은 PC에 보관되고, 연결이 돌아오면 자동으로 서버에 전송됩니다. 화면 상단에 전송 대기 상태가 표시됩니다.</div>
       </details>
-      <details>
+      <details class="reveal">
         <summary>업데이트할 때마다 다시 설치해야 하나요?</summary>
-        <div class="a">아니요. 새 버전이 나오면 프로그램이 스스로 내려받아 두고, 프로그램을 닫을 때 자동으로 교체됩니다. 설치 파일을 다시 내려받을 필요가 없습니다.</div>
+        <div class="a">아니요. 새 버전이 나오면 프로그램이 스스로 받아 두고, 닫을 때 자동으로 교체됩니다. 설치 파일을 다시 받을 필요가 없습니다.</div>
       </details>
-      <details>
+      <details class="reveal">
         <summary>비밀번호를 잊어버렸어요.</summary>
-        <div class="a">본사 관리자에게 연락해 주세요. 본인 확인 후 임시 비밀번호를 즉시 발급해 드립니다.</div>
+        <div class="a">본사 관리자에게 연락해 주세요. 본인 확인 후 임시 비밀번호를 즉시 발급합니다.</div>
       </details>
     </div>
   </div>
 </section>
 
 <section class="final">
-  <div class="wrap">
-    <h2>수기 장부는 오늘까지만.</h2>
-    <p class="section-sub" style="margin-left:auto;margin-right:auto">지금 도입 문의를 남기시면 계정 발급부터 첫 로그인까지 본사가 함께합니다.</p>
+  <div class="wrap reveal">
+    <h2>도입 <span style="background:linear-gradient(120deg,#5ed8ff,#a78bff,#ff7ea8);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent">문의</span></h2>
+    <p class="section-sub" style="max-width:520px">이메일로 매장 이름·연락처를 보내주세요. 계정 발급 후 첫 로그인까지 안내합니다.</p>
     <div class="hero-cta">
-      <a class="btn btn-primary" style="padding:15px 30px;font-size:17px" href="mailto:mkclub21@gmail.com?subject=%EB%8D%94%EB%A7%88%EC%86%94%EB%A3%A8%EC%85%98%20CRM%20%EB%8F%84%EC%9E%85%20%EB%AC%B8%EC%9D%98">이메일로 도입 문의</a>
-      <a class="btn btn-ghost" style="padding:15px 30px;font-size:17px" href="#download">프로그램 다운로드</a>
+      <a class="btn btn-primary" style="padding:16px 32px;font-size:16px" href="mailto:mkclub21@gmail.com?subject=%EB%8D%94%EB%A7%88%EC%86%94%EB%A3%A8%EC%85%98%20CRM%20%EB%8F%84%EC%9E%85%20%EB%AC%B8%EC%9D%98">이메일로 도입 문의</a>
+      <a class="btn btn-ghost" style="padding:16px 32px;font-size:16px" href="#download">프로그램 다운로드</a>
     </div>
   </div>
 </section>
@@ -328,14 +814,13 @@
 </footer>
 
 <script>
-  // 채널 매니페스트에서 최신 버전 표시 (같은 오리진 — CORS 없음)
+  // ── 최신 버전 표시 + 404 fallback ──
   fetch('/portable/latest.json?t=' + Date.now())
-    .then(r => r.json())
-    .then(m => {
+    .then(function (r) { return r.json(); })
+    .then(function (m) {
       var text = '최신 버전 v' + m.version + (m.releaseDate ? ' · ' + m.releaseDate.slice(0, 10) : '');
-      document.getElementById('ver-hero').textContent = text;
-      document.getElementById('ver-dl').textContent = text + ' · SHA-256 검증 배포';
-      // 안전장치: 채널에 설치파일이 아직 없으면(게시 작업 미갱신 등) 기본 버튼을 포터블로 바꿔 404를 막는다.
+      var h = document.getElementById('ver-hero'); if (h) h.textContent = text;
+      var d = document.getElementById('ver-dl'); if (d) d.textContent = text + ' · SHA-256 검증 배포';
       var mainBtn = document.getElementById('dl-main-btn');
       var setupUrl = '/portable/TroiareukeCRM-Setup.exe';
       fetch(setupUrl + '?t=' + Date.now(), { method: 'HEAD' })
@@ -349,9 +834,42 @@
         });
     })
     .catch(function () {
-      document.getElementById('ver-hero').textContent = '';
-      document.getElementById('ver-dl').textContent = '';
+      var h = document.getElementById('ver-hero'); if (h) h.textContent = '';
+      var d = document.getElementById('ver-dl'); if (d) d.textContent = '';
     });
+
+  // ── 스크롤 나타남 애니메이션 ──
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+
+  // ── 카드 마우스 위치 → 광채 좌표 ──
+  document.querySelectorAll('.card').forEach(function (card) {
+    card.addEventListener('mousemove', function (e) {
+      var r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+      card.style.setProperty('--my', (e.clientY - r.top) + 'px');
+    });
+  });
+
+  // ── 히어로 목업 마우스 패럴랙스 (약하게) ──
+  var mockup = document.querySelector('.mockup');
+  var hero = document.querySelector('.hero');
+  if (mockup && hero && matchMedia('(min-width:961px)').matches) {
+    hero.addEventListener('mousemove', function (e) {
+      var r = hero.getBoundingClientRect();
+      var x = (e.clientX - r.left) / r.width - 0.5;
+      var y = (e.clientY - r.top) / r.height - 0.5;
+      mockup.style.transform =
+        'rotateX(' + (6 - y * 6) + 'deg) rotateY(' + (-14 + x * 8) + 'deg) rotateZ(1deg) translateY(' + (y * -6) + 'px)';
+    });
+    hero.addEventListener('mouseleave', function () {
+      mockup.style.transform = '';
+    });
+  }
 </script>
 </body>
 </html>
