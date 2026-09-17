@@ -390,6 +390,17 @@
   @keyframes sheen{0%{left:-100%}50%,100%{left:150%}}
   .btn-white:hover{transform:translateY(-2px);box-shadow:0 14px 36px rgba(255,255,255,.28)}
   .dl-main .ver{margin-top:20px;font-size:12.5px;color:#8a95bd;font-weight:500}
+  .dl-notice{
+    margin-top:20px;padding:14px 18px;
+    border:1px solid rgba(255,217,122,.35);
+    background:linear-gradient(135deg,rgba(255,217,122,.14),rgba(255,180,90,.06));
+    border-radius:12px;
+    font-size:14px;color:#ffe6ad;line-height:1.65;
+    display:flex;gap:12px;align-items:flex-start;
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  }
+  .dl-notice svg{flex-shrink:0;margin-top:2px;color:#ffd97a}
+  .dl-notice b{color:#fff;font-weight:700}
 
   .dl-alt{
     background:linear-gradient(180deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,.02) 100%);
@@ -723,6 +734,10 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0-4-4m4 4 4-4"/><path d="M4 21h16"/></svg>
           설치파일 다운로드 (무료)
         </a>
+        <div class="dl-notice">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+          <span>다운로드 후 Windows가 파란 창(<b>Windows의 PC 보호</b>)으로 차단하면 <b>[추가 정보]</b> → <b>[실행]</b>을 누르세요. 처음 한 번만 나옵니다.</span>
+        </div>
         <p class="ver" id="ver-dl">최신 버전 확인 중…</p>
       </div>
       <div class="dl-alt reveal" style="transition-delay:.1s">
