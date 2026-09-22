@@ -24,6 +24,10 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: android-actions/setup-android@v3
+        with:
+          # 기본값 "tools platform-tools"의 'tools' 패키지가 cmdline-tools 16에서 사라져 sdkmanager exit 1 (2026-09-22 v1.0.59 릴리스 실사고).
+          # 플랫폼·빌드툴은 Gradle(AGP)이 라이선스 수락 상태에서 자동 내려받는다.
+          packages: platform-tools
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Build web bundle for Capacitor (BUILD_TARGET=capacitor -> dist-mobile)

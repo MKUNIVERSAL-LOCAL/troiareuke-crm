@@ -177,3 +177,9 @@ curl -s http://127.0.0.1:8787/health
 
 ### 현재 상태 한 줄
 코드는 정본(C:\dev)과 OneDrive 양쪽에 미커밋 상태로 동기화 완료, TSC 통과. 프로덕션(NAS·exe)은 아직 옛 코드.
+
+---
+
+## ✅ 완료 (2026-09-22 19:20, 회사 PC) — 상세는 `docs/DEPLOY-RECORD-2026-09-22-signup-approval.md`
+- PR #49·#50 머지, GitHub Release v1.0.59, NAS 채널·서버 라이브(verify:nas 5/5, sha 3종 일치), 어드민 exe 재빌드.
+- 남은 오너 액션: 어드민에서 테스트 신청 거부 정리, 48h 내 구버전 지점 0 확인, (선택) SSH 키 등록·DSM 작업 활성화.
