@@ -62,3 +62,12 @@ NAS `/etc/crontab`(SSH로 읽기 가능)에 두 작업이 `0 0 7 9 * root synosc
 - 배포 전 자동 백업(`troiareuke-crm-server.bak-*`) 생성 — 롤백은 백업 폴더 복원 + 재빌드.
 - 2026-09-02 현재 DSM의 두 작업 상태: publish는 v1.0.46으로 실행 완료(채널 라이브),
   server-update는 구버전(고정 해시 69b8cc1) — 이 개선판 적용 대기.
+
+## SSH 키 등록 (ssh-key-setup.sh, 2026-09-22)
+
+회사 PC(MKuni)·노트북 모두 NAS 키 인증이 `Permission denied (publickey)`였다. 원인 2가지:
+1. DSM `ssh-key-setup` 작업의 스크립트에서 키 한 줄이 붙여넣기 줄바꿈으로 3줄로 쪼개져 있었음 → 무효.
+2. `ys-lee0223` 홈 디렉토리가 없으면(사용자 홈 서비스 꺼짐) sshd가 authorized_keys를 읽을 수 없음.
+
+**오너 1회 적용**: ① 제어판 > 사용자 및 그룹 > 고급 > "사용자 홈 서비스 활성화" 체크(꺼져 있을 때만) ② 작업 스케줄러 > `ssh-key-setup` 편집 > 작업 설정에 `ssh-key-setup.sh` 내용 전체 붙여넣기(키는 반드시 한 줄) > 확인 > 실행.
+검증(PC): `ssh -o BatchMode=yes ys-lee0223@mkcorp.familyds.com echo OK` → OK. 이후 `release:all`이 채널 게시까지 자동, 서버 재배포는 `grant-deploy-sudo.sh`(root 1회)까지 적용하면 자동.
