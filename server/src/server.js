@@ -231,6 +231,9 @@ function isValidBranchId(value) {
 function isValidText(value, { required = false, max = MAX_TEXT_LENGTH } = {}) {
   if (value === undefined || value === null) return !required;
   if (typeof value !== 'string' || value.length > max) return false;
+  // U+FFFD(치환 문자)는 인코딩이 깨진 입력의 흔적 — 저장하면 어드민 화면에 '�'로 보인다 (2026-09-22 실측: CP949 터미널 curl).
+  // 정상 클라이언트(브라우저 fetch)는 항상 UTF-8이라 이 문자를 만들지 않는다.
+  if (value.includes('�')) return false;
   return !required || value.trim().length > 0;
 }
 
