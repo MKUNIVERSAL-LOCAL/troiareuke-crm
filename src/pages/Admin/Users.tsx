@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
-import { Users, Building2, Search, UserPlus } from 'lucide-react';
+import { Users, Building2, Search, UserPlus, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
-import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser } from '../../lib/authApi';
+import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser, adminGetApplication, adminApproveUser, adminRejectUser, type AdminApplicationDetail } from '../../lib/authApi';
 import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
 import { adminDeleteUser } from '../../lib/adminApi';
 import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
@@ -24,6 +24,10 @@ interface UserRow {
   last_app_version?: string | null;
   last_app_mode?: string | null;
   last_seen_at?: string | null;
+  // 지점 신청/승인 흐름 (2026-09-18) — pending: 승인 대기, approved: 로그인 가능, rejected: 거부
+  status?: 'pending' | 'approved' | 'rejected';
+  reject_reason?: string | null;
+  business_number?: string | null;
 }
 
 // 어드민이 계정 관리 시 발급하는 임시 비밀번호 (표시는 1회)
@@ -47,6 +51,59 @@ export default function AdminUsers() {
   const [branchFilter, setBranchFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  // 신청/승인 흐름 (2026-09-18) — 탭: 전체 vs 승인 대기
+  const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all');
+  const [reviewTarget, setReviewTarget] = useState<AdminApplicationDetail | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showRejectInput, setShowRejectInput] = useState(false);
+
+  async function openReview(userId: string) {
+    setReviewLoading(true);
+    setRejectReason('');
+    setShowRejectInput(false);
+    try {
+      const detail = await adminGetApplication(userId);
+      setReviewTarget(detail);
+    } catch (e: any) {
+      alert(`신청 상세를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  async function handleApprove() {
+    if (!reviewTarget) return;
+    if (!confirm(`${reviewTarget.email} 계정 승인 → 즉시 로그인 가능해집니다. 계속할까요?`)) return;
+    setReviewBusy(true);
+    try {
+      await adminApproveUser(reviewTarget.id);
+      setReviewTarget(null);
+      await loadData();
+    } catch (e: any) {
+      alert(e?.message || '승인 처리에 실패했습니다.');
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
+  async function handleReject() {
+    if (!reviewTarget) return;
+    const reason = rejectReason.trim();
+    if (!reason) { alert('거부 사유를 입력해주세요 (1~500자).'); return; }
+    if (!confirm(`${reviewTarget.email} 신청을 거부합니다. 계속할까요?\n사유: ${reason}`)) return;
+    setReviewBusy(true);
+    try {
+      await adminRejectUser(reviewTarget.id, reason);
+      setReviewTarget(null);
+      await loadData();
+    } catch (e: any) {
+      alert(e?.message || '거부 처리에 실패했습니다.');
+    } finally {
+      setReviewBusy(false);
+    }
+  }
 
   useEffect(() => {
     loadData();
@@ -72,6 +129,9 @@ export default function AdminUsers() {
           last_app_version: u.lastAppVersion || null,
           last_app_mode: u.lastAppMode || null,
           last_seen_at: u.lastSeenAt || null,
+          status: u.status || 'approved',
+          reject_reason: u.rejectReason || null,
+          business_number: u.businessNumber || null,
         })));
         fetchLatestChannelVersion().then(m => setLatestVersion(m?.version || null));
         // 지점 필터는 계정에 등록된 지점명으로 구성
@@ -264,6 +324,7 @@ export default function AdminUsers() {
   }
 
   const normalizedSearch = search.trim().toLowerCase();
+  const pendingCount = users.filter(u => u.status === 'pending').length;
   const filtered = users.filter(user => {
     const branchMatches = branchFilter === 'all' || user.branch_name === branchFilter;
     const searchMatches = !normalizedSearch || [
@@ -271,8 +332,11 @@ export default function AdminUsers() {
       user.email,
       user.branch_name || '',
       roleLabels[user.role]?.label || user.role,
+      user.business_number || '',
     ].some(value => value.toLowerCase().includes(normalizedSearch));
-    return branchMatches && searchMatches;
+    // 신청/승인 탭 분기: pending 탭은 pending만, all 탭은 pending 제외 (approved + rejected)
+    const tabMatches = activeTab === 'pending' ? user.status === 'pending' : user.status !== 'pending';
+    return branchMatches && searchMatches && tabMatches;
   });
 
   return (
@@ -347,6 +411,116 @@ export default function AdminUsers() {
               >
                 닫기
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 지점 신청 검토 모달 (2026-09-18) — 사업자등록증 사진 확인 후 승인/거부 */}
+      {reviewTarget && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="px-6 py-5 border-b border-slate-700 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-white">지점 신청 검토</h2>
+                <p className="text-xs text-slate-400 mt-1">사업자등록증의 <span className="text-slate-200">업태·종목</span>이 피부미용업/에스테틱인지 확인하고 승인/거부하세요.</p>
+              </div>
+              <button onClick={() => setReviewTarget(null)} disabled={reviewBusy} className="text-slate-500 hover:text-white disabled:opacity-50">
+                <XCircle size={20} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4 overflow-auto">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-[11px] text-slate-500 mb-1">상호명</p>
+                  <p className="text-slate-100 font-medium">{reviewTarget.shopName || reviewTarget.name}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500 mb-1">이메일</p>
+                  <p className="text-slate-100 font-medium">{reviewTarget.email}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500 mb-1">사업자등록번호</p>
+                  <p className="text-slate-100 font-mono">{reviewTarget.businessNumber}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500 mb-1">휴대폰</p>
+                  <p className="text-slate-100">{reviewTarget.phone || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500 mb-1">신청 일시</p>
+                  <p className="text-slate-100">{format(parseISO(reviewTarget.createdAt), 'yyyy.MM.dd HH:mm', { locale: ko })}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500 mb-1">상태</p>
+                  <p className="text-amber-300 font-semibold">승인 대기</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] text-slate-500 mb-2">사업자등록증 사진</p>
+                {reviewTarget.businessLicenseImage ? (
+                  <img
+                    src={reviewTarget.businessLicenseImage}
+                    alt="사업자등록증"
+                    className="w-full max-h-96 object-contain rounded-xl border border-slate-700 bg-white/5"
+                  />
+                ) : (
+                  <div className="p-6 text-center text-slate-500 border border-dashed border-slate-700 rounded-xl">첨부된 사업자등록증이 없습니다</div>
+                )}
+              </div>
+              {showRejectInput && (
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">거부 사유 * (1~500자, 지점에 다음 로그인 시 표시됩니다)</label>
+                  <textarea
+                    value={rejectReason}
+                    onChange={e => setRejectReason(e.target.value.slice(0, 500))}
+                    rows={3}
+                    placeholder="예: 사업자등록증의 업종이 피부미용업/에스테틱이 아닙니다. 정확한 서류로 재신청 부탁드립니다."
+                    className="w-full px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-sm text-white outline-none focus:border-red-500"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1 text-right">{rejectReason.length}/500</p>
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-slate-700 flex items-center justify-between gap-2">
+              {!showRejectInput ? (
+                <>
+                  <button
+                    onClick={() => setShowRejectInput(true)}
+                    disabled={reviewBusy}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                  >
+                    <XCircle size={14} />
+                    거부
+                  </button>
+                  <button
+                    onClick={handleApprove}
+                    disabled={reviewBusy}
+                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={14} />
+                    {reviewBusy ? '처리 중…' : '승인 (로그인 허용)'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setShowRejectInput(false); setRejectReason(''); }}
+                    disabled={reviewBusy}
+                    className="px-4 py-2 text-sm font-semibold rounded-xl bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50"
+                  >
+                    ← 뒤로
+                  </button>
+                  <button
+                    onClick={handleReject}
+                    disabled={reviewBusy || !rejectReason.trim()}
+                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-red-600 hover:bg-red-500 text-white disabled:opacity-50"
+                  >
+                    <XCircle size={14} />
+                    {reviewBusy ? '처리 중…' : '거부 확정'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -433,6 +607,30 @@ export default function AdminUsers() {
           </button>
         )}
       </div>
+
+      {/* 신청/승인 탭 (2026-09-18) — NAS 모드 전용 */}
+      {isAuthApiConfigured && (
+        <div className="flex items-center gap-2 mb-5">
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${activeTab === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}
+          >
+            전체 계정
+          </button>
+          <button
+            onClick={() => setActiveTab('pending')}
+            className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 ${activeTab === 'pending' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400 hover:text-white'}`}
+          >
+            <Clock size={14} />
+            승인 대기
+            {pendingCount > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-slate-900">
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* 관리자 초대 모달 */}
       {inviteOpen && (
@@ -533,8 +731,35 @@ export default function AdminUsers() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-16 text-center">
-            <Users size={32} className="text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">등록된 사용자가 없습니다</p>
+            {activeTab === 'pending' ? <Clock size={32} className="text-slate-600 mx-auto mb-3" /> : <Users size={32} className="text-slate-600 mx-auto mb-3" />}
+            <p className="text-slate-400">
+              {activeTab === 'pending' ? '승인 대기 중인 신청이 없습니다' : '등록된 사용자가 없습니다'}
+            </p>
+          </div>
+        ) : activeTab === 'pending' ? (
+          <div className="divide-y divide-slate-800/50">
+            {filtered.map(u => (
+              <div key={u.id} className="px-6 py-4 hover:bg-slate-800/30 transition-colors flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <p className="text-sm font-semibold text-white truncate">{u.name || '(상호명 없음)'}</p>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">승인 대기</span>
+                  </div>
+                  <p className="text-xs text-slate-500">{u.email}</p>
+                  <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-400">
+                    {u.business_number && <span>사업자번호 <span className="text-slate-200">{u.business_number}</span></span>}
+                    <span>신청 <span className="text-slate-200">{format(parseISO(u.created_at), 'yyyy.MM.dd HH:mm', { locale: ko })}</span></span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => openReview(u.id)}
+                  disabled={reviewLoading}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {reviewLoading ? '로딩…' : '검토'}
+                </button>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="overflow-auto max-h-[70vh]">
@@ -569,6 +794,9 @@ export default function AdminUsers() {
                         {u.name || '(이름 없음)'}
                         {!u.is_active && (
                           <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400">비활성</span>
+                        )}
+                        {u.status === 'rejected' && (
+                          <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-300">신청 거부됨</span>
                         )}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">{u.email}</p>

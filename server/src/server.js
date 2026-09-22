@@ -19,7 +19,6 @@ const RESET_TOKEN_MINUTES = envInteger('RESET_TOKEN_MINUTES', 30, 5, 1440);
 const MAX_TEXT_LENGTH = 10_000;
 const MAX_ID_LENGTH = 200;
 // 상용 배포 기본값: 관리자 발급 계정만 허용 (공개 가입 차단)
-const ALLOW_PUBLIC_SIGNUP = String(process.env.ALLOW_PUBLIC_SIGNUP || 'false').toLowerCase() === 'true';
 const BOOTSTRAP_ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 const BOOTSTRAP_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const allowedOrigins = new Set(
@@ -168,6 +167,20 @@ const loginEmailLimiter = rateLimit({
 });
 const resetLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false });
 
+// 지점 신청 남용 방어 — 신청은 인증 없이 사업자등록증 이미지(최대 7MB base64)를 저장하므로
+// 성공 요청도 집계하는 별도 IP 버킷(1시간 5회) + 전체 승인 대기 건수 상한으로 저장소 고갈을 막는다.
+const signupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: envInteger('SIGNUP_IP_LIMIT', 5, 1, 1000),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res, _next, options) => {
+    log('warn', 'rate_limit_signup', { ip: req.ip, xff: req.get('x-forwarded-for') || null });
+    res.status(options.statusCode).json({ error: '가입 신청이 너무 많습니다. 1시간 후 다시 시도해주세요.' });
+  },
+});
+const SIGNUP_PENDING_CAP = envInteger('SIGNUP_PENDING_CAP', 100, 1, 100000);
+
 // 데이터·사진 동기화 API 남용 방어 — 세션(토큰) 단위 분당 한도. 정상 동기화는 컬렉션 15종 + 사진 배치로
 // 분당 수십 회 수준이라 600은 넉넉하다. 토큰이 없으면 IP 단위(어차피 401).
 const dataLimiter = rateLimit({
@@ -245,6 +258,9 @@ function publicUser(row) {
     isActive: row.is_active !== false,
     serviceEndsAt: row.service_ends_at ? new Date(row.service_ends_at).toISOString() : null,
     mustChangePassword: row.must_change_password === true,
+    // 신청/승인 흐름 (2026-09-18) — pending: 승인 대기, approved: 로그인 가능, rejected: 거부 (reject_reason 표시)
+    status: row.status || 'approved',
+    rejectReason: row.reject_reason || null,
     // 프로그램 버전 텔레메트리 (배포 불변 원칙 — 구버전으로 남은 지점을 본사가 먼저 발견)
     lastAppVersion: row.last_app_version || null,
     lastAppMode: row.last_app_mode || null,
@@ -504,6 +520,12 @@ async function initializeDatabase() {
     CREATE INDEX IF NOT EXISTS auth_users_branch_idx ON auth_users(branch_id);
     CREATE INDEX IF NOT EXISTS message_send_log_scheduled_idx
       ON message_send_log(scheduled_message_id) WHERE scheduled_message_id IS NOT NULL;
+
+    -- 지점 신청/승인 흐름 (2026-09-18) — 신규 가입은 status='pending'으로 저장, 어드민 승인 후 approved 전환.
+    -- DEFAULT 'approved'로 두면 기존 계정은 자동 승인 상태로 마이그레이션되고, 신규 signup INSERT만 'pending'을 명시한다.
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'approved';
+    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS reject_reason text;
+    CREATE INDEX IF NOT EXISTS auth_users_status_idx ON auth_users(status);
   `);
 }
 
@@ -654,11 +676,10 @@ app.get('/health', async (_req, res, next) => {
   }
 });
 
-app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
+// 지점 신청 (2026-09-18 오너 결정) — 공개 신청 허용, status='pending'으로 저장, 세션 미발급.
+// 어드민이 사업자등록증 확인 후 approve → 로그인 가능. 국세청 API 자동 검증은 추후 (오너 결정).
+app.post('/api/auth/signup', authLimiter, signupLimiter, async (req, res, next) => {
   try {
-    if (!ALLOW_PUBLIC_SIGNUP) {
-      return res.status(403).json({ error: '이 서비스는 관리자가 발급한 계정으로만 이용할 수 있습니다. 관리자에게 계정 발급을 요청해주세요.' });
-    }
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
     const name = typeof req.body.name === 'string' ? req.body.name.trim() : ''; // 가입 화면에서는 샵명
@@ -668,45 +689,50 @@ app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
       return res.status(400).json({ error: '이메일, 샵명, 8자 이상의 비밀번호를 확인해주세요.' });
     }
 
-    // 사업자등록번호: 하이픈 유무 무관하게 받아 000-00-00000 로 정규화 (선택 필드 — 구 클라이언트 호환)
+    // 사업자등록번호: 필수 (10자리). 어드민 승인 시 사업자등록증 사진과 함께 확인.
     const businessDigits = String(req.body.businessNumber || '').replace(/\D/g, '');
-    if (businessDigits && businessDigits.length !== 10) {
-      return res.status(400).json({ error: '사업자등록번호 10자리를 확인해주세요.' });
+    if (businessDigits.length !== 10) {
+      return res.status(400).json({ error: '사업자등록번호 10자리를 입력해주세요.' });
     }
-    const businessNumber = businessDigits
-      ? `${businessDigits.slice(0, 3)}-${businessDigits.slice(3, 5)}-${businessDigits.slice(5)}`
-      : null;
+    const businessNumber = `${businessDigits.slice(0, 3)}-${businessDigits.slice(3, 5)}-${businessDigits.slice(5)}`;
 
-    // 사업자등록증 사진: 이미지 data URL만, ~5MB(base64 7MB) 초과 거부
+    // 사업자등록증 사진: 필수 (어드민이 업태·업종을 눈으로 확인). 브라우저가 그릴 수 있는 jpg·png·webp data URL만
+    // (HEIC·SVG는 어드민 화면에서 깨져 거부로 이어진다), ~5MB(base64 7MB) 초과 거부.
     const licenseImage = typeof req.body.businessLicenseImage === 'string' ? req.body.businessLicenseImage : '';
-    if (licenseImage && (!licenseImage.startsWith('data:image/') || licenseImage.length > 7 * 1024 * 1024)) {
-      return res.status(400).json({ error: '사업자등록증은 5MB 이하의 이미지 파일만 첨부할 수 있습니다.' });
+    if (!licenseImage || !/^data:image\/(jpeg|png|webp);base64,/.test(licenseImage) || licenseImage.length > 7 * 1024 * 1024) {
+      return res.status(400).json({ error: '사업자등록증 사진(5MB 이하 jpg·png)을 첨부해주세요.' });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const userId = crypto.randomUUID();
     const trialEndsAt = new Date(Date.now() + 14 * 86400000);
-    const client = await pool.connect();
+    // 세션 발급하지 않고 pending 상태로만 저장 — 승인 전까지 로그인 불가.
+    const { rows: existing } = await pool.query('SELECT id, status FROM auth_users WHERE email = $1 LIMIT 1', [email]);
     let rows;
-    let session;
-    try {
-      await client.query('BEGIN');
-      ({ rows } = await client.query(`
-        INSERT INTO auth_users (id, email, password_hash, name, phone, shop_name, business_number, business_license_image, trial_ends_at, role)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'admin')
-        RETURNING *
-      `, [userId, email, passwordHash, name, phone || null, name, businessNumber, licenseImage || null, trialEndsAt]));
-      session = await createSession(userId, client);
-      await client.query('COMMIT');
-    } catch (error) {
-      try { await client.query('ROLLBACK'); } catch (rollbackError) {
-        log('error', 'signup_rollback_failed', errorDetails(rollbackError));
+    if (existing[0]?.status === 'rejected') {
+      // 거부된 신청은 같은 이메일로 재신청 허용 — 정보·서류를 갱신하고 다시 승인 대기로 (거부 안내문의 "재신청" 약속 이행)
+      ({ rows } = await pool.query(`
+        UPDATE auth_users SET password_hash = $2, name = $3, phone = $4, shop_name = $3, business_number = $5,
+          business_license_image = $6, trial_ends_at = $7, status = 'pending', reject_reason = NULL, updated_at = now()
+        WHERE id = $1 AND status = 'rejected' RETURNING *
+      `, [existing[0].id, passwordHash, name, phone || null, businessNumber, licenseImage, trialEndsAt]));
+      if (!rows[0]) return res.status(409).json({ error: '이미 가입된 이메일입니다.' });
+      log('info', 'signup_reapplied', { userId: rows[0].id, email: maskEmail(email), businessNumber });
+    } else {
+      if (existing[0]) return res.status(409).json({ error: '이미 가입된 이메일입니다.' });
+      const { rows: pendingRows } = await pool.query(`SELECT count(*)::int AS n FROM auth_users WHERE status = 'pending'`);
+      if (pendingRows[0].n >= SIGNUP_PENDING_CAP) {
+        log('warn', 'signup_pending_cap', { pending: pendingRows[0].n, cap: SIGNUP_PENDING_CAP });
+        return res.status(503).json({ error: '신청이 몰려 처리 대기 중입니다. 잠시 후 다시 시도하거나 본사에 문의해주세요.' });
       }
-      throw error;
-    } finally {
-      client.release();
+      const userId = crypto.randomUUID();
+      ({ rows } = await pool.query(`
+        INSERT INTO auth_users (id, email, password_hash, name, phone, shop_name, business_number, business_license_image, trial_ends_at, role, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'admin', 'pending')
+        RETURNING *
+      `, [userId, email, passwordHash, name, phone || null, name, businessNumber, licenseImage, trialEndsAt]));
+      log('info', 'signup_pending', { userId, email: maskEmail(email), businessNumber });
     }
-    res.status(201).json({ user: publicUser(rows[0]), ...session });
+    res.status(201).json({ user: publicUser(rows[0]), pending: true });
   } catch (error) {
     if (error?.code === '23505') return res.status(409).json({ error: '이미 가입된 이메일입니다.' });
     next(error);
@@ -730,6 +756,16 @@ app.post('/api/auth/login', authLimiter, loginEmailLimiter, async (req, res, nex
     if (user.is_active === false) {
       recordLoginAttempt(req, { userId: user.id, email, branchId: user.branch_id, branchName: user.branch_name, status: 'failed', failReason: '비활성 계정' });
       return res.status(403).json({ error: '비활성화된 계정입니다. 관리자에게 문의해주세요.' });
+    }
+    // 신청/승인 흐름 (2026-09-18) — 슈퍼어드민은 예외, 그 외 계정은 status='approved'만 로그인 허용
+    if (user.role !== 'superadmin' && user.status && user.status !== 'approved') {
+      const failReason = user.status === 'rejected' ? '가입 거부됨' : '승인 대기 중';
+      recordLoginAttempt(req, { userId: user.id, email, branchId: user.branch_id, branchName: user.branch_name, status: 'failed', failReason });
+      return res.status(403).json({
+        error: user.status === 'rejected'
+          ? `가입이 거부되었습니다.${user.reject_reason ? ` 사유: ${user.reject_reason}` : ''}`
+          : '가입 심사 대기 중입니다. 본사 승인 후 로그인할 수 있습니다.',
+      });
     }
     // 사용기간 만료 차단 — service_ends_at 미설정(null) 계정은 기존과 동일하게 무제한
     if (user.role !== 'superadmin' && user.service_ends_at
@@ -818,6 +854,54 @@ app.get('/api/admin/users', requireSession, requireSuperadmin, async (_req, res,
   } catch (error) {
     next(error);
   }
+});
+
+// 지점 신청 상세 (사업자등록증 사진 포함) — 승인 검토용, 슈퍼어드민 전용
+app.get('/api/admin/users/:id/application', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, email, name, phone, shop_name, business_number, business_license_image,
+              status, reject_reason, role, created_at, updated_at
+       FROM auth_users WHERE id = $1 LIMIT 1`, [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: '계정을 찾을 수 없습니다.' });
+    const r = rows[0];
+    res.json({
+      id: r.id, email: r.email, name: r.name, phone: r.phone,
+      shopName: r.shop_name, businessNumber: r.business_number,
+      businessLicenseImage: r.business_license_image,
+      status: r.status, rejectReason: r.reject_reason, role: r.role,
+      createdAt: new Date(r.created_at).toISOString(),
+      updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+    });
+  } catch (error) { next(error); }
+});
+
+// 지점 신청 승인 — pending → approved, 로그인 즉시 허용
+app.post('/api/admin/users/:id/approve', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE auth_users SET status = 'approved', reject_reason = NULL, updated_at = now()
+       WHERE id = $1 AND status = 'pending' RETURNING *`, [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: '승인 대기 중인 신청이 없습니다.' });
+    log('info', 'signup_approved', { userId: rows[0].id, approvedBy: req.authUser.id, email: maskEmail(rows[0].email) });
+    res.json({ user: publicUser(rows[0]) });
+  } catch (error) { next(error); }
+});
+
+// 지점 신청 거부 — pending → rejected, 사유 저장 (지점에 다음 로그인 시도 시 표시)
+app.post('/api/admin/users/:id/reject', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const reason = String(req.body?.reason || '').trim();
+    if (!reason || reason.length > 500) {
+      return res.status(400).json({ error: '거부 사유(1~500자)를 입력해주세요.' });
+    }
+    const { rows } = await pool.query(
+      `UPDATE auth_users SET status = 'rejected', reject_reason = $2, updated_at = now()
+       WHERE id = $1 AND status = 'pending' RETURNING *`, [req.params.id, reason]);
+    if (!rows[0]) return res.status(404).json({ error: '승인 대기 중인 신청이 없습니다.' });
+    log('info', 'signup_rejected', { userId: rows[0].id, rejectedBy: req.authUser.id, email: maskEmail(rows[0].email) });
+    res.json({ user: publicUser(rows[0]) });
+  } catch (error) { next(error); }
 });
 
 // 로그인 기록(서버 정본) — 어드민 콘솔 "로그인 기록"·대시보드 최근 로그인. 최근 N건(기본 500, 최대 2000).

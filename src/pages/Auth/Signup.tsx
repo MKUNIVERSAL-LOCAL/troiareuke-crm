@@ -1,8 +1,8 @@
 ﻿import { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Eye, EyeOff, CheckCircle2, Paperclip, X } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle2, Paperclip, X, Clock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { isAuthApiConfigured } from '../../lib/authApi';
+import { isAuthApiConfigured, applyForAccount } from '../../lib/authApi';
 import { TroiareukeLogo } from './Login';
 
 const plans = [
@@ -36,7 +36,7 @@ export default function Signup() {
 
   const handleLicenseFile = (file: File | undefined) => {
     if (!file) return;
-    if (!file.type.startsWith('image/')) { setError('사업자등록증은 이미지 파일(jpg, png)만 첨부할 수 있습니다.'); return; }
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { setError('사업자등록증은 jpg·png·webp 이미지만 첨부할 수 있습니다. (아이폰 HEIC는 설정에서 "높은 호환성"으로 촬영하거나 jpg로 변환해주세요)'); return; }
     if (file.size > 5 * 1024 * 1024) { setError('사업자등록증 사진은 5MB 이하로 첨부해주세요.'); return; }
     const reader = new FileReader();
     reader.onload = () => {
@@ -54,6 +54,21 @@ export default function Signup() {
     if (!form.agreeTerms || !form.agreePrivacy) { setError('이용약관과 개인정보 처리방침에 모두 동의해주세요.'); return; }
     setLoading(true); setError('');
     try {
+      // NAS 중앙 서버 모드 — 지점 신청 API 직접 호출 후 심사 대기 화면(step 3)으로 전환.
+      // 승인 전까지 로그인 불가라 AuthContext.signup 우회 (2026-09-18 오너 결정).
+      if (isAuthApiConfigured) {
+        await applyForAccount({
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          password: form.password,
+          businessNumber: form.businessNumber,
+          businessLicenseImage: licenseImage,
+        });
+        setStep(3);
+        return;
+      }
+      // Supabase / 로컬 폴백 — 기존 흐름 유지
       await signup({
         name: form.name,
         email: form.email,
@@ -66,24 +81,18 @@ export default function Signup() {
     } catch (e: any) {
       const msg = e?.message || '';
       const status = e?.status;
-      if (status === 403 || /공개 가입이 비활성|가입이 허용되지 않/i.test(msg)) {
-        // NAS 중앙 서버는 계정 발급제(공개 가입 차단) — 막다른 오류 대신 발급 안내
-        setError('이 서비스는 관리자 발급제로 운영됩니다. 본사에 계정 발급을 요청해주세요.');
-      } else if (/already registered|user already exists|duplicate/i.test(msg)) {
+      if (/already registered|user already exists|duplicate|이미 가입/i.test(msg)) {
         setError('이미 가입된 이메일입니다. 로그인 페이지에서 시도해주세요.');
       } else if (/Email not confirmed/i.test(msg)) {
-        // Supabase "Confirm email" 활성화 상태 — 가입은 됐으나 이메일 인증 대기
-        setError('가입 완료! 이메일 인증 메일을 확인해주세요. 시연 환경에서는 Supabase 대시보드 → Authentication → Settings → "Confirm email"을 비활성화해주세요.');
+        setError('가입 완료! 이메일 인증 메일을 확인해주세요.');
       } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
         setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.');
-      } else if (/invalid email/i.test(msg)) {
-        setError('이메일 형식이 올바르지 않습니다.');
-      } else if (/password/i.test(msg)) {
-        setError('비밀번호 형식이 올바르지 않습니다 (8자 이상, 영문·숫자 조합 권장).');
+      } else if (status === 400 && /사업자등록증|사업자등록번호/.test(msg)) {
+        setError(msg);
       } else if (msg) {
-        setError(`회원가입 실패: ${msg}`);
+        setError(`가입 신청 실패: ${msg}`);
       } else {
-        setError('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        setError('가입 신청에 실패했습니다. 잠시 후 다시 시도해주세요.');
       }
     } finally { setLoading(false); }
   };
@@ -112,7 +121,7 @@ export default function Signup() {
               <h2 className="text-xl font-bold text-gray-900 mb-1">계정 정보 입력</h2>
               <p className="text-sm text-gray-400 mb-6">14일 무료 체험 · 신용카드 불필요</p>
               {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>}
-              <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.businessNumber || !form.password) { setError('모든 항목을 입력해주세요.'); return; } if (!isValidBusinessNumber) { setError('사업자등록번호 10자리를 확인해주세요. (예: 123-45-67890)'); return; } setError(''); setStep(2); }} className="space-y-4">
+              <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.businessNumber || !form.password) { setError('모든 항목을 입력해주세요.'); return; } if (!isValidBusinessNumber) { setError('사업자등록번호 10자리를 확인해주세요. (예: 123-45-67890)'); return; } if (isAuthApiConfigured && !licenseImage) { setError('사업자등록증 사진을 첨부해주세요. (본사 승인 시 확인용, jpg·png, 5MB 이하)'); return; } setError(''); setStep(2); }} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">샵명 *</label>
                   <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="auth-input" placeholder="예: 아르케스파 강남점" required />
@@ -133,8 +142,8 @@ export default function Signup() {
                     저장 컬럼이 없어 조용히 유실되므로 필드 자체를 숨긴다 */}
                 {isAuthApiConfigured && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록증 사진 (선택)</label>
-                  <input ref={licenseInputRef} type="file" accept="image/*" className="hidden" onChange={e => { handleLicenseFile(e.target.files?.[0]); e.target.value = ''; }} />
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록증 사진 *</label>
+                  <input ref={licenseInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { handleLicenseFile(e.target.files?.[0]); e.target.value = ''; }} />
                   {licenseImage ? (
                     <div className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-xl bg-gray-50">
                       <img src={licenseImage} alt="사업자등록증 미리보기" className="w-12 h-12 rounded-lg object-cover border border-gray-200" />
@@ -215,10 +224,36 @@ export default function Signup() {
               <div className="flex gap-3">
                 <button onClick={() => setStep(1)} className="flex-1 py-3 bg-gray-100 text-gray-600 font-semibold rounded-xl hover:bg-gray-200">이전</button>
                 <button onClick={handleSubmit} disabled={loading} className="flex-1 py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-60">
-                  {loading ? '처리 중...' : '무료 시작하기'}
+                  {loading ? '처리 중...' : (isAuthApiConfigured ? '가입 신청하기' : '무료 시작하기')}
                 </button>
               </div>
             </>
+          )}
+
+          {step === 3 && (
+            <div className="text-center py-4">
+              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Clock size={28} className="text-[#1a3a8f]" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">가입 신청이 접수되었습니다</h2>
+              <p className="text-sm text-gray-500 leading-relaxed mb-6">
+                본사에서 사업자 등록 정보와 서류를 확인한 뒤 승인해드립니다.<br />
+                <span className="text-gray-700 font-medium">평일 기준 24시간 이내</span>에 처리되며, 승인 완료 후 <br />
+                입력하신 이메일로 로그인하실 수 있습니다.
+              </p>
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-6 text-left">
+                <p className="text-xs text-gray-400 mb-1">신청 이메일</p>
+                <p className="text-sm text-gray-700 font-medium">{form.email}</p>
+                <p className="text-xs text-gray-400 mt-3 mb-1">사업자등록번호</p>
+                <p className="text-sm text-gray-700 font-medium">{form.businessNumber}</p>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">
+                문의: <a href="mailto:mkclub21@gmail.com" className="text-blue-600 underline">mkclub21@gmail.com</a>
+              </p>
+              <Link to="/login" className="inline-block w-full py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all">
+                로그인 페이지로 돌아가기
+              </Link>
+            </div>
           )}
         </div>
 
