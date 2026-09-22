@@ -1,0 +1,706 @@
+diff --git a/server/src/server.js b/server/src/server.js
+index abb7373..9539989 100644
+--- a/server/src/server.js
++++ b/server/src/server.js
+@@ -245,6 +245,9 @@ function publicUser(row) {
+     isActive: row.is_active !== false,
+     serviceEndsAt: row.service_ends_at ? new Date(row.service_ends_at).toISOString() : null,
+     mustChangePassword: row.must_change_password === true,
++    // 신청/승인 흐름 (2026-09-18) — pending: 승인 대기, approved: 로그인 가능, rejected: 거부 (reject_reason 표시)
++    status: row.status || 'approved',
++    rejectReason: row.reject_reason || null,
+     // 프로그램 버전 텔레메트리 (배포 불변 원칙 — 구버전으로 남은 지점을 본사가 먼저 발견)
+     lastAppVersion: row.last_app_version || null,
+     lastAppMode: row.last_app_mode || null,
+@@ -504,6 +507,12 @@ async function initializeDatabase() {
+     CREATE INDEX IF NOT EXISTS auth_users_branch_idx ON auth_users(branch_id);
+     CREATE INDEX IF NOT EXISTS message_send_log_scheduled_idx
+       ON message_send_log(scheduled_message_id) WHERE scheduled_message_id IS NOT NULL;
++
++    -- 지점 신청/승인 흐름 (2026-09-18) — 신규 가입은 status='pending'으로 저장, 어드민 승인 후 approved 전환.
++    -- DEFAULT 'approved'로 두면 기존 계정은 자동 승인 상태로 마이그레이션되고, 신규 signup INSERT만 'pending'을 명시한다.
++    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'approved';
++    ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS reject_reason text;
++    CREATE INDEX IF NOT EXISTS auth_users_status_idx ON auth_users(status);
+   `);
+ }
+ 
+@@ -654,11 +663,10 @@ app.get('/health', async (_req, res, next) => {
+   }
+ });
+ 
++// 지점 신청 (2026-09-18 오너 결정) — 공개 신청 허용, status='pending'으로 저장, 세션 미발급.
++// 어드민이 사업자등록증 확인 후 approve → 로그인 가능. 국세청 API 자동 검증은 추후 (오너 결정).
+ app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
+   try {
+-    if (!ALLOW_PUBLIC_SIGNUP) {
+-      return res.status(403).json({ error: '이 서비스는 관리자가 발급한 계정으로만 이용할 수 있습니다. 관리자에게 계정 발급을 요청해주세요.' });
+-    }
+     const email = normalizeEmail(req.body.email);
+     const password = req.body.password;
+     const name = typeof req.body.name === 'string' ? req.body.name.trim() : ''; // 가입 화면에서는 샵명
+@@ -668,45 +676,35 @@ app.post('/api/auth/signup', authLimiter, async (req, res, next) => {
+       return res.status(400).json({ error: '이메일, 샵명, 8자 이상의 비밀번호를 확인해주세요.' });
+     }
+ 
+-    // 사업자등록번호: 하이픈 유무 무관하게 받아 000-00-00000 로 정규화 (선택 필드 — 구 클라이언트 호환)
++    // 사업자등록번호: 필수 (10자리). 어드민 승인 시 사업자등록증 사진과 함께 확인.
+     const businessDigits = String(req.body.businessNumber || '').replace(/\D/g, '');
+-    if (businessDigits && businessDigits.length !== 10) {
+-      return res.status(400).json({ error: '사업자등록번호 10자리를 확인해주세요.' });
++    if (businessDigits.length !== 10) {
++      return res.status(400).json({ error: '사업자등록번호 10자리를 입력해주세요.' });
+     }
+-    const businessNumber = businessDigits
+-      ? `${businessDigits.slice(0, 3)}-${businessDigits.slice(3, 5)}-${businessDigits.slice(5)}`
+-      : null;
++    const businessNumber = `${businessDigits.slice(0, 3)}-${businessDigits.slice(3, 5)}-${businessDigits.slice(5)}`;
+ 
+-    // 사업자등록증 사진: 이미지 data URL만, ~5MB(base64 7MB) 초과 거부
++    // 사업자등록증 사진: 필수 (어드민이 업태·업종을 눈으로 확인). 이미지 data URL만, ~5MB(base64 7MB) 초과 거부.
+     const licenseImage = typeof req.body.businessLicenseImage === 'string' ? req.body.businessLicenseImage : '';
+-    if (licenseImage && (!licenseImage.startsWith('data:image/') || licenseImage.length > 7 * 1024 * 1024)) {
+-      return res.status(400).json({ error: '사업자등록증은 5MB 이하의 이미지 파일만 첨부할 수 있습니다.' });
++    if (!licenseImage || !licenseImage.startsWith('data:image/') || licenseImage.length > 7 * 1024 * 1024) {
++      return res.status(400).json({ error: '사업자등록증 사진(5MB 이하 jpg·png)을 첨부해주세요.' });
+     }
+ 
+     const passwordHash = await bcrypt.hash(password, 12);
+     const userId = crypto.randomUUID();
+     const trialEndsAt = new Date(Date.now() + 14 * 86400000);
+-    const client = await pool.connect();
++    // 세션 발급하지 않고 pending 상태로만 저장 — 승인 전까지 로그인 불가.
+     let rows;
+-    let session;
+     try {
+-      await client.query('BEGIN');
+-      ({ rows } = await client.query(`
+-        INSERT INTO auth_users (id, email, password_hash, name, phone, shop_name, business_number, business_license_image, trial_ends_at, role)
+-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'admin')
++      ({ rows } = await pool.query(`
++        INSERT INTO auth_users (id, email, password_hash, name, phone, shop_name, business_number, business_license_image, trial_ends_at, role, status)
++        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'admin', 'pending')
+         RETURNING *
+-      `, [userId, email, passwordHash, name, phone || null, name, businessNumber, licenseImage || null, trialEndsAt]));
+-      session = await createSession(userId, client);
+-      await client.query('COMMIT');
++      `, [userId, email, passwordHash, name, phone || null, name, businessNumber, licenseImage, trialEndsAt]));
+     } catch (error) {
+-      try { await client.query('ROLLBACK'); } catch (rollbackError) {
+-        log('error', 'signup_rollback_failed', errorDetails(rollbackError));
+-      }
+       throw error;
+-    } finally {
+-      client.release();
+     }
+-    res.status(201).json({ user: publicUser(rows[0]), ...session });
++    log('info', 'signup_pending', { userId, email: maskEmail(email), businessNumber });
++    res.status(201).json({ user: publicUser(rows[0]), pending: true });
+   } catch (error) {
+     if (error?.code === '23505') return res.status(409).json({ error: '이미 가입된 이메일입니다.' });
+     next(error);
+@@ -731,6 +729,17 @@ app.post('/api/auth/login', authLimiter, loginEmailLimiter, async (req, res, nex
+       recordLoginAttempt(req, { userId: user.id, email, branchId: user.branch_id, branchName: user.branch_name, status: 'failed', failReason: '비활성 계정' });
+       return res.status(403).json({ error: '비활성화된 계정입니다. 관리자에게 문의해주세요.' });
+     }
++    // 신청/승인 흐름 (2026-09-18) — 슈퍼어드민은 예외, 그 외 계정은 status='approved'만 로그인 허용
++    if (user.role !== 'superadmin' && user.status && user.status !== 'approved') {
++      const failReason = user.status === 'rejected' ? '가입 거부됨' : '승인 대기 중';
++      recordLoginAttempt(req, { userId: user.id, email, branchId: user.branch_id, branchName: user.branch_name, status: 'failed', failReason });
++      return res.status(403).json({
++        error: user.status === 'rejected'
++          ? `가입이 거부되었습니다.${user.reject_reason ? ` 사유: ${user.reject_reason}` : ''}`
++          : '가입 심사 대기 중입니다. 본사 승인 후 로그인할 수 있습니다.',
++        applicationStatus: user.status,
++      });
++    }
+     // 사용기간 만료 차단 — service_ends_at 미설정(null) 계정은 기존과 동일하게 무제한
+     if (user.role !== 'superadmin' && user.service_ends_at
+         && new Date(user.service_ends_at).getTime() < Date.now()) {
+@@ -820,6 +829,54 @@ app.get('/api/admin/users', requireSession, requireSuperadmin, async (_req, res,
+   }
+ });
+ 
++// 지점 신청 상세 (사업자등록증 사진 포함) — 승인 검토용, 슈퍼어드민 전용
++app.get('/api/admin/users/:id/application', requireSession, requireSuperadmin, async (req, res, next) => {
++  try {
++    const { rows } = await pool.query(
++      `SELECT id, email, name, phone, shop_name, business_number, business_license_image,
++              status, reject_reason, role, created_at, updated_at
++       FROM auth_users WHERE id = $1 LIMIT 1`, [req.params.id]);
++    if (!rows[0]) return res.status(404).json({ error: '계정을 찾을 수 없습니다.' });
++    const r = rows[0];
++    res.json({
++      id: r.id, email: r.email, name: r.name, phone: r.phone,
++      shopName: r.shop_name, businessNumber: r.business_number,
++      businessLicenseImage: r.business_license_image,
++      status: r.status, rejectReason: r.reject_reason, role: r.role,
++      createdAt: new Date(r.created_at).toISOString(),
++      updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
++    });
++  } catch (error) { next(error); }
++});
++
++// 지점 신청 승인 — pending → approved, 로그인 즉시 허용
++app.post('/api/admin/users/:id/approve', requireSession, requireSuperadmin, async (req, res, next) => {
++  try {
++    const { rows } = await pool.query(
++      `UPDATE auth_users SET status = 'approved', reject_reason = NULL, updated_at = now()
++       WHERE id = $1 AND status = 'pending' RETURNING *`, [req.params.id]);
++    if (!rows[0]) return res.status(404).json({ error: '승인 대기 중인 신청이 없습니다.' });
++    log('info', 'signup_approved', { userId: rows[0].id, approvedBy: req.authUser.id, email: maskEmail(rows[0].email) });
++    res.json({ user: publicUser(rows[0]) });
++  } catch (error) { next(error); }
++});
++
++// 지점 신청 거부 — pending → rejected, 사유 저장 (지점에 다음 로그인 시도 시 표시)
++app.post('/api/admin/users/:id/reject', requireSession, requireSuperadmin, async (req, res, next) => {
++  try {
++    const reason = String(req.body?.reason || '').trim();
++    if (!reason || reason.length > 500) {
++      return res.status(400).json({ error: '거부 사유(1~500자)를 입력해주세요.' });
++    }
++    const { rows } = await pool.query(
++      `UPDATE auth_users SET status = 'rejected', reject_reason = $2, updated_at = now()
++       WHERE id = $1 AND status = 'pending' RETURNING *`, [req.params.id, reason]);
++    if (!rows[0]) return res.status(404).json({ error: '승인 대기 중인 신청이 없습니다.' });
++    log('info', 'signup_rejected', { userId: rows[0].id, rejectedBy: req.authUser.id, email: maskEmail(rows[0].email) });
++    res.json({ user: publicUser(rows[0]) });
++  } catch (error) { next(error); }
++});
++
+ // 로그인 기록(서버 정본) — 어드민 콘솔 "로그인 기록"·대시보드 최근 로그인. 최근 N건(기본 500, 최대 2000).
+ app.get('/api/admin/login-logs', requireSession, requireSuperadmin, async (req, res, next) => {
+   try {
+diff --git a/src/lib/authApi.ts b/src/lib/authApi.ts
+index 7203dd9..0347487 100644
+--- a/src/lib/authApi.ts
++++ b/src/lib/authApi.ts
+@@ -29,6 +29,12 @@ export interface AuthApiUser {
+   lastAppMode?: string | null;
+   /** 마지막 서버 접속 시각 (ISO) */
+   lastSeenAt?: string | null;
++  /** 신청/승인 상태 (2026-09-18) — pending: 승인 대기, approved: 로그인 가능, rejected: 거부 */
++  status?: 'pending' | 'approved' | 'rejected';
++  /** 거부 사유 (status='rejected'일 때만) */
++  rejectReason?: string | null;
++  /** 사업자등록번호 (신청 시 필수) — 어드민 승인 화면 표시용 */
++  businessNumber?: string;
+   createdAt: string;
+ }
+ 
+@@ -130,11 +136,38 @@ export async function signupWithAuthApi(data: {
+   businessNumber?: string;
+   businessLicenseImage?: string;
+ }) {
+-  const response = await apiRequest<AuthResponse>('/api/auth/signup', {
++  const response = await apiRequest<AuthResponse | { user: AuthApiUser; pending: true }>('/api/auth/signup', {
+     method: 'POST',
+     body: JSON.stringify(data),
+   });
+-  return saveAuth(response);
++  // 신청/승인 흐름 (2026-09-18) — 서버가 pending으로 저장하면 세션 토큰 없이 user만 반환
++  // AuthContext.signup은 saveUser(profile) 호출하므로, pending 응답은 여기서 예외로 흘려 Signup.tsx catch에서 심사 대기 화면 전환
++  if ('pending' in response && response.pending) {
++    throw new AuthApiError('가입 신청이 접수되었습니다. 본사 승인 후 로그인할 수 있습니다.', 202);
++  }
++  return saveAuth(response as AuthResponse);
++}
++
++// 지점이 신청 직후 심사 대기 화면에서 signupWithAuthApi를 직접 쓰려 할 때 사용 —
++// AuthContext.signup을 우회해 pending 응답을 명시적으로 반환한다 (Signup.tsx 3단계).
++export async function applyForAccount(data: {
++  email: string;
++  password: string;
++  name: string;
++  phone: string;
++  businessNumber: string;
++  businessLicenseImage: string;
++}) {
++  const response = await apiRequest<AuthResponse | { user: AuthApiUser; pending: true }>('/api/auth/signup', {
++    method: 'POST',
++    body: JSON.stringify(data),
++  });
++  if ('pending' in response && response.pending) {
++    return { user: response.user, pending: true as const };
++  }
++  // 서버가 세션까지 발급한 예외 케이스(예: 슈퍼어드민 자기 자신을 대상으로 한 것 등) — 정상 저장 후 반환
++  const user = saveAuth(response as AuthResponse);
++  return { user, pending: false as const };
+ }
+ 
+ export type RestoreResult =
+@@ -229,3 +262,38 @@ export async function adminUpdateUser(
+   });
+   return response.user;
+ }
++
++// 지점 신청 검토·승인·거부 (슈퍼어드민 전용) — 2026-09-18
++export interface AdminApplicationDetail {
++  id: string;
++  email: string;
++  name: string;
++  phone?: string;
++  shopName: string;
++  businessNumber: string;
++  businessLicenseImage: string;
++  status: 'pending' | 'approved' | 'rejected';
++  rejectReason: string | null;
++  role: string;
++  createdAt: string;
++  updatedAt: string | null;
++}
++
++export async function adminGetApplication(id: string) {
++  return apiRequest<AdminApplicationDetail>(`/api/admin/users/${encodeURIComponent(id)}/application`);
++}
++
++export async function adminApproveUser(id: string) {
++  const response = await apiRequest<{ user: AuthApiUser }>(`/api/admin/users/${encodeURIComponent(id)}/approve`, {
++    method: 'POST',
++  });
++  return response.user;
++}
++
++export async function adminRejectUser(id: string, reason: string) {
++  const response = await apiRequest<{ user: AuthApiUser }>(`/api/admin/users/${encodeURIComponent(id)}/reject`, {
++    method: 'POST',
++    body: JSON.stringify({ reason }),
++  });
++  return response.user;
++}
+diff --git a/src/pages/Admin/Users.tsx b/src/pages/Admin/Users.tsx
+index 45e53f9..ac162af 100644
+--- a/src/pages/Admin/Users.tsx
++++ b/src/pages/Admin/Users.tsx
+@@ -1,7 +1,7 @@
+ ﻿import { useState, useEffect } from 'react';
+-import { Users, Building2, Search, UserPlus } from 'lucide-react';
++import { Users, Building2, Search, UserPlus, CheckCircle2, XCircle, Clock } from 'lucide-react';
+ import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
+-import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser } from '../../lib/authApi';
++import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser, adminGetApplication, adminApproveUser, adminRejectUser, type AdminApplicationDetail } from '../../lib/authApi';
+ import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
+ import { adminDeleteUser } from '../../lib/adminApi';
+ import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
+@@ -24,6 +24,10 @@ interface UserRow {
+   last_app_version?: string | null;
+   last_app_mode?: string | null;
+   last_seen_at?: string | null;
++  // 지점 신청/승인 흐름 (2026-09-18) — pending: 승인 대기, approved: 로그인 가능, rejected: 거부
++  status?: 'pending' | 'approved' | 'rejected';
++  reject_reason?: string | null;
++  business_number?: string | null;
+ }
+ 
+ // 어드민이 계정 관리 시 발급하는 임시 비밀번호 (표시는 1회)
+@@ -47,6 +51,59 @@ export default function AdminUsers() {
+   const [branchFilter, setBranchFilter] = useState('all');
+   const [search, setSearch] = useState('');
+   const [latestVersion, setLatestVersion] = useState<string | null>(null);
++  // 신청/승인 흐름 (2026-09-18) — 탭: 전체 vs 승인 대기
++  const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all');
++  const [reviewTarget, setReviewTarget] = useState<AdminApplicationDetail | null>(null);
++  const [reviewLoading, setReviewLoading] = useState(false);
++  const [reviewBusy, setReviewBusy] = useState(false);
++  const [rejectReason, setRejectReason] = useState('');
++  const [showRejectInput, setShowRejectInput] = useState(false);
++
++  async function openReview(userId: string) {
++    setReviewLoading(true);
++    setRejectReason('');
++    setShowRejectInput(false);
++    try {
++      const detail = await adminGetApplication(userId);
++      setReviewTarget(detail);
++    } catch (e: any) {
++      alert(`신청 상세를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
++    } finally {
++      setReviewLoading(false);
++    }
++  }
++
++  async function handleApprove() {
++    if (!reviewTarget) return;
++    if (!confirm(`${reviewTarget.email} 계정 승인 → 즉시 로그인 가능해집니다. 계속할까요?`)) return;
++    setReviewBusy(true);
++    try {
++      await adminApproveUser(reviewTarget.id);
++      setReviewTarget(null);
++      await loadData();
++    } catch (e: any) {
++      alert(e?.message || '승인 처리에 실패했습니다.');
++    } finally {
++      setReviewBusy(false);
++    }
++  }
++
++  async function handleReject() {
++    if (!reviewTarget) return;
++    const reason = rejectReason.trim();
++    if (!reason) { alert('거부 사유를 입력해주세요 (1~500자).'); return; }
++    if (!confirm(`${reviewTarget.email} 신청을 거부합니다. 계속할까요?\n사유: ${reason}`)) return;
++    setReviewBusy(true);
++    try {
++      await adminRejectUser(reviewTarget.id, reason);
++      setReviewTarget(null);
++      await loadData();
++    } catch (e: any) {
++      alert(e?.message || '거부 처리에 실패했습니다.');
++    } finally {
++      setReviewBusy(false);
++    }
++  }
+ 
+   useEffect(() => {
+     loadData();
+@@ -72,6 +129,9 @@ export default function AdminUsers() {
+           last_app_version: u.lastAppVersion || null,
+           last_app_mode: u.lastAppMode || null,
+           last_seen_at: u.lastSeenAt || null,
++          status: u.status || 'approved',
++          reject_reason: u.rejectReason || null,
++          business_number: u.businessNumber || null,
+         })));
+         fetchLatestChannelVersion().then(m => setLatestVersion(m?.version || null));
+         // 지점 필터는 계정에 등록된 지점명으로 구성
+@@ -264,6 +324,7 @@ export default function AdminUsers() {
+   }
+ 
+   const normalizedSearch = search.trim().toLowerCase();
++  const pendingCount = users.filter(u => u.status === 'pending').length;
+   const filtered = users.filter(user => {
+     const branchMatches = branchFilter === 'all' || user.branch_name === branchFilter;
+     const searchMatches = !normalizedSearch || [
+@@ -271,8 +332,11 @@ export default function AdminUsers() {
+       user.email,
+       user.branch_name || '',
+       roleLabels[user.role]?.label || user.role,
++      user.business_number || '',
+     ].some(value => value.toLowerCase().includes(normalizedSearch));
+-    return branchMatches && searchMatches;
++    // 신청/승인 탭 분기: pending 탭은 pending만, all 탭은 pending 제외 (approved + rejected)
++    const tabMatches = activeTab === 'pending' ? user.status === 'pending' : user.status !== 'pending';
++    return branchMatches && searchMatches && tabMatches;
+   });
+ 
+   return (
+@@ -352,6 +416,119 @@ export default function AdminUsers() {
+         </div>
+       )}
+ 
++      {/* 지점 신청 검토 모달 (2026-09-18) — 사업자등록증 사진 확인 후 승인/거부 */}
++      {reviewTarget && (
++        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
++          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
++            <div className="px-6 py-5 border-b border-slate-700 flex items-center justify-between">
++              <div>
++                <h2 className="text-base font-bold text-white">지점 신청 검토</h2>
++                <p className="text-xs text-slate-400 mt-1">사업자등록증의 <span className="text-slate-200">업태·종목</span>이 피부미용업/에스테틱인지 확인하고 승인/거부하세요.</p>
++              </div>
++              <button onClick={() => setReviewTarget(null)} disabled={reviewBusy} className="text-slate-500 hover:text-white disabled:opacity-50">
++                <XCircle size={20} />
++              </button>
++            </div>
++            <div className="px-6 py-5 space-y-4 overflow-auto">
++              <div className="grid grid-cols-2 gap-4 text-sm">
++                <div>
++                  <p className="text-[11px] text-slate-500 mb-1">상호명</p>
++                  <p className="text-slate-100 font-medium">{reviewTarget.shopName || reviewTarget.name}</p>
++                </div>
++                <div>
++                  <p className="text-[11px] text-slate-500 mb-1">이메일</p>
++                  <p className="text-slate-100 font-medium">{reviewTarget.email}</p>
++                </div>
++                <div>
++                  <p className="text-[11px] text-slate-500 mb-1">사업자등록번호</p>
++                  <p className="text-slate-100 font-mono">{reviewTarget.businessNumber}</p>
++                </div>
++                <div>
++                  <p className="text-[11px] text-slate-500 mb-1">휴대폰</p>
++                  <p className="text-slate-100">{reviewTarget.phone || '—'}</p>
++                </div>
++                <div>
++                  <p className="text-[11px] text-slate-500 mb-1">신청 일시</p>
++                  <p className="text-slate-100">{format(parseISO(reviewTarget.createdAt), 'yyyy.MM.dd HH:mm', { locale: ko })}</p>
++                </div>
++                <div>
++                  <p className="text-[11px] text-slate-500 mb-1">상태</p>
++                  <p className="text-amber-300 font-semibold">승인 대기</p>
++                </div>
++              </div>
++              <div>
++                <p className="text-[11px] text-slate-500 mb-2">사업자등록증 사진</p>
++                {reviewTarget.businessLicenseImage ? (
++                  <a href={reviewTarget.businessLicenseImage} target="_blank" rel="noopener noreferrer" className="block">
++                    <img
++                      src={reviewTarget.businessLicenseImage}
++                      alt="사업자등록증"
++                      className="w-full max-h-96 object-contain rounded-xl border border-slate-700 bg-white/5"
++                    />
++                    <p className="text-[11px] text-blue-400 mt-1 text-center">이미지 클릭 → 새 탭에서 원본 크기로 확인</p>
++                  </a>
++                ) : (
++                  <div className="p-6 text-center text-slate-500 border border-dashed border-slate-700 rounded-xl">첨부된 사업자등록증이 없습니다</div>
++                )}
++              </div>
++              {showRejectInput && (
++                <div>
++                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">거부 사유 * (1~500자, 지점에 다음 로그인 시 표시됩니다)</label>
++                  <textarea
++                    value={rejectReason}
++                    onChange={e => setRejectReason(e.target.value.slice(0, 500))}
++                    rows={3}
++                    placeholder="예: 사업자등록증의 업종이 피부미용업/에스테틱이 아닙니다. 정확한 서류로 재신청 부탁드립니다."
++                    className="w-full px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-sm text-white outline-none focus:border-red-500"
++                  />
++                  <p className="text-[11px] text-slate-500 mt-1 text-right">{rejectReason.length}/500</p>
++                </div>
++              )}
++            </div>
++            <div className="px-6 py-4 border-t border-slate-700 flex items-center justify-between gap-2">
++              {!showRejectInput ? (
++                <>
++                  <button
++                    onClick={() => setShowRejectInput(true)}
++                    disabled={reviewBusy}
++                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
++                  >
++                    <XCircle size={14} />
++                    거부
++                  </button>
++                  <button
++                    onClick={handleApprove}
++                    disabled={reviewBusy}
++                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
++                  >
++                    <CheckCircle2 size={14} />
++                    {reviewBusy ? '처리 중…' : '승인 (로그인 허용)'}
++                  </button>
++                </>
++              ) : (
++                <>
++                  <button
++                    onClick={() => { setShowRejectInput(false); setRejectReason(''); }}
++                    disabled={reviewBusy}
++                    className="px-4 py-2 text-sm font-semibold rounded-xl bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50"
++                  >
++                    ← 뒤로
++                  </button>
++                  <button
++                    onClick={handleReject}
++                    disabled={reviewBusy || !rejectReason.trim()}
++                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-red-600 hover:bg-red-500 text-white disabled:opacity-50"
++                  >
++                    <XCircle size={14} />
++                    {reviewBusy ? '처리 중…' : '거부 확정'}
++                  </button>
++                </>
++              )}
++            </div>
++          </div>
++        </div>
++      )}
++
+       {/* 사용기간 수정 모달 */}
+       {periodTarget && (
+         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+@@ -434,6 +611,30 @@ export default function AdminUsers() {
+         )}
+       </div>
+ 
++      {/* 신청/승인 탭 (2026-09-18) — NAS 모드 전용 */}
++      {isAuthApiConfigured && (
++        <div className="flex items-center gap-2 mb-5">
++          <button
++            onClick={() => setActiveTab('all')}
++            className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${activeTab === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}
++          >
++            전체 계정
++          </button>
++          <button
++            onClick={() => setActiveTab('pending')}
++            className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 ${activeTab === 'pending' ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400 hover:text-white'}`}
++          >
++            <Clock size={14} />
++            승인 대기
++            {pendingCount > 0 && (
++              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-slate-900">
++                {pendingCount}
++              </span>
++            )}
++          </button>
++        </div>
++      )}
++
+       {/* 관리자 초대 모달 */}
+       {inviteOpen && (
+         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+@@ -533,8 +734,35 @@ export default function AdminUsers() {
+           </div>
+         ) : filtered.length === 0 ? (
+           <div className="p-16 text-center">
+-            <Users size={32} className="text-slate-600 mx-auto mb-3" />
+-            <p className="text-slate-400">등록된 사용자가 없습니다</p>
++            {activeTab === 'pending' ? <Clock size={32} className="text-slate-600 mx-auto mb-3" /> : <Users size={32} className="text-slate-600 mx-auto mb-3" />}
++            <p className="text-slate-400">
++              {activeTab === 'pending' ? '승인 대기 중인 신청이 없습니다' : '등록된 사용자가 없습니다'}
++            </p>
++          </div>
++        ) : activeTab === 'pending' ? (
++          <div className="divide-y divide-slate-800/50">
++            {filtered.map(u => (
++              <div key={u.id} className="px-6 py-4 hover:bg-slate-800/30 transition-colors flex items-center justify-between gap-4">
++                <div className="flex-1 min-w-0">
++                  <div className="flex items-center gap-3 mb-1">
++                    <p className="text-sm font-semibold text-white truncate">{u.name || '(상호명 없음)'}</p>
++                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">승인 대기</span>
++                  </div>
++                  <p className="text-xs text-slate-500">{u.email}</p>
++                  <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-400">
++                    {u.business_number && <span>사업자번호 <span className="text-slate-200">{u.business_number}</span></span>}
++                    <span>신청 <span className="text-slate-200">{format(parseISO(u.created_at), 'yyyy.MM.dd HH:mm', { locale: ko })}</span></span>
++                  </div>
++                </div>
++                <button
++                  onClick={() => openReview(u.id)}
++                  disabled={reviewLoading}
++                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
++                >
++                  {reviewLoading ? '로딩…' : '검토'}
++                </button>
++              </div>
++            ))}
+           </div>
+         ) : (
+           <div className="overflow-auto max-h-[70vh]">
+diff --git a/src/pages/Auth/Signup.tsx b/src/pages/Auth/Signup.tsx
+index 0ef0022..b23afcc 100644
+--- a/src/pages/Auth/Signup.tsx
++++ b/src/pages/Auth/Signup.tsx
+@@ -1,8 +1,8 @@
+ ﻿import { useRef, useState } from 'react';
+ import { useNavigate, Link } from 'react-router-dom';
+-import { Eye, EyeOff, CheckCircle2, Paperclip, X } from 'lucide-react';
++import { Eye, EyeOff, CheckCircle2, Paperclip, X, Clock } from 'lucide-react';
+ import { useAuth } from '../../contexts/AuthContext';
+-import { isAuthApiConfigured } from '../../lib/authApi';
++import { isAuthApiConfigured, applyForAccount } from '../../lib/authApi';
+ import { TroiareukeLogo } from './Login';
+ 
+ const plans = [
+@@ -54,6 +54,26 @@ export default function Signup() {
+     if (!form.agreeTerms || !form.agreePrivacy) { setError('이용약관과 개인정보 처리방침에 모두 동의해주세요.'); return; }
+     setLoading(true); setError('');
+     try {
++      // NAS 중앙 서버 모드 — 지점 신청 API 직접 호출 후 심사 대기 화면(step 3)으로 전환.
++      // 승인 전까지 로그인 불가라 AuthContext.signup 우회 (2026-09-18 오너 결정).
++      if (isAuthApiConfigured) {
++        const result = await applyForAccount({
++          name: form.name,
++          email: form.email,
++          phone: form.phone,
++          password: form.password,
++          businessNumber: form.businessNumber,
++          businessLicenseImage: licenseImage,
++        });
++        if (result.pending) {
++          setStep(3);
++          return;
++        }
++        // pending이 아니면 세션이 발급된 예외 케이스 — 온보딩으로 이동
++        navigate('/onboarding');
++        return;
++      }
++      // Supabase / 로컬 폴백 — 기존 흐름 유지
+       await signup({
+         name: form.name,
+         email: form.email,
+@@ -66,24 +86,18 @@ export default function Signup() {
+     } catch (e: any) {
+       const msg = e?.message || '';
+       const status = e?.status;
+-      if (status === 403 || /공개 가입이 비활성|가입이 허용되지 않/i.test(msg)) {
+-        // NAS 중앙 서버는 계정 발급제(공개 가입 차단) — 막다른 오류 대신 발급 안내
+-        setError('이 서비스는 관리자 발급제로 운영됩니다. 본사에 계정 발급을 요청해주세요.');
+-      } else if (/already registered|user already exists|duplicate/i.test(msg)) {
++      if (/already registered|user already exists|duplicate|이미 가입/i.test(msg)) {
+         setError('이미 가입된 이메일입니다. 로그인 페이지에서 시도해주세요.');
+       } else if (/Email not confirmed/i.test(msg)) {
+-        // Supabase "Confirm email" 활성화 상태 — 가입은 됐으나 이메일 인증 대기
+-        setError('가입 완료! 이메일 인증 메일을 확인해주세요. 시연 환경에서는 Supabase 대시보드 → Authentication → Settings → "Confirm email"을 비활성화해주세요.');
++        setError('가입 완료! 이메일 인증 메일을 확인해주세요.');
+       } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
+         setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.');
+-      } else if (/invalid email/i.test(msg)) {
+-        setError('이메일 형식이 올바르지 않습니다.');
+-      } else if (/password/i.test(msg)) {
+-        setError('비밀번호 형식이 올바르지 않습니다 (8자 이상, 영문·숫자 조합 권장).');
++      } else if (status === 400 && /사업자등록증|사업자등록번호/.test(msg)) {
++        setError(msg);
+       } else if (msg) {
+-        setError(`회원가입 실패: ${msg}`);
++        setError(`가입 신청 실패: ${msg}`);
+       } else {
+-        setError('회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.');
++        setError('가입 신청에 실패했습니다. 잠시 후 다시 시도해주세요.');
+       }
+     } finally { setLoading(false); }
+   };
+@@ -112,7 +126,7 @@ export default function Signup() {
+               <h2 className="text-xl font-bold text-gray-900 mb-1">계정 정보 입력</h2>
+               <p className="text-sm text-gray-400 mb-6">14일 무료 체험 · 신용카드 불필요</p>
+               {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>}
+-              <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.businessNumber || !form.password) { setError('모든 항목을 입력해주세요.'); return; } if (!isValidBusinessNumber) { setError('사업자등록번호 10자리를 확인해주세요. (예: 123-45-67890)'); return; } setError(''); setStep(2); }} className="space-y-4">
++              <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.businessNumber || !form.password) { setError('모든 항목을 입력해주세요.'); return; } if (!isValidBusinessNumber) { setError('사업자등록번호 10자리를 확인해주세요. (예: 123-45-67890)'); return; } if (isAuthApiConfigured && !licenseImage) { setError('사업자등록증 사진을 첨부해주세요. (본사 승인 시 확인용, jpg·png, 5MB 이하)'); return; } setError(''); setStep(2); }} className="space-y-4">
+                 <div>
+                   <label className="block text-xs font-medium text-gray-600 mb-1.5">샵명 *</label>
+                   <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="auth-input" placeholder="예: 아르케스파 강남점" required />
+@@ -133,7 +147,7 @@ export default function Signup() {
+                     저장 컬럼이 없어 조용히 유실되므로 필드 자체를 숨긴다 */}
+                 {isAuthApiConfigured && (
+                 <div>
+-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록증 사진 (선택)</label>
++                  <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록증 사진 *</label>
+                   <input ref={licenseInputRef} type="file" accept="image/*" className="hidden" onChange={e => { handleLicenseFile(e.target.files?.[0]); e.target.value = ''; }} />
+                   {licenseImage ? (
+                     <div className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-xl bg-gray-50">
+@@ -215,11 +229,37 @@ export default function Signup() {
+               <div className="flex gap-3">
+                 <button onClick={() => setStep(1)} className="flex-1 py-3 bg-gray-100 text-gray-600 font-semibold rounded-xl hover:bg-gray-200">이전</button>
+                 <button onClick={handleSubmit} disabled={loading} className="flex-1 py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-60">
+-                  {loading ? '처리 중...' : '무료 시작하기'}
++                  {loading ? '처리 중...' : '가입 신청하기'}
+                 </button>
+               </div>
+             </>
+           )}
++
++          {step === 3 && (
++            <div className="text-center py-4">
++              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
++                <Clock size={28} className="text-[#1a3a8f]" />
++              </div>
++              <h2 className="text-xl font-bold text-gray-900 mb-2">가입 신청이 접수되었습니다</h2>
++              <p className="text-sm text-gray-500 leading-relaxed mb-6">
++                본사에서 사업자 등록 정보와 서류를 확인한 뒤 승인해드립니다.<br />
++                <span className="text-gray-700 font-medium">평일 기준 24시간 이내</span>에 처리되며, 승인 완료 후 <br />
++                입력하신 이메일로 로그인하실 수 있습니다.
++              </p>
++              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-6 text-left">
++                <p className="text-xs text-gray-400 mb-1">신청 이메일</p>
++                <p className="text-sm text-gray-700 font-medium">{form.email}</p>
++                <p className="text-xs text-gray-400 mt-3 mb-1">사업자등록번호</p>
++                <p className="text-sm text-gray-700 font-medium">{form.businessNumber}</p>
++              </div>
++              <p className="text-xs text-gray-400 mb-4">
++                문의: <a href="mailto:mkclub21@gmail.com" className="text-blue-600 underline">mkclub21@gmail.com</a>
++              </p>
++              <Link to="/login" className="inline-block w-full py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all">
++                로그인 페이지로 돌아가기
++              </Link>
++            </div>
++          )}
+         </div>
+ 
+         <p className="text-center text-sm text-gray-500 mt-6">

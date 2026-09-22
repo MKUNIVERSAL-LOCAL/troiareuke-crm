@@ -21,7 +21,7 @@
    - `PUBLIC_BASE_URL` — 외부에서 접근할 HTTPS 주소 (예: `https://crm-api.mkcorp.familyds.com`)
    - `ALLOWED_ORIGINS` — `http://localhost:5173,null` (데스크톱 앱은 `null` 오리진)
    - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — **최초 슈퍼어드민 계정** (첫 기동 시 자동 생성)
-   - `ALLOW_PUBLIC_SIGNUP=false` — 관리자 발급제 (앱의 무료가입을 열려면 true)
+   - 지점 가입은 신청→승인제(v1.0.59): 신청은 항상 열려 있고 사업자등록증(jpg·png·webp) 첨부 필수, 어드민 승인 후 로그인. `SIGNUP_IP_LIMIT`(시간당 IP별 신청 한도, 기본 5)·`SIGNUP_PENDING_CAP`(승인 대기 상한, 기본 100)
    - SMTP — 회사 메일 또는 NAS MailPlus SMTP (비밀번호 재설정 메일 발송용)
 4. Container Manager의 **프로젝트**에서 `docker-compose.yml`로 실행합니다.
 5. DSM 제어판 → 로그인 포털 → 고급 → **역방향 프록시**: 외부 HTTPS 주소 → `http://127.0.0.1:8787`, Let's Encrypt 인증서 적용.

@@ -3,7 +3,7 @@
  *
  * 검증 흐름:
  *  1. health
- *  2. 공개 가입 차단 (ALLOW_PUBLIC_SIGNUP=false)
+ *  2. 지점 신청 접수(pending, 세션 미발급) → 승인 전 로그인 차단 → 어드민 거부·재신청·승인 → 로그인
  *  3. 슈퍼어드민 부트스트랩 로그인
  *  4. 어드민 계정 발급 (임시 비밀번호) → 발급 계정 로그인
  *  5. 권한 격리 (일반 계정의 admin API 접근 차단)
@@ -62,12 +62,37 @@ await test('health가 ok를 반환한다', async () => {
   assert(status === 200 && data?.ok === true, `status=${status}`);
 });
 
-await test('공개 가입이 403으로 차단된다', async () => {
-  const { status } = await call('/api/auth/signup', {
+const applicantEmail = 'applicant@smoke.test';
+const applicantPassword = 'password123';
+const licenseImage = `data:image/png;base64,${Buffer.from('smoke-license').toString('base64')}`;
+let applicantId = '';
+
+await test('서류 없는 가입 신청은 400, 정상 신청은 pending 접수(세션 미발급), 중복은 409', async () => {
+  const bad = await call('/api/auth/signup', {
     method: 'POST',
     body: { email: 'walkin@smoke.test', password: 'password123', name: '무단가입' },
   });
-  assert(status === 403, `status=${status}`);
+  assert(bad.status === 400, `bad status=${bad.status}`);
+  const { status, data } = await call('/api/auth/signup', {
+    method: 'POST',
+    body: { email: applicantEmail, password: applicantPassword, name: '신청샵', phone: '010-1111-2222', businessNumber: '123-45-67890', businessLicenseImage: licenseImage },
+  });
+  assert(status === 201 && data?.pending === true && !data.token, `status=${status} ${JSON.stringify(data)}`);
+  assert(data.user?.status === 'pending' && data.user.id, 'pending user 누락');
+  applicantId = data.user.id;
+  const dup = await call('/api/auth/signup', {
+    method: 'POST',
+    body: { email: applicantEmail, password: applicantPassword, name: '신청샵', businessNumber: '123-45-67890', businessLicenseImage: licenseImage },
+  });
+  assert(dup.status === 409, `dup status=${dup.status}`);
+});
+
+await test('승인 전 신청 계정은 로그인이 403으로 차단된다', async () => {
+  const { status, data } = await call('/api/auth/login', {
+    method: 'POST',
+    body: { email: applicantEmail, password: applicantPassword },
+  });
+  assert(status === 403 && /심사 대기/.test(data?.error || ''), `status=${status} ${JSON.stringify(data)}`);
 });
 
 await test('부트스트랩 슈퍼어드민으로 로그인된다', async () => {
@@ -78,6 +103,26 @@ await test('부트스트랩 슈퍼어드민으로 로그인된다', async () => 
   assert(status === 200 && data?.token, `status=${status} ${JSON.stringify(data)}`);
   assert(data.user.role === 'superadmin', `role=${data?.user?.role}`);
   adminToken = data.token;
+});
+
+await test('어드민 거부 → 사유가 로그인에 표시 → 재신청 → 승인 → 로그인된다', async () => {
+  const detail = await call(`/api/admin/users/${applicantId}/application`, { token: adminToken });
+  assert(detail.status === 200 && detail.data?.businessLicenseImage === licenseImage && detail.data.status === 'pending', `detail status=${detail.status}`);
+  const rejected = await call(`/api/admin/users/${applicantId}/reject`, { method: 'POST', token: adminToken, body: { reason: '업종 확인 불가' } });
+  assert(rejected.status === 200 && rejected.data?.user?.status === 'rejected', `reject status=${rejected.status}`);
+  const blocked = await call('/api/auth/login', { method: 'POST', body: { email: applicantEmail, password: applicantPassword } });
+  assert(blocked.status === 403 && /업종 확인 불가/.test(blocked.data?.error || ''), `blocked status=${blocked.status} ${JSON.stringify(blocked.data)}`);
+  const reapply = await call('/api/auth/signup', {
+    method: 'POST',
+    body: { email: applicantEmail, password: applicantPassword, name: '신청샵(재신청)', businessNumber: '123-45-67890', businessLicenseImage: licenseImage },
+  });
+  assert(reapply.status === 201 && reapply.data?.user?.id === applicantId && reapply.data.user.status === 'pending', `reapply status=${reapply.status} ${JSON.stringify(reapply.data)}`);
+  const approved = await call(`/api/admin/users/${applicantId}/approve`, { method: 'POST', token: adminToken });
+  assert(approved.status === 200 && approved.data?.user?.status === 'approved', `approve status=${approved.status}`);
+  const again = await call(`/api/admin/users/${applicantId}/approve`, { method: 'POST', token: adminToken });
+  assert(again.status === 404, `re-approve status=${again.status}`);
+  const login = await call('/api/auth/login', { method: 'POST', body: { email: applicantEmail, password: applicantPassword } });
+  assert(login.status === 200 && login.data?.token, `login status=${login.status} ${JSON.stringify(login.data)}`);
 });
 
 let temporaryPassword = '';

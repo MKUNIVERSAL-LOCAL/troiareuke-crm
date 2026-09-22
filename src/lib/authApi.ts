@@ -29,6 +29,12 @@ export interface AuthApiUser {
   lastAppMode?: string | null;
   /** 마지막 서버 접속 시각 (ISO) */
   lastSeenAt?: string | null;
+  /** 신청/승인 상태 (2026-09-18) — pending: 승인 대기, approved: 로그인 가능, rejected: 거부 */
+  status?: 'pending' | 'approved' | 'rejected';
+  /** 거부 사유 (status='rejected'일 때만) */
+  rejectReason?: string | null;
+  /** 사업자등록번호 (신청 시 필수) — 어드민 승인 화면 표시용 */
+  businessNumber?: string;
   createdAt: string;
 }
 
@@ -130,11 +136,33 @@ export async function signupWithAuthApi(data: {
   businessNumber?: string;
   businessLicenseImage?: string;
 }) {
-  const response = await apiRequest<AuthResponse>('/api/auth/signup', {
+  const response = await apiRequest<AuthResponse | { user: AuthApiUser; pending: true }>('/api/auth/signup', {
     method: 'POST',
     body: JSON.stringify(data),
   });
-  return saveAuth(response);
+  // 신청/승인 흐름 (2026-09-18) — 서버가 pending으로 저장하면 세션 토큰 없이 user만 반환
+  // AuthContext.signup은 saveUser(profile) 호출하므로, pending 응답은 여기서 예외로 흘려 Signup.tsx catch에서 심사 대기 화면 전환
+  if ('pending' in response && response.pending) {
+    throw new AuthApiError('가입 신청이 접수되었습니다. 본사 승인 후 로그인할 수 있습니다.', 202);
+  }
+  return saveAuth(response as AuthResponse);
+}
+
+// 지점 가입 신청 — 서버는 세션 없이 pending으로만 저장한다(어드민 승인 후 로그인).
+// AuthContext.signup(saveUser)을 거치지 않고 Signup.tsx가 심사 대기 화면(3단계)으로 전환한다.
+export async function applyForAccount(data: {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+  businessNumber: string;
+  businessLicenseImage: string;
+}) {
+  const response = await apiRequest<{ user: AuthApiUser; pending: true }>('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return response.user;
 }
 
 export type RestoreResult =
@@ -226,6 +254,41 @@ export async function adminUpdateUser(
   const response = await apiRequest<{ user: AuthApiUser }>(`/api/admin/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
+  });
+  return response.user;
+}
+
+// 지점 신청 검토·승인·거부 (슈퍼어드민 전용) — 2026-09-18
+export interface AdminApplicationDetail {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  shopName: string;
+  businessNumber: string;
+  businessLicenseImage: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejectReason: string | null;
+  role: string;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+export async function adminGetApplication(id: string) {
+  return apiRequest<AdminApplicationDetail>(`/api/admin/users/${encodeURIComponent(id)}/application`);
+}
+
+export async function adminApproveUser(id: string) {
+  const response = await apiRequest<{ user: AuthApiUser }>(`/api/admin/users/${encodeURIComponent(id)}/approve`, {
+    method: 'POST',
+  });
+  return response.user;
+}
+
+export async function adminRejectUser(id: string, reason: string) {
+  const response = await apiRequest<{ user: AuthApiUser }>(`/api/admin/users/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
   });
   return response.user;
 }
