@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ticket, Copy, Check, Share2, X, ChevronRight } from 'lucide-react';
 import { canShareText, shareText } from '../lib/mobileBridge';
@@ -9,9 +9,11 @@ import { notify } from '../lib/notify';
  * 대시보드 — 회차권 소진·만료 임박 카드 (2026-11-17)
  * 잔여 1회 이하 / 만료 14일 이내 프로그램을 모아 재구매 안내 초안을 복사·공유한다. 항목을 누르면 고객 상세로.
  */
-export default function ProgramAlertCard({ compact = false }: { compact?: boolean }) {
+export default function ProgramAlertCard({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
   const navigate = useNavigate();
-  const [alerts] = useState<ProgramAlert[]>(() => getProgramAlerts());
+  // 대시보드 포커스/가시성 복귀(refreshKey)마다 다시 계산 — 모바일·PC 블록이 함께 마운트돼도 비용은 호출 2회
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const alerts = useMemo<ProgramAlert[]>(() => getProgramAlerts(), [refreshKey]);
   const [draftFor, setDraftFor] = useState<ProgramAlert | null>(null);
   const [copied, setCopied] = useState(false);
   if (alerts.length === 0) return null;
@@ -65,6 +67,7 @@ export default function ProgramAlertCard({ compact = false }: { compact?: boolea
             <button
               type="button"
               onClick={() => { setDraftFor(a); setCopied(false); }}
+              aria-label={`${a.customer.name} 재구매 안내`}
               className="flex-shrink-0 px-2.5 py-1.5 rounded-lg bg-[#1a3a8f]/10 text-[#1a3a8f] text-xs font-medium hover:bg-[#1a3a8f]/20"
             >
               재구매 안내

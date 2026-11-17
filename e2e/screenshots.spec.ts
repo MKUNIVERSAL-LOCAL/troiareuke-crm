@@ -46,10 +46,12 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   });
   // 회차권 잔여 1회 시드 — 대시보드 회차권 임박 카드가 세트에 찍히도록 (2026-11-17)
   await page.evaluate(() => {
-    const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k));
-    if (!key) return;
+    const customersKey = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const customer = JSON.parse(localStorage.getItem(customersKey) || '[]')[0];
+    const key = customersKey.replace(/_customers$/, '_customer_programs');
     const list = JSON.parse(localStorage.getItem(key) || '[]');
-    for (const cp of list) if (cp.totalSessions) cp.usedSessions = cp.totalSessions - 1;
+    const now = new Date().toISOString();
+    list.push({ id: 'seed_cp_' + Date.now(), shopId: customer.shopId, customerId: customer.id, customerName: customer.name, programName: '기본 관리 10회권', category: '회차권', totalSessions: 10, usedSessions: 9, pricePaid: 300000, paymentMethod: '카드', purchaseDate: now.slice(0, 10), isCompleted: false, createdAt: now });
     localStorage.setItem(key, JSON.stringify(list));
   });
   await page.goto('/customers?retention=1');

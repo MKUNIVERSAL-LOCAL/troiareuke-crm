@@ -27,8 +27,9 @@ export const REASON_LABEL: Record<ProgramAlertReason, string> = {
   expiring: '만료 임박',
 };
 
+/** 지역 날짜(YYYY-MM-DD) — 앱 전체 규칙(format.todayISO·reminderEngine). toISOString은 KST 00~09시에 하루 어긋난다 */
 function toISO(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** 활성 프로그램 중 소진·만료 임박 — 긴급한 순(잔여 0 → 만료 지남 → 잔여 1 → 만료 임박) */
@@ -36,10 +37,15 @@ export function getProgramAlerts(today = new Date()): ProgramAlert[] {
   const todayISO = toISO(today);
   const customers = new Map(CustomerStore.getAll().map(c => [c.id, c]));
   const out: ProgramAlert[] = [];
-  for (const cp of CustomerProgramStore.getAll()) {
-    if (cp.isCompleted || cp.id.startsWith('sample_')) continue;
+  const all = CustomerProgramStore.getAll();
+  for (const cp of all) {
+    // 마지막 회차를 쓰면 코어 useSession이 isCompleted=true로 닫는다 — 재구매 제안의 핵심 순간이므로 "소진으로 완료"는 알림 대상에 넣는다
+    const exhausted = cp.totalSessions != null && cp.usedSessions >= cp.totalSessions;
+    if ((cp.isCompleted && !exhausted) || cp.id.startsWith('sample_')) continue;
     const customer = customers.get(cp.customerId);
     if (!customer || customer.id.startsWith('sample_') || customer.isActive === false) continue;
+    // 같은 프로그램을 이미 재구매(활성)했으면 소진 알림 불필요
+    if (exhausted && all.some(p => p.id !== cp.id && p.customerId === cp.customerId && !p.isCompleted && (p.programId ? p.programId === cp.programId : p.programName === cp.programName))) continue;
     const remaining = cp.totalSessions == null ? null : Math.max(0, cp.totalSessions - cp.usedSessions);
     const daysToExpiry = cp.expiryDate
       ? Math.round((new Date(cp.expiryDate + 'T00:00:00').getTime() - new Date(todayISO + 'T00:00:00').getTime()) / 86_400_000)

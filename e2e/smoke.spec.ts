@@ -99,9 +99,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.goto('/');
   const tomorrowCard = page.getByTestId('tomorrow-reservation-card').filter({ visible: true }).first();
   await expect(tomorrowCard).toContainText('14:00');
-  await tomorrowCard.getByRole('button', { name: '안내', exact: true }).first().click();
+  await tomorrowCard.getByRole('button', { name: /예약 안내$/ }).first().click();
   await expect(tomorrowCard.getByText(/내일 예약 안내드립니다/)).toBeVisible();
-  await expect(tomorrowCard.getByText(/14:00/).nth(1)).toBeVisible();
+  await expect(tomorrowCard.locator('pre')).toContainText('14:00');
 
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
   await page.evaluate(() => {
@@ -115,7 +115,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(programCard).toContainText('잔여 1회');
   await programCard.getByRole('button', { name: '재구매 안내' }).first().click();
   await expect(programCard.getByText(/잔여 회차가 1회 남았어요/)).toBeVisible();
-  await programCard.getByRole('button', { name: `${acc.customer} 고객 보기` }).click();
+  await programCard.getByRole('button', { name: `${acc.customer} 고객 보기` }).first().click();
   await expect(page).toHaveURL(/\/customers/);
   await expect(page.getByTestId('customers-desktop').getByRole('heading', { name: '결제 내역' })).toBeVisible();
   await page.goto('/customers');
