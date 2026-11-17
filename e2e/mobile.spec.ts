@@ -169,6 +169,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles({ name: 'p.png', mimeType: 'image/png', buffer: solidPng(48, [200, 150, 150]) });
   await expect(page.getByLabel('시술 전후 구분')).toHaveCount(2);
   await page.getByRole('button', { name: '저장', exact: true }).filter({ visible: true }).first().click();
+  await expect(page.getByText('사진 2장').filter({ visible: true }).first()).toBeVisible(); // 목록 장수(localStorage 장수 목록, 2026-11-18)
   await expect.poll(() => countPhotoEntries(page), { timeout: 10_000 }).toBeGreaterThan(0); // IDB 커밋 후 이동
   await page.goto('/customers');
   await page.getByText('모바일고객').filter({ visible: true }).first().click();

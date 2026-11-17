@@ -34,7 +34,30 @@ let backend: CacheBackend = typeof indexedDB !== 'undefined' ? 'idb' : 'ls';
 let db: IDBDatabase | null = null;
 const mem = new Map<string, PhotoEntry[]>();   // LRU — Map 삽입 순서(오래된 → 최신)
 let memBytes = 0;
-const counts = new Map<string, number>();       // 장수만 — 목록 화면이 base64를 힙에 올리지 않게
+// 장수만 — 목록 화면이 base64를 힙에 올리지 않게. localStorage(작은 JSON)에 유지해 앱 시작 직후 목록도 사진을 읽지 않고 장수를 안다
+const COUNTS_KEY = 'crm_photo_counts';
+const counts = new Map<string, number>(loadCounts());
+let countsTimer: ReturnType<typeof setTimeout> | null = null;
+function loadCounts(): [string, number][] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(COUNTS_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? Object.entries(parsed).filter((e): e is [string, number] => typeof e[1] === 'number') : [];
+  } catch {
+    return [];
+  }
+}
+function persistCounts(): void {
+  if (countsTimer !== null) return;
+  countsTimer = setTimeout(() => {
+    countsTimer = null;
+    try { localStorage.setItem(COUNTS_KEY, JSON.stringify(Object.fromEntries(counts))); } catch { /* 용량 — 다음 기회에 */ }
+  }, 200);
+}
+function setCount(entityKey: string, n: number): void {
+  if (counts.get(entityKey) === n) return;
+  if (n === 0) counts.delete(entityKey); else counts.set(entityKey, n);
+  persistCounts();
+}
 const inflight = new Set<string>();             // IDB에서 읽는 중인 키
 const PENDING_WRITE = new Set<string>();        // IDB 저장이 끝나지 않은 키 — 메모리에서 내리면 안 됨
 const listeners = new Set<() => void>();
@@ -46,6 +69,7 @@ if (bc) bc.onmessage = ev => {
   if (typeof key !== 'string') return;
   memDrop(key);
   counts.delete(key);
+  persistCounts();
   emitChange();
 };
 
@@ -75,7 +99,7 @@ function memSet(entityKey: string, photos: PhotoEntry[]): void {
   memDrop(entityKey);
   mem.set(entityKey, photos);
   memBytes += sizeOf(photos);
-  counts.set(entityKey, photos.length);
+  setCount(entityKey, photos.length);
   // 상한 초과분은 오래된 키부터 내린다 — 저장 중·전송 중·방금 쓴 키는 제외
   for (const [k, v] of mem) {
     if (memBytes <= MEM_BUDGET) break;
@@ -150,6 +174,7 @@ async function migrateFromLocalStorage(database: IDBDatabase): Promise<void> {
         const back = await idbRun<PhotoEntry[] | undefined>(database, 'readonly', s => s.get(entityKey));
         if (!Array.isArray(back) || back.length !== parsed.length) continue; // 확인 실패 — localStorage 사본은 남겨 둔다
       }
+      setCount(entityKey, parsed.length);
       localStorage.removeItem(lsKey);
     } catch (e) {
       console.warn('[photoStore] localStorage → IndexedDB 이관 실패, 다음 실행에 재시도:', lsKey, e);
@@ -219,7 +244,7 @@ async function peekCache(entityKey: string): Promise<PhotoEntry[] | null> {
   try {
     const v = await idbRun<PhotoEntry[] | undefined>(database, 'readonly', s => s.get(entityKey));
     const value = Array.isArray(v) ? v : [];
-    counts.set(entityKey, value.length);
+    setCount(entityKey, value.length);
     return value;
   } catch (e) {
     console.error('[photoStore] IndexedDB 읽기 실패:', entityKey, e);
@@ -248,6 +273,7 @@ function writeCache(entityKey: string, photos: PhotoEntry[]): void {
       console.error('[photoStore] 로컬 사진 저장 실패 (서버 정본은 별도 동기화):', entityKey, e);
       memDrop(entityKey); // 다음 읽기는 디스크 상태를 반영
       counts.delete(entityKey);
+      persistCounts();
       // App.tsx가 듣는 용량 초과 토스트 — 저장이 조용히 사라지지 않게
       try { window.dispatchEvent(new CustomEvent('crm:storage-quota-exceeded', { detail: { key: storageKey(entityKey) } })); } catch { /* noop */ }
     } finally {
@@ -261,7 +287,7 @@ export function getPhotosAsync(entityKey: string): Promise<PhotoEntry[] | null> 
   return loadCache(entityKey);
 }
 
-/** 장수만 — 목록 화면용. 모르면 읽기를 걸어 두고 0을 돌려준다(적재 후 onPhotoCacheChange) */
+/** 장수만 — 목록 화면용(localStorage 장수 목록 → 메모리). 모르면 읽기를 걸어 두고 0을 돌려준다(적재 후 onPhotoCacheChange) */
 export function getPhotoCount(entityKey: string): number {
   if (backend === 'ls') return lsRead(entityKey).length;
   const c = counts.get(entityKey);
@@ -274,6 +300,7 @@ export function clearLocalPhotoCacheForLogout(): void {
   if (!isAuthApiConfigured) return;
   mem.clear(); memBytes = 0; counts.clear();
   try {
+    localStorage.removeItem(COUNTS_KEY);
     for (const k of Object.keys(localStorage)) if (k.startsWith(PREFIX) && !isMetaKey(k)) localStorage.removeItem(k);
   } catch { /* noop */ }
   void getDb().then(async database => {
