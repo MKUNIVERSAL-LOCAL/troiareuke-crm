@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { makeAccount, signupAndOnboard, createCustomer, dismissToasts } from './helpers';
 
 /**
@@ -302,6 +303,30 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(perfRow.locator('td').nth(2)).toHaveText(`${perfExpected.amount.toLocaleString('ko-KR')}원`); // 완료 예약액 칸
   await perf.getByRole('button', { name: '보고 문구' }).click();
   await expect(perf.locator('pre')).toContainText(`${perfExpected.name}: 완료 예약 ${perfExpected.count}건`);
+
+  // ── 9-4. 전체 백업 파일 저장·복원 (2026-11-18): JSON에 고객이 들어 있고, 고객 테이블을 비운 뒤 그 파일로 복원하면 돌아온다 ──
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '데이터 백업', exact: true }).filter({ visible: true }).first().click();
+  const backupCard = page.getByTestId('backup-restore-card');
+  const backupDownload = page.waitForEvent('download');
+  await backupCard.getByRole('button', { name: '백업 파일 저장' }).click();
+  const backupFile = await backupDownload;
+  expect(backupFile.suggestedFilename()).toMatch(/_전체백업_\d{4}-\d{2}-\d{2}\.json$/);
+  const backupPath = await backupFile.path();
+  const backupJson = JSON.parse(readFileSync(backupPath!, 'utf8'));
+  expect(backupJson.format).toBe('troiareuke-crm-backup');
+  expect((backupJson.tables.customers as { name: string }[]).some(c => c.name === acc.customer)).toBe(true);
+  // 손상 흉내: 고객 테이블을 비운다
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    localStorage.setItem(key, '[]');
+  });
+  await backupCard.getByLabel('백업 파일 선택').setInputFiles(backupPath!);
+  await expect(backupCard.getByTestId('restore-preview')).toContainText('고객');
+  await backupCard.getByRole('button', { name: '복원 실행' }).click(); // confirm은 dialog 핸들러가 수락 → 새로고침
+  await page.waitForURL(/\/settings/);
+  await page.goto('/customers');
+  await expect(page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
   // ── 10. 개인정보 보존기간 정책 (P4, 2026-11-17): 1년으로 켜고 고객을 2년 전 방문으로 만들면 안내 → 목록 → 익명화 ──
   await page.goto('/settings');

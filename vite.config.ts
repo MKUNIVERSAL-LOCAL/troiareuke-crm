@@ -65,7 +65,11 @@ function mobileIndexHtmlPlugin(): Plugin {
   }
 }
 
+// 빌드 시점 앱 버전 — 백업 파일 헤더 등 화면에서 버전을 알아야 할 때 (2026-11-18). src/global.d.ts에 선언
+const APP_VERSION: string = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8')).version;
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   plugins: [
     react(),
     cspMetaPlugin(),

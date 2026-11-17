@@ -4,6 +4,7 @@ import { notify } from '../../lib/notify';
 import { useState, useEffect, useCallback } from 'react';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
+import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
@@ -1425,10 +1426,12 @@ export default function Settings() {
                     </div>
                   ) : (
                     <p className="text-sm text-gray-400">
-                      데이터 백업 기능은 데스크탑(Electron) 앱에서만 사용 가능합니다.
+                      자동 백업(6시간마다·7일 보관)은 데스크탑 앱 전용입니다. 아래 [백업 파일 저장]으로 직접 보관하세요.
                     </p>
                   )}
                 </SettingCard>
+                {/* 전체 백업 파일 저장·복원 — 로컬 모드 데이터 소실 방지, PC·모바일 공용 (2026-11-18) */}
+                <BackupRestoreCard />
               </div>
             )}
           </div>
