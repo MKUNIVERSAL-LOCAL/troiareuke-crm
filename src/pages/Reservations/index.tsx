@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, type CSSProperties } from 'react';
+﻿import { useState, useCallback, useEffect, useMemo, type CSSProperties } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
@@ -204,7 +204,8 @@ export default function Reservations() {
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const normalizedSearch = search.trim().toLowerCase();
-  const filteredReservations = reservations.filter(r => {
+  // 입력·필터·목록이 바뀔 때만 (8,000건을 매 렌더마다 훑지 않게, 성능 감사 2026-11-18)
+  const filteredReservations = useMemo(() => reservations.filter(r => {
     const staffMatches = staffFilter === 'all' || r.staffId === staffFilter;
     const statusMatches = statusFilter === 'all' || r.status === statusFilter;
     const searchMatches = !normalizedSearch || [
@@ -215,7 +216,12 @@ export default function Reservations() {
       ...r.services.map(service => service.serviceName),
     ].some(value => value.toLowerCase().includes(normalizedSearch));
     return staffMatches && statusMatches && searchMatches;
-  });
+  }), [reservations, staffFilter, statusFilter, normalizedSearch]);
+  // 주/일 뷰에는 그 기간 예약만 — 뷰 안에서 날짜 파싱(parseISO) 대신 문자열 비교
+  const weekRange: readonly [string, string] = [format(weekDays[0], 'yyyy-MM-dd'), format(weekDays[6], 'yyyy-MM-dd')];
+  const weekReservations = useMemo(() => filteredReservations.filter(r => r.date >= weekRange[0] && r.date <= weekRange[1]), [filteredReservations, weekRange[0], weekRange[1]]);
+  const dayKey = format(currentDate, 'yyyy-MM-dd');
+  const dayReservations = useMemo(() => filteredReservations.filter(r => r.date === dayKey), [filteredReservations, dayKey]);
   const mobileRange: readonly [string, string] = (() => {
     if (mobileTab === 'today') return [todayStr, todayStr];
     if (mobileTab === 'week') return [format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'), format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')];
@@ -506,10 +512,10 @@ export default function Reservations() {
 
         {/* Calendar Views */}
         {viewMode === 'week' && (
-          <WeekView weekDays={weekDays} reservations={filteredReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <WeekView weekDays={weekDays} reservations={weekReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'day' && (
-          <DayView date={currentDate} reservations={filteredReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <DayView date={currentDate} reservations={dayReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'list' && (
           <ListView reservations={filteredReservations} onSelect={setSelectedReservation} googleEvents={googleEvents} />
@@ -572,7 +578,8 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
         <div className="py-3 px-3 text-xs text-gray-400 text-center border-r border-gray-100">시간</div>
         {weekDays.map((day, i) => {
           const isToday = isSameDay(day, today);
-          const dayReservations = reservations.filter(r => isSameDay(parseISO(r.date), day));
+          const dayKey = format(day, 'yyyy-MM-dd');
+          const dayReservations = reservations.filter(r => r.date === dayKey);
           return (
             <div key={i} className={clsx('py-3 px-2 text-center border-r border-gray-100 last:border-r-0', isToday && 'bg-purple-50')}>
               <p className={clsx('text-[11px] font-medium', i === 5 ? 'text-blue-500' : i === 6 ? 'text-red-500' : 'text-gray-500')}>
@@ -667,8 +674,9 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
   onSelect: (r: Reservation) => void;
   googleEvents?: GoogleEventLike[];
 }) {
-  const dayReservations = reservations.filter(r => isSameDay(parseISO(r.date), date));
-  const dayGoogleEvents = googleEvents.filter(ge => ge.date === format(date, 'yyyy-MM-dd'));
+  const dateKey = format(date, 'yyyy-MM-dd');
+  const dayReservations = reservations.filter(r => r.date === dateKey);
+  const dayGoogleEvents = googleEvents.filter(ge => ge.date === dateKey);
   const ROW_H = 60; // h-[60px] — 슬롯 1시간의 픽셀 높이
 
   // 시간 비례 배치 (겹침 레인 포함) — 주간 뷰와 동일한 방식
@@ -762,12 +770,15 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
 }
 
 function ListView({ reservations, onSelect, googleEvents = [] }: { reservations: Reservation[]; onSelect: (r: Reservation) => void; googleEvents?: GoogleEventLike[] }) {
-  const sorted = [...reservations].sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
+  const sorted = useMemo(() => [...reservations].sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`)), [reservations]);
+  // 목록은 200건씩 — 전체 예약(수천 건)을 한 번에 마운트하지 않는다 (성능 감사 2026-11-18)
+  const [limit, setLimit] = useState(200);
+  useEffect(() => { setLimit(200); }, [reservations]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="divide-y divide-gray-50">
-        {sorted.map(r => (
+        {sorted.slice(0, limit).map(r => (
           <button
             key={r.id}
             onClick={() => onSelect(r)}
@@ -795,6 +806,11 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
             <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
           </button>
         ))}
+        {sorted.length > limit && (
+          <button type="button" onClick={() => setLimit(n => n + 200)} className="w-full py-3 text-sm font-medium text-[#1a3a8f] hover:bg-gray-50 min-h-[44px]">
+            더 보기 ({sorted.length - limit}건 남음)
+          </button>
+        )}
         {/* Google Calendar 이벤트 */}
         {googleEvents.map(ge => (
           <a

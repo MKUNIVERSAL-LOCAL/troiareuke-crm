@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { CustomerStore, TreatmentLogStore, ReservationStore, SettingsStore } from './store';
-import type { Customer } from '../types';
+import type { Customer, TreatmentLog } from '../types';
 import { getPreference, setPreference, migrateLegacyPreference } from './shopPreferences';
 
 const LEGACY_CYCLE_KEY = 'troiareuke_revisit_cycle_days';
@@ -95,19 +95,22 @@ export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
   const cycle = getRevisitCycleDays();
   const todayISO = toISO(new Date());
   const customers = CustomerStore.getAll().filter(c => !c.id.startsWith('sample_') && c.isActive !== false); // 익명화(보존기간 경과) 고객 제외
-  const allReservations = ReservationStore.getAll();
+  // 한 번에 버킷 — 고객 3,000명 × 예약 8,000·시술 15,000건을 고객마다 훑으면 폰에서 포커스 복귀 때마다 1초 이상 멈춘다 (성능 감사 2026-11-18)
+  const upcoming = new Set<string>();
+  for (const r of ReservationStore.getAll()) if (r.date >= todayISO && r.status !== 'cancelled') upcoming.add(r.customerId);
+  const latestLog = new Map<string, TreatmentLog>();
+  for (const t of TreatmentLogStore.getAll()) {
+    const cur = latestLog.get(t.customerId);
+    if (!cur || t.treatmentDate > cur.treatmentDate) latestLog.set(t.customerId, t); // getByCustomer와 같은 "최신 시술" 기준
+  }
 
   const result: DueCustomer[] = [];
 
   for (const customer of customers) {
     // 미래 예약이 이미 있으면 리마인더 제외 (이미 재방문 예정)
-    const hasUpcoming = allReservations.some(
-      r => r.customerId === customer.id && r.date >= todayISO && r.status !== 'cancelled'
-    );
-    if (hasUpcoming) continue;
+    if (upcoming.has(customer.id)) continue;
 
-    const logs = TreatmentLogStore.getByCustomer(customer.id); // 최신순 정렬됨
-    const lastLog = logs[0];
+    const lastLog = latestLog.get(customer.id);
     const lastVisit = lastLog?.treatmentDate || customer.lastVisitDate || null;
 
     let dueDate: string | null = null;

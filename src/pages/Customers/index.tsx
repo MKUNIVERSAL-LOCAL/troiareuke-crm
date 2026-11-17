@@ -263,6 +263,8 @@ function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 
   );
 }
 
+const LIST_PAGE = 100; // 목록 1회 표시 수 — [더 보기]로 늘린다
+
 export default function Customers() {
   const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -837,23 +839,38 @@ export default function Customers() {
 
   // 신규 → 일반(기존고객) 자동 승급: 등록 90일 경과 + 시술 3회 이상
   // (목록을 불러올 때마다 점검 — 조건 충족 시 1회만 승급되고 이후엔 '신규'가 아니라 재실행 안 됨)
-  function autoPromoteNewCustomers() {
+  // 승급 대상 id만 고른다(쓰기 없음). 실제 쓰기는 runAutoPromote가 첫 화면을 그린 뒤 25명씩 — 코어 update()가 한 명마다
+  // 테이블 전체를 저장해 500명이면 4초 넘게 멈추기 때문(대량 데이터 E2E 실측, 성능 감사 2026-11-18)
+  function autoPromoteNewCustomers(): string[] {
     const NINETY_DAYS = 90 * 86400000;
     const now = Date.now();
-    CustomerStore.getAll().forEach(c => {
-      if (c.grade !== '신규' || c.id.startsWith('sample_') || !c.registeredAt) return;
-      const aged = now - new Date(c.registeredAt).getTime() >= NINETY_DAYS;
-      if (!aged) return;
-      const treatmentCount = TreatmentLogStore.getByCustomer(c.id).length;
-      if (treatmentCount >= 3) {
-        CustomerStore.update(c.id, { grade: '일반' });
-      }
-    });
+    const candidates = CustomerStore.getAll().filter(c => c.grade === '신규' && !c.id.startsWith('sample_') && !!c.registeredAt && now - new Date(c.registeredAt).getTime() >= NINETY_DAYS);
+    if (candidates.length === 0) return [];
+    // 시술 횟수는 한 번에 집계 — 신규 고객마다 시술 테이블 전체를 훑지 않게 (성능 감사 2026-11-18)
+    const treatmentCount = new Map<string, number>();
+    for (const t of TreatmentLogStore.getAll()) treatmentCount.set(t.customerId, (treatmentCount.get(t.customerId) || 0) + 1);
+    return candidates.filter(c => (treatmentCount.get(c.id) || 0) >= 3).map(c => c.id);
+  }
+  const promoteRunning = useRef(false);
+  function runAutoPromote() {
+    if (promoteRunning.current) return;
+    const ids = autoPromoteNewCustomers();
+    if (ids.length === 0) return;
+    promoteRunning.current = true;
+    let i = 0;
+    const step = () => {
+      for (const id of ids.slice(i, i + 25)) CustomerStore.update(id, { grade: '일반' });
+      i += 25;
+      if (i < ids.length) { setTimeout(step, 0); return; }
+      promoteRunning.current = false;
+      setCustomers(CustomerStore.getAll()); // 승급 결과를 목록에 반영
+    };
+    setTimeout(step, 0);
   }
 
   function loadAll() {
     setDetailTick(t => t + 1);
-    autoPromoteNewCustomers();
+    runAutoPromote(); // 첫 화면을 그린 뒤 백그라운드로
     setCustomers(CustomerStore.getAll());
     // Pull from ProgramStore first; if empty, create Program-like entries from ServiceStore
     const storePrograms = ProgramStore.getAll().filter(p => p.isActive);
@@ -885,14 +902,26 @@ export default function Customers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [customers, retentionPolicy.enabled, retentionPolicy.years],
   );
-  // 필터링
-  const filtered = customers.filter(c => {
+  // 필터링 — 입력·정렬·목록이 바뀔 때만 (3,000명 × 초성 검색 + 한글 정렬을 매 렌더마다 하지 않게, 성능 감사 2026-11-18)
+  const filtered = useMemo(() => customers.filter(c => {
     const matchSearch = matchesSearch(search, [c.name, c.phone, c.email]);
     const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
     const matchTag = !tagFilter || (c.tags || []).includes(tagFilter);
     const matchRetention = !retentionOnly || expiredIds.has(c.id);
     return matchSearch && matchGrade && matchTag && matchRetention;
-  }).sort(compareCustomers);
+  }).sort(compareCustomers),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey]);
+  // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
+  const activeProgCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const cp of CustomerProgramStore.getAll()) if (!cp.isCompleted) m.set(cp.customerId, (m.get(cp.customerId) || 0) + 1);
+    return m;
+  }, [customers]);
+  // 목록은 100명씩 — 전부 마운트하면 수백 명부터 폰에서 버벅인다. 검색·필터·정렬이 바뀌면 처음부터
+  const [listLimit, setListLimit] = useState(LIST_PAGE);
+  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey]);
+  const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   const tagOptions = useMemo(() => topTags(customers, 12), [customers]);
   // 걸러 둔 태그가 사라지면(마지막 고객에서 지움·병합·익명화·상위 12 밖) 빈 목록에 갇히지 않게 자동 해제
   useEffect(() => {
@@ -1325,7 +1354,7 @@ export default function Customers() {
               </button>
             </div>
           ) : (
-            filtered.map(customer => {
+            visible.map(customer => {
               const daysSince = getDaysSince(customer.lastVisitDate);
               return (
                 <button
@@ -1359,6 +1388,12 @@ export default function Customers() {
                 </button>
               );
             })
+          )}
+          {filtered.length > listLimit && (
+            <button type="button" onClick={() => setListLimit(n => n + LIST_PAGE)}
+              className="w-full py-3 text-sm font-medium text-[#1a3a8f] bg-white border border-gray-200 rounded-xl hover:bg-gray-50 min-h-[44px]">
+              더 보기 ({filtered.length - listLimit}명 남음)
+            </button>
           )}
         </div>
 
@@ -1754,10 +1789,10 @@ export default function Customers() {
               <p className="text-sm text-gray-400">고객이 없어요</p>
             </div>
           ) : (
-            filtered.map(customer => {
+            visible.map(customer => {
               const daysSince = getDaysSince(customer.lastVisitDate);
               const isRisk = daysSince !== null && daysSince > 60;
-              const activeProgs = CustomerProgramStore.getActive(customer.id).length;
+              const activeProgs = activeProgCount.get(customer.id) || 0;
               return (
                 <button
                   key={customer.id}
@@ -1791,6 +1826,12 @@ export default function Customers() {
                 </button>
               );
             })
+          )}
+          {filtered.length > listLimit && (
+            <button type="button" onClick={() => setListLimit(n => n + LIST_PAGE)}
+              className="w-full py-3 text-sm font-medium text-[#1a3a8f] bg-white border border-gray-200 rounded-xl hover:bg-gray-50 min-h-[44px]">
+              더 보기 ({filtered.length - listLimit}명 남음)
+            </button>
           )}
         </div>
       </div>

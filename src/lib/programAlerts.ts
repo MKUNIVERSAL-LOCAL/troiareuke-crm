@@ -38,6 +38,9 @@ export function getProgramAlerts(today = new Date()): ProgramAlert[] {
   const customers = new Map(CustomerStore.getAll().map(c => [c.id, c]));
   const out: ProgramAlert[] = [];
   const all = CustomerProgramStore.getAll();
+  // 고객별 활성 프로그램 — 재구매 확인에서 전체 테이블을 다시 훑지 않게 (성능 감사 2026-11-18)
+  const activeByCustomer = new Map<string, CustomerProgram[]>();
+  for (const p of all) if (!p.isCompleted) { const l = activeByCustomer.get(p.customerId); if (l) l.push(p); else activeByCustomer.set(p.customerId, [p]); }
   for (const cp of all) {
     // 마지막 회차를 쓰면 코어 useSession이 isCompleted=true로 닫는다 — 재구매 제안의 핵심 순간이므로 "소진으로 완료"는 알림 대상에 넣는다
     const exhausted = cp.totalSessions != null && cp.usedSessions >= cp.totalSessions;
@@ -45,7 +48,7 @@ export function getProgramAlerts(today = new Date()): ProgramAlert[] {
     const customer = customers.get(cp.customerId);
     if (!customer || customer.id.startsWith('sample_') || customer.isActive === false) continue;
     // 같은 프로그램을 이미 재구매(활성)했으면 소진 알림 불필요
-    if (exhausted && all.some(p => p.id !== cp.id && p.customerId === cp.customerId && !p.isCompleted && (p.programId ? p.programId === cp.programId : p.programName === cp.programName))) continue;
+    if (exhausted && (activeByCustomer.get(cp.customerId) || []).some(p => p.id !== cp.id && (p.programId ? p.programId === cp.programId : p.programName === cp.programName))) continue;
     const remaining = cp.totalSessions == null ? null : Math.max(0, cp.totalSessions - cp.usedSessions);
     const daysToExpiry = cp.expiryDate
       ? Math.round((new Date(cp.expiryDate + 'T00:00:00').getTime() - new Date(todayISO + 'T00:00:00').getTime()) / 86_400_000)

@@ -53,10 +53,6 @@ export default function Treatments() {
   };
   // 목록 표시용 사진 장수 — base64 캐시를 매 렌더·매 키 입력마다 파싱하지 않도록 목록이 바뀔 때만 계산
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시 적재·동기화 후 장수 갱신
-  const photoCounts = useMemo(
-    () => new Map(treatmentLogs.map(t => [t.id, getPhotoCount(`treatment:${t.id}`)])),
-    [treatmentLogs, photoCacheVersion],
-  );
 
   useEffect(() => {
     loadLogs();
@@ -76,12 +72,24 @@ export default function Treatments() {
     return [...new Set([...fromStaff, ...fromLogs])];
   }, [treatmentLogs]);
   const today = todayISO(); // 렌더마다 계산 — 자정을 넘겨 켜 둔 PC에서도 다음 렌더부터 새 날짜
-  const range = periodRange(period, today);
-  const filtered = treatmentLogs
-    .filter(t => matchesSearch(search, [t.customerName, t.staffName, t.treatmentDetails, t.programName]))
-    .filter(t => !range || (t.treatmentDate >= range.from && t.treatmentDate <= range.to))
-    .filter(t => !staffFilter || t.staffName === staffFilter)
-    .sort((a, b) => b.treatmentDate.localeCompare(a.treatmentDate)); // 최신 시술 먼저
+  // 입력·필터·목록이 바뀔 때만 (15,000건을 매 키 입력마다 정렬하지 않게, 성능 감사 2026-11-18)
+  const filtered = useMemo(() => {
+    const range = periodRange(period, today);
+    return treatmentLogs
+      .filter(t => matchesSearch(search, [t.customerName, t.staffName, t.treatmentDetails, t.programName]))
+      .filter(t => !range || (t.treatmentDate >= range.from && t.treatmentDate <= range.to))
+      .filter(t => !staffFilter || t.staffName === staffFilter)
+      .sort((a, b) => b.treatmentDate.localeCompare(a.treatmentDate)); // 최신 시술 먼저
+  }, [treatmentLogs, search, period, staffFilter, today]);
+  // 목록은 100건씩 — 전부 마운트하면 수백 건부터 폰에서 버벅인다. 검색·필터가 바뀌면 처음부터
+  const [listLimit, setListLimit] = useState(LIST_PAGE);
+  useEffect(() => { setListLimit(LIST_PAGE); }, [search, period, staffFilter]);
+  const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
+  // 목록 표시용 사진 장수 — 보이는 행만 (장수 0인 기록은 IndexedDB 조회를 유발하므로 15,000건 전체를 묻지 않는다)
+  const photoCounts = useMemo(
+    () => new Map(visible.map(t => [t.id, getPhotoCount(`treatment:${t.id}`)])),
+    [visible, photoCacheVersion],
+  );
 
   const isFiltered = period !== 'all' || !!staffFilter || !!search.trim();
   const filterChips = (
@@ -147,7 +155,7 @@ export default function Treatments() {
                 : <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">시술 기록 추가하기</button>}
             </div>
           ) : (
-            filtered.map(t => (
+            visible.map(t => (
               <button
                 key={t.id}
                 onClick={() => setSelected(t)}
@@ -181,6 +189,12 @@ export default function Treatments() {
               </button>
             ))
           )}
+          {filtered.length > listLimit && (
+            <button type="button" onClick={() => setListLimit(n => n + LIST_PAGE)}
+              className="w-full py-3 text-sm font-medium text-[#1a3a8f] bg-white border border-gray-200 rounded-xl hover:bg-gray-50 min-h-[44px]">
+              더 보기 ({filtered.length - listLimit}건 남음)
+            </button>
+          )}
         </div>
       </div>
 
@@ -210,7 +224,7 @@ export default function Treatments() {
                 시술 기록이 없습니다. 새 기록을 추가해 주세요.
               </div>
             )}
-            {filtered.map(t => (
+            {visible.map(t => (
               <button
                 key={t.id}
                 onClick={() => setSelected(t)}
@@ -245,6 +259,12 @@ export default function Treatments() {
                 <ChevronRight size={16} className="text-gray-300 mt-1 flex-shrink-0" />
               </button>
             ))}
+            {filtered.length > listLimit && (
+              <button type="button" onClick={() => setListLimit(n => n + LIST_PAGE)}
+                className="w-full py-3 text-sm font-medium text-[#1a3a8f] bg-white border border-gray-200 rounded-xl hover:bg-gray-50 min-h-[44px]">
+                더 보기 ({filtered.length - listLimit}건 남음)
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -293,6 +313,7 @@ export default function Treatments() {
 export interface TreatmentSaveResult { customerId: string; customerName: string; amount: number; details: string }
 
 /** 예약 상세 [시술 기록 작성]에서 넘어온 프리필 — 존재하는 고객·담당자·시술 메뉴만 반영한다 (2026-11-17) */
+const LIST_PAGE = 100; // 목록 1회 표시 수 — [더 보기]로 늘린다
 type Period = 'all' | 'today' | 'week' | 'month';
 const PERIODS: Period[] = ['all', 'today', 'week', 'month'];
 const PERIOD_LABELS: Record<Period, string> = { all: '전체', today: '오늘', week: '이번 주', month: '이번 달' };
