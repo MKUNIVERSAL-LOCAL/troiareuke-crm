@@ -242,6 +242,19 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   expect(afterMerge.grade).toBe('VIP'); // 등급은 높은 쪽
   expect(afterMerge.registeredAt).toBe('2020-01-01T00:00:00.000Z'); // 등록일은 이른 쪽
 
+  // ── 9-2. 활동 타임라인 (2026-11-18): 병합으로 옮겨온 결제·예약·시술이 한 줄기 시간순에 보이고, 종류 칩으로 걸러지며, 시술 항목을 누르면 시술 상세가 열린다 ──
+  const timeline = desk.getByTestId('customer-timeline');
+  await timeline.scrollIntoViewIfNeeded();
+  await expect(timeline).toContainText('7,000');
+  await expect(timeline).toContainText('중복 시술');
+  await timeline.getByRole('tab', { name: '결제' }).click();
+  await expect(timeline.getByRole('listitem')).toHaveCount(beforeMerge.payments + 1);
+  await timeline.getByRole('tab', { name: '시술' }).click();
+  await timeline.getByRole('button', { name: /중복 시술/ }).click();
+  await expect(page).toHaveURL(/\/treatments$/); // ?open=은 1회 캡처 후 비워진다
+  await expect(page.getByText('시술 기록 상세').filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText('중복 시술').filter({ visible: true }).first()).toBeVisible();
+
   // ── 10. 개인정보 보존기간 정책 (P4, 2026-11-17): 1년으로 켜고 고객을 2년 전 방문으로 만들면 안내 → 목록 → 익명화 ──
   await page.goto('/settings');
   await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();

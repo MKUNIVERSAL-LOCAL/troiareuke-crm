@@ -21,6 +21,7 @@ import { exportFile } from '../../lib/mobileBridge';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
+import CustomerTimeline from '../../components/CustomerTimeline';
 import { mergeBlockReason, findSamePhoneCustomers } from '../../lib/customerMerge';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { FileText } from 'lucide-react';
@@ -362,6 +363,7 @@ export default function Customers() {
   const isMobileLayout = useIsMobileLayout();
   // 타임랩스가 NAS에서 사진을 받아오면 최근 시술 썸네일도 같은 데이터를 다시 읽도록 리렌더
   const [photoTick, setPhotoTick] = useState(0);
+  const [detailTick, setDetailTick] = useState(0); // loadAll마다 증가 — 활동 타임라인 재계산 (2026-11-18)
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시가 비동기로 채워지면 썸네일·상담 사진을 다시 읽는다
   const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
@@ -763,6 +765,7 @@ export default function Customers() {
   }
 
   function loadAll() {
+    setDetailTick(t => t + 1);
     autoPromoteNewCustomers();
     setCustomers(CustomerStore.getAll());
     // Pull from ProgramStore first; if empty, create Program-like entries from ServiceStore
@@ -1394,6 +1397,8 @@ export default function Customers() {
                 )}
               </div>
 
+              <CustomerTimeline customerId={selected.id} compact tick={detailTick} />
+
               {/* 모바일 액션 — PC와 동일한 모달(body 포털) */}
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -1958,6 +1963,8 @@ export default function Customers() {
             </div>
 
             <CustomerPaymentHistory customerId={selected.id} onAdd={() => navigate(`/sales?new=1&customer=${selected.id}`)} />
+
+            <CustomerTimeline customerId={selected.id} tick={detailTick} />
           </div>
         </div>
       ) : (

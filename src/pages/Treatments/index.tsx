@@ -39,6 +39,14 @@ export default function Treatments() {
   const [editing, setEditing] = useState<TreatmentLog | null>(null);
   const [selected, setSelected] = useState<TreatmentLog | null>(null);
   const [treatmentLogs, setTreatmentLogs] = useState<TreatmentLog[]>([]);
+  // 고객 타임라인에서 /treatments?open=<id> → 해당 시술 상세를 바로 연다 (1회 캡처 후 URL 비움, 2026-11-18)
+  useEffect(() => {
+    const id = searchParams.get('open');
+    if (!id) return;
+    const log = TreatmentLogStore.getAll().find(t => t.id === id);
+    if (log) setSelected(log);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const loadLogs = () => {
     setTreatmentLogs(TreatmentLogStore.getAll());
