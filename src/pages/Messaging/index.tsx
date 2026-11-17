@@ -102,7 +102,7 @@ export default function Messaging() {
         )}
 
         {/* Connection Status — 실제 발송 경로 기준 (설정값 장식 아님) */}
-        <div className="flex gap-3 mb-6">
+        <div className="flex gap-3 mb-6 overflow-x-auto no-scrollbar">
           <StatusChip label="발송 서버" connected={messagingLive} />
           <StatusChip label="카카오 채널" connected={!!settings.kakao?.channelConnected} />
           <StatusChip label="카카오 오픈채팅" connected={!!settings.kakao?.openchatConnected} />
@@ -110,13 +110,13 @@ export default function Messaging() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar mb-6">
           {tabs.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={clsx(
-                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                'flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
                 tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               )}
             >
@@ -145,7 +145,7 @@ export default function Messaging() {
 function StatusChip({ label, connected }: { label: string; connected: boolean }) {
   return (
     <div className={clsx(
-      'flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium',
+      'flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium',
       connected ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-400'
     )}>
       <span className={clsx('w-1.5 h-1.5 rounded-full', connected ? 'bg-green-500' : 'bg-gray-300')}></span>

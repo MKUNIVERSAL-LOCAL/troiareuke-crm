@@ -198,7 +198,7 @@ export default function Programs() {
           <button
             key={cat}
             onClick={() => setFilterCategory(cat)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               filterCategory === cat
                 ? 'bg-[#1a3a8f] text-white'
                 : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
