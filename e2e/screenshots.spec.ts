@@ -91,6 +91,26 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
     await shot(name);
   }
 
+  // 모달·탭 (레이아웃 QA용) — 실패해도 생성기는 계속
+  const tryShot = async (name: string, fn: () => Promise<void>) => {
+    try { await fn(); await page.waitForTimeout(250); await shot(name); } catch (e) { console.warn('shot skipped', name, (e as Error).message); }
+    await page.keyboard.press('Escape').catch(() => {});
+  };
+  await page.goto('/programs');
+  await tryShot('modal-program-add', () => page.getByRole('button', { name: '프로그램 추가' }).filter({ visible: true }).first().click());
+  await page.goto('/staff');
+  await tryShot('modal-staff-add', () => page.getByRole('button', { name: '직원 추가' }).filter({ visible: true }).first().click());
+  await page.goto('/messaging');
+  await tryShot('modal-message-send', () => page.getByRole('button', { name: '메시지 보내기' }).filter({ visible: true }).first().click());
+  await page.goto('/treatments');
+  await tryShot('modal-treatment-detail', () => page.getByText(acc.customer).filter({ visible: true }).first().click());
+  await page.goto('/sales');
+  await tryShot('modal-expense-add', () => page.getByRole('button', { name: '지출 등록' }).filter({ visible: true }).first().click());
+  for (const tab of ['영업시간', '연동 설정', '알림 설정', '시술 관리', '데이터 백업']) {
+    await page.goto('/settings');
+    await tryShot(`settings-${tab}`, () => page.getByRole('button', { name: tab, exact: true }).filter({ visible: true }).first().click());
+  }
+
   // 본사 어드민 콘솔 (로컬 모드 폴백 화면)
   await becomeSuperadmin(page);
   for (const name of ['dashboard', 'branches', 'users', 'subscriptions', 'announcements', 'statistics', 'features', 'login-logs']) {

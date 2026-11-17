@@ -983,8 +983,8 @@ export default function Sales() {
 
       {/* 결제 등록 모달 */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-md my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editingId ? '결제 수정' : '결제 등록'}</h2>
               <button onClick={closeModal}><X size={18} className="text-gray-400" /></button>

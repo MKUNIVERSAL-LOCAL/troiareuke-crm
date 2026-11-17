@@ -672,9 +672,9 @@ export default function Settings() {
                     const hours = settings.businessHours[day];
                     if (!hours) return null;
                     return (
-                      <div key={day} className="flex items-center gap-4">
+                      <div key={day} className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                         <span className="text-sm font-medium text-gray-700 w-6">{day}</span>
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={!hours.isOff}
@@ -683,22 +683,25 @@ export default function Settings() {
                           />
                           <span className="text-xs text-gray-500">영업</span>
                         </label>
-                        <input
-                          type="time"
-                          value={hours.open}
-                          onChange={e => updateHours(day, 'open', e.target.value)}
-                          disabled={hours.isOff}
-                          className="form-input text-sm w-28 disabled:opacity-40"
-                        />
-                        <span className="text-gray-400 text-sm">~</span>
-                        <input
-                          type="time"
-                          value={hours.close}
-                          onChange={e => updateHours(day, 'close', e.target.value)}
-                          disabled={hours.isOff}
-                          className="form-input text-sm w-28 disabled:opacity-40"
-                        />
-                        {hours.isOff && <span className="text-xs text-red-400 font-medium">휴무</span>}
+                        {/* 모바일(412px)에서는 시간 범위를 다음 줄로 내려 잘리지 않게 (2026-11-17) */}
+                        <div className="flex items-center gap-2 w-full sm:w-auto pl-10 sm:pl-0">
+                          <input
+                            type="time"
+                            value={hours.open}
+                            onChange={e => updateHours(day, 'open', e.target.value)}
+                            disabled={hours.isOff}
+                            className="form-input text-sm w-28 min-w-0 disabled:opacity-40"
+                          />
+                          <span className="text-gray-400 text-sm">~</span>
+                          <input
+                            type="time"
+                            value={hours.close}
+                            onChange={e => updateHours(day, 'close', e.target.value)}
+                            disabled={hours.isOff}
+                            className="form-input text-sm w-28 min-w-0 disabled:opacity-40"
+                          />
+                          {hours.isOff && <span className="text-xs text-red-400 font-medium">휴무</span>}
+                        </div>
                       </div>
                     );
                   })}

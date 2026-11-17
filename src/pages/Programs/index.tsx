@@ -317,8 +317,9 @@ export default function Programs() {
 
       {/* 프로그램 추가/수정 모달 */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-lg my-4">
+        {/* 모바일에서 모달이 화면보다 길면 items-center가 위를 잘라낸다 → 카드 my-auto로 중앙 정렬+스크롤 (2026-11-17) */}
+        <div className="fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-lg my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editTarget ? '프로그램 수정' : '프로그램 추가'}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
