@@ -145,6 +145,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - 2026-11-18 01:35 3차 재검증(병합·중복 안내·타임라인 반영 후, HEAD 65e1634): check:distribution·check:routes·test:updater·build:mobile 통과, 지점·어드민 exe 재빌드(asar 01:33/01:34) → asar NAS 3/Supabase 0/IndexedDB 3/타임라인·병합 포함/v1.0.60, CDP 런타임 지점 isAdminBuild=false(#/login)·어드민 true(#/admin/login), 검증 후 Electron 잔존 프로세스 0.
 - 2026-11-18 02:47 4차 재검증(직원 실적·완료 누락 카드·백업/복원·영업시간·개별 메시지·휴일 반영 후, HEAD 0a9e917): check:distribution·check:routes·test:updater·build:mobile·mobile:prepare(cap sync, mobile-latest v1.0.60) 통과, Playwright 전체 연속 3회 통과, 지점·어드민 exe 재빌드(asar 02:45) → NAS 3/Supabase 0/IndexedDB 3/백업·실적·완료 누락 카드 포함/v1.0.60, CDP 지점 false·어드민 true, 잔존 프로세스 0.
 - 2026-11-18 04:32 5차 재검증(태그·상담 수정·프로그램 관리·재고·휴일·노쇼·역링크·시술 필터·UX 2차 반영 후, HEAD 9afd458): check:distribution·check:routes·test:updater·build:mobile·mobile:prepare 통과, Playwright 전체 연속 3회 통과, 지점·어드민 exe 재빌드(asar 04:29/04:30) → NAS 3/Supabase 0/IndexedDB 3/태그·노쇼·캘린더 매핑 포함/v1.0.60, CDP 지점 false·어드민 true, 잔존 프로세스 0.
+- 2026-11-18 05:24 6차 재검증(갭 감사 묶음·개별 익명화·재고 알림 링크·리뷰 반영 후, HEAD 78fdc57): check:distribution·check:routes·test:updater·build:mobile·mobile:prepare 통과, Playwright 전체 연속 3회 통과, 지점·어드민 exe 재빌드(asar 05:23) → NAS 3/Supabase 0/IndexedDB 3/알레르기·퇴사 처리·월 이동 포함/v1.0.60, CDP 지점 false·어드민 true, 잔존 프로세스 0.
 - 남은 것: PR #54 머지 → `npm run release:all`(게이트 전부 통과 상태) → NAS 채널 게시·서버 재배포(오너).
 
 ## 4. 릴리스 운영 원칙 (변경 없음)
