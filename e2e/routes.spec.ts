@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, becomeSuperadmin } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, becomeSuperadmin, BRANCH_ROUTES } from './helpers';
 
 /**
  * 전 화면 순회 안전망 (로컬 모드 빌드)
@@ -9,11 +9,6 @@ import { makeAccount, signupAndOnboard, createCustomer, becomeSuperadmin } from 
 
 const acc = makeAccount('RT');
 
-// 지점(비어드민) 화면 — App.tsx 선언 라우트 중 로그인 후 접근 가능한 것 전부
-const BRANCH_ROUTES = [
-  '/', '/customers', '/reservations', '/treatments', '/programs', '/products',
-  '/sales', '/staff', '/messaging', '/settings', '/api-guide', '/ai-chat',
-];
 // 본사 어드민 콘솔 — 로컬 모드에는 슈퍼어드민 계정이 없어 세션 역할을 바꿔 진입한다 (화면 렌더 안전망 목적)
 const ADMIN_ROUTES = [
   '/admin/dashboard', '/admin/branches', '/admin/users', '/admin/subscriptions',

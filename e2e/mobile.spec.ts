@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { BRANCH_ROUTES } from './helpers';
 
 /**
  * 모바일 최적화 게이트 — 스토어 앱과 같은 화면 폭(Pixel 7, 412×915)에서 핵심 화면이
@@ -70,8 +71,8 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
     await expectNoHorizontalOverflow(page, aria);
   }
 
-  // 탭바에 없는 화면(매출·설정)도 직접 진입해 확인
-  for (const route of ['/sales', '/settings', '/products']) {
+  // 지점 화면 전부를 모바일 폭으로 열어 가로 넘침 검사 (2026-11-17: 탭바 밖 화면 포함 전수)
+  for (const route of BRANCH_ROUTES) {
     await page.goto(route);
     await page.waitForLoadState('networkidle');
     await expectNoHorizontalOverflow(page, route);

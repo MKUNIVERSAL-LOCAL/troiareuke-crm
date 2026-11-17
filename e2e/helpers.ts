@@ -6,6 +6,12 @@ import { expect, type Page } from '@playwright/test';
  * smoke.spec(핵심 흐름)과 before-after.spec(킬러 기능 ②)이 같은 진입 절차를 공유한다.
  */
 
+/** 지점(비어드민) 화면 라우트 — App.tsx 선언 라우트 중 로그인 후 접근 가능한 것 전부 */
+export const BRANCH_ROUTES = [
+  '/', '/customers', '/reservations', '/treatments', '/programs', '/products',
+  '/sales', '/staff', '/messaging', '/settings', '/api-guide', '/ai-chat',
+];
+
 export interface E2EAccount {
   run: string;
   shop: string;
