@@ -23,7 +23,7 @@ import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbo
 import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import ProgramManageModal from '../../components/ProgramManageModal';
-import { mergeBlockReason, findSamePhoneCustomers } from '../../lib/customerMerge';
+import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../lib/customerMerge';
 import { parseTags, topTags } from '../../lib/customerTags';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { FileText } from 'lucide-react';
@@ -1101,7 +1101,13 @@ export default function Customers() {
 
   function handleDeleteCustomer() {
     if (!selected) return;
-    if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?\n등록된 상담·시술 기록은 남지만 고객 정보는 복구할 수 없습니다.`)) return;
+    // 연결된 기록이 있으면 건수를 보여 주고 병합·익명화를 권한다 — 삭제하면 기록의 고객 연결이 끊겨 타임라인·통계에서 빠진다 (2026-11-18)
+    const linked = previewMerge(selected.id);
+    const linkedTotal = linked.reservations + linked.treatments + linked.programs + linked.payments + linked.consultations + linked.productSales;
+    const detail = linkedTotal > 0
+      ? `\n연결된 기록 ${linkedTotal}건(예약 ${linked.reservations}·시술 ${linked.treatments}·프로그램 ${linked.programs}·결제 ${linked.payments}·상담 ${linked.consultations}·제품 판매 ${linked.productSales})은 남지만 고객과의 연결이 끊겨 타임라인·통계에서 빠집니다.\n같은 사람이 두 번 등록된 경우라면 [병합]을, 개인정보만 지우려면 설정의 보존기간 익명화를 권장합니다.`
+      : '\n연결된 기록이 없습니다.';
+    if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`)) return;
     CustomerStore.delete(selected.id);
     setSelected(null);
     loadAll();
