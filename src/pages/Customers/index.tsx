@@ -979,6 +979,21 @@ export default function Customers() {
                 )}
               </div>
 
+              {/* 모바일 액션 — PC와 동일한 모달(body 포털) */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setShowTreatmentModal(true)}
+                  className="py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-1.5"
+                >
+                  <Scissors size={14} />시술 기록
+                </button>
+                <button
+                  onClick={() => setShowProgramModal(true)}
+                  className="py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} />프로그램 등록
+                </button>
+              </div>
               <button
                 onClick={openEditModal}
                 className="w-full py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 flex items-center justify-center gap-1.5"
@@ -1685,8 +1700,8 @@ export default function Customers() {
       )}
 
       {/* ───── 프로그램 등록 모달 ───── */}
-      {showProgramModal && selected && (
-        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      {showProgramModal && selected && createPortal(
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
           <div className="modal-card bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
@@ -1773,12 +1788,13 @@ export default function Customers() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* ───── 시술 기록 모달 ───── */}
-      {showTreatmentModal && selected && (
-        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      {showTreatmentModal && selected && createPortal(
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
           <div className="modal-card bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
@@ -1853,7 +1869,8 @@ export default function Customers() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* ───── 피부 상담 모달 ───── */}
