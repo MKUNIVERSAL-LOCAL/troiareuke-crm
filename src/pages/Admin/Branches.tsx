@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
-import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
+import type { Branch } from '../../lib/supabase';
 import { createBranchAdmin, adminDeleteBranch, type AdminApiResult } from '../../lib/adminApi';
 import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
@@ -114,13 +114,6 @@ export default function Branches() {
         setLoadError(`지점 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
         setBranches([]);
       }
-    } else if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('branches').select('*').order('created_at', { ascending: false });
-      if (error) {
-        console.warn('[Branches] 로드 실패:', error.message);
-        setLoadError(`지점 목록을 불러오지 못했습니다: ${error.message}`);
-      }
-      setBranches(data || []);
     } else {
       // 로컬 폴백: localStorage에서 지점 목록 읽기
       try {
@@ -227,44 +220,7 @@ export default function Branches() {
         return;
       }
 
-      if (isSupabaseConfigured) {
-        if (editTarget) {
-          const { error: updateError } = await supabase.from('branches').update({
-            name: form.name, address: form.address, phone: form.phone,
-            shop_type: form.shop_type, plan: form.plan,
-          }).eq('id', editTarget.id);
-          if (updateError) {
-            // 실패를 성공처럼 위장하지 않도록 — 모달 유지 + 오류 표시
-            setError(`저장 실패: ${updateError.message}`);
-            return;
-          }
-        } else {
-          // 지점 레코드 생성
-          const { data: branch, error: insertError } = await supabase.from('branches').insert({
-            name: form.name, address: form.address, phone: form.phone,
-            shop_type: form.shop_type, plan: form.plan,
-            trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
-          }).select().single();
-          if (insertError) {
-            setError(`저장 실패: ${insertError.message}`);
-            return;
-          }
-
-          // 관리자 계정 생성은 NAS 관리자 API를 통해 수행 (auth.admin 직접 호출 금지)
-          if (form.admin_email && branch) {
-            const result = await createBranchAdmin({
-              email: form.admin_email,
-              branchId: branch.id,
-              branchName: form.name,
-              shopType: form.shop_type,
-              plan: form.plan,
-            });
-            if (applyAdminResult(result)) {
-              isPending = true;
-            }
-          }
-        }
-      } else {
+      {
         // 로컬 폴백 — 지점 정보만 저장, 계정 생성은 NAS 연동 후 지원
         const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
         if (editTarget) {
@@ -325,15 +281,10 @@ export default function Branches() {
       loadBranches();
       return;
     }
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.from('branches').update({ is_active: !b.is_active }).eq('id', b.id);
-      if (error) notify.error(`변경 실패: ${error.message}`);
-    } else {
-      const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
-      const idx = localBranches.findIndex(x => x.id === b.id);
-      if (idx !== -1) localBranches[idx].is_active = !b.is_active;
-      localStorage.setItem('troiareuke_branches', JSON.stringify(localBranches));
-    }
+    const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
+    const idx = localBranches.findIndex(x => x.id === b.id);
+    if (idx !== -1) localBranches[idx].is_active = !b.is_active;
+    localStorage.setItem('troiareuke_branches', JSON.stringify(localBranches));
     loadBranches();
   }
 

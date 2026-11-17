@@ -1,7 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import {
   adminListAnnouncements, adminCreateAnnouncement,
@@ -10,10 +9,9 @@ import {
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
-// NAS 중앙 서버 모드에서는 announcements 테이블(NAS Postgres)이 진실.
-// Supabase 경로는 NAS 미설정 구빌드 폴백으로만 유지한다.
+// 공지는 NAS 중앙 서버(announcements 테이블)에만 저장된다. 로컬 모드는 열람 전용(빈 목록).
 const NAS_MODE = isAuthApiConfigured;
-const BACKEND_READY = NAS_MODE || isSupabaseConfigured;
+const BACKEND_READY = NAS_MODE;
 
 interface Announcement {
   id: string;
@@ -60,10 +58,7 @@ export default function Announcements() {
       setLoading(false);
       return;
     }
-    if (!isSupabaseConfigured) { setList([]); setLoading(false); return; }
-    const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-    if (error) console.warn('[Announcements] 로드 실패:', error.message);
-    setList(data || []);
+    setList([]);
     setLoading(false);
   }
 
@@ -97,16 +92,7 @@ export default function Announcements() {
       load();
       return;
     }
-    const { error } = editTarget
-      ? await supabase.from('announcements').update(form).eq('id', editTarget.id)
-      : await supabase.from('announcements').insert(form);
     setSaving(false);
-    if (error) {
-      notify.error(`공지 저장에 실패했습니다: ${error.message}`);
-      return; // 저장 실패 시 모달을 닫지 않아 내용이 유실되지 않게 함
-    }
-    setShowModal(false);
-    load();
   }
 
   async function handleDelete(id: string) {
@@ -121,9 +107,6 @@ export default function Announcements() {
       load();
       return;
     }
-    const { error } = await supabase.from('announcements').delete().eq('id', id);
-    if (error) notify.error(`삭제 실패: ${error.message}`);
-    load();
   }
 
   async function handleToggle(a: Announcement) {
@@ -137,9 +120,6 @@ export default function Announcements() {
       load();
       return;
     }
-    const { error } = await supabase.from('announcements').update({ is_active: !a.is_active }).eq('id', a.id);
-    if (error) notify.error(`변경 실패: ${error.message}`);
-    load();
   }
 
   return (

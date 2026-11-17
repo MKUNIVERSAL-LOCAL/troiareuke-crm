@@ -33,10 +33,6 @@ jobs:
 
       - name: PWA build check
         run: npm run build
-        env:
-          # 빌드 타임 검증용 더미값. 실제 런타임에 사용되지 않음.
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://dummy.supabase.co' }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'dummy_build_only' }}
 
       - name: Verify PWA assets exist
         run: |

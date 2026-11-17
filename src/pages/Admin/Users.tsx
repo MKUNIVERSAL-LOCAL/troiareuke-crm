@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { notify } from '../../lib/notify';
 import { Users, Building2, Search, UserPlus, CheckCircle2, XCircle, Clock } from 'lucide-react';
-import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
+import type { Branch } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser, adminGetApplication, adminApproveUser, adminRejectUser, type AdminApplicationDetail } from '../../lib/authApi';
 import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
 import { adminDeleteUser } from '../../lib/adminApi';
@@ -138,28 +138,6 @@ export default function AdminUsers() {
         // 지점 필터는 계정에 등록된 지점명으로 구성
         const branchNames = [...new Set(list.map(u => u.branchName).filter(Boolean))] as string[];
         setBranches(branchNames.map(name => ({ id: name, name } as Branch)));
-      } else if (isSupabaseConfigured) {
-        // auth.admin.listUsers() 는 service_role 전용 — 프론트에서 직접 호출 금지.
-        // 이메일은 user_profiles에 email 컬럼이 있으면 함께 select, 없으면 '—' 처리.
-        const [usersRes, branchesRes] = await Promise.all([
-          supabase.from('user_profiles')
-            .select('id, email, name, role, branch_id, is_onboarded, created_at, branches(name)')
-            .order('created_at', { ascending: false }),
-          supabase.from('branches').select('*').order('name'),
-        ]);
-
-        setUsers((usersRes.data || []).map((u: any) => ({
-          id: u.id,
-          email: u.email || '—',
-          name: u.name,
-          role: u.role,
-          branch_name: u.branches?.name || null,
-          is_onboarded: u.is_onboarded,
-          is_active: true,
-          service_ends_at: null,
-          created_at: u.created_at,
-        })));
-        setBranches(branchesRes.data || []);
       } else {
         // 로컬 폴백
         const localUsers = JSON.parse(localStorage.getItem('troiareuke_local_users') || '[]');

@@ -3,7 +3,6 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, Phone, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured } from '../../lib/authApi';
-import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 
 const features = [
   '고객 관리 · 예약 · 시술 기록 통합',
@@ -23,70 +22,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resetOpen, setResetOpen] = useState(false);
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-  const [resetError, setResetError] = useState('');
 
   const resetComplete = new URLSearchParams(location.search).get('reset') === 'success';
 
-  const openPasswordReset = () => {
-    setResetEmail(email.trim());
-    setResetError('');
-    setResetSent(false);
-    setResetOpen(true);
-  };
-
-  const handlePasswordReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const normalizedEmail = resetEmail.trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      setResetError('가입할 때 사용한 이메일을 입력해주세요.');
-      return;
-    }
-    setResetLoading(true);
-    setResetError('');
-    try {
-      if (isAuthApiConfigured) {
-        // NAS 중앙서버 모드 우선: 계정이 본사 서버에 있어 Supabase 재설정 메일은 영원히 도착하지 않음.
-        // 이 모드에서는 렌더 분기의 "본사 안내 모달"이 표시되므로 여기서는 아무것도 보내지 않는다.
-        setResetLoading(false);
-        return;
-      }
-      if (isSupabaseConfigured) {
-        // NAS 미배포 환경 폴백: Supabase 재설정 메일 (웹 /reset-password로 복귀)
-        const configuredUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, '');
-        const browserUrl = window.location.protocol === 'http:' || window.location.protocol === 'https:'
-          ? window.location.origin
-          : '';
-        const publicAppUrl = configuredUrl || browserUrl || 'https://troiareuke-crm.vercel.app';
-        const { error: resetRequestError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-          redirectTo: `${publicAppUrl}/reset-password`,
-        });
-        if (resetRequestError) throw resetRequestError;
-      } else {
-        setResetError('비밀번호 재설정 서버가 연결되어 있지 않습니다. 관리자에게 문의해주세요.');
-        setResetLoading(false);
-        return;
-      }
-      setResetSent(true);
-    } catch (e: any) {
-      const message = e?.message || '';
-      if (/rate limit|too many/i.test(message)) {
-        setResetError('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
-      } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(message)) {
-        // 인터넷 문제와 서버(클라우드) 다운을 구분해 안내 — 잘못된 안내는 사용자를 헛수고시킴
-        setResetError(navigator.onLine
-          ? '클라우드 서버가 응답하지 않습니다. 서비스 점검 중이거나 일시정지 상태일 수 있으니 관리자에게 문의해주세요.'
-          : '인터넷 연결이 끊겨 있습니다. 네트워크 연결을 확인해주세요.');
-      } else {
-        setResetError('재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
-      }
-    } finally {
-      setResetLoading(false);
-    }
-  };
+  const openPasswordReset = () => setResetOpen(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,7 +170,7 @@ export default function Login() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="password-reset-title"
-          onMouseDown={e => { if (e.target === e.currentTarget && !resetLoading) setResetOpen(false); }}
+          onMouseDown={e => { if (e.target === e.currentTarget) setResetOpen(false); }}
         >
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
@@ -241,8 +180,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setResetOpen(false)}
-                disabled={resetLoading}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                 aria-label="닫기"
               >
                 <X size={18} />
@@ -265,11 +203,13 @@ export default function Login() {
                   확인
                 </button>
               </div>
-            ) : resetSent ? (
+            ) : (
+              // 로컬(오프라인) 모드: 재설정 메일을 보낼 서버가 없다 (2026-11-17 Supabase 메일 경로 폐기)
               <div className="mt-5">
-                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">메일을 확인해주세요</h2>
+                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">비밀번호 재설정 안내</h2>
                 <p className="mt-2 text-sm leading-6 text-gray-500">
-                  가입된 이메일이면 비밀번호 재설정 링크가 발송됩니다. 메일이 보이지 않으면 스팸함도 확인해주세요.
+                  이 프로그램은 중앙 서버에 연결되어 있지 않아 재설정 메일을 보낼 수 없습니다.
+                  설치한 관리자에게 문의해주세요.
                 </p>
                 <button
                   type="button"
@@ -279,35 +219,6 @@ export default function Login() {
                   확인
                 </button>
               </div>
-            ) : (
-              <form onSubmit={handlePasswordReset} className="mt-5">
-                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">비밀번호 재설정</h2>
-                <p className="mt-2 text-sm leading-6 text-gray-500">
-                  가입할 때 사용한 이메일을 입력하면 새 비밀번호를 설정할 수 있는 링크를 보내드립니다.
-                </p>
-                <label className="mt-5 block text-xs font-medium text-gray-600" htmlFor="reset-email">이메일</label>
-                <input
-                  id="reset-email"
-                  type="email"
-                  value={resetEmail}
-                  onChange={e => setResetEmail(e.target.value)}
-                  autoComplete="email"
-                  autoFocus
-                  required
-                  className="mt-1.5 w-full rounded-xl border border-gray-200 px-4 py-3 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  placeholder="example@email.com"
-                />
-                {resetError && (
-                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">{resetError}</div>
-                )}
-                <button
-                  type="submit"
-                  disabled={resetLoading}
-                  className="mt-5 w-full min-h-[48px] rounded-xl bg-[#1a3a8f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0d2260] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {resetLoading ? '메일 보내는 중...' : '재설정 메일 보내기'}
-                </button>
-              </form>
             )}
           </div>
         </div>

@@ -68,7 +68,7 @@ export default function Signup() {
         setStep(3);
         return;
       }
-      // Supabase / 로컬 폴백 — 기존 흐름 유지
+      // 로컬 폴백 — 기존 흐름 유지
       await signup({
         name: form.name,
         email: form.email,
@@ -138,8 +138,8 @@ export default function Signup() {
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록번호 *</label>
                   <input type="text" inputMode="numeric" value={form.businessNumber} onChange={e => set('businessNumber', formatBusinessNumber(e.target.value))} className="auth-input" placeholder="123-45-67890" required />
                 </div>
-                {/* 사업자등록증 첨부는 중앙 서버(NAS) 가입에서만 저장됨 — Supabase 경로는
-                    저장 컬럼이 없어 조용히 유실되므로 필드 자체를 숨긴다 */}
+                {/* 사업자등록증 첨부는 중앙 서버(NAS) 가입에서만 저장됨 — 로컬 모드는
+                    저장처가 없어 조용히 유실되므로 필드 자체를 숨긴다 */}
                 {isAuthApiConfigured && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록증 사진 *</label>

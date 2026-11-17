@@ -1,7 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { notify } from '../../lib/notify';
 import { CreditCard, Pencil, AlertCircle, CheckCircle, Clock, Search } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -82,13 +81,6 @@ export default function Subscriptions() {
         console.warn('[Subscriptions] NAS 계정 목록 로드 실패:', e?.message);
         setSubs([]);
       }
-    } else if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('*, branches(name)')
-        .order('created_at', { ascending: false });
-      if (error) console.warn('[Subscriptions] 로드 실패:', error.message);
-      setSubs((data || []).map((s: any) => ({ ...s, branch_name: s.branches?.name || '—' })));
     }
     setLoading(false);
   }
@@ -144,25 +136,8 @@ export default function Subscriptions() {
       loadSubs();
       return;
     }
-
-    const { error: subError } = await supabase.from('subscriptions').update({
-      plan: form.plan,
-      status: form.status,
-      expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
-      amount: parseInt(form.amount) || 0,
-      notes: form.notes,
-    }).eq('id', editTarget.id);
-
-    // branches 테이블도 동기화
-    const { error: branchError } = await supabase.from('branches').update({ plan: form.plan }).eq('id', editTarget.branch_id);
-
+    // 로컬 모드: 구독 기록 저장처 없음 (NAS 계정 plan이 정본)
     setSaving(false);
-    if (subError || branchError) {
-      notify.error(`저장 실패: ${(subError || branchError)!.message}`);
-      return;
-    }
-    setShowModal(false);
-    loadSubs();
   }
 
   const normalizedSearch = search.trim().toLowerCase();

@@ -24,7 +24,7 @@ function cspMetaPlugin(): Plugin {
     "font-src 'self' https://fonts.gstatic.com",
     // ⚠️ NAS 중앙서버(crm-api)가 빠지면 앱의 모든 NAS 요청(로그인 포함)이 CSP에서 차단되어
     //    "인증 실패"로만 보인다 — 새 API 도메인 추가 시 반드시 여기도 갱신할 것
-    "connect-src 'self' https://crm-api.mkcorp.familyds.com https://crm-update.mkcorp.familyds.com https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://www.googleapis.com https://oauth2.googleapis.com http://127.0.0.1:19876",
+    "connect-src 'self' https://crm-api.mkcorp.familyds.com https://crm-update.mkcorp.familyds.com https://api.anthropic.com https://www.googleapis.com https://oauth2.googleapis.com http://127.0.0.1:19876",
     "img-src 'self' data: blob: https:",
     "frame-src 'self' https://accounts.google.com",
   ].join('; ')
@@ -113,38 +113,6 @@ export default defineConfig({
               // PDF 한글 폰트 청크(~2.7MB)가 프리캐시 기본 한도(2MB)를 넘으므로 상향
               maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
               runtimeCaching: [
-                // Supabase REST API — NetworkFirst (3초 타임아웃)
-                {
-                  urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,
-                  handler: 'NetworkFirst',
-                  options: {
-                    cacheName: 'supabase-rest-cache',
-                    networkTimeoutSeconds: 3,
-                    expiration: {
-                      maxEntries: 50,
-                      maxAgeSeconds: 24 * 60 * 60, // 24시간
-                    },
-                    cacheableResponse: { statuses: [0, 200] },
-                  },
-                },
-                // Supabase Auth — NetworkOnly (캐시 안 함)
-                {
-                  urlPattern: /^https:\/\/.*\.supabase\.co\/auth\/.*/i,
-                  handler: 'NetworkOnly',
-                },
-                // Supabase Storage (시술 사진) — CacheFirst 30일
-                {
-                  urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
-                  handler: 'CacheFirst',
-                  options: {
-                    cacheName: 'supabase-storage-cache',
-                    expiration: {
-                      maxEntries: 100,
-                      maxAgeSeconds: 30 * 24 * 60 * 60, // 30일
-                    },
-                    cacheableResponse: { statuses: [0, 200] },
-                  },
-                },
                 // Google Fonts — CacheFirst 365일
                 {
                   urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,

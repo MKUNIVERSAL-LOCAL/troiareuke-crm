@@ -244,7 +244,7 @@ export default function Customers() {
 
   useEffect(() => {
     loadAll();
-    // 상담 기록 Supabase에서 1회 동기화 후 캐시 반영
+    // 상담 기록 중앙 서버에서 1회 동기화 후 캐시 반영
     loadConsultations().catch(() => {});
   }, []);
 

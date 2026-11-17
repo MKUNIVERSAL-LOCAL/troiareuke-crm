@@ -1,7 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle, DatabaseBackup, Copy, MonitorDown, AlertTriangle } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, apiRequest, type AuthApiUser } from '../../lib/authApi';
 import {
   INSTALL_SITE_URL, INSTALL_GUIDE_MESSAGE, fetchLatestChannelVersion, isOutdated, appModeLabel, type ChannelManifest,
@@ -101,23 +100,6 @@ export default function AdminDashboard() {
           totalBranches,
           activeBranches,
           totalUsers,
-          todayLogins: logs.filter(l => l.status === 'success' && new Date(l.logged_in_at).toDateString() === todayLocal).length,
-          recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
-        });
-      } else if (isSupabaseConfigured) {
-        // Supabase 단독 모드(레거시): 지점·사용자 집계만 Supabase, 로그인 기록은 이 기기 로컬
-        // (login_logs 테이블 기록은 2026-09-07 서버 정본 도입으로 제거됨)
-        const [branches, users] = await Promise.all([
-          supabase.from('branches').select('id, is_active'),
-          supabase.from('user_profiles').select('id'),
-        ]);
-        const logs = getLocalLogs();
-        const todayLocal = new Date().toDateString();
-
-        setStats({
-          totalBranches: branches.data?.length || 0,
-          activeBranches: branches.data?.filter(b => b.is_active).length || 0,
-          totalUsers: users.data?.length || 0,
           todayLogins: logs.filter(l => l.status === 'success' && new Date(l.logged_in_at).toDateString() === todayLocal).length,
           recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
         });
@@ -319,7 +301,7 @@ export default function AdminDashboard() {
             <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
               <h2 className="text-sm font-bold text-white">
                 최근 로그인 기록
-                {!isSupabaseConfigured && !logsFromServer && <span className="ml-2 text-[11px] font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
+                {!logsFromServer && <span className="ml-2 text-[11px] font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
               </h2>
               <Link to="/admin/login-logs" className="text-xs text-blue-400 hover:text-blue-300">전체 보기 →</Link>
             </div>

@@ -153,7 +153,7 @@ export default function Onboarding() {
     }
   };
 
-  // 구독 정보를 Supabase에 저장
+  // 구독 정보 로컬 저장 (NAS 모드는 서버 계정 plan이 정본)
   const saveSubscription = async (plan: SubscriptionPlan, impUid?: string, merchantUid?: string, amount?: number) => {
     if (!user) return;
 

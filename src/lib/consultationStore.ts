@@ -2,15 +2,13 @@
  * 트로이아르케 CRM — 고객 피부상담(Consultation) 저장소
  *
  * store.ts(코어)와 동일한 dual-write 패턴:
- *   localStorage(즉시 캐시) + Supabase(consultations 테이블) 동시 저장.
- * Supabase 미설정/테이블 미생성 시에도 localStorage로 안전 폴백한다.
- *   (consultations 테이블은 repo 루트 consultations-table.sql 참고)
+ *   localStorage(즉시 캐시) + NAS 중앙 서버(crm_records 'consultations') 동시 저장.
+ * NAS 미설정(로컬 모드)에서는 localStorage 단독으로 안전 동작한다.
  *
  * 코어 잠금 회피를 위해 별도 파일로 분리하되, getShopId/safeSetItem 등
  * 공개 유틸은 store.ts 에서 재사용한다.
  */
 import type { Consultation, BeaconMetrics } from '../types';
-import { supabase, isSupabaseConfigured } from './supabase';
 import { getShopId, safeSetItem } from './store';
 import { isNasDataConfigured, nasLoad, nasUpsert, nasUpdate, nasDelete } from './nasData';
 
@@ -36,7 +34,7 @@ function saveList<T>(key: string, data: T[]): void {
   safeSetItem(key, JSON.stringify(data));
 }
 
-// ─── Supabase ↔ App 필드 매핑 ──────────────────────────────────
+// ─── 서버(NAS) ↔ App 필드 매핑 ──────────────────────────────────
 function toDbConsultation(c: Partial<Consultation>): Record<string, any> {
   const db: Record<string, any> = {};
   if (c.id !== undefined) db.id = c.id;
@@ -83,7 +81,7 @@ function fromDbConsultation(row: Record<string, any>): Consultation {
 // ─── 메모리 캐시 ───────────────────────────────────────────────
 let _consultations: Consultation[] | null = null;
 
-/** 앱 시작/고객 진입 시 1회 서버 로드 — NAS 우선, Supabase 폴백 (실패 시 localStorage 유지) */
+/** 앱 시작/고객 진입 시 1회 서버 로드 — NAS (실패 시 localStorage 유지) */
 export async function loadConsultations(): Promise<void> {
   // NAS 중앙 서버 모드: crm_records('consultations')에서 로드
   if (isNasDataConfigured) {
@@ -93,26 +91,6 @@ export async function loadConsultations(): Promise<void> {
       saveList(shopKey('consultations'), _consultations);
     }
     return;
-  }
-  if (!isSupabaseConfigured) return;
-  try {
-    const branchId = getShopId();
-    let query = supabase.from('consultations').select('*');
-    if (branchId !== 'superadmin' && branchId !== 'default_shop') {
-      query = query.eq('branch_id', branchId);
-    }
-    const { data, error } = await query;
-    if (error) {
-      // 테이블 미생성 등 — localStorage 폴백 유지
-      console.warn('[Consultation] 로드 실패(폴백):', error.message);
-      return;
-    }
-    if (data && data.length > 0) {
-      _consultations = data.map(fromDbConsultation);
-      saveList(shopKey('consultations'), _consultations);
-    }
-  } catch (e) {
-    console.warn('[Consultation] 로드 예외(폴백):', e);
   }
 }
 
@@ -197,11 +175,6 @@ export const ConsultationStore = {
       nasUpsert('consultations', toDbConsultation(consultation));
       return consultation;
     }
-    if (isSupabaseConfigured) {
-      supabase.from('consultations').insert(toDbConsultation(consultation)).then(({ error }) => {
-        if (error) console.warn('[Consultation] insert 실패(로컬 보존):', error.message);
-      });
-    }
     return consultation;
   },
 
@@ -218,11 +191,6 @@ export const ConsultationStore = {
       nasUpdate('consultations', id, toDbConsultation(updates));
       return next[idx];
     }
-    if (isSupabaseConfigured) {
-      supabase.from('consultations').update(toDbConsultation(updates)).eq('id', id).then(({ error }) => {
-        if (error) console.warn('[Consultation] update 실패:', error.message);
-      });
-    }
     return next[idx];
   },
 
@@ -233,11 +201,6 @@ export const ConsultationStore = {
     if (isNasDataConfigured) {
       nasDelete('consultations', id);
       return;
-    }
-    if (isSupabaseConfigured) {
-      supabase.from('consultations').delete().eq('id', id).then(({ error }) => {
-        if (error) console.warn('[Consultation] delete 실패:', error.message);
-      });
     }
   },
 };
