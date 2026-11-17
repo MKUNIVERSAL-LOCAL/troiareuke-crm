@@ -21,6 +21,14 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   const dir = path.join(OUT, testInfo.project.name);
   const shot = (name: string) => page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: false });
 
+  // 로그인·가입 화면 (세션 없을 때)
+  await page.goto('/login');
+  await page.waitForLoadState('networkidle');
+  await shot('auth-login');
+  await page.goto('/signup');
+  await page.waitForLoadState('networkidle');
+  await shot('auth-signup');
+
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
 
@@ -96,6 +104,10 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
     try { await fn(); await page.waitForTimeout(250); await shot(name); } catch (e) { console.warn('shot skipped', name, (e as Error).message); }
     await page.keyboard.press('Escape').catch(() => {});
   };
+  await page.goto('/reservations');
+  await tryShot('modal-reservation-add', () => page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click());
+  await page.goto('/customers');
+  await tryShot('modal-customer-add', () => page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first().click());
   await page.goto('/programs');
   await tryShot('modal-program-add', () => page.getByRole('button', { name: '프로그램 추가' }).filter({ visible: true }).first().click());
   await page.goto('/staff');
