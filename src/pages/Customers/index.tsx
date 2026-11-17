@@ -1353,6 +1353,57 @@ export default function Customers() {
                 </div>
               </div>
 
+              {/* 피부 상담 이력 (모바일) */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase">피부 상담 이력</p>
+                  <button
+                    onClick={openConsultModal}
+                    className="text-xs font-medium text-indigo-600 flex items-center gap-1"
+                  >
+                    <Sparkles size={12} />상담 기록
+                  </button>
+                </div>
+                {consultations.length === 0 ? (
+                  <div className="text-center py-3">
+                    <p className="text-xs text-gray-400">상담 기록이 없어요</p>
+                    <button type="button" onClick={openConsultModal} className="mt-2 text-xs font-medium text-indigo-600 hover:underline">첫 상담 시작하기</button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {consultations.slice(0, 5).map(c => (
+                      <div key={c.id} className="p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-gray-800">{c.consultDate}</p>
+                          {c.skinTypeResult && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
+                        </div>
+                        {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
+                        {c.recommendedSolution && <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
+                        <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
+                        <button
+                          type="button"
+                          onClick={() => handleConsultPdf(c)}
+                          disabled={pdfBusyId === c.id}
+                          aria-label={`${formatDate(c.consultDate)} 상담 결과지 PDF`}
+                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                        >
+                          <FileText size={12} />{pdfBusyId === c.id ? '만드는 중...' : '결과지 PDF'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openConsultEdit(c)}
+                          aria-label={`${formatDate(c.consultDate)} 상담 수정`}
+                          className="mt-2 ml-1.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
+                        >
+                          <Pencil size={12} />수정
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+
               {/* 프로그램 목록 */}
               {customerPrograms.length > 0 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -1410,53 +1461,6 @@ export default function Customers() {
               </div>
 
               <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => navigate(`/sales?new=1&customer=${selected.id}`)} />
-
-              {/* 피부 상담 이력 (모바일) */}
-              <div className="bg-white rounded-xl border border-slate-200 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase">피부 상담 이력</p>
-                  <button
-                    onClick={openConsultModal}
-                    className="text-xs font-medium text-indigo-600 flex items-center gap-1"
-                  >
-                    <Sparkles size={12} />상담 기록
-                  </button>
-                </div>
-                {consultations.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-3">상담 기록이 없어요</p>
-                ) : (
-                  <div className="space-y-2">
-                    {consultations.slice(0, 5).map(c => (
-                      <div key={c.id} className="p-3 bg-slate-50 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-gray-800">{c.consultDate}</p>
-                          {c.skinTypeResult && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
-                        </div>
-                        {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
-                        {c.recommendedSolution && <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
-                        <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
-                        <button
-                          type="button"
-                          onClick={() => handleConsultPdf(c)}
-                          disabled={pdfBusyId === c.id}
-                          aria-label={`${formatDate(c.consultDate)} 상담 결과지 PDF`}
-                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
-                        >
-                          <FileText size={12} />{pdfBusyId === c.id ? '만드는 중...' : '결과지 PDF'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openConsultEdit(c)}
-                          aria-label={`${formatDate(c.consultDate)} 상담 수정`}
-                          className="mt-2 ml-1.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
-                        >
-                          <Pencil size={12} />수정
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
               <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
