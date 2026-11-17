@@ -168,6 +168,8 @@ export interface ShopPreferences {
   deviceFeatures?: Record<string, boolean>;
   /** API 연동 가이드 체크리스트 상태 */
   apiGuideStatus?: Record<string, 'connected' | 'pending' | 'not-started'>;
+  /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
+  retentionPolicy?: { enabled: boolean; years: number };
 }
 
 // =============================================

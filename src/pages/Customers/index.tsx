@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -23,6 +23,7 @@ import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbo
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
+import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import { refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
@@ -264,6 +265,14 @@ export default function Customers() {
     if (q !== null) setSearch(q);
   }, [searchParams]);
   const [gradeFilter, setGradeFilter] = useState<CustomerGrade | '전체'>('전체');
+  // 개인정보 보존기간 경과 목록(?retention=1) — 대시보드 안내/칩에서 진입, 일괄 익명화 (P4, 2026-11-17)
+  const retentionOnly = searchParams.get('retention') === '1';
+  const retentionPolicy = getRetentionPolicy();
+  const setRetentionOnly = (on: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    if (on) next.set('retention', '1'); else next.delete('retention');
+    setSearchParams(next, { replace: true });
+  };
 
   // 고객 추가 모달
   const [showAddModal, setShowAddModal] = useState(false);
@@ -685,12 +694,29 @@ export default function Customers() {
     }
   }
 
+  // 보존기간 경과 고객 id — 고객 목록이나 정책이 바뀔 때만 재계산
+  const expiredIds = useMemo(
+    () => new Set(getExpiredCustomers().map(c => c.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customers, retentionPolicy.enabled, retentionPolicy.years],
+  );
   // 필터링
   const filtered = customers.filter(c => {
     const matchSearch = matchesSearch(search, [c.name, c.phone, c.email]);
     const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
-    return matchSearch && matchGrade;
+    const matchRetention = !retentionOnly || expiredIds.has(c.id);
+    return matchSearch && matchGrade && matchRetention;
   });
+
+  function handleAnonymizeExpired() {
+    const targets = filtered.filter(c => expiredIds.has(c.id) && !isAnonymized(c));
+    if (targets.length === 0) return;
+    if (!window.confirm(`보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n이름·전화·메모 등 개인 식별 정보가 지워지고 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`)) return;
+    const n = anonymizeCustomers(targets.map(c => c.id));
+    notify(`고객 ${n}명을 익명화했습니다.`);
+    setSelected(null);
+    loadAll();
+  }
 
   // 고객 기록 엑셀(xlsx) 다운로드 — 현재 필터된 목록을 이메일 포함 전체 항목으로 내보냄
   function exportToExcel() {
@@ -1009,7 +1035,30 @@ export default function Customers() {
                 {g}
               </button>
             ))}
+            {retentionPolicy.enabled && (
+              <button
+                type="button"
+                onClick={() => setRetentionOnly(!retentionOnly)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+                title={`마지막 방문 후 ${retentionPolicy.years}년이 지난 고객`}
+              >
+                보존기간 경과 {expiredIds.size}
+              </button>
+            )}
           </div>
+          {retentionOnly && (
+            <div className="mt-2 flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" data-testid="retention-bar">
+              <p className="text-xs text-amber-800 min-w-0">보존기간({retentionPolicy.years}년) 경과 {filtered.length}명 — 개인 식별 정보를 지우고 통계만 남깁니다</p>
+              <button
+                type="button"
+                onClick={handleAnonymizeExpired}
+                disabled={filtered.length === 0}
+                className="flex-shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+              >
+                {filtered.length}명 익명화
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 카드 목록 */}
@@ -1307,7 +1356,30 @@ export default function Customers() {
                 {g}
               </button>
             ))}
+            {retentionPolicy.enabled && (
+              <button
+                type="button"
+                onClick={() => setRetentionOnly(!retentionOnly)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+                title={`마지막 방문 후 ${retentionPolicy.years}년이 지난 고객`}
+              >
+                보존기간 경과 {expiredIds.size}
+              </button>
+            )}
           </div>
+          {retentionOnly && (
+            <div className="mt-2 flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" data-testid="retention-bar">
+              <p className="text-xs text-amber-800 min-w-0">보존기간({retentionPolicy.years}년) 경과 {filtered.length}명 — 개인 식별 정보를 지우고 통계만 남깁니다</p>
+              <button
+                type="button"
+                onClick={handleAnonymizeExpired}
+                disabled={filtered.length === 0}
+                className="flex-shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+              >
+                {filtered.length}명 익명화
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto">

@@ -107,6 +107,33 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await desk.getByRole('button', { name: '예약 추가' }).click();
   await expect(page).toHaveURL(/\/reservations/);
   await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
+
+  // ── 10. 개인정보 보존기간 정책 (P4, 2026-11-17): 1년으로 켜고 고객을 2년 전 방문으로 만들면 안내 → 목록 → 익명화 ──
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();
+  const retentionCard = page.getByTestId('retention-policy-card');
+  await retentionCard.getByLabel('보존기간(년)').fill('1');
+  await retentionCard.getByRole('button', { name: '정책 켜기' }).click();
+  await expect(retentionCard.getByText(/사용 중 · 1년/)).toBeVisible();
+  await page.evaluate(name => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const old = new Date(); old.setFullYear(old.getFullYear() - 2);
+    for (const c of list) if (c.name === name) { c.lastVisitDate = old.toISOString().slice(0, 10); c.registeredAt = old.toISOString(); }
+    localStorage.setItem(key, JSON.stringify(list));
+  }, acc.customer);
+  await page.goto('/');
+  await page.getByTestId('retention-notice').filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(/retention=1/);
+  const bar = page.getByTestId('retention-bar').filter({ visible: true }).first();
+  await expect(bar).toContainText('경과 1명');
+  await bar.getByRole('button', { name: '1명 익명화' }).click(); // confirm은 dialog 핸들러가 수락
+  await expect(page.getByText('고객 1명을 익명화했습니다.').first()).toBeVisible();
+  await expect(bar).toContainText('경과 0명');
+  await page.goto('/customers');
+  await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
+  await page.goto('/');
+  await expect(page.getByTestId('retention-notice')).toHaveCount(0);
 });
 
 test('로그인 화면은 잘못된 계정을 거부한다', async ({ page }) => {

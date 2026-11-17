@@ -13,6 +13,7 @@ import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
 import RevisitReminderCard from '../components/RevisitReminderCard';
+import RetentionNoticeCard from '../components/RetentionNoticeCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 import { useFeature } from '../hooks/useFeature';
@@ -256,6 +257,8 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* 개인정보 보존기간 경과 (P4) — 정책 ON + 경과 고객 있을 때만 */}
+        <RetentionNoticeCard compact />
         {/* 재방문 리마인더 (킬러③) */}
         <RevisitReminderCard compact />
       </div>
@@ -494,6 +497,8 @@ export default function Dashboard() {
 
           {/* Alerts */}
           <div className="space-y-4">
+            {/* 개인정보 보존기간 경과 (P4) */}
+            <RetentionNoticeCard />
             {/* 재방문 리마인더 (킬러③) */}
             <RevisitReminderCard />
 

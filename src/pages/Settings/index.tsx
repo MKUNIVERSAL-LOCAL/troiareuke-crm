@@ -17,6 +17,7 @@ import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
+import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
 import clsx from 'clsx';
 
 const GOOGLE_OAUTH_READY = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim());
@@ -1037,6 +1038,7 @@ export default function Settings() {
             {tab === 'notifications' && (
               <div className="space-y-6">
               <RevisitCycleCard />
+              <RetentionPolicyCard />
 
               <SettingCard title="자동 알림 설정">
                 <div className="space-y-4">

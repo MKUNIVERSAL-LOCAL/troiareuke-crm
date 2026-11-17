@@ -1,0 +1,87 @@
+// ═══════════════════════════════════════════════════════════════
+// retentionPolicy — 개인정보 보존기간 정책 (P4, 비코어, 2026-11-17)
+// ───────────────────────────────────────────────────────────────
+// 개인정보보호법: 수집 목적을 달성했거나 보유기간이 지난 개인정보는 지체 없이 파기해야 한다.
+// 지점이 보존기간(년)을 정하면, 마지막 활동(마지막 방문·등록일 중 늦은 날)이 그 기간을 넘긴 고객을
+// 대시보드·고객 화면에 "보존기간 경과"로 모아 보여주고, 한 번에 익명화(개인 식별 정보 제거)한다.
+// 자동 삭제는 하지 않는다 — 사람이 확인하고 누르는 방식(실수 삭제·회차권 잔여 등 분쟁 방지).
+// 정책은 지점 환경설정(서버 동기)에 저장되어 어느 PC/앱에서나 같다. 기본은 OFF(오너 결정 전).
+// ═══════════════════════════════════════════════════════════════
+
+import { CustomerStore } from './store';
+import type { Customer } from '../types';
+import { getPreference, setPreference } from './shopPreferences';
+
+export interface RetentionPolicy {
+  enabled: boolean;
+  years: number; // 1~10
+}
+
+export const DEFAULT_RETENTION_YEARS = 3;
+export const MIN_RETENTION_YEARS = 1;
+export const MAX_RETENTION_YEARS = 10;
+export const ANONYMIZED_NAME = '탈퇴고객';
+
+export function getRetentionPolicy(): RetentionPolicy {
+  const v = getPreference('retentionPolicy');
+  const years = typeof v?.years === 'number' && Number.isInteger(v.years) && v.years >= MIN_RETENTION_YEARS && v.years <= MAX_RETENTION_YEARS
+    ? v.years : DEFAULT_RETENTION_YEARS;
+  return { enabled: v?.enabled === true, years };
+}
+
+/** 정책 저장(1~10년). 범위 밖이면 false. */
+export function setRetentionPolicy(policy: RetentionPolicy): boolean {
+  if (!Number.isInteger(policy.years) || policy.years < MIN_RETENTION_YEARS || policy.years > MAX_RETENTION_YEARS) return false;
+  setPreference('retentionPolicy', { enabled: policy.enabled, years: policy.years });
+  return true;
+}
+
+/** 고객의 마지막 활동일(YYYY-MM-DD) — 마지막 방문일과 등록일 중 늦은 날 */
+export function lastActivityDate(c: Customer): string {
+  const registered = (c.registeredAt || '').slice(0, 10);
+  const visit = (c.lastVisitDate || '').slice(0, 10);
+  return visit > registered ? visit : registered;
+}
+
+export function isAnonymized(c: Customer): boolean {
+  return c.name === ANONYMIZED_NAME && !c.phone;
+}
+
+/** 보존기간이 지난(아직 익명화되지 않은) 고객 — 정책 OFF면 빈 배열 */
+export function getExpiredCustomers(today = new Date()): Customer[] {
+  const policy = getRetentionPolicy();
+  if (!policy.enabled) return [];
+  const cutoff = new Date(today);
+  cutoff.setFullYear(cutoff.getFullYear() - policy.years);
+  const cutoffISO = cutoff.toISOString().slice(0, 10);
+  return CustomerStore.getAll().filter(c => !isAnonymized(c) && lastActivityDate(c) < cutoffISO);
+}
+
+/**
+ * 익명화 — 개인 식별 정보를 지우고 통계(방문·결제 합계)만 남긴다. 시술·결제 기록은 고객 id로 연결된 채 남아 매출 통계가 깨지지 않는다.
+ * @returns 처리한 고객 수
+ */
+export function anonymizeCustomers(ids: string[]): number {
+  let n = 0;
+  for (const id of ids) {
+    const c = CustomerStore.getById(id);
+    if (!c || isAnonymized(c)) continue;
+    CustomerStore.update(id, {
+      name: ANONYMIZED_NAME,
+      phone: '',
+      email: undefined,
+      address: undefined,
+      birthDate: undefined,
+      memo: undefined,
+      allergies: undefined,
+      skinType: undefined,
+      tags: [],
+      referralSource: undefined,
+      privacyConsent: false,
+      privacyConsentAt: undefined,
+      isActive: false,
+    });
+    n += 1;
+  }
+  return n;
+}
