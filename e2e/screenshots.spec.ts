@@ -60,7 +60,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
 
   // 시술 기록 + 사진 2장 (Before/After 카드가 보이도록)
   await page.goto('/treatments');
-  await page.getByRole('button', { name: '시술 기록 추가' }).click();
+  await page.getByRole('button', { name: '시술 기록 추가', exact: true }).click(); // 모바일 빈 상태 '시술 기록 추가하기'와 구분
   await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
   await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles([
     { name: 'before.png', mimeType: 'image/png', buffer: solidPng(64, [214, 150, 140]) },
