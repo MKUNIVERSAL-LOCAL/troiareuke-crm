@@ -160,5 +160,5 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 ## 5. 다음 세션 착수 순서 (2026-11-18 아침용 — 요약은 `docs/OWNER-BRIEFING-2026-11-18.md`)
 1. **오너**: PR #54 머지 → `npm run release:all`(v1.0.60) → NAS 채널 게시(SSH 키 또는 DSM 두 작업) → 서버 재배포(구버전 지점 경보 가동) → 48시간 뒤 경보 메일/대시보드로 구버전 0곳 확인.
 2. **오너**: Codex 자동화 `crm-10-git` 경로 F:→C: 수정, DSM 두 작업 "매일" 활성, P1(코어 Supabase 제거) 승인 — 자동 모드가 아닌 세션에서 `CORE_EDIT=1`.
-3. 다음 개발: P3 D4 사진 저장 이관(Capacitor Filesystem) → 안드로이드 서명 키 → Play 내부 테스트. P4 보존기간 정책은 오너 기간 결정 후.
+3. 다음 개발: (D4 사진 저장은 IndexedDB 이관으로 완료 — Capacitor Filesystem 이관은 불필요) 스토어 등록 준비(안드로이드 서명 키 → Play 내부 테스트, iOS는 Mac·Apple Developer)는 오너 지시로 맨 마지막. P4 보존기간 정책은 오너 기간 결정 후. 코드 쪽 남은 묶음은 감사(성능·접근성·첫 실행) 결과에 따라.
 4. 시각 QA 루틴: 릴리스 전 `SHOTS=1 SHOTS_DIR=<밖의 폴더> npx playwright test e2e/screenshots.spec.ts --project=mobile` 로 모바일 세트 확인.
