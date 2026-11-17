@@ -690,6 +690,7 @@ function TreatmentDetailModal({
   onDelete: (id: string) => void;
   onEdit: () => void;
 }) {
+  const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const photos = getPhotos(`treatment:${t.id}`);
 
@@ -744,8 +745,15 @@ function TreatmentDetailModal({
 
         {t.nextAppointment && (
           <div className="flex items-center gap-2 bg-green-50 rounded-xl p-3">
-            <ClipboardList size={14} className="text-green-600" />
-            <p className="text-sm text-green-700">다음 방문 권장: <strong>{t.nextAppointment}</strong></p>
+            <ClipboardList size={14} className="text-green-600 flex-shrink-0" />
+            <p className="text-sm text-green-700 flex-1 min-w-0">다음 방문 권장: <strong>{t.nextAppointment}</strong></p>
+            <button
+              type="button"
+              onClick={() => { onClose(); navigate(`/reservations?new=1&customer=${encodeURIComponent(t.customerId)}&date=${t.nextAppointment}`); }}
+              className="flex-shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 whitespace-nowrap"
+            >
+              이 날짜로 예약
+            </button>
           </div>
         )}
 

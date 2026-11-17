@@ -138,9 +138,12 @@ export default function Reservations() {
   const [searchParams, setSearchParams] = useSearchParams();
   // 고객 상세 [예약 추가](?customer=) 프리필 — 1회 캡처 후 URL을 비워 수동 열기·뒤로가기에 다시 붙지 않게 (리뷰 2026-11-17)
   const [newCustomerId, setNewCustomerId] = useState<string | undefined>(undefined);
+  const [newDate, setNewDate] = useState<string | undefined>(undefined); // 시술 기록 "다음 방문 권장" → 그 날짜로 예약 (2026-11-18)
   useEffect(() => {
     if (searchParams.get('new') !== '1') return;
     setNewCustomerId(searchParams.get('customer') ?? undefined);
+    const d = searchParams.get('date');
+    setNewDate(d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : undefined);
     setShowAddModal(true);
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
@@ -495,7 +498,7 @@ export default function Reservations() {
       </div>
 
       {showAddModal && (
-        <AddReservationModal initialCustomerId={newCustomerId} onClose={() => { setShowAddModal(false); setNewCustomerId(undefined); }} onSave={() => { setNewCustomerId(undefined); handleSaveReservation(); }} />
+        <AddReservationModal initialCustomerId={newCustomerId} initialDate={newDate} onClose={() => { setShowAddModal(false); setNewCustomerId(undefined); setNewDate(undefined); }} onSave={() => { setNewCustomerId(undefined); setNewDate(undefined); handleSaveReservation(); }} />
       )}
       {editReservation && (
         <AddReservationModal
@@ -811,7 +814,7 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
   );
 }
 
-function AddReservationModal({ reservation: editing, initialCustomerId, onClose, onSave }: { reservation?: Reservation | null; initialCustomerId?: string; onClose: () => void; onSave: () => void }) {
+function AddReservationModal({ reservation: editing, initialCustomerId, initialDate, onClose, onSave }: { reservation?: Reservation | null; initialCustomerId?: string; initialDate?: string; onClose: () => void; onSave: () => void }) {
   const { user: authUser } = useAuth();
   const isEdit = !!editing;
   const customers = CustomerStore.getAll().filter(c => c.isActive !== false); // 익명화(탈퇴) 고객은 예약 대상에서 제외
@@ -822,7 +825,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, onClose,
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (initialCustomerId && customers.some(c => c.id === initialCustomerId) ? initialCustomerId : ''));
   const [staffId, setStaffId] = useState(editing?.staffId ?? '');
   const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? '');
-  const [date, setDate] = useState(editing?.date ?? format(new Date(), 'yyyy-MM-dd'));
+  const [date, setDate] = useState(editing?.date ?? initialDate ?? format(new Date(), 'yyyy-MM-dd'));
   const [startTime, setStartTime] = useState(editing?.startTime ?? '10:00');
   const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
   const [memo, setMemo] = useState(editing?.memo ?? '');
@@ -986,6 +989,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, onClose,
             <label className="block text-xs font-medium text-gray-600 mb-1.5">날짜 *</label>
             <input
               type="date"
+              aria-label="예약 날짜"
               value={date}
               onChange={e => setDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"

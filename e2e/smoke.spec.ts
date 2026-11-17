@@ -245,7 +245,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     customers.push({ ...main, id: dupId, name: dupName, totalVisits: 2, totalSpent: 7000, memo: '중복 메모', grade: 'VIP', registeredAt: '2020-01-01T00:00:00.000Z' });
     payments.push({ id: 'duppay_' + Date.now(), shopId: main.shopId, customerId: dupId, customerName: dupName, paymentDate: '2026-01-10', type: 'other', typeLabel: '기타', amount: 7000, paymentMethod: 'cash', discountAmount: 0, status: 'completed', createdAt: now });
     reservations.push({ ...reservations[0], id: 'dupres_' + Date.now(), customerId: dupId, customerName: dupName, date: '2026-01-10', status: 'completed' });
-    logs.push({ id: 'duplog_' + Date.now(), shopId: main.shopId, customerId: dupId, customerName: dupName, treatmentDate: '2026-01-10', sessionsUsed: 0, treatmentDetails: '중복 시술', createdAt: now });
+    logs.push({ id: 'duplog_' + Date.now(), shopId: main.shopId, customerId: dupId, customerName: dupName, treatmentDate: '2026-01-10', sessionsUsed: 0, treatmentDetails: '중복 시술', nextAppointment: '2026-12-24', createdAt: now });
     write(/^crm_.*_customers$/, customers); write(/^crm_.*_payments$/, payments); write(/^crm_.*_reservations$/, reservations); write(/^crm_.*_treatment_logs$/, logs);
     const byMain = (list: { customerId: string }[]) => list.filter(x => x.customerId === main.id).length;
     return { visits: main.totalVisits as number, spent: main.totalSpent as number, payments: byMain(payments), reservations: byMain(reservations), logs: byMain(logs), used: programs.map((p: { usedSessions: number }) => p.usedSessions) as number[] };
@@ -303,6 +303,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page).toHaveURL(/\/treatments$/); // ?open=은 1회 캡처 후 비워진다
   await expect(page.getByText('시술 기록 상세').filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText('중복 시술').filter({ visible: true }).first()).toBeVisible();
+  // 다음 방문 권장일 → [이 날짜로 예약] → 예약 추가 모달에 고객·날짜가 미리 들어간다 (2026-11-18)
+  await page.getByRole('button', { name: '이 날짜로 예약' }).click();
+  await expect(page).toHaveURL(/\/reservations$/);
+  await expect(page.getByLabel('예약 날짜')).toHaveValue('2026-12-24');
+  await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1); // 병합돼 본 고객으로 옮겨진 기록
 
   // ── 9-3. 직원별 월 실적 (2026-11-18): 첫 예약을 완료로 만들면 직원 화면 실적 표에 완료 예약·예약액이 집계되고, 보고 문구가 만들어진다 ──
   const perfExpected = await page.evaluate(() => {
