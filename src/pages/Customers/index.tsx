@@ -859,7 +859,14 @@ export default function Customers() {
     promoteRunning.current = true;
     let i = 0;
     const step = () => {
-      for (const id of ids.slice(i, i + 25)) CustomerStore.update(id, { grade: '일반' });
+      try {
+        // 그 사이 직원이 등급을 바꿨으면(VIP 등) 건드리지 않는다
+        for (const id of ids.slice(i, i + 25)) if (CustomerStore.getById(id)?.grade === '신규') CustomerStore.update(id, { grade: '일반' });
+      } catch (e) {
+        promoteRunning.current = false; // 저장 실패(용량 등)로 가드가 잠기지 않게 — 다음 loadAll에서 재시도
+        console.error('[customers] 자동 승급 저장 실패:', e);
+        return;
+      }
       i += 25;
       if (i < ids.length) { setTimeout(step, 0); return; }
       promoteRunning.current = false;
@@ -917,7 +924,9 @@ export default function Customers() {
     const m = new Map<string, number>();
     for (const cp of CustomerProgramStore.getAll()) if (!cp.isCompleted) m.set(cp.customerId, (m.get(cp.customerId) || 0) + 1);
     return m;
-  }, [customers]);
+    // detailTick: 프로그램 등록·관리는 고객 테이블을 바꾸지 않아 customers 참조가 그대로다 — loadAll이 올리는 tick으로 재계산 (리뷰 2026-11-18)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, detailTick]);
   // 목록은 100명씩 — 전부 마운트하면 수백 명부터 폰에서 버벅인다. 검색·필터·정렬이 바뀌면 처음부터
   const [listLimit, setListLimit] = useState(LIST_PAGE);
   useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey]);
@@ -994,6 +1003,8 @@ export default function Customers() {
   useOverlayClose(showImportGuide, () => setShowImportGuide(false));
   const importGuideRef = useRef<HTMLDivElement>(null);
   useFocusTrap(showImportGuide, importGuideRef);
+  const gradeMenuRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showGradeMenu, gradeMenuRef); // 현재 등급 항목(data-autofocus)에 포커스, 닫히면 등급 버튼으로
 
   // 업로드 양식 엑셀 다운로드 (헤더 + 예시 2행)
   function downloadImportTemplate() {
@@ -1864,7 +1875,7 @@ export default function Customers() {
                         {showGradeMenu && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setShowGradeMenu(false)} />
-                            <div role="menu" aria-label="등급 선택" className="absolute left-0 mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 min-w-[90px]">
+                            <div ref={gradeMenuRef} role="menu" aria-label="등급 선택" className="absolute left-0 mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 min-w-[90px]">
                               {GRADES.map(g => (
                                 <button
                                   key={g}

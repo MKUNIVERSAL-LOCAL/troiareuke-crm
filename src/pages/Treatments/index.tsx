@@ -312,8 +312,9 @@ export default function Treatments() {
 /** 저장 직후 결제 연계에 필요한 요약 — 새 기록이고 시술 항목 금액이 있을 때만 채워진다 */
 export interface TreatmentSaveResult { customerId: string; customerName: string; amount: number; details: string }
 
-/** 예약 상세 [시술 기록 작성]에서 넘어온 프리필 — 존재하는 고객·담당자·시술 메뉴만 반영한다 (2026-11-17) */
 const LIST_PAGE = 100; // 목록 1회 표시 수 — [더 보기]로 늘린다
+
+/** 예약 상세 [시술 기록 작성]에서 넘어온 프리필 — 존재하는 고객·담당자·시술 메뉴만 반영한다 (2026-11-17) */
 type Period = 'all' | 'today' | 'week' | 'month';
 const PERIODS: Period[] = ['all', 'today', 'week', 'month'];
 const PERIOD_LABELS: Record<Period, string> = { all: '전체', today: '오늘', week: '이번 주', month: '이번 달' };

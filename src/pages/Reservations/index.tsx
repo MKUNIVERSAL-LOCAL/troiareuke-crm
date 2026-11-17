@@ -518,7 +518,7 @@ export default function Reservations() {
           <DayView date={currentDate} reservations={dayReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'list' && (
-          <ListView reservations={filteredReservations} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <ListView reservations={filteredReservations} onSelect={setSelectedReservation} googleEvents={googleEvents} filterKey={`${staffFilter}|${statusFilter}|${normalizedSearch}`} />
         )}
       </div>
 
@@ -769,11 +769,11 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
   );
 }
 
-function ListView({ reservations, onSelect, googleEvents = [] }: { reservations: Reservation[]; onSelect: (r: Reservation) => void; googleEvents?: GoogleEventLike[] }) {
+function ListView({ reservations, onSelect, googleEvents = [], filterKey }: { reservations: Reservation[]; onSelect: (r: Reservation) => void; googleEvents?: GoogleEventLike[]; filterKey: string }) {
   const sorted = useMemo(() => [...reservations].sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`)), [reservations]);
   // 목록은 200건씩 — 전체 예약(수천 건)을 한 번에 마운트하지 않는다 (성능 감사 2026-11-18)
   const [limit, setLimit] = useState(200);
-  useEffect(() => { setLimit(200); }, [reservations]);
+  useEffect(() => { setLimit(200); }, [filterKey]); // 필터·검색이 바뀔 때만 처음부터 — 예약 수정으로 목록이 새로 와도 펼친 상태 유지
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
