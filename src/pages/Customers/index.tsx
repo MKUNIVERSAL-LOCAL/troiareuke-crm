@@ -961,7 +961,7 @@ export default function Customers() {
       {/* 왼쪽: 고객 목록 */}
       <div className="w-80 flex-shrink-0 border-r border-gray-100 flex flex-col bg-white">
         <div className="p-4 border-b border-gray-100">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             <h1 className="text-lg font-bold text-gray-900 flex-1 whitespace-nowrap">고객 관리</h1>
             <input
               ref={importInputRef}
@@ -973,20 +973,20 @@ export default function Customers() {
             <button
               onClick={() => setShowImportGuide(true)}
               title="엑셀(xlsx)/CSV로 고객 대량 등록 (이름·전화번호 필수, 중복 자동 제외)"
-              className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+              className="flex items-center gap-1 px-3 py-1.5 whitespace-nowrap bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
               <Upload size={12} />업로드
             </button>
             <button
               onClick={exportToExcel}
               title="현재 목록을 엑셀(xlsx)로 다운로드"
-              className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+              className="flex items-center gap-1 px-3 py-1.5 whitespace-nowrap bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
               <Download size={12} />다운로드
             </button>
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-[#1a3a8f] text-white rounded-lg text-xs font-medium hover:bg-[#152f75] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
+              className="flex items-center gap-1 px-3 py-1.5 whitespace-nowrap bg-[#1a3a8f] text-white rounded-lg text-xs font-medium hover:bg-[#152f75] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
               <Plus size={12} />고객 추가
             </button>
@@ -1070,14 +1070,14 @@ export default function Customers() {
           <div className="max-w-3xl mx-auto space-y-4">
             {/* 기본 정보 카드 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xl font-bold">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-center gap-4 min-w-[260px] flex-1">
+                  <div className="w-14 h-14 flex-shrink-0 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white text-xl font-bold">
                     {selected.name[0]}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
+                      <h2 className="text-xl font-bold text-gray-900 whitespace-nowrap">{selected.name}</h2>
                       <div className="relative">
                         <button
                           onClick={() => setShowGradeMenu(v => !v)}
@@ -1115,34 +1115,35 @@ export default function Customers() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                {/* 1366px 폭에서 버튼 글자가 세로로 깨지지 않도록 — 줄바꿈은 버튼 단위로 (2026-11-17) */}
+                <div className="flex flex-wrap justify-end gap-2">
                   <button
                     onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
                   >
                     <Sparkles size={12} />피부 상담
                   </button>
                   <button
                     onClick={() => setShowTreatmentModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-green-500 text-white rounded-xl text-xs font-medium hover:bg-green-600 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-green-500 text-white rounded-xl text-xs font-medium hover:bg-green-600 transition-colors"
                   >
                     <Scissors size={12} />시술 기록
                   </button>
                   <button
                     onClick={() => setShowProgramModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75] transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75] transition-colors"
                   >
                     <Plus size={12} />프로그램 등록
                   </button>
                   <button
                     onClick={openEditModal}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-200 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-gray-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-200 transition-colors"
                   >
                     <Pencil size={12} />수정
                   </button>
                   <button
                     onClick={handleDeleteCustomer}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors"
                     aria-label="고객 삭제"
                   >
                     <Trash2 size={12} />삭제
