@@ -78,6 +78,12 @@ export function todayISO(): string {
   return toISODate(new Date());
 }
 
+/** "YYYY-MM-DD" → 로컬 자정 Date. new Date('YYYY-MM-DD')는 UTC 자정으로 해석돼 시간대에 따라 하루 어긋난다 */
+export function parseISODate(s: string): Date {
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 /** 이번 달 "YYYY-MM" — 로컬 기준 (월 필터 기본값 등) */
 export function thisYearMonthISO(): string {
   return todayISO().substring(0, 7);

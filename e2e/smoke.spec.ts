@@ -141,7 +141,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   });
   await page.goto('/');
   const pendingCard = page.getByTestId('pending-completion-card').filter({ visible: true }).first();
-  await expect(pendingCard).toContainText('1건');
+  await expect(pendingCard.getByTestId('pending-completion-count')).toHaveText('1건');
   await pendingCard.getByRole('button', { name: /완료$/ }).first().click();
   await expect(page.getByTestId('pending-completion-card')).toHaveCount(0);
   const pendingStatus = await page.evaluate(id => {

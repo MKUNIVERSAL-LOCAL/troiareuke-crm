@@ -126,8 +126,8 @@ export default function Dashboard() {
 
   // 다른 페이지에서 CRUD 후 돌아오거나 창에 포커스가 돌아오면 최신 데이터로 재계산 (stale 방지)
   const [refreshKey, setRefreshKey] = useState(0); // 포커스/가시성 복귀 때 알림 카드(회차권·내일 예약)도 다시 계산
+  const refresh = () => { setData(getDashboardData()); setRefreshKey(k => k + 1); };
   useEffect(() => {
-    const refresh = () => { setData(getDashboardData()); setRefreshKey(k => k + 1); };
     refresh(); // 마운트 시 최신화
     const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('focus', refresh);
@@ -230,7 +230,7 @@ export default function Dashboard() {
 
         {/* 행동이 필요한 카드 — 회차권 임박·보존기간 경과·재방문 리마인더. 차트보다 위(첫 화면 안)에 둔다 (2026-11-17 시각 QA) */}
         <DailyCloseCard compact refreshKey={refreshKey} />
-        <PendingCompletionCard compact refreshKey={refreshKey} />
+        <PendingCompletionCard compact refreshKey={refreshKey} onSettled={refresh} />
         <TomorrowReservationCard compact refreshKey={refreshKey} />
         <ProgramAlertCard compact refreshKey={refreshKey} />
         <BirthdayCard compact refreshKey={refreshKey} />
@@ -507,17 +507,17 @@ export default function Dashboard() {
 
           {/* Alerts */}
           <div className="space-y-4">
-            {/* 개인정보 보존기간 경과 (P4) */}
-            {/* 내일 예약 안내 — 노쇼 방지 (2026-11-17) */}
             {/* 오늘 마감 요약 — 복사/공유 (2026-11-17) */}
             <DailyCloseCard refreshKey={refreshKey} />
             {/* 완료 처리 누락 예약 — 방문 통계·실적 누수 방지 (2026-11-18) */}
-            <PendingCompletionCard refreshKey={refreshKey} />
+            <PendingCompletionCard refreshKey={refreshKey} onSettled={refresh} />
+            {/* 내일 예약 안내 — 노쇼 방지 (2026-11-17) */}
             <TomorrowReservationCard refreshKey={refreshKey} />
             {/* 회차권 소진·만료 임박 — 재구매 안내 (2026-11-17) */}
             <ProgramAlertCard refreshKey={refreshKey} />
             {/* 생일 임박 고객 — 축하 안내 (2026-11-17) */}
             <BirthdayCard refreshKey={refreshKey} />
+            {/* 개인정보 보존기간 경과 (P4) */}
             <RetentionNoticeCard />
             {/* 재방문 리마인더 (킬러③) */}
             <RevisitReminderCard refreshKey={refreshKey} />

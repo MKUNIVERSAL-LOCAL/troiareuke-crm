@@ -38,7 +38,7 @@ import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, Payment
 import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate } from '../../lib/format';
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -93,7 +93,7 @@ function getDaysSince(d?: string) {
 }
 function calcExpiryDate(days?: number | null, baseDate?: string) {
   if (!days) return undefined;
-  const d = baseDate ? new Date(baseDate) : new Date();
+  const d = baseDate ? parseISODate(baseDate) : new Date();
   d.setDate(d.getDate() + days);
   return toISODate(d);
 }
