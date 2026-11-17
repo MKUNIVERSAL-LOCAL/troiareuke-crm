@@ -78,7 +78,8 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - `npm run release:all` 게이트(라우트·불변 원칙·업데이터 테스트·E2E PC+모바일) 통과 후에만 릴리스. 재다운로드 금지. 릴리스 완료 = 채널 라이브 + `verify:nas` 5/5 + 48시간 내 구버전 지점 0곳.
 - 코어 잠금 파일은 오너 승인 + `CORE_EDIT=1`로만.
 
-## 5. 다음 세션 착수 순서
-1. 이 PR 머지 → v1.0.60 릴리스(P0 묶음) 또는 P1과 합쳐 릴리스(오너 결정 1 대기).
-2. P2 Before/After 완성 설계·구현(코드만으로 가능, 파일럿 체감 가장 큼).
-3. P3 D4 사진 저장 이관.
+## 5. 다음 세션 착수 순서 (2026-11-17 저녁 갱신)
+1. **오너**: PR #54 머지 → `npm run release:all`(v1.0.60) → NAS 채널 게시(SSH 키 또는 DSM 두 작업) → 서버 재배포(구버전 지점 경보 가동) → 48시간 뒤 경보 메일/대시보드로 구버전 0곳 확인.
+2. **오너**: Codex 자동화 `crm-10-git` 경로 F:→C: 수정, DSM 두 작업 "매일" 활성, P1(코어 Supabase 제거) 승인 — 자동 모드가 아닌 세션에서 `CORE_EDIT=1`.
+3. 다음 개발: P3 D4 사진 저장 이관(Capacitor Filesystem) → 안드로이드 서명 키 → Play 내부 테스트. P4 보존기간 정책은 오너 기간 결정 후.
+4. 시각 QA 루틴: 릴리스 전 `SHOTS=1 SHOTS_DIR=<밖의 폴더> npx playwright test e2e/screenshots.spec.ts --project=mobile` 로 모바일 세트 확인.
