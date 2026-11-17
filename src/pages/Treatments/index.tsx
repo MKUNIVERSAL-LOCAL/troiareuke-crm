@@ -1,7 +1,7 @@
 import { notify } from '../../lib/notify';
 import { matchesSearch } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -17,6 +17,7 @@ import { isAuthApiConfigured } from '../../lib/authApi';
 export default function Treatments() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const navigate = useNavigate();
   // 대시보드 빠른 작업(?new=1) → 바로 추가 모달
   const [searchParams] = useSearchParams();
   useEffect(() => { if (searchParams.get('new') === '1') setShowAddModal(true); }, [searchParams]);
@@ -187,9 +188,13 @@ export default function Treatments() {
       {showAddModal && (
         <AddTreatmentModal
           onClose={() => setShowAddModal(false)}
-          onSave={() => {
+          onSave={result => {
             setShowAddModal(false);
             loadLogs();
+            if (result && window.confirm(`시술 기록을 저장했습니다.\n${result.customerName} 고객의 결제(${result.amount.toLocaleString()}원)도 바로 등록할까요?`)) {
+              const q = new URLSearchParams({ new: '1', customer: result.customerId, amount: String(result.amount), memo: result.details });
+              navigate(`/sales?${q.toString()}`);
+            }
           }}
         />
       )}
@@ -215,7 +220,10 @@ export default function Treatments() {
   );
 }
 
-function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?: TreatmentLog | null; onClose: () => void; onSave: () => void }) {
+/** 저장 직후 결제 연계에 필요한 요약 — 새 기록이고 시술 항목 금액이 있을 때만 채워진다 */
+export interface TreatmentSaveResult { customerId: string; customerName: string; amount: number; details: string }
+
+function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?: TreatmentLog | null; onClose: () => void; onSave: (result?: TreatmentSaveResult) => void }) {
   const { user: authUser } = useAuth();
   const isEdit = !!editing;
   const customers = CustomerStore.getAll();
@@ -333,6 +341,12 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
       });
       if (saved && photos.length > 0) {
         try { savePhotos(`treatment:${saved.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
+      }
+      // 결제 연계: 회차권 차감이 아닌 단건 시술이고 선택한 시술 항목에 금액이 있으면 결제 등록으로 이어준다 (2026-11-17)
+      const amount = linkedProgram ? 0 : selectedServices.reduce((sum, name) => sum + (services.find(s => s.name === name)?.price ?? 0), 0);
+      if (saved && amount > 0) {
+        onSave({ customerId, customerName: customer.name, amount, details: details || '' });
+        return;
       }
     }
 

@@ -48,9 +48,20 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page.getByText(/결제 내역 \(1\)/)).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText('50,000').first()).toBeVisible();
 
+  // ── 5-1. 시술 기록 저장 → 결제 등록 연계 (2026-11-17) ──
+  await page.goto('/treatments?new=1');
+  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await page.getByText('테스트관리', { exact: true }).filter({ visible: true }).first().click(); // 시술 항목 체크
+  await page.getByRole('button', { name: '저장', exact: true }).click(); // confirm 은 page.on('dialog')가 수락
+  await expect(page).toHaveURL(/\/sales\?new=1/, { timeout: 10_000 });
+  const payForm2 = page.locator('form').filter({ hasText: '결제 구분' });
+  await expect(payForm2.getByPlaceholder('0').first()).toHaveValue('50,000');
+  await payForm2.getByRole('button', { name: '결제 등록' }).click();
+  await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
+
   // ── 6. 데이터가 새로고침 후에도 남는다 (로컬 저장 회귀) ──
   await page.reload();
-  await expect(page.getByText(/결제 내역 \(1\)/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
 });
 
 test('로그인 화면은 잘못된 계정을 거부한다', async ({ page }) => {

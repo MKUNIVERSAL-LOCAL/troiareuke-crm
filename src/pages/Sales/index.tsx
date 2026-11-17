@@ -1,5 +1,6 @@
 import { notify } from '../../lib/notify';
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
   ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search, Layers,
@@ -93,6 +94,24 @@ export default function Sales() {
   });
 
   const customers = useMemo(() => CustomerStore.getAll(), []);
+
+  // 시술 기록 저장 → 결제 연계 / 대시보드 빠른 작업: ?new=1(&customer=&amount=&memo=) 이면 등록 모달을 프리필해 연다 (2026-11-17)
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    const customerId = searchParams.get('customer') || '';
+    const customer = customerId ? customers.find(c => c.id === customerId) : undefined;
+    const amount = searchParams.get('amount') || '';
+    setForm(prev => ({
+      ...prev,
+      customerId: customer ? customer.id : prev.customerId,
+      customerName: customer ? customer.name : prev.customerName,
+      amount: amount || prev.amount,
+      memo: searchParams.get('memo') || prev.memo,
+      type: 'single_treatment',
+    }));
+    setShowModal(true);
+  }, [searchParams, customers]);
 
   // 수정 중인 원본 결제 (환불 가드·프로그램 타입 유지에 사용)
   const editingPayment = useMemo(
