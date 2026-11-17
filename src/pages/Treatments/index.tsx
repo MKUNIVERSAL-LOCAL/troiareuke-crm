@@ -19,8 +19,21 @@ export default function Treatments() {
   const [showAddModal, setShowAddModal] = useState(false);
   const navigate = useNavigate();
   // 대시보드 빠른 작업(?new=1) → 바로 추가 모달
-  const [searchParams] = useSearchParams();
-  useEffect(() => { if (searchParams.get('new') === '1') setShowAddModal(true); }, [searchParams]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 예약 상세/대시보드에서 온 프리필은 1회만 캡처하고 URL을 비운다 — 닫은 뒤 수동으로 열거나 뒤로가기 했을 때 이전 예약 값이 다시 붙지 않게 (리뷰 2026-11-17)
+  const [prefill, setPrefill] = useState<(TreatmentPrefill & { reservationId?: string }) | null>(null);
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setPrefill({
+      customerId: searchParams.get('customer') ?? undefined,
+      treatmentDate: searchParams.get('date') ?? undefined,
+      staffName: searchParams.get('staff') ?? undefined,
+      serviceNames: searchParams.getAll('services'), // 반복 키 — 쉼표가 든 메뉴명도 안전
+      reservationId: searchParams.get('reservation') ?? undefined,
+    });
+    setShowAddModal(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [editing, setEditing] = useState<TreatmentLog | null>(null);
   const [selected, setSelected] = useState<TreatmentLog | null>(null);
   const [treatmentLogs, setTreatmentLogs] = useState<TreatmentLog[]>([]);
@@ -187,18 +200,14 @@ export default function Treatments() {
 
       {showAddModal && (
         <AddTreatmentModal
-          prefill={{
-            customerId: searchParams.get('customer') ?? undefined,
-            treatmentDate: searchParams.get('date') ?? undefined,
-            staffName: searchParams.get('staff') ?? undefined,
-            serviceNames: searchParams.get('services')?.split(',').map(s => s.trim()).filter(Boolean),
-          }}
-          onClose={() => setShowAddModal(false)}
+          prefill={prefill ?? undefined}
+          onClose={() => { setShowAddModal(false); setPrefill(null); }}
           onSave={result => {
+            const reservationId = prefill?.reservationId;
             setShowAddModal(false);
+            setPrefill(null);
             loadLogs();
             // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
-            const reservationId = searchParams.get('reservation');
             const paidByReservation = !!reservationId && PaymentStore.getAll().some(p => p.referenceId === reservationId);
             if (result && !paidByReservation && window.confirm(`시술 기록을 저장했습니다.\n${result.customerName} 고객의 결제(${result.amount.toLocaleString()}원)도 바로 등록할까요?`)) {
               const q = new URLSearchParams({ new: '1', customer: result.customerId, amount: String(result.amount), memo: result.details });

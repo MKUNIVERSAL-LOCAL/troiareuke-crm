@@ -134,15 +134,23 @@ export default function Reservations() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
   // 대시보드 빠른 작업(?new=1) → 바로 추가 모달
-  const [searchParams] = useSearchParams();
-  useEffect(() => { if (searchParams.get('new') === '1') setShowAddModal(true); }, [searchParams]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 고객 상세 [예약 추가](?customer=) 프리필 — 1회 캡처 후 URL을 비워 수동 열기·뒤로가기에 다시 붙지 않게 (리뷰 2026-11-17)
+  const [newCustomerId, setNewCustomerId] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setNewCustomerId(searchParams.get('customer') ?? undefined);
+    setShowAddModal(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   // 대시보드 오늘 예약 항목(?open=<id>) → 예약 상세 모달 바로 열기 (2026-11-17)
   useEffect(() => {
     const id = searchParams.get('open');
     if (!id) return;
     const target = ReservationStore.getAll().find(r => r.id === id);
     if (target) setSelectedReservation(target);
-  }, [searchParams]);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [editReservation, setEditReservation] = useState<Reservation | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
@@ -486,7 +494,7 @@ export default function Reservations() {
       </div>
 
       {showAddModal && (
-        <AddReservationModal initialCustomerId={searchParams.get('customer') ?? undefined} onClose={() => setShowAddModal(false)} onSave={handleSaveReservation} />
+        <AddReservationModal initialCustomerId={newCustomerId} onClose={() => { setShowAddModal(false); setNewCustomerId(undefined); }} onSave={() => { setNewCustomerId(undefined); handleSaveReservation(); }} />
       )}
       {editReservation && (
         <AddReservationModal
@@ -1055,8 +1063,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const openTreatmentLog = () => {
     const q = new URLSearchParams({ new: '1', customer: r.customerId, date: r.date, reservation: r.id });
     if (r.staffName) q.set('staff', r.staffName);
-    const names = r.services.map(s => s.serviceName).filter(Boolean);
-    if (names.length) q.set('services', names.join(','));
+    r.services.map(s => s.serviceName).filter(Boolean).forEach(n => q.append('services', n)); // 반복 키 — 쉼표가 든 메뉴명도 안전
     goTo(`/treatments?${q.toString()}`);
   };
   const handleCancel = () => {

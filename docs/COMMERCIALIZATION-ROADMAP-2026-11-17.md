@@ -59,6 +59,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] 2026-11-17 밤: 모바일 앱에서 조용히 실패하던 파일 내보내기 2곳(고객 목록 xlsx·업로드 양식) → `writeWorkbook` 공통 경로(PC 내려받기/모바일 공유 시트)로 통일. 전수 조사: `XLSX.writeFile`·`<a download>`·`createObjectURL` 호출은 이제 dataExport·mobileBridge 안에서만. smoke E2E에 xlsx 다운로드 회귀 추가.
 - [x] 2026-11-17 밤: 고객 상세 [예약 추가](PC 헤더·모바일 3열 액션) → `/reservations?new=1&customer=` 고객 프리필. 모바일 시각 확인 완료. smoke E2E 9단계.
 - [x] 2026-11-17 밤: 예약 상세 [시술 기록 작성] → `/treatments?new=1&customer=&date=&staff=&services=&reservation=` 프리필(존재하는 고객·담당자·메뉴만), 예약 결제(referenceId) 있으면 결제 연계 생략. 예약→완료→결제→시술 기록(사진)까지 한 흐름. 모바일 E2E 검증.
+- [x] 2026-11-17 밤 3차 코드리뷰(오늘 커밋 6건, high 0/med 2/low 6) 전부 반영: 쿼리 프리필(?new=1&customer=…) 1회 캡처 후 URL 정리(수동 열기·뒤로가기에 이전 값 재부착 방지, Treatments·Reservations·Sales·Customers), 모바일 폭에서 데스크톱 상세 미렌더(사진 스트립·결제 내역 2중 실행 제거), 상담 모달 열기 단일 함수(이전 고객 AI 사진 플래시 제거), 첨부 제거 후 재저장 시 기록 사진도 삭제, 비교 이미지 .jpg 확장자, Before≥After 생성 차단, services 반복 키(쉼표 메뉴명), PhotoLightbox 포커스 이동·복원.
 - [ ] D4 사진 저장 localStorage → Capacitor Filesystem/IndexedDB 정식 이관(현재는 용량 초과 시 캐시 비우기로 방어), 직전 사진 반투명 오버레이(네이티브 카메라 플러그인). 스토어 등록 준비는 오너 지시로 맨 마지막.
 - 오너 준비물: Play 개발자 계정, Apple Developer(D-U-N-S), 아이콘 1024, 스크린샷, 개인정보처리방침 URL.
 

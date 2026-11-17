@@ -162,7 +162,7 @@ function ConsultPhotoStrip({ consultId, consultDate, customerName, tick, onOpen 
             onClick={() => onOpen({
               dataUrl: p.dataUrl,
               caption: `${formatDate(consultDate)} 상담 · ${isCompare ? 'Before/After 비교' : '상담 사진'}`,
-              fileName: isCompare ? comparisonFileName(customerName) : `${customerName}_상담사진_${consultDate}.jpg`,
+              fileName: isCompare ? comparisonFileName(customerName).replace(/\.png$/, '.jpg') : `${customerName}_상담사진_${consultDate}.jpg`, // 기록용 비교 이미지는 JPEG로 압축 저장됨
             })}
             aria-label="상담 사진 크게 보기"
             className={`rounded-lg border border-indigo-100 overflow-hidden bg-white ${isCompare ? 'w-24 h-14' : 'w-14 h-14'}`}
@@ -255,7 +255,7 @@ export default function Customers() {
   const [selected, setSelected] = useState<Customer | null>(null);
   const [customerPrograms, setCustomerPrograms] = useState<CustomerProgram[]>([]);
   // 헤더 전역 검색(?q=)에서 넘어온 검색어를 초기값·변경 모두 반영
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('q') || '');
   useEffect(() => {
@@ -267,7 +267,12 @@ export default function Customers() {
   // 고객 추가 모달
   const [showAddModal, setShowAddModal] = useState(false);
   // 대시보드 빠른 작업(/customers?new=1) → 바로 등록 모달
-  useEffect(() => { if (searchParams.get('new') === '1') setShowAddModal(true); }, [searchParams]);
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setShowAddModal(true);
+    const next = new URLSearchParams(searchParams); next.delete('new');
+    setSearchParams(next, { replace: true }); // 뒤로가기 때 추가 모달이 다시 뜨지 않게 (리뷰 2026-11-17)
+  }, [searchParams, setSearchParams]);
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
   const [addPrivacyConsent, setAddPrivacyConsent] = useState(false);
 
@@ -335,10 +340,13 @@ export default function Customers() {
   const [lightbox, setLightbox] = useState<LightboxPhoto | null>(null);
   const [consultPhotoTick, setConsultPhotoTick] = useState(0);
 
-  // 상담 모달이 열릴 때마다 사진 관련 상태를 한 곳에서 초기화 (여는 버튼이 4곳이라 각각 초기화하지 않는다)
-  useEffect(() => {
-    if (!showConsultModal || !selected) return;
+  // 상담 모달 열기 — 여는 버튼 4곳이 같은 초기화를 쓴다. 렌더 전에 동기 초기화해 이전 고객의 AI 사진이 한 프레임 비치지 않게 (리뷰 2026-11-17)
+  function openConsultModal() {
+    if (!selected) return;
     const photos = collectCustomerPhotos(selected.id);
+    setConsultForm(emptyConsultForm());
+    setKakaoMsg(null);
+    setSavedConsultId(null);
     setBaPhotos(photos);
     setBaBefore(0);
     setBaAfter(Math.max(0, photos.length - 1));
@@ -346,8 +354,8 @@ export default function Customers() {
     setAiPhoto(null);
     setAiResult(null);
     aiPhotoIdRef.current = makePhotoId();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showConsultModal]);
+    setShowConsultModal(true);
+  }
 
   async function buildComparison() {
     if (!selected) return;
@@ -510,6 +518,10 @@ export default function Customers() {
     if (comparison) entries.push({ id: comparison.id, dataUrl: comparison.dataUrl, label: 'compare', takenAt });
     if (entries.length > 0) {
       try { savePhotos(`consult:${consultId}`, entries); } catch { notify('사진 저장 용량을 초과해 상담 사진은 저장되지 않았습니다.'); }
+      setConsultPhotoTick(t => t + 1);
+    } else if (savedConsultId) {
+      // 저장+카톡 전송으로 한 번 저장한 뒤 [제거]하고 다시 저장한 경우 — 기록의 사진도 지운다 (NAS tombstone 포함)
+      clearPhotos(`consult:${consultId}`);
       setConsultPhotoTick(t => t + 1);
     }
     // 상담에서 판정한 피부타입을 고객 프로필에도 반영(있을 때)
@@ -1168,7 +1180,7 @@ export default function Customers() {
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase">피부 상담 이력</p>
                   <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
+                    onClick={openConsultModal}
                     className="text-xs font-medium text-indigo-600 flex items-center gap-1"
                   >
                     <Sparkles size={12} />상담 기록
@@ -1334,8 +1346,8 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* 오른쪽: 고객 상세 */}
-      {selected ? (
+      {/* 오른쪽: 고객 상세 — 모바일 폭에서는 위의 모바일 상세가 담당하므로 렌더하지 않는다 (CSS hidden만으로는 사진 스트립·결제 내역이 2중 실행, 리뷰 2026-11-17) */}
+      {selected && !isMobileLayout ? (
         <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
           <div className="max-w-3xl mx-auto space-y-4">
             {/* 기본 정보 카드 */}
@@ -1388,7 +1400,7 @@ export default function Customers() {
                 {/* 1366px 폭에서 버튼 글자가 세로로 깨지지 않도록 — 줄바꿈은 버튼 단위로 (2026-11-17) */}
                 <div className="flex flex-wrap justify-end gap-2">
                   <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
+                    onClick={openConsultModal}
                     className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
                   >
                     <Sparkles size={12} />피부 상담
@@ -1465,7 +1477,7 @@ export default function Customers() {
                   <Sparkles size={16} className="text-indigo-600" />피부 상담 이력
                 </h3>
                 <button
-                  onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
+                  onClick={openConsultModal}
                   className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
                 >
                   <Plus size={12} />상담 기록
@@ -1476,7 +1488,7 @@ export default function Customers() {
                 <div className="text-center py-6">
                   <Activity size={28} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">상담 기록이 없어요</p>
-                  <button onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }} className="mt-2 text-xs text-indigo-600 hover:underline">
+                  <button onClick={openConsultModal} className="mt-2 text-xs text-indigo-600 hover:underline">
                     첫 상담 시작하기
                   </button>
                 </div>
@@ -2213,14 +2225,15 @@ export default function Customers() {
                       {baPhotos.map((p, i) => <option key={p.id} value={i}>{photoCaption(p)}</option>)}
                     </select>
                   </div>
-                  <button type="button" onClick={buildComparison} disabled={comparing || baBefore === baAfter}
+                  <button type="button" onClick={buildComparison} disabled={comparing || baBefore >= baAfter}
+                    title={baBefore >= baAfter ? 'Before는 After보다 먼저 찍은 사진이어야 합니다' : undefined}
                     className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap">
                     {comparing ? <><Loader2 size={12} className="animate-spin" />만드는 중...</> : <><Images size={12} />{comparison ? '다시 만들기' : '비교 이미지 만들기'}</>}
                   </button>
                 </div>
                 {comparison ? (
                   <div className="flex flex-wrap gap-3 mt-3">
-                    <button type="button" onClick={() => setLightbox({ dataUrl: comparison.dataUrl, caption: `${selected?.name ?? ''} Before/After 비교`, fileName: comparisonFileName(selected?.name) })}
+                    <button type="button" onClick={() => setLightbox({ dataUrl: comparison.dataUrl, caption: `${selected?.name ?? ''} Before/After 비교`, fileName: comparisonFileName(selected?.name).replace(/\.png$/, '.jpg') })}
                       aria-label="비교 이미지 크게 보기" className="rounded-lg overflow-hidden border border-gray-200 bg-white w-40 h-24 flex-shrink-0">
                       <img src={comparison.dataUrl} alt="비교 이미지 미리보기" className="w-full h-full object-cover" />
                     </button>
@@ -2238,7 +2251,7 @@ export default function Customers() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-[11px] text-gray-500 mt-2">고객에게 보여줄 Before/After를 골라 만들면 상담 기록에 첨부됩니다. (기본: 최초 ↔ 최신)</p>
+                  <p className="text-[11px] text-gray-500 mt-2">{baBefore >= baAfter ? 'Before는 After보다 먼저 찍은 사진이어야 합니다.' : '고객에게 보여줄 Before/After를 골라 만들면 상담 기록에 첨부됩니다. (기본: 최초 ↔ 최신)'}</p>
                 )}
               </div>
               )}

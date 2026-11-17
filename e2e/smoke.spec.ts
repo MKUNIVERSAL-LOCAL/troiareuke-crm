@@ -53,7 +53,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
   await page.getByText('테스트관리', { exact: true }).filter({ visible: true }).first().click(); // 시술 항목 체크
   await page.getByRole('button', { name: '저장', exact: true }).click(); // confirm 은 page.on('dialog')가 수락
-  await expect(page).toHaveURL(/\/sales\?new=1/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/sales/, { timeout: 10_000 }); // 프리필 파라미터는 캡처 후 URL에서 제거됨
   const payForm2 = page.locator('form').filter({ hasText: '결제 구분' });
   await expect(payForm2.getByPlaceholder('0').first()).toHaveValue('50,000');
   await payForm2.getByRole('button', { name: '결제 등록' }).click();
@@ -96,7 +96,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(desk.getByRole('heading', { name: '결제 내역' })).toBeVisible();
   await expect(desk.getByTestId('customer-payments').getByText(/50,000/).first()).toBeVisible();
   await desk.getByRole('button', { name: '결제 등록' }).click();
-  await expect(page).toHaveURL(/\/sales\?new=1&customer=/);
+  await expect(page).toHaveURL(/\/sales/);
   const payForm3 = page.locator('form').filter({ hasText: '결제 구분' });
   await expect(payForm3).toBeVisible();
   await expect(payForm3.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
@@ -105,7 +105,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await desk.getByRole('button', { name: '예약 추가' }).click();
-  await expect(page).toHaveURL(/\/reservations\?new=1&customer=/);
+  await expect(page).toHaveURL(/\/reservations/);
   await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
 });
 

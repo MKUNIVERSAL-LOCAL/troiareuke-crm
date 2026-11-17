@@ -96,7 +96,7 @@ export default function Sales() {
   const customers = useMemo(() => CustomerStore.getAll(), []);
 
   // 시술 기록 저장 → 결제 연계 / 대시보드 빠른 작업: ?new=1(&customer=&amount=&memo=) 이면 등록 모달을 프리필해 연다 (2026-11-17)
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     if (searchParams.get('new') !== '1') return;
     const customerId = searchParams.get('customer') || '';
@@ -111,7 +111,8 @@ export default function Sales() {
       type: 'single_treatment',
     }));
     setShowModal(true);
-  }, [searchParams, customers]);
+    setSearchParams({}, { replace: true }); // 1회 캡처 후 URL 정리 — 뒤로가기 때 프리필 모달이 다시 뜨지 않게 (리뷰 2026-11-17)
+  }, [searchParams, setSearchParams, customers]);
 
   // 수정 중인 원본 결제 (환불 가드·프로그램 타입 유지에 사용)
   const editingPayment = useMemo(

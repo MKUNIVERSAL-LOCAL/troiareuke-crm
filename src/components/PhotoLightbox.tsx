@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download } from 'lucide-react';
 import { exportFile, dataUrlToBlob } from '../lib/mobileBridge';
@@ -17,15 +17,29 @@ export interface LightboxPhoto {
  * - Esc·배경 탭으로 닫기, 저장(PC 내려받기)/공유(모바일 공유 시트).
  */
 export default function PhotoLightbox({ photo, onClose }: { photo: LightboxPhoto; onClose: () => void }) {
+  // 부모가 인라인 람다를 넘겨도 리스너를 다시 달지 않도록 ref로 보관 (Modal.tsx와 같은 패턴)
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); closeRef.current(); } };
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+    // 포커스를 대화상자 안으로 옮기고, 닫히면 열었던 썸네일로 되돌린다 (키보드·스크린리더)
+    const opener = document.activeElement as HTMLElement | null;
+    closeBtnRef.current?.focus();
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      opener?.focus?.();
+    };
+  }, []);
 
   async function handleExport() {
     try {
-      const result = await exportFile(photo.fileName || 'photo.jpg', dataUrlToBlob(photo.dataUrl));
+      // 확장자는 실제 데이터(MIME) 기준 — 저장된 비교 이미지는 JPEG라 .png 이름이 들어와도 .jpg로 바로잡는다
+      const blob = dataUrlToBlob(photo.dataUrl);
+      const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
+      const fileName = (photo.fileName || 'photo').replace(/\.(png|jpe?g|webp)$/i, '') + '.' + ext;
+      const result = await exportFile(fileName, blob);
       if (result === 'downloaded') notify('사진을 내려받았습니다.');
     } catch (e) {
       notify(e instanceof Error ? e.message : '사진을 내보내지 못했습니다.');
@@ -50,7 +64,7 @@ export default function PhotoLightbox({ photo, onClose }: { photo: LightboxPhoto
           >
             <Download size={14} />{IS_MOBILE_APP ? '공유' : '저장'}
           </button>
-          <button type="button" onClick={onClose} aria-label="닫기" className="p-1.5 rounded-lg hover:bg-white/15">
+          <button ref={closeBtnRef} type="button" onClick={onClose} aria-label="닫기" className="p-1.5 rounded-lg hover:bg-white/15">
             <X size={18} />
           </button>
         </div>

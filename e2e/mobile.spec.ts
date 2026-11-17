@@ -74,7 +74,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   // 홈 빠른 작업 → 고객 추가 모달이 바로 열린다 (2026-11-17)
   await page.goto('/');
   await page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first().click();
-  expect(page.url()).toContain('/customers?new=1');
+  expect(page.url()).toContain('/customers'); // ?new=1 은 캡처 후 URL에서 제거됨 — 모달 노출로 검증
   await expect(page.getByRole('heading', { name: '고객 추가' }).filter({ visible: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '취소', exact: true }).filter({ visible: true }).first().click();
 
@@ -213,7 +213,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(page.getByText('예약 상세').filter({ visible: true }).first()).toBeVisible();
   // 예약 상세 [시술 기록 작성] → 고객·시술 항목이 채워진 시술 기록 창 (2026-11-17)
   await page.getByRole('button', { name: '시술 기록 작성' }).click();
-  await expect(page).toHaveURL(/\/treatments\?new=1&customer=/);
+  await expect(page).toHaveURL(/\/treatments/); // 프리필 파라미터는 캡처 후 URL에서 제거됨
   await expect(page.locator('option:checked', { hasText: '모바일고객' })).toHaveCount(1);
   await expect(page.locator('input[type="checkbox"]:checked')).not.toHaveCount(0);
   await page.getByRole('button', { name: '취소', exact: true }).filter({ visible: true }).first().click();
