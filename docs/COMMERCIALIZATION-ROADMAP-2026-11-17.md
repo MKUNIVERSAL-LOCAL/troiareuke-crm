@@ -120,6 +120,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - 2026-11-17 23:31 재검증 2차(마감 요약·생일·회차권·내일 예약·결과지 PDF·보존기간까지 반영 후): 게이트 3종 PASS / `build:mobile` 성공 / Playwright 5/5 / 지점·어드민 exe 재빌드 asar NAS 3·Supabase 0·IDB 3·v1.0.60(신규 문자열 마감 요약·생일 고객 포함) / CDP 지점 false(#/login)·어드민 true(#/admin/login) / 잔존 프로세스 0. PR #54 CI 전부 통과.
 - 2026-11-18 00:22 `npm run mobile:prepare` 사전 실행 성공: build:mobile → 버전 동기(android versionCode 1000060/1.0.60, ios 1000060/1.0.60 — 커밋됨) → `cap sync android`(플러그인 6종) → mobile-latest.json v1.0.60(minSupported 1.0.58).
 - 2026-11-18 00:33 플래키 점검: Playwright 전체 5개 연속 3회 모두 통과(각 ~26초). 재방문 리마인더 카드도 refreshKey 재계산으로 통일.
+- 2026-11-18 01:35 3차 재검증(병합·중복 안내·타임라인 반영 후, HEAD 65e1634): check:distribution·check:routes·test:updater·build:mobile 통과, 지점·어드민 exe 재빌드(asar 01:33/01:34) → asar NAS 3/Supabase 0/IndexedDB 3/타임라인·병합 포함/v1.0.60, CDP 런타임 지점 isAdminBuild=false(#/login)·어드민 true(#/admin/login), 검증 후 Electron 잔존 프로세스 0.
 - 남은 것: PR #54 머지 → `npm run release:all`(게이트 전부 통과 상태) → NAS 채널 게시·서버 재배포(오너).
 
 ## 4. 릴리스 운영 원칙 (변경 없음)
