@@ -233,7 +233,7 @@ export default function Dashboard() {
         <ProgramAlertCard compact refreshKey={refreshKey} />
         <BirthdayCard compact refreshKey={refreshKey} />
         <RetentionNoticeCard compact />
-        <RevisitReminderCard compact />
+        <RevisitReminderCard compact refreshKey={refreshKey} />
 
         {/* 주간 매출 차트 */}
         {salesOn && (
@@ -516,7 +516,7 @@ export default function Dashboard() {
             <BirthdayCard refreshKey={refreshKey} />
             <RetentionNoticeCard />
             {/* 재방문 리마인더 (킬러③) */}
-            <RevisitReminderCard />
+            <RevisitReminderCard refreshKey={refreshKey} />
 
             {/* Low Stock Alert */}
             {productsOn && (

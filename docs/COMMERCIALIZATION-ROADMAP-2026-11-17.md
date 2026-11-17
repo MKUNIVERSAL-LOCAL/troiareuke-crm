@@ -110,6 +110,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - 2026-11-17 21:35 재검증(오늘 밤 커밋 전부 반영 후): `check:routes` 26라우트·43지점 죽은 라우트 0 / 배포 불변 원칙 전부 PASS / 업데이터 헬퍼 테스트 통과 / `build:mobile`(Capacitor 번들) 성공 / Playwright 5/5. 지점 exe·어드민 exe 재빌드: asar NAS 3·Supabase 0·IndexedDB 마커 3·v1.0.60, CDP 런타임 지점 `isAdminBuild=false`(#/login)·어드민 `true`(#/admin/login), IndexedDB 사용 가능. (주의: 저녁 CDP 검증 후 남은 Electron 프로세스 8개가 빌드 폴더를 잠가 첫 빌드가 실패했음 — 검증 스크립트는 taskkill /T로 종료, 메모리에 기록.)
 - 2026-11-17 23:31 재검증 2차(마감 요약·생일·회차권·내일 예약·결과지 PDF·보존기간까지 반영 후): 게이트 3종 PASS / `build:mobile` 성공 / Playwright 5/5 / 지점·어드민 exe 재빌드 asar NAS 3·Supabase 0·IDB 3·v1.0.60(신규 문자열 마감 요약·생일 고객 포함) / CDP 지점 false(#/login)·어드민 true(#/admin/login) / 잔존 프로세스 0. PR #54 CI 전부 통과.
 - 2026-11-18 00:22 `npm run mobile:prepare` 사전 실행 성공: build:mobile → 버전 동기(android versionCode 1000060/1.0.60, ios 1000060/1.0.60 — 커밋됨) → `cap sync android`(플러그인 6종) → mobile-latest.json v1.0.60(minSupported 1.0.58).
+- 2026-11-18 00:33 플래키 점검: Playwright 전체 5개 연속 3회 모두 통과(각 ~26초). 재방문 리마인더 카드도 refreshKey 재계산으로 통일.
 - 남은 것: PR #54 머지 → `npm run release:all`(게이트 전부 통과 상태) → NAS 채널 게시·서버 재배포(오너).
 
 ## 4. 릴리스 운영 원칙 (변경 없음)

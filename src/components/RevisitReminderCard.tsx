@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BellRing, Copy, Check, MessageSquare, X, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../lib/mobileBridge';
@@ -12,17 +12,19 @@ import { useFeature } from '../hooks/useFeature';
  * - 권장 재방문일이 지난 고객을 산출해 보여준다.
  * - 각 고객별 메시지 초안 생성/복사(실제 자동발송은 NAS 게이트웨이 연동 후).
  */
-export default function RevisitReminderCard(props: { compact?: boolean }) {
+export default function RevisitReminderCard(props: { compact?: boolean; refreshKey?: number }) {
   // 훅 순서 보존을 위해 게이트를 래퍼로 분리 — 어드민이 끄면 카드 자체를 렌더하지 않는다
   const enabled = useFeature('dashboard.revisitReminder');
   if (!enabled) return null;
   return <RevisitReminderCardInner {...props} />;
 }
 
-function RevisitReminderCardInner({ compact = false }: { compact?: boolean }) {
+function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [due] = useState<DueCustomer[]>(() => getRevisitDueCustomers(0));
+  // 대시보드 포커스/가시성 복귀(refreshKey)마다 다시 계산 — 다른 알림 카드와 같은 규칙 (2026-11-18)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const due = useMemo<DueCustomer[]>(() => getRevisitDueCustomers(0), [refreshKey]);
   const [draftFor, setDraftFor] = useState<DueCustomer | null>(null);
   const [copied, setCopied] = useState(false);
 
