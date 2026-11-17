@@ -180,6 +180,36 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: '사진 크게 보기' })).toBeHidden();
 
+  // 앱 잠금(PIN) — 설정 > 데이터 백업 탭에서 켜고, 화면 이탈/복귀를 흉내 내면 잠금 화면이 뜨고 PIN으로 풀린다 (2026-11-18)
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '데이터 백업', exact: true }).filter({ visible: true }).first().click();
+  const lockCard = page.getByTestId('app-lock-card');
+  await lockCard.getByLabel('새 PIN').fill('2580');
+  await lockCard.getByLabel('PIN 확인').fill('2580');
+  await lockCard.getByLabel('잠금 대기 시간').selectOption('0');
+  await lockCard.getByRole('button', { name: '잠금 켜기' }).click();
+  await expect(lockCard.getByText(/사용 중 · 즉시/)).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const lock = page.getByTestId('app-lock');
+  await expect(lock).toBeVisible();
+  await expectNoHorizontalOverflow(page, '앱 잠금');
+  await lock.getByLabel('PIN').fill('0000');
+  await lock.getByRole('button', { name: '확인' }).click();
+  await expect(lock.getByRole('alert')).toContainText('PIN이 맞지 않습니다');
+  await lock.getByLabel('PIN').fill('2580');
+  await lock.getByRole('button', { name: '확인' }).click();
+  await expect(lock).toBeHidden();
+  await lockCard.getByLabel('현재 PIN').fill('2580');
+  await lockCard.getByRole('button', { name: '잠금 끄기' }).click();
+  await expect(lockCard.getByText('사용 안 함')).toBeVisible();
+  await page.goto('/customers');
+  await page.getByText('모바일고객').filter({ visible: true }).first().click();
+
   // 고객 정보 수정이 모바일에서도 된다 (2026-11-17)
   await page.getByRole('button', { name: '고객 정보 수정' }).click();
   const memoField = page.getByPlaceholder('특이사항, 알레르기 등').filter({ visible: true }).first();

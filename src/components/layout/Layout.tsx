@@ -7,6 +7,7 @@ import MobileUpdateBanner from '../ui/MobileUpdateBanner';
 import ToastHost from '../ui/ToastHost';
 import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
+import AppLockOverlay from '../AppLockOverlay';
 import FeatureRouteGate from '../FeatureGate';
 import ErrorBoundary from '../ui/ErrorBoundary';
 import { useAuth } from '../../contexts/AuthContext';
@@ -80,6 +81,8 @@ export default function Layout() {
         <AnnouncementBanner />
         {/* 오프라인 배너 (모바일 전용 — lg:hidden) */}
         <OfflineBanner />
+        {/* 앱 잠금(PIN) — 설정에서 켠 기기에서만 (2026-11-18) */}
+        <AppLockOverlay />
         {/* 모바일 상단 헤더 */}
         <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
           <button

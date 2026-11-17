@@ -16,6 +16,7 @@ import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFla
 import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
+import AppLockCard from '../../components/settings/AppLockCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
 import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
 import clsx from 'clsx';
@@ -1388,6 +1389,8 @@ export default function Settings() {
                   </div>
                 </SettingCard>
 
+                {/* 앱 잠금(PIN) — 기기별, 기본 OFF (2026-11-18) */}
+                <AppLockCard />
                 {/* 백신 예외 등록 안내 — Electron에서만 렌더(electronAPI.securityGuide 없으면 카드가 스스로 null) */}
                 <SecurityGuideCard />
 
