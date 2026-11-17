@@ -59,11 +59,13 @@ export default function DailyCloseCard({ compact = false, refreshKey = 0 }: { co
         <Stat label="시술 · 신규" value={`${close.treatments}건 · ${close.newCustomers}명`} />
         <Stat label="예약 완료/노쇼" value={`${close.reservations.completed} / ${close.reservations.noshow}`} />
       </div>
-      {close.byMethod.length > 0 && (
+      {(close.byMethod.length > 0 || close.refunds > 0 || close.expenses > 0) && (
         <p className="text-[11px] text-gray-500 mt-2 truncate">
-          {close.byMethod.map(m => `${m.method} ${m.amount.toLocaleString()}원`).join(' · ')}
-          {close.refunds ? ` · 환불 ${close.refunds.toLocaleString()}원` : ''}
-          {close.expenses ? ` · 지출 ${close.expenses.toLocaleString()}원` : ''}
+          {[
+            ...close.byMethod.map(m => `${m.method} ${m.amount.toLocaleString()}원`),
+            close.refunds ? `환불(오늘 결제분) ${close.refunds.toLocaleString()}원` : '',
+            close.expenses ? `지출 ${close.expenses.toLocaleString()}원` : '',
+          ].filter(Boolean).join(' · ')}
         </p>
       )}
     </div>

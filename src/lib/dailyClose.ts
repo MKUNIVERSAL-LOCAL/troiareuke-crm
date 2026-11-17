@@ -15,11 +15,17 @@ export interface DailyClose {
   paymentCount: number;
   byMethod: { method: string; amount: number }[];   // 금액 큰 순
   byType: { treatment: number; product: number; other: number };
-  refunds: number;            // 오늘 환불 처리된 금액 합계(참고)
+  refunds: number;            // 오늘 결제분 중 환불된 금액(환불 처리일이 아님 — Payment에 환불일이 없다)
   expenses: number;           // 오늘 지출 합계
   treatments: number;         // 오늘 시술 기록 수(방문)
   newCustomers: number;
   reservations: { total: number; completed: number; noshow: number; cancelled: number; pending: number };
+}
+
+/** ISO 일시(UTC, registeredAt) → 지역 날짜. KST 00~09시 등록 고객이 어제로 빠지지 않게 */
+function localDay(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function getDailyClose(date = todayISO()): DailyClose {
@@ -32,7 +38,7 @@ export function getDailyClose(date = todayISO()): DailyClose {
   return {
     date,
     revenue: sum(completed),
-    paymentCount: completed.length,
+    paymentCount: new Set(completed.map(p => p.referenceId ?? p.id)).size, // 분할(복합) 결제 2행 = 1건
     byMethod: [...methodMap.entries()].map(([method, amount]) => ({ method, amount })).sort((a, b) => b.amount - a.amount),
     byType: {
       treatment: sum(completed.filter(p => p.type === 'program' || p.type === 'single_treatment')),
@@ -42,7 +48,7 @@ export function getDailyClose(date = todayISO()): DailyClose {
     refunds: sum(payments.filter(p => p.status === 'refunded')),
     expenses: sum(ExpenseStore.getAll().filter(e => e.expenseDate === date)),
     treatments: TreatmentLogStore.getAll().filter(t => t.treatmentDate === date && !t.id.startsWith('sample_')).length,
-    newCustomers: CustomerStore.getAll().filter(c => !c.id.startsWith('sample_') && (c.registeredAt || '').slice(0, 10) === date).length,
+    newCustomers: CustomerStore.getAll().filter(c => !c.id.startsWith('sample_') && !!c.registeredAt && localDay(c.registeredAt) === date).length,
     reservations: {
       total: reservations.length,
       completed: reservations.filter(r => r.status === 'completed').length,
@@ -67,7 +73,7 @@ export function buildDailyCloseMessage(c: DailyClose): string {
   if (c.byType.product) parts.push(`제품 ${won(c.byType.product)}`);
   if (c.byType.other) parts.push(`기타 ${won(c.byType.other)}`);
   if (parts.length) lines.push(`  ${parts.join(' / ')}`);
-  if (c.refunds) lines.push(`· 환불 ${won(c.refunds)}`);
+  if (c.refunds) lines.push(`· 환불(오늘 결제분) ${won(c.refunds)}`);
   if (c.expenses) lines.push(`· 지출 ${won(c.expenses)}`);
   lines.push(`· 시술 ${c.treatments}건 · 신규 고객 ${c.newCustomers}명`);
   lines.push(`· 예약 ${c.reservations.total}건 (완료 ${c.reservations.completed} / 노쇼 ${c.reservations.noshow} / 취소 ${c.reservations.cancelled}${c.reservations.pending ? ` / 미처리 ${c.reservations.pending}` : ''})`);

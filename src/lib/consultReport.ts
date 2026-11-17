@@ -56,7 +56,7 @@ export async function exportConsultationPdf(c: Consultation, customer: Customer)
   };
   const section = (title: string) => {
     y += 10;
-    ensure(26);
+    ensure(26 + 16); // 제목 + 본문 첫 줄이 같은 페이지에 오게(제목만 남는 고아 방지)
     doc.setDrawColor(26, 58, 143);
     doc.setLineWidth(1.2);
     doc.line(M, y + 2, M + 18, y + 2);
@@ -122,12 +122,14 @@ export async function exportConsultationPdf(c: Consultation, customer: Customer)
     }
   }
 
-  // 꼬리말
-  ensure(40);
-  y = Math.max(y, H - M - 24);
+  // 꼬리말 — 모든 페이지 하단 여백 안(H - M/2)에 찍는다. 본문 한계(H - M)보다 아래라 겹치지 않고, 꼬리말만 있는 빈 페이지도 생기지 않는다
   doc.setFontSize(8.5);
   doc.setTextColor(156, 163, 175);
-  doc.text('※ 본 결과지는 피부 관리 참고용 소견이며 의료 진단·처방·치료가 아닙니다. 고객 본인 확인용 · 무단 공유 금지', M, H - M);
+  for (let i = 1, n = doc.getNumberOfPages(); i <= n; i++) {
+    doc.setPage(i);
+    doc.setFont('NanumGothic');
+    doc.text('※ 본 결과지는 피부 관리 참고용 소견이며 의료 진단·처방·치료가 아닙니다. 고객 본인 확인용 · 무단 공유 금지', M, H - M / 2);
+  }
 
   const fileName = consultReportFileName(customer.name, c.consultDate);
   if (IS_MOBILE_APP) {
