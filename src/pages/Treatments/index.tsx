@@ -2,6 +2,7 @@ import { notify } from '../../lib/notify';
 import { matchesSearch } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -42,9 +43,10 @@ export default function Treatments() {
     setTreatmentLogs(TreatmentLogStore.getAll());
   };
   // 목록 표시용 사진 장수 — base64 캐시를 매 렌더·매 키 입력마다 파싱하지 않도록 목록이 바뀔 때만 계산
+  const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시 적재·동기화 후 장수 갱신
   const photoCounts = useMemo(
     () => new Map(treatmentLogs.map(t => [t.id, getPhotos(`treatment:${t.id}`).length])),
-    [treatmentLogs],
+    [treatmentLogs, photoCacheVersion],
   );
 
   useEffect(() => {
@@ -268,6 +270,12 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
   // 사진 (시술 전/후) — 로컬 photoStore에 별도 저장
   const [photos, setPhotoList] = useState<PhotoEntry[]>(() => (editing ? getPhotos(`treatment:${editing.id}`) : []));
+  const editCacheVersion = usePhotoCacheVersion();
+  useEffect(() => {
+    // IndexedDB 최초 적재가 모달을 연 뒤에 끝난 경우 — 사용자가 아직 아무것도 안 붙였을 때만 캐시값으로 채운다
+    if (!editing) return;
+    setPhotoList(prev => (prev.length === 0 ? getPhotos(`treatment:${editing.id}`) : prev));
+  }, [editing, editCacheVersion]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // 모바일: capture 속성이 있는 입력은 앨범 대신 카메라 앱을 바로 연다 (PC 브라우저는 무시하고 파일 선택)

@@ -3,7 +3,10 @@
 // ───────────────────────────────────────────────────────────────
 // 설계 의도:
 //  - 사진은 용량이 커서 코어 store.ts의 레코드(treatment_logs 등)와 분리한다.
-//  - 로컬 캐시는 localStorage(base64), 정본은 NAS 중앙 서버 `/api/photos/*`
+//  - 로컬 캐시는 IndexedDB(기본, 수백 MB) — WebView/브라우저가 IDB를 못 쓰면 localStorage(~5MB) 폴백.
+//    읽기(getPhotos)는 동기 메모리 read-through: 아직 안 읽은 키는 []를 돌려주고 비동기로 채운 뒤
+//    onPhotoCacheChange로 알린다(화면은 usePhotoCacheVersion으로 다시 그린다). 2026-11-17 D4 이관.
+//  - 정본은 NAS 중앙 서버 `/api/photos/*`
 //    (crm_photos 테이블)에 동기화한다 — 다른 PC에서도 같은 사진이 보인다.
 //    (2026-09-07 주석 갱신: 예전 "기기별 보관" 설명은 NAS 연동 전 상태였음)
 //  - 업로드 시 클라이언트에서 리사이즈/압축하여 용량을 억제한다.
@@ -16,6 +19,143 @@ const PREFIX = 'troiareuke_photos_';
 /** 엔티티 키 규칙: `treatment:<logId>`, `customer:<customerId>` 등 */
 function storageKey(entityKey: string): string {
   return `${PREFIX}${entityKey}`;
+}
+
+// ── 로컬 캐시 백엔드 (IndexedDB 기본 / localStorage 폴백) ─────────────────
+// 모바일 WebView의 localStorage는 5~10MB라 사진 수십 장이면 "용량 초과"에 막혔다(D4).
+// IndexedDB는 수백 MB 이상이라 캐시 비우기 없이 보관한다. 메타키(dirty·evicted·tombstone)는 작은 목록이라 localStorage에 그대로 둔다.
+const IDB_NAME = 'troiareuke_photos';
+const IDB_STORE = 'photos';
+type CacheBackend = 'idb' | 'ls';
+let backend: CacheBackend = typeof indexedDB !== 'undefined' ? 'idb' : 'ls';
+const mem = new Map<string, PhotoEntry[]>();   // entityKey → 사진 (IDB 백엔드의 동기 read-through 캐시)
+const inflight = new Set<string>();             // IDB에서 읽는 중인 키
+const listeners = new Set<() => void>();
+let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 캐시 내용이 비동기로 바뀌었을 때(최초 적재·NAS 동기화) 화면을 다시 그리기 위한 구독 */
+export function onPhotoCacheChange(cb: () => void): () => void {
+  listeners.add(cb);
+  return () => { listeners.delete(cb); };
+}
+function emitChange(): void {
+  if (notifyTimer !== null) return; // 여러 키가 연달아 적재돼도 리렌더는 한 번
+  notifyTimer = setTimeout(() => {
+    notifyTimer = null;
+    listeners.forEach(cb => { try { cb(); } catch { /* 구독자 오류가 다른 구독자를 막지 않게 */ } });
+  }, 30);
+}
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error('indexedDB open failed'));
+    req.onblocked = () => reject(new Error('indexedDB blocked'));
+  });
+}
+function idbRun<T>(db: IDBDatabase, mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, mode);
+    const req = fn(tx.objectStore(IDB_STORE));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error('indexedDB request failed'));
+    tx.onabort = () => reject(tx.error ?? new Error('indexedDB transaction aborted'));
+  });
+}
+
+let db: IDBDatabase | null = null;
+function isMetaKey(lsKey: string): boolean {
+  return lsKey === DIRTY_KEY; // DIRTY_KEY도 PREFIX로 시작한다
+}
+/** localStorage에 남아 있던 사진을 IndexedDB로 옮긴다 — 읽기 확인 후에만 localStorage 키를 지운다(무손실) */
+async function migrateFromLocalStorage(database: IDBDatabase): Promise<void> {
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(PREFIX) && !isMetaKey(k)) keys.push(k);
+  }
+  for (const lsKey of keys) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(lsKey) || 'null');
+      if (!Array.isArray(parsed)) { localStorage.removeItem(lsKey); continue; }
+      const entityKey = lsKey.slice(PREFIX.length);
+      if (parsed.length > 0) {
+        await idbRun(database, 'readwrite', s => s.put(parsed, entityKey));
+        const back = await idbRun<PhotoEntry[] | undefined>(database, 'readonly', s => s.get(entityKey));
+        if (!Array.isArray(back) || back.length !== parsed.length) continue; // 확인 실패 — localStorage 사본은 남겨 둔다
+      }
+      localStorage.removeItem(lsKey);
+    } catch (e) {
+      console.warn('[photoStore] localStorage → IndexedDB 이관 실패, 다음 실행에 재시도:', lsKey, e);
+    }
+  }
+}
+/** 캐시 준비(IDB 열기 + 이관) — 쓰기·동기화는 이 뒤에 수행해 이관본이 새 값을 덮어쓰지 않게 한다 */
+export const photoCacheReady: Promise<void> = backend === 'idb'
+  ? openDb()
+      .then(async database => { db = database; await migrateFromLocalStorage(database); })
+      .catch(e => { console.warn('[photoStore] IndexedDB 사용 불가 — localStorage 폴백:', e); backend = 'ls'; db = null; })
+  : Promise.resolve();
+
+function lsRead(entityKey: string): PhotoEntry[] {
+  try {
+    const raw = localStorage.getItem(storageKey(entityKey));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+/** 동기 읽기 — IDB 백엔드는 메모리에 없으면 []를 돌려주고 비동기로 채운 뒤 onPhotoCacheChange로 알린다 */
+function readCache(entityKey: string): PhotoEntry[] {
+  if (backend === 'ls') return lsRead(entityKey);
+  const cached = mem.get(entityKey);
+  if (cached) return cached;
+  // 이관 전이면 localStorage에 아직 남아 있을 수 있다 — 그 값을 그대로 보여준다
+  const legacy = lsRead(entityKey);
+  if (!inflight.has(entityKey)) {
+    inflight.add(entityKey);
+    void loadCache(entityKey).then(v => { if (v.length > 0) emitChange(); }).finally(() => inflight.delete(entityKey));
+  }
+  return legacy;
+}
+/** 비동기 읽기(확정값) — NAS 동기화처럼 실제 값이 필요한 곳에서 사용 */
+async function loadCache(entityKey: string): Promise<PhotoEntry[]> {
+  await photoCacheReady;
+  if (backend === 'ls') return lsRead(entityKey);
+  const cached = mem.get(entityKey);
+  if (cached) return cached;
+  let value: PhotoEntry[] = [];
+  try {
+    const v = db ? await idbRun<PhotoEntry[] | undefined>(db, 'readonly', s => s.get(entityKey)) : undefined;
+    value = Array.isArray(v) ? v : [];
+  } catch (e) {
+    console.error('[photoStore] IndexedDB 읽기 실패:', entityKey, e);
+  }
+  if (!mem.has(entityKey)) mem.set(entityKey, value); // 읽는 사이 쓰기가 먼저 들어왔으면 그 값을 유지
+  return mem.get(entityKey)!;
+}
+/** 쓰기 — localStorage 백엔드는 동기(용량 초과 시 throw), IDB 백엔드는 메모리 즉시 + 비동기 저장 */
+function writeCache(entityKey: string, photos: PhotoEntry[]): void {
+  if (backend === 'ls') {
+    if (photos.length === 0) localStorage.removeItem(storageKey(entityKey));
+    else localStorage.setItem(storageKey(entityKey), JSON.stringify(photos));
+    return;
+  }
+  mem.set(entityKey, photos);
+  void photoCacheReady.then(async () => {
+    if (backend === 'ls') { writeCache(entityKey, photos); return; } // 열기 실패로 폴백된 경우
+    if (!db) return;
+    try {
+      if (photos.length === 0) await idbRun(db, 'readwrite', s => s.delete(entityKey));
+      else await idbRun(db, 'readwrite', s => s.put(photos, entityKey));
+    } catch (e) {
+      console.error('[photoStore] IndexedDB 저장 실패 (서버 정본은 별도 동기화):', entityKey, e);
+    }
+  });
 }
 
 // ── NAS 동기화 dirty 추적 ─────────────────────────────────────
@@ -118,6 +258,7 @@ function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
  */
 export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> {
   if (!isAuthApiConfigured) return false;
+  await photoCacheReady; // 이관 전에 빈 로컬을 정본으로 올리지 않도록
 
   // 삭제 tombstone 재전송 — 삭제된 엔티티는 entityKeys에 없으므로 여기서 재시도
   for (const key of getTombstoneKeys()) {
@@ -129,7 +270,7 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
   const evicted = new Set(getEvictedKeys());
   for (const key of entityKeys) {
     if (!dirty.has(key)) continue;
-    const local = getPhotos(key);
+    const local = await loadCache(key);
     if (local.length === 0 && evicted.has(key)) {
       // 용량 초과로 캐시가 비워진 것이지 삭제가 아니다 — 서버본을 정본으로 두고 표식만 정리
       setDirty(key, false);
@@ -159,15 +300,14 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
 
     for (const entityKey of chunk) {
       const remote = entries[entityKey]; // undefined = 서버에 행 없음
-      const local = getPhotos(entityKey);
+      const local = await loadCache(entityKey);
       if (remote !== undefined) {
         if (JSON.stringify(remote) !== JSON.stringify(local)) {
           try {
-            if (remote.length === 0) localStorage.removeItem(storageKey(entityKey));
-            else localStorage.setItem(storageKey(entityKey), JSON.stringify(remote));
+            writeCache(entityKey, remote);
             setEvicted(entityKey, false);
             changed = true;
-          } catch { /* 로컬 캐시 용량 초과 — 서버본은 남아 있으므로 무시 */ }
+          } catch { /* 로컬 캐시 용량 초과(localStorage 폴백) — 서버본은 남아 있으므로 무시 */ }
         }
       } else if (local.length > 0) {
         pushToNas(entityKey, local);
@@ -178,16 +318,12 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
   return changed;
 }
 
-/** 해당 엔티티에 저장된 사진(base64 data URL) 목록 반환 */
+/**
+ * 해당 엔티티에 저장된 사진(base64 data URL) 목록 반환 (동기).
+ * IndexedDB 백엔드에서 아직 메모리에 없는 키는 []를 돌려주고 비동기로 채운다 — 화면은 usePhotoCacheVersion()으로 구독해 다시 그린다.
+ */
 export function getPhotos(entityKey: string): PhotoEntry[] {
-  try {
-    const raw = localStorage.getItem(storageKey(entityKey));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return readCache(entityKey);
 }
 
 /**
@@ -196,7 +332,7 @@ export function getPhotos(entityKey: string): PhotoEntry[] {
  * @returns 비운 엔티티 수
  */
 function evictPhotoCache(keepEntityKey?: string): number {
-  if (!isAuthApiConfigured) return 0;
+  if (!isAuthApiConfigured || backend !== 'ls') return 0; // IndexedDB 백엔드는 용량 여유가 커서 비우지 않는다
   const dirty = new Set(getDirtyKeys());
   let evicted = 0;
   for (const key of Object.keys(localStorage)) {
@@ -213,21 +349,16 @@ function evictPhotoCache(keepEntityKey?: string): number {
   return evicted;
 }
 
-function writePhotoCache(entityKey: string, photos: PhotoEntry[]): void {
-  if (photos.length === 0) localStorage.removeItem(storageKey(entityKey));
-  else localStorage.setItem(storageKey(entityKey), JSON.stringify(photos));
-}
-
 /** 사진 목록 저장(덮어쓰기) — NAS 설정 시 서버에도 백업 */
 export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
   try {
-    writePhotoCache(entityKey, photos);
+    writeCache(entityKey, photos);
   } catch (e) {
     // 용량 초과(QuotaExceeded): NAS 모드면 다른 캐시를 비우고 1회 재시도 (서버 정본은 그대로)
     const evicted = evictPhotoCache(entityKey);
     if (evicted > 0) {
       try {
-        writePhotoCache(entityKey, photos);
+        writeCache(entityKey, photos);
         console.warn(`[photoStore] 로컬 캐시 ${evicted}건 비우고 저장 (서버 동기화는 유지)`);
         pushToNas(entityKey, photos);
         return;
@@ -242,7 +373,7 @@ export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
 
 /** 엔티티의 모든 사진 삭제 (레코드 삭제 시 정리용) — NAS에서도 삭제 */
 export function clearPhotos(entityKey: string): void {
-  try { localStorage.removeItem(storageKey(entityKey)); } catch { /* noop */ }
+  try { writeCache(entityKey, []); } catch { /* noop */ }
   if (!isAuthApiConfigured) return;
   // 즉시 push가 실패해도 sync 때 재전송되도록 먼저 tombstone 목록에 등재
   setTombstone(entityKey, true);

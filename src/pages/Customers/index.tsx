@@ -21,6 +21,7 @@ import { exportFile } from '../../lib/mobileBridge';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
+import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
@@ -282,6 +283,7 @@ export default function Customers() {
   const isMobileLayout = useIsMobileLayout();
   // 타임랩스가 NAS에서 사진을 받아오면 최근 시술 썸네일도 같은 데이터를 다시 읽도록 리렌더
   const [photoTick, setPhotoTick] = useState(0);
+  const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시가 비동기로 채워지면 썸네일·상담 사진을 다시 읽는다
   const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
   // 엑셀 업로드용 파일 input ref
@@ -1165,7 +1167,7 @@ export default function Customers() {
                           </div>
                           <p className="text-xs text-gray-600 mt-0.5">{log.treatmentDetails || log.programName || '시술 내역 없음'}</p>
                           {log.skinCondition && <p className="text-[11px] text-gray-400 mt-0.5">피부 상태: {log.skinCondition}</p>}
-                          <TreatmentPhotoStrip logId={log.id} treatmentDate={log.treatmentDate} customerName={selected.name} tick={photoTick} onOpen={setLightbox} />
+                          <TreatmentPhotoStrip logId={log.id} treatmentDate={log.treatmentDate} customerName={selected.name} tick={photoTick + photoCacheVersion} onOpen={setLightbox} />
                         </div>
                       ))}
                     </div>
@@ -1198,7 +1200,7 @@ export default function Customers() {
                         </div>
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
                         {c.recommendedSolution && <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
-                        <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick} onOpen={setLightbox} />
+                        <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
                       </div>
                     ))}
                   </div>
@@ -1559,7 +1561,7 @@ export default function Customers() {
                         {c.nextConsultDate && (
                           <p className="text-xs text-indigo-500 mt-1.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>
                         )}
-                        <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick} onOpen={setLightbox} />
+                        <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
                       </div>
                     );
                   })}
@@ -1693,7 +1695,7 @@ export default function Customers() {
                           </div>
                           {log.staffName && <p className="text-xs text-gray-400">담당: {log.staffName}</p>}
                           {log.treatmentDetails && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{log.treatmentDetails}</p>}
-                          <TreatmentPhotoStrip logId={log.id} treatmentDate={log.treatmentDate} customerName={selected.name} tick={photoTick} onOpen={setLightbox} />
+                          <TreatmentPhotoStrip logId={log.id} treatmentDate={log.treatmentDate} customerName={selected.name} tick={photoTick + photoCacheVersion} onOpen={setLightbox} />
                         </div>
                       </div>
                     ))}

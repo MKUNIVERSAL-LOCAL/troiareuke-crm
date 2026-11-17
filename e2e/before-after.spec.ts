@@ -82,4 +82,31 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await page.reload();
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await expect(desk.getByRole('button', { name: '상담 사진 크게 보기' })).toHaveCount(1, { timeout: 10_000 });
+
+  // ── D4 (2026-11-17): 사진 캐시는 IndexedDB에 있고 localStorage에는 사진 키가 남지 않는다 ──
+  const storage = await page.evaluate(async () => {
+    const names = (await indexedDB.databases()).map(d => d.name);
+    const lsPhotoKeys = Object.keys(localStorage).filter(k => k.startsWith('troiareuke_photos_') && k !== 'troiareuke_photos_dirty');
+    return { hasDb: names.includes('troiareuke_photos'), lsPhotoKeys };
+  });
+  expect(storage.hasDb).toBe(true);
+  expect(storage.lsPhotoKeys).toEqual([]);
+
+  // 구버전(localStorage) 사진 3장을 심고 새로고침 → IndexedDB로 이관되고(무손실) 썸네일 3장이 보이며 localStorage 키는 제거된다
+  const legacyKey = await page.evaluate(() => {
+    const logsKey = Object.keys(localStorage).find(k => /^crm_.*_treatment_logs$/.test(k));
+    const logs = logsKey ? JSON.parse(localStorage.getItem(logsKey) || '[]') : [];
+    if (!logs.length) return null;
+    const canvas = document.createElement('canvas'); canvas.width = 8; canvas.height = 8;
+    const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#4477aa'; ctx.fillRect(0, 0, 8, 8);
+    const dataUrl = canvas.toDataURL('image/png');
+    const key = `troiareuke_photos_treatment:${logs[0].id}`;
+    localStorage.setItem(key, JSON.stringify([1, 2, 3].map(i => ({ id: `legacy_${i}`, dataUrl, takenAt: new Date().toISOString() }))));
+    return key;
+  });
+  expect(legacyKey).not.toBeNull();
+  await page.reload();
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  await expect(desk.getByRole('button', { name: '시술 사진 크게 보기' })).toHaveCount(3, { timeout: 10_000 });
+  await expect.poll(() => page.evaluate(k => localStorage.getItem(k), legacyKey!), { timeout: 10_000 }).toBeNull();
 });

@@ -3,6 +3,7 @@ import { Images, ArrowLeftRight, Download, Copy, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { TreatmentLogStore } from '../lib/store';
 import { syncPhotosFromNas, PHOTO_ANGLES, type PhotoAngle } from '../lib/photoStore';
+import { usePhotoCacheVersion } from '../hooks/usePhotoCache';
 import {
   collectCustomerPhotos, photoCaption, daysBetween,
   renderComparison, comparisonFileName, canCopyImage, copyImageToClipboard,
@@ -33,7 +34,8 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
-  const allPhotos = useMemo<DatedPhoto[]>(() => collectCustomerPhotos(customerId), [customerId, photoVersion]);
+  const cacheVersion = usePhotoCacheVersion(); // IndexedDB 최초 적재·동기화로 캐시가 채워지면 재수집
+  const allPhotos = useMemo<DatedPhoto[]>(() => collectCustomerPhotos(customerId), [customerId, photoVersion, cacheVersion]);
   const angles = useMemo(() => PHOTO_ANGLES.filter(a => allPhotos.some(p => p.angle === a.id)), [allPhotos]);
   const [angleFilter, setAngleFilter] = useState<PhotoAngle | 'all'>('all');
   // 고객이 바뀌면 필터 초기화. 선택한 각도의 사진이 사라지면(동기화·삭제) '전체'로 폴백 — 빈 화면에 갇히지 않게
