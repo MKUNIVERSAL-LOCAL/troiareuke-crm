@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { useOverlayClose } from '../../lib/overlayStack';
 import { useState, useEffect } from 'react';
 import { Plus, Package, Edit2, Trash2, CheckCircle, XCircle, Tag, Clock, Calendar, Search } from 'lucide-react';
 import { ProgramStore } from '../../lib/store';
@@ -43,6 +44,8 @@ export default function Programs() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  useOverlayClose(showModal, () => setShowModal(false), { escape: false }); // Android 뒤로가기 — 폼은 Esc 제외
+  useOverlayClose(!!deleteConfirm, () => setDeleteConfirm(null));
 
   useEffect(() => { loadPrograms(); }, []);
 

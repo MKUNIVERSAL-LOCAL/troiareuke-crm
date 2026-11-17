@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { useOverlayClose } from '../../lib/overlayStack';
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -62,6 +63,8 @@ export default function Sales() {
   // 지출(매입) 상태
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  useOverlayClose(showModal, closeModal, { escape: false }); // Android 뒤로가기 — 결제 등록 폼은 Esc 제외
+  useOverlayClose(showExpenseModal, closeExpenseModal, { escape: false });
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<'all' | ExpenseCategory>('all');
   const [pnlMode, setPnlMode] = useState<PnlPeriodMode>('month');

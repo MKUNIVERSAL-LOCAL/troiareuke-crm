@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, Phone, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured } from '../../lib/authApi';
+import { useOverlayClose } from '../../lib/overlayStack';
 
 const features = [
   '고객 관리 · 예약 · 시술 기록 통합',
@@ -22,6 +23,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resetOpen, setResetOpen] = useState(false);
+  useOverlayClose(resetOpen, () => setResetOpen(false)); // Android 뒤로가기·Esc — 로그인 화면은 라우터 back 대상이 없어 이게 유일한 닫기 경로
 
   const resetComplete = new URLSearchParams(location.search).get('reset') === 'success';
 

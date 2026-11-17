@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BellRing, Copy, Check, MessageSquare, X, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../lib/mobileBridge';
+import { useOverlayClose } from '../lib/overlayStack';
 import { getRevisitDueCustomers, buildReminderMessage, type DueCustomer } from '../lib/reminderEngine';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,6 +27,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const due = useMemo<DueCustomer[]>(() => getRevisitDueCustomers(0), [refreshKey]);
   const [draftFor, setDraftFor] = useState<DueCustomer | null>(null);
+  useOverlayClose(!!draftFor, () => setDraftFor(null)); // Android 뒤로가기·Esc
   const [copied, setCopied] = useState(false);
 
   const list = compact ? due.slice(0, 3) : due.slice(0, 8);
