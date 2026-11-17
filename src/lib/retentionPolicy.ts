@@ -66,18 +66,20 @@ export function anonymizeCustomers(ids: string[]): number {
   for (const id of ids) {
     const c = CustomerStore.getById(id);
     if (!c || isAnonymized(c)) continue;
+    // 문자열 필드는 undefined가 아니라 ''로 지운다 — store의 toDbCustomer는 undefined 필드를 서버(NAS)에 보내지 않아
+    // 로컬만 지워지고 서버 행에는 개인정보가 남는다 (2026-11-17 자체 점검에서 발견)
     CustomerStore.update(id, {
       name: ANONYMIZED_NAME,
       phone: '',
-      email: undefined,
-      address: undefined,
-      birthDate: undefined,
-      memo: undefined,
-      allergies: undefined,
-      skinType: undefined,
+      email: '',
+      address: '',
+      birthDate: '',
+      memo: '',
+      allergies: '',
+      skinType: '',
       tags: [],
-      referralSource: undefined,
-      privacyConsent: false,
+      referralSource: '',
+      privacyConsent: false,      // 로컬 전용 필드(서버 매핑 없음)
       privacyConsentAt: undefined,
       isActive: false,
     });
