@@ -1084,6 +1084,13 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     onUpdate();
   };
+  // 노쇼 — 상세에서 바로 처리 (2026-11-18). 고객 상세 "노쇼 N회"·직원 실적 제외·완료 누락 카드에서 빠진다. 취소와 달리 캘린더 일정은 지난 기록으로 남겨 둔다
+  const handleNoShow = () => {
+    if (!window.confirm(`${r.customerName} 고객이 오지 않았나요? 노쇼로 기록합니다.`)) return;
+    ReservationStore.updateStatus(r.id, 'noshow');
+    notify('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
+    onUpdate();
+  };
 
   const [showPayModal, setShowPayModal] = useState(false);
 
@@ -1180,6 +1187,15 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           >
             취소처리
           </button>
+          {r.status !== 'cancelled' && r.status !== 'noshow' && r.status !== 'completed' && (
+            <button
+              onClick={handleNoShow}
+              className="flex-1 py-2.5 text-sm font-medium text-rose-600 bg-rose-50 rounded-xl hover:bg-rose-100 transition-colors"
+              title="고객이 오지 않은 예약 — 노쇼 횟수에 반영"
+            >
+              노쇼
+            </button>
+          )}
           <button
             onClick={handleComplete}
             className="flex-1 py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"

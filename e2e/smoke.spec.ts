@@ -254,13 +254,22 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(payForm3).toBeVisible();
   await expect(payForm3.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
 
-  // ── 8-1. 노쇼 이력 (2026-11-17): 노쇼 예약 1건을 심으면 고객 상세에 "노쇼 1회"가 보인다 ──
-  await page.evaluate(() => {
+  // ── 8-1. 노쇼 (2026-11-17, 상세 버튼 2026-11-18): 지난 확정 예약을 상세에서 [노쇼] 처리하면 고객 상세에 "노쇼 1회"가 보인다 ──
+  const noshowId = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
     const list = JSON.parse(localStorage.getItem(key) || '[]');
-    list.push({ ...list[0], id: 'noshow_' + Date.now(), date: '2026-11-10', status: 'noshow' });
+    const id = 'noshow_' + Date.now();
+    list.push({ ...list[0], id, date: '2026-11-10', status: 'confirmed' });
     localStorage.setItem(key, JSON.stringify(list));
+    return id;
   });
+  await page.goto(`/reservations?open=${noshowId}`);
+  await page.getByRole('button', { name: '노쇼', exact: true }).click(); // confirm은 dialog 핸들러가 수락
+  const noshowStatus = await page.evaluate(id => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
+    return JSON.parse(localStorage.getItem(key) || '[]').find((r: { id: string }) => r.id === id)?.status;
+  }, noshowId);
+  expect(noshowStatus).toBe('noshow');
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await expect(desk.getByTestId('noshow-badge')).toContainText('노쇼 1회');
