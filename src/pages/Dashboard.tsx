@@ -464,8 +464,8 @@ export default function Dashboard() {
         </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Today's Reservations */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {/* Today's Reservations — items-start: 예약 1건일 때 오른쪽 열 높이만큼 카드가 늘어나 빈 공간이 생기지 않게 (2026-11-18 시각 QA) */}
           {reservationsOn && (
           <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
