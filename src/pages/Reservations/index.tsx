@@ -305,7 +305,7 @@ export default function Reservations() {
               <p className="text-sm text-slate-500">
                 {mobileTab === 'today' ? '오늘' : mobileTab === 'week' ? '이번 주' : '이번 달'} 예약이 없습니다
               </p>
-              <p className="text-xs text-slate-400 mt-1">PC에서 예약을 추가하세요</p>
+              <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">예약 추가하기</button>
             </div>
           ) : (
             mobileFilteredReservations.map(r => (
@@ -794,7 +794,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   const { user: authUser } = useAuth();
   const isEdit = !!editing;
   const customers = CustomerStore.getAll().filter(c => c.isActive !== false); // 익명화(탈퇴) 고객은 예약 대상에서 제외
-  const staffList = StaffStore.getAll();
+  const staffList = StaffStore.getAll().filter(s => s.isActive || s.id === editing?.staffId); // 퇴사 직원은 새 예약 담당자 목록에서 제외
   const services = ServiceStore.getAll().filter(s => s.isActive);
 
   // 고객 상세 [예약 추가](?customer=)에서 왔으면 그 고객을 미리 선택 (2026-11-17)

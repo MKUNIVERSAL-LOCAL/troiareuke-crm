@@ -144,7 +144,7 @@ export default function Settings() {
       phones: shopPhone ? [shopPhone] : [],
     });
     if (result.pending) {
-      setSmsTestMessage('SMS 게이트웨이가 아직 연동되지 않았습니다 (NAS 서버 연동 후 지원). 실제 발송되지 않습니다.');
+      setSmsTestMessage('SMS 게이트웨이가 아직 연동되지 않았습니다 (준비 중). 실제 발송되지 않습니다.');
     } else if (result.reason) {
       setSmsTestMessage(`발송 실패: ${result.reason}`);
     } else {
@@ -391,7 +391,6 @@ export default function Settings() {
       type: settings.type as ShopSettings['type'],
       phone: settings.phone,
       address: settings.address,
-      pointRate: settings.pointRate,
     });
 
     // 다음 로그인에서도 같은 샵명이 보이도록 지점·로컬 세션을 함께 갱신한다.
@@ -661,17 +660,6 @@ export default function Settings() {
                       className="form-input"
                     />
                   </FormRow>
-                  <FormRow label="포인트 적립률">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={settings.pointRate}
-                        onChange={e => setSettings(prev => ({ ...prev, pointRate: Number(e.target.value) }))}
-                        className="form-input w-24"
-                      />
-                      <span className="text-sm text-gray-500">% (결제금액의 N%)</span>
-                    </div>
-                  </FormRow>
                   <div className="pt-4">
                     <button
                       onClick={handleShopSave}
@@ -809,12 +797,12 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
+                        <p className="text-xs text-gray-400 mt-0.5">준비 중</p>
                       </div>
                       <button
                         disabled
                         className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="NAS 서버 연동 후 활성화됩니다"
+                        title="준비 중입니다"
                       >
                         연동하기
                       </button>
@@ -860,12 +848,12 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
+                        <p className="text-xs text-gray-400 mt-0.5">준비 중</p>
                       </div>
                       <button
                         disabled
                         className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="NAS 서버 연동 후 활성화됩니다"
+                        title="준비 중입니다"
                       >
                         연동하기
                       </button>
@@ -882,12 +870,12 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
+                        <p className="text-xs text-gray-400 mt-0.5">준비 중</p>
                       </div>
                       <button
                         disabled
                         className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="NAS 서버 연동 후 활성화됩니다"
+                        title="준비 중입니다"
                       >
                         연동하기
                       </button>
@@ -988,7 +976,7 @@ export default function Settings() {
                   <div className="space-y-4">
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>엔포+ SMS 게이트웨이는 NAS 서버 연동 후 실제 발송이 지원됩니다. API Key와 발신번호를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
+                      <span>엔포+ SMS 게이트웨이는 발송사 계약 후 실제 발송이 지원됩니다. API Key와 발신번호를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
                     </div>
                     <FormRow label="API Key">
                       <input

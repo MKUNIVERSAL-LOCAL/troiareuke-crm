@@ -117,7 +117,7 @@ export default function StaffPage() {
                   >
                     {staff.name[0]}
                   </div>
-                  <h3 className="text-base font-bold text-gray-900">{staff.name}</h3>
+                  <h3 className="text-base font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-1.5 align-middle text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">퇴사</span>}</h3>
                   <p className="text-xs text-gray-400 mt-0.5">{staff.role}</p>
                 </div>
 
@@ -454,8 +454,23 @@ function StaffDetailModal({
     onUpdate();
   };
 
+  // 퇴사 처리/복직 — 삭제 대신 isActive만 바꿔 과거 예약·시술·실적의 담당자 연결을 유지한다 (2026-11-18)
+  const handleToggleActive = () => {
+    const leaving = staff.isActive;
+    if (!window.confirm(leaving
+      ? `"${staff.name}" 직원을 퇴사 처리할까요?\n새 예약·시술의 담당자 목록에서 빠지고, 과거 기록과 실적은 그대로 남습니다. 언제든 복직할 수 있습니다.`
+      : `"${staff.name}" 직원을 복직 처리할까요?`)) return;
+    StaffStore.update(staff.id, { isActive: !leaving });
+    notify(leaving ? '퇴사 처리했습니다.' : '복직 처리했습니다.');
+    onUpdate();
+  };
   const handleDelete = () => {
-    if (!window.confirm(`"${staff.name}" 직원을 삭제하시겠습니까?`)) return;
+    const linkedRes = ReservationStore.getAll().filter(r => r.staffId === staff.id).length;
+    const linkedLogs = TreatmentLogStore.getAll().filter(t => t.staffName === staff.name).length;
+    const detail = linkedRes + linkedLogs > 0
+      ? `\n연결된 예약 ${linkedRes}건·시술 기록 ${linkedLogs}건은 남지만 담당자 연결이 끊겨 직원 실적·필터에서 빠집니다. 퇴사한 직원이라면 [퇴사 처리]를 권장합니다.`
+      : '';
+    if (!window.confirm(`"${staff.name}" 직원을 삭제하시겠습니까?${detail}\n복구할 수 없습니다.`)) return;
     StaffStore.delete(staff.id);
     onDelete();
   };
@@ -583,7 +598,7 @@ function StaffDetailModal({
           >
             {staff.name[0]}
           </div>
-          <h3 className="text-lg font-bold text-gray-900">{staff.name}</h3>
+          <h3 className="text-lg font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-2 align-middle text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">퇴사</span>}</h3>
           <p className="text-sm text-gray-400">{staff.role}</p>
         </div>
 
@@ -618,6 +633,13 @@ function StaffDetailModal({
         </div>
 
         <div className="flex gap-3 pt-2">
+          <button
+            onClick={handleToggleActive}
+            className={`flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors ${staff.isActive ? 'text-gray-600 bg-gray-100 hover:bg-gray-200' : 'text-green-700 bg-green-50 hover:bg-green-100'}`}
+            title={staff.isActive ? '담당자 목록에서 빼고 기록·실적은 유지' : '다시 재직으로'}
+          >
+            {staff.isActive ? '퇴사 처리' : '복직'}
+          </button>
           <button
             onClick={handleDelete}
             className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"

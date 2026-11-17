@@ -142,7 +142,7 @@ export default function Treatments() {
             <div className="py-16 text-center">
               <ClipboardList size={32} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm text-slate-500">시술 기록이 없습니다</p>
-              <p className="text-xs text-slate-400 mt-1">PC에서 시술 기록을 추가하세요</p>
+              <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">시술 기록 추가하기</button>
             </div>
           ) : (
             filtered.map(t => (

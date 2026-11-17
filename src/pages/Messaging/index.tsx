@@ -117,7 +117,7 @@ export default function Messaging() {
           <div className="flex items-start gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
             <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
             <span>
-              실제 문자/카카오 발송은 중앙 서버(NAS) 연동 후 지원됩니다. 지금 발송을 시도하면
+              실제 문자/카카오 발송은 발송사 연동 후 지원됩니다. 지금 발송을 시도하면
               발송되지 않고 이력에 '미연동'으로만 기록됩니다.
             </span>
           </div>
@@ -1109,7 +1109,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                   type="button"
                   disabled
                   className="px-4 py-2 text-sm font-medium bg-white text-gray-400 rounded-xl border border-gray-200 flex items-center gap-1.5 cursor-not-allowed opacity-60"
-                  title="중앙 서버(NAS) 연동 후 지원됩니다"
+                  title="발송사 연동 후 지원됩니다"
                 >
                   예약 발송
                   <HelpCircle size={12} className="text-gray-400" />

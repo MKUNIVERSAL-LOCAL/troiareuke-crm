@@ -434,6 +434,19 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await perf.getByRole('button', { name: '보고 문구' }).click();
   await expect(perf.locator('pre')).toContainText(`${perfExpected.name}: 완료 예약 ${perfExpected.count}건`);
 
+  // ── 9-3-0. 직원 퇴사 처리/복직 (2026-11-18): 삭제 대신 비활성 — 재직 목록에서 빠지고 '퇴사·비활성' 필터에 보이며, 복직하면 돌아온다 ──
+  await page.getByRole('heading', { name: perfExpected.name }).first().click(); // 직원 카드
+  await page.getByRole('button', { name: '퇴사 처리' }).click(); // confirm은 dialog 핸들러가 수락
+  await expect(page.getByText('퇴사 처리했습니다.').first()).toBeVisible();
+  await expect(page.getByText('조건에 맞는 직원이 없어요')).toBeVisible(); // 기본 '재직' 필터에서 사라짐
+  await page.getByRole('button', { name: '퇴사·비활성' }).click();
+  await expect(page.getByRole('heading', { name: new RegExp(perfExpected.name) }).first()).toContainText('퇴사');
+  await page.getByRole('heading', { name: new RegExp(perfExpected.name) }).first().click();
+  await page.getByRole('button', { name: '복직' }).click();
+  await expect(page.getByText('복직 처리했습니다.').first()).toBeVisible();
+  await page.getByRole('button', { name: '재직', exact: true }).click();
+  await expect(page.getByRole('heading', { name: perfExpected.name })).toBeVisible();
+
   // ── 9-3-1. 지정 휴일 (2026-11-18): 설정 > 영업시간에서 날짜를 추가·저장하면 다시 열어도 남아 있다 ──
   await page.goto('/settings');
   await page.getByRole('button', { name: '영업시간', exact: true }).filter({ visible: true }).first().click();
