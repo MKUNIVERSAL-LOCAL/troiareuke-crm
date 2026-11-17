@@ -4,7 +4,8 @@ import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil,
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
-import { ProductStore, ProductSaleStore, CustomerStore } from '../../lib/store';
+import { ProductStore, ProductSaleStore, CustomerStore, StaffStore } from '../../lib/store';
+import { todayISO } from '../../lib/format';
 import type { Product, ProductSale } from '../../types';
 import type { PaymentMethod } from '../../types';
 import clsx from 'clsx';
@@ -657,7 +658,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
     quantity: '1',
     unitPrice: String(product.price),
     paymentMethod: '카드' as PaymentMethod,
-    saleDate: new Date().toISOString().split('T')[0],
+    saleDate: todayISO(),
     staffName: '',
     notes: '',
   });
@@ -800,13 +801,15 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당자</label>
-            <input
-              type="text"
-              placeholder="담당 직원(선택)"
+            <select
               value={form.staffName}
               onChange={e => set('staffName', e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
-            />
+              aria-label="담당 직원"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+            >
+              <option value="">담당 직원 없음</option>
+              {StaffStore.getAll().filter(s => s.isActive).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
           </div>
         </div>
 

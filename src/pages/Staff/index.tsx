@@ -4,7 +4,7 @@ import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import StaffPerformanceCard from '../../components/StaffPerformanceCard';
-import { StaffStore, ReservationStore } from '../../lib/store';
+import { StaffStore, ReservationStore, TreatmentLogStore } from '../../lib/store';
 import { todayISO, thisYearMonthISO, formatPhoneInput } from '../../lib/format';
 import type { Staff } from '../../types';
 
@@ -128,7 +128,7 @@ export default function StaffPage() {
                   </div>
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center" title="완료·예정 포함, 취소·노쇼 제외">
                     <p className="text-base font-bold text-gray-800">{(monthlyRevenue / 10000).toFixed(0)}만</p>
-                    <p className="text-xs text-gray-400 whitespace-nowrap">월 예약액</p>
+                    <p className="text-xs text-gray-400 whitespace-nowrap">월 예약액(예정 포함)</p>
                   </div>
                 </div>
 
@@ -258,6 +258,10 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
   const handleSave = () => {
     if (!name.trim() || !phone.trim()) {
       notify('이름과 전화번호는 필수입니다.');
+      return;
+    }
+    if (StaffStore.getAll().some(s => s.isActive && s.name.trim() === name.trim())) {
+      notify('같은 이름의 재직 직원이 이미 있습니다. 시술·제품 판매 기록을 이름으로 구분하므로 다른 이름(예: 김수아B)으로 등록해주세요.');
       return;
     }
     StaffStore.save({
@@ -426,6 +430,17 @@ function StaffDetailModal({
       notify('이름과 전화번호는 필수입니다.');
       return;
     }
+    const newName = name.trim();
+    if (StaffStore.getAll().some(s => s.id !== staff.id && s.isActive && s.name.trim() === newName)) {
+      notify('같은 이름의 재직 직원이 이미 있습니다. 다른 이름으로 저장해주세요.');
+      return;
+    }
+    if (newName !== staff.name) {
+      // 시술 기록은 담당자를 이름으로 들고 있어 함께 고친다(실적 표 연결 유지). 제품 판매는 코어에 수정 API가 없어 옛 이름으로 남는다.
+      const logs = TreatmentLogStore.getAll().filter(t => t.staffName === staff.name);
+      logs.forEach(t => TreatmentLogStore.update(t.id, { staffName: newName }));
+      if (logs.length > 0) notify(`시술 기록 ${logs.length}건의 담당자 이름도 '${newName}'(으)로 바꿨습니다.`);
+    }
     StaffStore.update(staff.id, {
       name: name.trim(),
       role,
@@ -578,7 +593,7 @@ function StaffDetailModal({
           </div>
           <div className="bg-pink-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-pink-700">{(monthRevenue / 10000).toFixed(0)}만</p>
-            <p className="text-[11px] text-pink-400 mt-0.5">이번달 예약액</p>
+            <p className="text-[11px] text-pink-400 mt-0.5">이번달 예약액(예정 포함)</p>
             <p className="text-[10px] text-pink-300">(완료·예정 포함, 취소·노쇼 제외)</p>
           </div>
           <div className="bg-blue-50 rounded-xl p-3 text-center">

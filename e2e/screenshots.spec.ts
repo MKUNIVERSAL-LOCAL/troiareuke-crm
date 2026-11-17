@@ -145,6 +145,8 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   await page.screenshot({ path: path.join(dir, 'customer-detail-full.png'), fullPage: true });
   // 모바일 상세는 내부 스크롤 컨테이너라 fullPage에 하단이 안 잡힌다 — 결제 내역까지 스크롤한 뷰포트 샷
   await tryShot('customer-detail-bottom', () => page.getByTestId('customer-payments').filter({ visible: true }).first().scrollIntoViewIfNeeded());
+  // 활동 타임라인(2026-11-18) — 상세 맨 아래
+  await tryShot('customer-timeline', () => page.getByTestId('customer-timeline').filter({ visible: true }).first().scrollIntoViewIfNeeded());
   await tryShot('modal-consult', async () => {
     await page.getByRole('button', { name: '상담 기록', exact: true }).filter({ visible: true }).first().click();
     const make = page.getByRole('button', { name: '비교 이미지 만들기' });
@@ -153,6 +155,8 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   await page.goto('/programs');
   await tryShot('modal-program-add', () => page.getByRole('button', { name: '프로그램 추가' }).filter({ visible: true }).first().click());
   await page.goto('/staff');
+  // 직원별 월 실적 표(2026-11-18) — 카드 아래
+  await tryShot('staff-performance', () => page.getByTestId('staff-performance').scrollIntoViewIfNeeded());
   await tryShot('modal-staff-add', () => page.getByRole('button', { name: '직원 추가' }).filter({ visible: true }).first().click());
   await page.goto('/messaging');
   await tryShot('modal-message-send', () => page.getByRole('button', { name: '메시지 보내기' }).filter({ visible: true }).first().click());

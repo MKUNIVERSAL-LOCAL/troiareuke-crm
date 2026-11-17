@@ -263,6 +263,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     const t = new Date();
     const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     const first = list.find((r: { date: string; status: string }) => r.date === today && r.status !== 'noshow' && r.status !== 'cancelled');
+    if (!first) throw new Error('오늘 날짜의 유효한 예약이 없음 — 앞 단계가 바뀌었는지 확인');
     first.status = 'completed';
     first.totalPrice = 50000;
     localStorage.setItem(key(/^crm_.*_reservations$/), JSON.stringify(list));
@@ -273,9 +274,10 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   });
   await page.goto('/staff');
   const perf = page.getByTestId('staff-performance');
-  const perfRow = perf.getByRole('row', { name: new RegExp(perfExpected.name) });
-  await expect(perfRow).toContainText(`${perfExpected.count}건`);
-  await expect(perfRow).toContainText(`${perfExpected.amount.toLocaleString('ko-KR')}원`);
+  const perfRow = perf.locator('tbody tr').filter({ has: page.getByRole('cell', { name: perfExpected.name, exact: true }) });
+  await expect(perfRow).toHaveCount(1);
+  await expect(perfRow.locator('td').nth(1)).toHaveText(`${perfExpected.count}건`); // 완료 건수 칸
+  await expect(perfRow.locator('td').nth(2)).toHaveText(`${perfExpected.amount.toLocaleString('ko-KR')}원`); // 완료 예약액 칸
   await perf.getByRole('button', { name: '보고 문구' }).click();
   await expect(perf.locator('pre')).toContainText(`${perfExpected.name}: 완료 예약 ${perfExpected.count}건`);
 
