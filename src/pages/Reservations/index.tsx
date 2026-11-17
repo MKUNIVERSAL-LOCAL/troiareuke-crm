@@ -267,7 +267,7 @@ export default function Reservations() {
           {mobileTab === 'month' && (
             <div className="flex items-center justify-between mt-2" data-testid="mobile-month-nav">
               <button type="button" onClick={() => setMobileMonthOffset(o => o - 1)} aria-label="이전 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronLeft size={16} /></button>
-              <button type="button" onClick={() => setMobileMonthOffset(0)} className="text-sm font-semibold text-gray-800">{format(mobileMonthDate, 'yyyy년 M월')}{mobileMonthOffset !== 0 && <span className="ml-1 text-[11px] font-normal text-[#1a3a8f]">(이번달로)</span>}</button>
+              <button type="button" onClick={() => setMobileMonthOffset(0)} data-testid="mobile-month-label" className="text-sm font-semibold text-gray-800">{format(mobileMonthDate, 'yyyy년 M월')}{mobileMonthOffset !== 0 && <span className="ml-1 text-[11px] font-normal text-[#1a3a8f]">(이번달로)</span>}</button>
               <button type="button" onClick={() => setMobileMonthOffset(o => o + 1)} aria-label="다음 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronRight size={16} /></button>
             </div>
           )}
@@ -312,9 +312,13 @@ export default function Reservations() {
             <div className="py-16 text-center">
               <Calendar size={32} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm text-slate-500">
-                {mobileTab === 'today' ? '오늘' : mobileTab === 'week' ? '이번 주' : format(mobileMonthDate, 'M월')} 예약이 없습니다
+                {search.trim() || statusFilter !== 'all' || staffFilter !== 'all'
+                  ? '조건에 맞는 예약이 없습니다'
+                  : `${mobileTab === 'today' ? '오늘' : mobileTab === 'week' ? '이번 주' : format(mobileMonthDate, 'M월')} 예약이 없습니다`}
               </p>
-              <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">예약 추가하기</button>
+              {search.trim() || statusFilter !== 'all' || staffFilter !== 'all'
+                ? <button type="button" onClick={() => { setSearch(''); setStatusFilter('all'); setStaffFilter('all'); }} className="mt-3 px-4 py-2 bg-slate-100 text-gray-700 rounded-xl text-sm font-medium">필터 초기화</button>
+                : <button type="button" onClick={() => { if (mobileTab === 'month' && mobileMonthOffset !== 0) setNewDate(format(mobileMonthDate, 'yyyy-MM-dd')); setShowAddModal(true); }} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">예약 추가하기</button>}
             </div>
           ) : (
             mobileFilteredReservations.map(r => (

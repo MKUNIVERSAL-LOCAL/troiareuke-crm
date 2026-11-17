@@ -438,7 +438,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByRole('heading', { name: perfExpected.name }).first().click(); // 직원 카드
   await page.getByRole('button', { name: '퇴사 처리' }).click(); // confirm은 dialog 핸들러가 수락
   await expect(page.getByText('퇴사 처리했습니다.').first()).toBeVisible();
-  await expect(page.getByText('조건에 맞는 직원이 없어요')).toBeVisible(); // 기본 '재직' 필터에서 사라짐
+  await expect(page.getByRole('heading', { name: perfExpected.name })).toHaveCount(0); // 기본 '재직' 필터에서 사라짐
   await page.getByRole('button', { name: '퇴사·비활성' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(perfExpected.name) }).first()).toContainText('퇴사');
   await page.getByRole('heading', { name: new RegExp(perfExpected.name) }).first().click();

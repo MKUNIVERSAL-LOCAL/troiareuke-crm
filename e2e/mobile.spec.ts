@@ -291,11 +291,11 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   // 예약 등록 → 모바일 카드 → 상세 모달 (2026-11-17)
   await page.goto('/reservations');
   // 모바일 예약 '이번달' 탭에서 다음 달로 이동할 수 있다 (2026-11-18) — 다음 달 예약을 모바일에서도 찾게
-  await page.getByRole('button', { name: '이번달' }).click();
+  await page.getByRole('button', { name: '이번달', exact: true }).click();
   const monthNav = page.getByTestId('mobile-month-nav');
-  const thisMonthLabel = await monthNav.locator('button').nth(1).innerText();
+  const thisMonthLabel = await page.getByTestId('mobile-month-label').innerText();
   await monthNav.getByRole('button', { name: '다음 달' }).click();
-  expect(await monthNav.locator('button').nth(1).innerText()).not.toBe(thisMonthLabel);
+  expect(await page.getByTestId('mobile-month-label').innerText()).not.toBe(thisMonthLabel);
   await monthNav.getByRole('button', { name: '이전 달' }).click();
   await page.getByRole('button', { name: '오늘', exact: true }).click();
   await page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click();

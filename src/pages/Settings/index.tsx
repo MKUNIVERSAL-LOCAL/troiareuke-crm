@@ -797,7 +797,7 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">준비 중</p>
+                        <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
                       <button
                         disabled
@@ -848,7 +848,7 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">준비 중</p>
+                        <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
                       <button
                         disabled
@@ -870,7 +870,7 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">준비 중</p>
+                        <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
                       <button
                         disabled

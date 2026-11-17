@@ -141,8 +141,10 @@ export default function Treatments() {
           {filtered.length === 0 ? (
             <div className="py-16 text-center">
               <ClipboardList size={32} className="text-slate-300 mx-auto mb-2" />
-              <p className="text-sm text-slate-500">시술 기록이 없습니다</p>
-              <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">시술 기록 추가하기</button>
+              <p className="text-sm text-slate-500">{isFiltered ? '조건에 맞는 시술 기록이 없습니다' : '시술 기록이 없습니다'}</p>
+              {isFiltered
+                ? <button type="button" onClick={() => { setPeriod('all'); setStaffFilter(''); setSearch(''); }} className="mt-3 px-4 py-2 bg-slate-100 text-gray-700 rounded-xl text-sm font-medium">필터 초기화</button>
+                : <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">시술 기록 추가하기</button>}
             </div>
           ) : (
             filtered.map(t => (
@@ -314,7 +316,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const { user: authUser } = useAuth();
   const isEdit = !!editing;
   const customers = CustomerStore.getAll();
-  const staff = StaffStore.getAll();
+  const staff = StaffStore.getAll().filter(s => s.isActive || s.name === editing?.staffName || s.name === prefill?.staffName); // 퇴사 직원은 새 시술 담당자 목록에서 제외 (기존 기록의 담당자는 유지)
   const services = ServiceStore.getAll();
 
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));

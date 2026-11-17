@@ -1376,7 +1376,7 @@ export default function Customers() {
                       <span className="text-xs font-semibold text-amber-800 text-right">{selected.allergies}</span>
                     </div>
                   )}
-                  {selected.address && user?.role !== 'staff' && (
+                  {selected.address && (user?.role ?? 'staff') !== 'staff' && (
                     <div className="flex justify-between gap-2">
                       <span className="text-xs text-gray-500">주소</span>
                       <span className="text-xs font-medium text-gray-900 text-right truncate">{selected.address}</span>
@@ -1772,12 +1772,12 @@ export default function Customers() {
                     <p className="text-sm text-gray-500">{maskPhone(selected.phone, user?.role ?? 'staff')}</p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}
                     {(() => {
-                      // 폼에서 받는 정보를 상세에서도 보이게 — 이메일·주소는 내보내기와 같은 규칙으로 staff 역할에겐 숨김 (2026-11-18)
+                      // 폼에서 받는 정보를 상세에서도 보이게 — 이메일·주소는 목록 내보내기(이 화면)와 같은 규칙으로 staff 역할에게 숨김, 역할을 모르면 숨김 (2026-11-18)
                       const parts = [
                         selected.gender && selected.gender !== '미입력' ? selected.gender : '',
                         selected.birthDate ? `생일 ${selected.birthDate}` : '',
-                        user?.role !== 'staff' && selected.email ? selected.email : '',
-                        user?.role !== 'staff' && selected.address ? selected.address : '',
+                        (user?.role ?? 'staff') !== 'staff' && selected.email ? selected.email : '',
+                        (user?.role ?? 'staff') !== 'staff' && selected.address ? selected.address : '',
                         selected.referralSource ? `유입 ${selected.referralSource}` : '',
                       ].filter(Boolean);
                       return parts.length > 0 ? <p className="text-xs text-gray-400 mt-0.5 truncate" title={parts.join(' · ')}>{parts.join(' · ')}</p> : null;
