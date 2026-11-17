@@ -11,21 +11,30 @@ import {
   isScheduleAvailable, type ScheduledMessage,
 } from '../../lib/messagingGateway';
 import type { MessageType, MessageTemplate, MessageHistory, Customer } from '../../types';
+import { topTags } from '../../lib/customerTags';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit';
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | `tag:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
-const SEGMENT_LABELS: Record<Segment, string> = {
+const SEGMENT_LABELS: Record<string, string> = {
   all: '전체',
   vip: 'VIP',
   birthday: '이번달 생일',
   novisit: '미방문 60일+',
 };
+function segmentLabel(seg: Segment): string {
+  return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);
+}
+/** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
+function segmentFilter(seg: Segment): (c: Customer) => boolean {
+  if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
+  return SEGMENT_FILTERS[seg] ?? (() => true);
+}
 
-const SEGMENT_FILTERS: Record<Segment, (c: Customer) => boolean> = {
+const SEGMENT_FILTERS: Record<string, (c: Customer) => boolean> = {
   all: () => true,
   vip: c => c.grade === 'VIP',
   birthday: c => {
@@ -212,6 +221,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
           { key: 'vip' as Segment, label: 'VIP 고객', count: customers.filter(SEGMENT_FILTERS.vip).length, color: 'yellow' },
           { key: 'birthday' as Segment, label: '이번달 생일', count: birthdayCount, color: 'pink' },
           { key: 'novisit' as Segment, label: '미방문 60일+', count: customers.filter(SEGMENT_FILTERS.novisit).length, color: 'orange' },
+          ...topTags(customers, 4).map(t => ({ key: `tag:${t.tag}` as Segment, label: `#${t.tag}`, count: t.count, color: 'amber' })),
         ].map(t => (
           <button
             key={t.label}
@@ -226,6 +236,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
                 t.color === 'yellow' && 'bg-yellow-100 text-yellow-700',
                 t.color === 'pink' && 'bg-pink-100 text-pink-700',
                 t.color === 'orange' && 'bg-orange-100 text-orange-700',
+                t.color === 'amber' && 'bg-amber-100 text-amber-700',
               )}>
                 {t.count}명
               </span>
@@ -800,7 +811,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   ];
 
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준)
-  const targetCustomers = blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(SEGMENT_FILTERS[recipientMode]);
+  const targetCustomers = blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode));
   const recipientCount = targetCustomers.length;
 
   // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
@@ -987,9 +998,9 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               </div>
             ) : (
             <div className="flex gap-2 flex-wrap">
-              {(['all', 'vip', 'birthday', 'novisit'] as Segment[]).map(key => ({
+              {([...(['all', 'vip', 'birthday', 'novisit'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)]).map(key => ({
                 key,
-                label: `${SEGMENT_LABELS[key]} (${customers.filter(SEGMENT_FILTERS[key]).length}명)`,
+                label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key)).length}명)`,
               })).map(r => (
                 <button
                   key={r.key}

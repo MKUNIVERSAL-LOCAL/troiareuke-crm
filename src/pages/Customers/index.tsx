@@ -24,6 +24,7 @@ import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import ProgramManageModal from '../../components/ProgramManageModal';
 import { mergeBlockReason, findSamePhoneCustomers } from '../../lib/customerMerge';
+import { parseTags, topTags } from '../../lib/customerTags';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { FileText } from 'lucide-react';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
@@ -307,6 +308,7 @@ export default function Customers() {
     if (qParam !== null) setSearch(qParam);
   }, [qParam]);
   const [gradeFilter, setGradeFilter] = useState<CustomerGrade | '전체'>('전체');
+  const [tagFilter, setTagFilter] = useState(''); // 태그 칩 필터 (2026-11-18)
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
   type SortKey = 'recent' | 'name' | 'registered' | 'spent';
   const [sortKey, setSortKey] = useState<SortKey>('recent');
@@ -355,7 +357,7 @@ export default function Customers() {
     const next = new URLSearchParams(searchParams); next.delete('open');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '', tags: '' });
   const [addPrivacyConsent, setAddPrivacyConsent] = useState(false);
 
   // 고객 수정 모달
@@ -366,7 +368,7 @@ export default function Customers() {
   const [photoTick, setPhotoTick] = useState(0);
   const [detailTick, setDetailTick] = useState(0); // loadAll마다 증가 — 활동 타임라인 재계산 (2026-11-18)
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시가 비동기로 채워지면 썸네일·상담 사진을 다시 읽는다
-  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
+  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '', tags: '' });
 
   // 엑셀 업로드용 파일 input ref
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -851,9 +853,29 @@ export default function Customers() {
   const filtered = customers.filter(c => {
     const matchSearch = matchesSearch(search, [c.name, c.phone, c.email]);
     const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
+    const matchTag = !tagFilter || (c.tags || []).includes(tagFilter);
     const matchRetention = !retentionOnly || expiredIds.has(c.id);
-    return matchSearch && matchGrade && matchRetention;
+    return matchSearch && matchGrade && matchTag && matchRetention;
   }).sort(compareCustomers);
+  const tagChipsRow = (() => {
+    const tags = topTags(customers, 12);
+    if (tags.length === 0) return null;
+    return (
+      <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar pr-6" role="group" aria-label="태그 필터" data-testid="tag-filter">
+        {tags.map(({ tag, count }) => (
+          <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
+            className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
+            #{tag} <span className="opacity-70">{count}</span>
+          </button>
+        ))}
+      </div>
+    );
+  })();
+  const tagChips = selected && (selected.tags || []).length > 0 ? (
+    <span className="flex flex-wrap gap-1 mt-1" data-testid="customer-tags">
+      {(selected.tags || []).map(t => <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">#{t}</span>)}
+    </span>
+  ) : null;
 
   function handleAnonymizeExpired() {
     const targets = filtered.filter(c => expiredIds.has(c.id) && !isAnonymized(c));
@@ -977,7 +999,7 @@ export default function Customers() {
             referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
             email: pick(r, ['이메일', 'email']) || undefined,
             address: pick(r, ['주소', 'address']) || undefined,
-            allergies: undefined, tags: [], isActive: true,
+            allergies: undefined, tags: parseTags(pick(r, ['태그', 'tags'])), isActive: true,
           });
           added++;
         });
@@ -1019,11 +1041,11 @@ export default function Customers() {
       referralSource: addForm.referralSource || undefined,
       email: addForm.email.trim() || undefined, allergies: undefined,
       address: addForm.address.trim() || undefined,
-      tags: [], isActive: true,
+      tags: parseTags(addForm.tags), isActive: true,
       privacyConsent: true, privacyConsentAt: new Date().toISOString(),
     });
     setShowAddModal(false);
-    setAddForm({ name: '', phone: '', email: '', address: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '' });
+    setAddForm({ name: '', phone: '', email: '', address: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '', tags: '' });
     setAddPrivacyConsent(false);
     loadAll();
   }
@@ -1038,6 +1060,7 @@ export default function Customers() {
       grade: selected.grade, skinType: selected.skinType ?? '',
       memo: selected.memo ?? '', birthDate: selected.birthDate ?? '',
       referralSource: selected.referralSource ?? '',
+      tags: (selected.tags || []).join(', '),
     });
     setShowEditModal(true);
   }
@@ -1053,6 +1076,7 @@ export default function Customers() {
       referralSource: editForm.referralSource || undefined,
       email: editForm.email.trim() || undefined,
       address: editForm.address.trim() || undefined,
+      tags: parseTags(editForm.tags),
     });
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
@@ -1178,6 +1202,7 @@ export default function Customers() {
               <Plus size={18} />
             </button>
           </div>
+          {tagChipsRow}
           <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar pr-6">
             {(['전체', ...GRADES] as const).map(g => (
               <button
@@ -1330,7 +1355,7 @@ export default function Customers() {
                       <span className="text-xs font-medium text-rose-600">{selectedNoShows}회</span>
                     </div>
                   )}
-                  {dupHint}
+                  {tagChips}{dupHint}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 결제</span>
                     <span className="text-xs font-medium text-gray-900">{(selected.totalSpent || 0).toLocaleString()}원</span>
@@ -1562,6 +1587,7 @@ export default function Customers() {
               className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          {tagChipsRow}
           <div className="flex gap-1 flex-wrap">
             {(['전체', ...GRADES] as const).map(g => (
               <button
@@ -1711,7 +1737,7 @@ export default function Customers() {
                     {selectedNoShows > 0 && (
                       <p className="text-xs mt-0.5 text-rose-600 font-medium" data-testid="noshow-badge">노쇼 {selectedNoShows}회 — 예약 확인 연락을 권장합니다</p>
                     )}
-                    {dupHint}
+                    {tagChips}{dupHint}
                   </div>
                 </div>
                 {/* 1366px 폭에서 버튼 글자가 세로로 깨지지 않도록 — 줄바꿈은 버튼 단위로 (2026-11-17) */}
@@ -2187,6 +2213,11 @@ export default function Customers() {
                 </select>
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">태그 <span className="text-gray-400 font-normal">(쉼표로 구분)</span></label>
+                <input value={addForm.tags} onChange={e => setAddForm(f => ({ ...f, tags: e.target.value }))} aria-label="태그" placeholder="예: 민감성, 재구매, 단골"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
                 <textarea value={addForm.memo} onChange={e => setAddForm(f => ({ ...f, memo: e.target.value }))}
                   rows={2} placeholder="특이사항, 알레르기 등"
@@ -2279,6 +2310,11 @@ export default function Customers() {
                   <option value="">선택</option>
                   {['네이버', '카카오', '지인 소개', '간판', '유튜브', 'SNS', '직접 방문', '기타'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">태그 <span className="text-gray-400 font-normal">(쉼표로 구분)</span></label>
+                <input value={editForm.tags} onChange={e => setEditForm(f => ({ ...f, tags: e.target.value }))} aria-label="태그" placeholder="예: 민감성, 재구매, 단골"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>

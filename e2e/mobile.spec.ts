@@ -253,8 +253,15 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.getByRole('button', { name: '고객 정보 수정' }).click();
   const memoField = page.getByPlaceholder('특이사항, 알레르기 등').filter({ visible: true }).first();
   await memoField.fill('모바일에서 수정');
+  await page.getByLabel('태그').filter({ visible: true }).first().fill('민감성, 재구매'); // 고객 태그 (2026-11-18)
   await page.getByRole('button', { name: '저장', exact: true }).filter({ visible: true }).first().click();
   await expect(page.getByText('모바일에서 수정').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('customer-tags').filter({ visible: true }).first()).toContainText('#민감성');
+  // 목록 태그 칩으로 걸러진다
+  await page.getByRole('button', { name: '뒤로가기' }).click();
+  await page.getByTestId('tag-filter').filter({ visible: true }).first().getByRole('button', { name: /^#재구매/ }).click();
+  await expect(page.getByText('모바일고객').filter({ visible: true }).first()).toBeVisible();
+  await page.getByText('모바일고객').filter({ visible: true }).first().click();
   // 빠른 메모 — 수정 모달 없이 날짜가 붙는 한 줄 추가 (2026-11-18)
   await page.getByLabel('빠른 메모').filter({ visible: true }).first().fill('저자극 제품 선호');
   await page.getByRole('button', { name: '메모 추가' }).filter({ visible: true }).first().click();
