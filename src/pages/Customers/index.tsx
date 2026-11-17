@@ -24,7 +24,7 @@ import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, Payment
 import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatPrice, formatDate, todayISO as today, formatPhoneInput } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch } from '../../lib/format';
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -463,7 +463,7 @@ export default function Customers() {
 
   // 필터링
   const filtered = customers.filter(c => {
-    const matchSearch = !search || c.name.includes(search) || c.phone.includes(search) || (c.email?.includes(search) ?? false);
+    const matchSearch = matchesSearch(search, [c.name, c.phone, c.email]);
     const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
     return matchSearch && matchGrade;
   });

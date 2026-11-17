@@ -18,6 +18,16 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
 
+  // 검색 품질: 전화 뒷자리 4자리·초성으로도 찾힌다 (2026-11-17)
+  const searchBox = page.getByPlaceholder('이름, 전화번호 검색').filter({ visible: true }).first();
+  await searchBox.fill(acc.customerPhone.slice(-4));
+  await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible();
+  await searchBox.fill('ㅌㅅㅌ');
+  await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible();
+  await searchBox.fill('없는고객zzz');
+  await expect(page.getByText(acc.customer).filter({ visible: true })).toHaveCount(0);
+  await searchBox.fill('');
+
   // ── 4. 예약 등록 ──
   await page.goto('/reservations');
   await page.getByRole('button', { name: '예약 추가' }).click();

@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { matchesSearch } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
@@ -41,12 +42,7 @@ export default function Treatments() {
     });
   }, []);
 
-  const filtered = treatmentLogs.filter(t =>
-    t.customerName.includes(search) ||
-    (t.staffName && t.staffName.includes(search)) ||
-    (t.treatmentDetails && t.treatmentDetails.includes(search)) ||
-    (t.programName && t.programName.includes(search))
-  ).sort((a, b) => b.treatmentDate.localeCompare(a.treatmentDate)); // 최신 시술 먼저
+  const filtered = treatmentLogs.filter(t => matchesSearch(search, [t.customerName, t.staffName, t.treatmentDetails, t.programName])).sort((a, b) => b.treatmentDate.localeCompare(a.treatmentDate)); // 최신 시술 먼저
 
   const handleDelete = (id: string) => {
     TreatmentLogStore.delete(id);

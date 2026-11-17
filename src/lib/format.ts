@@ -20,7 +20,7 @@ export function formatDate(d?: string): string {
  */
 export function formatPhoneInput(value: string): string {
   if (!value || value.trim().startsWith('+')) return value;
-  const d = value.replace(/D/g, '').slice(0, 11);
+  const d = value.replace(/\D/g, '').slice(0, 11);
   if (d.startsWith('02')) {
     if (d.length <= 2) return d;
     if (d.length <= 5) return d.slice(0, 2) + '-' + d.slice(2);
@@ -31,6 +31,39 @@ export function formatPhoneInput(value: string): string {
   if (d.length <= 7) return d.slice(0, 3) + '-' + d.slice(3);
   if (d.length <= 10) return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6);
   return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7);
+}
+
+const CHOSUNG = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+/** 한글 음절 → 초성 (그 외 문자는 그대로) */
+function toChosung(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    out += code >= 0xac00 && code <= 0xd7a3 ? CHOSUNG[Math.floor((code - 0xac00) / 588)] : ch;
+  }
+  return out;
+}
+
+/**
+ * 고객·시술 검색 공통 매칭 (2026-11-17)
+ *  - 일반: 대소문자 무시 부분 일치
+ *  - 숫자만 입력: 전화번호의 하이픈을 무시하고 일치 (뒷자리 4자리 검색)
+ *  - 초성만 입력(ㅌㅅㅌ): 이름 초성 일치
+ */
+export function matchesSearch(query: string, fields: Array<string | undefined | null>): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const digitsOnly = /^[\d-]+$/.test(q);
+  const chosungOnly = /^[ㄱ-ㅎ]+$/.test(q);
+  const qDigits = q.replace(/\D/g, '');
+  for (const raw of fields) {
+    if (!raw) continue;
+    const f = String(raw).toLowerCase();
+    if (f.includes(q)) return true;
+    if (digitsOnly && qDigits && f.replace(/\D/g, '').includes(qDigits)) return true;
+    if (chosungOnly && toChosung(f).includes(q)) return true;
+  }
+  return false;
 }
 
 export function todayISO(): string {
