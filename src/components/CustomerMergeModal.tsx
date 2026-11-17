@@ -30,7 +30,7 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
   useEffect(() => {
     if (!isNasDataConfigured) return;
     let alive = true;
-    loadConsultations().then(() => { if (alive) setConsultsReady(true); }).catch(() => { if (alive) setConsultsReady(false); });
+    loadConsultations().then(ok => { if (alive) setConsultsReady(ok); }).catch(() => { if (alive) setConsultsReady(false); });
     return () => { alive = false; };
   }, []);
 

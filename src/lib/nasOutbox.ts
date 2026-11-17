@@ -72,6 +72,11 @@ export function pendingNasOutboxCount(): number {
   return readOutbox(outboxKey()).length;
 }
 
+// 서버가 영구 거부(400/404)해 폐기한 저장분 — 배너가 뜨기 전(로그인 직후 flush)에 생긴 것도 보여야 해서 모듈에 보관
+let rejectedCount = 0;
+export function rejectedNasOutboxCount(): number { return rejectedCount; }
+export function clearRejectedNasOutbox(): void { rejectedCount = 0; }
+
 /** 전송 대기 항목 추가. quota 초과 시 큐 대신 기존 방식(즉시 전송)으로 폴백 — UI로 예외를 던지지 않는다. */
 export function enqueueNasMutation(path: string, method: NasMutation['method'], body?: string): void {
   const key = outboxKey();
@@ -130,7 +135,8 @@ export function flushNasOutbox(): Promise<void> {
         if (!isPermanentRejection(error)) throw error; // 일시 오류 — 큐 보존, 실패 전파
         console.error(`[NAS] ${next.method} ${next.path} 영구 실패 — 항목 폐기:`, error);
         // 서버가 거부(400/404 — 구버전 서버가 모르는 컬렉션 등): 화면에선 이미 저장 성공으로 보였으므로 반드시 알린다
-        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status: error instanceof AuthApiError ? error.status : undefined } })); } catch { /* noop */ }
+        rejectedCount++;
+        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status: (error as AuthApiError).status } })); } catch { /* noop */ }
       }
       // 전송 중 새 항목이 추가될 수 있으므로 현재 큐를 다시 읽어 처리된 항목만 제거
       writeOutbox(key, readOutbox(key).filter(item => item.id !== next.id));

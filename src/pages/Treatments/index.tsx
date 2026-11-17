@@ -436,10 +436,10 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         customerName: customer.name,
         // 수정 시 비운 값은 ''/null로 — undefined는 서버 PATCH(JSON 병합)에서 키가 빠져 옛 값이 남는다 (NAS 감사 2026-11-18)
         customerProgramId: (customerProgramId || null) as unknown as string | undefined,
-        programName: linkedProgram?.programName || editing.programName || '',
+        programName: linkedProgram?.programName || (customerProgramId ? editing.programName : '') || '', // 연결을 끊었으면 옛 프로그램명도 지운다
         staffName: staffName || '',
         treatmentDate,
-        treatmentDetails: details,
+        treatmentDetails: details ?? '', // 비운 내역도 ''로 — undefined는 서버 PATCH에서 빠진다
         skinCondition: skinCondition || '',
         staffNotes: staffNotes || '',
         nextAppointment: nextAppointment || '',

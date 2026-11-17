@@ -610,7 +610,7 @@ export default function Customers() {
   useEffect(() => {
     loadAll();
     // 상담 기록 중앙 서버에서 1회 동기화 후 캐시 반영 — 실패하면 이 기기 캐시를 보여 준다고 알린다(무음 폴백 금지)
-    loadConsultations().catch(() => notify('서버에서 상담 기록을 받지 못해 이 기기에 저장된 기록을 표시합니다.'));
+    loadConsultations().then(ok => { if (!ok) notify('서버에서 상담 기록을 받지 못해 이 기기에 저장된 기록을 표시합니다.'); }).catch(() => {});
   }, []);
 
   useEffect(() => {

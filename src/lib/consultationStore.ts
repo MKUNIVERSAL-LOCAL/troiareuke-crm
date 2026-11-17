@@ -82,16 +82,16 @@ function fromDbConsultation(row: Record<string, any>): Consultation {
 let _consultations: Consultation[] | null = null;
 
 /** 앱 시작/고객 진입 시 1회 서버 로드 — NAS (실패 시 localStorage 유지) */
-export async function loadConsultations(): Promise<void> {
+/** @returns true면 서버 행을 적용, false면 서버에서 못 받아 이 기기 캐시 유지(nasLoad는 실패 시 null만 돌려주고 reject하지 않는다 — 호출 쪽이 이 값으로 알려야 한다). 로컬 모드는 true */
+export async function loadConsultations(): Promise<boolean> {
   // NAS 중앙 서버 모드: crm_records('consultations')에서 로드
   if (isNasDataConfigured) {
     const rows = await nasLoad('consultations');
-    if (rows) {
-      _consultations = rows.map(fromDbConsultation);
-      saveList(shopKey('consultations'), _consultations);
-    }
-    return;
+    if (!rows) return false;
+    _consultations = rows.map(fromDbConsultation);
+    saveList(shopKey('consultations'), _consultations);
   }
+  return true;
 }
 
 // ─── 진단 보조 로직 (관리사가 수정 가능한 "제안값") ──────────────
