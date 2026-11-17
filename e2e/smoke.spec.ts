@@ -62,6 +62,29 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   // ── 6. 데이터가 새로고침 후에도 남는다 (로컬 저장 회귀) ──
   await page.reload();
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
+
+  // ── 7. 회차권: 프로그램 생성 → 고객 등록 → 시술 연결 시 1회 차감 (2026-11-17) ──
+  await page.goto('/programs');
+  await page.getByRole('button', { name: '프로그램 추가' }).first().click();
+  await page.getByPlaceholder('예: 기본 피부관리 10회권').fill('회차권10');
+  await page.locator('input[placeholder="0"]').filter({ visible: true }).first().fill('300000'); // 판매가
+  await page.getByRole('button', { name: '프로그램 추가' }).last().click(); // 모달 제출
+  await expect(page.getByText('회차권10').filter({ visible: true }).first()).toBeVisible();
+
+  await page.goto('/customers');
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  await page.getByRole('button', { name: '프로그램 등록', exact: true }).first().click();
+  const progSelect = page.locator('select').filter({ hasText: '프로그램을 선택하세요' });
+  await progSelect.selectOption(await progSelect.locator('option', { hasText: '회차권10' }).getAttribute('value') as string);
+  await page.locator('input[placeholder="0"]').filter({ visible: true }).first().fill('300000'); // 실제 결제 금액
+  await page.getByRole('button', { name: '프로그램 등록', exact: true }).last().click();
+  await expect(page.getByText('잔여 10회').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole('button', { name: '시술 기록', exact: true }).first().click();
+  const linkSelect = page.locator('select').filter({ hasText: '잔여' });
+  await linkSelect.selectOption(await linkSelect.locator('option', { hasText: '회차권10' }).getAttribute('value') as string);
+  await page.getByRole('button', { name: '시술 기록 저장' }).click();
+  await expect(page.getByText('잔여 9회').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 });
 
 test('로그인 화면은 잘못된 계정을 거부한다', async ({ page }) => {
