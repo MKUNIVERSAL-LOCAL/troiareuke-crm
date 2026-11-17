@@ -76,6 +76,10 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 | 7 | NAS SSH 키 등록 + DSM 두 작업 "매일 00:00" 활성 | 릴리스 전자동(PC→채널→서버) 복구 | 2분 |
 | 8 | 아르케스파 파일럿 피드백 기록 재개 | 우선순위의 실측 근거 | — |
 
+## 3-1. v1.0.60 릴리스 준비 상태 (2026-11-17 밤 실측)
+- 지점 exe(`electron:build:dir`)·어드민 exe(`electron:build:admin:dir`) 빌드 성공. asar 마커: NAS 3건 / Supabase 0건 / 버전 1.0.60. CDP 런타임: 지점 `isAdminBuild=false`(로그인 화면), 어드민 `isAdminBuild=true`(어드민 로그인).
+- 남은 것: PR #54 머지 → `npm run release:all`(게이트 전부 통과 상태) → NAS 채널 게시·서버 재배포(오너).
+
 ## 4. 릴리스 운영 원칙 (변경 없음)
 - `npm run release:all` 게이트(라우트·불변 원칙·업데이터 테스트·E2E PC+모바일) 통과 후에만 릴리스. 재다운로드 금지. 릴리스 완료 = 채널 라이브 + `verify:nas` 5/5 + 48시간 내 구버전 지점 0곳.
 - 코어 잠금 파일은 오너 승인 + `CORE_EDIT=1`로만.
