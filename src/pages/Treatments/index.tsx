@@ -1,5 +1,5 @@
 import { notify } from '../../lib/notify';
-import { matchesSearch } from '../../lib/format';
+import { matchesSearch, todayISO } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
@@ -265,7 +265,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
   const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? '');
   const [staffName, setStaffName] = useState(editing?.staffName ?? (prefill?.staffName && staff.some(s => s.name === prefill.staffName) ? prefill.staffName : ''));
-  const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? prefill?.treatmentDate ?? new Date().toISOString().slice(0, 10));
+  const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? prefill?.treatmentDate ?? todayISO());
   // 수정 모드: 기존 시술 내용에서 시술 메뉴명과 일치하는 항목을 체크 상태로 복원. 예약 프리필도 같은 규칙(존재하는 메뉴만)
   const [selectedServices, setSelectedServices] = useState<string[]>(() => {
     const names = new Set(services.map(s => s.name));

@@ -128,6 +128,28 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await birthdayCard.getByRole('button', { name: /생일 안내$/ }).first().click();
   await expect(birthdayCard.locator('pre')).toContainText('오늘 생일을 진심으로 축하드려요');
 
+  // ── 6-4. 완료 처리 누락 예약 (2026-11-18): 어제 확정 예약을 심으면 대시보드 카드에 뜨고 [완료]를 누르면 완료 처리되어 카드에서 사라진다 ──
+  const pendingId = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const t = new Date(); t.setDate(t.getDate() - 1);
+    const date = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    const id = 'pending_' + Date.now();
+    list.push({ ...list[0], id, date, status: 'confirmed', startTime: '11:00', endTime: '12:00' });
+    localStorage.setItem(key, JSON.stringify(list));
+    return id;
+  });
+  await page.goto('/');
+  const pendingCard = page.getByTestId('pending-completion-card').filter({ visible: true }).first();
+  await expect(pendingCard).toContainText('1건');
+  await pendingCard.getByRole('button', { name: /완료$/ }).first().click();
+  await expect(page.getByTestId('pending-completion-card')).toHaveCount(0);
+  const pendingStatus = await page.evaluate(id => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
+    return JSON.parse(localStorage.getItem(key) || '[]').find((r: { id: string }) => r.id === id)?.status;
+  }, pendingId);
+  expect(pendingStatus).toBe('completed');
+
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
   await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;

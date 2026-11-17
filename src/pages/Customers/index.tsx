@@ -38,7 +38,7 @@ import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, Payment
 import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate } from '../../lib/format';
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -95,7 +95,7 @@ function calcExpiryDate(days?: number | null, baseDate?: string) {
   if (!days) return undefined;
   const d = baseDate ? new Date(baseDate) : new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  return toISODate(d);
 }
 
 // 생년월일 — 연/월/일 드롭다운 (네이티브 달력 대체). 3개 모두 선택 시에만 완전한 날짜를 emit.
@@ -845,8 +845,7 @@ export default function Customers() {
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '고객목록');
-    const today = new Date().toISOString().split('T')[0];
-    writeWorkbook(wb, `고객목록_${today}.xlsx`).catch(e => notify(e instanceof Error ? e.message : '엑셀 파일을 내보내지 못했습니다.'));
+    writeWorkbook(wb, `고객목록_${today()}.xlsx`).catch(e => notify(e instanceof Error ? e.message : '엑셀 파일을 내보내지 못했습니다.'));
   }
 
   // 업로드 가이드 모달 — 양식을 모르면 쓸 수 없는 기능이라 안내+양식 다운로드를 먼저 보여줌

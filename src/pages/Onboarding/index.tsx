@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { todayISO } from '../../lib/format';
 import { useState, useRef } from 'react';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -262,7 +263,7 @@ export default function Onboarding() {
           specialty: [],
           color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
           isActive: true,
-          hireDate: new Date().toISOString().split('T')[0],
+          hireDate: todayISO(),
         });
       });
 

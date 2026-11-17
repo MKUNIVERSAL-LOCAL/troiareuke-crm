@@ -7,6 +7,7 @@
  * 마이그레이션(마스터+이력 전체) 관점을 반영했다.
  */
 import { IS_MOBILE_APP } from './platform';
+import { todayISO } from './format';
 import { saveOrShareFile } from './mobileBridge';
 import * as XLSX from 'xlsx';
 import {
@@ -329,8 +330,7 @@ export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult
   });
 
   const shopName = (SettingsStore.get().name || 'CRM').replace(/[\\/:*?"<>|]/g, '');
-  const date = new Date().toISOString().slice(0, 10);
-  const fileName = `${shopName}_데이터내보내기_${date}.xlsx`;
+  const fileName = `${shopName}_데이터내보내기_${todayISO()}.xlsx`;
   await writeWorkbook(workbook, fileName);
   return { fileName, counts };
 }

@@ -9,7 +9,7 @@ import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
-import { todayISO } from '../../lib/format';
+import { todayISO, toISODate } from '../../lib/format';
 
 interface UserRow {
   id: string;
@@ -529,7 +529,7 @@ export default function AdminUsers() {
                       const base = periodDate && periodDate >= todayISO()
                         ? new Date(periodDate) : new Date();
                       base.setMonth(base.getMonth() + months);
-                      setPeriodDate(base.toISOString().slice(0, 10));
+                      setPeriodDate(toISODate(base));
                     }}
                     className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"
                   >

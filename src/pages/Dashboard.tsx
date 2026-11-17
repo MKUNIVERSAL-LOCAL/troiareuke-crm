@@ -18,6 +18,7 @@ import ProgramAlertCard from '../components/ProgramAlertCard';
 import TomorrowReservationCard from '../components/TomorrowReservationCard';
 import DailyCloseCard from '../components/DailyCloseCard';
 import BirthdayCard from '../components/BirthdayCard';
+import PendingCompletionCard from '../components/PendingCompletionCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 import { useFeature } from '../hooks/useFeature';
@@ -229,6 +230,7 @@ export default function Dashboard() {
 
         {/* 행동이 필요한 카드 — 회차권 임박·보존기간 경과·재방문 리마인더. 차트보다 위(첫 화면 안)에 둔다 (2026-11-17 시각 QA) */}
         <DailyCloseCard compact refreshKey={refreshKey} />
+        <PendingCompletionCard compact refreshKey={refreshKey} />
         <TomorrowReservationCard compact refreshKey={refreshKey} />
         <ProgramAlertCard compact refreshKey={refreshKey} />
         <BirthdayCard compact refreshKey={refreshKey} />
@@ -509,6 +511,8 @@ export default function Dashboard() {
             {/* 내일 예약 안내 — 노쇼 방지 (2026-11-17) */}
             {/* 오늘 마감 요약 — 복사/공유 (2026-11-17) */}
             <DailyCloseCard refreshKey={refreshKey} />
+            {/* 완료 처리 누락 예약 — 방문 통계·실적 누수 방지 (2026-11-18) */}
+            <PendingCompletionCard refreshKey={refreshKey} />
             <TomorrowReservationCard refreshKey={refreshKey} />
             {/* 회차권 소진·만료 임박 — 재구매 안내 (2026-11-17) */}
             <ProgramAlertCard refreshKey={refreshKey} />

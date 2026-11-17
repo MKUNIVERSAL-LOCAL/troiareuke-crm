@@ -6,6 +6,7 @@
  * (dataExport.buildExportSheets)와 동일한 데이터 경로를 공유한다.
  */
 import { IS_MOBILE_APP } from './platform';
+import { todayISO } from './format';
 import { saveOrShareFile } from './mobileBridge';
 import { buildExportSheets, EXPORT_DATASETS, type ExportResult } from './dataExport';
 import { SettingsStore } from './store';
@@ -31,7 +32,7 @@ export async function exportDatasetsToPdf(keys: string[]): Promise<ExportResult>
   doc.setFont('NanumGothic');
 
   const shopName = SettingsStore.get().name || 'CRM';
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayISO();
   const counts: Record<string, number> = {};
   const sensitiveKeys = new Set(EXPORT_DATASETS.filter(d => d.sensitive).map(d => d.key));
 

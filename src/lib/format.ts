@@ -66,12 +66,16 @@ export function matchesSearch(query: string, fields: Array<string | undefined | 
   return false;
 }
 
-export function todayISO(): string {
-  const d = new Date();
+/** Date → "YYYY-MM-DD" 로컬 기준. toISOString()은 UTC라 한국 새벽 0~9시에 전날로 잡힌다 — 날짜 기본값·기간 계산은 이것을 쓴다 (2026-11-18) */
+export function toISODate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+export function todayISO(): string {
+  return toISODate(new Date());
 }
 
 /** 이번 달 "YYYY-MM" — 로컬 기준 (월 필터 기본값 등) */

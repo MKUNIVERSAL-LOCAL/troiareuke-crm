@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { todayISO } from '../../lib/format';
 import { format, parseISO } from 'date-fns';
 import {
   Building2, Database, Search, ChevronLeft, ChevronRight, RefreshCw,
@@ -91,7 +92,7 @@ export default function DataBrowser() {
     setError(null);
     try {
       const bundle = await adminExportBranch(branch.branchId);
-      const stamp = new Date().toISOString().slice(0, 10);
+      const stamp = todayISO();
       downloadJsonFile(`더마솔루션-지점데이터-${(branch.branchName || branch.branchId).replace(/[\\/:*?"<>|]/g, '')}-${stamp}.json`, bundle);
     } catch (e: any) {
       setError(e?.message || '데이터 반출에 실패했습니다.');

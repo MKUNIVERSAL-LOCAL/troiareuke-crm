@@ -106,8 +106,9 @@ export default function AdminDashboard() {
       } else {
         // 로컬 데이터 폴백
         const logs = getLocalLogs();
-        const today = new Date().toISOString().split('T')[0];
-        const todayCount = logs.filter(l => l.status === 'success' && l.logged_in_at.startsWith(today)).length;
+        // logged_in_at은 ISO(UTC) 문자열 — 오늘(로컬) 범위로 비교
+        const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+        const todayCount = logs.filter(l => l.status === 'success' && new Date(l.logged_in_at) >= dayStart).length;
 
         setStats({
           totalBranches: 0,

@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
+import { toISODate } from './format';
 import { ConsultationStore } from './consultationStore';
 import { clearPhotos } from './photoStore';
 import type { Customer } from '../types';
@@ -55,7 +56,7 @@ export function getExpiredCustomers(today = new Date()): Customer[] {
   if (!policy.enabled) return [];
   const cutoff = new Date(today);
   cutoff.setFullYear(cutoff.getFullYear() - policy.years);
-  const cutoffISO = cutoff.toISOString().slice(0, 10);
+  const cutoffISO = toISODate(cutoff);
   return CustomerStore.getAll().filter(c => !c.id.startsWith('sample_') && !isAnonymized(c) && lastActivityDate(c) < cutoffISO);
 }
 
