@@ -201,11 +201,11 @@ export default function Dashboard() {
               <div className="py-8 text-center text-sm text-gray-400">
                 <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
                 오늘 예약이 없습니다
-                <p className="text-xs text-slate-400 mt-1">PC에서 예약을 추가하세요</p>
+                <button onClick={() => navigate('/reservations?new=1')} className="block mx-auto mt-2 text-xs font-medium text-[#1a3a8f]">예약 추가하기</button>
               </div>
             ) : (
               todayReservations.slice(0, 5).map(r => (
-                <div key={r.id} className="flex items-center gap-3 px-4 py-3 min-h-[52px]">
+                <button key={r.id} onClick={() => navigate(`/reservations?open=${r.id}`)} className="w-full text-left flex items-center gap-3 px-4 py-3 min-h-[52px] active:bg-gray-50">
                   <div className="text-center w-12 flex-shrink-0">
                     <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
                   </div>
@@ -214,7 +214,7 @@ export default function Dashboard() {
                     <p className="text-xs text-gray-400 truncate">{r.services.map(s => s.serviceName).join(', ')} · {r.staffName}</p>
                   </div>
                   <StatusBadge status={r.status} />
-                </div>
+                </button>
               ))
             )}
           </div>
@@ -466,7 +466,7 @@ export default function Dashboard() {
                 <div className="py-12 text-center text-gray-400 text-sm">오늘 예약이 없습니다</div>
               ) : (
                 todayReservations.map(r => (
-                  <div key={r.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/50 transition-colors">
+                  <div key={r.id} role="button" tabIndex={0} onClick={() => navigate(`/reservations?open=${r.id}`)} onKeyDown={e => { if (e.key === 'Enter') navigate(`/reservations?open=${r.id}`); }} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/50 transition-colors cursor-pointer">
                     <div className="text-center w-14 flex-shrink-0">
                       <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
                       <p className="text-xs text-gray-400">{r.endTime}</p>

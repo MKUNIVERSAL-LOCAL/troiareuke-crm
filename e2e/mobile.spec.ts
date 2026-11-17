@@ -192,6 +192,12 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(page.getByTestId('sales-mobile-list').getByText('50,000').first()).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole('button', { name: '결제 내역 (2)' }).filter({ visible: true }).first()).toBeVisible();
 
+  // 홈 오늘 예약 항목 → 예약 상세 딥링크 (2026-11-17)
+  await page.goto('/');
+  await page.getByText('모바일고객').filter({ visible: true }).first().click();
+  await expect(page.getByText('예약 상세').filter({ visible: true }).first()).toBeVisible();
+  await page.keyboard.press('Escape');
+
   // 더보기 탭(설정 등 진입점)이 하단 탭바에 있다
   const more = page.getByRole('button', { name: '더보기 메뉴 열기' }).filter({ visible: true }).first();
   await expect(more).toBeVisible();

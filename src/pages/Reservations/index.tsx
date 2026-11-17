@@ -136,6 +136,13 @@ export default function Reservations() {
   // 대시보드 빠른 작업(?new=1) → 바로 추가 모달
   const [searchParams] = useSearchParams();
   useEffect(() => { if (searchParams.get('new') === '1') setShowAddModal(true); }, [searchParams]);
+  // 대시보드 오늘 예약 항목(?open=<id>) → 예약 상세 모달 바로 열기 (2026-11-17)
+  useEffect(() => {
+    const id = searchParams.get('open');
+    if (!id) return;
+    const target = ReservationStore.getAll().find(r => r.id === id);
+    if (target) setSelectedReservation(target);
+  }, [searchParams]);
   const [editReservation, setEditReservation] = useState<Reservation | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
