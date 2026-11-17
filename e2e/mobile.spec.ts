@@ -229,8 +229,25 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await lockCard.getByLabel('현재 PIN').fill('2580');
   await lockCard.getByRole('button', { name: '잠금 끄기' }).click();
   await expect(lockCard.getByText('사용 안 함')).toBeVisible();
+  // 고객 프로그램 [관리]가 모바일 상세(fixed 오버레이) 위에서도 열린다 (2026-11-18)
+  await page.evaluate(() => {
+    const customersKey = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const customer = JSON.parse(localStorage.getItem(customersKey) || '[]').find((c: { name: string }) => c.name === '모바일고객');
+    const key = customersKey.replace(/_customers$/, '_customer_programs');
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const now = new Date().toISOString();
+    list.push({ id: 'seed_cp_' + Date.now(), shopId: customer.shopId, customerId: customer.id, customerName: customer.name, programName: '모바일 5회권', category: '회차권', totalSessions: 5, usedSessions: 1, pricePaid: 100000, paymentMethod: '카드', purchaseDate: now.slice(0, 10), isCompleted: false, createdAt: now });
+    localStorage.setItem(key, JSON.stringify(list));
+  });
   await page.goto('/customers');
   await page.getByText('모바일고객').filter({ visible: true }).first().click();
+  await page.getByRole('button', { name: '모바일 5회권 관리' }).click();
+  const manage = page.getByRole('dialog', { name: '프로그램 관리' });
+  await expect(manage).toBeVisible();
+  await manage.getByRole('button', { name: '+30일' }).click();
+  await manage.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(manage).toBeHidden();
+  await expect(page.getByText(/만료일 \d{4}\.\d{2}\.\d{2}/).filter({ visible: true }).first()).toBeVisible();
 
   // 고객 정보 수정이 모바일에서도 된다 (2026-11-17)
   await page.getByRole('button', { name: '고객 정보 수정' }).click();

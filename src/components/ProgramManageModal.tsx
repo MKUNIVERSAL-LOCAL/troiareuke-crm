@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import Modal from './ui/Modal';
 import { CustomerProgramStore } from '../lib/store';
 import { todayISO, parseISODate, toISODate, formatDate } from '../lib/format';
@@ -83,7 +84,8 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
     onDone();
   }
 
-  return (
+  // body 포털 — 고객 상세의 모바일 오버레이(fixed z-50)와 데스크톱 컨테이너 밖에서 렌더해야 두 레이아웃 모두에서 보인다
+  return createPortal(
     <Modal isOpen onClose={onClose} title="프로그램 관리" size="sm">
       <div className="space-y-4">
         <div>
@@ -130,6 +132,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
           <button type="button" onClick={handleSave} className="py-2.5 px-5 bg-[#1a3a8f] hover:bg-[#15306e] text-white rounded-xl text-sm font-semibold">저장</button>
         </div>
       </div>
-    </Modal>
+    </Modal>,
+    document.body,
   );
 }
