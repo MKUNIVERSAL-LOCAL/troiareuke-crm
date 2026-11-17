@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellRing, Copy, Check, MessageSquare, X } from 'lucide-react';
+import { BellRing, Copy, Check, MessageSquare, X, Share2 } from 'lucide-react';
+import { canShareText, shareText } from '../lib/mobileBridge';
 import { getRevisitDueCustomers, buildReminderMessage, type DueCustomer } from '../lib/reminderEngine';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
@@ -111,6 +112,15 @@ function RevisitReminderCardInner({ compact = false }: { compact?: boolean }) {
                 ⚠️ 자동 발송은 문자/카카오 게이트웨이(회사 NAS 서버) 연동 후 지원됩니다. 현재는 초안을 복사해 직접 발송해주세요.
               </p>
               <div className="flex gap-2">
+                {canShareText && (
+                  <button
+                    onClick={() => shareText(buildReminderMessage(draftFor.customer), '재방문 안내')}
+                    className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-green-600"
+                    title="카카오톡·문자 앱으로 바로 보내기"
+                  >
+                    <Share2 size={14} />보내기
+                  </button>
+                )}
                 <button
                   onClick={() => copyDraft(buildReminderMessage(draftFor.customer))}
                   className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-[#152f75]"
