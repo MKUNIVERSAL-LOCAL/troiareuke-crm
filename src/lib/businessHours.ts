@@ -2,7 +2,8 @@
 // businessHours — 영업시간·휴무일 점검 (비코어, 2026-11-18)
 // ───────────────────────────────────────────────────────────────
 // 예약을 휴무일·지정 휴일·영업시간 밖에 잡으면 저장 전에 경고한다(막지는 않는다 — 예외 영업이 흔하므로 confirm).
-// 설정 > 영업시간의 요일별 open/close/isOff와 holidays(YYYY-MM-DD)를 쓴다.
+// 설정 > 영업시간의 요일별 open/close/isOff와 holidays(YYYY-MM-DD, 서버 시드 전용 — 화면 편집기는 아직 없음)를 쓴다.
+// 시간은 분으로 비교한다 — 'HH:mm' 문자열 비교는 자정을 넘는 예약(23:30+60분 → 00:30)에서 틀린다.
 // ═══════════════════════════════════════════════════════════════
 
 import { SettingsStore } from './store';
@@ -15,8 +16,22 @@ export interface HoursWarning {
   message: string;
 }
 
-/** 날짜·시간이 영업 조건에 맞지 않으면 경고 목록(빈 배열이면 정상) */
-export function checkBusinessHours(date: string, startTime: string, endTime: string): HoursWarning[] {
+function toMinutes(hhmm: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function fromMinutes(min: number): string {
+  const h = Math.floor(min / 60), m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * 날짜·시작 시각·소요 시간(분)이 영업 조건에 맞지 않으면 경고 목록(빈 배열이면 정상).
+ * 종료가 자정을 넘으면 24:00 이후로 계산해 영업시간 밖으로 잡힌다.
+ */
+export function checkBusinessHours(date: string, startTime: string, durationMinutes: number): HoursWarning[] {
   const s = SettingsStore.get();
   const out: HoursWarning[] = [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return out;
@@ -31,8 +46,11 @@ export function checkBusinessHours(date: string, startTime: string, endTime: str
     out.push({ kind: 'dayOff', message: `${day}요일은 휴무일입니다.` });
     return out;
   }
-  if (hours.open && hours.close && (startTime < hours.open || endTime > hours.close)) {
-    out.push({ kind: 'outsideHours', message: `${day}요일 영업시간(${hours.open}~${hours.close}) 밖입니다 (${startTime}~${endTime}).` });
+  const open = toMinutes(hours.open), close = toMinutes(hours.close), start = toMinutes(startTime);
+  if (open === null || close === null || start === null) return out;
+  const end = start + Math.max(0, durationMinutes || 0);
+  if (start < open || end > close) {
+    out.push({ kind: 'outsideHours', message: `${day}요일 영업시간(${hours.open}~${hours.close}) 밖입니다 (${startTime}~${fromMinutes(end)}).` });
   }
   return out;
 }

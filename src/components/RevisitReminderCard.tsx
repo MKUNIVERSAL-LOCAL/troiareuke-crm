@@ -88,7 +88,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
                 초안
               </button>
               <button
-                onClick={() => navigate(`/reservations?new=1&customer=${encodeURIComponent(d.customer.id)}`)}
+                onClick={() => navigate(`/reservations?new=1&customer=${encodeURIComponent(d.customer.id)}${d.overdueDays < 0 ? `&date=${d.dueDate}` : ''}`)}
                 aria-label={`${d.customer.name} 예약 추가`}
                 className="text-xs px-2.5 py-1.5 bg-sky-50 text-sky-700 rounded-lg font-medium hover:bg-sky-100 transition-colors flex-shrink-0"
               >

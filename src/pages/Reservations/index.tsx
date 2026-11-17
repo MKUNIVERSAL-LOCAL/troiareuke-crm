@@ -891,17 +891,16 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       r.status !== 'cancelled' && r.status !== 'noshow' &&
       startTime < r.endTime && endTime > r.startTime
     );
-    if (overlap) {
-      const proceed = window.confirm(
-        `${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.\n그래도 등록하시겠습니까?`
-      );
-      if (!proceed) return;
-    }
-
-    // 휴무일·지정 휴일·영업시간 밖 경고 — 예외 영업이 있으니 막지 않고 확인만 (2026-11-18)
-    const hoursWarnings = checkBusinessHours(date, startTime, endTime);
-    if (hoursWarnings.length > 0) {
-      const proceed = window.confirm(`${hoursWarnings.map(w => w.message).join('\n')}\n그래도 예약을 등록하시겠습니까?`);
+    // 휴무일·지정 휴일·영업시간 밖 경고 — 예외 영업이 있으니 막지 않고 확인만. 시간이 안 바뀐 수정(메모만 등)은 다시 묻지 않는다 (2026-11-18)
+    const timeChanged = !editing || editing.date !== date || editing.startTime !== startTime || editing.endTime !== endTime;
+    const hoursWarnings = timeChanged ? checkBusinessHours(date, startTime, totalDuration) : [];
+    const warnings = [
+      ...(overlap ? [`${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.`] : []),
+      ...hoursWarnings.map(w => w.message),
+    ];
+    if (warnings.length > 0) {
+      // 확인창은 하나로 — 모바일에서 네이티브 confirm 두 번은 답답하다
+      const proceed = window.confirm(`${warnings.join('\n')}\n그래도 ${isEdit ? '저장' : '등록'}하시겠습니까?`);
       if (!proceed) return;
     }
 

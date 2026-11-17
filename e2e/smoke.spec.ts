@@ -50,7 +50,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
   page.off('dialog', recordDialog);
   expect(dialogMessages.some(m => m.includes(`${dayLabel}요일은 휴무일입니다`))).toBe(true);
-  await page.evaluate(() => { // 휴무 원복 — 뒤 단계의 예약 생성이 영향받지 않게
+  await page.evaluate(() => { // 휴무 원복 — 뒤 단계의 예약 생성이 영향받지 않게. 메모리 캐시(SettingsStore)는 다음 page.goto에서 다시 읽힌다 — 그 전에 SettingsStore.save()를 부르는 단계를 끼우지 말 것
     const key = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!;
     const s = JSON.parse(localStorage.getItem(key) || '{}');
     for (const d of Object.keys(s.businessHours)) s.businessHours[d].isOff = false;
@@ -231,7 +231,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   // ── 9-0. 고객 상세 [메시지] → 발송 모달이 그 고객 한 명을 수신 대상으로 연다 (2026-11-18) ──
   await page.goto('/customers');
   await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
-  await desk.getByRole('button', { name: '메시지' }).click();
+  await desk.getByRole('button', { name: '메시지', exact: true }).click();
   await expect(page).toHaveURL(/\/messaging$/); // ?customer=는 1회 캡처 후 비워진다
   await expect(page.getByTestId('recipient-single')).toContainText(acc.customer);
   await page.getByRole('button', { name: '대상 바꾸기' }).click();

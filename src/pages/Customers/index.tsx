@@ -1400,18 +1400,22 @@ export default function Customers() {
 
               {/* 모바일 액션 — PC와 동일한 모달(body 포털) */}
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
-                  className="py-2.5 bg-sky-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
-                >
-                  <CalendarPlus size={14} />예약 추가
-                </button>
-                <button
-                  onClick={() => navigate(`/messaging?customer=${selected.id}`)}
-                  className="py-2.5 bg-purple-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
-                >
-                  <MessageSquare size={14} />메시지
-                </button>
+                {!isAnonymized(selected) && (
+                  <>
+                    <button
+                      onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
+                      className="py-2.5 bg-sky-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
+                    >
+                      <CalendarPlus size={14} />예약 추가
+                    </button>
+                    <button
+                      onClick={() => navigate(`/messaging?customer=${selected.id}`)}
+                      className="py-2.5 bg-purple-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
+                    >
+                      <MessageSquare size={14} />메시지
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={() => setShowTreatmentModal(true)}
                   className="py-2.5 bg-green-500 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
@@ -1664,20 +1668,24 @@ export default function Customers() {
                   >
                     <Plus size={12} />프로그램 등록
                   </button>
-                  <button
-                    onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
-                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-sky-600 text-white rounded-xl text-xs font-medium hover:bg-sky-700 transition-colors"
-                    title="이 고객으로 예약 추가 창을 엽니다"
-                  >
-                    <CalendarPlus size={12} />예약 추가
-                  </button>
-                  <button
-                    onClick={() => navigate(`/messaging?customer=${selected.id}`)}
-                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-purple-600 text-white rounded-xl text-xs font-medium hover:bg-purple-700 transition-colors"
-                    title="이 고객 한 명에게 문자·카카오를 보냅니다"
-                  >
-                    <MessageSquare size={12} />메시지
-                  </button>
+                  {!isAnonymized(selected) && (
+                    <>
+                      <button
+                        onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
+                        className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-sky-600 text-white rounded-xl text-xs font-medium hover:bg-sky-700 transition-colors"
+                        title="이 고객으로 예약 추가 창을 엽니다"
+                      >
+                        <CalendarPlus size={12} />예약 추가
+                      </button>
+                      <button
+                        onClick={() => navigate(`/messaging?customer=${selected.id}`)}
+                        className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-purple-600 text-white rounded-xl text-xs font-medium hover:bg-purple-700 transition-colors"
+                        title="이 고객 한 명에게 문자·카카오를 보냅니다"
+                      >
+                        <MessageSquare size={12} />메시지
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={openEditModal}
                     className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-gray-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-200 transition-colors"

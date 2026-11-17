@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { notify } from '../../lib/notify';
 import { useSearchParams } from 'react-router-dom';
 import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -772,9 +772,11 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [scheduleAt, setScheduleAt] = useState('');
   const charLimit = msgType === 'sms' ? 90 : 1000;
 
-  const customers = CustomerStore.getAll().filter(c => c.isActive !== false);
-  // 개별 고객 발송 — 고객 상세에서 열었을 때. [대상 바꾸기]로 세그먼트 발송으로 되돌릴 수 있다
+  const customers = useMemo(() => CustomerStore.getAll().filter(c => c.isActive !== false), []);
+  // 개별 고객 발송 — 고객 상세에서 열었을 때. [대상 바꾸기]로 세그먼트 발송으로 되돌릴 수 있다.
+  // 요청한 고객이 발송 대상이 아니면(익명화·없음) 세그먼트로 떨어뜨리지 않고 막는다 — 전체 발송 사고 방지
   const [onlyCustomer, setOnlyCustomer] = useState<Customer | null>(() => (initialCustomerId && customers.find(c => c.id === initialCustomerId)) || null);
+  const blockedCustomer = !!initialCustomerId && !onlyCustomer;
   const templates = MessageTemplateStore.getAll();
   const kakaoSettings = SettingsStore.get().kakao;
 
@@ -798,7 +800,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   ];
 
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준)
-  const targetCustomers = onlyCustomer ? [onlyCustomer] : customers.filter(SEGMENT_FILTERS[recipientMode]);
+  const targetCustomers = blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(SEGMENT_FILTERS[recipientMode]);
   const recipientCount = targetCustomers.length;
 
   // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
@@ -810,6 +812,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
+    if (recipientPhones.length === 0) { notify('전화번호가 있는 수신 대상이 없습니다. 고객 정보의 전화번호를 확인해주세요.'); return; }
     // 치환 안 된 변수({고객명} 등)가 그대로 나가는 사고 방지 — 예약/즉시 발송 공통
     if (/\{[^}]+\}/.test(content)) {
       notify('메시지에 치환되지 않은 변수({고객명} 등)가 있습니다. 실제 값으로 바꾼 뒤 발송해주세요.');
@@ -973,9 +976,13 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           {/* Recipients */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">수신 대상</label>
-            {onlyCustomer ? (
+            {blockedCustomer ? (
+              <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2" data-testid="recipient-blocked">
+                이 고객은 발송 대상이 아닙니다(익명화됐거나 삭제됨). 창을 닫고 다른 고객을 선택해주세요.
+              </p>
+            ) : onlyCustomer ? (
               <div className="flex items-center gap-2 flex-wrap" data-testid="recipient-single">
-                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-purple-600 text-white">개별 발송: {onlyCustomer.name}{onlyCustomer.phone ? ` (${onlyCustomer.phone})` : ''}</span>
+                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-purple-600 text-white">개별 발송: {onlyCustomer.name} ({onlyCustomer.phone || '전화번호 없음'})</span>
                 <button type="button" onClick={() => setOnlyCustomer(null)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">대상 바꾸기</button>
               </div>
             ) : (
@@ -1135,7 +1142,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             )}
             <button
               onClick={handleSend}
-              disabled={sending || !content.trim() || recipientCount === 0}
+              disabled={sending || !content.trim() || recipientCount === 0 || recipientPhones.length === 0}
               className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sending ? <Clock size={14} className="animate-spin" /> : <Send size={14} />}
