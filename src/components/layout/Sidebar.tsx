@@ -89,6 +89,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* 모바일 닫기 버튼 */}
         <button
           onClick={onClose}
+          aria-label="메뉴 닫기"
           className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
         >
           <X size={16} />

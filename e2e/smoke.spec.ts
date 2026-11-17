@@ -29,6 +29,21 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page.getByText(acc.customer).filter({ visible: true })).toHaveCount(0);
   await searchBox.fill('');
 
+  // 키보드 포커스 — 모달을 열면 첫 입력란에 커서, Tab은 창 안에서만 돌고, 닫으면 열었던 버튼으로 돌아온다 (접근성 감사 2026-11-18)
+  const addOpener = page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first();
+  await addOpener.click();
+  const addDialog = page.getByRole('dialog', { name: '고객 추가' });
+  await expect(addDialog).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    return el?.tagName === 'INPUT' && !!el.closest('[role="dialog"][aria-label="고객 추가"]');
+  }), '첫 입력란에 포커스').toBe(true);
+  for (let i = 0; i < 40; i++) await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"][aria-label="고객 추가"]')), 'Tab 40번 뒤에도 포커스가 모달 안').toBe(true);
+  await addDialog.getByRole('button', { name: '닫기' }).click();
+  await expect(addDialog).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.textContent?.includes('고객 추가') ?? false), '열었던 버튼으로 포커스 복원').toBe(true);
+
   // ── 4. 예약 등록 (오늘을 휴무일로 바꿔 두면 저장 전 "휴무일" 확인이 뜨고, 수락하면 저장된다 — 2026-11-18 영업시간 점검) ──
   const dayLabel = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!;

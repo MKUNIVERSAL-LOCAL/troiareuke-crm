@@ -1,8 +1,8 @@
 import { HIDE_ON_MOBILE } from '../../lib/platform';
 import { formatPhoneInput } from '../../lib/format';
 import { notify } from '../../lib/notify';
-import { useOverlayClose } from '../../lib/overlayStack';
-import { useState, useEffect, useCallback } from 'react';
+import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
@@ -374,6 +374,8 @@ export default function Settings() {
   // Service modal
   const [showServiceModal, setShowServiceModal] = useState(false);
   useOverlayClose(showServiceModal, () => setShowServiceModal(false), { escape: false }); // Android 뒤로가기 — 메뉴 폼은 Esc 제외
+  const serviceModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showServiceModal, serviceModalRef); // 첫 입력란 포커스·Tab 순환·닫힐 때 복원
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceForm, setServiceForm] = useState(emptyServiceForm);
 
@@ -1452,9 +1454,11 @@ export default function Settings() {
       {/* Service Add/Edit Modal */}
       {showServiceModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+          <div ref={serviceModalRef} role="dialog" aria-modal="true" aria-label={editingService ? '시술 수정' : '시술 추가'} className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
             <button
+              type="button"
               onClick={() => setShowServiceModal(false)}
+              aria-label="닫기"
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
             >
               <X size={18} />
@@ -1462,10 +1466,11 @@ export default function Settings() {
             <h3 className="text-base font-bold text-gray-900 mb-5">
               {editingService ? '시술 수정' : '시술 추가'}
             </h3>
-            <div className="space-y-4">
+            <form onSubmit={e => { e.preventDefault(); handleServiceSubmit(); }} className="space-y-4">
               <FormRow label="시술명">
                 <input
                   type="text"
+                  aria-label="시술명"
                   value={serviceForm.name}
                   onChange={e => setServiceForm(prev => ({ ...prev, name: e.target.value }))}
                   className="form-input"
@@ -1475,6 +1480,7 @@ export default function Settings() {
               <FormRow label="카테고리">
                 <input
                   type="text"
+                  aria-label="카테고리"
                   value={serviceForm.category}
                   onChange={e => setServiceForm(prev => ({ ...prev, category: e.target.value }))}
                   className="form-input"
@@ -1485,6 +1491,7 @@ export default function Settings() {
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
+                    aria-label="소요시간(분)"
                     value={serviceForm.duration}
                     onChange={e => setServiceForm(prev => ({ ...prev, duration: Number(e.target.value) }))}
                     className="form-input w-24"
@@ -1496,6 +1503,7 @@ export default function Settings() {
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
+                    aria-label="가격(원)"
                     value={serviceForm.price}
                     onChange={e => setServiceForm(prev => ({ ...prev, price: Number(e.target.value) }))}
                     className="form-input w-32"
@@ -1506,6 +1514,7 @@ export default function Settings() {
               <FormRow label="설명">
                 <input
                   type="text"
+                  aria-label="설명"
                   value={serviceForm.description}
                   onChange={e => setServiceForm(prev => ({ ...prev, description: e.target.value }))}
                   className="form-input"
@@ -1514,19 +1523,20 @@ export default function Settings() {
               </FormRow>
               <div className="flex gap-3 pt-4">
                 <button
+                  type="button"
                   onClick={() => setShowServiceModal(false)}
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200"
                 >
                   취소
                 </button>
                 <button
-                  onClick={handleServiceSubmit}
+                  type="submit"
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600"
                 >
                   {editingService ? '수정하기' : '추가하기'}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}

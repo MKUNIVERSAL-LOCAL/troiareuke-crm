@@ -1,6 +1,6 @@
 import { notify } from '../../lib/notify';
-import { useOverlayClose } from '../../lib/overlayStack';
-import { useState, useEffect, useMemo } from 'react';
+import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
@@ -65,6 +65,10 @@ export default function Sales() {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   useOverlayClose(showModal, closeModal, { escape: false }); // Android 뒤로가기 — 결제 등록 폼은 Esc 제외
   useOverlayClose(showExpenseModal, closeExpenseModal, { escape: false });
+  const payModalRef = useRef<HTMLDivElement>(null);
+  const expenseModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showModal, payModalRef); // 첫 입력란 포커스·Tab 순환·닫힐 때 복원
+  useFocusTrap(showExpenseModal, expenseModalRef);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<'all' | ExpenseCategory>('all');
   const [pnlMode, setPnlMode] = useState<PnlPeriodMode>('month');
@@ -1018,10 +1022,10 @@ export default function Sales() {
       {/* 결제 등록 모달 */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-md my-auto">
+          <div ref={payModalRef} role="dialog" aria-modal="true" aria-label={editingId ? '결제 수정' : '결제 등록'} className="bg-white rounded-2xl w-full max-w-md my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editingId ? '결제 수정' : '결제 등록'}</h2>
-              <button onClick={closeModal}><X size={18} className="text-gray-400" /></button>
+              <button onClick={closeModal} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleSave} className="p-5 space-y-4">
               {/* 구분 */}
@@ -1041,6 +1045,7 @@ export default function Sales() {
                     <button
                       type="button"
                       key={v}
+                      aria-pressed={form.type === v}
                       onClick={() => setForm(f => ({ ...f, type: v as Payment['type'] }))}
                       className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-medium transition-colors ${
                         form.type === v ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -1056,7 +1061,7 @@ export default function Sales() {
               {/* 고객 선택 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">고객</label>
-                <select value={form.customerId} onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}
+                <select aria-label="고객" value={form.customerId} onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">고객 선택 (선택사항)</option>
                   {customers.map(c => (
@@ -1069,7 +1074,7 @@ export default function Sales() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">결제 금액 *</label>
                 <div className="relative">
-                  <input
+                  <input aria-label="결제 금액"
                     required
                     type="text"
                     value={form.amount && !Number.isNaN(parseInt(form.amount, 10)) ? parseInt(form.amount, 10).toLocaleString('ko-KR') : ''}
@@ -1093,7 +1098,7 @@ export default function Sales() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">할인 금액</label>
                 <div className="relative">
-                  <input
+                  <input aria-label="할인 금액"
                     type="text"
                     value={form.discountAmount && form.discountAmount !== '0' && !Number.isNaN(parseInt(form.discountAmount, 10)) ? parseInt(form.discountAmount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value.replace(/,/g, '') || '0' }))}
@@ -1148,7 +1153,7 @@ export default function Sales() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제일</label>
-                  <input type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
+                  <input aria-label="결제일" type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
@@ -1156,7 +1161,7 @@ export default function Sales() {
               {/* 메모 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
-                <input value={form.memo} onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
+                <input aria-label="메모" value={form.memo} onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
                   placeholder="시술명, 제품명 등"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
@@ -1182,10 +1187,10 @@ export default function Sales() {
       {/* 지출(매입) 등록 모달 */}
       {showExpenseModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <div ref={expenseModalRef} role="dialog" aria-modal="true" aria-label={editingExpenseId ? '지출 수정' : '지출(매입) 등록'} className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editingExpenseId ? '지출 수정' : '지출(매입) 등록'}</h2>
-              <button onClick={closeExpenseModal}><X size={18} className="text-gray-400" /></button>
+              <button onClick={closeExpenseModal} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleExpenseSave} className="p-5 space-y-4">
               {/* 분류 */}
@@ -1196,6 +1201,7 @@ export default function Sales() {
                     <button
                       type="button"
                       key={c}
+                      aria-pressed={expenseForm.category === c}
                       onClick={() => setExpenseForm(f => ({ ...f, category: c }))}
                       className={`py-2 rounded-xl border text-xs font-medium transition-colors ${
                         expenseForm.category === c
@@ -1217,7 +1223,7 @@ export default function Sales() {
               {/* 내용 & 거래처 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">내용 *</label>
-                <input
+                <input aria-label="내용"
                   required
                   value={expenseForm.description}
                   onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))}
@@ -1227,7 +1233,7 @@ export default function Sales() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">거래처</label>
-                <input
+                <input aria-label="거래처"
                   value={expenseForm.vendor}
                   onChange={e => setExpenseForm(f => ({ ...f, vendor: e.target.value }))}
                   placeholder="예: 본사, 건물주 (선택)"
@@ -1239,7 +1245,7 @@ export default function Sales() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">금액 *</label>
                 <div className="relative">
-                  <input
+                  <input aria-label="금액"
                     required
                     type="text"
                     value={expenseForm.amount && !Number.isNaN(parseInt(expenseForm.amount, 10)) ? parseInt(expenseForm.amount, 10).toLocaleString('ko-KR') : ''}
@@ -1262,7 +1268,7 @@ export default function Sales() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">지출일</label>
-                  <input
+                  <input aria-label="지출일"
                     type="date"
                     value={expenseForm.expenseDate}
                     onChange={e => setExpenseForm(f => ({ ...f, expenseDate: e.target.value }))}
@@ -1274,7 +1280,7 @@ export default function Sales() {
               {/* 메모 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
-                <input
+                <input aria-label="메모"
                   value={expenseForm.memo}
                   onChange={e => setExpenseForm(f => ({ ...f, memo: e.target.value }))}
                   placeholder="세금계산서 발행 여부 등 (선택)"

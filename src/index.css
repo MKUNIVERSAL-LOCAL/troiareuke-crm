@@ -47,6 +47,11 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
   border-color: transparent;
 }
+/* 키보드 포커스 링 — outline-none을 쓴 버튼·링크도 키보드로 올 때는 보이게 (마우스 클릭엔 안 보임) */
+:where(button, a, [role="button"], [role="menuitem"], [tabindex]):focus-visible {
+  outline: 2px solid #1a3a8f;
+  outline-offset: 2px;
+}
 
 /* Line clamp */
 .line-clamp-2 {

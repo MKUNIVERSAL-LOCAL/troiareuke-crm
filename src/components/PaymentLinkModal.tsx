@@ -6,8 +6,8 @@
  * PG 키 미설정이면 서버가 enabled=false를 내려 생성 버튼이 준비 중으로 표시된다.
  */
 import { notify } from '../lib/notify';
-import { useOverlayClose } from '../lib/overlayStack';
-import { useState, useEffect } from 'react';
+import { useOverlayClose, useFocusTrap } from '../lib/overlayStack';
+import { useState, useEffect, useRef } from 'react';
 import { X, Link2, Copy, CheckCircle, MessageSquare, RefreshCw, Ban } from 'lucide-react';
 import type { Customer } from '../types';
 import { formatPrice, todayISO } from '../lib/format';
@@ -62,6 +62,8 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
   }
 
   useOverlayClose(open, onClose); // Esc·Android 뒤로가기
+  const cardRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, cardRef);
   if (!open) return null;
 
   const selectedCustomer = customers.find(c => c.id === form.customerId);
@@ -134,12 +136,12 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div ref={cardRef} role="dialog" aria-modal="true" aria-label="결제 요청" className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
           <h2 className="font-bold text-gray-900 flex items-center gap-2">
             <Link2 size={16} className="text-[#1a3a8f]" />결제 요청 (카드·무통장입금)
           </h2>
-          <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
+          <button onClick={onClose} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -157,7 +159,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
           <form onSubmit={handleCreate} className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">고객 (선택)</label>
-              <select
+              <select aria-label="고객 (선택)"
                 value={form.customerId}
                 onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -172,7 +174,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">금액 *</label>
                 <div className="relative">
-                  <input
+                  <input aria-label="금액"
                     required
                     type="text"
                     value={form.amount && !Number.isNaN(parseInt(form.amount, 10)) ? parseInt(form.amount, 10).toLocaleString('ko-KR') : ''}
@@ -185,7 +187,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">결제 수단</label>
-                <select
+                <select aria-label="결제 수단"
                   value={form.method}
                   onChange={e => setForm(f => ({ ...f, method: e.target.value as typeof form.method }))}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -198,7 +200,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">결제 내용 *</label>
-              <input
+              <input aria-label="결제 내용"
                 required
                 value={form.orderName}
                 onChange={e => setForm(f => ({ ...f, orderName: e.target.value }))}
@@ -208,7 +210,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">메모 (선택)</label>
-              <input
+              <input aria-label="메모 (선택)"
                 value={form.memo}
                 onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
                 placeholder="매출 기록 메모에 함께 남습니다"

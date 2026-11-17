@@ -1,6 +1,6 @@
 import { notify } from '../../lib/notify';
-import { useOverlayClose } from '../../lib/overlayStack';
-import { useState, useEffect } from 'react';
+import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Package, Edit2, Trash2, CheckCircle, XCircle, Tag, Clock, Calendar, Search } from 'lucide-react';
 import { ProgramStore } from '../../lib/store';
 import type { Program } from '../../types';
@@ -46,6 +46,10 @@ export default function Programs() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   useOverlayClose(showModal, () => setShowModal(false), { escape: false }); // Android 뒤로가기 — 폼은 Esc 제외
   useOverlayClose(!!deleteConfirm, () => setDeleteConfirm(null));
+  const formModalRef = useRef<HTMLDivElement>(null);
+  const deleteModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showModal, formModalRef); // 첫 입력란 포커스·Tab 순환·닫힐 때 복원
+  useFocusTrap(!!deleteConfirm, deleteModalRef);
 
   useEffect(() => { loadPrograms(); }, []);
 
@@ -305,7 +309,7 @@ export default function Programs() {
       {/* 삭제 확인 */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+          <div ref={deleteModalRef} role="dialog" aria-modal="true" aria-label="프로그램 삭제" className="bg-white rounded-2xl p-6 w-full max-w-sm">
             <h3 className="font-bold text-gray-900 mb-2">프로그램 삭제</h3>
             <p className="text-sm text-gray-500 mb-5">
               이 프로그램을 삭제하면 복구할 수 없습니다. 고객에게 등록된 기존 회권에는 영향이 없습니다.
@@ -321,10 +325,10 @@ export default function Programs() {
       {/* 프로그램 추가/수정 모달 — 모바일에서 모달이 화면보다 길면 items-center가 위를 잘라낸다 → 카드 my-auto로 중앙 정렬+스크롤 (2026-11-17) */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-lg my-auto">
+          <div ref={formModalRef} role="dialog" aria-modal="true" aria-label={editTarget ? '프로그램 수정' : '프로그램 추가'} className="bg-white rounded-2xl w-full max-w-lg my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editTarget ? '프로그램 수정' : '프로그램 추가'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowModal(false)} aria-label="닫기" className="text-gray-400 hover:text-gray-600">
                 <XCircle size={20} />
               </button>
             </div>
@@ -333,7 +337,7 @@ export default function Programs() {
               {/* 프로그램명 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">프로그램명 *</label>
-                <input
+                <input aria-label="프로그램명"
                   type="text"
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -435,7 +439,7 @@ export default function Programs() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">판매가 *</label>
                   <div className="relative">
-                    <input
+                    <input aria-label="판매가"
                       type="text"
                       value={form.price}
                       onChange={e => setForm(f => ({ ...f, price: e.target.value.replace(/[^0-9]/g, '') }))}
@@ -449,7 +453,7 @@ export default function Programs() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">원가 (선택)</label>
                   <div className="relative">
-                    <input
+                    <input aria-label="원가 (선택)"
                       type="text"
                       value={form.costPrice}
                       onChange={e => setForm(f => ({ ...f, costPrice: e.target.value.replace(/[^0-9]/g, '') }))}
@@ -475,7 +479,7 @@ export default function Programs() {
               {/* 설명 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">설명 (선택)</label>
-                <textarea
+                <textarea aria-label="설명 (선택)"
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="프로그램에 대한 간단한 설명을 입력하세요"

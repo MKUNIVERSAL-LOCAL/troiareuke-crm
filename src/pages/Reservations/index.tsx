@@ -966,11 +966,11 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
 
   return (
     <Modal isOpen={true} onClose={onClose} title={isEdit ? '예약 수정' : '예약 추가'} size="lg">
-      <div className="space-y-4">
+      <form onSubmit={e => { e.preventDefault(); handleSave(); }} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
-            <select
+            <select aria-label="고객"
               value={customerId}
               onChange={e => setCustomerId(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
@@ -981,7 +981,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원 *</label>
-            <select
+            <select aria-label="담당 직원"
               value={staffId}
               onChange={e => setStaffId(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
@@ -993,7 +993,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 *</label>
-          <select
+          <select aria-label="시술"
             value={serviceId}
             onChange={e => setServiceId(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
@@ -1015,7 +1015,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">시작 시간 *</label>
-            <select
+            <select aria-label="시작 시간"
               value={startTime}
               onChange={e => setStartTime(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
@@ -1025,7 +1025,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">예약 경로</label>
-            <select
+            <select aria-label="예약 경로"
               value={source}
               onChange={e => setSource(e.target.value as Reservation['source'])}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
@@ -1041,7 +1041,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">메모</label>
-          <textarea
+          <textarea aria-label="메모"
             rows={2}
             value={memo}
             onChange={e => setMemo(e.target.value)}
@@ -1067,15 +1067,15 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
           </div>
         )}
         <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
+          <button type="button" onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
           <button
-            onClick={handleSave}
+            type="submit"
             className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-md"
           >
             예약 저장
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }

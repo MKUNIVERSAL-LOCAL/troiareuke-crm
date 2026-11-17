@@ -18,7 +18,7 @@ import { resizeImageFile, getPhotos, getPhotosAsync, setPhotos as savePhotos, cl
 import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, comparisonFileName, angleLabel, type DatedPhoto } from '../../lib/beforeAfter';
 import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile, dataUrlToBlob } from '../../lib/mobileBridge';
-import { useOverlayClose } from '../../lib/overlayStack';
+import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
@@ -558,6 +558,18 @@ export default function Customers() {
   // Android 뒤로가기 — 열린 것 중 가장 위부터 하나씩 닫는다(상세 → 목록). 폼 모달은 Esc로는 닫지 않는다(입력 유실 방지, 취소 버튼으로)
   useOverlayClose(!!selected && isMobileLayout, () => setSelected(null), { escape: false });
   useOverlayClose(showAddModal, () => setShowAddModal(false), { escape: false });
+  useOverlayClose(showGradeMenu, () => setShowGradeMenu(false)); // 등급 메뉴 — Esc·뒤로가기로 닫기
+  // 포커스 트랩 — 첫 입력란 포커스·Tab 순환·닫힐 때 열었던 버튼으로 복원 (키보드 접근성 감사 2026-11-18)
+  const addModalRef = useRef<HTMLDivElement>(null);
+  const editModalRef = useRef<HTMLDivElement>(null);
+  const programModalRef = useRef<HTMLDivElement>(null);
+  const treatmentModalRef = useRef<HTMLDivElement>(null);
+  const consultModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showAddModal, addModalRef);
+  useFocusTrap(showEditModal, editModalRef);
+  useFocusTrap(showProgramModal, programModalRef);
+  useFocusTrap(showTreatmentModal, treatmentModalRef);
+  useFocusTrap(showConsultModal, consultModalRef);
   useOverlayClose(showEditModal, () => setShowEditModal(false), { escape: false });
   useOverlayClose(showProgramModal, () => setShowProgramModal(false), { escape: false });
   useOverlayClose(showTreatmentModal, () => setShowTreatmentModal(false), { escape: false });
@@ -951,6 +963,8 @@ export default function Customers() {
   // 업로드 가이드 모달 — 양식을 모르면 쓸 수 없는 기능이라 안내+양식 다운로드를 먼저 보여줌
   const [showImportGuide, setShowImportGuide] = useState(false);
   useOverlayClose(showImportGuide, () => setShowImportGuide(false));
+  const importGuideRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showImportGuide, importGuideRef);
 
   // 업로드 양식 엑셀 다운로드 (헤더 + 예시 2행)
   function downloadImportTemplate() {
@@ -1240,7 +1254,7 @@ export default function Customers() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="고객명, 전화번호 검색"
+                aria-label="고객 검색" placeholder="고객명, 전화번호 검색"
                 className="w-full h-10 pl-9 pr-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -1681,7 +1695,7 @@ export default function Customers() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="이름, 전화번호 검색"
+              aria-label="고객 검색" placeholder="이름, 전화번호 검색"
               className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -1800,6 +1814,8 @@ export default function Customers() {
                           onClick={() => setShowGradeMenu(v => !v)}
                           className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5 hover:ring-2 hover:ring-offset-1 hover:ring-blue-300 transition ${GRADE_COLORS[selected.grade]}`}
                           aria-label="등급 변경"
+                          aria-haspopup="menu"
+                          aria-expanded={showGradeMenu}
                         >
                           {selected.grade}
                           <ChevronDown size={11} />
@@ -1807,10 +1823,12 @@ export default function Customers() {
                         {showGradeMenu && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setShowGradeMenu(false)} />
-                            <div className="absolute left-0 mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 min-w-[90px]">
+                            <div role="menu" aria-label="등급 선택" className="absolute left-0 mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 min-w-[90px]">
                               {GRADES.map(g => (
                                 <button
                                   key={g}
+                                  role="menuitem"
+                                  data-autofocus={g === selected.grade ? '' : undefined}
                                   onClick={() => changeGrade(g)}
                                   className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-1.5 ${g === selected.grade ? 'font-bold text-blue-700' : 'text-gray-600'}`}
                                 >
@@ -2220,10 +2238,10 @@ export default function Customers() {
       {/* ───── 고객 엑셀 업로드 가이드 모달 ───── */}
       {showImportGuide && (
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="modal-card bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+          <div ref={importGuideRef} role="dialog" aria-modal="true" aria-label="엑셀 업로드 안내" className="modal-card bg-white rounded-2xl w-full max-w-lg shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">고객 엑셀 업로드</h2>
-              <button onClick={() => setShowImportGuide(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200"><X size={18} /></button>
+              <button onClick={() => setShowImportGuide(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200" aria-label="닫기"><X size={18} /></button>
             </div>
             <div className="p-5 space-y-4">
               <p className="text-sm text-gray-600">
@@ -2261,35 +2279,35 @@ export default function Customers() {
       {/* 모바일(lg 미만)에서도 열리도록 body 포털로 렌더 — 이 블록은 데스크톱 전용(hidden lg:flex) 래퍼 안에 있다 */}
       {showAddModal && createPortal(
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
-          <div className="modal-card my-auto bg-white rounded-2xl w-full max-w-md shadow-2xl">
+          <div ref={addModalRef} role="dialog" aria-modal="true" aria-label="고객 추가" className="modal-card my-auto bg-white rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">고객 추가</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200"><X size={18} /></button>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200" aria-label="닫기"><X size={18} /></button>
             </div>
             <form onSubmit={handleAddCustomer} className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">이름 *</label>
-                  <input required value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                  <input aria-label="이름" required value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="홍길동" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
-                  <input required value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
+                  <input aria-label="전화번호" required value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="010-0000-0000" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">성별</label>
-                  <select value={addForm.gender} onChange={e => setAddForm(f => ({ ...f, gender: e.target.value as Gender }))}
+                  <select aria-label="성별" value={addForm.gender} onChange={e => setAddForm(f => ({ ...f, gender: e.target.value as Gender }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="여성">여성</option><option value="남성">남성</option><option value="미입력">미입력</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">등급</label>
-                  <select value={addForm.grade} onChange={e => setAddForm(f => ({ ...f, grade: e.target.value as CustomerGrade }))}
+                  <select aria-label="등급" value={addForm.grade} onChange={e => setAddForm(f => ({ ...f, grade: e.target.value as CustomerGrade }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
@@ -2302,7 +2320,7 @@ export default function Customers() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
-                  <select value={addForm.skinType} onChange={e => setAddForm(f => ({ ...f, skinType: e.target.value }))}
+                  <select aria-label="피부 유형" value={addForm.skinType} onChange={e => setAddForm(f => ({ ...f, skinType: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">선택 안함</option>
                     {['건성', '지성', '복합성', '민감성', '중성'].map(t => <option key={t} value={t}>{t}</option>)}
@@ -2311,17 +2329,17 @@ export default function Customers() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
-                <input type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                <input aria-label="이메일" type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">주소</label>
-                <input type="text" value={addForm.address} onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
+                <input aria-label="주소" type="text" value={addForm.address} onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="서울시 강남구..." />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
-                <select value={addForm.referralSource} onChange={e => setAddForm(f => ({ ...f, referralSource: e.target.value }))}
+                <select aria-label="유입 경로" value={addForm.referralSource} onChange={e => setAddForm(f => ({ ...f, referralSource: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">선택</option>
                   {['네이버', '카카오', '지인 소개', '간판', '유튜브', 'SNS', '직접 방문', '기타'].map(s => <option key={s} value={s}>{s}</option>)}
@@ -2339,7 +2357,7 @@ export default function Customers() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
-                <textarea value={addForm.memo} onChange={e => setAddForm(f => ({ ...f, memo: e.target.value }))}
+                <textarea aria-label="메모" value={addForm.memo} onChange={e => setAddForm(f => ({ ...f, memo: e.target.value }))}
                   rows={2} placeholder="특이사항 (알레르기는 위 칸에)"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
@@ -2365,35 +2383,35 @@ export default function Customers() {
       {/* 모바일에서도 열리도록 body 포털 (데스크톱 전용 래퍼 안에 있음) — 2026-11-17 */}
       {showEditModal && selected && createPortal(
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-[60] p-4 overflow-y-auto">
-          <div className="modal-card my-auto bg-white rounded-2xl w-full max-w-md shadow-2xl">
+          <div ref={editModalRef} role="dialog" aria-modal="true" aria-label="고객 정보 수정" className="modal-card my-auto bg-white rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">고객 정보 수정</h2>
-              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200"><X size={18} /></button>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200" aria-label="닫기"><X size={18} /></button>
             </div>
             <form onSubmit={handleEditCustomer} className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">이름 *</label>
-                  <input required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  <input aria-label="이름" required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="홍길동" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
-                  <input required value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
+                  <input aria-label="전화번호" required value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="010-0000-0000" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">성별</label>
-                  <select value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value as Gender }))}
+                  <select aria-label="성별" value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value as Gender }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="여성">여성</option><option value="남성">남성</option><option value="미입력">미입력</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">등급</label>
-                  <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value as CustomerGrade }))}
+                  <select aria-label="등급" value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value as CustomerGrade }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
@@ -2406,7 +2424,7 @@ export default function Customers() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
-                  <select value={editForm.skinType} onChange={e => setEditForm(f => ({ ...f, skinType: e.target.value }))}
+                  <select aria-label="피부 유형" value={editForm.skinType} onChange={e => setEditForm(f => ({ ...f, skinType: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">선택 안함</option>
                     {['건성', '지성', '복합성', '민감성', '중성'].map(t => <option key={t} value={t}>{t}</option>)}
@@ -2415,17 +2433,17 @@ export default function Customers() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
-                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                <input aria-label="이메일" type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">주소</label>
-                <input type="text" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
+                <input aria-label="주소" type="text" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="서울시 강남구..." />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
-                <select value={editForm.referralSource} onChange={e => setEditForm(f => ({ ...f, referralSource: e.target.value }))}
+                <select aria-label="유입 경로" value={editForm.referralSource} onChange={e => setEditForm(f => ({ ...f, referralSource: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">선택</option>
                   {['네이버', '카카오', '지인 소개', '간판', '유튜브', 'SNS', '직접 방문', '기타'].map(s => <option key={s} value={s}>{s}</option>)}
@@ -2443,7 +2461,7 @@ export default function Customers() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
-                <textarea value={editForm.memo} onChange={e => setEditForm(f => ({ ...f, memo: e.target.value }))}
+                <textarea aria-label="메모" value={editForm.memo} onChange={e => setEditForm(f => ({ ...f, memo: e.target.value }))}
                   rows={2} placeholder="특이사항 (알레르기는 위 칸에)"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
@@ -2460,18 +2478,18 @@ export default function Customers() {
       {/* ───── 프로그램 등록 모달 ───── */}
       {showProgramModal && selected && createPortal(
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-[60] p-4 overflow-y-auto">
-          <div className="modal-card my-auto bg-white rounded-2xl w-full max-w-md">
+          <div ref={programModalRef} role="dialog" aria-modal="true" aria-label="프로그램 등록" className="modal-card my-auto bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
                 <h2 className="font-bold text-gray-900">프로그램 등록</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{selected.name} 고객</p>
               </div>
-              <button onClick={() => setShowProgramModal(false)}><X size={18} className="text-gray-400" /></button>
+              <button onClick={() => setShowProgramModal(false)} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleRegisterProgram} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">프로그램 선택 *</label>
-                <select
+                <select aria-label="프로그램 선택"
                   required
                   value={progForm.programId}
                   onChange={e => {
@@ -2500,7 +2518,7 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">실제 결제 금액 *</label>
                 <div className="relative">
-                  <input
+                  <input aria-label="실제 결제 금액"
                     required
                     type="text"
                     value={progForm.pricePaid && !Number.isNaN(parseInt(progForm.pricePaid)) ? parseInt(progForm.pricePaid).toLocaleString('ko-KR') : ''}
@@ -2520,21 +2538,21 @@ export default function Customers() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제 방법</label>
-                  <select value={progForm.paymentMethod} onChange={e => setProgForm(f => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))}
+                  <select aria-label="결제 방법" value={progForm.paymentMethod} onChange={e => setProgForm(f => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     {getAllPaymentMethods().map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">구매 날짜</label>
-                  <input type="date" value={progForm.purchaseDate} onChange={e => setProgForm(f => ({ ...f, purchaseDate: e.target.value }))}
+                  <input aria-label="구매 날짜" type="date" value={progForm.purchaseDate} onChange={e => setProgForm(f => ({ ...f, purchaseDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모 (선택)</label>
-                <input value={progForm.notes} onChange={e => setProgForm(f => ({ ...f, notes: e.target.value }))}
+                <input aria-label="메모 (선택)" value={progForm.notes} onChange={e => setProgForm(f => ({ ...f, notes: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="특이사항 등" />
               </div>
 
@@ -2553,18 +2571,18 @@ export default function Customers() {
       {/* ───── 시술 기록 모달 ───── */}
       {showTreatmentModal && selected && createPortal(
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-[60] p-4 overflow-y-auto">
-          <div className="modal-card my-auto bg-white rounded-2xl w-full max-w-md">
+          <div ref={treatmentModalRef} role="dialog" aria-modal="true" aria-label="시술 기록 추가" className="modal-card my-auto bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
                 <h2 className="font-bold text-gray-900">시술 기록</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{selected.name} — 회차 차감</p>
               </div>
-              <button onClick={() => setShowTreatmentModal(false)}><X size={18} className="text-gray-400" /></button>
+              <button onClick={() => setShowTreatmentModal(false)} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleTreatment} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">차감할 프로그램</label>
-                <select value={treatForm.customerProgramId} onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
+                <select aria-label="차감할 프로그램" value={treatForm.customerProgramId} onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">선택 없음 (단순 기록)</option>
                   {CustomerProgramStore.getActive(selected.id).map(cp => (
@@ -2578,19 +2596,19 @@ export default function Customers() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">시술일 *</label>
-                  <input required type="date" value={treatForm.treatmentDate} onChange={e => setTreatForm(f => ({ ...f, treatmentDate: e.target.value }))}
+                  <input aria-label="시술일" required type="date" value={treatForm.treatmentDate} onChange={e => setTreatForm(f => ({ ...f, treatmentDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">시간</label>
-                  <input type="time" value={treatForm.treatmentTime} onChange={e => setTreatForm(f => ({ ...f, treatmentTime: e.target.value }))}
+                  <input aria-label="시간" type="time" value={treatForm.treatmentTime} onChange={e => setTreatForm(f => ({ ...f, treatmentTime: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">담당자</label>
-                <select value={treatForm.staffName} onChange={e => setTreatForm(f => ({ ...f, staffName: e.target.value }))}
+                <select aria-label="담당자" value={treatForm.staffName} onChange={e => setTreatForm(f => ({ ...f, staffName: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">선택</option>
                   {StaffStore.getAll().filter(s => s.isActive).map(s => (
@@ -2601,21 +2619,21 @@ export default function Customers() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">시술 내용</label>
-                <textarea value={treatForm.treatmentDetails} onChange={e => setTreatForm(f => ({ ...f, treatmentDetails: e.target.value }))}
+                <textarea aria-label="시술 내용" value={treatForm.treatmentDetails} onChange={e => setTreatForm(f => ({ ...f, treatmentDetails: e.target.value }))}
                   rows={2} placeholder="시술 내용을 기록하세요"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">피부 상태</label>
-                <input value={treatForm.skinCondition} onChange={e => setTreatForm(f => ({ ...f, skinCondition: e.target.value }))}
+                <input aria-label="피부 상태" value={treatForm.skinCondition} onChange={e => setTreatForm(f => ({ ...f, skinCondition: e.target.value }))}
                   placeholder="오늘 피부 상태 메모"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">다음 예약 권고일</label>
-                <input type="date" value={treatForm.nextAppointment} onChange={e => setTreatForm(f => ({ ...f, nextAppointment: e.target.value }))}
+                <input aria-label="다음 예약 권고일" type="date" value={treatForm.nextAppointment} onChange={e => setTreatForm(f => ({ ...f, nextAppointment: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
 
@@ -2635,7 +2653,7 @@ export default function Customers() {
       {/* 모바일에서도 열리도록 body 포털 (2026-11-17) */}
       {showConsultModal && selected && createPortal(
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-[60] p-4 overflow-y-auto">
-          <div role="dialog" aria-modal="true" aria-label="피부 상담" className="modal-card my-auto bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div ref={consultModalRef} role="dialog" aria-modal="true" aria-label="피부 상담" className="modal-card my-auto bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white flex items-center justify-between p-5 border-b border-gray-100 z-10">
               <div>
                 <h2 className="font-bold text-gray-900 flex items-center gap-1.5">
@@ -2643,20 +2661,20 @@ export default function Customers() {
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">{selected.name} 고객 · 1:1 맞춤 솔루션</p>
               </div>
-              <button onClick={() => { setShowConsultModal(false); setSavedConsultId(null); }}><X size={18} className="text-gray-400" /></button>
+              <button onClick={() => { setShowConsultModal(false); setSavedConsultId(null); }} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleSaveConsultation} className="p-5 space-y-5">
               {/* 상담일 / 담당 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">상담일 *</label>
-                  <input required type="date" value={consultForm.consultDate}
+                  <input aria-label="상담일" required type="date" value={consultForm.consultDate}
                     onChange={e => setConsultForm(f => ({ ...f, consultDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">담당 관리사</label>
-                  <select value={consultForm.staffName} onChange={e => setConsultForm(f => ({ ...f, staffName: e.target.value }))}
+                  <select aria-label="담당 관리사" value={consultForm.staffName} onChange={e => setConsultForm(f => ({ ...f, staffName: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="">선택</option>
                     {StaffStore.getAll().filter(s => s.isActive).map(s => (
@@ -2885,7 +2903,7 @@ export default function Customers() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">종합 피부 타입</label>
-                  <select value={consultForm.skinTypeResult} onChange={e => setConsultForm(f => ({ ...f, skinTypeResult: e.target.value }))}
+                  <select aria-label="종합 피부 타입" value={consultForm.skinTypeResult} onChange={e => setConsultForm(f => ({ ...f, skinTypeResult: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="">선택</option>
                     {SKIN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
@@ -2893,7 +2911,7 @@ export default function Customers() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">다음 관리 권고일</label>
-                  <input type="date" value={consultForm.nextConsultDate} onChange={e => setConsultForm(f => ({ ...f, nextConsultDate: e.target.value }))}
+                  <input aria-label="다음 관리 권고일" type="date" value={consultForm.nextConsultDate} onChange={e => setConsultForm(f => ({ ...f, nextConsultDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
               </div>
@@ -2901,7 +2919,7 @@ export default function Customers() {
               {/* 맞춤 솔루션 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">1:1 맞춤 솔루션 (추천)</label>
-                <textarea value={consultForm.recommendedSolution} onChange={e => setConsultForm(f => ({ ...f, recommendedSolution: e.target.value }))}
+                <textarea aria-label="1:1 맞춤 솔루션 (추천)" value={consultForm.recommendedSolution} onChange={e => setConsultForm(f => ({ ...f, recommendedSolution: e.target.value }))}
                   rows={4} placeholder="피부 문제를 체크하면 추천 홈케어를 자동 입력할 수 있습니다. 자유롭게 수정하세요."
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
               </div>
@@ -2909,7 +2927,7 @@ export default function Customers() {
               {/* 추천 제품/프로그램 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">추천 제품·프로그램 (쉼표로 구분)</label>
-                <input value={consultForm.recommendedProducts} onChange={e => setConsultForm(f => ({ ...f, recommendedProducts: e.target.value }))}
+                <input aria-label="추천 제품·프로그램 (쉼표로 구분)" value={consultForm.recommendedProducts} onChange={e => setConsultForm(f => ({ ...f, recommendedProducts: e.target.value }))}
                   placeholder="예: 수분 앰플, 진정 관리 10회권"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
               </div>
@@ -2917,7 +2935,7 @@ export default function Customers() {
               {/* 관리사 소견 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">관리사 소견</label>
-                <textarea value={consultForm.managerNote} onChange={e => setConsultForm(f => ({ ...f, managerNote: e.target.value }))}
+                <textarea aria-label="관리사 소견" value={consultForm.managerNote} onChange={e => setConsultForm(f => ({ ...f, managerNote: e.target.value }))}
                   rows={2} placeholder="고객 피부 상태 관찰 소견을 기록하세요"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
               </div>
