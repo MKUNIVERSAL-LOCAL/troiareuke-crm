@@ -1,6 +1,7 @@
 ﻿import { useState, useCallback } from 'react';
 import { notify } from '../../lib/notify';
-import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2 } from 'lucide-react';
+import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus } from 'lucide-react';
+import StockAdjustModal from '../../components/StockAdjustModal';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -27,6 +28,7 @@ export default function Products() {
   const [sales, setSales] = useState(() => ProductSaleStore.getAll());
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [saleProduct, setSaleProduct] = useState<Product | null>(null);
 
@@ -217,6 +219,7 @@ export default function Products() {
                             <span className="text-sm font-bold text-gray-900">{p.price.toLocaleString()}원</span>
                             <span className="flex items-center gap-1">
                               <button onClick={() => handleSell(p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg"><ShoppingCart size={11} />판매</button>
+                              <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
                               <button onClick={() => setEditProduct(p)} className="p-1.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={14} /></button>
                               <button onClick={() => handleDeleteProduct(p)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="제품 삭제"><Trash2 size={14} /></button>
                             </span>
@@ -303,6 +306,15 @@ export default function Products() {
                               >
                                 <ShoppingCart size={11} />
                                 판매
+                              </button>
+                              <button
+                                onClick={() => setStockProduct(p)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                                aria-label={`${p.name} 입고·조정`}
+                                title="재고 입고 또는 실사 조정"
+                              >
+                                <PackagePlus size={11} />
+                                입고
                               </button>
                               <button
                                 onClick={() => setEditProduct(p)}
@@ -442,6 +454,9 @@ export default function Products() {
           onClose={() => setShowAddModal(false)}
           onSaved={() => { refresh(); setShowAddModal(false); }}
         />
+      )}
+      {stockProduct && (
+        <StockAdjustModal product={stockProduct} onClose={() => setStockProduct(null)} onDone={() => { setStockProduct(null); refresh(); }} />
       )}
       {editProduct && (
         <AddProductModal

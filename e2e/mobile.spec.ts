@@ -117,6 +117,20 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(productCards).toBeVisible({ timeout: 10_000 });
   await expect(productCards.getByText('모바일세럼')).toBeVisible();
   await expectNoHorizontalOverflow(page, '제품 카드 목록');
+  // 재고 입고 — 5개 입고(매입 단가 10,000원)하면 재고 15, 지출 원장에 제품 매입 50,000원 (2026-11-18)
+  await productCards.getByRole('button', { name: '모바일세럼 입고·조정' }).click();
+  const stockDialog = page.getByRole('dialog', { name: '재고 입고·조정' });
+  await stockDialog.getByLabel('입고 수량').fill('5');
+  await stockDialog.getByLabel('매입 단가').fill('10000');
+  await stockDialog.getByRole('button', { name: '입고 저장' }).click();
+  await expect(stockDialog).toHaveCount(0);
+  await expect(productCards.getByText('15개').first()).toBeVisible();
+  const purchaseExpense = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_expenses$/.test(k))!;
+    return JSON.parse(localStorage.getItem(key) || '[]').find((e: { category: string }) => e.category === '제품 매입');
+  });
+  expect(purchaseExpense?.amount).toBe(50000);
+  expect(purchaseExpense?.description).toContain('모바일세럼 5개 입고');
 
   // 결제 등록 → 매출 모바일 카드 목록에 표시
   await page.goto('/sales');
