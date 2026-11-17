@@ -31,6 +31,22 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
 
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
+  // 보존기간 정책 ON(1년) + 경과 고객 1명 — 대시보드 안내·고객 화면 칩/막대·설정 카드가 세트에 찍히도록 (2026-11-17 P4)
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();
+  const retentionCard = page.getByTestId('retention-policy-card');
+  await retentionCard.getByLabel('보존기간(년)').fill('1');
+  await retentionCard.getByRole('button', { name: '정책 켜기' }).click();
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const old = new Date(); old.setFullYear(old.getFullYear() - 2);
+    list.push({ ...list[0], id: 'old_' + Date.now(), name: '오래된고객', phone: '010-1111-2222', lastVisitDate: old.toISOString().slice(0, 10), registeredAt: old.toISOString() });
+    localStorage.setItem(key, JSON.stringify(list));
+  });
+  await page.goto('/customers?retention=1');
+  await page.waitForTimeout(300);
+  await shot('customers-retention');
 
   // 시술 기록 + 사진 2장 (Before/After 카드가 보이도록)
   await page.goto('/treatments');
@@ -127,6 +143,8 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   await page.goto('/messaging');
   await tryShot('modal-message-send', () => page.getByRole('button', { name: '메시지 보내기' }).filter({ visible: true }).first().click());
   // 촬영 가이드 카메라(모바일 프로젝트는 가짜 카메라 장치) — 직전 사진 반투명 오버레이 (2026-11-17)
+  // PC 폭에서는 [카메라로 촬영] 버튼이 숨겨져(lg:hidden) 클릭 대기가 테스트 제한을 넘기므로 모바일 프로젝트에서만
+  if (test.info().project.name === 'mobile') {
   await page.goto('/treatments?new=1');
   await tryShot('camera-overlay', async () => {
     await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
@@ -134,6 +152,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
     await page.getByRole('dialog', { name: '카메라 촬영' }).getByRole('button', { name: '촬영' }).waitFor({ state: 'visible' });
     await page.waitForTimeout(800);
   });
+  }
   await page.goto('/treatments');
   await tryShot('modal-treatment-detail', () => page.getByText(acc.customer).filter({ visible: true }).first().click());
   await page.goto('/sales');
