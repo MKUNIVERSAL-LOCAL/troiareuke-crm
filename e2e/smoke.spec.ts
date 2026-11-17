@@ -350,8 +350,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const holidays = page.getByTestId('holidays-editor');
   await holidays.getByLabel('휴일 날짜').fill('2027-01-01');
   await holidays.getByRole('button', { name: '휴일 추가' }).click();
-  await expect(holidays).toContainText('2027-01-01');
-  await page.getByRole('button', { name: '저장하기' }).filter({ visible: true }).first().click();
+  await expect(holidays).toContainText('2027-01-01'); // 추가 즉시 저장
   await page.goto('/settings');
   await page.getByRole('button', { name: '영업시간', exact: true }).filter({ visible: true }).first().click();
   await expect(page.getByTestId('holidays-editor')).toContainText('2027-01-01');

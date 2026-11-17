@@ -124,10 +124,10 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await stockDialog.getByLabel('매입 단가').fill('10000');
   await stockDialog.getByRole('button', { name: '입고 저장' }).click();
   await expect(stockDialog).toHaveCount(0);
-  await expect(productCards.getByText('15개').first()).toBeVisible();
+  await expect(productCards.getByText('재고 15개', { exact: true })).toBeVisible();
   const purchaseExpense = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_expenses$/.test(k))!;
-    return JSON.parse(localStorage.getItem(key) || '[]').find((e: { category: string }) => e.category === '제품 매입');
+    return JSON.parse(localStorage.getItem(key) || '[]').find((e: { category: string; description: string }) => e.category === '제품 매입' && e.description.includes('모바일세럼'));
   });
   expect(purchaseExpense?.amount).toBe(50000);
   expect(purchaseExpense?.description).toContain('모바일세럼 5개 입고');
