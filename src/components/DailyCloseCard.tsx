@@ -53,7 +53,8 @@ export default function DailyCloseCard({ compact = false, refreshKey = 0 }: { co
           )}
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* PC 우측 알림 열(약 300px)에서는 4열이 잘려 2열 고정 — 모바일도 2열 (시각 QA 2026-11-17) */}
+      <div className="grid grid-cols-2 gap-2">
         <Stat label="오늘 매출" value={`${close.revenue.toLocaleString()}원`} />
         <Stat label="결제" value={`${close.paymentCount}건`} />
         <Stat label="시술 · 신규" value={`${close.treatments}건 · ${close.newCustomers}명`} />

@@ -119,6 +119,10 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
     await shot('customer-before-after');
   }
 
+  // 대시보드 전체(우측 알림 카드 열까지) — PC 레이아웃 QA (2026-11-17)
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: path.join(dir, 'dashboard-full.png'), fullPage: true });
   for (const [route, name] of [['/', 'dashboard'], ['/programs', 'programs'], ['/staff', 'staff'], ['/messaging', 'messaging'], ['/settings', 'settings']] as const) {
     await page.goto(route);
     await page.waitForLoadState('networkidle');
