@@ -50,6 +50,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 
 ### P3. 모바일 앱 완성도 → 스토어 제출 가능 상태
 - [x] 2026-11-17: 모바일 고객 등록 허용(모달 body 포털), 매출·제품 화면 모바일 카드 뷰, 모바일 E2E에 고객·제품·결제 등록 검증 추가.
+- [x] 2026-11-17 시각 QA(스크린샷 세트 `SHOTS=1 npx playwright test e2e/screenshots.spec.ts`): 설정 2단 레이아웃이 412px에서 깨지던 문제(탭 칩 가로 스크롤·FormRow 세로 배치), 제품 헤더 "+ +" 중복, 모바일 고객 상세에 Before/After·최근 시술 기록 추가. 전 라우트 순회 안전망(e2e/routes.spec.ts).
 - [ ] D4 사진 저장 localStorage → Capacitor Filesystem/IndexedDB(WebView 한도·iOS 퍼지 대비), 카메라 플러그인 촬영(직전 사진 오버레이), Settings 모바일 레이아웃.
 - 오너 준비물: Play 개발자 계정, Apple Developer(D-U-N-S), 아이콘 1024, 스크린샷, 개인정보처리방침 URL.
 

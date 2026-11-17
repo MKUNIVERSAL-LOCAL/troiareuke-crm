@@ -924,6 +924,32 @@ export default function Customers() {
                 </div>
               )}
 
+              {/* Before/After 타임랩스 — 시술 사진이 있을 때만 (2026-11-17 모바일에도 노출) */}
+              <TimelapseViewer customerId={selected.id} customerName={selected.name} />
+
+              {/* 최근 시술 기록 */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-3">최근 시술 기록</p>
+                {(() => {
+                  const logs = TreatmentLogStore.getByCustomer(selected.id).slice(0, 5);
+                  if (logs.length === 0) return <p className="text-xs text-gray-400 text-center py-3">시술 기록이 없어요</p>;
+                  return (
+                    <div className="space-y-2">
+                      {logs.map(log => (
+                        <div key={log.id} className="p-3 bg-slate-50 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-gray-800">{log.treatmentDate}</p>
+                            {log.staffName && <span className="text-[11px] text-gray-400">{log.staffName}</span>}
+                          </div>
+                          <p className="text-xs text-gray-600 mt-0.5">{log.treatmentDetails || log.programName || '시술 내역 없음'}</p>
+                          {log.skinCondition && <p className="text-[11px] text-gray-400 mt-0.5">피부 상태: {log.skinCondition}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
               <p className="text-xs text-slate-400 text-center pb-2">수정·삭제는 PC에서 이용해주세요</p>
             </div>
           </div>
@@ -931,7 +957,7 @@ export default function Customers() {
       </div>
 
       {/* ── 데스크톱 뷰 (lg+) ── 기존 레이아웃 그대로 */}
-      <div className="hidden lg:flex h-full flex-1">
+      <div className="hidden lg:flex h-full flex-1" data-testid="customers-desktop">
       {/* 왼쪽: 고객 목록 */}
       <div className="w-80 flex-shrink-0 border-r border-gray-100 flex flex-col bg-white">
         <div className="p-4 border-b border-gray-100">

@@ -99,7 +99,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
 
   // 제품 등록 → 모바일 카드 목록에 표시 (표 대신 카드, 2026-11-17)
   await page.goto('/products');
-  await page.getByRole('button', { name: '+ 제품 추가' }).filter({ visible: true }).first().click();
+  await page.getByRole('button', { name: '제품 추가' }).filter({ visible: true }).first().click();
   await page.getByPlaceholder('제품명 입력').fill('모바일세럼');
   await page.getByPlaceholder('0').nth(0).fill('30000'); // 판매가
   await page.getByPlaceholder('0').nth(2).fill('10');    // 재고
@@ -121,6 +121,22 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(salesCards).toBeVisible({ timeout: 10_000 });
   await expect(salesCards.getByText('50,000').first()).toBeVisible();
   await expectNoHorizontalOverflow(page, '매출 카드 목록');
+
+  // 고객 상세(모바일 풀스크린)에 기본 정보·최근 시술 기록이 보인다
+  await page.goto('/customers');
+  await page.getByText('모바일고객').filter({ visible: true }).first().click();
+  await expect(page.getByText('기본 정보').filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText('최근 시술 기록').filter({ visible: true }).first()).toBeVisible();
+  await expectNoHorizontalOverflow(page, '고객 상세');
+  await page.getByRole('button', { name: '뒤로가기' }).click();
+
+  // 설정 화면: 모바일에서 탭 칩이 가로로 쌓이고 입력란이 화면 안에 있다
+  await page.goto('/settings');
+  const saveBtn = page.getByRole('button', { name: '저장하기' }).filter({ visible: true }).first();
+  await expect(saveBtn).toBeVisible();
+  const saveBox = await saveBtn.boundingBox();
+  expect(saveBox && saveBox.x >= 0 && saveBox.x + saveBox.width <= vw, '설정 저장 버튼이 화면 밖').toBeTruthy();
+  await expectNoHorizontalOverflow(page, '설정 샵 정보');
 
   // 더보기 탭(설정 등 진입점)이 하단 탭바에 있다
   const more = page.getByRole('button', { name: '더보기 메뉴 열기' }).filter({ visible: true }).first();

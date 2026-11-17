@@ -573,17 +573,18 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="p-8 flex-1">
-        <div className="flex gap-6">
+      <div className="p-4 lg:p-8 flex-1">
+        {/* 모바일(lg 미만): 탭을 가로 스크롤 칩으로 쌓고 본문은 전체 폭 — 2단 고정 폭은 412px에서 입력란이 화면 밖으로 밀렸다 (2026-11-17) */}
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
           {/* Sidebar tabs */}
-          <div className="w-48 flex-shrink-0">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 space-y-0.5">
+          <div className="w-full lg:w-48 flex-shrink-0">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 flex lg:block gap-1 overflow-x-auto no-scrollbar lg:space-y-0.5">
               {tabs.map(t => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
                   className={clsx(
-                    'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left',
+                    'flex-shrink-0 lg:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap',
                     tab === t.key
                       ? 'bg-purple-50 text-purple-700'
                       : 'text-gray-600 hover:bg-gray-50'
@@ -597,7 +598,7 @@ export default function Settings() {
           </div>
 
           {/* Content */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             {tab === 'shop' && (
               <SettingCard title="샵 기본 정보">
                 <div className="space-y-4">
@@ -1536,9 +1537,9 @@ function SettingCard({ title, children }: { title: string; children: React.React
 
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-4">
-      <label className="text-sm font-medium text-gray-600 w-32 flex-shrink-0">{label}</label>
-      <div className="flex-1">{children}</div>
+    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
+      <label className="text-sm font-medium text-gray-600 sm:w-32 flex-shrink-0">{label}</label>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

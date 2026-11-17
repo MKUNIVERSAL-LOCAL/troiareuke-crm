@@ -34,14 +34,15 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
   await dismissToasts(page);
 
-  // ── 고객 상세 → 타임랩스 ──
+  // ── 고객 상세 → 타임랩스 (데스크톱 패널에 한정 — 모바일 상세 패널도 같은 뷰어를 숨김 상태로 렌더한다) ──
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
-  await expect(page.getByText('Before / After 타임랩스')).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText('사진 2장')).toBeVisible();
+  const desk = page.getByTestId('customers-desktop');
+  await expect(desk.getByText('Before / After 타임랩스')).toBeVisible({ timeout: 10_000 });
+  await expect(desk.getByText('사진 2장')).toBeVisible();
   // 각도 필터: '정면'만 남기면 썸네일 1장, '전체'로 돌리면 2장
-  const angleGroup = page.getByRole('group', { name: '촬영 각도 필터' });
-  const thumbs = page.getByRole('button', { name: /사진 선택$/ });
+  const angleGroup = desk.getByRole('group', { name: '촬영 각도 필터' });
+  const thumbs = desk.getByRole('button', { name: /사진 선택$/ });
   await expect(thumbs).toHaveCount(2);
   await angleGroup.getByRole('button', { name: '정면', exact: true }).click();
   await expect(thumbs).toHaveCount(1);
@@ -49,13 +50,13 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await expect(thumbs).toHaveCount(2);
 
   // ── 비교 보기 → 이미지 저장(내려받기) ──
-  await page.getByRole('button', { name: '비교 보기' }).click();
-  await expect(page.getByText('D+0')).toBeVisible();
-  await expect(page.getByText(/^Before · /)).toBeVisible();
-  await expect(page.getByText(/^After · /)).toBeVisible();
+  await desk.getByRole('button', { name: '비교 보기' }).click();
+  await expect(desk.getByText('D+0')).toBeVisible();
+  await expect(desk.getByText(/^Before · /)).toBeVisible();
+  await expect(desk.getByText(/^After · /)).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: '이미지 저장' }).click();
+  await desk.getByRole('button', { name: '이미지 저장' }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/BeforeAfter_\d{4}-\d{2}-\d{2}\.png$/);
-  await expect(page.getByText('비교 이미지를 내려받았습니다.')).toBeVisible();
+  await expect(page.getByText('비교 이미지를 내려받았습니다.').first()).toBeVisible();
 });

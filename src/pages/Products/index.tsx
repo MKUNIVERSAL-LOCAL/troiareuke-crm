@@ -80,7 +80,7 @@ export default function Products() {
       <Header
         title="제품/재고 관리"
         subtitle={`총 ${products.length}종 · 재고부족 ${lowStockCount}종`}
-        action={{ label: '+ 제품 추가', onClick: () => setShowAddModal(true) }}
+        action={{ label: '제품 추가', onClick: () => setShowAddModal(true) }}
       />
 
       <div className="p-4 sm:p-6 lg:p-8 flex-1">
