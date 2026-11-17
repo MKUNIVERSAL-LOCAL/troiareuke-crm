@@ -21,7 +21,7 @@ import { exportFile } from '../../lib/mobileBridge';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
-import { mergeBlockReason } from '../../lib/customerMerge';
+import { mergeBlockReason, findSamePhoneCustomers } from '../../lib/customerMerge';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { FileText } from 'lucide-react';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
@@ -384,6 +384,15 @@ export default function Customers() {
   // 프로그램 등록 모달
   const [showProgramModal, setShowProgramModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false); // 중복 고객 병합 (2026-11-18)
+  const [mergeQuery, setMergeQuery] = useState(''); // 중복 의심 안내에서 열면 전화번호가 미리 입력된다
+  const samePhone = useMemo(() => (selected ? findSamePhoneCustomers(selected) : []), [selected, customers]);
+  const openMergeFromHint = () => { setMergeQuery(selected?.phone ?? ''); setShowMergeModal(true); };
+  const dupHint = samePhone.length > 0 && (
+    <button type="button" onClick={openMergeFromHint} data-testid="dup-hint"
+      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 hover:bg-amber-100">
+      <GitMerge size={12} />같은 전화번호 고객 {samePhone.length}명 — 병합하기
+    </button>
+  );
   const [progForm, setProgForm] = useState({ programId: '', pricePaid: '', paymentMethod: '카드' as PaymentMethod, purchaseDate: today(), notes: '' });
 
   // 시술 기록 (차감) 모달
@@ -1004,6 +1013,7 @@ export default function Customers() {
   function handleMerged() {
     if (!selected) return;
     setShowMergeModal(false);
+    setMergeQuery('');
     const updated = CustomerStore.getById(selected.id);
     setSelected(updated ?? null);
     loadAll();
@@ -1269,6 +1279,7 @@ export default function Customers() {
                       <span className="text-xs font-medium text-rose-600">{selectedNoShows}회</span>
                     </div>
                   )}
+                  {dupHint}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 결제</span>
                     <span className="text-xs font-medium text-gray-900">{(selected.totalSpent || 0).toLocaleString()}원</span>
@@ -1620,6 +1631,7 @@ export default function Customers() {
                     {selectedNoShows > 0 && (
                       <p className="text-xs mt-0.5 text-rose-600 font-medium" data-testid="noshow-badge">노쇼 {selectedNoShows}회 — 예약 확인 연락을 권장합니다</p>
                     )}
+                    {dupHint}
                   </div>
                 </div>
                 {/* 1366px 폭에서 버튼 글자가 세로로 깨지지 않도록 — 줄바꿈은 버튼 단위로 (2026-11-17) */}
@@ -2677,7 +2689,7 @@ export default function Customers() {
         document.body,
       )}
       {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
-      {showMergeModal && selected && <CustomerMergeModal target={selected} onClose={() => setShowMergeModal(false)} onMerged={handleMerged} />}
+      {showMergeModal && selected && <CustomerMergeModal target={selected} initialQuery={mergeQuery} onClose={() => { setShowMergeModal(false); setMergeQuery(''); }} onMerged={handleMerged} />}
       </div>
     </div>
   );

@@ -179,7 +179,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page).toHaveURL(/\/reservations/);
   await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
 
-  // ── 9-1. 중복 고객 병합 (2026-11-18): 중복 레코드(결제 1건·방문 2회)를 만들고 본 고객으로 흡수 → 기록 수·방문·누적 결제가 합쳐지고 중복은 사라진다 ──
+  // ── 9-1. 중복 고객 병합 (2026-11-18): 같은 전화번호의 중복 레코드(결제·예약·시술 1건, 방문 2회)를 만들면 상세에 "중복 의심" 안내가 뜨고, 본 고객으로 흡수 → 기록·방문·누적 결제가 합쳐지고 중복은 사라진다 ──
   const dupName = acc.customer + '중복';
   const beforeMerge = await page.evaluate(dupName => {
     const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
@@ -193,9 +193,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     const main = customers.find((c: { name: string }) => c.name === dupName.replace('중복', ''));
     const dupId = 'dup_' + Date.now();
     const now = new Date().toISOString();
-    customers.push({ ...main, id: dupId, name: dupName, phone: '010-9999-0001', totalVisits: 2, totalSpent: 7000, memo: '중복 메모', grade: 'VIP', registeredAt: '2020-01-01T00:00:00.000Z' });
+    customers.push({ ...main, id: dupId, name: dupName, totalVisits: 2, totalSpent: 7000, memo: '중복 메모', grade: 'VIP', registeredAt: '2020-01-01T00:00:00.000Z' });
     payments.push({ id: 'duppay_' + Date.now(), shopId: main.shopId, customerId: dupId, customerName: dupName, paymentDate: '2026-01-10', type: 'other', typeLabel: '기타', amount: 7000, paymentMethod: 'cash', discountAmount: 0, status: 'completed', createdAt: now });
-    reservations.push({ ...reservations[0], id: 'dupres_' + Date.now(), customerId: dupId, customerName: dupName, customerPhone: '010-9999-0001', date: '2026-01-10', status: 'completed' });
+    reservations.push({ ...reservations[0], id: 'dupres_' + Date.now(), customerId: dupId, customerName: dupName, date: '2026-01-10', status: 'completed' });
     logs.push({ id: 'duplog_' + Date.now(), shopId: main.shopId, customerId: dupId, customerName: dupName, treatmentDate: '2026-01-10', sessionsUsed: 0, treatmentDetails: '중복 시술', createdAt: now });
     write(/^crm_.*_customers$/, customers); write(/^crm_.*_payments$/, payments); write(/^crm_.*_reservations$/, reservations); write(/^crm_.*_treatment_logs$/, logs);
     const byMain = (list: { customerId: string }[]) => list.filter(x => x.customerId === main.id).length;
@@ -203,9 +203,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   }, dupName);
   await page.goto('/customers');
   await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
-  await desk.getByRole('button', { name: '병합' }).click();
+  await desk.getByTestId('dup-hint').click(); // "같은 전화번호 고객 1명 — 병합하기" → 전화번호가 검색칸에 미리 입력된다
   const mergeDialog = page.getByRole('dialog', { name: '고객 병합' });
-  await mergeDialog.getByLabel('병합할 고객 검색').fill('9999-0001');
+  await expect(mergeDialog.getByLabel('병합할 고객 검색')).toHaveValue(acc.customerPhone);
   const dupOption = mergeDialog.getByRole('radio', { name: new RegExp(dupName) });
   await expect(dupOption).toHaveCount(1);
   await dupOption.check();
@@ -213,6 +213,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await mergeDialog.getByRole('button', { name: '병합 실행' }).click(); // confirm은 dialog 핸들러가 수락
   await expect(mergeDialog).toHaveCount(0);
   await expect(desk).toContainText('중복 메모'); // 흡수된 고객의 메모가 본 고객 메모에 합쳐짐
+  await expect(desk.getByTestId('dup-hint')).toHaveCount(0); // 중복이 사라져 안내도 사라진다
   const afterMerge = await page.evaluate(name => {
     const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
     const read = (re: RegExp) => JSON.parse(localStorage.getItem(key(re)) || '[]');
