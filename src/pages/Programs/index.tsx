@@ -315,9 +315,8 @@ export default function Programs() {
         </div>
       )}
 
-      {/* 프로그램 추가/수정 모달 */}
+      {/* 프로그램 추가/수정 모달 — 모바일에서 모달이 화면보다 길면 items-center가 위를 잘라낸다 → 카드 my-auto로 중앙 정렬+스크롤 (2026-11-17) */}
       {showModal && (
-        {/* 모바일에서 모달이 화면보다 길면 items-center가 위를 잘라낸다 → 카드 my-auto로 중앙 정렬+스크롤 (2026-11-17) */}
         <div className="fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl w-full max-w-lg my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
