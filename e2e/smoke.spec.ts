@@ -100,6 +100,13 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const payForm3 = page.locator('form').filter({ hasText: '결제 구분' });
   await expect(payForm3).toBeVisible();
   await expect(payForm3.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
+
+  // ── 9. 고객 상세 [예약 추가] → 예약 추가 모달에 고객이 미리 선택된다 (2026-11-17) ──
+  await page.goto('/customers');
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  await desk.getByRole('button', { name: '예약 추가' }).click();
+  await expect(page).toHaveURL(/\/reservations\?new=1&customer=/);
+  await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
 });
 
 test('로그인 화면은 잘못된 계정을 거부한다', async ({ page }) => {

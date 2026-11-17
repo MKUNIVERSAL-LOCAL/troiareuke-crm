@@ -486,7 +486,7 @@ export default function Reservations() {
       </div>
 
       {showAddModal && (
-        <AddReservationModal onClose={() => setShowAddModal(false)} onSave={handleSaveReservation} />
+        <AddReservationModal initialCustomerId={searchParams.get('customer') ?? undefined} onClose={() => setShowAddModal(false)} onSave={handleSaveReservation} />
       )}
       {editReservation && (
         <AddReservationModal
@@ -802,14 +802,15 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
   );
 }
 
-function AddReservationModal({ reservation: editing, onClose, onSave }: { reservation?: Reservation | null; onClose: () => void; onSave: () => void }) {
+function AddReservationModal({ reservation: editing, initialCustomerId, onClose, onSave }: { reservation?: Reservation | null; initialCustomerId?: string; onClose: () => void; onSave: () => void }) {
   const { user: authUser } = useAuth();
   const isEdit = !!editing;
   const customers = CustomerStore.getAll();
   const staffList = StaffStore.getAll();
   const services = ServiceStore.getAll().filter(s => s.isActive);
 
-  const [customerId, setCustomerId] = useState(editing?.customerId ?? '');
+  // 고객 상세 [예약 추가](?customer=)에서 왔으면 그 고객을 미리 선택 (2026-11-17)
+  const [customerId, setCustomerId] = useState(editing?.customerId ?? (initialCustomerId && customers.some(c => c.id === initialCustomerId) ? initialCustomerId : ''));
   const [staffId, setStaffId] = useState(editing?.staffId ?? '');
   const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? '');
   const [date, setDate] = useState(editing?.date ?? format(new Date(), 'yyyy-MM-dd'));

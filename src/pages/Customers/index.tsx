@@ -5,7 +5,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ChevronDown, Tag,
-  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard
+  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -1194,16 +1194,22 @@ export default function Customers() {
               </div>
 
               {/* 모바일 액션 — PC와 동일한 모달(body 포털) */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
+                  className="py-2.5 bg-sky-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
+                >
+                  <CalendarPlus size={14} />예약 추가
+                </button>
                 <button
                   onClick={() => setShowTreatmentModal(true)}
-                  className="py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-1.5"
+                  className="py-2.5 bg-green-500 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
                 >
                   <Scissors size={14} />시술 기록
                 </button>
                 <button
                   onClick={() => setShowProgramModal(true)}
-                  className="py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-1.5"
+                  className="py-2.5 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
                 >
                   <Plus size={14} />프로그램 등록
                 </button>
@@ -1398,6 +1404,13 @@ export default function Customers() {
                     className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75] transition-colors"
                   >
                     <Plus size={12} />프로그램 등록
+                  </button>
+                  <button
+                    onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-sky-600 text-white rounded-xl text-xs font-medium hover:bg-sky-700 transition-colors"
+                    title="이 고객으로 예약 추가 창을 엽니다"
+                  >
+                    <CalendarPlus size={12} />예약 추가
                   </button>
                   <button
                     onClick={openEditModal}
