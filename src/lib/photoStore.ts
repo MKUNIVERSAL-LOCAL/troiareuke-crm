@@ -12,7 +12,7 @@
 //  - 업로드 시 클라이언트에서 리사이즈/압축하여 용량을 억제한다.
 // ═══════════════════════════════════════════════════════════════
 
-import { apiRequest, isAuthApiConfigured } from './authApi';
+import { apiRequest, isAuthApiConfigured, AuthApiError } from './authApi';
 
 const PREFIX = 'troiareuke_photos_';
 
@@ -353,6 +353,32 @@ function setDirty(entityKey: string, dirty: boolean): void {
     else keys.delete(entityKey);
     localStorage.setItem(DIRTY_KEY, JSON.stringify([...keys]));
   } catch { /* noop */ }
+  emitSync();
+}
+
+// ── 사진 서버 전송 상태 — OfflineBanner가 "사진 N건 전송 대기/거부"를 보여주고 [다시 시도]할 수 있게 (실패 경로 감사 2026-11-18)
+export const PHOTO_SYNC_EVENT = 'crm:photo-sync-changed';
+function emitSync(): void { try { window.dispatchEvent(new CustomEvent(PHOTO_SYNC_EVENT)); } catch { /* noop */ } }
+// 서버가 영구 거부(4xx — 용량 413 등)한 키 — 이 세션에선 자동 재전송하지 않는다(마운트마다 같은 오류 반복 방지). 수동 [다시 시도]는 포함
+const REJECTED_PUSH = new Map<string, number>();
+export function dirtyPhotoCount(): number { return getDirtyKeys().length; }
+export function rejectedPhotoCount(): number { return REJECTED_PUSH.size; }
+/** 전송 실패분(dirty) 재전송 — 연결 복구(자동, 거부분 제외)·배너 [다시 시도](거부분 포함) */
+export async function retryDirtyPhotos(includeRejected = false): Promise<void> {
+  if (!isAuthApiConfigured) return;
+  await photoCacheReady;
+  for (const key of getDirtyKeys()) {
+    if (PENDING_PUSH.has(key)) continue;
+    if (REJECTED_PUSH.has(key)) { if (!includeRejected) continue; REJECTED_PUSH.delete(key); }
+    const local = await peekCache(key);
+    if (local === null) continue; // 로컬을 읽지 못했으면 빈 배열을 올리지 않는다
+    if (local.length === 0 && getEvictedKeys().includes(key)) continue; // 용량 초과로 비워진 캐시 — 서버본이 정본
+    pushToNas(key, local);
+  }
+  emitSync();
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { void retryDirtyPhotos(false); });
 }
 
 // ── 삭제 tombstone 재전송 대기 목록 ──────────────────────────────
@@ -382,6 +408,7 @@ function setTombstone(entityKey: string, pending: boolean): void {
 // NAS 중앙 서버로 사진 백업. 실패 시 dirty로 표시해 다음 sync에서 재푸시.
 function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
   if (!isAuthApiConfigured) return;
+  if (REJECTED_PUSH.has(entityKey)) return; // 이 세션에서 서버가 거부한 키 — 배너의 [다시 시도]로만
   PENDING_PUSH.add(entityKey);
   apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
     method: 'PUT',
@@ -394,6 +421,11 @@ function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
     })
     .catch(e => {
       setDirty(entityKey, true);
+      // 4xx(401/403 세션·408/429 일시 제외)는 재시도해도 같다 — 용량 초과(413) 등. 거부로 표시해 배너가 알리고 자동 재전송은 멈춘다
+      if (e instanceof AuthApiError && e.status >= 400 && e.status < 500 && ![401, 403, 408, 429].includes(e.status)) {
+        REJECTED_PUSH.set(entityKey, e.status);
+        emitSync();
+      }
       console.error(`[NAS] 사진 동기화 실패 (${entityKey}):`, e);
     })
     .finally(() => PENDING_PUSH.delete(entityKey));

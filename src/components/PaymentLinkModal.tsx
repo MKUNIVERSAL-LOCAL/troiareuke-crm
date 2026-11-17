@@ -25,6 +25,7 @@ interface Props {
 
 export default function PaymentLinkModal({ open, onClose, customers }: Props) {
   const [pgEnabled, setPgEnabled] = useState<boolean | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false); // 서버 연결 실패 — "준비 중(PG 미계약)"과 구분 (실패 경로 감사 2026-11-18)
   const [requests, setRequests] = useState<PaymentRequestRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -54,9 +55,11 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
       const [config, list] = await Promise.all([fetchPgConfig(), listPaymentRequests()]);
       setPgEnabled(config.enabled);
       setRequests(list.requests);
+      setLoadFailed(false);
     } catch {
-      setPgEnabled(false);
+      setPgEnabled(null);
       setRequests([]);
+      setLoadFailed(true);
     }
     setLoading(false);
   }
@@ -145,6 +148,12 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
         </div>
 
         <div className="p-5 space-y-4">
+          {loadFailed && (
+            <div role="alert" className="px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 flex-wrap">
+              <p className="text-xs text-rose-700 font-medium">결제 서버에 연결하지 못했습니다 — 연결을 확인한 뒤 다시 불러오세요.</p>
+              <button type="button" onClick={() => { void refresh(); }} className="ml-auto text-xs underline text-rose-700">다시 불러오기</button>
+            </div>
+          )}
           {pgEnabled === false && (
             <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
               <p className="text-xs text-amber-700 font-medium">온라인 결제 준비 중입니다</p>
@@ -219,7 +228,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
             </div>
             <button
               type="submit"
-              disabled={busy || pgEnabled === false}
+              disabled={busy || pgEnabled === false || loadFailed}
               className="w-full py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <Link2 size={14} />{pgEnabled === false ? '결제 링크 생성 (준비 중)' : busy ? '생성 중…' : '결제 링크 만들기'}

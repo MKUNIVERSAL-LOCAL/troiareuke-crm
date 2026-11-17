@@ -16,6 +16,7 @@ import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { BLOCK_STAFF_UI } from '../../lib/buildTarget';
 import { refreshFeatureFlags } from '../../lib/featureFlags';
 import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
+import { notify } from '../../lib/notify';
 
 export default function Layout() {
   const location = useLocation();
@@ -31,6 +32,21 @@ export default function Layout() {
   // 어드민 원격 기능 플래그 동기화 — 실패해도 캐시/기본값으로 동작
   useEffect(() => {
     refreshFeatureFlags();
+  }, []);
+
+  // 처리되지 않은 Promise 거부 — 콘솔에만 남고 화면은 멀쩡해 보이는 "조용한 실패"를 막는다 (실패 경로 감사 2026-11-18). 10초에 한 번만 알림
+  useEffect(() => {
+    let last = 0;
+    const onRejection = (e: PromiseRejectionEvent) => {
+      console.error('[app] 처리되지 않은 오류:', e.reason);
+      const now = Date.now();
+      if (now - last < 10_000) return;
+      last = now;
+      const msg = e.reason instanceof Error ? e.reason.message : String(e.reason ?? '');
+      notify(`작업 중 오류가 났습니다${msg ? `: ${msg.slice(0, 80)}` : ''} — 화면을 새로고침해도 같다면 관리자에게 알려주세요.`);
+    };
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => window.removeEventListener('unhandledrejection', onRejection);
   }, []);
 
   // 프로그램 분리: 어드민 전용 exe에서는 지점(일반 CRM) 화면을 표시하지 않는다

@@ -56,9 +56,8 @@ export default function UpdateBanner() {
     });
 
     api.onUpdateError(() => {
-      // 수동 복사 배포(GitHub 릴리스 미게시) 모델에서는 업데이트 확인 실패가 정상 동작.
-      // 사용자에게 불필요한 오류 배너를 띄우지 않고 조용히 무시한다.
-      // (실제 릴리스 게시를 시작하면 setState('error')로 되돌릴 것)
+      // 릴리스 채널이 실제로 게시되는 지금(v1.0.48+ 무인 업데이트)은 확인 실패를 알려야 구버전 지점이 생기지 않는다 (실패 경로 감사 2026-11-18)
+      setState('error');
     });
 
     return () => {
@@ -192,7 +191,7 @@ export default function UpdateBanner() {
             <line x1="12" y1="9" x2="12" y2="13" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-          <span>업데이트 확인 중 문제가 발생했습니다</span>
+          <span>업데이트 확인에 실패했습니다 — 다음 실행 때 다시 확인합니다. 계속되면 관리자에게 알려주세요</span>
         </div>
         <button
           onClick={() => setDismissed(true)}

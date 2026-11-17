@@ -38,7 +38,9 @@ export default function Login() {
       navigate('/');
     } catch (e: any) {
       const msg = e?.message || '';
-      if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
+      if (e?.name === 'AbortError' || /aborted/i.test(msg)) {
+        setError('서버 응답이 없습니다(시간 초과). 인터넷 연결을 확인하고 잠시 후 다시 시도해주세요.');
+      } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
         setError('서버에 연결할 수 없습니다. 인터넷 연결 또는 관리자에게 문의해주세요.');
       } else if (/올바르지 않|Invalid|invalid_credentials/i.test(msg)) {
         setError('이메일 또는 비밀번호가 올바르지 않습니다.');

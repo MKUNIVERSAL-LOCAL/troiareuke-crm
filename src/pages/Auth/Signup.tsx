@@ -86,6 +86,8 @@ export default function Signup() {
         setError('이미 가입된 이메일입니다. 로그인 페이지에서 시도해주세요.');
       } else if (/Email not confirmed/i.test(msg)) {
         setError('가입 완료! 이메일 인증 메일을 확인해주세요.');
+      } else if (e?.name === 'AbortError' || /aborted/i.test(msg)) {
+        setError('서버 응답이 없습니다(시간 초과). 인터넷 연결을 확인하고 잠시 후 다시 시도해주세요.');
       } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
         setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.');
       } else if (status === 400 && /사업자등록증|사업자등록번호/.test(msg)) {

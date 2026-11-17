@@ -11,6 +11,8 @@
 import { apiRequest, isAuthApiConfigured, AuthApiError } from './authApi';
 
 const OUTBOX_PREFIX = 'troiareuke_nas_outbox_';
+const REJECTED_PREFIX = 'troiareuke_nas_rejected_'; // 서버가 영구 거부한 저장분 — 재시작해도 남아 배너·다시 시도·내려받기에 쓴다
+const REJECTED_MAX = 200;
 const RETRY_INTERVAL_MS = 60_000;
 const QUEUE_WARN_SIZE = 1_000;
 
@@ -72,10 +74,34 @@ export function pendingNasOutboxCount(): number {
   return readOutbox(outboxKey()).length;
 }
 
-// 서버가 영구 거부(400/404)해 폐기한 저장분 — 배너가 뜨기 전(로그인 직후 flush)에 생긴 것도 보여야 해서 모듈에 보관
-let rejectedCount = 0;
-export function rejectedNasOutboxCount(): number { return rejectedCount; }
-export function clearRejectedNasOutbox(): void { rejectedCount = 0; }
+// ── 서버가 영구 거부(400/404 등)한 저장분 ─────────────────────────
+// 화면에선 이미 "저장됨"으로 보였으므로 조용히 버리면 안 된다. 본문째 localStorage에 남겨
+// 배너가 어떤 기록인지 보여주고, 서버를 고친 뒤 [다시 시도]하거나 JSON으로 [내려받기]할 수 있게 한다 (실패 경로 감사 2026-11-18)
+export interface RejectedNasMutation extends NasMutation { status: number; rejectedAt: string }
+function rejectedKey(): string { return `${REJECTED_PREFIX}${currentBranchId()}`; }
+function readRejected(): RejectedNasMutation[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(rejectedKey()) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+function writeRejected(list: RejectedNasMutation[]): void {
+  try {
+    if (list.length === 0) localStorage.removeItem(rejectedKey());
+    else localStorage.setItem(rejectedKey(), JSON.stringify(list.slice(-REJECTED_MAX)));
+  } catch (e) { console.error('[NAS] 거부 목록 저장 실패:', e); }
+}
+export function rejectedNasOutboxCount(): number { return readRejected().length; }
+export function listRejectedNasOutbox(): RejectedNasMutation[] { return readRejected(); }
+export function clearRejectedNasOutbox(): void { writeRejected([]); }
+/** 거부분을 대기열 맨 뒤에 다시 넣는다 — 서버를 업데이트한 뒤 쓰는 수동 재시도 */
+export function retryRejectedNasOutbox(): number {
+  const list = readRejected();
+  if (list.length === 0) return 0;
+  writeRejected([]);
+  for (const m of list) enqueueNasMutation(m.path, m.method, m.body);
+  return list.length;
+}
 
 /** 전송 대기 항목 추가. quota 초과 시 큐 대신 기존 방식(즉시 전송)으로 폴백 — UI로 예외를 던지지 않는다. */
 export function enqueueNasMutation(path: string, method: NasMutation['method'], body?: string): void {
@@ -87,9 +113,13 @@ export function enqueueNasMutation(path: string, method: NasMutation['method'], 
   } catch (error) {
     // localStorage 용량 초과 — 큐잉을 포기하고 종전 fire-and-forget 전송으로 폴백
     console.error('[NAS] outbox 저장 실패(용량 초과 추정) — 직접 전송 폴백:', error);
-    try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT)); } catch {}
+    // 대기열이 없으니 "자동 재시도"가 아니다 — 배너가 정직하게 말하도록 fallback 표식 (실패 경로 감사 2026-11-18)
+    try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { fallback: true } })); } catch {}
     apiRequest(path, { method, ...(body === undefined ? {} : { body }) })
-      .catch(e => console.error(`[NAS] ${method} ${path} 전송 실패:`, e));
+      .catch(e => {
+        console.error(`[NAS] ${method} ${path} 전송 실패:`, e);
+        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { fallback: true, failed: true, path } })); } catch {}
+      });
     return;
   }
   if (queue.length > QUEUE_WARN_SIZE) {
@@ -132,11 +162,18 @@ export function flushNasOutbox(): Promise<void> {
           ...(next.body === undefined ? {} : { body: next.body }),
         });
       } catch (error) {
-        if (!isPermanentRejection(error)) throw error; // 일시 오류 — 큐 보존, 실패 전파
-        console.error(`[NAS] ${next.method} ${next.path} 영구 실패 — 항목 폐기:`, error);
-        // 서버가 거부(400/404 — 구버전 서버가 모르는 컬렉션 등): 화면에선 이미 저장 성공으로 보였으므로 반드시 알린다
-        rejectedCount++;
-        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status: (error as AuthApiError).status } })); } catch { /* noop */ }
+        if (!isPermanentRejection(error)) {
+          // 세션 만료는 연결 복구로 풀리지 않는다 — 배너가 "자동 전송"이라고 하지 않게 알린다
+          if (error instanceof AuthApiError && (error.status === 401 || error.status === 403)) {
+            try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { auth: true, status: error.status } })); } catch { /* noop */ }
+          }
+          throw error; // 일시 오류 — 큐 보존, 실패 전파
+        }
+        const status = (error as AuthApiError).status;
+        console.error(`[NAS] ${next.method} ${next.path} 영구 실패(${status}) — 거부 목록으로 이동:`, error);
+        // 서버가 거부(400/404 — 구버전 서버가 모르는 컬렉션 등): 화면에선 이미 저장 성공으로 보였으므로 본문째 보존하고 반드시 알린다
+        writeRejected([...readRejected(), { ...next, status, rejectedAt: new Date().toISOString() }]);
+        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status } })); } catch { /* noop */ }
       }
       // 전송 중 새 항목이 추가될 수 있으므로 현재 큐를 다시 읽어 처리된 항목만 제거
       writeOutbox(key, readOutbox(key).filter(item => item.id !== next.id));

@@ -186,14 +186,16 @@ export default function Settings() {
       const keys = EXPORT_DATASETS.filter(d => exportSelection.has(d.key)).map(d => d.key);
       // 지출 원장은 매출 페이지에 들른 적이 있어야 캐시에 있다. 다른 기기에서 로그인 직후
       // 바로 내보내면 0건으로 조용히 빠지므로 서버에서 먼저 채운다 (실패 시 로컬 캐시 사용).
+      let expenseNote = '';
       if (keys.includes('expenses')) {
-        await (await import('../../lib/expenseStore')).loadExpenses().catch(() => {});
+        const ok = await (await import('../../lib/expenseStore')).loadExpenses().catch(() => false);
+        if (!ok) expenseNote = ' (지출: 서버 미응답 — 이 기기 캐시 기준)'; // loadExpenses는 실패해도 reject하지 않고 false를 돌려준다
       }
       const result = exportFormat === 'pdf'
         ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys)
         : await exportDatasetsToXlsx(keys);
       const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
-      const detail = `${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행`;
+      const detail = `${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행${expenseNote}`;
       setExportMessage(
         result.delivery === 'cancelled' ? '공유를 취소했습니다 — 파일은 저장되지 않았습니다. 다시 내보내 보낼 앱을 고르세요.'
           : result.delivery === 'shared' ? `공유 시트로 전달: ${detail}`
