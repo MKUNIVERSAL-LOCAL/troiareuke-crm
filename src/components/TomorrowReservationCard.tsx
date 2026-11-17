@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarClock, Copy, Check, Share2, X, ChevronRight } from 'lucide-react';
-import { canShareText, shareText } from '../lib/mobileBridge';
+import { CalendarClock, Copy, Check, ChevronRight } from 'lucide-react';
+import MessageDraftPanel from './ui/MessageDraftPanel';
 import { getTomorrowReservations, buildReservationMessage, tomorrowISO } from '../lib/reservationReminder';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,21 +18,21 @@ export default function TomorrowReservationCard({ compact = false, refreshKey = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const list = useMemo<Reservation[]>(() => getTomorrowReservations(), [refreshKey]);
   const [draftFor, setDraftFor] = useState<Reservation | null>(null);
-  const [copied, setCopied] = useState<'all' | 'draft' | null>(null); // 어느 버튼을 눌렀는지 구분해 피드백
+  const [copiedAll, setCopiedAll] = useState(false); // 헤더 [전체 복사] 피드백 (개별 초안은 MessageDraftPanel이 담당)
   if (list.length === 0) return null;
   const shown = compact ? list.slice(0, 4) : list.slice(0, 10);
 
-  const copyDraft = async (text: string, which: 'all' | 'draft') => {
+  const allText = list.map(buildReservationMessage).join('\n\n— — —\n\n');
+  const copyAll = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(which);
-      setTimeout(() => setCopied(null), 1500);
+      await navigator.clipboard.writeText(allText);
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 1500);
     } catch {
       notify('복사하지 못했습니다. 문구를 직접 선택해 복사하세요.');
     }
   };
 
-  const allText = list.map(buildReservationMessage).join('\n\n— — —\n\n');
 
   return (
     <div className={`bg-white rounded-xl border border-slate-200 ${compact ? 'p-4' : 'p-5 shadow-sm'}`} data-testid="tomorrow-reservation-card">
@@ -44,11 +44,11 @@ export default function TomorrowReservationCard({ compact = false, refreshKey = 
         </div>
         <button
           type="button"
-          onClick={() => copyDraft(allText, 'all')}
+          onClick={copyAll}
           className="flex-shrink-0 text-xs font-medium text-[#1a3a8f] flex items-center gap-1"
           title="내일 예약 안내 문구를 한 번에 복사"
         >
-          {copied === 'all' ? <><Check size={12} />복사됨</> : <><Copy size={12} />전체 복사</>}
+          {copiedAll ? <><Check size={12} />복사됨</> : <><Copy size={12} />전체 복사</>}
         </button>
       </div>
       <ul className="divide-y divide-gray-50">
@@ -68,7 +68,7 @@ export default function TomorrowReservationCard({ compact = false, refreshKey = 
             </button>
             <button
               type="button"
-              onClick={() => { setDraftFor(r); setCopied(null); }}
+              onClick={() => setDraftFor(r)}
               aria-label={`${r.customerName} 예약 안내`}
               className="flex-shrink-0 px-2.5 py-1.5 rounded-lg bg-[#1a3a8f]/10 text-[#1a3a8f] text-xs font-medium hover:bg-[#1a3a8f]/20"
             >
@@ -81,25 +81,13 @@ export default function TomorrowReservationCard({ compact = false, refreshKey = 
       {list.length > shown.length && <p className="text-[11px] text-gray-400 mt-2">외 {list.length - shown.length}건 — 예약 관리에서 확인</p>}
 
       {draftFor && (
-        <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-700">{draftFor.customerName}님 예약 안내 초안</p>
-            <button type="button" onClick={() => setDraftFor(null)} aria-label="닫기" className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
-          </div>
-          <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{buildReservationMessage(draftFor)}</pre>
-          <div className="flex gap-2 mt-2">
-            <button type="button" onClick={() => copyDraft(buildReservationMessage(draftFor), 'draft')}
-              className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1">
-              {copied === 'draft' ? <><Check size={12} />복사됨</> : <><Copy size={12} />복사</>}
-            </button>
-            {canShareText && (
-              <button type="button" onClick={() => shareText(buildReservationMessage(draftFor), '예약 안내')}
-                className="px-3 py-1.5 rounded-lg bg-[#1a3a8f] text-white text-xs font-medium flex items-center gap-1">
-                <Share2 size={12} />보내기
-              </button>
-            )}
-          </div>
-        </div>
+        <MessageDraftPanel
+          key={draftFor.id}
+          title={`${draftFor.customerName}님 예약 안내 초안`}
+          text={buildReservationMessage(draftFor)}
+          shareTitle="예약 안내"
+          onClose={() => setDraftFor(null)}
+        />
       )}
     </div>
   );

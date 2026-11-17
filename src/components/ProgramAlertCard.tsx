@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ticket, Copy, Check, Share2, X, ChevronRight } from 'lucide-react';
-import { canShareText, shareText } from '../lib/mobileBridge';
+import { Ticket, ChevronRight } from 'lucide-react';
 import { getProgramAlerts, buildProgramMessage, REASON_LABEL, type ProgramAlert } from '../lib/programAlerts';
-import { notify } from '../lib/notify';
+import MessageDraftPanel from './ui/MessageDraftPanel';
 
 /**
  * 대시보드 — 회차권 소진·만료 임박 카드 (2026-11-17)
@@ -15,19 +14,8 @@ export default function ProgramAlertCard({ compact = false, refreshKey = 0 }: { 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const alerts = useMemo<ProgramAlert[]>(() => getProgramAlerts(), [refreshKey]);
   const [draftFor, setDraftFor] = useState<ProgramAlert | null>(null);
-  const [copied, setCopied] = useState(false);
   if (alerts.length === 0) return null;
   const list = compact ? alerts.slice(0, 3) : alerts.slice(0, 8);
-
-  const copyDraft = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      notify('복사하지 못했습니다. 문구를 직접 선택해 복사하세요.');
-    }
-  };
 
   const badgeCls: Record<ProgramAlert['reason'], string> = {
     exhausted: 'bg-rose-100 text-rose-700',
@@ -66,7 +54,7 @@ export default function ProgramAlertCard({ compact = false, refreshKey = 0 }: { 
             </button>
             <button
               type="button"
-              onClick={() => { setDraftFor(a); setCopied(false); }}
+              onClick={() => setDraftFor(a)}
               aria-label={`${a.customer.name} 재구매 안내`}
               className="flex-shrink-0 px-2.5 py-1.5 rounded-lg bg-[#1a3a8f]/10 text-[#1a3a8f] text-xs font-medium hover:bg-[#1a3a8f]/20"
             >
@@ -81,25 +69,13 @@ export default function ProgramAlertCard({ compact = false, refreshKey = 0 }: { 
       )}
 
       {draftFor && (
-        <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-700">{draftFor.customer.name}님 재구매 안내 초안</p>
-            <button type="button" onClick={() => setDraftFor(null)} aria-label="닫기" className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
-          </div>
-          <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{buildProgramMessage(draftFor)}</pre>
-          <div className="flex gap-2 mt-2">
-            <button type="button" onClick={() => copyDraft(buildProgramMessage(draftFor))}
-              className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1">
-              {copied ? <><Check size={12} />복사됨</> : <><Copy size={12} />복사</>}
-            </button>
-            {canShareText && (
-              <button type="button" onClick={() => shareText(buildProgramMessage(draftFor), '재구매 안내')}
-                className="px-3 py-1.5 rounded-lg bg-[#1a3a8f] text-white text-xs font-medium flex items-center gap-1">
-                <Share2 size={12} />보내기
-              </button>
-            )}
-          </div>
-        </div>
+        <MessageDraftPanel
+          key={draftFor.program.id}
+          title={`${draftFor.customer.name}님 재구매 안내 초안`}
+          text={buildProgramMessage(draftFor)}
+          shareTitle="재구매 안내"
+          onClose={() => setDraftFor(null)}
+        />
       )}
     </div>
   );
