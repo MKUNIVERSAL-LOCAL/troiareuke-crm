@@ -7,7 +7,7 @@ import {
   Scissors, ChevronDown, Tag,
   Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus
 } from 'lucide-react';
-import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore } from '../../lib/store';
+import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
 import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
@@ -236,6 +236,11 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
   );
 }
 
+/** 예약 노쇼 횟수 — 예약 받을 때 참고(확인 전화·선결제 권장) (2026-11-17) */
+function noShowCount(customerId: string): number {
+  return ReservationStore.getAll().filter(r => r.customerId === customerId && r.status === 'noshow').length;
+}
+
 /** 다음 방문 권장 표시 — 예약이 잡혀 있으면 예약일, 아니면 권장일과 남은 일수 */
 function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 'sm' | 'md' }) {
   const info = getCustomerRevisitInfo(customerId);
@@ -258,6 +263,7 @@ export default function Customers() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [customerPrograms, setCustomerPrograms] = useState<CustomerProgram[]>([]);
+  const selectedNoShows = selected ? noShowCount(selected.id) : 0;
   // 헤더 전역 검색(?q=)에서 넘어온 검색어를 초기값·변경 모두 반영
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1188,6 +1194,12 @@ export default function Customers() {
                     <span className="text-xs text-gray-500">총 방문</span>
                     <span className="text-xs font-medium text-gray-900">{selected.totalVisits}회</span>
                   </div>
+                  {selectedNoShows > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">노쇼</span>
+                      <span className="text-xs font-medium text-rose-600">{selectedNoShows}회</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 결제</span>
                     <span className="text-xs font-medium text-gray-900">{(selected.totalSpent || 0).toLocaleString()}원</span>
@@ -1518,6 +1530,9 @@ export default function Customers() {
                           ? `동의함${selected.privacyConsentAt ? ` (${selected.privacyConsentAt.slice(0, 10)})` : ''}`
                           : '기록 없음 (구 등록 고객)'}
                     </p>
+                    {selectedNoShows > 0 && (
+                      <p className="text-xs mt-0.5 text-rose-600 font-medium" data-testid="noshow-badge">노쇼 {selectedNoShows}회 — 예약 확인 연락을 권장합니다</p>
+                    )}
                   </div>
                 </div>
                 {/* 1366px 폭에서 버튼 글자가 세로로 깨지지 않도록 — 줄바꿈은 버튼 단위로 (2026-11-17) */}

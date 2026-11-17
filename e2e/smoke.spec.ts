@@ -161,6 +161,17 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(payForm3).toBeVisible();
   await expect(payForm3.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
 
+  // ── 8-1. 노쇼 이력 (2026-11-17): 노쇼 예약 1건을 심으면 고객 상세에 "노쇼 1회"가 보인다 ──
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    list.push({ ...list[0], id: 'noshow_' + Date.now(), date: '2026-11-10', status: 'noshow' });
+    localStorage.setItem(key, JSON.stringify(list));
+  });
+  await page.goto('/customers');
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  await expect(desk.getByTestId('noshow-badge')).toContainText('노쇼 1회');
+
   // ── 9. 고객 상세 [예약 추가] → 예약 추가 모달에 고객이 미리 선택된다 (2026-11-17) ──
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
