@@ -118,6 +118,14 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   await tryShot('modal-treatment-detail', () => page.getByText(acc.customer).filter({ visible: true }).first().click());
   await page.goto('/sales');
   await tryShot('modal-expense-add', () => page.getByRole('button', { name: '지출 등록' }).filter({ visible: true }).first().click());
+  await page.goto('/messaging');
+  await tryShot('messaging-templates', () => page.getByRole('button', { name: /템플릿 관리/ }).filter({ visible: true }).first().click());
+  await page.goto('/messaging');
+  await tryShot('messaging-history', () => page.getByRole('button', { name: /발송 이력/ }).filter({ visible: true }).first().click());
+  await page.goto('/reservations');
+  await tryShot('reservations-list', () => page.getByRole('button', { name: /목록|이번달/ }).filter({ visible: true }).first().click());
+  await page.goto('/treatments');
+  await tryShot('modal-treatment-edit', async () => { await page.getByText(acc.customer).filter({ visible: true }).first().click(); await page.getByRole('button', { name: '수정', exact: true }).filter({ visible: true }).first().click(); });
   for (const tab of ['영업시간', '연동 설정', '알림 설정', '시술 관리', '데이터 백업']) {
     await page.goto('/settings');
     await tryShot(`settings-${tab}`, () => page.getByRole('button', { name: tab, exact: true }).filter({ visible: true }).first().click());
