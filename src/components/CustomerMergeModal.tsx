@@ -4,6 +4,8 @@ import { GitMerge, X, AlertTriangle } from 'lucide-react';
 import { CustomerStore } from '../lib/store';
 import { previewMerge, mergeCustomers, mergeBlockReason } from '../lib/customerMerge';
 import { isPaymentLinkAvailable, listPaymentRequests } from '../lib/paymentLinks';
+import { loadConsultations } from '../lib/consultationStore';
+import { isNasDataConfigured } from '../lib/nasData';
 import { matchesSearch, formatPrice } from '../lib/format';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +25,14 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
   const [sourceId, setSourceId] = useState('');
   const [pendingBySource, setPendingBySource] = useState<Record<string, number> | null>(isPaymentLinkAvailable ? null : {});
   const [busy, setBusy] = useState(false);
+  // 서버 모드: 상담 기록을 서버에서 다시 받아 온 뒤에만 병합 — 캐시에 없는 상담이 이동에서 빠져 고아가 되지 않게 (실패면 병합 금지)
+  const [consultsReady, setConsultsReady] = useState<boolean | null>(isNasDataConfigured ? null : true);
+  useEffect(() => {
+    if (!isNasDataConfigured) return;
+    let alive = true;
+    loadConsultations().then(() => { if (alive) setConsultsReady(true); }).catch(() => { if (alive) setConsultsReady(false); });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -58,11 +68,12 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
   const preview = source ? previewMerge(source.id) : null;
   const total = preview ? preview.reservations + preview.treatments + preview.programs + preview.payments + preview.consultations : 0;
   const pendingRequests = source && pendingBySource ? pendingBySource[source.id] || 0 : 0;
-  const serverCheckFailed = isPaymentLinkAvailable && pendingBySource === null;
+  const serverCheckFailed = (isPaymentLinkAvailable && pendingBySource === null) || consultsReady === false;
+  const serverChecking = consultsReady === null;
   const spentMismatch = source && preview && (source.totalSpent || 0) !== preview.completedAmount;
 
   function handleMerge() {
-    if (!source || busy || pendingRequests > 0 || serverCheckFailed) return;
+    if (!source || busy || pendingRequests > 0 || serverCheckFailed || serverChecking) return;
     if (!window.confirm(`'${source.name}' 고객의 기록 ${total}건을 '${target.name}' 고객으로 옮기고 '${source.name}'을(를) 삭제할까요?\n되돌릴 수 없습니다.`)) return;
     setBusy(true);
     try {
@@ -116,12 +127,13 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
               <p>누적 결제액은 완료된 결제 기록 기준 {formatPrice(preview.completedAmount)}이 더해집니다{spentMismatch ? ` (이 고객 화면의 누적 ${formatPrice(source.totalSpent || 0)}과 다름 — 결제 기록 없는 금액은 옮겨지지 않음)` : ''}.</p>
               {preview.productSales > 0 && <p className="font-semibold">제품 판매 {preview.productSales}건은 옮겨지지 않고 {source.name} 이름으로 남습니다.</p>}
               {pendingRequests > 0 && <p className="font-semibold text-red-700">미결 결제 요청(링크) {pendingRequests}건이 있어 병합할 수 없습니다. 결제 링크 화면에서 취소하거나 완료된 뒤 다시 시도하세요.</p>}
-              {serverCheckFailed && <p className="font-semibold text-red-700">서버의 결제 요청 상태를 확인하지 못했습니다. 네트워크를 확인한 뒤 다시 열어주세요.</p>}
+              {serverCheckFailed && <p className="font-semibold text-red-700">서버의 결제 요청·상담 기록을 확인하지 못했습니다. 네트워크를 확인한 뒤 다시 열어주세요.</p>}
+              {serverChecking && <p className="text-gray-500">서버 기록을 확인하는 중...</p>}
             </div>
           )}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
-            <button type="button" onClick={handleMerge} disabled={!source || busy || pendingRequests > 0 || serverCheckFailed}
+            <button type="button" onClick={handleMerge} disabled={!source || busy || pendingRequests > 0 || serverCheckFailed || serverChecking}
               className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5">
               <GitMerge size={14} />병합 실행
             </button>

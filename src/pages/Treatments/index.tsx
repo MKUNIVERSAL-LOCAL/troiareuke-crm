@@ -434,14 +434,15 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
       TreatmentLogStore.update(editing.id, {
         customerId,
         customerName: customer.name,
-        customerProgramId: customerProgramId || undefined,
-        programName: linkedProgram?.programName || editing.programName || undefined,
-        staffName: staffName || undefined,
+        // 수정 시 비운 값은 ''/null로 — undefined는 서버 PATCH(JSON 병합)에서 키가 빠져 옛 값이 남는다 (NAS 감사 2026-11-18)
+        customerProgramId: (customerProgramId || null) as unknown as string | undefined,
+        programName: linkedProgram?.programName || editing.programName || '',
+        staffName: staffName || '',
         treatmentDate,
         treatmentDetails: details,
-        skinCondition: skinCondition || undefined,
-        staffNotes: staffNotes || undefined,
-        nextAppointment: nextAppointment || undefined,
+        skinCondition: skinCondition || '',
+        staffNotes: staffNotes || '',
+        nextAppointment: nextAppointment || '',
       });
       if (photosReady) {
         try { savePhotos(`treatment:${editing.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }

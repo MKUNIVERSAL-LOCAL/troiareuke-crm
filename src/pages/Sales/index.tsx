@@ -132,7 +132,7 @@ export default function Sales() {
     loadPayments();
     refreshExpenses();
     // NAS 서버에서 지출 원장 최신화 (실패 시 localStorage 캐시 유지)
-    loadExpenses().then(refreshExpenses).catch(() => {});
+    loadExpenses().then(refreshExpenses).catch(() => notify('서버에서 지출 원장을 받지 못해 이 기기에 저장된 기록을 표시합니다.'));
   }, []);
 
   function loadPayments() {

@@ -446,7 +446,7 @@ function StaffDetailModal({
       name: name.trim(),
       role,
       phone: phone.trim(),
-      email: email.trim() || undefined,
+      email: email.trim() || '', // '' — 서버 PATCH가 실제로 지우게 (undefined는 키 제외)
       specialty,
       color,
       hireDate,

@@ -87,7 +87,7 @@ export default function BackupRestoreCard() {
           )}
         </div>
         {!RESTORE_ALLOWED && (
-          <p className="text-xs text-gray-400">서버 연동 매장은 서버가 데이터의 정본이라 이 기기에서 복원하지 않습니다. 기기를 바꾸면 로그인만 하면 됩니다.</p>
+          <p className="text-xs text-gray-400">서버 연동 매장은 서버가 데이터의 정본이라 이 기기에서 복원하지 않습니다. 기기를 바꾸면 로그인만 하면 됩니다. 이 파일은 <b>이 기기 캐시의 사본</b>이라 다른 기기에서 쓴 기록이 빠지거나 오래됐을 수 있습니다 — 서버 백업은 어드민 콘솔에서.</p>
         )}
         {pending && (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2" data-testid="restore-preview" role="status" aria-live="polite">

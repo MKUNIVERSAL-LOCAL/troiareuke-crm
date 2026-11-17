@@ -20,6 +20,7 @@ export default function OfflineBanner() {
   const [minutes, setMinutes] = useState<number | null>(null);
   const [pending, setPending] = useState(() => pendingNasOutboxCount());
   const [sendFailed, setSendFailed] = useState(false);
+  const [rejected, setRejected] = useState(0); // 서버가 영구 거부한 저장분 — 연결 복구로 풀리지 않는다 (NAS 감사 2026-11-18)
 
   useEffect(() => {
     const onOffline = () => setOffline(true);
@@ -31,7 +32,10 @@ export default function OfflineBanner() {
       const detail = (e as CustomEvent<{ count?: number }>).detail;
       setPending(typeof detail?.count === 'number' ? detail.count : pendingNasOutboxCount());
     };
-    const onOutboxError = () => setSendFailed(true);
+    const onOutboxError = (e: Event) => {
+      const detail = (e as CustomEvent<{ permanent?: boolean }>).detail;
+      if (detail?.permanent) setRejected(n => n + 1); else setSendFailed(true);
+    };
 
     window.addEventListener('offline', onOffline);
     window.addEventListener('online', onOnline);
@@ -52,7 +56,7 @@ export default function OfflineBanner() {
     }
   }, [offline]);
 
-  if (!offline && pending === 0 && !sendFailed) return null;
+  if (!offline && pending === 0 && !sendFailed && rejected === 0) return null;
 
   const base = 'sticky top-0 z-30 border-b text-xs py-2 px-4 flex items-center gap-2';
 
@@ -73,6 +77,16 @@ export default function OfflineBanner() {
         <span className="ml-1 text-amber-600">
           {pending > 0 ? '연결이 복구되면 자동 전송됩니다' : '인터넷 연결을 확인해주세요'}
         </span>
+      </div>
+    );
+  }
+
+  if (rejected > 0) {
+    return (
+      <div role="alert" className={`${base} bg-rose-50 border-rose-200 text-rose-700`}>
+        <AlertTriangle size={14} className="flex-shrink-0" />
+        <span>서버가 저장분 {rejected}건을 거부해 반영되지 않았습니다 — 서버 프로그램이 구버전일 수 있습니다. 관리자에게 문의하세요.</span>
+        <button type="button" onClick={() => setRejected(0)} className="ml-auto text-rose-500 hover:text-rose-700 text-xs underline">닫기</button>
       </div>
     );
   }

@@ -129,6 +129,8 @@ export function flushNasOutbox(): Promise<void> {
       } catch (error) {
         if (!isPermanentRejection(error)) throw error; // 일시 오류 — 큐 보존, 실패 전파
         console.error(`[NAS] ${next.method} ${next.path} 영구 실패 — 항목 폐기:`, error);
+        // 서버가 거부(400/404 — 구버전 서버가 모르는 컬렉션 등): 화면에선 이미 저장 성공으로 보였으므로 반드시 알린다
+        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status: error instanceof AuthApiError ? error.status : undefined } })); } catch { /* noop */ }
       }
       // 전송 중 새 항목이 추가될 수 있으므로 현재 큐를 다시 읽어 처리된 항목만 제거
       writeOutbox(key, readOutbox(key).filter(item => item.id !== next.id));

@@ -609,8 +609,8 @@ export default function Customers() {
 
   useEffect(() => {
     loadAll();
-    // 상담 기록 중앙 서버에서 1회 동기화 후 캐시 반영
-    loadConsultations().catch(() => {});
+    // 상담 기록 중앙 서버에서 1회 동기화 후 캐시 반영 — 실패하면 이 기기 캐시를 보여 준다고 알린다(무음 폴백 금지)
+    loadConsultations().catch(() => notify('서버에서 상담 기록을 받지 못해 이 기기에 저장된 기록을 표시합니다.'));
   }, []);
 
   useEffect(() => {
@@ -1078,12 +1078,13 @@ export default function Customers() {
       name: editForm.name, phone: editForm.phone,
       gender: editForm.gender, grade: editForm.grade,
       skinType: editForm.skinType, memo: editForm.memo,
-      birthDate: editForm.birthDate || undefined,
-      referralSource: editForm.referralSource || undefined,
-      email: editForm.email.trim() || undefined,
-      address: editForm.address.trim() || undefined,
+      // 비운 값은 ''로 — undefined는 toDbCustomer가 키를 빼서 서버(JSON 병합 PATCH)에 옛 값이 남고 재로그인 때 되살아난다 (NAS 감사 2026-11-18). 소비자는 모두 truthy 검사
+      birthDate: editForm.birthDate || '',
+      referralSource: editForm.referralSource || '',
+      email: editForm.email.trim() || '',
+      address: editForm.address.trim() || '',
       tags: parseTags(editForm.tags),
-      allergies: editForm.allergies.trim() || undefined,
+      allergies: editForm.allergies.trim() || '',
     });
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);

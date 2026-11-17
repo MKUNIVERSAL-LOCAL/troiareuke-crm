@@ -10,7 +10,7 @@
  */
 import type { Consultation, BeaconMetrics } from '../types';
 import { getShopId, safeSetItem } from './store';
-import { isNasDataConfigured, nasLoad, nasUpsert, nasUpdate, nasDelete } from './nasData';
+import { isNasDataConfigured, nasLoad, nasUpsert, nasDelete } from './nasData';
 
 function genId(): string {
   return globalThis.crypto?.randomUUID?.()
@@ -188,7 +188,8 @@ export const ConsultationStore = {
     _consultations = next;
     saveList(shopKey('consultations'), next);
     if (isNasDataConfigured) {
-      nasUpdate('consultations', id, toDbConsultation(updates));
+      // 행 전체 upsert — 부분 PATCH는 서버가 JSON 병합이라 비운 필드(undefined → 키 제외)가 옛 값으로 남는다 (NAS 감사 2026-11-18, expenseStore와 같은 방식)
+      nasUpsert('consultations', toDbConsultation(next[idx]));
       return next[idx];
     }
     return next[idx];
