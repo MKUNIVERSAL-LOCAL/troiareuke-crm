@@ -15,6 +15,7 @@ import {
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
 import TimelapseViewer from '../../components/TimelapseViewer';
 import { resizeImageFile, getPhotos } from '../../lib/photoStore';
+import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import { refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
@@ -138,6 +139,10 @@ export default function Customers() {
 
   // 고객 수정 모달
   const [showEditModal, setShowEditModal] = useState(false);
+  // 모바일/데스크톱 패널이 둘 다 DOM에 있어 타임랩스(NAS 동기화·사진 디코딩)가 2회 돌던 것을 활성 레이아웃만 렌더
+  const isMobileLayout = useIsMobileLayout();
+  // 타임랩스가 NAS에서 사진을 받아오면 최근 시술 썸네일도 같은 데이터를 다시 읽도록 리렌더
+  const [photoTick, setPhotoTick] = useState(0);
   const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
 
   // 엑셀 업로드용 파일 input ref
@@ -829,8 +834,8 @@ export default function Customers() {
           )}
         </div>
 
-        {/* 모바일 고객 상세 — 풀스크린 모달 */}
-        {selected && (
+        {/* 모바일 고객 상세 — 풀스크린 모달 (활성 레이아웃일 때만 마운트) */}
+        {selected && isMobileLayout && (
           <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
             {/* 헤더 */}
             <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 shadow-sm">
@@ -925,7 +930,7 @@ export default function Customers() {
               )}
 
               {/* Before/After 타임랩스 — 시술 사진이 있을 때만 (2026-11-17 모바일에도 노출) */}
-              <TimelapseViewer customerId={selected.id} customerName={selected.name} />
+              <TimelapseViewer customerId={selected.id} customerName={selected.name} onSynced={() => setPhotoTick(t => t + 1)} />
 
               {/* 최근 시술 기록 */}
               <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -1421,7 +1426,7 @@ export default function Customers() {
             </div>
 
             {/* Before/After 타임랩스 (킬러②) — 시술 사진이 있을 때만 표시 */}
-            <TimelapseViewer customerId={selected.id} customerName={selected.name} />
+            {!isMobileLayout && <TimelapseViewer customerId={selected.id} customerName={selected.name} onSynced={() => setPhotoTick(t => t + 1)} />}
 
             {/* 최근 시술 기록 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
@@ -1449,6 +1454,7 @@ export default function Customers() {
                           {log.staffName && <p className="text-xs text-gray-400">담당: {log.staffName}</p>}
                           {log.treatmentDetails && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{log.treatmentDetails}</p>}
                           {(() => {
+                            void photoTick; // NAS 동기화 후 재읽기
                             const thumbs = getPhotos(`treatment:${log.id}`);
                             if (thumbs.length === 0) return null;
                             return (

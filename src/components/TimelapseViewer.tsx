@@ -5,11 +5,12 @@ import { TreatmentLogStore } from '../lib/store';
 import { syncPhotosFromNas, PHOTO_ANGLES, type PhotoAngle } from '../lib/photoStore';
 import {
   collectCustomerPhotos, photoCaption, daysBetween,
-  renderComparison, exportComparison, comparisonFileName, canCopyImage, copyImageToClipboard,
+  renderComparison, comparisonFileName, canCopyImage, copyImageToClipboard,
   type DatedPhoto,
 } from '../lib/beforeAfter';
 import { notify } from '../lib/notify';
 import { IS_MOBILE_APP } from '../lib/platform';
+import { exportFile } from '../lib/mobileBridge';
 
 /**
  * Before/After 타임랩스 뷰어 (킬러 기능 ②)
@@ -18,14 +19,18 @@ import { IS_MOBILE_APP } from '../lib/platform';
  * - 촬영 각도 태그가 있으면 같은 각도끼리만 비교할 수 있다.
  * - 비교 이미지를 PNG 1장으로 합성해 저장(PC) / 공유(모바일) / 클립보드 복사(PC, 카카오톡 PC 붙여넣기).
  */
-export default function TimelapseViewer({ customerId, customerName }: { customerId: string; customerName?: string }) {
+export default function TimelapseViewer({ customerId, customerName, onSynced }: { customerId: string; customerName?: string; onSynced?: () => void }) {
   // NAS 동기화로 사진이 바뀌면 재수집
   const [photoVersion, setPhotoVersion] = useState(0);
   useEffect(() => {
     const logs = TreatmentLogStore.getByCustomer(customerId);
     syncPhotosFromNas(logs.map(log => `treatment:${log.id}`)).then(changed => {
-      if (changed) setPhotoVersion(v => v + 1);
+      if (!changed) return;
+      setPhotoVersion(v => v + 1);
+      onSynced?.(); // 부모(고객 상세 썸네일 등)도 같은 캐시를 다시 읽게
     });
+    // onSynced는 호출 시점의 최신 콜백이면 충분 — 의존성에 넣으면 부모 리렌더마다 재동기화된다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
   const allPhotos = useMemo<DatedPhoto[]>(() => collectCustomerPhotos(customerId), [customerId, photoVersion]);
@@ -69,7 +74,7 @@ export default function TimelapseViewer({ customerId, customerName }: { customer
   async function handleSave() {
     setBusy('save');
     try {
-      const result = await exportComparison(await buildImage(), comparisonFileName(customerName));
+      const result = await exportFile(comparisonFileName(customerName), await buildImage());
       notify.success(
         result === 'shared' ? '비교 이미지를 공유했습니다.'
           : result === 'saved' ? '비교 이미지를 저장했습니다.'
@@ -132,9 +137,7 @@ export default function TimelapseViewer({ customerId, customerName }: { customer
         </div>
       </div>
 
-      {photos.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">이 각도로 찍은 사진이 없습니다.</p>
-      ) : compare && photos.length >= 2 ? (
+      {compare && photos.length >= 2 ? (
         <div>
           {/* Before(선택) vs After(선택) 나란히 비교 */}
           <div className="grid grid-cols-2 gap-3">

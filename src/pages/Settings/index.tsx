@@ -1226,7 +1226,10 @@ export default function Settings() {
                                 ))}
                               </div>
                             </div>
-                            {!isCurrent && (plan.price > 0 && !PAYMENT_ENABLED ? (
+                            {!isCurrent && (isAuthApiConfigured ? (
+                              // NAS 모드: 플랜은 본사가 계정 단위로 관리 — 누르면 실패하는 버튼을 보여주지 않는다
+                              <span className="flex-shrink-0 text-xs text-gray-400">본사에서 변경</span>
+                            ) : plan.price > 0 && !PAYMENT_ENABLED ? (
                               <button
                                 disabled
                                 className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-gray-100 text-gray-400 rounded-xl cursor-not-allowed"

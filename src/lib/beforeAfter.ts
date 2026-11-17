@@ -4,7 +4,6 @@
 import { TreatmentLogStore, SettingsStore } from './store';
 import { getPhotos, PHOTO_ANGLES, type PhotoEntry, type PhotoAngle } from './photoStore';
 import { IS_MOBILE_APP } from './platform';
-import { exportFile } from './mobileBridge';
 import { todayISO } from './format';
 
 export interface DatedPhoto extends PhotoEntry {
@@ -165,11 +164,6 @@ export function comparisonFileName(customerName?: string): string {
   const shop = (SettingsStore.get().name || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const who = (customerName || '고객').replace(/[\\/:*?"<>|\s]/g, '');
   return `${shop}_${who}_BeforeAfter_${todayISO()}.png`;
-}
-
-/** PC: 파일 내려받기 / 모바일 앱: 캐시 저장 후 공유 시트(카카오톡 등) */
-export function exportComparison(blob: Blob, fileName: string): Promise<'shared' | 'saved' | 'downloaded'> {
-  return exportFile(fileName, blob);
 }
 
 /** 클립보드 이미지 복사 가능 여부 — PC(Electron·브라우저)에서 카카오톡 PC 대화창에 바로 붙이기 */
