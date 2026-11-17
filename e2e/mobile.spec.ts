@@ -211,6 +211,15 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.goto('/');
   await page.getByText('모바일고객').filter({ visible: true }).first().click();
   await expect(page.getByText('예약 상세').filter({ visible: true }).first()).toBeVisible();
+  // 예약 상세 [시술 기록 작성] → 고객·시술 항목이 채워진 시술 기록 창 (2026-11-17)
+  await page.getByRole('button', { name: '시술 기록 작성' }).click();
+  await expect(page).toHaveURL(/\/treatments\?new=1&customer=/);
+  await expect(page.locator('option:checked', { hasText: '모바일고객' })).toHaveCount(1);
+  await expect(page.locator('input[type="checkbox"]:checked')).not.toHaveCount(0);
+  await page.getByRole('button', { name: '취소', exact: true }).filter({ visible: true }).first().click();
+  await page.goto('/');
+  await page.getByText('모바일고객').filter({ visible: true }).first().click();
+  await expect(page.getByText('예약 상세').filter({ visible: true }).first()).toBeVisible();
   await page.keyboard.press('Escape');
 
   // 더보기 탭(설정 등 진입점)이 하단 탭바에 있다

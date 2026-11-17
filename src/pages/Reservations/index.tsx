@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback, useEffect, type CSSProperties } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { notify } from '../../lib/notify';
-import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
@@ -1050,6 +1050,15 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   onEdit: () => void;
 }) {
   const { user } = useAuth();
+  const goTo = useNavigate();
+  // 예약 → 시술 기록(사진 첨부) 연계: 고객·시술일·담당자·시술 항목을 프리필해 시술 기록 화면을 연다 (2026-11-17)
+  const openTreatmentLog = () => {
+    const q = new URLSearchParams({ new: '1', customer: r.customerId, date: r.date, reservation: r.id });
+    if (r.staffName) q.set('staff', r.staffName);
+    const names = r.services.map(s => s.serviceName).filter(Boolean);
+    if (names.length) q.set('services', names.join(','));
+    goTo(`/treatments?${q.toString()}`);
+  };
   const handleCancel = () => {
     // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행
     if (!window.confirm('이 예약을 취소 처리하시겠습니까?')) return;
@@ -1136,6 +1145,16 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           </div>
         )}
 
+        {r.status !== 'cancelled' && r.status !== 'noshow' && (
+          <button
+            type="button"
+            onClick={openTreatmentLog}
+            className="w-full py-2.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-xl hover:bg-green-100 transition-colors flex items-center justify-center gap-1.5"
+            title="이 예약의 고객·날짜·시술 항목이 채워진 시술 기록 창을 엽니다 (사진 첨부)"
+          >
+            <Scissors size={14} />시술 기록 작성
+          </button>
+        )}
         <div className="flex gap-2 pt-2">
           <button
             onClick={handleCancel}

@@ -5,7 +5,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
-import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore } from '../../lib/store';
+import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, PaymentStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
@@ -187,11 +187,20 @@ export default function Treatments() {
 
       {showAddModal && (
         <AddTreatmentModal
+          prefill={{
+            customerId: searchParams.get('customer') ?? undefined,
+            treatmentDate: searchParams.get('date') ?? undefined,
+            staffName: searchParams.get('staff') ?? undefined,
+            serviceNames: searchParams.get('services')?.split(',').map(s => s.trim()).filter(Boolean),
+          }}
           onClose={() => setShowAddModal(false)}
           onSave={result => {
             setShowAddModal(false);
             loadLogs();
-            if (result && window.confirm(`시술 기록을 저장했습니다.\n${result.customerName} 고객의 결제(${result.amount.toLocaleString()}원)도 바로 등록할까요?`)) {
+            // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
+            const reservationId = searchParams.get('reservation');
+            const paidByReservation = !!reservationId && PaymentStore.getAll().some(p => p.referenceId === reservationId);
+            if (result && !paidByReservation && window.confirm(`시술 기록을 저장했습니다.\n${result.customerName} 고객의 결제(${result.amount.toLocaleString()}원)도 바로 등록할까요?`)) {
               const q = new URLSearchParams({ new: '1', customer: result.customerId, amount: String(result.amount), memo: result.details });
               navigate(`/sales?${q.toString()}`);
             }
@@ -223,22 +232,25 @@ export default function Treatments() {
 /** 저장 직후 결제 연계에 필요한 요약 — 새 기록이고 시술 항목 금액이 있을 때만 채워진다 */
 export interface TreatmentSaveResult { customerId: string; customerName: string; amount: number; details: string }
 
-function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?: TreatmentLog | null; onClose: () => void; onSave: (result?: TreatmentSaveResult) => void }) {
+/** 예약 상세 [시술 기록 작성]에서 넘어온 프리필 — 존재하는 고객·담당자·시술 메뉴만 반영한다 (2026-11-17) */
+export interface TreatmentPrefill { customerId?: string; treatmentDate?: string; staffName?: string; serviceNames?: string[] }
+
+function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { treatment?: TreatmentLog | null; prefill?: TreatmentPrefill; onClose: () => void; onSave: (result?: TreatmentSaveResult) => void }) {
   const { user: authUser } = useAuth();
   const isEdit = !!editing;
   const customers = CustomerStore.getAll();
   const staff = StaffStore.getAll();
   const services = ServiceStore.getAll();
 
-  const [customerId, setCustomerId] = useState(editing?.customerId ?? '');
+  const [customerId, setCustomerId] = useState(editing?.customerId ?? (prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
   const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? '');
-  const [staffName, setStaffName] = useState(editing?.staffName ?? '');
-  const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? new Date().toISOString().slice(0, 10));
-  // 수정 모드: 기존 시술 내용에서 시술 메뉴명과 일치하는 항목을 체크 상태로 복원
+  const [staffName, setStaffName] = useState(editing?.staffName ?? (prefill?.staffName && staff.some(s => s.name === prefill.staffName) ? prefill.staffName : ''));
+  const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? prefill?.treatmentDate ?? new Date().toISOString().slice(0, 10));
+  // 수정 모드: 기존 시술 내용에서 시술 메뉴명과 일치하는 항목을 체크 상태로 복원. 예약 프리필도 같은 규칙(존재하는 메뉴만)
   const [selectedServices, setSelectedServices] = useState<string[]>(() => {
-    if (!editing?.treatmentDetails) return [];
     const names = new Set(services.map(s => s.name));
-    return editing.treatmentDetails.split(',').map(s => s.trim()).filter(n => names.has(n));
+    if (editing?.treatmentDetails) return editing.treatmentDetails.split(',').map(s => s.trim()).filter(n => names.has(n));
+    return (prefill?.serviceNames ?? []).filter(n => names.has(n));
   });
   const [treatmentDetails, setTreatmentDetails] = useState(editing?.treatmentDetails ?? '');
   const [skinCondition, setSkinCondition] = useState(editing?.skinCondition ?? '');
