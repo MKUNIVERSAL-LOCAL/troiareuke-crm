@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
 import { notify } from '../../lib/notify';
-import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search } from 'lucide-react';
+import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
+import { canShareText, shareText } from '../../lib/mobileBridge';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { MessageTemplateStore, MessageHistoryStore, CustomerStore, SettingsStore } from '../../lib/store';
@@ -1097,6 +1098,18 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
 
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
+            {canShareText && (
+              // 모바일: 발송사 미계약이어도 문구를 카카오톡·문자 앱으로 넘겨 직접 보낼 수 있다 (2026-11-17)
+              <button
+                type="button"
+                onClick={() => shareText(content, '고객 안내')}
+                disabled={!content.trim()}
+                className="flex-1 py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                title="카카오톡·문자 앱으로 문구 보내기"
+              >
+                <Share2 size={14} />앱으로 보내기
+              </button>
+            )}
             <button
               onClick={handleSend}
               disabled={sending || !content.trim() || recipientCount === 0}
