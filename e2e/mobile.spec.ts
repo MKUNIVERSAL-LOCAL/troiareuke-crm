@@ -251,12 +251,14 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
 
   // 고객 정보 수정이 모바일에서도 된다 (2026-11-17)
   await page.getByRole('button', { name: '고객 정보 수정' }).click();
-  const memoField = page.getByPlaceholder('특이사항, 알레르기 등').filter({ visible: true }).first();
+  const memoField = page.getByPlaceholder('특이사항 (알레르기는 위 칸에)').filter({ visible: true }).first();
   await memoField.fill('모바일에서 수정');
   await page.getByRole('textbox', { name: '태그' }).filter({ visible: true }).first().fill('민감성, #재구매'); // 고객 태그 (2026-11-18) — #은 벗겨진다
+  await page.getByRole('textbox', { name: '알레르기' }).filter({ visible: true }).first().fill('레티놀 자극'); // 알레르기 입력 (2026-11-18)
   await page.getByRole('button', { name: '저장', exact: true }).filter({ visible: true }).first().click();
   await expect(page.getByText('모바일에서 수정').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('customer-tags').filter({ visible: true }).first()).toContainText('#민감성');
+  await expect(page.getByTestId('allergy-row').filter({ visible: true }).first()).toContainText('레티놀 자극');
   // 목록 태그 칩으로 걸러진다
   await page.getByRole('button', { name: '뒤로가기' }).click();
   const tagChip = page.getByTestId('tag-filter').filter({ visible: true }).first().getByRole('button', { name: /^#재구매/ });
@@ -288,6 +290,14 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
 
   // 예약 등록 → 모바일 카드 → 상세 모달 (2026-11-17)
   await page.goto('/reservations');
+  // 모바일 예약 '이번달' 탭에서 다음 달로 이동할 수 있다 (2026-11-18) — 다음 달 예약을 모바일에서도 찾게
+  await page.getByRole('button', { name: '이번달' }).click();
+  const monthNav = page.getByTestId('mobile-month-nav');
+  const thisMonthLabel = await monthNav.locator('button').nth(1).innerText();
+  await monthNav.getByRole('button', { name: '다음 달' }).click();
+  expect(await monthNav.locator('button').nth(1).innerText()).not.toBe(thisMonthLabel);
+  await monthNav.getByRole('button', { name: '이전 달' }).click();
+  await page.getByRole('button', { name: '오늘', exact: true }).click();
   await page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click();
   await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
   await page.locator('select').filter({ hasText: '직원 선택' }).selectOption({ index: 1 });

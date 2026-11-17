@@ -191,6 +191,8 @@ export default function Reservations() {
 
   // 모바일 전용 상태
   const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
+  const [mobileMonthOffset, setMobileMonthOffset] = useState(0); // '이번달' 탭에서 ‹ › 로 다른 달 보기 (2026-11-18) — 다음 달 예약을 모바일에서도 찾을 수 있게
+  const mobileMonthDate = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + mobileMonthOffset); return d; })();
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const normalizedSearch = search.trim().toLowerCase();
@@ -214,8 +216,8 @@ export default function Reservations() {
       const wEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
       return filteredReservations.filter(r => r.date >= wStart && r.date <= wEnd);
     } else {
-      const mStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-      const mEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+      const mStart = format(startOfMonth(mobileMonthDate), 'yyyy-MM-dd');
+      const mEnd = format(endOfMonth(mobileMonthDate), 'yyyy-MM-dd');
       return filteredReservations.filter(r => r.date >= mStart && r.date <= mEnd);
     }
   })().sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
@@ -262,6 +264,13 @@ export default function Reservations() {
               );
             })}
           </div>
+          {mobileTab === 'month' && (
+            <div className="flex items-center justify-between mt-2" data-testid="mobile-month-nav">
+              <button type="button" onClick={() => setMobileMonthOffset(o => o - 1)} aria-label="이전 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronLeft size={16} /></button>
+              <button type="button" onClick={() => setMobileMonthOffset(0)} className="text-sm font-semibold text-gray-800">{format(mobileMonthDate, 'yyyy년 M월')}{mobileMonthOffset !== 0 && <span className="ml-1 text-[11px] font-normal text-[#1a3a8f]">(이번달로)</span>}</button>
+              <button type="button" onClick={() => setMobileMonthOffset(o => o + 1)} aria-label="다음 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronRight size={16} /></button>
+            </div>
+          )}
           <div className="flex gap-2 mt-2">
             <label className="relative flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -303,7 +312,7 @@ export default function Reservations() {
             <div className="py-16 text-center">
               <Calendar size={32} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm text-slate-500">
-                {mobileTab === 'today' ? '오늘' : mobileTab === 'week' ? '이번 주' : '이번 달'} 예약이 없습니다
+                {mobileTab === 'today' ? '오늘' : mobileTab === 'week' ? '이번 주' : format(mobileMonthDate, 'M월')} 예약이 없습니다
               </p>
               <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">예약 추가하기</button>
             </div>

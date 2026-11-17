@@ -357,7 +357,7 @@ export default function Customers() {
     const next = new URLSearchParams(searchParams); next.delete('open');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
-  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '', tags: '' });
+  const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '', tags: '', allergies: '' });
   const [addPrivacyConsent, setAddPrivacyConsent] = useState(false);
 
   // 고객 수정 모달
@@ -368,7 +368,7 @@ export default function Customers() {
   const [photoTick, setPhotoTick] = useState(0);
   const [detailTick, setDetailTick] = useState(0); // loadAll마다 증가 — 활동 타임라인 재계산 (2026-11-18)
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시가 비동기로 채워지면 썸네일·상담 사진을 다시 읽는다
-  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '', tags: '' });
+  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '', tags: '', allergies: '' });
 
   // 엑셀 업로드용 파일 input ref
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -1004,7 +1004,7 @@ export default function Customers() {
             referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
             email: pick(r, ['이메일', 'email']) || undefined,
             address: pick(r, ['주소', 'address']) || undefined,
-            allergies: undefined, tags: parseTags(pick(r, ['태그', 'tags'])), isActive: true,
+            allergies: pick(r, ['알레르기', 'allergies']) || undefined, tags: parseTags(pick(r, ['태그', 'tags'])), isActive: true,
           });
           added++;
         });
@@ -1044,13 +1044,13 @@ export default function Customers() {
       skinType: addForm.skinType, memo: addForm.memo,
       birthDate: addForm.birthDate || undefined,
       referralSource: addForm.referralSource || undefined,
-      email: addForm.email.trim() || undefined, allergies: undefined,
+      email: addForm.email.trim() || undefined, allergies: addForm.allergies.trim() || undefined,
       address: addForm.address.trim() || undefined,
       tags: parseTags(addForm.tags), isActive: true,
       privacyConsent: true, privacyConsentAt: new Date().toISOString(),
     });
     setShowAddModal(false);
-    setAddForm({ name: '', phone: '', email: '', address: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '', tags: '' });
+    setAddForm({ name: '', phone: '', email: '', address: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '', tags: '', allergies: '' });
     setAddPrivacyConsent(false);
     loadAll();
   }
@@ -1066,6 +1066,7 @@ export default function Customers() {
       memo: selected.memo ?? '', birthDate: selected.birthDate ?? '',
       referralSource: selected.referralSource ?? '',
       tags: (selected.tags || []).join(', '),
+      allergies: selected.allergies ?? '',
     });
     setShowEditModal(true);
   }
@@ -1082,6 +1083,7 @@ export default function Customers() {
       email: editForm.email.trim() || undefined,
       address: editForm.address.trim() || undefined,
       tags: parseTags(editForm.tags),
+      allergies: editForm.allergies.trim() || undefined,
     });
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
@@ -1368,6 +1370,24 @@ export default function Customers() {
                     <span className="text-xs text-gray-500">피부 타입</span>
                     <span className="text-xs font-medium text-gray-900">{selected.skinType || '-'}</span>
                   </div>
+                  {selected.allergies && (
+                    <div className="flex justify-between gap-2" data-testid="allergy-row">
+                      <span className="text-xs text-amber-700 font-medium">알레르기·주의</span>
+                      <span className="text-xs font-semibold text-amber-800 text-right">{selected.allergies}</span>
+                    </div>
+                  )}
+                  {selected.address && user?.role !== 'staff' && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-xs text-gray-500">주소</span>
+                      <span className="text-xs font-medium text-gray-900 text-right truncate">{selected.address}</span>
+                    </div>
+                  )}
+                  {selected.referralSource && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">유입 경로</span>
+                      <span className="text-xs font-medium text-gray-900">{selected.referralSource}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 방문</span>
                     <span className="text-xs font-medium text-gray-900">{selected.totalVisits}회</span>
@@ -1751,6 +1771,20 @@ export default function Customers() {
                     </div>
                     <p className="text-sm text-gray-500">{maskPhone(selected.phone, user?.role ?? 'staff')}</p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}
+                    {(() => {
+                      // 폼에서 받는 정보를 상세에서도 보이게 — 이메일·주소는 내보내기와 같은 규칙으로 staff 역할에겐 숨김 (2026-11-18)
+                      const parts = [
+                        selected.gender && selected.gender !== '미입력' ? selected.gender : '',
+                        selected.birthDate ? `생일 ${selected.birthDate}` : '',
+                        user?.role !== 'staff' && selected.email ? selected.email : '',
+                        user?.role !== 'staff' && selected.address ? selected.address : '',
+                        selected.referralSource ? `유입 ${selected.referralSource}` : '',
+                      ].filter(Boolean);
+                      return parts.length > 0 ? <p className="text-xs text-gray-400 mt-0.5 truncate" title={parts.join(' · ')}>{parts.join(' · ')}</p> : null;
+                    })()}
+                    {selected.allergies && (
+                      <p className="text-xs mt-0.5 text-amber-800 font-medium bg-amber-50 border border-amber-100 rounded-lg px-2 py-0.5 inline-block" data-testid="allergy-row">⚠ 알레르기·주의: {selected.allergies}</p>
+                    )}
                     <p className={`text-xs mt-0.5 ${isAnonymized(selected) ? 'text-gray-400' : selected.privacyConsent ? 'text-green-600' : 'text-amber-500'}`}>
                       개인정보 동의: {isAnonymized(selected)
                         ? '익명화됨 (보존기간 경과)'
@@ -2252,9 +2286,14 @@ export default function Customers() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">알레르기·주의사항</label>
+                <input value={addForm.allergies} onChange={e => setAddForm(f => ({ ...f, allergies: e.target.value }))} aria-label="알레르기" placeholder="예: 레티놀 자극, 견과류 알레르기"
+                  className="w-full px-3 py-2 border border-amber-200 bg-amber-50/40 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
                 <textarea value={addForm.memo} onChange={e => setAddForm(f => ({ ...f, memo: e.target.value }))}
-                  rows={2} placeholder="특이사항, 알레르기 등"
+                  rows={2} placeholder="특이사항 (알레르기는 위 칸에)"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
               <label className="flex items-start gap-2 p-3 bg-blue-50/60 border border-blue-100 rounded-xl cursor-pointer">
@@ -2351,9 +2390,14 @@ export default function Customers() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">알레르기·주의사항</label>
+                <input value={editForm.allergies} onChange={e => setEditForm(f => ({ ...f, allergies: e.target.value }))} aria-label="알레르기" placeholder="예: 레티놀 자극, 견과류 알레르기"
+                  className="w-full px-3 py-2 border border-amber-200 bg-amber-50/40 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
                 <textarea value={editForm.memo} onChange={e => setEditForm(f => ({ ...f, memo: e.target.value }))}
-                  rows={2} placeholder="특이사항, 알레르기 등"
+                  rows={2} placeholder="특이사항 (알레르기는 위 칸에)"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
               </div>
               <div className="flex gap-2">
