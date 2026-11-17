@@ -1,5 +1,5 @@
 import { notify } from '../../lib/notify';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -250,17 +250,17 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
     setUploading(true);
     try {
       const added: PhotoEntry[] = [];
-      const baseCount = photos.length;
       for (const file of files) {
         try {
           const dataUrl = await resizeImageFile(file);
-          // 기본 태그: 기록의 첫 사진은 '시술 전', 이후는 '시술 후' (썸네일 아래에서 수정 가능)
-          added.push({ id: makePhotoId(), dataUrl, takenAt: new Date().toISOString(), label: baseCount + added.length === 0 ? 'before' : 'after' });
+          added.push({ id: makePhotoId(), dataUrl, takenAt: new Date().toISOString() });
         } catch {
           // 개별 파일 실패는 건너뜀
         }
       }
-      setPhotoList(prev => [...prev, ...added]);
+      // 기본 태그: 기록의 첫 사진은 '시술 전', 이후는 '시술 후' (썸네일 아래에서 수정 가능).
+      // 리사이즈 중 목록이 바뀔 수 있어 커밋 시점의 prev 길이로 판정한다.
+      setPhotoList(prev => [...prev, ...added.map((p, i) => ({ ...p, label: prev.length + i === 0 ? 'before' : 'after' }))]);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -270,8 +270,12 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
   const removePhotoLocal = (id: string) => setPhotoList(prev => prev.filter(p => p.id !== id));
   const updatePhotoMeta = (id: string, patch: Pick<PhotoEntry, 'label' | 'angle'>) =>
     setPhotoList(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
-  // 촬영 가이드 — 같은 고객의 직전 시술 사진(각도별 최신 1장). 편집 중인 기록은 제외
-  const referencePhotos = customerId ? findReferencePhotos(customerId, editing?.id) : [];
+  // 촬영 가이드 — 같은 고객의 직전 시술 사진(각도별 최신 1장). 편집 중인 기록은 제외.
+  // 사진 base64를 전부 읽는 작업이라 고객 선택이 바뀔 때만 계산한다 (키 입력마다 재계산 금지)
+  const referencePhotos = useMemo(
+    () => (customerId ? findReferencePhotos(customerId, editing?.id) : []),
+    [customerId, editing?.id],
+  );
 
   const handleSave = () => {
     if (!customerId) return;

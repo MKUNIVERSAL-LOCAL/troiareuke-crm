@@ -4,8 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { StaffStore, ServiceStore, ProgramStore, SettingsStore } from '../../lib/store';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { isAuthApiConfigured } from '../../lib/authApi';
 import { PLANS } from '../../lib/payment';
 import type { ShopSettings, SubscriptionPlan } from '../../types';
 import * as XLSX from 'xlsx';
@@ -182,16 +180,7 @@ export default function Onboarding() {
       notes: plan === 'trial' ? '14일 무료 체험' : `${plan} 플랜 결제`,
     };
 
-    // Supabase 구독 기록은 NAS 미설정 구빌드 폴백 전용 — NAS 모드는 서버가 플랜을 보유한다
-    if (isSupabaseConfigured && !isAuthApiConfigured) {
-      // 라이브 subscriptions 테이블에는 currency 컬럼이 없음(PGRST204) — 제외하고 저장
-      const { currency: _currency, ...dbRow } = subscriptionData;
-      const { error } = await supabase.from('subscriptions').insert(dbRow);
-      if (error) {
-        console.error('구독 저장 실패:', error);
-      }
-    }
-
+    // 구독 기록: NAS 모드는 서버 계정이 플랜을 보유하므로 로컬 표시용만 저장
     // 로컬에도 저장
     localStorage.setItem('troiareuke_subscription', JSON.stringify({
       ...subscriptionData,

@@ -9,12 +9,7 @@ import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore, getShopId } from '../../lib/store';
 import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
-import { isAuthApiConfigured } from '../../lib/authApi';
-
-// 구독 기록의 Supabase 경로는 NAS 미설정 구빌드 폴백 전용. NAS 모드에서는 호출하지 않는다
-// (2026-11-17: Supabase 프로젝트 도메인 소멸 확인 — NAS 모드에서 호출 시 매번 실패·플랜 전환 차단).
-const SUPABASE_FALLBACK = isSupabaseConfigured && !isAuthApiConfigured;
+import { isAuthApiConfigured, updateAuthProfile } from '../../lib/authApi';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFlagsChanged, PAYMENT_ENABLED } from '../../lib/featureFlags';
 import { useFeatureAllowed } from '../../hooks/useFeature';
@@ -222,36 +217,18 @@ export default function Settings() {
     try {
       let fetchedFromRemote = false;
 
-      if (SUPABASE_FALLBACK && user?.branchId) {
-        const { data } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('branch_id', user.branchId)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (data) {
-          fetchedFromRemote = true;
-          setCurrentSubscription({
-            id: data.id,
-            branchId: data.branch_id,
-            plan: data.plan,
-            status: data.status,
-            startedAt: data.started_at,
-            expiresAt: data.expires_at,
-            paymentMethod: data.payment_method,
-            amount: data.amount,
-            currency: data.currency,
-            impUid: data.imp_uid,
-            merchantUid: data.merchant_uid,
-            customerUid: data.customer_uid,
-            notes: data.notes,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-          });
-        }
+      // NAS 모드: 플랜은 본사 계정(auth_users.plan)이 정본 — 세션 프로필을 그대로 보여준다
+      if (isAuthApiConfigured && user) {
+        fetchedFromRemote = true;
+        setCurrentSubscription({
+          id: 'nas',
+          branchId: user.branchId || user.id,
+          plan: user.plan,
+          status: 'active',
+          startedAt: user.createdAt,
+          expiresAt: user.trialEndsAt,
+          notes: '본사 계정 플랜',
+        });
       }
 
       // 로컬 스토리지 폴백 — fetchedFromRemote 플래그로 stale closure 방지
@@ -289,6 +266,12 @@ export default function Settings() {
     if (plan.id === 'enterprise') return; // Enterprise는 문의 필요
     setPlanChangeError(null);
 
+    if (isAuthApiConfigured) {
+      // NAS 모드: 플랜은 본사가 계정 단위로 관리(어드민 콘솔 > 구독/지점) — 지점에서 바꾸면 서버와 어긋난 가짜 성공이 된다
+      setPlanChangeError('플랜 변경은 본사 관리자가 처리합니다. 본사에 문의해주세요.');
+      return;
+    }
+
     if (plan.id === 'trial') {
       // 유료 → 무료로의 다운그레이드
       setPlanChangeLoading(true);
@@ -307,22 +290,6 @@ export default function Settings() {
           currency: 'KRW',
           notes: '무료 체험 전환',
         };
-
-        if (SUPABASE_FALLBACK && user?.branchId) {
-          // 기존 구독 만료 처리
-          if (currentSubscription?.id) {
-            const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
-            if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
-          }
-          // 라이브 subscriptions 테이블에는 currency 컬럼이 없음(PGRST204) — 제외하고 저장
-          const { currency: _currency, ...dbRow } = subData;
-          const { error: insertError } = await supabase.from('subscriptions').insert(dbRow);
-          if (insertError) {
-            setPlanChangeError(`서버에 구독 저장 실패: ${insertError.message}`);
-            setPlanChangeLoading(false);
-            return;
-          }
-        }
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
         await loadSubscription();
@@ -368,20 +335,6 @@ export default function Settings() {
           merchant_uid: result.merchantUid,
           notes: `${plan.name} 플랜 결제`,
         };
-
-        if (SUPABASE_FALLBACK && user?.branchId) {
-          if (currentSubscription?.id) {
-            const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
-            if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
-          }
-          const { currency: _currency, ...dbRow } = subData;
-          const { error: insertError } = await supabase.from('subscriptions').insert(dbRow);
-          if (insertError) {
-            setPlanChangeError(`결제는 완료됐지만 서버 기록에 실패했습니다: ${insertError.message}`);
-            setPlanChangeLoading(false);
-            return;
-          }
-        }
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
         await loadSubscription();
@@ -439,15 +392,18 @@ export default function Settings() {
 
     // 다음 로그인에서도 같은 샵명이 보이도록 지점·로컬 세션을 함께 갱신한다.
     let remoteFailed = false;
-    if (SUPABASE_FALLBACK && user?.branchId) {
-      const { error } = await supabase.from('branches').update({
-        name: shopName,
-        phone: settings.phone || null,
-        address: settings.address || null,
-      }).eq('id', user.branchId);
-      if (error) {
+    if (isAuthApiConfigured) {
+      // NAS 모드: 다른 PC가 로그인 시 받는 branchName은 서버 프로필이 정본 — 함께 갱신한다
+      try {
+        await updateAuthProfile({
+          shopName,
+          shopType: settings.type,
+          shopPhone: settings.phone || undefined,
+          shopAddress: settings.address || undefined,
+        });
+      } catch (e: any) {
         remoteFailed = true;
-        console.warn('[Settings] 지점 정보 서버 반영 실패:', error.message);
+        console.warn('[Settings] 지점 정보 서버 반영 실패:', e?.message);
       }
     }
 

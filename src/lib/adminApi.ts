@@ -8,6 +8,7 @@
  * 관리자 계정 생성/조회는 서버 사이드(NAS API)에서만 수행합니다.
  */
 import { adminCreateUser, apiRequest, isAuthApiConfigured } from './authApi';
+import { exportFile } from './mobileBridge';
 
 export interface CreateBranchAdminPayload {
   email: string;
@@ -274,15 +275,7 @@ export function adminDeleteBranch(branchId: string, payload: { confirmName: stri
 
 /** 반출 JSON을 파일로 저장 (브라우저·Electron 공통) */
 export function downloadJsonFile(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  void exportFile(filename, new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
 }
 
 export async function createBranchAdmin(

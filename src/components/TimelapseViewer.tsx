@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { TreatmentLogStore } from '../lib/store';
 import { syncPhotosFromNas, PHOTO_ANGLES, type PhotoAngle } from '../lib/photoStore';
 import {
-  collectCustomerPhotos, angleLabel, daysBetween,
+  collectCustomerPhotos, photoCaption, daysBetween,
   renderComparison, exportComparison, comparisonFileName, canCopyImage, copyImageToClipboard,
   type DatedPhoto,
 } from '../lib/beforeAfter';
@@ -31,9 +31,13 @@ export default function TimelapseViewer({ customerId, customerName }: { customer
   const allPhotos = useMemo<DatedPhoto[]>(() => collectCustomerPhotos(customerId), [customerId, photoVersion]);
   const angles = useMemo(() => PHOTO_ANGLES.filter(a => allPhotos.some(p => p.angle === a.id)), [allPhotos]);
   const [angleFilter, setAngleFilter] = useState<PhotoAngle | 'all'>('all');
+  // 고객이 바뀌면 필터 초기화. 선택한 각도의 사진이 사라지면(동기화·삭제) '전체'로 폴백 — 빈 화면에 갇히지 않게
+  useEffect(() => setAngleFilter('all'), [customerId]);
+  const effectiveFilter: PhotoAngle | 'all' =
+    angleFilter !== 'all' && !angles.some(a => a.id === angleFilter) ? 'all' : angleFilter;
   const photos = useMemo(
-    () => (angleFilter === 'all' ? allPhotos : allPhotos.filter(p => p.angle === angleFilter)),
-    [allPhotos, angleFilter],
+    () => (effectiveFilter === 'all' ? allPhotos : allPhotos.filter(p => p.angle === effectiveFilter)),
+    [allPhotos, effectiveFilter],
   );
 
   // null = 기본값(Before: 최초, After: 최신). 사진 수·필터가 바뀌면 기본값으로 복귀
@@ -42,7 +46,7 @@ export default function TimelapseViewer({ customerId, customerName }: { customer
   const [compare, setCompare] = useState(false);
   const [target, setTarget] = useState<'before' | 'after'>('after');
   const [busy, setBusy] = useState<null | 'save' | 'copy'>(null);
-  useEffect(() => { setBeforeSel(null); setAfterSel(null); }, [angleFilter, photos.length]);
+  useEffect(() => { setBeforeSel(null); setAfterSel(null); }, [effectiveFilter, photos.length]);
 
   if (allPhotos.length === 0) return null;
 
@@ -90,7 +94,7 @@ export default function TimelapseViewer({ customerId, customerName }: { customer
     }
   }
 
-  const caption = (p: DatedPhoto) => `${p.date}${p.angle ? ` · ${angleLabel(p.angle)}` : ''}`;
+  const caption = photoCaption;
   const labelBadge = (p: DatedPhoto) => (p.label === 'before' ? '전' : p.label === 'after' ? '후' : '');
 
   return (
@@ -109,7 +113,7 @@ export default function TimelapseViewer({ customerId, customerName }: { customer
                   key={a.id}
                   onClick={() => setAngleFilter(a.id)}
                   className={clsx('text-[11px] px-2 py-1 rounded-lg font-medium transition-colors',
-                    angleFilter === a.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
+                    effectiveFilter === a.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
                 >
                   {a.label}
                 </button>

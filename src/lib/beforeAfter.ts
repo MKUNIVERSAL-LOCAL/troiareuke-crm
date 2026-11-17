@@ -4,7 +4,8 @@
 import { TreatmentLogStore, SettingsStore } from './store';
 import { getPhotos, PHOTO_ANGLES, type PhotoEntry, type PhotoAngle } from './photoStore';
 import { IS_MOBILE_APP } from './platform';
-import { saveOrShareFile, blobToBase64 } from './mobileBridge';
+import { exportFile } from './mobileBridge';
+import { todayISO } from './format';
 
 export interface DatedPhoto extends PhotoEntry {
   date: string;  // 시술일 (YYYY-MM-DD)
@@ -24,6 +25,11 @@ export function collectCustomerPhotos(customerId: string): DatedPhoto[] {
 
 export function angleLabel(angle?: PhotoAngle | string): string {
   return PHOTO_ANGLES.find(a => a.id === angle)?.label ?? '';
+}
+
+/** 사진 캡션 "시술일 · 각도" — 뷰어·합성 이미지가 같은 형식을 쓴다 */
+export function photoCaption(p: DatedPhoto): string {
+  return `${p.date}${p.angle ? ` · ${angleLabel(p.angle)}` : ''}`;
 }
 
 /** 촬영 가이드 — 같은 고객의 직전 시술 사진을 각도별 최신 1장씩 (편집 중인 기록은 제외, 최대 4장) */
@@ -52,6 +58,18 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+/** 둥근 사각형 경로 — ctx.roundRect는 Chromium 99+/Safari 16+ 전용이라 구형 Android WebView용 폴백 */
+function roundedRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
 /** 정사각 패널에 사진을 꽉 채워(가운데 크롭) 그린다 */
 function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
   const scale = Math.max(w / img.width, h / img.height);
@@ -60,8 +78,7 @@ function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: numb
   const sx = (img.width - sw) / 2;
   const sy = (img.height - sh) / 2;
   ctx.save();
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 20);
+  roundedRectPath(ctx, x, y, w, h, 20);
   ctx.clip();
   ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
   ctx.restore();
@@ -73,8 +90,7 @@ function drawTag(ctx: CanvasRenderingContext2D, text: string, x: number, y: numb
   ctx.font = `bold 18px ${FONT}`;
   const w = ctx.measureText(text).width + 28;
   ctx.fillStyle = bg;
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, 36, 18);
+  roundedRectPath(ctx, x, y, w, 36, 18);
   ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
@@ -129,9 +145,8 @@ export async function renderComparison({ before, after, customerName }: Comparis
   ctx.textAlign = 'center';
   ctx.fillStyle = '#374151';
   ctx.font = `20px ${FONT}`;
-  const cap = (p: DatedPhoto) => `${p.date}${p.angle ? ` · ${angleLabel(p.angle)}` : ''}`;
-  ctx.fillText(cap(before), xB + PANEL / 2, y + PANEL + 14);
-  ctx.fillText(cap(after), xA + PANEL / 2, y + PANEL + 14);
+  ctx.fillText(photoCaption(before), xB + PANEL / 2, y + PANEL + 14);
+  ctx.fillText(photoCaption(after), xA + PANEL / 2, y + PANEL + 14);
 
   // 꼬리말
   ctx.font = `17px ${FONT}`;
@@ -149,21 +164,12 @@ export async function renderComparison({ before, after, customerName }: Comparis
 export function comparisonFileName(customerName?: string): string {
   const shop = (SettingsStore.get().name || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const who = (customerName || '고객').replace(/[\\/:*?"<>|\s]/g, '');
-  return `${shop}_${who}_BeforeAfter_${new Date().toISOString().slice(0, 10)}.png`;
+  return `${shop}_${who}_BeforeAfter_${todayISO()}.png`;
 }
 
 /** PC: 파일 내려받기 / 모바일 앱: 캐시 저장 후 공유 시트(카카오톡 등) */
-export async function exportComparison(blob: Blob, fileName: string): Promise<'shared' | 'saved' | 'downloaded'> {
-  if (IS_MOBILE_APP) return saveOrShareFile(fileName, await blobToBase64(blob), 'image/png');
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  return 'downloaded';
+export function exportComparison(blob: Blob, fileName: string): Promise<'shared' | 'saved' | 'downloaded'> {
+  return exportFile(fileName, blob);
 }
 
 /** 클립보드 이미지 복사 가능 여부 — PC(Electron·브라우저)에서 카카오톡 PC 대화창에 바로 붙이기 */

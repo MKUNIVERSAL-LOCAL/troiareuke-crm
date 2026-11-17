@@ -65,6 +65,23 @@ export async function saveOrShareFile(fileName: string, base64: string, mimeType
   }
 }
 
+/**
+ * 파일 내보내기 공통 경로 — 모바일 앱은 캐시 저장 + 공유 시트, PC/브라우저는 <a download>.
+ * (beforeAfter 비교 이미지, 어드민 반출 JSON 등이 같은 결정을 반복하지 않도록 한 곳에 둔다)
+ */
+export async function exportFile(fileName: string, blob: Blob): Promise<'shared' | 'saved' | 'downloaded'> {
+  if (IS_MOBILE_APP) return saveOrShareFile(fileName, await blobToBase64(blob), blob.type || 'application/octet-stream');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return 'downloaded';
+}
+
 export function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -746,14 +747,24 @@ export default function Customers() {
       <div className="flex flex-col lg:hidden flex-1">
         {/* 검색바 + 필터 */}
         <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 pt-3 pb-2 shadow-sm">
-          <div className="relative mb-2">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="고객명, 전화번호 검색"
-              className="w-full h-10 pl-9 pr-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex gap-2 mb-2">
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="고객명, 전화번호 검색"
+                className="w-full h-10 pl-9 pr-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            {/* 모바일 고객 등록 (2026-11-17) — 스토어 앱 심사 대비: 핵심 기능이 PC 전용이면 '앱으로서 불완전' 판정 위험 */}
+            <button
+              onClick={() => setShowAddModal(true)}
+              aria-label="고객 추가"
+              className="flex-shrink-0 h-10 w-10 bg-[#1a3a8f] text-white rounded-xl flex items-center justify-center active:scale-95 transition"
+            >
+              <Plus size={18} />
+            </button>
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
             {(['전체', ...GRADES] as const).map(g => (
@@ -776,7 +787,9 @@ export default function Customers() {
             <div className="py-16 text-center">
               <User size={32} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm text-slate-500">고객이 없습니다</p>
-              <p className="text-xs text-slate-400 mt-1">PC에서 고객을 추가하세요</p>
+              <button onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
+                첫 고객 등록하기
+              </button>
             </div>
           ) : (
             filtered.map(customer => {
@@ -1418,8 +1431,9 @@ export default function Customers() {
       )}
 
       {/* ───── 고객 추가 모달 ───── */}
-      {showAddModal && (
-        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      {/* 모바일(lg 미만)에서도 열리도록 body 포털로 렌더 — 이 블록은 데스크톱 전용(hidden lg:flex) 래퍼 안에 있다 */}
+      {showAddModal && createPortal(
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="modal-card bg-white rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">고객 추가</h2>
@@ -1506,7 +1520,8 @@ export default function Customers() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* ───── 고객 수정 모달 ───── */}

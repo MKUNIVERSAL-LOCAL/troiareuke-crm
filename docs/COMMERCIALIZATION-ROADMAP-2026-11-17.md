@@ -34,7 +34,9 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] API 연동 가이드 "연동 완료 %" → "확인 완료로 표시(자기 체크)" — 자기신고 체크박스를 연동 상태처럼 보이게 하던 문구 정정(FEATURE-REVIEW 6절).
 - 검증(2026-11-17): tsc 0 / `npm run build` 성공 / 죽은 라우트 0(26라우트·42지점) / 배포 불변 원칙 전부 PASS / Playwright 3/3(PC 스모크·로그인 거부·모바일 Pixel 7).
 
-### P1. Supabase 완전 제거 (오너 승인 → `CORE_EDIT=1`, 다음 PR)
+### P1. Supabase 완전 제거 (오너 승인 → `CORE_EDIT=1`, 다음 PR) — ⛔ 2026-11-17 자동 모드에서 시도, 분류기 차단
+- 시도 기록: AuthContext.tsx 재작성(Supabase 분기 제거, NAS/로컬 2모드)을 자동 모드 분류기가 "Security Weaken"으로 거부. 코어 잠금 파일은 **자동 모드가 아닌 세션에서 오너가 직접 승인**해야 진행 가능. 비코어 14파일만 먼저 걷어내는 반쪽 작업은 모드 분기 불일치만 만들어 보류.
+- 전수 조사 결과(제거 범위): src 24파일(코어 store.ts 35곳·AuthContext 26곳 포함), `supabase/schema.sql`+루트 SQL 4종(→ docs/archive), vite.config CSP·SW 캐시 규칙, CI 3개 워크플로의 VITE_SUPABASE_* env, `@supabase/supabase-js` 의존성, ResetPassword 페이지·/reset-password 라우트·main.tsx 복구 리다이렉트, CORE-LOCK·core-lock.mjs 목록.
 - 소멸한 백엔드 코드 경로 14파일(코어 4: supabase.ts·AuthContext·store.ts·App 경유)과 루트 SQL 4종, vite CSP/SW 캐시 규칙, `.env` 키 2개, `@supabase/supabase-js` 의존성 제거. 모드는 NAS·로컬 2개로 단순화.
 - 영향: 번들 축소, 모드 분기 테스트 면 축소, CLAUDE.md §3·§5의 Supabase 마커 문구 갱신. 로컬 모드(e2e)는 그대로.
 - 전제: 구버전(Supabase 전용) 지점이 0곳인지 어드민 텔레메트리로 확인.

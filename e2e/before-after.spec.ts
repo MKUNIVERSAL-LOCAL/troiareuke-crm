@@ -29,7 +29,7 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await expect(labelSelects.nth(1)).toHaveValue('after');
   const angleSelects = page.getByLabel('촬영 각도');
   await angleSelects.nth(0).selectOption('front');
-  await angleSelects.nth(1).selectOption('front');
+  await angleSelects.nth(1).selectOption('left');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
   await dismissToasts(page);
@@ -39,9 +39,14 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await expect(page.getByText('Before / After 타임랩스')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText('사진 2장')).toBeVisible();
-  // 각도 태그가 있으니 필터 칩이 나타난다
-  await page.getByRole('button', { name: '정면', exact: true }).click();
-  await expect(page.getByText('사진 2장')).toBeVisible();
+  // 각도 필터: '정면'만 남기면 썸네일 1장, '전체'로 돌리면 2장
+  const angleGroup = page.getByRole('group', { name: '촬영 각도 필터' });
+  const thumbs = page.getByRole('button', { name: /사진 선택$/ });
+  await expect(thumbs).toHaveCount(2);
+  await angleGroup.getByRole('button', { name: '정면', exact: true }).click();
+  await expect(thumbs).toHaveCount(1);
+  await angleGroup.getByRole('button', { name: '전체', exact: true }).click();
+  await expect(thumbs).toHaveCount(2);
 
   // ── 비교 보기 → 이미지 저장(내려받기) ──
   await page.getByRole('button', { name: '비교 보기' }).click();

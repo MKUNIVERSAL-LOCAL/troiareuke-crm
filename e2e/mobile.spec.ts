@@ -78,7 +78,6 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   }
 
   // 고객 화면(모바일 전용 패널)의 검색창이 화면 안에 있고 입력 가능하다
-  // (1차 모바일 범위 D2: 고객 조회·상담 — 고객 신규 등록은 PC. docs/MOBILE-APP-PLAN.md)
   await page.goto('/customers');
   const search = page.getByPlaceholder('고객명, 전화번호 검색').filter({ visible: true }).first();
   await expect(search).toBeVisible();
@@ -87,6 +86,16 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   expect(box && box.x >= 0 && box.x + box.width <= vw, '고객 검색창이 화면 밖').toBeTruthy();
   await search.fill('테스트');
   await expectNoHorizontalOverflow(page, '고객 검색');
+
+  // 고객 신규 등록이 모바일에서도 된다 (2026-11-17 — 스토어 제출 전 "PC에서 추가" 제한 해제)
+  await search.fill('');
+  await page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first().click();
+  await expectNoHorizontalOverflow(page, '고객 추가 모달');
+  await page.getByPlaceholder('홍길동').fill('모바일고객');
+  await page.getByPlaceholder('010-0000-0000').fill('010-9999-0001');
+  await page.getByText('[필수] 개인정보 수집·이용 동의').click();
+  await page.getByRole('button', { name: '등록', exact: true }).click();
+  await expect(page.getByText('모바일고객').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
   // 더보기 탭(설정 등 진입점)이 하단 탭바에 있다
   const more = page.getByRole('button', { name: '더보기 메뉴 열기' }).filter({ visible: true }).first();
