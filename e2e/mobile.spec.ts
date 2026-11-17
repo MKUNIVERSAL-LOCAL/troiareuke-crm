@@ -182,7 +182,15 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await resvCard.click();
   await expect(page.getByText('예약 상세').filter({ visible: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page, '예약 상세');
-  await page.keyboard.press('Escape');
+  // 완료처리 → 결제 등록 모달 → 매출 반영 (2026-11-17)
+  await page.getByRole('button', { name: '완료처리' }).click();
+  await expect(page.getByRole('heading', { name: '결제 등록' }).filter({ visible: true }).first()).toBeVisible();
+  await expectNoHorizontalOverflow(page, '완료 결제 모달');
+  await page.getByRole('button', { name: '결제 등록', exact: true }).click();
+  await page.goto('/sales');
+  await page.getByRole('button', { name: /결제 내역/ }).filter({ visible: true }).first().click();
+  await expect(page.getByTestId('sales-mobile-list').getByText('50,000').first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: '결제 내역 (2)' }).filter({ visible: true }).first()).toBeVisible();
 
   // 더보기 탭(설정 등 진입점)이 하단 탭바에 있다
   const more = page.getByRole('button', { name: '더보기 메뉴 열기' }).filter({ visible: true }).first();
