@@ -63,6 +63,17 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.reload();
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
 
+  // ── 6-2. 오늘 마감 요약 (2026-11-17): 오늘 결제 2건 100,000원이 집계되고 보고 문구가 복사된다 ──
+  await page.goto('/');
+  const closeCard = page.getByTestId('daily-close-card').filter({ visible: true }).first();
+  await expect(closeCard).toContainText('100,000원');
+  await expect(closeCard).toContainText('2건');
+  await closeCard.getByRole('button', { name: '복사' }).click();
+  await expect(closeCard.getByRole('button', { name: '복사됨' })).toBeVisible();
+  const closeText = await page.evaluate(() => navigator.clipboard.readText());
+  expect(closeText).toContain('마감 보고');
+  expect(closeText).toContain('매출 100,000원 (2건)');
+
   // ── 7. 회차권: 프로그램 생성 → 고객 등록 → 시술 연결 시 1회 차감 (2026-11-17) ──
   await page.goto('/programs');
   await page.getByRole('button', { name: '프로그램 추가' }).first().click();

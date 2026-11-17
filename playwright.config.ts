@@ -22,7 +22,8 @@ export default defineConfig({
   },
   projects: [
     // PC 흐름(smoke.spec) — 데스크톱 폭
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /mobile.spec.ts/ },
+    // clipboard 권한: 마감 요약·안내 문구 [복사] 경로를 실제 클립보드로 검증 (2026-11-17)
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], permissions: ['clipboard-read', 'clipboard-write'] }, testIgnore: /mobile.spec.ts/ },
     // 모바일 최적화 게이트(mobile.spec) — 스토어 앱과 같은 화면 폭. 오너 원칙: 릴리스마다 필수 통과
     // 가짜 카메라(--use-fake-*-media-stream): 촬영 가이드 오버레이의 getUserMedia → 캔버스 캡처 경로를 실제로 통과시킨다
     { name: 'mobile', use: { ...devices['Pixel 7'], launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } }, testMatch: /(mobile|screenshots).spec.ts/ },
