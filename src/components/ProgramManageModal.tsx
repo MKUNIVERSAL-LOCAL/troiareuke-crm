@@ -7,8 +7,9 @@ import type { CustomerProgram } from '../types';
 
 /**
  * 고객 프로그램 관리 모달 (2026-11-18) — 고객 상세 PC·모바일 공용.
- * 만료일 변경(연장·단축), 총 회차 보정(서비스 회차 추가·오등록 수정), 완료 처리/되돌리기. 바뀐 내용은 notes에 날짜와 함께 남긴다.
+ * 만료일 변경(연장·단축·없음), 총 회차 보정(서비스 회차 추가·오등록 수정), 완료 처리/되돌리기. 바뀐 내용은 notes에 날짜와 함께 남긴다.
  * 회차 사용(usedSessions)은 시술 기록이 정본이라 여기서 건드리지 않는다 — 시술 기록을 수정·삭제하면 자동 복구된다.
+ * 만료일을 없앨 때는 undefined가 아니라 null을 보낸다 — toDbCustomerProgram이 undefined 키를 빼 버려 서버에는 옛 만료일이 남는 split-brain을 막기 위해.
  */
 export default function ProgramManageModal({ program: cp, onClose, onDone }: { program: CustomerProgram; onClose: () => void; onDone: () => void }) {
   const [expiryDate, setExpiryDate] = useState(cp.expiryDate || '');
@@ -16,9 +17,16 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   const [reason, setReason] = useState('');
   const isSessionBased = cp.totalSessions !== null;
   const remaining = isSessionBased ? Math.max(0, (cp.totalSessions as number) - cp.usedSessions) : null;
+  const manuallyCompleted = cp.isCompleted && isSessionBased && cp.usedSessions < (cp.totalSessions as number);
+  const totalInput = totalSessions.replace(/[,\s]/g, '');
+  const dirty = expiryDate !== (cp.expiryDate || '') || (isSessionBased && totalInput !== String(cp.totalSessions));
+  const changeLog = (cp.notes || '').split('\n').filter(l => /^\[\d{4}-\d{2}-\d{2}\]/.test(l));
 
   const shift = (days: number) => {
-    const base = /^\d{4}-\d{2}-\d{2}$/.test(expiryDate) ? parseISODate(expiryDate) : new Date();
+    // 이미 지난 만료일에서 더하면 여전히 과거 — 연장은 오늘과 만료일 중 늦은 날부터
+    const today = parseISODate(todayISO());
+    const cur = /^\d{4}-\d{2}-\d{2}$/.test(expiryDate) ? parseISODate(expiryDate) : today;
+    const base = cur > today ? cur : today;
     base.setDate(base.getDate() + days);
     setExpiryDate(toISODate(base));
   };
@@ -33,18 +41,24 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
     const changes: string[] = [];
     if (expiryDate !== (cp.expiryDate || '')) {
       if (expiryDate && !/^\d{4}-\d{2}-\d{2}$/.test(expiryDate)) { notify('만료일 형식이 올바르지 않습니다.'); return; }
-      updates.expiryDate = expiryDate || undefined;
+      // 비우면 null — 서버 PATCH가 expiry_date를 실제로 지우게 (타입은 string?지만 스토어·서버·화면 모두 falsy로 다룬다)
+      updates.expiryDate = (expiryDate || null) as unknown as string | undefined;
       changes.push(`만료일 ${cp.expiryDate ? formatDate(cp.expiryDate) : '없음'} → ${expiryDate ? formatDate(expiryDate) : '없음'}`);
     }
-    if (isSessionBased) {
-      const t = totalSessions.replace(/[,\s]/g, '');
-      if (!/^\d+$/.test(t)) { notify('총 회차는 숫자만 입력해주세요.'); return; }
-      const next = Number(t);
-      if (next !== cp.totalSessions) {
-        if (next < cp.usedSessions) { notify(`이미 ${cp.usedSessions}회를 사용해 총 회차를 그보다 적게 둘 수 없습니다.`); return; }
-        updates.totalSessions = next;
-        updates.isCompleted = cp.usedSessions >= next;
-        changes.push(`총 회차 ${cp.totalSessions}회 → ${next}회`);
+    if (isSessionBased && totalInput !== String(cp.totalSessions)) {
+      if (!/^\d+$/.test(totalInput)) { notify('총 회차는 숫자만 입력해주세요.'); return; }
+      const next = Number(totalInput);
+      if (next < 1) { notify('총 회차는 1 이상이어야 합니다.'); return; }
+      if (next < cp.usedSessions) { notify(`이미 ${cp.usedSessions}회를 사용해 총 회차를 그보다 적게 둘 수 없습니다.`); return; }
+      updates.totalSessions = next;
+      changes.push(`총 회차 ${cp.totalSessions}회 → ${next}회`);
+      // 사람이 직접 완료 처리한 프로그램은 회차를 바꿔도 그대로 완료. 그 외엔 사용 회차 기준으로 다시 계산하고 상태가 바뀌면 기록
+      if (!manuallyCompleted) {
+        const nextCompleted = cp.usedSessions >= next;
+        if (nextCompleted !== cp.isCompleted) {
+          updates.isCompleted = nextCompleted;
+          changes.push(nextCompleted ? '진행중 → 완료' : '완료 → 진행중');
+        }
       }
     }
     if (changes.length === 0) { notify('바뀐 내용이 없습니다.'); return; }
@@ -55,6 +69,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   }
 
   function toggleCompleted() {
+    if (dirty) { notify('만료일·총 회차 변경을 먼저 [저장]하거나 취소한 뒤 완료 상태를 바꿔주세요.'); return; }
     if (cp.isCompleted) {
       if (isSessionBased && cp.usedSessions >= (cp.totalSessions as number)) { notify('회차를 모두 사용한 프로그램은 되돌릴 수 없습니다. 총 회차를 늘려주세요.'); return; }
       CustomerProgramStore.update(cp.id, { isCompleted: false, notes: appendNote(cp.notes, '완료 → 진행중으로 되돌림') });
@@ -86,27 +101,28 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
             <button type="button" onClick={() => shift(90)} className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-gray-700 hover:bg-slate-200">+90일</button>
             {expiryDate && <button type="button" onClick={() => setExpiryDate('')} className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-500">만료 없음</button>}
           </div>
+          <p className="text-[11px] text-gray-400 mt-1">+30/+90일은 만료일과 오늘 중 늦은 날부터 더합니다.</p>
         </div>
         {isSessionBased && (
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">총 회차 (서비스 회차 추가·오등록 수정)</label>
             <input inputMode="numeric" value={totalSessions} onChange={e => setTotalSessions(e.target.value)} aria-label="총 회차" className="w-32 px-3 py-2 text-sm border border-gray-200 rounded-xl" />
-            <p className="text-xs text-gray-400 mt-1">사용 회차는 시술 기록이 정본이라 여기서 바꾸지 않습니다.</p>
+            <p className="text-xs text-gray-400 mt-1">사용 회차는 시술 기록이 정본이라 여기서 바꾸지 않습니다.{manuallyCompleted ? ' 직접 완료 처리한 프로그램은 회차를 바꿔도 완료 상태가 유지됩니다.' : ''}</p>
           </div>
         )}
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">사유 (기록에 남음)</label>
           <input value={reason} onChange={e => setReason(e.target.value)} aria-label="사유" placeholder="예: 휴가로 1개월 연장 요청" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl" />
         </div>
-        {cp.notes && (
+        {changeLog.length > 0 && (
           <div className="p-3 bg-slate-50 rounded-xl">
             <p className="text-[11px] font-medium text-gray-400 mb-1">변경 기록</p>
-            <p className="text-xs text-gray-600 whitespace-pre-line max-h-28 overflow-y-auto">{cp.notes}</p>
+            <p className="text-xs text-gray-600 whitespace-pre-line max-h-28 overflow-y-auto">{changeLog.slice(-10).join('\n')}</p>
           </div>
         )}
         <div className="flex flex-wrap gap-2 pt-1">
-          <button type="button" onClick={toggleCompleted}
-            className={`py-2.5 px-4 rounded-xl text-sm font-medium border ${cp.isCompleted ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-600 bg-white'}`}>
+          <button type="button" onClick={toggleCompleted} disabled={dirty} title={dirty ? '변경 내용을 먼저 저장하세요' : undefined}
+            className={`py-2.5 px-4 rounded-xl text-sm font-medium border disabled:opacity-40 ${cp.isCompleted ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-600 bg-white'}`}>
             {cp.isCompleted ? '진행중으로 되돌리기' : '완료 처리'}
           </button>
           <div className="flex-1" />

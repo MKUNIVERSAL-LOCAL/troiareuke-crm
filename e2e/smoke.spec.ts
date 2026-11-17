@@ -120,10 +120,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   // ── 7-2. 프로그램 관리 (2026-11-18): 만료일 +30일·총 회차 12회로 보정 → 잔여 11회, 변경 기록이 notes에 남는다 ──
   await page.getByRole('button', { name: '회차권10 관리' }).filter({ visible: true }).first().click();
   const manageDialog = page.getByRole('dialog', { name: '프로그램 관리' });
-  const expiryBefore = await manageDialog.getByLabel('만료일').inputValue();
+  const expiryBefore = await manageDialog.getByLabel('만료일').inputValue(); // 프로그램 기본 유효기간 180일
   await manageDialog.getByRole('button', { name: '+30일' }).click();
   const expiryAfter = await manageDialog.getByLabel('만료일').inputValue();
-  expect(expiryAfter > expiryBefore).toBe(true);
+  const plus30 = (() => { const today = new Date(); today.setHours(0, 0, 0, 0); const [y, m, d] = expiryBefore.split('-').map(Number); const cur = expiryBefore ? new Date(y, m - 1, d) : today; const t = cur > today ? cur : today; t.setDate(t.getDate() + 30); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; })();
+  expect(expiryAfter).toBe(plus30); // 만료일과 오늘 중 늦은 날 + 30
   await manageDialog.getByLabel('총 회차').fill('12');
   await manageDialog.getByLabel('사유').fill('서비스 2회 추가');
   await manageDialog.getByRole('button', { name: '저장', exact: true }).click();
@@ -136,8 +137,29 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   });
   expect(managed.expiryDate).toBe(expiryAfter);
   expect(managed.totalSessions).toBe(12);
+  expect(managed.notes).toMatch(/만료일 .+ → /);
   expect(managed.notes).toContain('총 회차 10회 → 12회');
   expect(managed.notes).toContain('서비스 2회 추가');
+  // [만료 없음]은 서버가 실제로 지우도록 null로 저장되고, 완료 처리/되돌리기는 기록을 남긴다
+  await page.getByRole('button', { name: '회차권10 관리' }).filter({ visible: true }).first().click();
+  await manageDialog.getByRole('button', { name: '만료 없음' }).click();
+  await manageDialog.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(manageDialog).toHaveCount(0);
+  await page.getByRole('button', { name: '회차권10 관리' }).filter({ visible: true }).first().click();
+  await manageDialog.getByRole('button', { name: '완료 처리' }).click(); // confirm은 dialog 핸들러가 수락
+  await expect(manageDialog).toHaveCount(0);
+  const managed2 = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;
+    const cp = JSON.parse(localStorage.getItem(key) || '[]').find((x: { programName: string }) => x.programName === '회차권10');
+    return { expiryDate: cp.expiryDate, isCompleted: cp.isCompleted as boolean, notes: (cp.notes || '') as string };
+  });
+  expect(managed2.expiryDate).toBeNull();
+  expect(managed2.isCompleted).toBe(true);
+  expect(managed2.notes).toContain('완료 처리 (잔여 11회 소멸)');
+  await page.getByRole('button', { name: '회차권10 관리' }).filter({ visible: true }).first().click();
+  await manageDialog.getByRole('button', { name: '진행중으로 되돌리기' }).click();
+  await expect(manageDialog).toHaveCount(0);
+  await expect(page.getByText('잔여 11회').filter({ visible: true }).first()).toBeVisible();
 
   // ── 6-1. 내일 예약 안내 (2026-11-17): 오늘 예약을 내일로 복제하면 대시보드 카드에 뜨고 안내 초안이 만들어진다 ──
   await page.evaluate(() => {
