@@ -1,4 +1,5 @@
 import { HIDE_ON_MOBILE } from '../../lib/platform';
+import { formatPhoneInput } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useState, useEffect, useCallback } from 'react';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
@@ -630,7 +631,7 @@ export default function Settings() {
                     <input
                       type="tel"
                       value={settings.phone}
-                      onChange={e => setSettings(prev => ({ ...prev, phone: e.target.value }))}
+                      onChange={e => setSettings(prev => ({ ...prev, phone: formatPhoneInput(e.target.value) }))}
                       className="form-input"
                     />
                   </FormRow>

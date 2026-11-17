@@ -1,4 +1,5 @@
 ﻿import { useRef, useState } from 'react';
+import { formatPhoneInput } from '../../lib/format';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, CheckCircle2, Paperclip, X, Clock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -132,7 +133,7 @@ export default function Signup() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">휴대폰 번호 *</label>
-                  <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} className="auth-input" placeholder="010-0000-0000" required />
+                  <input type="tel" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} className="auth-input" placeholder="010-0000-0000" required />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록번호 *</label>

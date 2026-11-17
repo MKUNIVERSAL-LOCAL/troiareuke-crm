@@ -4,7 +4,7 @@ import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { StaffStore, ReservationStore } from '../../lib/store';
-import { todayISO, thisYearMonthISO } from '../../lib/format';
+import { todayISO, thisYearMonthISO, formatPhoneInput } from '../../lib/format';
 import type { Staff } from '../../types';
 
 const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '왁싱', '각질관리'];
@@ -307,7 +307,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
           <input
             type="tel"
             value={phone}
-            onChange={e => setPhone(e.target.value)}
+            onChange={e => setPhone(formatPhoneInput(e.target.value))}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
             placeholder="010-0000-0000"
           />
@@ -478,7 +478,7 @@ function StaffDetailModal({
             <input
               type="tel"
               value={phone}
-              onChange={e => setPhone(e.target.value)}
+              onChange={e => setPhone(formatPhoneInput(e.target.value))}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
             />
           </div>
