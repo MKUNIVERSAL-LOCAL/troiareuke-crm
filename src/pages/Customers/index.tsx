@@ -542,6 +542,19 @@ export default function Customers() {
     }
   }
 
+  // 상담 기록 삭제 — PC·모바일 카드 공용
+  function handleConsultDelete(c: Consultation) {
+    if (!selected) return;
+    if (!window.confirm('이 상담 기록을 삭제할까요?')) return;
+    ConsultationStore.delete(c.id);
+    clearPhotos(`consult:${c.id}`);
+    setConsultations(ConsultationStore.getByCustomer(selected.id));
+    setDetailTick(t => t + 1); // 활동 타임라인에서도 바로 사라지게
+  }
+  // 모바일 상담 기록은 최근 5건만 — [전체 보기]로 펼친다 (고객을 바꾸면 접힘)
+  const [showAllMobileConsults, setShowAllMobileConsults] = useState(false);
+  useEffect(() => { setShowAllMobileConsults(false); }, [selected?.id]);
+
   // Android 뒤로가기 — 열린 것 중 가장 위부터 하나씩 닫는다(상세 → 목록). 폼 모달은 Esc로는 닫지 않는다(입력 유실 방지, 취소 버튼으로)
   useOverlayClose(!!selected && isMobileLayout, () => setSelected(null), { escape: false });
   useOverlayClose(showAddModal, () => setShowAddModal(false), { escape: false });
@@ -1453,14 +1466,20 @@ export default function Customers() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {consultations.slice(0, 5).map(c => (
+                    {(showAllMobileConsults ? consultations : consultations.slice(0, 5)).map(c => (
                       <div key={c.id} className="p-3 bg-slate-50 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold text-gray-800">{c.consultDate}</p>
-                          {c.skinTypeResult && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-gray-800">{c.consultDate}{c.staffName ? <span className="font-normal text-gray-400"> · {c.staffName}</span> : null}</p>
+                          <span className="flex items-center gap-1.5">
+                            {c.skinTypeResult && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
+                            <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-1.5 -m-1 text-gray-300 active:text-red-400"><X size={14} /></button>
+                          </span>
                         </div>
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
                         {c.recommendedSolution && <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
+                        {c.recommendedProducts.length > 0 && <p className="text-[11px] text-gray-500 mt-0.5">🧴 {c.recommendedProducts.join(', ')}</p>}
+                        {c.managerNote && <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">📝 {c.managerNote}</p>}
+                        {c.nextConsultDate && <p className="text-[11px] text-indigo-500 mt-0.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>}
                         <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
                         <button
                           type="button"
@@ -1481,6 +1500,11 @@ export default function Customers() {
                         </button>
                       </div>
                     ))}
+                    {consultations.length > 5 && !showAllMobileConsults && (
+                      <button type="button" onClick={() => setShowAllMobileConsults(true)} className="w-full py-2 text-xs font-medium text-indigo-600 bg-white border border-indigo-100 rounded-lg">
+                        전체 {consultations.length}건 보기
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1497,17 +1521,23 @@ export default function Customers() {
                           <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
                           <span className="flex items-center gap-1.5">
                             <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                              !cp.isCompleted ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'
-                            }`}>{!cp.isCompleted ? '진행중' : '완료'}</span>
+                              cp.isCompleted ? 'bg-slate-200 text-slate-600' : (cp.expiryDate && cp.expiryDate < today()) ? 'bg-red-100 text-red-500' : 'bg-green-100 text-green-700'
+                            }`}>{cp.isCompleted ? '완료' : (cp.expiryDate && cp.expiryDate < today()) ? '만료' : '진행중'}</span>
                             <button type="button" onClick={() => setManageProgram(cp)} aria-label={`${cp.programName} 관리`}
                               className="px-2 py-0.5 text-[11px] font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
                           </span>
                         </div>
                         <p className="text-[11px] text-gray-400">결제 {formatPrice(cp.pricePaid)} · 등록 {formatDate(cp.purchaseDate)}{cp.expiryDate ? ` · 만료일 ${formatDate(cp.expiryDate)}` : ''}</p>
                         {cp.totalSessions != null && (
-                          <p className="text-xs text-gray-500">
-                            {cp.usedSessions || 0}/{cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
-                          </p>
+                          <>
+                            <p className="text-xs text-gray-500">
+                              {cp.usedSessions || 0}/{cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
+                            </p>
+                            <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1" aria-hidden="true">
+                              <div className={`h-1.5 rounded-full ${(cp.usedSessions || 0) / cp.totalSessions >= 0.8 ? 'bg-orange-400' : 'bg-blue-400'}`}
+                                style={{ width: `${Math.min(((cp.usedSessions || 0) / cp.totalSessions) * 100, 100)}%` }} />
+                            </div>
+                          </>
                         )}
                       </div>
                     ))}
@@ -1592,7 +1622,18 @@ export default function Customers() {
                   <GitMerge size={14} />중복 고객 병합
                 </button>
               )}
-              <p className="text-xs text-slate-400 text-center pb-2">삭제·익명화는 PC에서 이용해주세요</p>
+              <div className="flex gap-2 pb-2">
+                {!isAnonymized(selected) && !selected.id.startsWith('sample_') && (
+                  <button type="button" onClick={handleAnonymizeOne} aria-label="고객 익명화" title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
+                    className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium">
+                    익명화
+                  </button>
+                )}
+                <button type="button" onClick={handleDeleteCustomer} aria-label="고객 삭제"
+                  className="flex-1 py-2.5 bg-red-50 text-red-600 rounded-xl text-xs font-medium flex items-center justify-center gap-1">
+                  <Trash2 size={14} />고객 삭제
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1955,14 +1996,7 @@ export default function Customers() {
                             {c.staffName && <span className="text-xs text-gray-400">· {c.staffName}</span>}
                           </div>
                           <button
-                            onClick={() => {
-                              if (window.confirm('이 상담 기록을 삭제할까요?')) {
-                                ConsultationStore.delete(c.id);
-                                clearPhotos(`consult:${c.id}`);
-                                setConsultations(ConsultationStore.getByCustomer(selected.id));
-                                setDetailTick(t => t + 1); // 활동 타임라인에서도 바로 사라지게
-                              }
-                            }}
+                            onClick={() => handleConsultDelete(c)}
                             className="text-gray-300 hover:text-red-400"
                             aria-label="상담 삭제"
                           >

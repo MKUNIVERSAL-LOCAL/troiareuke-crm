@@ -273,6 +273,11 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.getByLabel('빠른 메모').filter({ visible: true }).first().fill('저자극 제품 선호');
   await page.getByRole('button', { name: '메모 추가' }).filter({ visible: true }).first().click();
   await expect(page.getByText(/\[\d{4}-\d{2}-\d{2}\] 저자극 제품 선호/).filter({ visible: true }).first()).toBeVisible();
+  // 모바일 상세에도 삭제·익명화가 있다 (PC 동등성 감사 2026-11-18) — 뒤 단계가 이 고객을 쓰므로 존재만 확인
+  await expect(page.getByRole('button', { name: '고객 삭제' }).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: '고객 익명화' }).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText('삭제·익명화는 PC에서')).toHaveCount(0);
+
   // 활동 타임라인(모바일 compact) — 예약·결제가 한 줄기에 보인다 (2026-11-18)
   const mobileTimeline = page.getByTestId('customer-timeline').filter({ visible: true }).first();
   await mobileTimeline.scrollIntoViewIfNeeded();

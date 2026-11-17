@@ -208,19 +208,18 @@ export default function Reservations() {
     ].some(value => value.toLowerCase().includes(normalizedSearch));
     return staffMatches && statusMatches && searchMatches;
   });
-  const mobileFilteredReservations = (() => {
-    if (mobileTab === 'today') {
-      return filteredReservations.filter(r => r.date === todayStr);
-    } else if (mobileTab === 'week') {
-      const wStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      const wEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      return filteredReservations.filter(r => r.date >= wStart && r.date <= wEnd);
-    } else {
-      const mStart = format(startOfMonth(mobileMonthDate), 'yyyy-MM-dd');
-      const mEnd = format(endOfMonth(mobileMonthDate), 'yyyy-MM-dd');
-      return filteredReservations.filter(r => r.date >= mStart && r.date <= mEnd);
-    }
-  })().sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  const mobileRange: readonly [string, string] = (() => {
+    if (mobileTab === 'today') return [todayStr, todayStr];
+    if (mobileTab === 'week') return [format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'), format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')];
+    return [format(startOfMonth(mobileMonthDate), 'yyyy-MM-dd'), format(endOfMonth(mobileMonthDate), 'yyyy-MM-dd')];
+  })();
+  const mobileFilteredReservations = filteredReservations
+    .filter(r => r.date >= mobileRange[0] && r.date <= mobileRange[1])
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  // Google 캘린더 일정 — PC 주/일/목록 뷰처럼 모바일 목록에도 같은 기간으로 (링크는 외부 브라우저)
+  const mobileGoogleEvents = googleEvents
+    .filter(ge => ge.date >= mobileRange[0] && ge.date <= mobileRange[1])
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 
   const STATUS_COLORS: Record<string, string> = {
     confirmed: 'bg-indigo-100 text-indigo-700',
@@ -308,7 +307,7 @@ export default function Reservations() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-          {mobileFilteredReservations.length === 0 ? (
+          {mobileFilteredReservations.length === 0 && mobileGoogleEvents.length === 0 ? (
             <div className="py-16 text-center">
               <Calendar size={32} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm text-slate-500">
@@ -321,7 +320,8 @@ export default function Reservations() {
                 : <button type="button" onClick={() => { if (mobileTab === 'month' && mobileMonthOffset !== 0) setNewDate(format(mobileMonthDate, 'yyyy-MM-dd')); setShowAddModal(true); }} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">예약 추가하기</button>}
             </div>
           ) : (
-            mobileFilteredReservations.map(r => (
+            <>
+            {mobileFilteredReservations.map(r => (
               <button
                 key={r.id}
                 onClick={() => setSelectedReservation(r)}
@@ -349,7 +349,29 @@ export default function Reservations() {
                   </div>
                 </div>
               </button>
-            ))
+            ))}
+            {mobileGoogleEvents.map(ge => (
+              <a
+                key={`g-${ge.id}`}
+                href={ge.htmlLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={clsx('w-full bg-white rounded-xl border border-blue-100 shadow-sm p-4 text-left min-h-[60px] flex items-start gap-3', !ge.htmlLink && 'pointer-events-none')}
+              >
+                <div className="text-center w-14 flex-shrink-0 pt-0.5">
+                  <p className="text-xs text-slate-500">{ge.date.slice(5).replace('-', '/')}</p>
+                  <p className="text-sm font-bold text-blue-600">{ge.startTime}</p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{ge.summary}</p>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full"><Calendar size={10} /> Google</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">{ge.startTime} ~ {ge.endTime}</p>
+                </div>
+              </a>
+            ))}
+            </>
           )}
         </div>
       </div>

@@ -617,7 +617,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
                     <button
                       type="button"
                       onClick={() => removePhotoLocal(p.id)}
-                      className="absolute top-1 right-1 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                      className="absolute top-1 right-1 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 transition"
                       aria-label="사진 삭제"
                     >
                       <X size={13} />

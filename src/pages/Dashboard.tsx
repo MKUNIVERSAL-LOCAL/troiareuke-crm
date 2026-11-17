@@ -166,28 +166,32 @@ export default function Dashboard() {
         {/* StatCards 2열 */}
         <div className="grid grid-cols-2 gap-3">
           {salesOn && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <button type="button" onClick={() => navigate('/sales')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">이번 달 총 매출</p>
               <p className="text-lg font-black text-gray-900 mt-1">{Math.round(thisMonth.totalRevenue / 10000)}만원</p>
-            </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">{revenueGrowth === null ? '전월 매출 없음' : `전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}</p>
+            </button>
           )}
           {reservationsOn && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <button type="button" onClick={() => navigate('/reservations')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">오늘 예약</p>
               <p className="text-lg font-black text-gray-900 mt-1">{todayActiveReservations.length}건</p>
-            </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">완료 {todayReservations.filter(r => r.status === 'completed').length}건 · 대기 {todayReservations.filter(r => r.status === 'pending').length}건</p>
+            </button>
           )}
           {customersOn && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <button type="button" onClick={() => navigate('/customers')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">전체 고객</p>
               <p className="text-lg font-black text-gray-900 mt-1">{totalCustomers}명</p>
-            </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">이번 달 신규 {newThisMonth}명</p>
+            </button>
           )}
           {customersOn && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <button type="button" onClick={() => navigate('/customers')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">VIP 고객</p>
               <p className="text-lg font-black text-gray-900 mt-1">{vipCount}명</p>
-            </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">전체의 {totalPercent}%</p>
+            </button>
           )}
         </div>
 
@@ -260,7 +264,12 @@ export default function Dashboard() {
         {/* 재고 부족 알림 */}
         {productsOn && lowStockProducts.length > 0 && (
           <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
-            <p className="text-sm font-bold text-amber-800 mb-2">재고 부족 알림</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-bold text-amber-800">재고 부족 알림</p>
+              {lowStockProducts.length > 3 && (
+                <button type="button" onClick={() => navigate('/products')} className="text-xs font-medium text-amber-700">외 {lowStockProducts.length - 3}개 전체 보기 →</button>
+              )}
+            </div>
             <div className="space-y-1.5">
               {lowStockProducts.slice(0, 3).map(p => (
                 <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)} aria-label={`${p.name} 재고 ${p.stock}${p.unit} 입고`}

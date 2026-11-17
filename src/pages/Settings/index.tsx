@@ -516,19 +516,6 @@ export default function Settings() {
   };
 
   // ─── Notifications ────────────────────────────────────────
-  const toggleNotification = (key: keyof ShopSettings['notificationSettings']) => {
-    const updated = {
-      ...settings.notificationSettings,
-      [key]: !settings.notificationSettings[key],
-    };
-    setSettings(prev => ({ ...prev, notificationSettings: updated }));
-  };
-
-  const handleNotificationsSave = () => {
-    SettingsStore.save({ notificationSettings: settings.notificationSettings });
-    flash();
-  };
-
   // ─── Services ─────────────────────────────────────────────
   const openAddService = () => {
     setEditingService(null);
@@ -1091,21 +1078,13 @@ export default function Settings() {
                           type="checkbox"
                           className="sr-only peer"
                           disabled
+                          readOnly
                           checked={settings.notificationSettings[n.key]}
-                          onChange={() => toggleNotification(n.key)}
                         />
                         <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
                       </label>
                     </div>
                   ))}
-                  <div className="pt-2">
-                    <button
-                      onClick={handleNotificationsSave}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
-                    >
-                      저장하기
-                    </button>
-                  </div>
                 </div>
               </SettingCard>
               </div>

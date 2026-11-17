@@ -734,10 +734,10 @@ export default function Sales() {
                       <span className="text-gray-500 text-xs">{p.paymentMethod}</span>
                       <span className="flex items-center justify-end gap-1.5">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
-                        <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 수정">
+                        <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">
                           <Pencil size={13} />
                         </button>
-                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 삭제">
+                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
                           <Trash2 size={13} />
                         </button>
                       </span>
@@ -862,10 +862,10 @@ export default function Sales() {
                         <span className="text-gray-500 text-xs">{x.paymentMethod}</span>
                         <span className="flex items-center justify-end gap-1.5">
                           <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
-                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="지출 수정">
+                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 수정">
                             <Pencil size={13} />
                           </button>
-                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="지출 삭제">
+                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
                             <Trash2 size={13} />
                           </button>
                         </span>
