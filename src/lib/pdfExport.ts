@@ -83,7 +83,7 @@ export async function exportDatasetsToPdf(keys: string[]): Promise<ExportResult>
   const fileName = `${safeShopName}_데이터내보내기_${date}.pdf`;
   if (IS_MOBILE_APP) {
     const base64 = doc.output('datauristring').replace(/^data:[^;]*;base64,/, '');
-    await saveOrShareFile(fileName, base64, 'application/pdf');
+    await saveOrShareFile(fileName, base64);
   } else {
     doc.save(fileName);
   }

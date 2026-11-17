@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
-import { differenceInDays, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { featureForPath } from '../../lib/featureRegistry';
 import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';

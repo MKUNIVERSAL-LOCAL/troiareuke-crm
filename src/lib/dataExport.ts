@@ -287,7 +287,7 @@ export function buildExportSheets(keys: string[]): ExportSheet[] {
 export async function writeWorkbook(workbook: XLSX.WorkBook, fileName: string): Promise<void> {
   if (IS_MOBILE_APP) {
     const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' }) as string;
-    await saveOrShareFile(fileName, base64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    await saveOrShareFile(fileName, base64);
     return;
   }
   XLSX.writeFile(workbook, fileName);

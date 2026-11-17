@@ -1,6 +1,5 @@
 import { notify } from '../../lib/notify';
 import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { StaffStore, ServiceStore, ProgramStore, SettingsStore } from '../../lib/store';
@@ -73,7 +72,6 @@ const planIcons: Record<string, React.ReactNode> = {
 };
 
 export default function Onboarding() {
-  const navigate = useNavigate();
   const { completeOnboarding, user } = useAuth();
   const [step, setStep] = useState(0);
   const [shopName, setShopName] = useState('');

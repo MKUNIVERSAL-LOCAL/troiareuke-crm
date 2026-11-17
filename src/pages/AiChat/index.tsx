@@ -36,7 +36,7 @@ const QUICK_QUESTIONS = [
 ];
 
 // AI 자동 선택: Claude 우선
-function selectProvider(question: string, claudeKey: string, openaiKey: string, geminiKey: string): 'claude' | 'openai' | 'gemini' {
+function selectProvider(claudeKey: string, openaiKey: string, geminiKey: string): 'claude' | 'openai' | 'gemini' {
   if (claudeKey) return 'claude'; // Claude 우선
   if (openaiKey) return 'openai';
   if (geminiKey) return 'gemini';
@@ -286,7 +286,7 @@ function AiChatInner() {
       }
 
       // AI 선택 (Claude 우선)
-      const provider = selectProvider(userText, claudeKey, openaiKey, geminiKey);
+      const provider = selectProvider(claudeKey, openaiKey, geminiKey);
       let responseText: string;
       let usedProvider: 'claude' | 'openai' | 'gemini' | 'server' = provider;
 

@@ -52,7 +52,7 @@ export async function openExternal(url: string): Promise<void> {
  * 파일 저장/공유 — 모바일 앱에서는 캐시에 쓰고 공유 시트를 띄운다(카카오톡·메일·파일 앱으로 보냄).
  * @param base64 파일 본문(base64, data: 접두어 없음)
  */
-export async function saveOrShareFile(fileName: string, base64: string, mimeType: string): Promise<'shared' | 'saved'> {
+export async function saveOrShareFile(fileName: string, base64: string): Promise<'shared' | 'saved'> {
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const { Share } = await import('@capacitor/share');
   const written = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
@@ -70,7 +70,7 @@ export async function saveOrShareFile(fileName: string, base64: string, mimeType
  * (beforeAfter 비교 이미지, 어드민 반출 JSON 등이 같은 결정을 반복하지 않도록 한 곳에 둔다)
  */
 export async function exportFile(fileName: string, blob: Blob): Promise<'shared' | 'saved' | 'downloaded'> {
-  if (IS_MOBILE_APP) return saveOrShareFile(fileName, await blobToBase64(blob), blob.type || 'application/octet-stream');
+  if (IS_MOBILE_APP) return saveOrShareFile(fileName, await blobToBase64(blob));
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
