@@ -1797,7 +1797,10 @@ export default function Customers() {
           {filtered.length === 0 ? (
             <div className="p-8 text-center">
               <User size={32} className="text-gray-200 mx-auto mb-2" />
-              <p className="text-sm text-gray-400">고객이 없어요</p>
+              <p className="text-sm text-gray-400">{customers.length === 0 ? '아직 고객이 없습니다' : '조건에 맞는 고객이 없어요'}</p>
+              {customers.length === 0 && (
+                <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">첫 고객 등록하기</button>
+              )}
             </div>
           ) : (
             visible.map(customer => {

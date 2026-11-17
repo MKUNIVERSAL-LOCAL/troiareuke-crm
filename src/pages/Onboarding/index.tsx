@@ -421,7 +421,7 @@ export default function Onboarding() {
                   + 직원 추가
                 </button>
               </div>
-              <StepNav onPrev={() => setStep(0)} onNext={() => setStep(2)} skipLabel="나중에 설정" onSkip={() => setStep(2)} />
+              <StepNav onPrev={() => setStep(0)} onNext={() => setStep(2)} skipLabel="나중에 (직원 관리에서)" onSkip={() => setStep(2)} />
             </StepWrapper>
           )}
 
@@ -542,7 +542,7 @@ export default function Onboarding() {
                   </div>
                 )}
               </div>
-              <StepNav onPrev={() => setStep(1)} onNext={() => setStep(3)} skipLabel="나중에 설정" onSkip={() => setStep(3)} />
+              <StepNav onPrev={() => setStep(1)} onNext={() => setStep(3)} skipLabel="나중에 (설정 > 시술 관리에서)" onSkip={() => setStep(3)} />
             </StepWrapper>
           )}
 
@@ -630,7 +630,7 @@ export default function Onboarding() {
                 <CheckCircle size={36} className="text-white" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">설정 완료!</h2>
-              <p className="text-gray-400 mb-2 text-sm">{shopName} 의 에스테틱 CRM이 준비되었습니다</p>
+              <p className="text-gray-400 mb-2 text-sm">{shopName}의 에스테틱 CRM이 준비되었습니다</p>
               <p className="text-xs text-blue-500 mb-2 font-medium">
                 {selectedPlan === 'trial'
                   ? '14일 무료 체험이 시작됩니다'
@@ -642,7 +642,7 @@ export default function Onboarding() {
                 </p>
               )}
               <div className="grid grid-cols-2 gap-3 mb-8 text-sm">
-                {['고객 관리 시작', '예약 등록', '직원 스케줄', 'AI 분석 챗봇'].map(f => (
+                {['고객 관리 시작', '예약 등록', '시술 기록·사진 비교', '매출·손익 관리'].map(f => (
                   <div key={f} className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl text-[#1a3a8f] font-medium">
                     <ChevronRight size={14} /> {f}
                   </div>

@@ -134,7 +134,7 @@ export default function Programs() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">시술 프로그램 관리</h1>
-          <p className="text-sm text-gray-400 mt-0.5">회원권, 패키지, 회차권 등 프로그램을 등록하고 관리하세요</p>
+          <p className="text-sm text-gray-400 mt-0.5">회차권·패키지처럼 여러 번 관리하는 프로그램을 등록하고 관리하세요</p>
         </div>
         <button
           onClick={openCreate}
@@ -225,8 +225,18 @@ export default function Programs() {
       {filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
           <Package size={40} className="text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">조건에 맞는 프로그램이 없어요</p>
-          <p className="text-sm text-gray-300 mt-1">검색어나 필터를 바꾸거나 새 프로그램을 추가하세요</p>
+          {programs.length === 0 ? (
+            <>
+              <p className="text-gray-400 font-medium">아직 프로그램이 없습니다</p>
+              <p className="text-sm text-gray-400 mt-1">10회권·패키지처럼 여러 번에 걸쳐 관리하는 상품입니다. 1회 시술 메뉴는 설정 &gt; 시술 관리에서 등록하세요.</p>
+              <button type="button" onClick={openCreate} className="mt-4 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75]">프로그램 추가</button>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-400 font-medium">조건에 맞는 프로그램이 없어요</p>
+              <p className="text-sm text-gray-300 mt-1">검색어나 필터를 바꾸거나 새 프로그램을 추가하세요</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -312,7 +322,7 @@ export default function Programs() {
           <div ref={deleteModalRef} role="dialog" aria-modal="true" aria-label="프로그램 삭제" className="bg-white rounded-2xl p-6 w-full max-w-sm">
             <h3 className="font-bold text-gray-900 mb-2">프로그램 삭제</h3>
             <p className="text-sm text-gray-500 mb-5">
-              이 프로그램을 삭제하면 복구할 수 없습니다. 고객에게 등록된 기존 회권에는 영향이 없습니다.
+              이 프로그램을 삭제하면 복구할 수 없습니다. 고객에게 등록된 기존 회차권에는 영향이 없습니다.
             </p>
             <div className="flex gap-2">
               <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">취소</button>

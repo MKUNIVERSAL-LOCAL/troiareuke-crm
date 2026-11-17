@@ -851,6 +851,7 @@ function ListView({ reservations, onSelect, googleEvents = [], filterKey }: { re
 
 function AddReservationModal({ reservation: editing, initialCustomerId, initialDate, onClose, onSave }: { reservation?: Reservation | null; initialCustomerId?: string; initialDate?: string; onClose: () => void; onSave: () => void }) {
   const { user: authUser } = useAuth();
+  const goTo = useNavigate();
   const isEdit = !!editing;
   const customers = CustomerStore.getAll().filter(c => c.isActive !== false); // 익명화(탈퇴) 고객은 예약 대상에서 제외
   const staffList = StaffStore.getAll().filter(s => s.isActive || s.id === editing?.staffId); // 퇴사 직원은 새 예약 담당자 목록에서 제외
@@ -877,6 +878,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
         !serviceId && '시술',
       ].filter(Boolean).join(', ');
       const guide = [
+        customers.length === 0 && !customerId ? '등록된 고객이 없습니다 — 고객 관리에서 먼저 등록해주세요.' : '',
         staffList.length === 0 && !staffId ? '등록된 직원이 없습니다 — 직원 관리에서 먼저 등록해주세요.' : '',
         services.length === 0 && !serviceId ? '등록된 시술이 없습니다 — 설정 > 시술 관리에서 먼저 등록해주세요.' : '',
       ].filter(Boolean).join(' ');
@@ -994,6 +996,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               <option value="">고객 선택</option>
               {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>)}
             </select>
+            {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원 *</label>
@@ -1005,6 +1008,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               <option value="">직원 선택</option>
               {staffList.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
             </select>
+            {staffList.length === 0 && <PrereqHint text="등록된 직원이 없습니다" action="직원 등록" onGo={() => { onClose(); goTo('/staff?new=1'); }} />}
           </div>
         </div>
         <div>
@@ -1017,6 +1021,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <option value="">시술 선택</option>
             {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {s.price.toLocaleString()}원)</option>)}
           </select>
+          {services.length === 0 && <PrereqHint text="등록된 시술 메뉴가 없습니다" action="시술 메뉴 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div>
@@ -1093,6 +1098,16 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
         </div>
       </form>
     </Modal>
+  );
+}
+
+/** 선택지가 비어 있을 때 저장을 누르기 전에 보이는 안내 — 등록 화면으로 바로 보낸다 (첫 실행 감사 2026-11-18) */
+function PrereqHint({ text, action, onGo }: { text: string; action: string; onGo: () => void }) {
+  return (
+    <p className="mt-1.5 text-xs text-amber-700 flex items-center gap-2 flex-wrap">
+      {text}
+      <button type="button" onClick={onGo} className="px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 font-medium hover:bg-amber-100">{action} →</button>
+    </p>
   );
 }
 

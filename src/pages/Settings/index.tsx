@@ -3,6 +3,7 @@ import { formatPhoneInput } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
@@ -107,7 +108,13 @@ const emptyServiceForm = { name: '', category: '', duration: 60, price: 0, descr
 
 export default function Settings() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<SettingTab>('shop');
+  // ?tab=services 같은 딥링크(예약·시술 안내, 첫 설정 체크리스트에서 진입) — 1회 캡처 후 URL 정리 (첫 실행 감사 2026-11-18)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<SettingTab>(() => {
+    const q = searchParams.get('tab');
+    return q && allTabs.some(t => t.key === q) ? (q as SettingTab) : 'shop';
+  });
+  useEffect(() => { if (searchParams.has('tab')) setSearchParams({}, { replace: true }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [settings, setSettings] = useState<ShopSettings>(() => {
     const current = SettingsStore.get();
     if (current.name === '내 에스테틱 샵' && user?.shopName) {
@@ -955,7 +962,7 @@ export default function Settings() {
                           className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
                           title="Google OAuth 클라이언트가 설정되지 않은 빌드입니다"
                         >
-                          준비 중
+                          이 빌드에서는 연결 불가
                         </button>
                       )}
                     </div>

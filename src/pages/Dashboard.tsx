@@ -19,6 +19,7 @@ import TomorrowReservationCard from '../components/TomorrowReservationCard';
 import DailyCloseCard from '../components/DailyCloseCard';
 import BirthdayCard from '../components/BirthdayCard';
 import PendingCompletionCard from '../components/PendingCompletionCard';
+import SetupChecklistCard from '../components/SetupChecklistCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 import { useFeature } from '../hooks/useFeature';
@@ -163,6 +164,8 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+        {/* 첫 설정 체크리스트 — 할 일이 남은 새 매장에만 보인다 */}
+        <SetupChecklistCard refreshKey={refreshKey} />
         {/* StatCards 2열 */}
         <div className="grid grid-cols-2 gap-3">
           {salesOn && (
@@ -295,6 +298,8 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+        {/* 첫 설정 체크리스트 — 할 일이 남은 새 매장에만 보인다 */}
+        <SetupChecklistCard refreshKey={refreshKey} />
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {salesOn && (
@@ -453,7 +458,10 @@ export default function Dashboard() {
               </button>
             </div>
             {recentPayments.length === 0 ? (
-              <div className="py-8 text-center text-gray-400 text-xs">결제 기록이 없습니다</div>
+              <div className="py-8 text-center text-gray-400 text-xs">
+                결제 기록이 없습니다
+                <button type="button" onClick={() => navigate('/sales?new=1')} className="block mx-auto mt-2 text-xs font-medium text-[#1a3a8f] hover:underline">결제 등록하기 →</button>
+              </div>
             ) : (
               <div className="space-y-3">
                 {recentPayments.map(p => (
@@ -486,7 +494,10 @@ export default function Dashboard() {
             </div>
             <div className="divide-y divide-gray-50">
               {todayReservations.length === 0 ? (
-                <div className="py-12 text-center text-gray-400 text-sm">오늘 예약이 없습니다</div>
+                <div className="py-12 text-center text-gray-400 text-sm">
+                  오늘 예약이 없습니다
+                  <button type="button" onClick={() => navigate('/reservations?new=1')} className="block mx-auto mt-2 text-xs font-medium text-[#1a3a8f] hover:underline">예약 추가하기 →</button>
+                </div>
               ) : (
                 todayReservations.map(r => (
                   <div key={r.id} role="button" tabIndex={0} onClick={() => navigate(`/reservations?open=${r.id}`)} onKeyDown={e => { if (e.key === 'Enter') navigate(`/reservations?open=${r.id}`); }} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/50 transition-colors cursor-pointer">
@@ -575,7 +586,7 @@ export default function Dashboard() {
               </div>
               <div className="px-5 py-3 space-y-2">
                 {todayReservations.length === 0 ? (
-                  <p className="text-xs text-gray-400 py-2">오늘 예약이 없습니다</p>
+                  <p className="text-xs text-gray-400 py-2">오늘 예약이 없습니다 — <button type="button" onClick={() => navigate('/reservations?new=1')} className="font-medium text-[#1a3a8f] hover:underline">예약 추가</button></p>
                 ) : (
                   todayReservations.slice(0, 4).map(r => (
                     <div key={r.id} className="flex items-center gap-3">

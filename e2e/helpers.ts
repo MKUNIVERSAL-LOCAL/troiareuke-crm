@@ -34,7 +34,8 @@ export function makeAccount(prefix: string): E2EAccount {
 }
 
 export async function dismissToasts(page: Page) {
-  const close = page.getByRole('button', { name: '닫기' });
+  // 토스트의 [닫기]만 — 이름에 '닫기'가 들어가는 다른 버튼(사이드바 '메뉴 닫기' 등, 모바일에선 화면 밖이라 클릭 불가)을 잡으면 무한 루프 (2026-11-18)
+  const close = page.locator('[aria-live="polite"] [role="status"], [aria-live="polite"] [role="alert"]').getByRole('button', { name: '닫기', exact: true });
   while (await close.count()) {
     await close.first().click().catch(() => {});
     if ((await close.count()) === 0) break;

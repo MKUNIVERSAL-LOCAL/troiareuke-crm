@@ -153,10 +153,6 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         <div className="bg-gray-50 rounded-xl px-4 py-3">
           <p className="text-[11px] font-bold text-gray-700 truncate">{shopName || '샵 정보 미설정'}</p>
           <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
-          <div className="flex items-center gap-1.5 mt-2">
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
-            <span className="text-xs text-green-600 font-medium">정상 운영 중</span>
-          </div>
         </div>
         <button
           onClick={() => { resetFeatureFlags(); clearLocalPhotoCacheForLogout(); logout(); }}

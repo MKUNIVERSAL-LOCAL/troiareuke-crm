@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
 import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
@@ -25,6 +26,11 @@ function getYearMonth() {
 export default function StaffPage() {
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  // 첫 설정 체크리스트·예약 안내(/staff?new=1) → 바로 추가 모달, 1회 캡처 후 URL 정리 (2026-11-18)
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('new') === '1') { setShowAddModal(true); setSearchParams({}, { replace: true }); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [selected, setSelected] = useState<Staff | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
@@ -160,8 +166,17 @@ export default function StaffPage() {
           {filteredStaff.length === 0 && (
             <div className="md:col-span-2 xl:col-span-4 bg-white rounded-2xl border border-gray-100 py-14 text-center">
               <Users size={36} className="text-gray-200 mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-500">조건에 맞는 직원이 없어요</p>
-              <p className="text-xs text-gray-400 mt-1">검색어나 재직 상태를 바꿔보세요</p>
+              {staffList.length === 0 ? (
+                <>
+                  <p className="text-sm font-medium text-gray-500">아직 직원이 없습니다</p>
+                  <p className="text-xs text-gray-400 mt-1">예약과 시술 기록의 담당자로 쓰입니다 — 옆의 [직원 추가]로 등록하세요 (원장님 본인도 포함)</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-gray-500">조건에 맞는 직원이 없어요</p>
+                  <p className="text-xs text-gray-400 mt-1">검색어나 재직 상태를 바꿔보세요</p>
+                </>
+              )}
             </div>
           )}
 

@@ -17,7 +17,23 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
 
   // ── 1~3. 가입 → 온보딩 → 고객 등록 (공통 헬퍼) ──
   await signupAndOnboard(page, acc);
+
+  // 첫 설정 체크리스트 — 고객이 없는 새 매장 홈에 보이고, 항목이 해당 등록 화면(?tab=)으로 간다 (첫 실행 감사 2026-11-18)
+  await page.goto('/');
+  const checklist = page.getByTestId('setup-checklist').filter({ visible: true }).first();
+  await expect(checklist).toBeVisible();
+  await expect(checklist).toContainText('첫 고객 등록');
+  await checklist.getByRole('button', { name: /매장 정보/ }).click();
+  await expect(page).toHaveURL(/\/settings$/); // ?tab=shop 캡처 후 정리
+  await page.goto('/settings?tab=services');
+  await expect(page.getByText('시술 항목 관리').filter({ visible: true }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/settings$/);
+
   await createCustomer(page, acc);
+  // 고객을 등록하면 체크리스트의 그 줄은 완료로 바뀐다
+  await page.goto('/');
+  await expect(page.getByTestId('setup-checklist').filter({ visible: true }).first()).not.toContainText('이름과 전화번호만 있으면 됩니다');
+  await page.goto('/customers'); // 아래 검색 품질 검증은 고객 화면에서
 
   // 검색 품질: 전화 뒷자리 4자리·초성으로도 찾힌다 (2026-11-17)
   const searchBox = page.getByPlaceholder('이름, 전화번호 검색').filter({ visible: true }).first();

@@ -200,7 +200,14 @@ export default function Products() {
               {filtered.length === 0 ? (
                 <div className="py-16 text-center">
                   <Package size={32} className="mx-auto mb-3 text-gray-300" />
-                  <p className="text-sm text-gray-400">해당하는 제품이 없습니다</p>
+                  {products.length === 0 ? (
+                    <>
+                      <p className="text-sm text-gray-400">아직 제품이 없습니다 — 판매하고 재고를 관리할 홈케어 제품을 등록하세요</p>
+                      <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">제품 추가</button>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-400">해당하는 제품이 없습니다</p>
+                  )}
                 </div>
               ) : (
                 <>

@@ -128,7 +128,6 @@ export default function Messaging() {
           <StatusChip label="발송 서버" connected={messagingLive} />
           <StatusChip label="카카오 채널" connected={!!settings.kakao?.channelConnected} />
           <StatusChip label="카카오 오픈채팅" connected={!!settings.kakao?.openchatConnected} />
-          <StatusChip label="네이버 톡톡" connected={false} />
         </div>
 
         {/* Tabs */}
