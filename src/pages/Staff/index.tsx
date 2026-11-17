@@ -125,7 +125,7 @@ export default function StaffPage() {
                   </div>
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center" title="완료·예정 포함, 취소·노쇼 제외">
                     <p className="text-base font-bold text-gray-800">{(monthlyRevenue / 10000).toFixed(0)}만</p>
-                    <p className="text-xs text-gray-400">이번달 예약액</p>
+                    <p className="text-xs text-gray-400 whitespace-nowrap">월 예약액</p>
                   </div>
                 </div>
 

@@ -1364,17 +1364,19 @@ export default function Customers() {
             />
             <button
               onClick={() => setShowImportGuide(true)}
+              aria-label="업로드"
               title="엑셀(xlsx)/CSV로 고객 대량 등록 (이름·전화번호 필수, 중복 자동 제외)"
               className="flex items-center gap-1 px-3 py-1.5 whitespace-nowrap bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
-              <Upload size={12} /><span className="hidden xl:inline">업로드</span>
+              <Upload size={12} /><span className="hidden 2xl:inline">업로드</span>
             </button>
             <button
               onClick={exportToExcel}
+              aria-label="다운로드"
               title="현재 목록을 엑셀(xlsx)로 다운로드"
               className="flex items-center gap-1 px-3 py-1.5 whitespace-nowrap bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
-              <Download size={12} /><span className="hidden xl:inline">다운로드</span>
+              <Download size={12} /><span className="hidden 2xl:inline">다운로드</span>
             </button>
             <button
               onClick={() => setShowAddModal(true)}
