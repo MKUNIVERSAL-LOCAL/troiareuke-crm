@@ -203,6 +203,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(bar).toContainText('경과 0명');
   await page.goto('/customers');
   await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
+  // 목록 정렬 선택이 동작한다 (2026-11-18)
+  await page.getByLabel('정렬').filter({ visible: true }).first().selectOption('name');
+  await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
   await page.goto('/');
   await expect(page.getByRole('heading', { name: '대시보드' }).filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByTestId('retention-notice')).toHaveCount(0);

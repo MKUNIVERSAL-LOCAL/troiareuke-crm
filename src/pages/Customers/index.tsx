@@ -274,6 +274,27 @@ export default function Customers() {
     if (qParam !== null) setSearch(qParam);
   }, [qParam]);
   const [gradeFilter, setGradeFilter] = useState<CustomerGrade | '전체'>('전체');
+  // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
+  type SortKey = 'recent' | 'name' | 'registered' | 'spent';
+  const [sortKey, setSortKey] = useState<SortKey>('recent');
+  const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+    { value: 'recent', label: '최근 방문순' },
+    { value: 'name', label: '이름순' },
+    { value: 'registered', label: '최근 등록순' },
+    { value: 'spent', label: '누적 결제순' },
+  ];
+  const compareCustomers = (a: Customer, b: Customer): number => {
+    switch (sortKey) {
+      case 'name': return a.name.localeCompare(b.name, 'ko');
+      case 'registered': return (b.registeredAt || '').localeCompare(a.registeredAt || '');
+      case 'spent': return (b.totalSpent || 0) - (a.totalSpent || 0) || a.name.localeCompare(b.name, 'ko');
+      default: { // 최근 방문순 — 방문 기록 없는 고객은 등록일로, 그래도 같으면 이름
+        const av = a.lastVisitDate || (a.registeredAt || '').slice(0, 10);
+        const bv = b.lastVisitDate || (b.registeredAt || '').slice(0, 10);
+        return bv.localeCompare(av) || a.name.localeCompare(b.name, 'ko');
+      }
+    }
+  };
   // 개인정보 보존기간 경과 목록(?retention=1) — 대시보드 안내/칩에서 진입, 일괄 익명화 (P4, 2026-11-17)
   const retentionOnly = searchParams.get('retention') === '1';
   const retentionPolicy = getRetentionPolicy();
@@ -739,7 +760,7 @@ export default function Customers() {
     const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
     const matchRetention = !retentionOnly || expiredIds.has(c.id);
     return matchSearch && matchGrade && matchRetention;
-  });
+  }).sort(compareCustomers);
 
   function handleAnonymizeExpired() {
     const targets = filtered.filter(c => expiredIds.has(c.id) && !isAnonymized(c));
@@ -1068,6 +1089,14 @@ export default function Customers() {
                 {g}
               </button>
             ))}
+            <select
+              value={sortKey}
+              onChange={e => setSortKey(e.target.value as SortKey)}
+              aria-label="정렬"
+              className="flex-shrink-0 px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 border-0 focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+            >
+              {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
             {retentionPolicy.enabled && (
               <button
                 type="button"
@@ -1406,6 +1435,14 @@ export default function Customers() {
                 {g}
               </button>
             ))}
+            <select
+              value={sortKey}
+              onChange={e => setSortKey(e.target.value as SortKey)}
+              aria-label="정렬"
+              className="flex-shrink-0 px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 border-0 focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+            >
+              {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
             {retentionPolicy.enabled && (
               <button
                 type="button"
