@@ -60,6 +60,33 @@ function addDays(iso: string, days: number): string {
   return toISO(d);
 }
 
+export interface CustomerRevisitInfo {
+  dueDate: string;                 // 권장 재방문일 (YYYY-MM-DD)
+  daysLeft: number;                // 남은 일수 (음수 = 지남)
+  basis: 'recommended' | 'cycle';  // 시술기록 권장일 / 주기 추정
+  upcomingReservation: string | null; // 이미 잡힌 다음 예약일
+}
+
+/** 고객 상세용 — 다음 방문 권장일과 남은 일수 (방문 이력이 없으면 null). 리마인더 목록과 같은 규칙 (2026-11-17) */
+export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo | null {
+  const todayStr = toISO(new Date());
+  const upcoming = ReservationStore.getAll()
+    .filter(r => r.customerId === customerId && r.date >= todayStr && r.status !== 'cancelled')
+    .map(r => r.date)
+    .sort()[0] ?? null;
+  const logs = TreatmentLogStore.getByCustomer(customerId);
+  const lastLog = logs[0];
+  const customer = CustomerStore.getAll().find(c => c.id === customerId);
+  const lastVisit = lastLog?.treatmentDate || customer?.lastVisitDate || null;
+  let dueDate: string;
+  let basis: CustomerRevisitInfo['basis'];
+  if (lastLog?.nextAppointment) { dueDate = lastLog.nextAppointment; basis = 'recommended'; }
+  else if (lastVisit) { dueDate = addDays(lastVisit, getRevisitCycleDays()); basis = 'cycle'; }
+  else return null;
+  const daysLeft = Math.round((new Date(dueDate + 'T00:00:00').getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000);
+  return { dueDate, daysLeft, basis, upcomingReservation: upcoming };
+}
+
 /**
  * 재방문 권장일이 지난 고객 목록 (오래 지난 순 정렬).
  * @param minOverdueDays 최소 며칠 이상 지났을 때만 포함 (기본 0 = 오늘 포함)

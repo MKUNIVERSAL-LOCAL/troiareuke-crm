@@ -16,6 +16,7 @@ import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
 import TimelapseViewer from '../../components/TimelapseViewer';
 import { resizeImageFile, getPhotos } from '../../lib/photoStore';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
+import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import { refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
@@ -114,6 +115,22 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
         {days.map(dy => <option key={dy} value={dy}>{Number(dy)}일</option>)}
       </select>
     </div>
+  );
+}
+
+/** 다음 방문 권장 표시 — 예약이 잡혀 있으면 예약일, 아니면 권장일과 남은 일수 */
+function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 'sm' | 'md' }) {
+  const info = getCustomerRevisitInfo(customerId);
+  if (!info) return <span className={size === 'sm' ? 'text-xs font-medium text-gray-400' : 'text-sm font-semibold text-gray-400'}>-</span>;
+  const cls = size === 'sm' ? 'text-xs font-medium' : 'text-sm font-semibold';
+  if (info.upcomingReservation) {
+    return <span className={`${cls} text-blue-600`}>예약 {formatDate(info.upcomingReservation)}</span>;
+  }
+  const late = info.daysLeft < 0;
+  return (
+    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-600' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술기록의 다음 방문 권장일' : '마지막 방문일 + 재방문 권장 주기'}>
+      {formatDate(info.dueDate)} ({late ? `${-info.daysLeft}일 지남` : info.daysLeft === 0 ? '오늘' : `D-${info.daysLeft}`})
+    </span>
   );
 }
 
@@ -898,6 +915,10 @@ export default function Customers() {
                       <span className="text-xs font-medium text-gray-900">{formatDate(selected.lastVisitDate)}</span>
                     </div>
                   )}
+                  <div className="flex justify-between">
+                    <span className="text-xs text-gray-500">다음 방문 권장</span>
+                    <RevisitBadge customerId={selected.id} size="sm" />
+                  </div>
                 </div>
                 {selected.memo && (
                   <div className="mt-3 p-3 bg-slate-50 rounded-lg">
@@ -1208,7 +1229,7 @@ export default function Customers() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-gray-50">
+              <div className="grid grid-cols-5 gap-3 mt-4 pt-4 border-t border-gray-50">
                 <div className="text-center">
                   <p className="text-xs text-gray-400">총 방문</p>
                   <p className="text-lg font-bold text-gray-900">{selected.totalVisits}회</p>
@@ -1224,6 +1245,10 @@ export default function Customers() {
                 <div className="text-center">
                   <p className="text-xs text-gray-400">등록일</p>
                   <p className="text-sm font-semibold text-gray-700">{formatDate(selected.registeredAt)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-400">다음 방문 권장</p>
+                  <p><RevisitBadge customerId={selected.id} /></p>
                 </div>
               </div>
 

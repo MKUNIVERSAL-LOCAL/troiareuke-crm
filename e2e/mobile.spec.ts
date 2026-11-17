@@ -136,6 +136,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.getByText('모바일고객').filter({ visible: true }).first().click();
   await expect(page.getByText('기본 정보').filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText('최근 시술 기록').filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText('다음 방문 권장').filter({ visible: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page, '고객 상세');
   // 시술 기록·프로그램 등록 모달이 모바일에서도 열린다 (2026-11-17)
   await page.getByRole('button', { name: '시술 기록', exact: true }).filter({ visible: true }).first().click();
