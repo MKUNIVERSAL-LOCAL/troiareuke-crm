@@ -128,6 +128,12 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(page.getByText('기본 정보').filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText('최근 시술 기록').filter({ visible: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page, '고객 상세');
+  // 피부 상담 입력이 모바일에서도 열린다 (2026-11-17)
+  await page.getByRole('button', { name: '상담 기록', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /^피부 상담/ }).filter({ visible: true }).first()).toBeVisible();
+  await expectNoHorizontalOverflow(page, '피부 상담 모달');
+  await page.getByRole('button', { name: '취소', exact: true }).filter({ visible: true }).first().click();
+
   // 고객 정보 수정이 모바일에서도 된다 (2026-11-17)
   await page.getByRole('button', { name: '고객 정보 수정' }).click();
   const memoField = page.getByPlaceholder('특이사항, 알레르기 등').filter({ visible: true }).first();

@@ -950,6 +950,35 @@ export default function Customers() {
                 })()}
               </div>
 
+              {/* 피부 상담 이력 (모바일) */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase">피부 상담 이력</p>
+                  <button
+                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
+                    className="text-xs font-medium text-indigo-600 flex items-center gap-1"
+                  >
+                    <Sparkles size={12} />상담 기록
+                  </button>
+                </div>
+                {consultations.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-3">상담 기록이 없어요</p>
+                ) : (
+                  <div className="space-y-2">
+                    {consultations.slice(0, 5).map(c => (
+                      <div key={c.id} className="p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-gray-800">{c.consultDate}</p>
+                          {c.skinTypeResult && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
+                        </div>
+                        {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
+                        {c.recommendedSolution && <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={openEditModal}
                 className="w-full py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 flex items-center justify-center gap-1.5"
@@ -1828,8 +1857,9 @@ export default function Customers() {
       )}
 
       {/* ───── 피부 상담 모달 ───── */}
-      {showConsultModal && selected && (
-        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      {/* 모바일에서도 열리도록 body 포털 (2026-11-17) */}
+      {showConsultModal && selected && createPortal(
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
           <div className="modal-card bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white flex items-center justify-between p-5 border-b border-gray-100 z-10">
               <div>
@@ -2092,7 +2122,8 @@ export default function Customers() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
       </div>
     </div>
