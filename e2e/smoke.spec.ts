@@ -114,6 +114,20 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(tomorrowCard.getByText(/내일 예약 안내드립니다/)).toBeVisible();
   await expect(tomorrowCard.locator('pre')).toContainText('14:00');
 
+  // ── 6-3. 생일 고객 (2026-11-17): 생년월일을 오늘(월·일)로 두면 대시보드 카드에 "오늘"로 뜨고 안내 초안이 만들어진다 ──
+  await page.evaluate(name => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const t = new Date();
+    for (const c of list) if (c.name === name) c.birthDate = `1990-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    localStorage.setItem(key, JSON.stringify(list));
+  }, acc.customer);
+  await page.goto('/');
+  const birthdayCard = page.getByTestId('birthday-card').filter({ visible: true }).first();
+  await expect(birthdayCard).toContainText('오늘');
+  await birthdayCard.getByRole('button', { name: /생일 안내$/ }).first().click();
+  await expect(birthdayCard.locator('pre')).toContainText('오늘 생일을 진심으로 축하드려요');
+
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
   await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;

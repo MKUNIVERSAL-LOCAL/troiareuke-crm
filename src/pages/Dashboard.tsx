@@ -17,6 +17,7 @@ import RetentionNoticeCard from '../components/RetentionNoticeCard';
 import ProgramAlertCard from '../components/ProgramAlertCard';
 import TomorrowReservationCard from '../components/TomorrowReservationCard';
 import DailyCloseCard from '../components/DailyCloseCard';
+import BirthdayCard from '../components/BirthdayCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 import { useFeature } from '../hooks/useFeature';
@@ -230,6 +231,7 @@ export default function Dashboard() {
         <DailyCloseCard compact refreshKey={refreshKey} />
         <TomorrowReservationCard compact refreshKey={refreshKey} />
         <ProgramAlertCard compact refreshKey={refreshKey} />
+        <BirthdayCard compact refreshKey={refreshKey} />
         <RetentionNoticeCard compact />
         <RevisitReminderCard compact />
 
@@ -511,6 +513,8 @@ export default function Dashboard() {
             <TomorrowReservationCard refreshKey={refreshKey} />
             {/* 회차권 소진·만료 임박 — 재구매 안내 (2026-11-17) */}
             <ProgramAlertCard refreshKey={refreshKey} />
+            {/* 생일 임박 고객 — 축하 안내 (2026-11-17) */}
+            <BirthdayCard refreshKey={refreshKey} />
             <RetentionNoticeCard />
             {/* 재방문 리마인더 (킬러③) */}
             <RevisitReminderCard />
