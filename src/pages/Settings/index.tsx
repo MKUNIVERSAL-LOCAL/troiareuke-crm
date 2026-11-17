@@ -441,9 +441,19 @@ export default function Settings() {
   };
 
   const handleHoursSave = () => {
-    SettingsStore.save({ businessHours: settings.businessHours });
+    SettingsStore.save({ businessHours: settings.businessHours, holidays: settings.holidays || [] });
     flash();
   };
+
+  // 지정 휴일(명절·임시 휴무) — 예약 저장 전 경고에 쓰인다. 날짜 추가/삭제 후 [저장하기] (2026-11-18)
+  const [holidayInput, setHolidayInput] = useState('');
+  const addHoliday = () => {
+    const d = holidayInput;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { notify('날짜를 선택해주세요.'); return; }
+    setSettings(prev => ({ ...prev, holidays: [...new Set([...(prev.holidays || []), d])].sort() }));
+    setHolidayInput('');
+  };
+  const removeHoliday = (d: string) => setSettings(prev => ({ ...prev, holidays: (prev.holidays || []).filter(x => x !== d) }));
 
   // ─── Integrations ─────────────────────────────────────────
   const handleNaverSave = () => {
@@ -709,6 +719,26 @@ export default function Settings() {
                       </div>
                     );
                   })}
+                  <div className="pt-4 border-t border-gray-100 space-y-2" data-testid="holidays-editor">
+                    <p className="text-sm font-medium text-gray-700">지정 휴일</p>
+                    <p className="text-xs text-gray-400">명절·임시 휴무 날짜. 이 날에 예약을 잡으면 저장 전에 확인창이 뜹니다.</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input type="date" value={holidayInput} onChange={e => setHolidayInput(e.target.value)} aria-label="휴일 날짜" className="form-input text-sm w-40 min-w-0" />
+                      <button type="button" onClick={addHoliday} className="px-3 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200">휴일 추가</button>
+                    </div>
+                    {(settings.holidays || []).length > 0 ? (
+                      <ul className="flex flex-wrap gap-2">
+                        {(settings.holidays || []).map(d => (
+                          <li key={d} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-medium">
+                            {d}
+                            <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="text-rose-400 hover:text-rose-600"><X size={12} /></button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-gray-300">지정 휴일 없음</p>
+                    )}
+                  </div>
                   <div className="pt-4">
                     <button
                       onClick={handleHoursSave}

@@ -344,6 +344,18 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await perf.getByRole('button', { name: '보고 문구' }).click();
   await expect(perf.locator('pre')).toContainText(`${perfExpected.name}: 완료 예약 ${perfExpected.count}건`);
 
+  // ── 9-3-1. 지정 휴일 (2026-11-18): 설정 > 영업시간에서 날짜를 추가·저장하면 다시 열어도 남아 있다 ──
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '영업시간', exact: true }).filter({ visible: true }).first().click();
+  const holidays = page.getByTestId('holidays-editor');
+  await holidays.getByLabel('휴일 날짜').fill('2027-01-01');
+  await holidays.getByRole('button', { name: '휴일 추가' }).click();
+  await expect(holidays).toContainText('2027-01-01');
+  await page.getByRole('button', { name: '저장하기' }).filter({ visible: true }).first().click();
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '영업시간', exact: true }).filter({ visible: true }).first().click();
+  await expect(page.getByTestId('holidays-editor')).toContainText('2027-01-01');
+
   // ── 9-4. 전체 백업 파일 저장·복원 (2026-11-18): JSON에 고객이 들어 있고, 고객 테이블을 비운 뒤 그 파일로 복원하면 돌아온다 ──
   await page.goto('/settings');
   await page.getByRole('button', { name: '데이터 백업', exact: true }).filter({ visible: true }).first().click();
@@ -398,6 +410,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(bar).toContainText('경과 0명');
   await page.goto('/customers');
   await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
+  // 익명화 고객 상세에는 [예약 추가]·[메시지]가 없다 — 발송·예약 대상이 아니므로 (2026-11-18)
+  await page.getByText('탈퇴고객').filter({ visible: true }).first().click();
+  await expect(desk.getByText('익명화됨')).toBeVisible();
+  await expect(desk.getByRole('button', { name: '메시지', exact: true })).toHaveCount(0);
+  await expect(desk.getByRole('button', { name: '예약 추가' })).toHaveCount(0);
   // 목록 정렬 선택이 동작한다 (2026-11-18)
   await page.getByLabel('정렬').filter({ visible: true }).first().selectOption('name');
   await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
