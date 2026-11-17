@@ -144,6 +144,20 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   expect(saveBox && saveBox.x >= 0 && saveBox.x + saveBox.width <= vw, '설정 저장 버튼이 화면 밖').toBeTruthy();
   await expectNoHorizontalOverflow(page, '설정 샵 정보');
 
+  // 예약 등록 → 모바일 카드 → 상세 모달 (2026-11-17)
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click();
+  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await page.locator('select').filter({ hasText: '직원 선택' }).selectOption({ index: 1 });
+  await page.locator('select').filter({ hasText: '시술 선택' }).selectOption({ index: 1 });
+  await page.getByRole('button', { name: '예약 저장' }).click();
+  const resvCard = page.getByText('모바일고객').filter({ visible: true }).first();
+  await expect(resvCard).toBeVisible({ timeout: 10_000 });
+  await resvCard.click();
+  await expect(page.getByText('예약 상세').filter({ visible: true }).first()).toBeVisible();
+  await expectNoHorizontalOverflow(page, '예약 상세');
+  await page.keyboard.press('Escape');
+
   // 더보기 탭(설정 등 진입점)이 하단 탭바에 있다
   const more = page.getByRole('button', { name: '더보기 메뉴 열기' }).filter({ visible: true }).first();
   await expect(more).toBeVisible();

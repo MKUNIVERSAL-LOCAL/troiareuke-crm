@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileTabBar from './MobileTabBar';
 import UpdateBanner from '../ui/UpdateBanner';
@@ -8,12 +8,14 @@ import ToastHost from '../ui/ToastHost';
 import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
 import FeatureRouteGate from '../FeatureGate';
+import ErrorBoundary from '../ui/ErrorBoundary';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { BLOCK_STAFF_UI } from '../../lib/buildTarget';
 import { refreshFeatureFlags } from '../../lib/featureFlags';
 
 export default function Layout() {
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, logout } = useAuth();
   const { programName } = useCrmBrand(user?.shopName);
@@ -103,9 +105,12 @@ export default function Layout() {
           </div>
         </div>
 
-        <FeatureRouteGate>
-          <Outlet />
-        </FeatureRouteGate>
+        {/* 화면 렌더 예외 → 흰 화면 대신 복구 UI. 라우트가 바뀌면 자동 초기화 (2026-11-17) */}
+        <ErrorBoundary resetKey={location.pathname}>
+          <FeatureRouteGate>
+            <Outlet />
+          </FeatureRouteGate>
+        </ErrorBoundary>
       </main>
 
       {/* 하단 탭바 — 모바일 전용 (내부에서 lg:hidden 처리) */}
