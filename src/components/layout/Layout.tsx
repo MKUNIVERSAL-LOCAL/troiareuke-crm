@@ -70,8 +70,8 @@ export default function Layout() {
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* 메인 콘텐츠 */}
-      {/* pb-16 lg:pb-0: 모바일 탭바(h-14=56px) + safe-area 여백 / 데스크톱은 0 */}
-      <main className="flex-1 lg:ml-64 min-h-screen overflow-x-hidden pb-16 lg:pb-0">
+      {/* pb-tabbar-safe lg:pb-0: 모바일 탭바(h-14=56px) + 기기 하단 safe-area / 데스크톱은 0 */}
+      <main className="flex-1 lg:ml-64 min-h-screen overflow-x-hidden pb-tabbar-safe lg:pb-0">
         {/* 공통 알림(토스트) — notify() 표시 영역 */}
         <ToastHost />
         {/* 업데이트 배너 — PC(포터블) / 모바일 앱(스토어 버전 안내), 각자 해당 플랫폼에서만 렌더 */}
@@ -84,7 +84,7 @@ export default function Layout() {
         {/* 앱 잠금(PIN) — 설정에서 켠 기기에서만 (2026-11-18) */}
         <AppLockOverlay />
         {/* 모바일 상단 헤더 */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 pt-safe bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm" style={{ paddingTop: 'calc(0.75rem + max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)))' }}>
           <button
             onClick={() => setSidebarOpen(true)}
             className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"

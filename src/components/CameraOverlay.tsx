@@ -136,7 +136,7 @@ export default function CameraOverlay({ references, onCapture, onClose, onPickFr
   return createPortal(
     <div role="dialog" aria-modal="true" aria-label="카메라 촬영" className="fixed inset-0 z-[90] bg-black flex flex-col">
       {/* 상단 바 */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2 text-white bg-black/60">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 pt-safe text-white bg-black/60">
         <p className="text-sm font-medium truncate">
           {reference ? `가이드: ${reference.date}${reference.angle ? ` · ${angleLabel(reference.angle)}` : ''}` : '촬영'}
         </p>

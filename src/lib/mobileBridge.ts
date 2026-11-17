@@ -29,7 +29,10 @@ export function installMobileBridge(): void {
     return nativeOpen(url, target, features);
   }) as typeof window.open;
 
-  // 3) Android 뒤로가기
+  // 3) 저장소 영속성 — 로컬 모드 정본(localStorage)·사진(IndexedDB)이 저장공간 압박 때 퇴거되지 않게 요청(거부돼도 동작엔 영향 없음)
+  try { void navigator.storage?.persist?.(); } catch { /* noop */ }
+
+  // 4) Android 뒤로가기
   void import('@capacitor/app').then(({ App }) => {
     App.addListener('backButton', ({ canGoBack }) => {
       const atRoot = /^#?\/?(dashboard)?$/.test(location.hash.replace(/^#/, '')) || !canGoBack;

@@ -7,6 +7,8 @@ const IS_ELECTRON =
   /Electron/i.test(navigator.userAgent) &&
   !!(window as any).electronAPI;
 import Header from '../../components/layout/Header';
+import { copyText } from '../../lib/clipboard';
+import { notify } from '../../lib/notify';
 import { useFeature } from '../../hooks/useFeature';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
 // 외부 LLM으로 나가는 프롬프트에는 전화번호를 항상 마스킹한다(권한 무관) — 다른 화면과 개인정보 정책 일치
@@ -348,8 +350,8 @@ function AiChatInner() {
     }
   };
 
-  const copyMessage = (id: string, content: string) => {
-    navigator.clipboard.writeText(content);
+  const copyMessage = async (id: string, content: string) => {
+    if (!(await copyText(content))) { notify('복사하지 못했습니다. 내용을 길게 눌러 직접 복사하세요.'); return; }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };

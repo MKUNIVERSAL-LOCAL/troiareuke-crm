@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 모바일 safe-area — 상단 상태바(노치·Android 15+ edge-to-edge)와 하단 제스처 바. env()가 0인 WebView(<140)에서는 Capacitor가 주입하는 변수를 쓴다 (2026-11-18) */
+@layer utilities {
+  .pt-safe { padding-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)); }
+  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px)); }
+  .pb-tabbar-safe { padding-bottom: calc(4rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
+  .bottom-toast-safe { bottom: calc(5rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
+}
+
 * {
   font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;

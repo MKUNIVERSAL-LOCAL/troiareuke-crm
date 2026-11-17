@@ -28,7 +28,7 @@ export default function ToastHost() {
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-20 lg:bottom-6 z-[10000] flex flex-col items-center gap-2 px-4 pointer-events-none" aria-live="polite">
+    <div className="fixed inset-x-0 bottom-toast-safe lg:bottom-6 z-[10000] flex flex-col items-center gap-2 px-4 pointer-events-none" aria-live="polite">
       {items.map(item => (
         <div
           key={item.id}

@@ -1596,7 +1596,7 @@ export default function Customers() {
             <input
               ref={importInputRef}
               type="file"
-              accept=".xlsx,.xls,.csv"
+              accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/comma-separated-values,text/plain"
               onChange={handleImportExcel}
               className="hidden"
             />

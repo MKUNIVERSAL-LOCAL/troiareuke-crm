@@ -69,7 +69,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
 
   return (
     <aside className={clsx(
-      'w-64 h-screen bg-white border-r border-gray-100 flex flex-col fixed left-0 top-0 z-30 shadow-sm transition-transform duration-300',
+      'w-64 h-screen bg-white border-r border-gray-100 flex flex-col fixed left-0 top-0 z-30 shadow-sm transition-transform duration-300 pt-safe',
       // 데스크탑: 항상 표시
       'lg:translate-x-0',
       // 모바일: open 상태에 따라

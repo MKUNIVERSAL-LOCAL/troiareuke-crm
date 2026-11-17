@@ -510,7 +510,7 @@ export default function Onboarding() {
                   <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
                     <Upload size={14} className="text-[#1a3a8f]" /> 엑셀/CSV 파일 업로드
                   </h3>
-                  <input ref={fileInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" onChange={handleExcelUpload} className="hidden" />
+                  <input ref={fileInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv,text/comma-separated-values,text/tab-separated-values,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={handleExcelUpload} className="hidden" />
                   <button onClick={() => fileInputRef.current?.click()}
                     className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-blue-300 hover:text-blue-400 transition-colors flex flex-col items-center gap-1.5">
                     <FileSpreadsheet size={24} />
