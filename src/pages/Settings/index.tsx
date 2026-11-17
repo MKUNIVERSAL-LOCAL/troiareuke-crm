@@ -718,7 +718,7 @@ export default function Settings() {
                         {(settings.holidays || []).map(d => (
                           <li key={d} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-medium">
                             {d}
-                            <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="text-rose-400 hover:text-rose-600"><X size={12} /></button>
+                            <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="p-1.5 -m-1 rounded text-rose-400 hover:text-rose-600"><X size={14} /></button>
                           </li>
                         ))}
                       </ul>
@@ -1115,13 +1115,15 @@ export default function Settings() {
                               <span className="font-semibold text-gray-800">{svc.price.toLocaleString()}원</span>
                               <button
                                 onClick={() => openEditService(svc)}
-                                className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-0.5"
+                                aria-label={`${svc.name} 수정`}
+                                className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-purple-50"
                               >
                                 <Pencil size={12} /> 수정
                               </button>
                               <button
                                 onClick={() => handleDeleteService(svc.id)}
-                                className="text-xs text-red-500 hover:text-red-700 flex items-center gap-0.5"
+                                aria-label={`${svc.name} 삭제`}
+                                className="text-xs text-red-500 hover:text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
                               >
                                 <Trash2 size={12} /> 삭제
                               </button>

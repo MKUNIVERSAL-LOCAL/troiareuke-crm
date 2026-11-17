@@ -228,10 +228,10 @@ export default function Products() {
                           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                             <span className="text-sm font-bold text-gray-900">{p.price.toLocaleString()}원</span>
                             <span className="flex items-center gap-1">
-                              <button onClick={() => handleSell(p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg"><ShoppingCart size={11} />판매</button>
-                              <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
-                              <button onClick={() => setEditProduct(p)} className="p-1.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={14} /></button>
-                              <button onClick={() => handleDeleteProduct(p)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="제품 삭제"><Trash2 size={14} /></button>
+                              <button onClick={() => handleSell(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg"><ShoppingCart size={11} />판매</button>
+                              <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
+                              <button onClick={() => setEditProduct(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={16} /></button>
+                              <button onClick={() => handleDeleteProduct(p)} className="p-2.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="제품 삭제"><Trash2 size={16} /></button>
                             </span>
                           </div>
                         </div>

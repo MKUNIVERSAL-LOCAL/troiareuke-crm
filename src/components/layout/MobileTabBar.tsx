@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar, ClipboardList,
-  MoreHorizontal, TrendingUp, Settings, LogOut, X,
+  MoreHorizontal, TrendingUp, Settings, LogOut, X, Tag, Package, UserCog, MessageSquare,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -32,6 +32,13 @@ export default function MobileTabBar() {
     return !def || isFeatureEnabled(def.id);
   });
   const salesEnabled = isFeatureEnabled('module.sales');
+  // 서랍(햄버거) 없이 더보기에서 바로 — 어드민이 끈 모듈은 서랍과 같은 기준으로 제외
+  const MORE_LINKS = [
+    { to: '/programs', label: '시술 프로그램', icon: Tag, bg: 'bg-blue-50', fg: 'text-blue-600' },
+    { to: '/products', label: '제품/재고', icon: Package, bg: 'bg-amber-50', fg: 'text-amber-600' },
+    { to: '/staff', label: '직원 관리', icon: UserCog, bg: 'bg-teal-50', fg: 'text-teal-600' },
+    { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, bg: 'bg-emerald-50', fg: 'text-emerald-600' },
+  ].filter(l => { const def = featureForPath(l.to); return !def || isFeatureEnabled(def.id); });
 
   const handleLogout = () => {
     setMoreOpen(false);
@@ -137,6 +144,19 @@ export default function MobileTabBar() {
                   <span className="text-sm font-medium text-gray-800">매출·손익</span>
                 </button>
               )}
+
+              {MORE_LINKS.map(l => (
+                <button
+                  key={l.to}
+                  onClick={() => handleNavigate(l.to)}
+                  className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors text-left"
+                >
+                  <div className={`w-10 h-10 ${l.bg} rounded-xl flex items-center justify-center`}>
+                    <l.icon size={20} className={l.fg} />
+                  </div>
+                  <span className="text-sm font-medium text-gray-800">{l.label}</span>
+                </button>
+              ))}
 
               <button
                 onClick={() => handleNavigate('/settings')}

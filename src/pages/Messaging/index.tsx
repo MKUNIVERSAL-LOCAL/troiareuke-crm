@@ -111,7 +111,7 @@ export default function Messaging() {
         action={{ label: '메시지 보내기', onClick: () => openSendModal('all') }}
       />
 
-      <div className="p-8 flex-1">
+      <div className="p-4 sm:p-6 lg:p-8 flex-1">
         {/* 실발송 경로 미연동 안내 */}
         {!messagingLive && (
           <div className="flex items-start gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">

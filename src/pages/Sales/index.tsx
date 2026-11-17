@@ -486,11 +486,11 @@ export default function Sales() {
 
       {/* 월 선택 */}
       <div className="flex items-center gap-3 mb-6 bg-white border border-gray-100 rounded-2xl p-3 w-fit">
-        <button onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => changeMonth(-1)} aria-label="이전 달" className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
         <span className="text-sm font-bold text-gray-900 min-w-[100px] text-center">{monthLabel}</span>
-        <button onClick={() => changeMonth(1)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => changeMonth(1)} aria-label="다음 달" className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronRight size={16} className="text-gray-400" />
         </button>
       </div>
@@ -700,8 +700,8 @@ export default function Sales() {
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
                         <span className="flex items-center gap-1">
-                          <button onClick={() => openEdit(p)} className="p-1.5 text-gray-400 hover:text-[#1a3a8f] rounded" aria-label="결제 수정"><Pencil size={14} /></button>
-                          <button onClick={() => handleDelete(p)} className="p-1.5 text-gray-400 hover:text-red-500 rounded" aria-label="결제 삭제"><Trash2 size={14} /></button>
+                          <button onClick={() => openEdit(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="결제 수정"><Pencil size={16} /></button>
+                          <button onClick={() => handleDelete(p)} className="p-2.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="결제 삭제"><Trash2 size={16} /></button>
                         </span>
                       </div>
                     </div>
@@ -830,8 +830,8 @@ export default function Sales() {
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
                           <span className="flex items-center gap-1">
-                            <button onClick={() => openExpenseEdit(x)} className="p-1.5 text-gray-400 hover:text-[#1a3a8f] rounded" aria-label="지출 수정"><Pencil size={14} /></button>
-                            <button onClick={() => handleExpenseDelete(x)} className="p-1.5 text-gray-400 hover:text-red-500 rounded" aria-label="지출 삭제"><Trash2 size={14} /></button>
+                            <button onClick={() => openExpenseEdit(x)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="지출 수정"><Pencil size={16} /></button>
+                            <button onClick={() => handleExpenseDelete(x)} className="p-2.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="지출 삭제"><Trash2 size={16} /></button>
                           </span>
                         </div>
                       </div>

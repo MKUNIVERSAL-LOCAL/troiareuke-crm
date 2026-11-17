@@ -246,11 +246,11 @@ export default function Programs() {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(program)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
-                      <Edit2 size={13} />
+                    <button onClick={() => openEdit(program)} aria-label={`${program.name} 수정`} className="p-2.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
+                      <Edit2 size={16} />
                     </button>
-                    <button onClick={() => setDeleteConfirm(program.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                      <Trash2 size={13} />
+                    <button onClick={() => setDeleteConfirm(program.id)} aria-label={`${program.name} 삭제`} className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>

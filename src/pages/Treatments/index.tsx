@@ -88,7 +88,7 @@ export default function Treatments() {
     <div className="flex items-center gap-1.5 overflow-x-auto py-0.5" role="group" aria-label="시술 기록 필터">
       {PERIODS.map(p => (
         <button key={p} type="button" aria-pressed={period === p} onClick={() => setPeriod(p)}
-          className={clsx('flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border', period === p ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200')}>
+          className={clsx('flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border', period === p ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200')}>
           {PERIOD_LABELS[p]}
         </button>
       ))}

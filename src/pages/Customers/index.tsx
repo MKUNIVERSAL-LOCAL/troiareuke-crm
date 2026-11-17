@@ -1454,7 +1454,7 @@ export default function Customers() {
                   <p className="text-xs font-semibold text-gray-500 uppercase">피부 상담 이력</p>
                   <button
                     onClick={openConsultModal}
-                    className="text-xs font-medium text-indigo-600 flex items-center gap-1"
+                    className="text-xs font-medium text-indigo-600 flex items-center gap-1 px-2 py-2 -my-2 -mr-2 rounded-lg active:bg-indigo-50"
                   >
                     <Sparkles size={12} />상담 기록
                   </button>
@@ -1524,7 +1524,7 @@ export default function Customers() {
                               cp.isCompleted ? 'bg-slate-200 text-slate-600' : (cp.expiryDate && cp.expiryDate < today()) ? 'bg-red-100 text-red-500' : 'bg-green-100 text-green-700'
                             }`}>{cp.isCompleted ? '완료' : (cp.expiryDate && cp.expiryDate < today()) ? '만료' : '진행중'}</span>
                             <button type="button" onClick={() => setManageProgram(cp)} aria-label={`${cp.programName} 관리`}
-                              className="px-2 py-0.5 text-[11px] font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
+                              className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
                           </span>
                         </div>
                         <p className="text-[11px] text-gray-400">결제 {formatPrice(cp.pricePaid)} · 등록 {formatDate(cp.purchaseDate)}{cp.expiryDate ? ` · 만료일 ${formatDate(cp.expiryDate)}` : ''}</p>

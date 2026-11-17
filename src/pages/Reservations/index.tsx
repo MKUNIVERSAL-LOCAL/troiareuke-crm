@@ -1201,17 +1201,17 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
             <Scissors size={14} />시술 기록 작성
           </button>
         )}
-        <div className="flex gap-2 pt-2">
+        <div className="flex flex-wrap gap-2 pt-2">
           <button
             onClick={handleCancel}
-            className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
           >
             취소처리
           </button>
           {canNoShow && (
             <button
               onClick={handleNoShow}
-              className="flex-1 py-2.5 text-sm font-medium text-rose-600 bg-rose-50 rounded-xl hover:bg-rose-100 transition-colors"
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-rose-600 bg-rose-50 rounded-xl hover:bg-rose-100 transition-colors"
               title="고객이 오지 않은 예약 — 노쇼 횟수에 반영"
             >
               노쇼
@@ -1219,7 +1219,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           )}
           <button
             onClick={handleComplete}
-            className="flex-1 py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
+            className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
           >
             완료처리
           </button>
@@ -1229,7 +1229,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           >
             <Trash2 size={14} /> 삭제
           </button>
-          <button onClick={onEdit} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all">수정</button>
+          <button onClick={onEdit} className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all">수정</button>
         </div>
       </div>
       {showPayModal && (
