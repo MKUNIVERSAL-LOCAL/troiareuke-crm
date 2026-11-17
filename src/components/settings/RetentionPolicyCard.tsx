@@ -16,7 +16,7 @@ export default function RetentionPolicyCard() {
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
 
   function save(enabled: boolean) {
-    const years = parseInt(draftYears, 10);
+    const years = enabled ? parseInt(draftYears, 10) : policy.years; // 끌 때는 입력칸이 비어 있어도 된다
     if (!setRetentionPolicy({ enabled, years })) {
       setMessage({ tone: 'warn', text: `${MIN_RETENTION_YEARS}~${MAX_RETENTION_YEARS} 사이의 연수를 입력해 주세요.` });
       return;
@@ -44,7 +44,7 @@ export default function RetentionPolicyCard() {
       <div className="px-6 py-5 space-y-3">
         <p className="text-sm text-gray-500 leading-relaxed">
           마지막 방문(또는 등록) 후 이 기간이 지난 고객을 <b className="text-gray-800">보존기간 경과</b>로 모아 보여줍니다.
-          확인 후 한 번에 <b className="text-gray-800">익명화</b>(이름·전화·메모 등 개인 식별 정보 삭제, 방문·결제 통계는 유지)할 수 있습니다.
+          확인 후 한 번에 <b className="text-gray-800">익명화</b>(고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진까지 삭제, 방문·결제 통계는 유지)할 수 있습니다.
           자동 삭제는 하지 않습니다. 기본 {DEFAULT_RETENTION_YEARS}년.
         </p>
         <div className="flex flex-wrap items-center gap-2">

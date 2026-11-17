@@ -8,7 +8,9 @@
 // 정책은 지점 환경설정(서버 동기)에 저장되어 어느 PC/앱에서나 같다. 기본은 OFF(오너 결정 전).
 // ═══════════════════════════════════════════════════════════════
 
-import { CustomerStore } from './store';
+import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
+import { ConsultationStore } from './consultationStore';
+import { clearPhotos } from './photoStore';
 import type { Customer } from '../types';
 import { getPreference, setPreference } from './shopPreferences';
 
@@ -54,11 +56,13 @@ export function getExpiredCustomers(today = new Date()): Customer[] {
   const cutoff = new Date(today);
   cutoff.setFullYear(cutoff.getFullYear() - policy.years);
   const cutoffISO = cutoff.toISOString().slice(0, 10);
-  return CustomerStore.getAll().filter(c => !isAnonymized(c) && lastActivityDate(c) < cutoffISO);
+  return CustomerStore.getAll().filter(c => !c.id.startsWith('sample_') && !isAnonymized(c) && lastActivityDate(c) < cutoffISO);
 }
 
 /**
- * 익명화 — 개인 식별 정보를 지우고 통계(방문·결제 합계)만 남긴다. 시술·결제 기록은 고객 id로 연결된 채 남아 매출 통계가 깨지지 않는다.
+ * 익명화(파기) — 고객 레코드의 개인 식별 정보를 지우고 통계(방문·결제 합계)만 남긴다.
+ * 예약·시술·프로그램·결제·상담 기록에 복사돼 있던 이름(예약은 전화번호도)과 얼굴 사진(시술·상담 사진)도 함께 지운다 —
+ * 기록 자체는 고객 id로 연결된 채 남아 매출 통계가 깨지지 않는다. (제품 판매 기록의 이름은 수정 API가 없어 남는다 — 코어 변경 필요, 로드맵 기록)
  * @returns 처리한 고객 수
  */
 export function anonymizeCustomers(ids: string[]): number {
@@ -81,8 +85,14 @@ export function anonymizeCustomers(ids: string[]): number {
       referralSource: '',
       privacyConsent: false,      // 로컬 전용 필드(서버 매핑 없음)
       privacyConsentAt: undefined,
-      isActive: false,
+      isActive: false,            // 재방문 리마인더·예약/발송 대상에서 제외하는 표식
     });
+    // 연결 기록에 복사된 이름·전화 — update는 이름만 바꾸므로 회차 차감·결제 합계에 영향 없음
+    ReservationStore.getAll().filter(r => r.customerId === id).forEach(r => ReservationStore.update(r.id, { customerName: ANONYMIZED_NAME, customerPhone: '' }));
+    TreatmentLogStore.getByCustomer(id).forEach(t => { TreatmentLogStore.update(t.id, { customerName: ANONYMIZED_NAME }); clearPhotos(`treatment:${t.id}`); });
+    CustomerProgramStore.getByCustomer(id).forEach(cp => CustomerProgramStore.update(cp.id, { customerName: ANONYMIZED_NAME }));
+    PaymentStore.getAll().filter(p => p.customerId === id).forEach(p => PaymentStore.update(p.id, { customerName: ANONYMIZED_NAME }));
+    ConsultationStore.getByCustomer(id).forEach(c => { ConsultationStore.update(c.id, { customerName: ANONYMIZED_NAME }); clearPhotos(`consult:${c.id}`); });
     n += 1;
   }
   return n;

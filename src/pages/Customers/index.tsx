@@ -260,10 +260,11 @@ export default function Customers() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('q') || '');
+  const qParam = searchParams.get('q');
   useEffect(() => {
-    const q = searchParams.get('q');
-    if (q !== null) setSearch(q);
-  }, [searchParams]);
+    // q가 실제로 바뀔 때만 — 다른 파라미터(retention 등) 변경이 손으로 고친 검색어를 되돌리지 않게 (리뷰 2026-11-17)
+    if (qParam !== null) setSearch(qParam);
+  }, [qParam]);
   const [gradeFilter, setGradeFilter] = useState<CustomerGrade | '전체'>('전체');
   // 개인정보 보존기간 경과 목록(?retention=1) — 대시보드 안내/칩에서 진입, 일괄 익명화 (P4, 2026-11-17)
   const retentionOnly = searchParams.get('retention') === '1';
@@ -711,7 +712,7 @@ export default function Customers() {
   function handleAnonymizeExpired() {
     const targets = filtered.filter(c => expiredIds.has(c.id) && !isAnonymized(c));
     if (targets.length === 0) return;
-    if (!window.confirm(`보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n이름·전화·메모 등 개인 식별 정보가 지워지고 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`)) return;
+    if (!window.confirm(`보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`)) return;
     const n = anonymizeCustomers(targets.map(c => c.id));
     notify(`고객 ${n}명을 익명화했습니다.`);
     setSelected(null);
@@ -1048,7 +1049,7 @@ export default function Customers() {
           </div>
           {retentionOnly && (
             <div className="mt-2 flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" data-testid="retention-bar">
-              <p className="text-xs text-amber-800 min-w-0">보존기간({retentionPolicy.years}년) 경과 {filtered.length}명 — 개인 식별 정보를 지우고 통계만 남깁니다</p>
+              <p className="text-xs text-amber-800 min-w-0">보존기간({retentionPolicy.years}년) 경과 {filtered.length}명 — 개인 식별 정보·기록의 이름·사진을 지우고 통계만 남깁니다</p>
               <button
                 type="button"
                 onClick={handleAnonymizeExpired}
@@ -1369,7 +1370,7 @@ export default function Customers() {
           </div>
           {retentionOnly && (
             <div className="mt-2 flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" data-testid="retention-bar">
-              <p className="text-xs text-amber-800 min-w-0">보존기간({retentionPolicy.years}년) 경과 {filtered.length}명 — 개인 식별 정보를 지우고 통계만 남깁니다</p>
+              <p className="text-xs text-amber-800 min-w-0">보존기간({retentionPolicy.years}년) 경과 {filtered.length}명 — 개인 식별 정보·기록의 이름·사진을 지우고 통계만 남깁니다</p>
               <button
                 type="button"
                 onClick={handleAnonymizeExpired}
@@ -1475,10 +1476,12 @@ export default function Customers() {
                     </div>
                     <p className="text-sm text-gray-500">{maskPhone(selected.phone, user?.role ?? 'staff')}</p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}
-                    <p className={`text-xs mt-0.5 ${selected.privacyConsent ? 'text-green-600' : 'text-amber-500'}`}>
-                      개인정보 동의: {selected.privacyConsent
-                        ? `동의함${selected.privacyConsentAt ? ` (${selected.privacyConsentAt.slice(0, 10)})` : ''}`
-                        : '기록 없음 (구 등록 고객)'}
+                    <p className={`text-xs mt-0.5 ${isAnonymized(selected) ? 'text-gray-400' : selected.privacyConsent ? 'text-green-600' : 'text-amber-500'}`}>
+                      개인정보 동의: {isAnonymized(selected)
+                        ? '익명화됨 (보존기간 경과)'
+                        : selected.privacyConsent
+                          ? `동의함${selected.privacyConsentAt ? ` (${selected.privacyConsentAt.slice(0, 10)})` : ''}`
+                          : '기록 없음 (구 등록 고객)'}
                     </p>
                   </div>
                 </div>

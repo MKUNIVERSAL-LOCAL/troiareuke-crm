@@ -157,11 +157,11 @@ function StatusChip({ label, connected }: { label: string; connected: boolean })
 }
 
 function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; reloadKey: number }) {
-  const [customers, setCustomers] = useState(CustomerStore.getAll());
+  const [customers, setCustomers] = useState(() => CustomerStore.getAll().filter(c => c.isActive !== false)); // 익명화 고객 제외
   const [settings, setSettings] = useState(SettingsStore.get());
 
   useEffect(() => {
-    setCustomers(CustomerStore.getAll());
+    setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false));
     setSettings(SettingsStore.get());
   }, [reloadKey]);
 
@@ -758,7 +758,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
   const [scheduleAt, setScheduleAt] = useState('');
   const charLimit = msgType === 'sms' ? 90 : 1000;
 
-  const customers = CustomerStore.getAll();
+  const customers = CustomerStore.getAll().filter(c => c.isActive !== false);
   const templates = MessageTemplateStore.getAll();
   const kakaoSettings = SettingsStore.get().kakao;
 

@@ -133,7 +133,12 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.goto('/customers');
   await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
   await page.goto('/');
+  await expect(page.getByRole('heading', { name: '대시보드' }).filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByTestId('retention-notice')).toHaveCount(0);
+  // 익명화 고객은 예약 대상(고객 선택)에서 빠진다 — 기록(오늘 예약 등)에는 '탈퇴고객'으로 남는 것이 정상
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: '예약 추가' }).first().click();
+  await expect(page.locator('option', { hasText: '탈퇴고객' })).toHaveCount(0);
 });
 
 test('로그인 화면은 잘못된 계정을 거부한다', async ({ page }) => {

@@ -94,7 +94,7 @@ export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo 
 export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
   const cycle = getRevisitCycleDays();
   const todayISO = toISO(new Date());
-  const customers = CustomerStore.getAll().filter(c => !c.id.startsWith('sample_'));
+  const customers = CustomerStore.getAll().filter(c => !c.id.startsWith('sample_') && c.isActive !== false); // 익명화(보존기간 경과) 고객 제외
   const allReservations = ReservationStore.getAll();
 
   const result: DueCustomer[] = [];

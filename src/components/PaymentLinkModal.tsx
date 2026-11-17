@@ -161,7 +161,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">고객 선택 — 선택하면 문자 발송 가능</option>
-                {customers.map(c => (
+                {customers.filter(c => c.isActive !== false).map(c => ( /* 익명화(탈퇴) 고객 제외 */
                   <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
                 ))}
               </select>

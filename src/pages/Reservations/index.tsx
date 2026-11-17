@@ -813,7 +813,7 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
 function AddReservationModal({ reservation: editing, initialCustomerId, onClose, onSave }: { reservation?: Reservation | null; initialCustomerId?: string; onClose: () => void; onSave: () => void }) {
   const { user: authUser } = useAuth();
   const isEdit = !!editing;
-  const customers = CustomerStore.getAll();
+  const customers = CustomerStore.getAll().filter(c => c.isActive !== false); // 익명화(탈퇴) 고객은 예약 대상에서 제외
   const staffList = StaffStore.getAll();
   const services = ServiceStore.getAll().filter(s => s.isActive);
 
