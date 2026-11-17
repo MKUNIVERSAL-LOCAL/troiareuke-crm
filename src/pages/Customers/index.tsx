@@ -387,7 +387,7 @@ export default function Customers() {
   const [showProgramModal, setShowProgramModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false); // 중복 고객 병합 (2026-11-18)
   const [mergeQuery, setMergeQuery] = useState(''); // 중복 의심 안내에서 열면 전화번호가 미리 입력된다
-  const samePhone = useMemo(() => (selected ? findSamePhoneCustomers(selected) : []), [selected, customers]);
+  const samePhone = useMemo(() => (selected ? findSamePhoneCustomers(selected, customers) : []), [selected, customers]);
   const openMergeFromHint = () => { setMergeQuery(selected?.phone ?? ''); setShowMergeModal(true); };
   const dupHint = samePhone.length > 0 && (
     <button type="button" onClick={openMergeFromHint} data-testid="dup-hint"
@@ -1397,7 +1397,7 @@ export default function Customers() {
                 )}
               </div>
 
-              <CustomerTimeline customerId={selected.id} compact tick={detailTick} />
+              <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
               {/* 모바일 액션 — PC와 동일한 모달(body 포털) */}
               <div className="grid grid-cols-3 gap-2">
@@ -1767,6 +1767,7 @@ export default function Customers() {
                                 ConsultationStore.delete(c.id);
                                 clearPhotos(`consult:${c.id}`);
                                 setConsultations(ConsultationStore.getByCustomer(selected.id));
+                                setDetailTick(t => t + 1); // 활동 타임라인에서도 바로 사라지게
                               }
                             }}
                             className="text-gray-300 hover:text-red-400"
@@ -1964,7 +1965,7 @@ export default function Customers() {
 
             <CustomerPaymentHistory customerId={selected.id} onAdd={() => navigate(`/sales?new=1&customer=${selected.id}`)} />
 
-            <CustomerTimeline customerId={selected.id} tick={detailTick} />
+            <CustomerTimeline key={selected.id} customerId={selected.id} tick={detailTick} />
           </div>
         </div>
       ) : (

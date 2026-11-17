@@ -7,6 +7,7 @@
 
 import { ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
 import { ConsultationStore } from './consultationStore';
+import { formatPrice } from './format';
 import type { Reservation } from '../types';
 
 export type TimelineKind = 'reservation' | 'treatment' | 'consult' | 'program' | 'payment';
@@ -20,7 +21,7 @@ export interface TimelineItem {
   time?: string;
   title: string;
   detail?: string;
-  /** 결제·프로그램 금액(환불은 음수) */
+  /** 결제 금액. 프로그램 등록은 자동 생성되는 결제 행이 금액을 들고 있어 여기 금액을 두지 않는다(이중 표시 방지) */
   amount?: number;
   /** 눌렀을 때 이동할 경로 */
   href?: string;
@@ -48,7 +49,7 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
     if (r.customerId !== customerId) continue;
     const services = r.services.map(s => s.serviceName).join(', ');
     items.push({
-      id: `res:${r.id}`, kind: 'reservation', date: r.date, time: r.startTime,
+      id: `res:${r.id}`, kind: 'reservation', date: dateOf(r.date), time: r.startTime,
       title: `${RESERVATION_LABEL[r.status] ?? r.status} · ${r.startTime}${r.staffName ? ` · ${r.staffName}` : ''}`,
       detail: services || undefined,
       href: `/reservations?open=${r.id}`,
@@ -59,7 +60,7 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
   for (const t of TreatmentLogStore.getByCustomer(customerId)) {
     const parts = [t.programName, t.staffName].filter(Boolean);
     items.push({
-      id: `trt:${t.id}`, kind: 'treatment', date: t.treatmentDate, time: t.treatmentTime,
+      id: `trt:${t.id}`, kind: 'treatment', date: dateOf(t.treatmentDate), time: t.treatmentTime,
       title: parts.length ? parts.join(' · ') : '시술',
       detail: t.treatmentDetails || t.skinCondition || undefined,
       href: `/treatments?open=${t.id}`,
@@ -68,7 +69,7 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
 
   for (const c of ConsultationStore.getByCustomer(customerId)) {
     items.push({
-      id: `con:${c.id}`, kind: 'consult', date: c.consultDate,
+      id: `con:${c.id}`, kind: 'consult', date: dateOf(c.consultDate),
       title: `피부 상담${c.skinTypeResult ? ` · ${c.skinTypeResult}` : ''}${c.staffName ? ` · ${c.staffName}` : ''}`,
       detail: c.concerns.length ? c.concerns.join(', ') : c.managerNote || undefined,
     });
@@ -76,10 +77,13 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
 
   for (const cp of CustomerProgramStore.getByCustomer(customerId)) {
     items.push({
-      id: `prg:${cp.id}`, kind: 'program', date: cp.purchaseDate,
+      id: `prg:${cp.id}`, kind: 'program', date: dateOf(cp.purchaseDate),
       title: `${cp.programName} 등록`,
-      detail: cp.totalSessions ? `${cp.totalSessions}회${cp.expiryDate ? ` · ~${cp.expiryDate}` : ''}` : cp.expiryDate ? `기간제 · ~${cp.expiryDate}` : '기간제',
-      amount: cp.pricePaid || undefined,
+      detail: [
+        cp.totalSessions ? `${cp.totalSessions}회` : '기간제',
+        cp.expiryDate ? `~${cp.expiryDate}` : '',
+        cp.pricePaid ? formatPrice(cp.pricePaid) : '',
+      ].filter(Boolean).join(' · '),
     });
   }
 
@@ -90,7 +94,7 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
       id: `pay:${p.id}`, kind: 'payment', date: dateOf(p.paymentDate),
       title: `${refunded ? '환불' : p.status === 'pending' ? '결제 대기' : '결제'} · ${p.typeLabel}`,
       detail: p.memo || undefined,
-      amount: refunded ? -p.amount : p.amount,
+      amount: p.amount,
       tone: refunded ? 'bad' : p.status === 'pending' ? 'muted' : undefined,
     });
   }

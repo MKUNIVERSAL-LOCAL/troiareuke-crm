@@ -47,10 +47,10 @@ export function mergeBlockReason(c: Customer): string | null {
 }
 
 /** 같은 전화번호(숫자 8자리 이상 기준)를 쓰는 다른 고객 — 상세 화면의 "중복 의심" 안내용. 샘플·익명화 고객은 제외 */
-export function findSamePhoneCustomers(customer: Customer): Customer[] {
+export function findSamePhoneCustomers(customer: Customer, customers: Customer[] = CustomerStore.getAll()): Customer[] {
   const digits = (customer.phone || '').replace(/\D/g, '');
   if (digits.length < 8 || mergeBlockReason(customer)) return [];
-  return CustomerStore.getAll().filter(c => c.id !== customer.id && !mergeBlockReason(c) && c.phone.replace(/\D/g, '') === digits);
+  return customers.filter(c => c.id !== customer.id && !mergeBlockReason(c) && c.phone.replace(/\D/g, '') === digits);
 }
 
 function later(a?: string, b?: string): string | undefined {

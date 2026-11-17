@@ -245,11 +245,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   // ── 9-2. 활동 타임라인 (2026-11-18): 병합으로 옮겨온 결제·예약·시술이 한 줄기 시간순에 보이고, 종류 칩으로 걸러지며, 시술 항목을 누르면 시술 상세가 열린다 ──
   const timeline = desk.getByTestId('customer-timeline');
   await timeline.scrollIntoViewIfNeeded();
+  await timeline.getByRole('button', { name: '결제', pressed: false }).click(); // 종류 토글 — 옮겨온 2026-01-10 결제는 전체 보기에선 12건 뒤로 밀릴 수 있다
+  await expect(timeline.getByRole('listitem')).toHaveCount(Math.min(12, beforeMerge.payments + 1));
   await expect(timeline).toContainText('7,000');
+  await timeline.getByRole('button', { name: '시술', pressed: false }).click();
   await expect(timeline).toContainText('중복 시술');
-  await timeline.getByRole('tab', { name: '결제' }).click();
-  await expect(timeline.getByRole('listitem')).toHaveCount(beforeMerge.payments + 1);
-  await timeline.getByRole('tab', { name: '시술' }).click();
   await timeline.getByRole('button', { name: /중복 시술/ }).click();
   await expect(page).toHaveURL(/\/treatments$/); // ?open=은 1회 캡처 후 비워진다
   await expect(page.getByText('시술 기록 상세').filter({ visible: true }).first()).toBeVisible();
