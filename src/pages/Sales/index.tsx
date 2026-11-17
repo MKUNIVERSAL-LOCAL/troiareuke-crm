@@ -645,7 +645,36 @@ export default function Sales() {
             </div>
           ) : (
             <div>
-              <div className="overflow-auto max-h-[65vh]">
+              {/* 모바일(lg 미만): 카드 목록 — 표는 720px 폭이라 가로 스크롤만 생긴다 (2026-11-17) */}
+              <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="sales-mobile-list">
+                {listPayments.map(p => (
+                  <li key={p.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {p.customerName || '—'}
+                          {p.status === 'refunded' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
+                          {p.status === 'pending' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
+                        </p>
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                          <span>{p.paymentDate}</span>
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{p.typeLabel}</span>
+                          <span>{p.paymentMethod}</span>
+                          {p.discountAmount > 0 && <span className="text-orange-500">-{formatPrice(p.discountAmount)}</span>}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
+                        <span className="flex items-center gap-1">
+                          <button onClick={() => openEdit(p)} className="p-1.5 text-gray-400 hover:text-[#1a3a8f] rounded" aria-label="결제 수정"><Pencil size={14} /></button>
+                          <button onClick={() => handleDelete(p)} className="p-1.5 text-gray-400 hover:text-red-500 rounded" aria-label="결제 삭제"><Trash2 size={14} /></button>
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden lg:block overflow-auto max-h-[65vh]">
                 <div className="min-w-[720px]">
                   <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
                     <span>날짜</span>
@@ -749,7 +778,33 @@ export default function Sales() {
               </div>
             ) : (
               <div>
-                <div className="overflow-auto max-h-[65vh]">
+                <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="expense-mobile-list">
+                  {expenseList.map(x => (
+                    <li key={x.id} className="px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {x.description}
+                            {x.vendor && <span className="ml-1.5 text-xs font-normal text-gray-400">· {x.vendor}</span>}
+                          </p>
+                          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                            <span>{x.expenseDate}</span>
+                            <span className={`px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-600' : 'bg-rose-50 text-rose-500'}`}>{x.category}</span>
+                            <span>{x.paymentMethod}</span>
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
+                          <span className="flex items-center gap-1">
+                            <button onClick={() => openExpenseEdit(x)} className="p-1.5 text-gray-400 hover:text-[#1a3a8f] rounded" aria-label="지출 수정"><Pencil size={14} /></button>
+                            <button onClick={() => handleExpenseDelete(x)} className="p-1.5 text-gray-400 hover:text-red-500 rounded" aria-label="지출 삭제"><Trash2 size={14} /></button>
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="hidden lg:block overflow-auto max-h-[65vh]">
                   <div className="min-w-[720px]">
                     <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
                       <span>날짜</span>

@@ -49,7 +49,8 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - 사진 저장 구조는 그대로(NAS `crm_photos`), 중기 과제인 파일 스토리지 전환은 별도.
 
 ### P3. 모바일 앱 완성도 → 스토어 제출 가능 상태
-- D4 사진 저장 localStorage → Capacitor Filesystem/IndexedDB(WebView 한도·iOS 퍼지 대비), 카메라 플러그인 촬영, Sales/Products/Settings 모바일 레이아웃, 고객 등록을 모바일에서도 허용(현재 "PC에서 추가" 안내).
+- [x] 2026-11-17: 모바일 고객 등록 허용(모달 body 포털), 매출·제품 화면 모바일 카드 뷰, 모바일 E2E에 고객·제품·결제 등록 검증 추가.
+- [ ] D4 사진 저장 localStorage → Capacitor Filesystem/IndexedDB(WebView 한도·iOS 퍼지 대비), 카메라 플러그인 촬영(직전 사진 오버레이), Settings 모바일 레이아웃.
 - 오너 준비물: Play 개발자 계정, Apple Developer(D-U-N-S), 아이콘 1024, 스크린샷, 개인정보처리방침 URL.
 
 ### P4. 운영·법규 자동화

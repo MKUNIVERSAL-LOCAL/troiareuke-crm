@@ -239,7 +239,7 @@ Google Play도 유사하다.
 **다음 단계 (완성도 → 스토어 제출)**
 1. P0-D4 사진 저장: localStorage → Capacitor Filesystem/IndexedDB 이관(WebView 저장 한도·iOS 퍼지 대비). 오너 결정 A안 권고 그대로.
 2. P1: 카메라(@capacitor/camera) 촬영 → 시술 전후 사진 바로 첨부, 로컬 알림(예약 리마인드), 딥링크.
-3. P2: Sales/Products/Settings 모바일 레이아웃 정리(현재 E2E는 가로 넘침·탭 이동만 검사 — 화면 밀도 개선은 별도).
+3. P2: ~~Sales/Products~~ 모바일 레이아웃 — ✅ 2026-11-17 매출(결제·지출 내역)·제품(목록·판매 기록) 모바일 카드 뷰 + 모바일 E2E에 등록→카드 표시 검증. Settings는 추후.
 4. iOS: macOS 러너 워크플로(`mobile-ios.yml`) + Apple Developer 계정(오너, D-U-N-S 선행) 후 TestFlight.
 5. 안드로이드 서명 키스토어 생성(오너 보관) → GitHub Secrets 4개 등록 → 릴리스 서명 AAB → Play Console 내부 테스트.
 

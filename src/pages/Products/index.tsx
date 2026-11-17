@@ -190,7 +190,42 @@ export default function Products() {
                   <p className="text-sm text-gray-400">해당하는 제품이 없습니다</p>
                 </div>
               ) : (
-                <div className="overflow-auto max-h-[65vh]">
+                <>
+                {/* 모바일(lg 미만): 카드 목록 — 표는 900px 폭 (2026-11-17) */}
+                <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="products-mobile-list">
+                  {filtered.map(p => {
+                    const isLow = p.stock <= p.minStock;
+                    const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
+                    return (
+                      <li key={p.id} className={clsx('px-4 py-3', isLow && 'bg-orange-50/40')}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900">
+                              {p.name}
+                              {!p.isActive && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-[10px] font-medium align-middle">비활성</span>}
+                            </p>
+                            {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}
+                            <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{p.category}</span>
+                              <span className={clsx('font-bold', isLow ? 'text-red-500' : 'text-gray-700')}>재고 {p.stock}{p.unit}</span>
+                              {isLow && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-[11px] font-medium"><AlertTriangle size={10} /> 부족</span>}
+                              <span className={clsx('font-semibold', margin >= 50 ? 'text-green-600' : margin >= 30 ? 'text-blue-600' : 'text-orange-500')}>마진 {margin}%</span>
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                            <span className="text-sm font-bold text-gray-900">{p.price.toLocaleString()}원</span>
+                            <span className="flex items-center gap-1">
+                              <button onClick={() => handleSell(p)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg"><ShoppingCart size={11} />판매</button>
+                              <button onClick={() => setEditProduct(p)} className="p-1.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={14} /></button>
+                              <button onClick={() => handleDeleteProduct(p)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="제품 삭제"><Trash2 size={14} /></button>
+                            </span>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="hidden lg:block overflow-auto max-h-[65vh]">
                 <table className="w-full min-w-[900px]">
                   <thead>
                     <tr className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50">
@@ -290,6 +325,7 @@ export default function Products() {
                   </tbody>
                 </table>
                 </div>
+                </>
               )}
             </div>
           </>
@@ -316,7 +352,33 @@ export default function Products() {
                 <p className="text-xs text-gray-300">제품 목록에서 "판매" 버튼을 눌러 기록하세요</p>
               </div>
             ) : (
-              <div className="overflow-auto max-h-[65vh]">
+              <>
+              <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="product-sales-mobile-list">
+                {recentSales.map(sale => (
+                  <li key={sale.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{sale.productName}</p>
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                          <span>{sale.saleDate}</span>
+                          <span>{sale.customerName || '—'}</span>
+                          <span>{sale.quantity}개 × {sale.unitPrice.toLocaleString()}원</span>
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{sale.paymentMethod}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="text-sm font-bold text-gray-900">{sale.totalPrice.toLocaleString()}원</span>
+                        <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+                <li className="px-4 py-3 bg-gray-50/50 flex items-center justify-between text-xs font-semibold text-gray-500">
+                  <span>표시분 합계(최근 60건)</span>
+                  <span className="text-sm font-black text-[#1a3a8f]">{visibleSalesRevenue.toLocaleString()}원</span>
+                </li>
+              </ul>
+              <div className="hidden lg:block overflow-auto max-h-[65vh]">
               <table className="w-full min-w-[760px]">
                 <thead>
                   <tr className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50">
@@ -368,6 +430,7 @@ export default function Products() {
                 </tfoot>
               </table>
               </div>
+              </>
             )}
           </div>
         )}

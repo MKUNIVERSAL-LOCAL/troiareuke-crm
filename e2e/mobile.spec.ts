@@ -97,6 +97,31 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.getByRole('button', { name: '등록', exact: true }).click();
   await expect(page.getByText('모바일고객').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
+  // 제품 등록 → 모바일 카드 목록에 표시 (표 대신 카드, 2026-11-17)
+  await page.goto('/products');
+  await page.getByRole('button', { name: '+ 제품 추가' }).filter({ visible: true }).first().click();
+  await page.getByPlaceholder('제품명 입력').fill('모바일세럼');
+  await page.getByPlaceholder('0').nth(0).fill('30000'); // 판매가
+  await page.getByPlaceholder('0').nth(2).fill('10');    // 재고
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  const productCards = page.getByTestId('products-mobile-list');
+  await expect(productCards).toBeVisible({ timeout: 10_000 });
+  await expect(productCards.getByText('모바일세럼')).toBeVisible();
+  await expectNoHorizontalOverflow(page, '제품 카드 목록');
+
+  // 결제 등록 → 매출 모바일 카드 목록에 표시
+  await page.goto('/sales');
+  await page.getByRole('button', { name: '결제 등록' }).filter({ visible: true }).first().click();
+  const payForm = page.locator('form').filter({ hasText: '결제 구분' });
+  await payForm.locator('select').first().selectOption({ index: 1 });
+  await payForm.getByPlaceholder('0').first().fill('50000');
+  await payForm.getByRole('button', { name: '결제 등록' }).click();
+  await page.getByRole('button', { name: /결제 내역/ }).filter({ visible: true }).first().click();
+  const salesCards = page.getByTestId('sales-mobile-list');
+  await expect(salesCards).toBeVisible({ timeout: 10_000 });
+  await expect(salesCards.getByText('50,000').first()).toBeVisible();
+  await expectNoHorizontalOverflow(page, '매출 카드 목록');
+
   // 더보기 탭(설정 등 진입점)이 하단 탭바에 있다
   const more = page.getByRole('button', { name: '더보기 메뉴 열기' }).filter({ visible: true }).first();
   await expect(more).toBeVisible();
