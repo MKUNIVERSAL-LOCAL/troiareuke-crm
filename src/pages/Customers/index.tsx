@@ -14,7 +14,7 @@ import {
 } from '../../lib/consultationStore';
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
 import TimelapseViewer from '../../components/TimelapseViewer';
-import { resizeImageFile } from '../../lib/photoStore';
+import { resizeImageFile, getPhotos } from '../../lib/photoStore';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import { refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
@@ -1404,6 +1404,18 @@ export default function Customers() {
                           </div>
                           {log.staffName && <p className="text-xs text-gray-400">담당: {log.staffName}</p>}
                           {log.treatmentDetails && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{log.treatmentDetails}</p>}
+                          {(() => {
+                            const thumbs = getPhotos(`treatment:${log.id}`);
+                            if (thumbs.length === 0) return null;
+                            return (
+                              <div className="flex items-center gap-1.5 mt-2">
+                                {thumbs.slice(0, 4).map(p => (
+                                  <img key={p.id} src={p.dataUrl} alt="시술 사진" className="w-10 h-10 rounded-lg object-cover border border-gray-100" />
+                                ))}
+                                {thumbs.length > 4 && <span className="text-[11px] text-gray-400">+{thumbs.length - 4}</span>}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     ))}
