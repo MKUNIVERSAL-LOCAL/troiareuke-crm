@@ -224,6 +224,10 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await memoField.fill('모바일에서 수정');
   await page.getByRole('button', { name: '저장', exact: true }).filter({ visible: true }).first().click();
   await expect(page.getByText('모바일에서 수정').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+  // 빠른 메모 — 수정 모달 없이 날짜가 붙는 한 줄 추가 (2026-11-18)
+  await page.getByLabel('빠른 메모').filter({ visible: true }).first().fill('저자극 제품 선호');
+  await page.getByRole('button', { name: '메모 추가' }).filter({ visible: true }).first().click();
+  await expect(page.getByText(/\[\d{4}-\d{2}-\d{2}\] 저자극 제품 선호/).filter({ visible: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '뒤로가기' }).click();
 
   // 설정 화면: 모바일에서 탭 칩이 가로로 쌓이고 입력란이 화면 안에 있다

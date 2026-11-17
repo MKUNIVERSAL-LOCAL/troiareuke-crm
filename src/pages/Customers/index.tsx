@@ -264,6 +264,35 @@ export default function Customers() {
   const [selected, setSelected] = useState<Customer | null>(null);
   const [customerPrograms, setCustomerPrograms] = useState<CustomerProgram[]>([]);
   const selectedNoShows = selected ? noShowCount(selected.id) : 0;
+  // 빠른 메모 — 수정 모달 없이 날짜가 붙는 한 줄을 메모에 덧붙인다 (2026-11-18)
+  const [quickMemo, setQuickMemo] = useState('');
+  function handleQuickMemo() {
+    if (!selected) return;
+    const text = quickMemo.trim();
+    if (!text) return;
+    const line = `[${today()}] ${text}`;
+    CustomerStore.update(selected.id, { memo: selected.memo ? `${selected.memo}\n${line}` : line });
+    const updated = CustomerStore.getById(selected.id);
+    if (updated) setSelected(updated);
+    setQuickMemo('');
+    loadAll();
+    notify('메모를 추가했습니다.');
+  }
+  const quickMemoRow = (compact: boolean) => (
+    <form onSubmit={e => { e.preventDefault(); handleQuickMemo(); }} className="flex gap-2 mt-2">
+      <input
+        value={quickMemo}
+        onChange={e => setQuickMemo(e.target.value)}
+        placeholder="한 줄 메모 (예: 저자극 제품 선호)"
+        aria-label="빠른 메모"
+        className={`flex-1 min-w-0 border border-gray-200 rounded-lg px-3 ${compact ? 'py-2 text-sm' : 'py-1.5 text-xs'} focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30`}
+      />
+      <button type="submit" disabled={!quickMemo.trim()}
+        className={`flex-shrink-0 px-3 rounded-lg bg-[#1a3a8f] text-white font-medium disabled:opacity-40 ${compact ? 'py-2 text-sm' : 'py-1.5 text-xs'}`}>
+        메모 추가
+      </button>
+    </form>
+  );
   // 헤더 전역 검색(?q=)에서 넘어온 검색어를 초기값·변경 모두 반영
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1244,12 +1273,11 @@ export default function Customers() {
                     <RevisitBadge customerId={selected.id} size="sm" />
                   </div>
                 </div>
-                {selected.memo && (
-                  <div className="mt-3 p-3 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-gray-500 mb-1">메모</p>
-                    <p className="text-xs text-gray-700">{selected.memo}</p>
-                  </div>
-                )}
+                <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                  <p className="text-xs text-gray-500 mb-1">메모</p>
+                  {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line">{selected.memo}</p> : <p className="text-xs text-gray-300">메모 없음</p>}
+                  {quickMemoRow(true)}
+                </div>
               </div>
 
               {/* 프로그램 목록 */}
@@ -1640,11 +1668,10 @@ export default function Customers() {
                 </div>
               </div>
 
-              {selected.memo && (
-                <div className="mt-3 p-3 bg-yellow-50 rounded-xl">
-                  <p className="text-xs text-yellow-700">📝 {selected.memo}</p>
-                </div>
-              )}
+              <div className="mt-3 p-3 bg-yellow-50 rounded-xl">
+                {selected.memo ? <p className="text-xs text-yellow-700 whitespace-pre-line">📝 {selected.memo}</p> : <p className="text-xs text-yellow-600/60">📝 메모 없음</p>}
+                {quickMemoRow(false)}
+              </div>
             </div>
 
             {/* 피부 상담 이력 */}
