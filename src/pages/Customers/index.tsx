@@ -1099,13 +1099,25 @@ export default function Customers() {
     loadAll();
   }
 
+  // 고객 요청 등으로 개인정보만 지울 때 — 삭제와 달리 기록 연결·방문/결제 통계는 남는다 (2026-11-18)
+  function handleAnonymizeOne() {
+    if (!selected || isAnonymized(selected)) return;
+    if (!window.confirm(`'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`)) return;
+    const n = anonymizeCustomers([selected.id]);
+    if (n === 0) { notify('익명화하지 못했습니다.'); return; }
+    notify('고객을 익명화했습니다.');
+    const updated = CustomerStore.getById(selected.id);
+    setSelected(updated ?? null);
+    loadAll();
+  }
+
   function handleDeleteCustomer() {
     if (!selected) return;
     // 연결된 기록이 있으면 건수를 보여 주고 병합·익명화를 권한다 — 삭제하면 기록의 고객 연결이 끊겨 타임라인·통계에서 빠진다 (2026-11-18)
     const linked = previewMerge(selected.id);
     const linkedTotal = linked.reservations + linked.treatments + linked.programs + linked.payments + linked.consultations + linked.productSales;
     const detail = linkedTotal > 0
-      ? `\n연결된 기록 ${linkedTotal}건(예약 ${linked.reservations}·시술 ${linked.treatments}·프로그램 ${linked.programs}·결제 ${linked.payments}·상담 ${linked.consultations}·제품 판매 ${linked.productSales})은 남지만 고객과의 연결이 끊겨 타임라인·통계에서 빠집니다.\n같은 사람이 두 번 등록된 경우라면 [병합]을, 개인정보만 지우려면 설정의 보존기간 익명화를 권장합니다.`
+      ? `\n연결된 기록 ${linkedTotal}건(예약 ${linked.reservations}·시술 ${linked.treatments}·프로그램 ${linked.programs}·결제 ${linked.payments}·상담 ${linked.consultations}·제품 판매 ${linked.productSales})은 남지만 고객과의 연결이 끊겨 타임라인·통계에서 빠집니다.\n${!mergeBlockReason(selected) ? '같은 사람이 두 번 등록된 경우라면 [병합]을, ' : ''}개인정보만 지우려면 [익명화]를 권장합니다.`
       : '\n연결된 기록이 없습니다.';
     if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`)) return;
     CustomerStore.delete(selected.id);
@@ -1804,6 +1816,16 @@ export default function Customers() {
                       title="같은 사람이 두 번 등록된 경우, 다른 고객의 기록을 이 고객으로 합칩니다"
                     >
                       <GitMerge size={12} />병합
+                    </button>
+                  )}
+                  {!isAnonymized(selected) && !selected.id.startsWith('sample_') && (
+                    <button
+                      onClick={handleAnonymizeOne}
+                      className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-gray-100 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-200 transition-colors"
+                      aria-label="고객 익명화"
+                      title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
+                    >
+                      익명화
                     </button>
                   )}
                   <button

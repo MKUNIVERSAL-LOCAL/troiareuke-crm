@@ -81,7 +81,7 @@ function getDashboardData() {
   const totalPercent = totalCustomers > 0 ? Math.round((vipCount / totalCustomers) * 100) : 0;
 
   // Low stock
-  const lowStockProducts = products.filter(p => p.stock <= p.minStock);
+  const lowStockProducts = products.filter(p => p.isActive !== false && p.stock <= p.minStock); // 단종(비활성) 제품은 입고 권유 대상이 아니다
 
   // Today's reservations (목록엔 전부 표시, 건수 집계는 취소/노쇼 제외)
   const todayReservations = ReservationStore.getByDate(todayStr);
@@ -263,10 +263,10 @@ export default function Dashboard() {
             <p className="text-sm font-bold text-amber-800 mb-2">재고 부족 알림</p>
             <div className="space-y-1.5">
               {lowStockProducts.slice(0, 3).map(p => (
-                <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)} aria-label={`${p.name} 입고`}
-                  className="w-full flex items-center justify-between rounded-lg px-1 py-0.5 hover:bg-amber-100 text-left">
-                  <p className="text-xs text-amber-900">{p.name}</p>
-                  <p className="text-xs font-bold text-red-600">{p.stock}{p.unit} <span className="font-medium text-amber-700">입고 →</span></p>
+                <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)} aria-label={`${p.name} 재고 ${p.stock}${p.unit} 입고`}
+                  className="w-full flex items-center justify-between rounded-lg px-1 py-0.5 hover:bg-amber-100 active:bg-amber-100 text-left">
+                  <span className="block text-xs text-amber-900">{p.name}</span>
+                  <span className="block text-xs font-bold text-red-600">{p.stock}{p.unit} <span className="font-medium text-amber-700">입고 →</span></span>
                 </button>
               ))}
             </div>
@@ -540,16 +540,16 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   lowStockProducts.map(p => (
-                    <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)} aria-label={`${p.name} 입고`}
+                    <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)} aria-label={`${p.name} 재고 ${p.stock}${p.unit} 입고`}
                       className="w-full flex items-center justify-between px-5 py-3 hover:bg-amber-50/60 text-left" title="입고 창 열기">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-800">{p.name}</p>
-                        <p className="text-[11px] text-gray-400">{p.category}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-bold text-red-500">{p.stock}{p.unit}</p>
-                        <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit} · <span className="text-[#1a3a8f] font-medium">입고</span></p>
-                      </div>
+                      <span className="block">
+                        <span className="block text-xs font-semibold text-gray-800">{p.name}</span>
+                        <span className="block text-[11px] text-gray-400">{p.category}</span>
+                      </span>
+                      <span className="block text-right">
+                        <span className="block text-xs font-bold text-red-500">{p.stock}{p.unit}</span>
+                        <span className="block text-xs text-gray-400">최소 {p.minStock}{p.unit} · <span className="text-[#1a3a8f] font-medium">입고</span></span>
+                      </span>
                     </button>
                   ))
                 )}

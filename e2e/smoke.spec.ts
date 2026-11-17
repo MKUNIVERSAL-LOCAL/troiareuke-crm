@@ -198,11 +198,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     const list = key ? JSON.parse(localStorage.getItem(key) || '[]') : [];
     const customersKey = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
     const shopId = JSON.parse(localStorage.getItem(customersKey) || '[]')[0].shopId;
-    list.push({ id: 'lowstock_' + Date.now(), shopId, name: '부족세럼', category: '기초', price: 30000, cost: 10000, stock: 1, minStock: 5, unit: '개', isActive: true });
+    list.push({ id: 'lowstock_' + Date.now(), shopId, name: '부족세럼', category: '세럼', price: 30000, cost: 10000, stock: 1, minStock: 5, unit: '개', isActive: true });
     localStorage.setItem(key ?? customersKey.replace(/_customers$/, '_products'), JSON.stringify(list));
   });
   await page.goto('/');
-  await page.getByRole('button', { name: '부족세럼 입고' }).filter({ visible: true }).first().click();
+  await page.getByRole('button', { name: /^부족세럼 .*입고$/ }).filter({ visible: true }).first().click();
   await expect(page).toHaveURL(/\/products$/); // ?stock=은 1회 캡처 후 비워진다
   const lowStockDialog = page.getByRole('dialog', { name: '재고 입고·조정' });
   await expect(lowStockDialog).toContainText('부족세럼');
@@ -504,6 +504,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(desk.getByText('익명화됨')).toBeVisible();
   await expect(desk.getByRole('button', { name: '메시지', exact: true })).toHaveCount(0);
   await expect(desk.getByRole('button', { name: '예약 추가' })).toHaveCount(0);
+  await expect(desk.getByRole('button', { name: '고객 익명화' })).toHaveCount(0); // 이미 익명화된 고객에는 [익명화] 없음
   // 목록 정렬 선택이 동작한다 (2026-11-18)
   await page.getByLabel('정렬').filter({ visible: true }).first().selectOption('name');
   await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();

@@ -36,7 +36,7 @@ export default function Products() {
     const id = searchParams.get('stock');
     if (!id) return;
     const p = ProductStore.getAll().find(x => x.id === id);
-    if (p) setStockProduct(p);
+    if (p) setStockProduct(p); else notify('제품을 찾을 수 없습니다. 삭제됐거나 다른 매장의 제품입니다.');
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
   const [showSaleModal, setShowSaleModal] = useState(false);
@@ -67,7 +67,7 @@ export default function Products() {
     return matchSearch && matchCategory && matchLowStock;
   });
 
-  const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
+  const lowStockCount = products.filter(p => p.isActive !== false && p.stock <= p.minStock).length;
 
   const normalizedSalesSearch = salesSearch.trim().toLowerCase();
   const recentSales = [...sales]
