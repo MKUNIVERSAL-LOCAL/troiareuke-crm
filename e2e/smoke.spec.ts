@@ -179,6 +179,45 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page).toHaveURL(/\/reservations/);
   await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
 
+  // ── 9-1. 중복 고객 병합 (2026-11-18): 중복 레코드(결제 1건·방문 2회)를 만들고 본 고객으로 흡수 → 기록 수·방문·누적 결제가 합쳐지고 중복은 사라진다 ──
+  const dupName = acc.customer + '중복';
+  const beforeMerge = await page.evaluate(dupName => {
+    const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
+    const customers = JSON.parse(localStorage.getItem(key(/^crm_.*_customers$/)) || '[]');
+    const payments = JSON.parse(localStorage.getItem(key(/^crm_.*_payments$/)) || '[]');
+    const main = customers.find((c: { name: string }) => c.name === dupName.replace('중복', ''));
+    const dup = { ...main, id: 'dup_' + Date.now(), name: dupName, phone: '010-9999-0001', totalVisits: 2, totalSpent: 7000, memo: '중복 메모', createdAt: new Date().toISOString() };
+    customers.push(dup);
+    payments.push({ ...payments[0], id: 'duppay_' + Date.now(), customerId: dup.id, customerName: dupName, amount: 7000, referenceId: undefined, referenceType: undefined });
+    localStorage.setItem(key(/^crm_.*_customers$/), JSON.stringify(customers));
+    localStorage.setItem(key(/^crm_.*_payments$/), JSON.stringify(payments));
+    return { visits: main.totalVisits as number, spent: main.totalSpent as number, payments: payments.filter((p: { customerId: string }) => p.customerId === main.id).length as number };
+  }, dupName);
+  await page.goto('/customers');
+  await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
+  await desk.getByRole('button', { name: '병합' }).click();
+  const mergeDialog = page.getByRole('dialog', { name: '고객 병합' });
+  await mergeDialog.getByLabel('병합할 고객 검색').fill('9999-0001');
+  const dupOption = mergeDialog.locator('option', { hasText: '중복' });
+  await expect(dupOption).toHaveCount(1);
+  await mergeDialog.getByLabel('흡수할 고객').selectOption(await dupOption.getAttribute('value') as string);
+  await expect(mergeDialog.getByTestId('merge-preview')).toContainText('결제 1');
+  await mergeDialog.getByRole('button', { name: '병합 실행' }).click(); // confirm은 dialog 핸들러가 수락
+  await expect(mergeDialog).toHaveCount(0);
+  await expect(desk).toContainText('중복 메모'); // 흡수된 고객의 메모가 본 고객 메모에 합쳐짐
+  const afterMerge = await page.evaluate(name => {
+    const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
+    const customers = JSON.parse(localStorage.getItem(key(/^crm_.*_customers$/)) || '[]');
+    const payments = JSON.parse(localStorage.getItem(key(/^crm_.*_payments$/)) || '[]');
+    const main = customers.find((c: { name: string }) => c.name === name);
+    return { count: customers.filter((c: { name: string }) => c.name.startsWith(name)).length, visits: main.totalVisits, spent: main.totalSpent, memo: main.memo, payments: payments.filter((p: { customerId: string }) => p.customerId === main.id).length };
+  }, acc.customer);
+  expect(afterMerge.count).toBe(1);
+  expect(afterMerge.visits).toBe(beforeMerge.visits + 2);
+  expect(afterMerge.spent).toBe(beforeMerge.spent + 7000);
+  expect(afterMerge.payments).toBe(beforeMerge.payments + 1);
+  expect(afterMerge.memo).toContain('중복 메모');
+
   // ── 10. 개인정보 보존기간 정책 (P4, 2026-11-17): 1년으로 켜고 고객을 2년 전 방문으로 만들면 안내 → 목록 → 익명화 ──
   await page.goto('/settings');
   await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();

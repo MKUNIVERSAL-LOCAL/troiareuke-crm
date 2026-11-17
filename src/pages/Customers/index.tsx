@@ -5,7 +5,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ChevronDown, Tag,
-  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus
+  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus, GitMerge
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -20,6 +20,7 @@ import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile } from '../../lib/mobileBridge';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
+import CustomerMergeModal from '../../components/CustomerMergeModal';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { FileText } from 'lucide-react';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
@@ -381,6 +382,7 @@ export default function Customers() {
 
   // 프로그램 등록 모달
   const [showProgramModal, setShowProgramModal] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false); // 중복 고객 병합 (2026-11-18)
   const [progForm, setProgForm] = useState({ programId: '', pricePaid: '', paymentMethod: '카드' as PaymentMethod, purchaseDate: today(), notes: '' });
 
   // 시술 기록 (차감) 모달
@@ -998,6 +1000,14 @@ export default function Customers() {
   }
 
   // 고객 삭제 — 2단계 확인 후 제거
+  function handleMerged() {
+    if (!selected) return;
+    setShowMergeModal(false);
+    const updated = CustomerStore.getById(selected.id);
+    setSelected(updated ?? null);
+    loadAll();
+  }
+
   function handleDeleteCustomer() {
     if (!selected) return;
     if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?\n등록된 상담·시술 기록은 남지만 고객 정보는 복구할 수 없습니다.`)) return;
@@ -1399,6 +1409,15 @@ export default function Customers() {
               >
                 <Pencil size={14} />고객 정보 수정
               </button>
+              {!selected.id.startsWith('sample_') && (
+                <button
+                  type="button"
+                  onClick={() => setShowMergeModal(true)}
+                  className="w-full py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 flex items-center justify-center gap-1.5"
+                >
+                  <GitMerge size={14} />중복 고객 병합
+                </button>
+              )}
               <p className="text-xs text-slate-400 text-center pb-2">삭제는 PC에서 이용해주세요</p>
             </div>
           </div>
@@ -1635,6 +1654,16 @@ export default function Customers() {
                   >
                     <Pencil size={12} />수정
                   </button>
+                  {!selected.id.startsWith('sample_') && (
+                    <button
+                      type="button"
+                      onClick={() => setShowMergeModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-amber-50 text-amber-700 rounded-xl text-xs font-medium hover:bg-amber-100 transition-colors"
+                      title="같은 사람이 두 번 등록된 경우, 다른 고객의 기록을 이 고객으로 합칩니다"
+                    >
+                      <GitMerge size={12} />병합
+                    </button>
+                  )}
                   <button
                     onClick={handleDeleteCustomer}
                     className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors"
@@ -2647,6 +2676,7 @@ export default function Customers() {
         document.body,
       )}
       {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
+      {showMergeModal && selected && <CustomerMergeModal target={selected} onClose={() => setShowMergeModal(false)} onMerged={handleMerged} />}
       </div>
     </div>
   );
