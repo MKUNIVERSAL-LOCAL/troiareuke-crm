@@ -14,7 +14,7 @@ import {
 } from '../../lib/consultationStore';
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
 import TimelapseViewer from '../../components/TimelapseViewer';
-import { resizeImageFile, getPhotos, setPhotos as savePhotos, clearPhotos, makePhotoId, syncPhotosFromNas, type PhotoEntry } from '../../lib/photoStore';
+import { resizeImageFile, getPhotos, getPhotosAsync, setPhotos as savePhotos, clearPhotos, makePhotoId, syncPhotosFromNas, type PhotoEntry } from '../../lib/photoStore';
 import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, comparisonFileName, angleLabel, type DatedPhoto } from '../../lib/beforeAfter';
 import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile, dataUrlToBlob } from '../../lib/mobileBridge';
@@ -435,7 +435,8 @@ export default function Customers() {
   const [baPhotos, setBaPhotos] = useState<DatedPhoto[]>([]);
   const [baBefore, setBaBefore] = useState(0);
   const [baAfter, setBaAfter] = useState(0);
-  const [comparison, setComparison] = useState<{ id: string; dataUrl: string; blob: Blob; days: number } | null>(null);
+  const [comparison, setComparison] = useState<{ id: string; dataUrl: string; blob: Blob; days: number | null; restored?: boolean; takenAt?: string } | null>(null);
+  const editPhotosRef = useRef<{ had: boolean; aiTakenAt?: string }>({ had: false }); // 수정 세션이 사진을 갖고 시작했는지 — 없던 기록에 빈 tombstone을 보내지 않게
   const [comparing, setComparing] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxPhoto | null>(null);
   const [consultPhotoTick, setConsultPhotoTick] = useState(0);
@@ -469,12 +470,15 @@ export default function Customers() {
     setAiPhoto(null);
     setAiResult(null);
     aiPhotoIdRef.current = makePhotoId();
+    editPhotosRef.current = { had: false };
     setShowConsultModal(true);
   }
 
   // 기존 상담 수정 (2026-11-18) — 기록 값으로 폼을 채우고 savedConsultId를 둬 저장이 update로 가게. 사진은 상태로 되살린다(persistConsultation이 상태 기준으로 사진을 다시 쓰므로 비우면 삭제됨)
-  function openConsultEdit(c: Consultation) {
+  async function openConsultEdit(c: Consultation) {
     if (!selected) return;
+    const saved = await getPhotosAsync(`consult:${c.id}`); // 동기 getPhotos는 캐시 미적재 때 []라 사진을 지울 위험 — 반드시 읽어 온 뒤 연다
+    if (saved === null) { notify('상담 사진을 읽지 못해 수정을 열 수 없습니다. 잠시 뒤 다시 시도해주세요.'); return; }
     const photos = collectCustomerPhotos(selected.id);
     const metrics: Record<string, string> = {};
     for (const [k, v] of Object.entries(c.beaconMetrics || {})) if (typeof v === 'number') metrics[k] = String(v);
@@ -495,12 +499,12 @@ export default function Customers() {
     setBaPhotos(photos);
     setBaBefore(0);
     setBaAfter(Math.max(0, photos.length - 1));
-    const saved = getPhotos(`consult:${c.id}`);
     const ai = saved.find(p => p.label === 'consult');
     const cmp = saved.find(p => p.label === 'compare');
     setAiPhoto(ai?.dataUrl ?? null);
     aiPhotoIdRef.current = ai?.id ?? makePhotoId();
-    setComparison(cmp ? { id: cmp.id, dataUrl: cmp.dataUrl, blob: dataUrlToBlob(cmp.dataUrl), days: 0 } : null);
+    editPhotosRef.current = { had: saved.length > 0, aiTakenAt: ai?.takenAt };
+    setComparison(cmp ? { id: cmp.id, dataUrl: cmp.dataUrl, blob: dataUrlToBlob(cmp.dataUrl), days: null, restored: true, takenAt: cmp.takenAt } : null);
     setAiResult(null);
     setShowConsultModal(true);
   }
@@ -537,7 +541,8 @@ export default function Customers() {
   async function exportComparison() {
     if (!comparison || !selected) return;
     try {
-      const result = await exportFile(comparisonFileName(selected.name), comparison.blob);
+      const fileName = comparison.blob.type === 'image/jpeg' ? comparisonFileName(selected.name).replace(/\.png$/, '.jpg') : comparisonFileName(selected.name);
+      const result = await exportFile(fileName, comparison.blob);
       if (result === 'downloaded') notify('비교 이미지를 내려받았습니다.');
     } catch (e) {
       notify(e instanceof Error ? e.message : '비교 이미지를 내보내지 못했습니다.');
@@ -673,23 +678,26 @@ export default function Customers() {
     // 상담 사진: AI 분석에 쓴 얼굴 사진 + Before/After 비교 이미지 (photoStore → NAS crm_photos)
     const takenAt = new Date().toISOString();
     const entries: PhotoEntry[] = [];
-    if (aiPhoto) entries.push({ id: aiPhotoIdRef.current, dataUrl: aiPhoto, label: 'consult', takenAt });
-    if (comparison) entries.push({ id: comparison.id, dataUrl: comparison.dataUrl, label: 'compare', takenAt });
+    if (aiPhoto) entries.push({ id: aiPhotoIdRef.current, dataUrl: aiPhoto, label: 'consult', takenAt: editPhotosRef.current.aiTakenAt ?? takenAt });
+    if (comparison) entries.push({ id: comparison.id, dataUrl: comparison.dataUrl, label: 'compare', takenAt: comparison.takenAt ?? takenAt });
     if (entries.length > 0) {
       try { savePhotos(`consult:${consultId}`, entries); } catch { notify('사진 저장 용량을 초과해 상담 사진은 저장되지 않았습니다.'); }
       setConsultPhotoTick(t => t + 1);
-    } else if (savedConsultId) {
+    } else if (savedConsultId && editPhotosRef.current.had) {
       // 저장+카톡 전송으로 한 번 저장한 뒤 [제거]하고 다시 저장한 경우 — 기록의 사진도 지운다 (NAS tombstone 포함)
       clearPhotos(`consult:${consultId}`);
       setConsultPhotoTick(t => t + 1);
     }
     // 상담에서 판정한 피부타입을 고객 프로필에도 반영(있을 때)
-    if (consultForm.skinTypeResult && consultForm.skinTypeResult !== selected.skinType) {
+    // 옛 상담을 고칠 때 그 기록의 피부타입이 최신 판정을 덮지 않게 — 최신 기록(또는 새 기록)일 때만 프로필 동기
+    const isLatestRecord = !savedConsultId || consultations[0]?.id === savedConsultId;
+    if (isLatestRecord && consultForm.skinTypeResult && consultForm.skinTypeResult !== selected.skinType) {
       CustomerStore.update(selected.id, { skinType: consultForm.skinTypeResult });
       const updated = CustomerStore.getById(selected.id);
       if (updated) setSelected(updated);
     }
     setConsultations(ConsultationStore.getByCustomer(selected.id));
+    setDetailTick(t => t + 1); // 활동 타임라인(소견·판정)도 바로 갱신
   }
 
   // 피부상담 저장
@@ -719,6 +727,7 @@ export default function Customers() {
   // 상담 저장 후 상담 내용을 카카오로 전송
   async function handleSaveAndSendKakao() {
     if (!selected) return;
+    if (savedConsultId && !window.confirm('이미 저장된 상담입니다. 결과를 고객에게 다시 보낼까요? (발송 이력이 한 건 더 남습니다)')) return;
     persistConsultation();
     setKakaoSending(true);
     setKakaoMsg(null);
@@ -2560,7 +2569,7 @@ export default function Customers() {
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="flex-1 min-w-[120px]">
                     <label className="block text-[10px] text-gray-500 mb-0.5">Before</label>
-                    <select aria-label="비교 Before 사진" value={baBefore} onChange={e => { setBaBefore(Number(e.target.value)); setComparison(null); }}
+                    <select aria-label="비교 Before 사진" value={baBefore} onChange={e => { setBaBefore(Number(e.target.value)); setComparison(c => (c?.restored ? c : null)); }}
                       className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
                       {baPhotos.map((p, i) => <option key={p.id} value={i}>{photoCaption(p)}</option>)}
                     </select>
@@ -2568,7 +2577,7 @@ export default function Customers() {
                   <ArrowLeftRight size={14} className="text-gray-400 mb-2 flex-shrink-0" />
                   <div className="flex-1 min-w-[120px]">
                     <label className="block text-[10px] text-gray-500 mb-0.5">After</label>
-                    <select aria-label="비교 After 사진" value={baAfter} onChange={e => { setBaAfter(Number(e.target.value)); setComparison(null); }}
+                    <select aria-label="비교 After 사진" value={baAfter} onChange={e => { setBaAfter(Number(e.target.value)); setComparison(c => (c?.restored ? c : null)); }}
                       className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
                       {baPhotos.map((p, i) => <option key={p.id} value={i}>{photoCaption(p)}</option>)}
                     </select>
@@ -2586,7 +2595,7 @@ export default function Customers() {
                       <img src={comparison.dataUrl} alt="비교 이미지 미리보기" className="w-full h-full object-cover" />
                     </button>
                     <div className="flex-1 min-w-[140px] text-xs text-gray-600">
-                      <p className="font-medium text-gray-800">D+{comparison.days} 비교 이미지가 준비됐습니다.</p>
+                      <p className="font-medium text-gray-800">{comparison.days === null ? '저장된 비교 이미지입니다.' : `D+${comparison.days} 비교 이미지가 준비됐습니다.`}</p>
                       <p className="text-[11px] text-gray-500 mt-0.5">상담 저장 시 상담 기록에 함께 저장됩니다.</p>
                       <div className="flex gap-2 mt-2">
                         <button type="button" onClick={exportComparison}

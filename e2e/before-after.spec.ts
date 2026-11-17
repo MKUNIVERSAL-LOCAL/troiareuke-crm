@@ -94,7 +94,7 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await editConsult.getByPlaceholder('고객 피부 상태 관찰 소견을 기록하세요').fill('수정된 관리사 소견');
   await editConsult.getByRole('button', { name: '상담 저장' }).click();
   await expect(editConsult).toBeHidden();
-  await expect(desk.getByText('수정된 관리사 소견')).toBeVisible();
+  await expect(desk.getByText('수정된 관리사 소견').first()).toBeVisible(); // 상담 카드 + 활동 타임라인 두 곳
   const consultCount = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_consultations$/.test(k))!;
     return (JSON.parse(localStorage.getItem(key) || '[]') as unknown[]).length;
@@ -102,6 +102,16 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   expect(consultCount).toBe(1); // 새 기록이 아니라 같은 기록을 고쳤다
   await expect.poll(() => countPhotoEntries(page), { timeout: 10_000 }).toBe(photosBeforeEdit);
   await expect(desk.getByRole('button', { name: '상담 사진 크게 보기' })).toHaveCount(1);
+  // 콜드 캐시: 새로고침 직후 썸네일을 기다리지 않고 바로 [수정] → 비동기로 읽어 온 비교 이미지가 보이고, 저장해도 사진이 지워지지 않는다
+  await page.reload();
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  await desk.getByRole('button', { name: /상담 수정$/ }).first().click();
+  const coldEdit = page.getByRole('dialog').filter({ hasText: 'Before/After 비교 이미지 첨부' });
+  await expect(coldEdit.getByAltText('비교 이미지 미리보기')).toBeVisible({ timeout: 10_000 });
+  await expect(coldEdit.getByText('저장된 비교 이미지입니다.')).toBeVisible();
+  await coldEdit.getByRole('button', { name: '상담 저장' }).click();
+  await expect(coldEdit).toBeHidden();
+  await expect.poll(() => countPhotoEntries(page), { timeout: 10_000 }).toBe(photosBeforeEdit);
 
   // ── 상담 결과지 PDF (2026-11-17): 사진(비교 이미지) 포함 A4가 내려받힌다 ──
   const pdfDownload = page.waitForEvent('download');
