@@ -1559,7 +1559,7 @@ export default function Customers() {
                   <GitMerge size={14} />중복 고객 병합
                 </button>
               )}
-              <p className="text-xs text-slate-400 text-center pb-2">삭제는 PC에서 이용해주세요</p>
+              <p className="text-xs text-slate-400 text-center pb-2">삭제·익명화는 PC에서 이용해주세요</p>
             </div>
           </div>
         )}
