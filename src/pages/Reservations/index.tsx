@@ -16,6 +16,8 @@ import {
   createCalendarEvent,
   deleteCalendarEvent,
 } from '../../lib/googleCalendar';
+import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
+import { todayISO } from '../../lib/format';
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
@@ -92,32 +94,6 @@ function eventBlockStyle(ev: ScheduleEvent<unknown>, slotStartMin: number, rowH:
 }
 
 // ── Google Calendar 이벤트 매핑 (reservationId → eventId) ─────────────────
-// 예약 수정/취소/삭제 시 캘린더의 유령 일정을 정리하기 위해 로컬에 매핑 보관.
-// (Reservation 코어 타입에 googleEventId 필드가 없어 비코어 우회 저장)
-const GCAL_MAP_KEY = 'crm_gcal_event_map';
-
-function getGcalMap(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(GCAL_MAP_KEY) || '{}'); } catch { return {}; }
-}
-
-function rememberGcalEvent(reservationId: string, eventId: string): void {
-  const m = getGcalMap();
-  m[reservationId] = eventId;
-  try { localStorage.setItem(GCAL_MAP_KEY, JSON.stringify(m)); } catch { /* noop */ }
-}
-
-/** 예약에 연결된 Google 이벤트를 캘린더에서 삭제하고 매핑 제거 (미연결/실패는 무시) */
-function cleanupGcalEvent(reservationId: string): void {
-  const m = getGcalMap();
-  const eventId = m[reservationId];
-  if (!eventId) return;
-  delete m[reservationId];
-  try { localStorage.setItem(GCAL_MAP_KEY, JSON.stringify(m)); } catch { /* noop */ }
-  if (isGoogleCalendarConnected()) {
-    deleteCalendarEvent(eventId).catch(() => { /* 캘린더 정리는 best-effort */ });
-  }
-}
-
 type ViewMode = 'week' | 'day' | 'list';
 
 interface GoogleEventLike {
@@ -1084,10 +1060,13 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     onUpdate();
   };
-  // 노쇼 — 상세에서 바로 처리 (2026-11-18). 고객 상세 "노쇼 N회"·직원 실적 제외·완료 누락 카드에서 빠진다. 취소와 달리 캘린더 일정은 지난 기록으로 남겨 둔다
+  // 노쇼 — 상세에서 바로 처리 (2026-11-18). 고객 상세 "노쇼 N회"·직원 실적 제외·완료 누락 카드에서 빠진다.
+  // 캘린더 일정도 지운다 — 남겨 두면 공유 캘린더에서 그 시간이 여전히 잡혀 보여 대체 예약이 이중 일정처럼 보인다(취소와 동일 처리)
+  const canNoShow = r.date <= todayISO() && r.status !== 'cancelled' && r.status !== 'noshow' && r.status !== 'completed';
   const handleNoShow = () => {
-    if (!window.confirm(`${r.customerName} 고객이 오지 않았나요? 노쇼로 기록합니다.`)) return;
+    if (!window.confirm(`${r.customerName} 고객이 ${r.date} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`)) return;
     ReservationStore.updateStatus(r.id, 'noshow');
+    cleanupGcalEvent(r.id);
     notify('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
     onUpdate();
   };
@@ -1194,7 +1173,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           >
             취소처리
           </button>
-          {r.status !== 'cancelled' && r.status !== 'noshow' && r.status !== 'completed' && (
+          {canNoShow && (
             <button
               onClick={handleNoShow}
               className="flex-1 py-2.5 text-sm font-medium text-rose-600 bg-rose-50 rounded-xl hover:bg-rose-100 transition-colors"

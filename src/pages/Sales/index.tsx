@@ -101,8 +101,8 @@ export default function Sales() {
   const navigate = useNavigate();
   // 결제 행의 고객명 → 고객 상세 (2026-11-18)
   const customerLink = (p: Payment, fallback: string) => p.customerId ? (
-    <button type="button" onClick={e => { e.stopPropagation(); navigate(`/customers?open=${encodeURIComponent(p.customerId!)}`); }}
-      className="hover:underline text-left" title="고객 상세 열기">{p.customerName || fallback}</button>
+    <button type="button" onClick={() => navigate(`/customers?open=${encodeURIComponent(p.customerId!)}`)}
+      className="inline max-w-full truncate align-bottom hover:underline text-left" title="고객 상세 열기">{p.customerName || fallback}</button>
   ) : (p.customerName || fallback);
   useEffect(() => {
     if (searchParams.get('new') !== '1') return;

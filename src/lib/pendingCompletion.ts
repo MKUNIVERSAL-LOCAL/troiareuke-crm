@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { ReservationStore, PaymentStore } from './store';
+import { cleanupGcalEvent } from './gcalEventMap';
 import { todayISO, toISODate } from './format';
 import type { Reservation } from '../types';
 
@@ -36,6 +37,10 @@ export function hasPaymentFor(reservationId: string): boolean {
 /** 상태 일괄 변경 — 한 건씩 updateStatus를 거쳐 방문 통계가 맞게 반영된다. @returns 바뀐 건수 */
 export function settleReservations(ids: string[], status: 'completed' | 'noshow'): number {
   let n = 0;
-  for (const id of ids) if (ReservationStore.updateStatus(id, status)) n++;
+  for (const id of ids) {
+    if (!ReservationStore.updateStatus(id, status)) continue;
+    n++;
+    if (status === 'noshow') cleanupGcalEvent(id); // 예약 화면의 노쇼 처리와 같은 정리 — 공유 캘린더에 빈 슬롯이 잡혀 보이지 않게
+  }
   return n;
 }
