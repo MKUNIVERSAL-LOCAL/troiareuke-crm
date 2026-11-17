@@ -255,6 +255,30 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page.getByText('시술 기록 상세').filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText('중복 시술').filter({ visible: true }).first()).toBeVisible();
 
+  // ── 9-3. 직원별 월 실적 (2026-11-18): 첫 예약을 완료로 만들면 직원 화면 실적 표에 완료 예약·예약액이 집계되고, 보고 문구가 만들어진다 ──
+  const perfExpected = await page.evaluate(() => {
+    const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key(/^crm_.*_reservations$/)) || '[]');
+    const staffList = JSON.parse(localStorage.getItem(key(/^crm_.*_staff$/)) || '[]');
+    const t = new Date();
+    const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    const first = list.find((r: { date: string; status: string }) => r.date === today && r.status !== 'noshow' && r.status !== 'cancelled');
+    first.status = 'completed';
+    first.totalPrice = 50000;
+    localStorage.setItem(key(/^crm_.*_reservations$/), JSON.stringify(list));
+    const staffId = first.staffId as string;
+    const ym = today.slice(0, 7);
+    const done = list.filter((r: { staffId: string; status: string; date: string }) => r.staffId === staffId && r.status === 'completed' && r.date.startsWith(ym));
+    return { name: staffList.find((s: { id: string }) => s.id === staffId).name as string, count: done.length as number, amount: done.reduce((s: number, r: { totalPrice: number }) => s + (r.totalPrice || 0), 0) as number };
+  });
+  await page.goto('/staff');
+  const perf = page.getByTestId('staff-performance');
+  const perfRow = perf.getByRole('row', { name: new RegExp(perfExpected.name) });
+  await expect(perfRow).toContainText(`${perfExpected.count}건`);
+  await expect(perfRow).toContainText(`${perfExpected.amount.toLocaleString('ko-KR')}원`);
+  await perf.getByRole('button', { name: '보고 문구' }).click();
+  await expect(perf.locator('pre')).toContainText(`${perfExpected.name}: 완료 예약 ${perfExpected.count}건`);
+
   // ── 10. 개인정보 보존기간 정책 (P4, 2026-11-17): 1년으로 켜고 고객을 2년 전 방문으로 만들면 안내 → 목록 → 익명화 ──
   await page.goto('/settings');
   await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();

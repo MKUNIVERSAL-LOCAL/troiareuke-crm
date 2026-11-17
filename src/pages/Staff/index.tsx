@@ -3,6 +3,7 @@ import { notify } from '../../lib/notify';
 import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
+import StaffPerformanceCard from '../../components/StaffPerformanceCard';
 import { StaffStore, ReservationStore } from '../../lib/store';
 import { todayISO, thisYearMonthISO, formatPhoneInput } from '../../lib/format';
 import type { Staff } from '../../types';
@@ -27,9 +28,11 @@ export default function StaffPage() {
   const [selected, setSelected] = useState<Staff | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
+  const [reloadTick, setReloadTick] = useState(0); // 직원 추가·수정·삭제 후 실적 표 재집계 (2026-11-18)
 
   const reload = () => {
     setStaffList(StaffStore.getAll());
+    setReloadTick(t => t + 1);
   };
 
   useEffect(() => {
@@ -172,6 +175,8 @@ export default function StaffPage() {
             <span className="text-sm font-medium">직원 추가</span>
           </button>
         </div>
+
+        <StaffPerformanceCard tick={reloadTick} />
 
         {/* Staff Schedule Overview */}
         <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
