@@ -1,5 +1,5 @@
 import { notify } from '../../lib/notify';
-import { matchesSearch, todayISO } from '../../lib/format';
+import { matchesSearch, todayISO, toISODate, thisYearMonthISO } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
@@ -67,7 +67,49 @@ export default function Treatments() {
     });
   }, []);
 
-  const filtered = treatmentLogs.filter(t => matchesSearch(search, [t.customerName, t.staffName, t.treatmentDetails, t.programName])).sort((a, b) => b.treatmentDate.localeCompare(a.treatmentDate)); // 최신 시술 먼저
+  // 기간·담당자 필터 (2026-11-18) — PC·모바일 공용 칩. 기간은 로컬 날짜 기준(오늘/이번 주(월~)/이번 달/전체)
+  type Period = 'all' | 'today' | 'week' | 'month';
+  const [period, setPeriod] = useState<Period>('all');
+  const [staffFilter, setStaffFilter] = useState('');
+  const staffNames = useMemo(() => {
+    const fromStaff = StaffStore.getAll().filter(s => s.isActive).map(s => s.name);
+    const fromLogs = treatmentLogs.map(t => t.staffName).filter((n): n is string => !!n);
+    return [...new Set([...fromStaff, ...fromLogs])];
+  }, [treatmentLogs]);
+  const periodFrom = useMemo(() => {
+    const today = todayISO();
+    if (period === 'today') return today;
+    if (period === 'month') return `${thisYearMonthISO()}-01`;
+    if (period === 'week') { const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return toISODate(d); }
+    return '';
+  }, [period]);
+  const filtered = treatmentLogs
+    .filter(t => matchesSearch(search, [t.customerName, t.staffName, t.treatmentDetails, t.programName]))
+    .filter(t => !periodFrom || (t.treatmentDate >= periodFrom && t.treatmentDate <= todayISO()))
+    .filter(t => !staffFilter || t.staffName === staffFilter)
+    .sort((a, b) => b.treatmentDate.localeCompare(a.treatmentDate)); // 최신 시술 먼저
+
+  const PERIOD_LABELS: Record<Period, string> = { all: '전체', today: '오늘', week: '이번 주', month: '이번 달' };
+  const filterChips = (
+    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label="시술 기록 필터">
+      {(['all', 'today', 'week', 'month'] as Period[]).map(p => (
+        <button key={p} type="button" aria-pressed={period === p} onClick={() => setPeriod(p)}
+          className={clsx('flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border', period === p ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200')}>
+          {PERIOD_LABELS[p]}
+        </button>
+      ))}
+      {staffNames.length > 0 && (
+        <select value={staffFilter} onChange={e => setStaffFilter(e.target.value)} aria-label="담당자 필터"
+          className="flex-shrink-0 ml-1 text-[11px] border border-gray-200 rounded-full px-2 py-1 bg-white text-gray-600">
+          <option value="">담당자 전체</option>
+          {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+      )}
+      {(period !== 'all' || staffFilter) && (
+        <button type="button" onClick={() => { setPeriod('all'); setStaffFilter(''); }} className="flex-shrink-0 text-[11px] text-gray-400 hover:text-gray-600 px-1">초기화</button>
+      )}
+    </div>
+  );
 
   const handleDelete = (id: string) => {
     TreatmentLogStore.delete(id);
@@ -98,6 +140,7 @@ export default function Treatments() {
               className="w-full h-10 pl-9 pr-4 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
             />
           </div>
+          <div className="mt-2">{filterChips}</div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
@@ -161,8 +204,9 @@ export default function Treatments() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-bold text-gray-700">총 {filtered.length}건</p>
+            {filterChips}
           </div>
           <div className="divide-y divide-gray-50">
             {filtered.length === 0 && (

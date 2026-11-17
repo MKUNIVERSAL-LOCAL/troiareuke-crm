@@ -357,6 +357,16 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page.getByText('시술 기록 상세').filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText('중복 시술').filter({ visible: true }).first()).toBeVisible();
   // 다음 방문 권장일 → [이 날짜로 예약] → 예약 추가 모달에 고객·날짜가 미리 들어간다 (2026-11-18)
+  await page.keyboard.press('Escape');
+  // 시술 목록 기간·담당자 필터 (2026-11-18): 2026-01-10 기록은 '이번 달'에서 빠지고 '전체'로 돌아온다
+  await page.goto('/treatments');
+  const treatList = page.locator('.hidden.lg\\:block');
+  await expect(treatList.getByText('중복 시술').first()).toBeVisible();
+  await treatList.getByRole('button', { name: '이번 달', pressed: false }).click();
+  await expect(treatList.getByText('중복 시술')).toHaveCount(0);
+  await treatList.getByRole('button', { name: '초기화' }).click();
+  await expect(treatList.getByText('중복 시술').first()).toBeVisible();
+  await treatList.getByText('중복 시술').first().click();
   await page.getByRole('button', { name: '이 날짜로 예약' }).click();
   await expect(page).toHaveURL(/\/reservations$/);
   await expect(page.getByLabel('예약 날짜')).toHaveValue('2026-12-24');
