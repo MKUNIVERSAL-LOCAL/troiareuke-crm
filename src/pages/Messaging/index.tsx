@@ -1110,7 +1110,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               />
             )}
             {!isScheduleAvailable && (
-              <p className="text-[11px] text-gray-400 mt-1.5">예약 발송은 NAS 서버 연동 후 지원됩니다.</p>
+              <p className="text-[11px] text-gray-400 mt-1.5">예약 발송은 준비 중입니다.</p>
             )}
           </div>
 
@@ -1126,7 +1126,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             </div>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 sticky bottom-0 bg-white pt-3 -mx-6 px-6 -mb-4 pb-4 border-t border-gray-100">
             <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
             {canShareText && (
               // 모바일: 발송사 미계약이어도 문구를 카카오톡·문자 앱으로 넘겨 직접 보낼 수 있다 (2026-11-17)

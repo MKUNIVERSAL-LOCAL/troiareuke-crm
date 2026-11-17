@@ -144,7 +144,7 @@ export function staffReportCaveats(report: StaffMonthReport): string[] {
   const u = report.unassigned;
   if (report.pendingCompletionTotal > 0) out.push(`완료 처리되지 않은 지난 예약 ${report.pendingCompletionTotal}건은 예약액에 들어가지 않았습니다 — 예약 화면에서 완료 처리하면 반영됩니다.`);
   if (u.deletedStaffReservations > 0) out.push(`삭제된 직원의 예약 ${u.deletedStaffReservations}건은 표에 없습니다.`);
-  if (u.nameMismatch > 0) out.push(`담당 이름이 비어 있거나 직원 이름과 맞지 않는 시술·제품 판매 ${u.nameMismatch}건은 표에 없습니다(이름을 바꾼 직원의 과거 제품 판매 포함).`);
+  if (u.nameMismatch > 0) out.push(`담당자가 비어 있거나 현재 직원 이름과 일치하지 않는 시술·제품 판매 ${u.nameMismatch}건은 표에 포함되지 않았습니다 (이름을 변경한 직원의 과거 제품 판매 포함).`);
   if (u.ambiguous > 0) out.push(`같은 이름의 재직 직원이 둘 이상이라 나누지 못한 시술·제품 판매 ${u.ambiguous}건이 있습니다.`);
   return out;
 }

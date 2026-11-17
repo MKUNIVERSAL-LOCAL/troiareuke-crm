@@ -1356,7 +1356,7 @@ export default function Customers() {
               {/* 프로그램 목록 */}
               {customerPrograms.length > 0 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase mb-3">진행 프로그램</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-3">등록 프로그램</p>
                   <div className="space-y-2">
                     {customerPrograms.map(cp => (
                       <div key={cp.id} className="p-3 bg-slate-50 rounded-lg">
@@ -1370,7 +1370,7 @@ export default function Customers() {
                               className="px-2 py-0.5 text-[11px] font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
                           </span>
                         </div>
-                        {cp.expiryDate && <p className="text-[11px] text-gray-400">만료일 {formatDate(cp.expiryDate)}</p>}
+                        <p className="text-[11px] text-gray-400">결제 {formatPrice(cp.pricePaid)} · 등록 {formatDate(cp.purchaseDate)}{cp.expiryDate ? ` · 만료일 ${formatDate(cp.expiryDate)}` : ''}</p>
                         {cp.totalSessions != null && (
                           <p className="text-xs text-gray-500">
                             {cp.usedSessions || 0}/{cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
@@ -2043,7 +2043,7 @@ export default function Customers() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{log.programName || '시술'}</p>
+                            <p className="text-sm font-semibold text-gray-800 truncate">{log.programName || log.treatmentDetails || '시술 내역 없음'}</p>
                             <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{formatDate(log.treatmentDate)}</span>
                           </div>
                           {log.staffName && <p className="text-xs text-gray-400">담당: {log.staffName}</p>}

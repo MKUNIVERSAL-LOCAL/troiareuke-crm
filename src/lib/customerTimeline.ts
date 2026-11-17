@@ -61,7 +61,7 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
     const parts = [t.programName, t.staffName].filter(Boolean);
     items.push({
       id: `trt:${t.id}`, kind: 'treatment', date: dateOf(t.treatmentDate), time: t.treatmentTime,
-      title: parts.length ? parts.join(' · ') : '시술',
+      title: parts.length ? parts.join(' · ') : '시술 기록 (내역 미입력)',
       detail: t.treatmentDetails || t.skinCondition || undefined,
       href: `/treatments?open=${t.id}`,
     });

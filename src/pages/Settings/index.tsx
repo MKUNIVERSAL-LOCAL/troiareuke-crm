@@ -728,7 +728,7 @@ export default function Settings() {
                     <p className="text-sm font-medium text-gray-700">지정 휴일</p>
                     <p className="text-xs text-gray-400">명절·임시 휴무 날짜. 이 날에 예약을 잡으면 저장 전에 확인창이 뜹니다. 추가·삭제 즉시 저장됩니다.</p>
                     <div className="flex flex-wrap items-center gap-2">
-                      <input type="date" value={holidayInput} onChange={e => setHolidayInput(e.target.value)} aria-label="휴일 날짜" className="form-input text-sm w-40 min-w-0" />
+                      <input type="date" value={holidayInput} onChange={e => setHolidayInput(e.target.value)} aria-label="휴일 날짜" className="form-input text-sm !w-44 min-w-0" />
                       <button type="button" onClick={addHoliday} className="px-3 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200">휴일 추가</button>
                     </div>
                     {(settings.holidays || []).length > 0 ? (

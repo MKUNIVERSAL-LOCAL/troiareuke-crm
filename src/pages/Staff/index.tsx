@@ -128,7 +128,8 @@ export default function StaffPage() {
                   </div>
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center" title="완료·예정 포함, 취소·노쇼 제외">
                     <p className="text-base font-bold text-gray-800">{(monthlyRevenue / 10000).toFixed(0)}만</p>
-                    <p className="text-xs text-gray-400 whitespace-nowrap">월 예약액(예정 포함)</p>
+                    <p className="text-xs text-gray-400 whitespace-nowrap">월 예약액</p>
+                    <p className="text-[10px] text-gray-300 whitespace-nowrap">예정 포함</p>
                   </div>
                 </div>
 
@@ -167,7 +168,7 @@ export default function StaffPage() {
           {/* Add Staff Card */}
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-white rounded-2xl p-5 border-2 border-dashed border-gray-200 hover:border-purple-300 transition-colors flex flex-col items-center justify-center gap-3 text-gray-400 hover:text-purple-400 min-h-[280px]"
+            className="bg-white rounded-2xl p-5 border-2 border-dashed border-gray-200 hover:border-purple-300 transition-colors flex flex-col items-center justify-center gap-3 text-gray-400 hover:text-purple-400 min-h-[120px] md:min-h-[280px]"
           >
             <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
               <Plus size={20} />

@@ -35,6 +35,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
           </button>
         </div>
       </div>
+      <p className="sm:hidden px-4 pt-2 text-[11px] text-gray-400">표를 옆으로 밀면 응대 고객·남은 일정까지 보입니다.</p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -75,7 +76,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
       </div>
       <div className="px-4 sm:px-6 py-3 border-t border-gray-50 space-y-2">
         <p className="text-[11px] text-gray-400">
-          완료 처리된 예약의 예약액과 담당 직원이 기록된 제품 판매액 기준 — 실제 입금액(결제 화면)·할인·회차권 차감은 반영되지 않습니다. 취소·노쇼 제외.
+          완료 처리된 예약의 예약액과 담당 직원이 기록된 제품 판매액 기준입니다. 실제 입금액(결제 화면)·할인·회차권 차감은 반영되지 않으며, 취소·노쇼는 제외합니다.
         </p>
         {caveats.map(c => <p key={c} className="text-[11px] text-amber-700">{c}</p>)}
         {draft && (
