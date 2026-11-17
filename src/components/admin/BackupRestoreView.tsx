@@ -10,9 +10,9 @@ import type { AdminBranchOverview, AdminBackupEntry } from '../../lib/adminApi';
  */
 
 const LABELS: Record<string, string> = {
-  customers: '고객', programs: '프로그램', customer_programs: '회권', treatment_logs: '시술기록', products: '제품',
-  product_sales: '제품판매', payments: '결제', staff: '직원', services: '시술메뉴', reservations: '예약',
-  shop_settings: '샵설정', message_templates: '템플릿', message_history: '메시지이력', consultations: '상담', expenses: '지출',
+  customers: '고객', programs: '프로그램', customer_programs: '회차권', treatment_logs: '시술 기록', products: '제품',
+  product_sales: '제품 판매', payments: '결제', staff: '직원', services: '시술 항목', reservations: '예약',
+  shop_settings: '매장 설정', message_templates: '템플릿', message_history: '발송 기록', consultations: '상담', expenses: '지출',
 };
 
 interface Props {
@@ -185,7 +185,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                 disabled={busy || confirmText.trim() !== '복원' || (selected.size === 0 && !includePhotos)}
                 className="px-4 py-2 text-sm font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-40"
               >
-                {busy ? '복원 중…' : '복원 실행'}
+                {busy ? '복원 중...' : '복원 실행'}
               </button>
             </div>
           </div>

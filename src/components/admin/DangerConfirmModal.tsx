@@ -60,7 +60,7 @@ export default function DangerConfirmModal({ title, description, expected, expec
             disabled={busy || typed.trim() !== expected}
             className="px-4 py-2 text-sm font-bold rounded-xl bg-red-600 text-white hover:bg-red-500 disabled:opacity-40"
           >
-            {busy ? '처리 중…' : confirmLabel}
+            {busy ? '처리 중...' : confirmLabel}
           </button>
         </div>
       </div>

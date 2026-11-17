@@ -231,7 +231,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               disabled={busy || pgEnabled === false || loadFailed}
               className="w-full py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <Link2 size={14} />{pgEnabled === false ? '결제 링크 생성 (준비 중)' : busy ? '생성 중…' : '결제 링크 만들기'}
+              <Link2 size={14} />{pgEnabled === false ? '결제 링크 생성 (준비 중)' : busy ? '생성 중...' : '결제 링크 만들기'}
             </button>
           </form>
 

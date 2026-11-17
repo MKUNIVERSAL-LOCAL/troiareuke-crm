@@ -59,7 +59,7 @@ export default function SecurityGuideCard() {
     await handleCopy();
     const r = await api!.openDefender();
     setOpenMsg(r.success
-      ? 'Windows 보안 화면을 열었습니다. 맨 아래 "제외" → [제외 추가 또는 제거] → [제외 사항 추가] → [폴더]에서 아래 폴더를 하나씩 추가해 주세요. 경로는 이미 복사돼 있습니다.'
+      ? 'Windows 보안 화면을 열었습니다. 맨 아래 "제외" → [제외 추가 또는 제거] → [제외 사항 추가] → [폴더]에서 아래 폴더를 하나씩 추가해주세요. 경로는 이미 복사돼 있습니다.'
       : 'Windows 보안 화면을 자동으로 열 수 없습니다. 아래 단계대로 직접 열어 주세요.');
   }
 

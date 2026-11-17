@@ -16,7 +16,7 @@ export default function RevisitCycleCard() {
   function save() {
     const value = parseInt(draft, 10);
     if (!setRevisitCycleDays(value)) {
-      setMessage({ tone: 'warn', text: `${MIN_CYCLE_DAYS}~${MAX_CYCLE_DAYS} 사이의 일수를 입력해 주세요.` });
+      setMessage({ tone: 'warn', text: `${MIN_CYCLE_DAYS}~${MAX_CYCLE_DAYS} 사이의 일수를 입력해주세요.` });
       return;
     }
     setDays(value);
@@ -31,7 +31,7 @@ export default function RevisitCycleCard() {
       </div>
       <div className="px-6 py-5 space-y-3">
         <p className="text-sm text-gray-500 leading-relaxed">
-          시술기록에 다음 방문 권장일을 따로 적지 않은 고객은 마지막 방문일에서 이 주기가 지나면
+          시술 기록에 다음 방문 권장일을 따로 적지 않은 고객은 마지막 방문일에서 이 주기가 지나면
           대시보드의 재방문 리마인더에 표시됩니다. 현재 <b className="text-gray-800">{days}일</b> (기본 {DEFAULT_CYCLE_DAYS}일).
         </p>
         <div className="flex items-center gap-2">

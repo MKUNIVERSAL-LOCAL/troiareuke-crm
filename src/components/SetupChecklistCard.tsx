@@ -19,7 +19,7 @@ function buildSetupItems(): Item[] {
     // 전화번호는 온보딩에서 선택 입력 — 조건에 넣으면 대부분 매장이 영원히 3/4에 머문다 (리뷰 2026-11-18)
     { key: 'shop', label: '매장 정보', desc: '매장 이름 (안내문·결과지에 표시)', done: !!s.name && s.name !== DEFAULT_SHOP_NAME, to: '/settings?tab=shop' },
     { key: 'staff', label: '직원 등록', desc: '예약·시술 담당자로 쓰입니다', done: StaffStore.getAll().some(st => st.isActive), to: '/staff?new=1' },
-    { key: 'services', label: '시술 메뉴 등록', desc: '예약·시술 기록에서 고르는 항목', done: ServiceStore.getAll().some(sv => sv.isActive), to: '/settings?tab=services' },
+    { key: 'services', label: '시술 항목 등록', desc: '예약·시술 기록에서 고르는 항목', done: ServiceStore.getAll().some(sv => sv.isActive), to: '/settings?tab=services' },
     { key: 'customer', label: '첫 고객 등록', desc: '이름과 전화번호만 있으면 됩니다', done: CustomerStore.getAll().length > 0, to: '/customers?new=1' },
   ];
 }

@@ -545,7 +545,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
             disabled={!name.trim() || !content.trim()}
             className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isEdit ? <><Pencil size={14} /> 수정 저장</> : <><Plus size={14} /> 저장</>}
+            {isEdit ? <><Pencil size={14} /> 저장</> : <><Plus size={14} /> 템플릿 추가</>}
           </button>
         </div>
       </div>

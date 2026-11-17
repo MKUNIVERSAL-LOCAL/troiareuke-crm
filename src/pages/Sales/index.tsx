@@ -1169,7 +1169,7 @@ export default function Sales() {
               <div className="flex gap-2">
                 <button type="button" onClick={closeModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
-                  <CheckCircle size={14} />{editingId ? '수정 저장' : '결제 등록'}
+                  <CheckCircle size={14} />{editingId ? '저장' : '결제 등록'}
                 </button>
               </div>
             </form>
@@ -1291,7 +1291,7 @@ export default function Sales() {
               <div className="flex gap-2">
                 <button type="button" onClick={closeExpenseModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
-                  <CheckCircle size={14} />{editingExpenseId ? '수정 저장' : '지출 등록'}
+                  <CheckCircle size={14} />{editingExpenseId ? '저장' : '지출 등록'}
                 </button>
               </div>
             </form>

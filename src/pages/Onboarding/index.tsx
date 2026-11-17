@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx';
 const steps = [
   { icon: <Store size={20} />, label: '샵 정보', desc: '기본 정보 입력' },
   { icon: <Users size={20} />, label: '직원 설정', desc: '직원 등록' },
-  { icon: <Scissors size={20} />, label: '시술 항목', desc: '메뉴 등록' },
+  { icon: <Scissors size={20} />, label: '시술 항목', desc: '시술 항목 등록' },
   { icon: <Link2 size={20} />, label: '연동 설정', desc: '외부 서비스 연결' },
   { icon: <CreditCard size={20} />, label: '플랜 선택', desc: '요금제 선택' },
   { icon: <CheckCircle size={20} />, label: '완료', desc: '시작 준비' },
@@ -394,7 +394,7 @@ export default function Onboarding() {
                   </div>
                   <div>
                     <label className="ob-label">주소</label>
-                    <input value={shopAddress} onChange={e => setShopAddress(e.target.value)} className="ob-input" placeholder="서울시 강남구..." />
+                    <input value={shopAddress} onChange={e => setShopAddress(e.target.value)} className="ob-input" placeholder="예: 서울시 강남구 테헤란로 1" />
                   </div>
                 </div>
               </div>

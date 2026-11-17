@@ -257,7 +257,7 @@ function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 
   }
   const late = info.daysLeft < 0;
   return (
-    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-600' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술기록의 다음 방문 권장일' : '마지막 방문일 + 재방문 권장 주기'}>
+    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-600' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술 기록의 다음 방문 권장일' : '마지막 방문일 + 재방문 권장 주기'}>
       {formatDate(info.dueDate)} ({late ? `${-info.daysLeft}일 지남` : info.daysLeft === 0 ? '오늘' : `D-${info.daysLeft}`})
     </span>
   );
@@ -2390,7 +2390,7 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">주소</label>
                 <input aria-label="주소" type="text" value={addForm.address} onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="서울시 강남구..." />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 서울시 강남구 테헤란로 1" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
@@ -2421,7 +2421,7 @@ export default function Customers() {
                   className="mt-0.5 w-4 h-4 rounded border-gray-300 text-[#1a3a8f] focus:ring-blue-500" />
                 <span className="text-xs text-gray-700 leading-relaxed">
                   <span className="font-semibold">[필수] 개인정보 수집·이용 동의</span><br />
-                  고객관리 목적으로 이름·연락처 등 개인정보를 수집·이용하는 것에 대해 고객 본인의 동의를 받았습니다.
+                  고객 관리 목적으로 이름·연락처 등 개인정보를 수집·이용하는 것에 대해 고객 본인의 동의를 받았습니다.
                 </span>
               </label>
               <div className="flex gap-2">
@@ -2494,7 +2494,7 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">주소</label>
                 <input aria-label="주소" type="text" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="서울시 강남구..." />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 서울시 강남구 테헤란로 1" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
@@ -2728,8 +2728,8 @@ export default function Customers() {
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">담당 관리사</label>
-                  <select aria-label="담당 관리사" value={consultForm.staffName} onChange={e => setConsultForm(f => ({ ...f, staffName: e.target.value }))}
+                  <label className="block text-xs font-medium text-gray-600 mb-1">담당자</label>
+                  <select aria-label="담당자" value={consultForm.staffName} onChange={e => setConsultForm(f => ({ ...f, staffName: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="">선택</option>
                     {StaffStore.getAll().filter(s => s.isActive).map(s => (

@@ -228,7 +228,7 @@ export default function Programs() {
           {programs.length === 0 ? (
             <>
               <p className="text-gray-400 font-medium">아직 프로그램이 없습니다</p>
-              <p className="text-sm text-gray-400 mt-1">10회권·패키지처럼 여러 번에 걸쳐 관리하는 상품입니다. 1회 시술 메뉴는 설정 &gt; 시술 관리에서 등록하세요.</p>
+              <p className="text-sm text-gray-400 mt-1">10회권·패키지처럼 여러 번에 걸쳐 관리하는 상품입니다. 1회 시술 항목은 설정 &gt; 시술 관리에서 등록하세요.</p>
               <button type="button" onClick={openCreate} className="mt-4 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75]">프로그램 추가</button>
             </>
           ) : (
@@ -389,7 +389,7 @@ export default function Programs() {
                       !form.isTimed ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
                     }`}
                   >
-                    회차권 (N회)
+                    회차권 (횟수제)
                   </button>
                   <button
                     type="button"
@@ -541,7 +541,7 @@ export default function Programs() {
                   className="flex-1 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] flex items-center justify-center gap-2"
                 >
                   <CheckCircle size={14} />
-                  {editTarget ? '수정 완료' : '프로그램 추가'}
+                  {editTarget ? '저장' : '프로그램 추가'}
                 </button>
               </div>
             </form>

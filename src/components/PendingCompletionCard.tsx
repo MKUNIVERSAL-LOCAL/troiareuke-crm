@@ -41,7 +41,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
   };
   const settleAll = () => {
     if (confirmedIds.length === 0) return;
-    const extra = pendingCount > 0 ? `\n대기 상태 ${pendingCount}건은 왔는지 알 수 없어 그대로 둡니다 — 건별로 처리해 주세요.` : '';
+    const extra = pendingCount > 0 ? `\n대기 상태 ${pendingCount}건은 왔는지 알 수 없어 그대로 둡니다 — 건별로 처리해주세요.` : '';
     if (!window.confirm(`확정 예약 ${confirmedIds.length}건을 모두 완료 처리할까요?\n오지 않은 고객이 있으면 먼저 건별로 [노쇼]를 눌러 주세요.${extra}`)) return;
     settle(confirmedIds, 'completed');
   };
@@ -73,7 +73,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
                 {r.customerName} <span className="text-xs text-gray-400">· {formatDate(r.date)} {r.startTime}</span>
                 {r.status === 'pending' && <span className="ml-1 text-[10px] font-semibold text-gray-500 bg-gray-100 rounded px-1 py-0.5 align-middle">대기</span>}
               </p>
-              <p className="text-xs text-gray-500 truncate">{r.services.map(s => s.serviceName).join(', ') || '서비스 미지정'}{r.staffName ? ` · ${r.staffName}` : ''}</p>
+              <p className="text-xs text-gray-500 truncate">{r.services.map(s => s.serviceName).join(', ') || '시술 항목 미지정'}{r.staffName ? ` · ${r.staffName}` : ''}</p>
             </button>
             <button type="button" onClick={() => settleOneAndPay(r)} aria-label={`${r.customerName} ${formatDate(r.date)} 완료`}
               className="px-2 py-1 rounded-lg text-[11px] font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>

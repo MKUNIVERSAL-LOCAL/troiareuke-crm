@@ -51,11 +51,11 @@ export default function MobileUpdateBanner() {
       <Smartphone size={18} className="mt-0.5 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="font-semibold">
-          {required ? '앱 업데이트가 필요합니다' : `새 버전 ${state.manifest.version} 이 나왔습니다`}
+          {required ? '앱 업데이트가 필요합니다' : `새 버전 ${state.manifest.version}이 나왔습니다`}
         </p>
         <p className="text-xs opacity-90 mt-0.5">
           {required
-            ? `현재 ${state.current} 은 더 이상 지원되지 않아 일부 기능이 동작하지 않을 수 있습니다.`
+            ? `현재 ${state.current}은 더 이상 지원되지 않아 일부 기능이 동작하지 않을 수 있습니다.`
             : `현재 ${state.current}. 스토어에서 업데이트하면 최신 기능이 적용됩니다.`}
         </p>
         {state.url && (

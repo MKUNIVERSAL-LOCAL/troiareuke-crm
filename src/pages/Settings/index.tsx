@@ -1103,7 +1103,7 @@ export default function Settings() {
 
             {tab === 'services' && (
               <SettingCard title="시술 항목 관리">
-                <p className="text-sm text-gray-500 mb-4">시술 항목을 추가, 수정, 삭제할 수 있습니다.</p>
+                <p className="text-sm text-gray-500 mb-4">시술 항목을 추가·수정·삭제할 수 있습니다.</p>
                 <button
                   onClick={openAddService}
                   className="mb-4 px-4 py-2 text-sm font-medium bg-purple-50 text-purple-700 rounded-xl border border-purple-200 hover:bg-purple-100 flex items-center gap-1.5"
@@ -1542,7 +1542,7 @@ export default function Settings() {
                   type="submit"
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600"
                 >
-                  {editingService ? '수정하기' : '추가하기'}
+                  {editingService ? '저장' : '시술 추가'}
                 </button>
               </div>
             </form>

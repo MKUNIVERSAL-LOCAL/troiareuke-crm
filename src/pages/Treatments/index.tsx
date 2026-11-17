@@ -137,7 +137,7 @@ export default function Treatments() {
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="고객명, 시술명, 직원명 검색..."
+              placeholder="고객명, 시술명, 직원명 검색"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full h-10 pl-9 pr-4 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
@@ -206,7 +206,7 @@ export default function Treatments() {
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="고객명, 시술명, 직원명 검색..."
+              placeholder="고객명, 시술명, 직원명 검색"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
@@ -569,7 +569,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 항목</label>
-          {services.length === 0 && <PrereqHint text="등록된 시술 메뉴가 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다" action="시술 메뉴 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
+          {services.length === 0 && <PrereqHint text="등록된 시술 항목이 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
           <div className="space-y-2">
             {services.map(s => (
               <label key={s.id} className="flex items-center gap-3 p-2.5 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">

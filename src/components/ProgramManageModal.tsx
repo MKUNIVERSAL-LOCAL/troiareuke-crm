@@ -107,7 +107,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
         </div>
         {isSessionBased && (
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">총 회차 (서비스 회차 추가·오등록 수정)</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">총 회차 (회차 추가·오등록 수정)</label>
             <input inputMode="numeric" value={totalSessions} onChange={e => setTotalSessions(e.target.value)} aria-label="총 회차" className="w-32 px-3 py-2 text-sm border border-gray-200 rounded-xl" />
             <p className="text-xs text-gray-400 mt-1">사용 회차는 시술 기록이 정본이라 여기서 바꾸지 않습니다.{manuallyCompleted ? ' 직접 완료 처리한 프로그램은 회차를 바꿔도 완료 상태가 유지됩니다.' : ''}</p>
           </div>

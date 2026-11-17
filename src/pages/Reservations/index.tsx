@@ -1022,7 +1022,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <option value="">시술 선택</option>
             {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {s.price.toLocaleString()}원)</option>)}
           </select>
-          {services.length === 0 && <PrereqHint text="등록된 시술 메뉴가 없습니다" action="시술 메뉴 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
+          {services.length === 0 && <PrereqHint text="등록된 시술 항목이 없습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div>

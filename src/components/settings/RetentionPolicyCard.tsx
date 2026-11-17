@@ -18,7 +18,7 @@ export default function RetentionPolicyCard() {
   function save(enabled: boolean) {
     const years = enabled ? parseInt(draftYears, 10) : policy.years; // 끌 때는 입력칸이 비어 있어도 된다
     if (!setRetentionPolicy({ enabled, years })) {
-      setMessage({ tone: 'warn', text: `${MIN_RETENTION_YEARS}~${MAX_RETENTION_YEARS} 사이의 연수를 입력해 주세요.` });
+      setMessage({ tone: 'warn', text: `${MIN_RETENTION_YEARS}~${MAX_RETENTION_YEARS} 사이의 연수를 입력해주세요.` });
       return;
     }
     const next = { enabled, years };
