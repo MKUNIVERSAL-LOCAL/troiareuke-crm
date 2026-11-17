@@ -181,10 +181,25 @@ export function clearPhotos(entityKey: string): void {
   pushToNas(entityKey, []);
 }
 
+export type PhotoAngle = 'front' | 'left' | 'right' | 'other';
+export type PhotoLabel = 'before' | 'after';
+
+export const PHOTO_ANGLES: { id: PhotoAngle; label: string }[] = [
+  { id: 'front', label: '정면' },
+  { id: 'left', label: '좌측' },
+  { id: 'right', label: '우측' },
+  { id: 'other', label: '기타' },
+];
+export const PHOTO_LABELS: { id: PhotoLabel; label: string }[] = [
+  { id: 'before', label: '시술 전' },
+  { id: 'after', label: '시술 후' },
+];
+
 export interface PhotoEntry {
   id: string;
   dataUrl: string;   // base64 data URL (리사이즈됨)
-  label?: 'before' | 'after' | string;
+  label?: PhotoLabel | string; // 시술 전/후 (구데이터 호환으로 string 허용)
+  angle?: PhotoAngle;          // 촬영 각도 — 같은 각도끼리 Before/After 비교·촬영 가이드 (2026-11-17)
   takenAt: string;   // ISO 날짜 (촬영/업로드 시각)
 }
 

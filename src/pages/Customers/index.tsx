@@ -1331,7 +1331,7 @@ export default function Customers() {
             </div>
 
             {/* Before/After 타임랩스 (킬러②) — 시술 사진이 있을 때만 표시 */}
-            <TimelapseViewer customerId={selected.id} />
+            <TimelapseViewer customerId={selected.id} customerName={selected.name} />
 
             {/* 최근 시술 기록 */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">

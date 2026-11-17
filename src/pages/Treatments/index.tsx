@@ -8,7 +8,8 @@ import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
-import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, type PhotoEntry } from '../../lib/photoStore';
+import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, PHOTO_ANGLES, PHOTO_LABELS, type PhotoEntry, type PhotoAngle, type PhotoLabel } from '../../lib/photoStore';
+import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import { isAuthApiConfigured } from '../../lib/authApi';
 
 export default function Treatments() {
@@ -249,10 +250,12 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
     setUploading(true);
     try {
       const added: PhotoEntry[] = [];
+      const baseCount = photos.length;
       for (const file of files) {
         try {
           const dataUrl = await resizeImageFile(file);
-          added.push({ id: makePhotoId(), dataUrl, takenAt: new Date().toISOString() });
+          // 기본 태그: 기록의 첫 사진은 '시술 전', 이후는 '시술 후' (썸네일 아래에서 수정 가능)
+          added.push({ id: makePhotoId(), dataUrl, takenAt: new Date().toISOString(), label: baseCount + added.length === 0 ? 'before' : 'after' });
         } catch {
           // 개별 파일 실패는 건너뜀
         }
@@ -265,6 +268,10 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
   };
 
   const removePhotoLocal = (id: string) => setPhotoList(prev => prev.filter(p => p.id !== id));
+  const updatePhotoMeta = (id: string, patch: Pick<PhotoEntry, 'label' | 'angle'>) =>
+    setPhotoList(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+  // 촬영 가이드 — 같은 고객의 직전 시술 사진(각도별 최신 1장). 편집 중인 기록은 제외
+  const referencePhotos = customerId ? findReferencePhotos(customerId, editing?.id) : [];
 
   const handleSave = () => {
     if (!customerId) return;
@@ -453,18 +460,57 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
           {photos.length > 0 && (
             <div className="grid grid-cols-4 gap-2 mb-2">
               {photos.map(p => (
-                <div key={p.id} className="relative group aspect-square">
-                  <img src={p.dataUrl} alt="시술 사진" className="w-full h-full object-cover rounded-xl border border-gray-100" />
-                  <button
-                    type="button"
-                    onClick={() => removePhotoLocal(p.id)}
-                    className="absolute top-1 right-1 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                    aria-label="사진 삭제"
-                  >
-                    <X size={13} />
-                  </button>
+                <div key={p.id} className="space-y-1">
+                  <div className="relative group aspect-square">
+                    <img src={p.dataUrl} alt="시술 사진" className="w-full h-full object-cover rounded-xl border border-gray-100" />
+                    <button
+                      type="button"
+                      onClick={() => removePhotoLocal(p.id)}
+                      className="absolute top-1 right-1 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                      aria-label="사진 삭제"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                  <div className="flex gap-1">
+                    <select
+                      value={p.label ?? ''}
+                      onChange={e => updatePhotoMeta(p.id, { label: (e.target.value || undefined) as PhotoLabel | undefined })}
+                      className="flex-1 min-w-0 text-[11px] border border-gray-200 rounded-lg px-1 py-1 bg-white"
+                      aria-label="시술 전후 구분"
+                    >
+                      <option value="">전/후</option>
+                      {PHOTO_LABELS.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+                    </select>
+                    <select
+                      value={p.angle ?? ''}
+                      onChange={e => updatePhotoMeta(p.id, { angle: (e.target.value || undefined) as PhotoAngle | undefined })}
+                      className="flex-1 min-w-0 text-[11px] border border-gray-200 rounded-lg px-1 py-1 bg-white"
+                      aria-label="촬영 각도"
+                    >
+                      <option value="">각도</option>
+                      {PHOTO_ANGLES.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
+                    </select>
+                  </div>
                 </div>
               ))}
+            </div>
+          )}
+          {referencePhotos.length > 0 && (
+            <div className="mb-2 p-2.5 bg-indigo-50/60 border border-indigo-100 rounded-xl">
+              <p className="text-[11px] font-semibold text-indigo-900 mb-1.5">
+                직전 시술 사진 참고 — 같은 각도·거리·조명으로 찍으면 Before/After 비교가 정확해집니다
+              </p>
+              <div className="flex gap-2 overflow-x-auto">
+                {referencePhotos.map(r => (
+                  <figure key={r.id} className="flex-shrink-0 w-16">
+                    <img src={r.dataUrl} alt="직전 시술 사진" className="w-16 h-16 object-cover rounded-lg border border-indigo-100" />
+                    <figcaption className="text-[10px] text-gray-500 text-center mt-0.5 truncate">
+                      {r.date.slice(5)}{r.angle ? ` · ${angleLabel(r.angle)}` : ''}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
             </div>
           )}
           <button
@@ -578,8 +624,13 @@ function TreatmentDetailModal({
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">시술 전후 사진 ({photos.length})</p>
             <div className="grid grid-cols-4 gap-2">
               {photos.map(p => (
-                <a key={p.id} href={p.dataUrl} target="_blank" rel="noreferrer" className="aspect-square">
+                <a key={p.id} href={p.dataUrl} target="_blank" rel="noreferrer" className="relative aspect-square">
                   <img src={p.dataUrl} alt="시술 사진" className="w-full h-full object-cover rounded-xl border border-gray-100 hover:opacity-90 transition" />
+                  {(p.label === 'before' || p.label === 'after' || p.angle) && (
+                    <span className={clsx('absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-white', p.label === 'after' ? 'bg-indigo-600/90' : 'bg-gray-800/80')}>
+                      {p.label === 'before' ? '전' : p.label === 'after' ? '후' : ''}{p.angle ? (p.label === 'before' || p.label === 'after' ? ' · ' : '') + angleLabel(p.angle) : ''}
+                    </span>
+                  )}
                 </a>
               ))}
             </div>
