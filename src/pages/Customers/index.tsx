@@ -15,7 +15,8 @@ import {
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
 import TimelapseViewer from '../../components/TimelapseViewer';
 import { resizeImageFile, getPhotos, setPhotos as savePhotos, clearPhotos, makePhotoId, syncPhotosFromNas, type PhotoEntry } from '../../lib/photoStore';
-import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, comparisonFileName, type DatedPhoto } from '../../lib/beforeAfter';
+import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, comparisonFileName, angleLabel, type DatedPhoto } from '../../lib/beforeAfter';
+import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile } from '../../lib/mobileBridge';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
@@ -118,6 +119,28 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
         <option value="">일</option>
         {days.map(dy => <option key={dy} value={dy}>{Number(dy)}일</option>)}
       </select>
+    </div>
+  );
+}
+
+/** 최근 시술 기록 카드의 사진 썸네일(최대 4장) — 탭하면 크게 보기. PC·모바일 공용 (2026-11-17) */
+function TreatmentPhotoStrip({ logId, treatmentDate, customerName, tick, onOpen }: { logId: string; treatmentDate: string; customerName: string; tick: number; onOpen: (p: LightboxPhoto) => void }) {
+  void tick; // NAS 동기화 후 재읽기
+  const thumbs = getPhotos(`treatment:${logId}`);
+  if (thumbs.length === 0) return null;
+  return (
+    <div className="flex items-center gap-1.5 mt-2">
+      {thumbs.slice(0, 4).map(p => {
+        const tag = [PHOTO_LABELS.find(l => l.id === p.label)?.label, angleLabel(p.angle)].filter(Boolean).join(' · ');
+        return (
+          <button key={p.id} type="button" aria-label="시술 사진 크게 보기"
+            onClick={() => onOpen({ dataUrl: p.dataUrl, caption: `${formatDate(treatmentDate)} 시술${tag ? ` · ${tag}` : ''}`, fileName: `${customerName}_시술사진_${treatmentDate}.jpg` })}
+            className="w-10 h-10 rounded-lg overflow-hidden border border-gray-100 bg-white">
+            <img src={p.dataUrl} alt="시술 사진" className="w-full h-full object-cover" />
+          </button>
+        );
+      })}
+      {thumbs.length > 4 && <span className="text-[11px] text-gray-400">+{thumbs.length - 4}</span>}
     </div>
   );
 }
@@ -1129,6 +1152,7 @@ export default function Customers() {
                           </div>
                           <p className="text-xs text-gray-600 mt-0.5">{log.treatmentDetails || log.programName || '시술 내역 없음'}</p>
                           {log.skinCondition && <p className="text-[11px] text-gray-400 mt-0.5">피부 상태: {log.skinCondition}</p>}
+                          <TreatmentPhotoStrip logId={log.id} treatmentDate={log.treatmentDate} customerName={selected.name} tick={photoTick} onOpen={setLightbox} />
                         </div>
                       ))}
                     </div>
@@ -1643,19 +1667,7 @@ export default function Customers() {
                           </div>
                           {log.staffName && <p className="text-xs text-gray-400">담당: {log.staffName}</p>}
                           {log.treatmentDetails && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{log.treatmentDetails}</p>}
-                          {(() => {
-                            void photoTick; // NAS 동기화 후 재읽기
-                            const thumbs = getPhotos(`treatment:${log.id}`);
-                            if (thumbs.length === 0) return null;
-                            return (
-                              <div className="flex items-center gap-1.5 mt-2">
-                                {thumbs.slice(0, 4).map(p => (
-                                  <img key={p.id} src={p.dataUrl} alt="시술 사진" className="w-10 h-10 rounded-lg object-cover border border-gray-100" />
-                                ))}
-                                {thumbs.length > 4 && <span className="text-[11px] text-gray-400">+{thumbs.length - 4}</span>}
-                              </div>
-                            );
-                          })()}
+                          <TreatmentPhotoStrip logId={log.id} treatmentDate={log.treatmentDate} customerName={selected.name} tick={photoTick} onOpen={setLightbox} />
                         </div>
                       </div>
                     ))}

@@ -108,6 +108,18 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   await tryShot('modal-reservation-add', () => page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click());
   await page.goto('/customers');
   await tryShot('modal-customer-add', () => page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first().click());
+  // 고객 상세 전체(결제 내역·상담 이력까지) + 상담 모달(Before/After 첨부 블록) (2026-11-17)
+  await page.goto('/customers');
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(dir, 'customer-detail-full.png'), fullPage: true });
+  // 모바일 상세는 내부 스크롤 컨테이너라 fullPage에 하단이 안 잡힌다 — 결제 내역까지 스크롤한 뷰포트 샷
+  await tryShot('customer-detail-bottom', () => page.getByTestId('customer-payments').filter({ visible: true }).first().scrollIntoViewIfNeeded());
+  await tryShot('modal-consult', async () => {
+    await page.getByRole('button', { name: '상담 기록', exact: true }).filter({ visible: true }).first().click();
+    const make = page.getByRole('button', { name: '비교 이미지 만들기' });
+    if (await make.count()) { await make.click(); await page.getByAltText('비교 이미지 미리보기').waitFor({ timeout: 10_000 }); }
+  });
   await page.goto('/programs');
   await tryShot('modal-program-add', () => page.getByRole('button', { name: '프로그램 추가' }).filter({ visible: true }).first().click());
   await page.goto('/staff');

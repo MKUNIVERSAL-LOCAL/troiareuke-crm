@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { BRANCH_ROUTES } from './helpers';
+import { BRANCH_ROUTES, solidPng } from './helpers';
 
 /**
  * 모바일 최적화 게이트 — 스토어 앱과 같은 화면 폭(Pixel 7, 412×915)에서 핵심 화면이
@@ -153,6 +153,21 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(page.getByRole('heading', { name: /^피부 상담/ }).filter({ visible: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page, '피부 상담 모달');
   await page.getByRole('button', { name: '취소', exact: true }).filter({ visible: true }).first().click();
+
+  // 시술 기록 화면에서 사진 1장 첨부 → 고객 상세 최근 시술 기록 썸네일 → 크게 보기 (모바일도 PC와 동일, 2026-11-17)
+  await page.goto('/treatments?new=1');
+  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles({ name: 'p.png', mimeType: 'image/png', buffer: solidPng(48, [200, 150, 150]) });
+  await page.getByRole('button', { name: '저장', exact: true }).filter({ visible: true }).first().click();
+  await page.goto('/customers');
+  await page.getByText('모바일고객').filter({ visible: true }).first().click();
+  const treatThumb = page.getByRole('button', { name: '시술 사진 크게 보기' }).filter({ visible: true });
+  await expect(treatThumb.first()).toBeVisible({ timeout: 10_000 });
+  await treatThumb.first().click();
+  await expect(page.getByRole('dialog', { name: '사진 크게 보기' })).toBeVisible();
+  await expectNoHorizontalOverflow(page, '사진 크게 보기');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '사진 크게 보기' })).toBeHidden();
 
   // 고객 정보 수정이 모바일에서도 된다 (2026-11-17)
   await page.getByRole('button', { name: '고객 정보 수정' }).click();
