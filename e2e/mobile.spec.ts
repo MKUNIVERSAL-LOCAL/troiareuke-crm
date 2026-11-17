@@ -100,7 +100,8 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first().click();
   await expectNoHorizontalOverflow(page, '고객 추가 모달');
   await page.getByPlaceholder('홍길동').fill('모바일고객');
-  await page.getByPlaceholder('010-0000-0000').fill('010-9999-0001');
+  await page.getByPlaceholder('010-0000-0000').fill('01099990001'); // 숫자만 → 자동 하이픈
+  await expect(page.getByPlaceholder('010-0000-0000').filter({ visible: true }).first()).toHaveValue('010-9999-0001');
   await page.getByText('[필수] 개인정보 수집·이용 동의').click();
   await page.getByRole('button', { name: '등록', exact: true }).click();
   await expect(page.getByText('모바일고객').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
