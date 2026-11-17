@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, solidPng } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, solidPng, countPhotoEntries } from './helpers';
 
 /**
  * 킬러 기능 ② Before/After E2E (로컬 모드 빌드)
@@ -33,6 +33,7 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
   await dismissToasts(page);
+  await expect.poll(() => countPhotoEntries(page), { timeout: 10_000 }).toBeGreaterThan(0); // IDB 커밋 후 이동
 
   // ── 고객 상세 → 타임랩스 (데스크톱 패널에 한정 — 모바일 상세 패널도 같은 뷰어를 숨김 상태로 렌더한다) ──
   await page.goto('/customers');
@@ -79,6 +80,7 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await page.keyboard.press('Escape');
   await expect(lightbox).toBeHidden();
   // 새로고침 후에도 상담 사진이 남는다 (photoStore 'consult:<id>')
+  await expect.poll(() => countPhotoEntries(page), { timeout: 10_000 }).toBeGreaterThan(1); // treatment + consult 커밋 후 새로고침
   await page.reload();
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await expect(desk.getByRole('button', { name: '상담 사진 크게 보기' })).toHaveCount(1, { timeout: 10_000 });

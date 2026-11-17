@@ -13,6 +13,7 @@ import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPhotos, getPhotosAsync, getPhotoCount, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, PHOTO_ANGLES, PHOTO_LABELS, type PhotoEntry, type PhotoAngle, type PhotoLabel } from '../../lib/photoStore';
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
+import CameraOverlay, { isCameraPreviewSupported } from '../../components/CameraOverlay';
 import { isAuthApiConfigured } from '../../lib/authApi';
 
 export default function Treatments() {
@@ -289,6 +290,19 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const fileInputRef = useRef<HTMLInputElement>(null);
   // 모바일: capture 속성이 있는 입력은 앨범 대신 카메라 앱을 바로 연다 (PC 브라우저는 무시하고 파일 선택)
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  // 촬영 가이드 카메라(직전 사진 반투명 오버레이) — 미리보기를 못 열면 기존 <input capture> 경로로 폴백 (2026-11-17)
+  const [showCamera, setShowCamera] = useState(false);
+  const openCamera = () => {
+    if (isCameraPreviewSupported()) setShowCamera(true);
+    else cameraInputRef.current?.click();
+  };
+  const handleCameraCapture = (dataUrl: string, reference: { angle?: PhotoAngle } | null) => {
+    photosTouchedRef.current = true;
+    // 가이드로 쓴 직전 사진의 각도를 그대로 물려받아 같은 각도끼리 비교되게 한다
+    setPhotoList(prev => [...prev, { id: makePhotoId(), dataUrl, takenAt: new Date().toISOString(), label: prev.length === 0 ? 'before' : 'after', angle: reference?.angle }]);
+    setShowCamera(false);
+    notify('사진 1장을 추가했습니다.');
+  };
 
   // Get active programs for the selected customer
   const activePrograms = customerId ? CustomerProgramStore.getActive(customerId) : [];
@@ -596,7 +610,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <div className="grid grid-cols-2 gap-2 lg:hidden">
             <button
               type="button"
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={openCamera}
               disabled={uploading || !photosReady}
               className="border-2 border-dashed border-purple-200 rounded-xl py-4 flex flex-col items-center gap-1.5 text-purple-500 disabled:opacity-50"
             >
@@ -627,6 +641,14 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               ? '사진은 기기에 저장되고 중앙 서버(NAS)와 동기화되어 다른 기기에서도 볼 수 있습니다.'
               : '사진은 이 기기에만 저장됩니다. (다른 기기 동기화는 중앙 서버 연동 후 지원)'}
           </p>
+          {showCamera && (
+            <CameraOverlay
+              references={referencePhotos}
+              onCapture={handleCameraCapture}
+              onClose={() => setShowCamera(false)}
+              onUnavailable={() => { setShowCamera(false); cameraInputRef.current?.click(); }}
+            />
+          )}
         </div>
 
         <div className="flex gap-3 pt-2">

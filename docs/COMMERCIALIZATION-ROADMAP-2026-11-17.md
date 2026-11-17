@@ -46,7 +46,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] 촬영 가이드(PC): 시술 기록 폼에 같은 고객의 직전 사진을 각도별 최신 1장씩 표시 — "같은 각도·거리·조명" 안내. 카메라 오버레이는 모바일 P3에서.
 - [x] 타임랩스 뷰어: Before/After 각각 선택(기본 최초↔최신), 각도 필터, D+N 표시, 비교 이미지 PNG 합성(`src/lib/beforeAfter.ts`, 1200×750, 샵명·날짜·각도·주의문구) → PC 내려받기 / 모바일 공유 시트 / PC 클립보드 복사(카카오톡 PC 붙여넣기).
 - [x] 2026-11-17 밤: 고객 상담 모달에서 Before/After 비교 이미지 생성·첨부 — Before/After 사진 선택(기본 최초↔최신), JPEG 압축 후 photoStore `consult:<id>`(NAS crm_photos)에 AI 분석 사진과 함께 저장, 상담 카드 썸네일 → 크게 보기(`PhotoLightbox`, 저장/공유), 상담 삭제 시 사진 정리, 다른 PC/앱에서 저장한 상담 사진 동기화. E2E(before-after.spec)로 생성→저장→새로고침 보존 검증.
-- [ ] 남은 것: 모바일 카메라 촬영 시 직전 사진 반투명 오버레이(P3와 함께).
+- [x] 2026-11-17 밤: 모바일 카메라 촬영 시 직전 사진 반투명 오버레이(`CameraOverlay`, P3 항목 참조). P2 코드 항목 전부 완료.
 - 사진 저장 구조는 그대로(NAS `crm_photos`), 중기 과제인 파일 스토리지 전환은 별도.
 
 ### P3. 모바일 앱 완성도 → 스토어 제출 가능 상태
@@ -62,7 +62,9 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] 2026-11-17 밤 3차 코드리뷰(오늘 커밋 6건, high 0/med 2/low 6) 전부 반영: 쿼리 프리필(?new=1&customer=…) 1회 캡처 후 URL 정리(수동 열기·뒤로가기에 이전 값 재부착 방지, Treatments·Reservations·Sales·Customers), 모바일 폭에서 데스크톱 상세 미렌더(사진 스트립·결제 내역 2중 실행 제거), 상담 모달 열기 단일 함수(이전 고객 AI 사진 플래시 제거), 첨부 제거 후 재저장 시 기록 사진도 삭제, 비교 이미지 .jpg 확장자, Before≥After 생성 차단, services 반복 키(쉼표 메뉴명), PhotoLightbox 포커스 이동·복원.
 - [x] 2026-11-17 밤 D4 완료: 사진 로컬 캐시 localStorage(5~10MB) → IndexedDB(수백 MB) 이관. `photoStore` 백엔드 분리(IDB 기본, 열기 실패 시 localStorage 폴백), 동기 read-through 메모리 캐시 + `onPhotoCacheChange`/`usePhotoCacheVersion` 구독(Customers·Treatments·TimelapseViewer), 구버전 localStorage 사진은 첫 실행 때 읽기 확인 후 무손실 이관, NAS 동기화는 캐시 준비 후에만(이관 전 빈 로컬을 정본으로 올리지 않음). dirty·evicted·tombstone 메타키는 그대로. E2E: IDB 존재·localStorage 사진 키 0·이관 3장 검증.
 - [x] 2026-11-17 밤 D4 전용 코드리뷰(high 1/med 4/low 5) 전부 반영: 수정 모달은 확정값(getPhotosAsync)을 읽기 전 사진 변경·저장 차단(빈 목록으로 서버 사진 덮어쓰기 사고 차단), IDB 읽기 실패는 캐시하지 않고 null(동기화 판단 보류), 트랜잭션 oncomplete 기준 확정 + 저장 실패 시 용량 초과 토스트, 메모리 LRU 64MB + 목록은 장수만(getPhotoCount), 로그아웃 시 로컬 사진 캐시 삭제(서버 모드, 비코어 5곳), BroadcastChannel 다중 탭 무효화, open 8초 타임아웃→폴백, 연결 강제 종료 시 재연결, 백업 탭 사진 미포함 안내.
-- [ ] 직전 사진 반투명 오버레이(네이티브 카메라 플러그인). 스토어 등록 준비는 오너 지시로 맨 마지막.
+- [x] 2026-11-17 밤: 촬영 가이드 카메라 `CameraOverlay` — 네이티브 플러그인 없이 WebView getUserMedia 미리보기 위에 직전 시술 사진을 반투명(투명도 슬라이더·숨김)으로 겹치고, 가이드 사진 선택·전/후면 전환·캔버스 캡처(1280px JPEG)·각도 상속. 미리보기를 못 열면 기존 `<input capture>` 폴백. Android `CAMERA` 권한 추가(Capacitor가 WebView에 위임). Playwright 모바일 프로젝트는 가짜 카메라 장치로 촬영 경로 실검증. **iOS 프로젝트 생성 시 `NSCameraUsageDescription` 필요(오너 메모).**
+- [x] 2026-11-17 밤: E2E는 IndexedDB 커밋을 확인한 뒤 page.goto/reload — 전체 새로고침이 비동기 저장을 끊는 레이스 제거(앱 내 SPA 이동은 해당 없음).
+- [ ] 스토어 등록 준비는 오너 지시로 맨 마지막.
 - 오너 준비물: Play 개발자 계정, Apple Developer(D-U-N-S), 아이콘 1024, 스크린샷, 개인정보처리방침 URL.
 
 ### P4. 운영·법규 자동화

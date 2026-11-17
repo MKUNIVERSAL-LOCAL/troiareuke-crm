@@ -126,6 +126,14 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   await tryShot('modal-staff-add', () => page.getByRole('button', { name: '직원 추가' }).filter({ visible: true }).first().click());
   await page.goto('/messaging');
   await tryShot('modal-message-send', () => page.getByRole('button', { name: '메시지 보내기' }).filter({ visible: true }).first().click());
+  // 촬영 가이드 카메라(모바일 프로젝트는 가짜 카메라 장치) — 직전 사진 반투명 오버레이 (2026-11-17)
+  await page.goto('/treatments?new=1');
+  await tryShot('camera-overlay', async () => {
+    await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+    await page.getByRole('button', { name: '카메라로 촬영' }).click();
+    await page.getByRole('dialog', { name: '카메라 촬영' }).getByRole('button', { name: '촬영' }).waitFor({ state: 'visible' });
+    await page.waitForTimeout(800);
+  });
   await page.goto('/treatments');
   await tryShot('modal-treatment-detail', () => page.getByText(acc.customer).filter({ visible: true }).first().click());
   await page.goto('/sales');

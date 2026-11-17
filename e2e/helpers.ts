@@ -132,3 +132,21 @@ export function solidPng(size: number, rgb: [number, number, number]): Buffer {
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
+
+/**
+ * IndexedDB 사진 캐시에 저장된 엔티티 수 (troiareuke_photos/photos). 실제 앱은 SPA 이동이라 커밋이 끊기지 않지만,
+ * E2E의 page.goto/reload는 페이지를 내려 비동기 저장을 중단시킬 수 있어 저장 완료를 확인한 뒤 이동한다 (2026-11-17 D4)
+ */
+export function countPhotoEntries(page: Page): Promise<number> {
+  return page.evaluate(() => new Promise<number>(resolve => {
+    const req = indexedDB.open('troiareuke_photos');
+    req.onerror = () => resolve(-1);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('photos')) { db.close(); resolve(0); return; }
+      const count = db.transaction('photos', 'readonly').objectStore('photos').count();
+      count.onsuccess = () => { db.close(); resolve(count.result); };
+      count.onerror = () => { db.close(); resolve(-1); };
+    };
+  }));
+}

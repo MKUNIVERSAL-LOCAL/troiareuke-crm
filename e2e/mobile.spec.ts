@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { BRANCH_ROUTES, solidPng } from './helpers';
+import { BRANCH_ROUTES, solidPng, countPhotoEntries } from './helpers';
 
 /**
  * 모바일 최적화 게이트 — 스토어 앱과 같은 화면 폭(Pixel 7, 412×915)에서 핵심 화면이
@@ -157,8 +157,19 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   // 시술 기록 화면에서 사진 1장 첨부 → 고객 상세 최근 시술 기록 썸네일 → 크게 보기 (모바일도 PC와 동일, 2026-11-17)
   await page.goto('/treatments?new=1');
   await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  // 촬영 가이드 카메라(getUserMedia 가짜 장치) → 촬영 → 사진 1장 (2026-11-17)
+  await page.getByRole('button', { name: '카메라로 촬영' }).click();
+  const camera = page.getByRole('dialog', { name: '카메라 촬영' });
+  await expect(camera).toBeVisible();
+  await expectNoHorizontalOverflow(page, '카메라 촬영');
+  await expect(camera.getByRole('button', { name: '촬영' })).toBeEnabled({ timeout: 10_000 });
+  await camera.getByRole('button', { name: '촬영' }).click();
+  await expect(camera).toBeHidden();
+  await expect(page.getByLabel('시술 전후 구분')).toHaveCount(1);
   await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles({ name: 'p.png', mimeType: 'image/png', buffer: solidPng(48, [200, 150, 150]) });
+  await expect(page.getByLabel('시술 전후 구분')).toHaveCount(2);
   await page.getByRole('button', { name: '저장', exact: true }).filter({ visible: true }).first().click();
+  await expect.poll(() => countPhotoEntries(page), { timeout: 10_000 }).toBeGreaterThan(0); // IDB 커밋 후 이동
   await page.goto('/customers');
   await page.getByText('모바일고객').filter({ visible: true }).first().click();
   const treatThumb = page.getByRole('button', { name: '시술 사진 크게 보기' }).filter({ visible: true });
