@@ -263,10 +263,11 @@ export default function Dashboard() {
             <p className="text-sm font-bold text-amber-800 mb-2">재고 부족 알림</p>
             <div className="space-y-1.5">
               {lowStockProducts.slice(0, 3).map(p => (
-                <div key={p.id} className="flex items-center justify-between">
+                <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)} aria-label={`${p.name} 입고`}
+                  className="w-full flex items-center justify-between rounded-lg px-1 py-0.5 hover:bg-amber-100 text-left">
                   <p className="text-xs text-amber-900">{p.name}</p>
-                  <p className="text-xs font-bold text-red-600">{p.stock}{p.unit}</p>
-                </div>
+                  <p className="text-xs font-bold text-red-600">{p.stock}{p.unit} <span className="font-medium text-amber-700">입고 →</span></p>
+                </button>
               ))}
             </div>
           </div>
@@ -539,16 +540,17 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   lowStockProducts.map(p => (
-                    <div key={p.id} className="flex items-center justify-between px-5 py-3">
+                    <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)} aria-label={`${p.name} 입고`}
+                      className="w-full flex items-center justify-between px-5 py-3 hover:bg-amber-50/60 text-left" title="입고 창 열기">
                       <div>
                         <p className="text-xs font-semibold text-gray-800">{p.name}</p>
                         <p className="text-[11px] text-gray-400">{p.category}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs font-bold text-red-500">{p.stock}{p.unit}</p>
-                        <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit}</p>
+                        <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit} · <span className="text-[#1a3a8f] font-medium">입고</span></p>
                       </div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>

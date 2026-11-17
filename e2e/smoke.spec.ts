@@ -192,6 +192,22 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await birthdayCard.getByRole('button', { name: /생일 안내$/ }).first().click();
   await expect(birthdayCard.locator('pre')).toContainText('오늘 생일을 진심으로 축하드려요');
 
+  // ── 6-3-1. 재고 부족 알림 → 입고 (2026-11-18): 재고가 안전재고 아래인 제품을 심으면 대시보드 알림에 뜨고, 누르면 제품 화면의 입고 창이 열린다 ──
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_products$/.test(k));
+    const list = key ? JSON.parse(localStorage.getItem(key) || '[]') : [];
+    const customersKey = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const shopId = JSON.parse(localStorage.getItem(customersKey) || '[]')[0].shopId;
+    list.push({ id: 'lowstock_' + Date.now(), shopId, name: '부족세럼', category: '기초', price: 30000, cost: 10000, stock: 1, minStock: 5, unit: '개', isActive: true });
+    localStorage.setItem(key ?? customersKey.replace(/_customers$/, '_products'), JSON.stringify(list));
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '부족세럼 입고' }).filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(/\/products$/); // ?stock=은 1회 캡처 후 비워진다
+  const lowStockDialog = page.getByRole('dialog', { name: '재고 입고·조정' });
+  await expect(lowStockDialog).toContainText('부족세럼');
+  await lowStockDialog.getByRole('button', { name: '닫기' }).click();
+
   // ── 6-4. 완료 처리 누락 예약 (2026-11-18): 어제 확정 예약을 심으면 대시보드 카드에 뜨고 [완료]를 누르면 완료 처리되어 카드에서 사라진다 ──
   const pendingId = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;

@@ -1,4 +1,5 @@
-﻿import { useState, useCallback } from 'react';
+﻿import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
 import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus } from 'lucide-react';
 import StockAdjustModal from '../../components/StockAdjustModal';
@@ -29,6 +30,15 @@ export default function Products() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
+  // 대시보드 재고 부족 알림(?stock=<id>) → 입고 모달 바로 열기. 1회 캡처 후 URL 비움(프리필 관례)
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('stock');
+    if (!id) return;
+    const p = ProductStore.getAll().find(x => x.id === id);
+    if (p) setStockProduct(p);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [saleProduct, setSaleProduct] = useState<Product | null>(null);
 
