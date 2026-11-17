@@ -228,6 +228,15 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page).toHaveURL(/\/reservations/);
   await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
 
+  // ── 9-0. 고객 상세 [메시지] → 발송 모달이 그 고객 한 명을 수신 대상으로 연다 (2026-11-18) ──
+  await page.goto('/customers');
+  await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
+  await desk.getByRole('button', { name: '메시지' }).click();
+  await expect(page).toHaveURL(/\/messaging$/); // ?customer=는 1회 캡처 후 비워진다
+  await expect(page.getByTestId('recipient-single')).toContainText(acc.customer);
+  await page.getByRole('button', { name: '대상 바꾸기' }).click();
+  await expect(page.getByTestId('recipient-single')).toHaveCount(0);
+
   // ── 9-1. 중복 고객 병합 (2026-11-18): 같은 전화번호의 중복 레코드(결제·예약·시술 1건, 방문 2회)를 만들면 상세에 "중복 의심" 안내가 뜨고, 본 고객으로 흡수 → 기록·방문·누적 결제가 합쳐지고 중복은 사라진다 ──
   const dupName = acc.customer + '중복';
   const beforeMerge = await page.evaluate(dupName => {

@@ -5,7 +5,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ChevronDown, Tag,
-  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus, GitMerge
+  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus, GitMerge, MessageSquare
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -1399,12 +1399,18 @@ export default function Customers() {
               <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
               {/* 모바일 액션 — PC와 동일한 모달(body 포털) */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
                   className="py-2.5 bg-sky-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
                 >
                   <CalendarPlus size={14} />예약 추가
+                </button>
+                <button
+                  onClick={() => navigate(`/messaging?customer=${selected.id}`)}
+                  className="py-2.5 bg-purple-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
+                >
+                  <MessageSquare size={14} />메시지
                 </button>
                 <button
                   onClick={() => setShowTreatmentModal(true)}
@@ -1664,6 +1670,13 @@ export default function Customers() {
                     title="이 고객으로 예약 추가 창을 엽니다"
                   >
                     <CalendarPlus size={12} />예약 추가
+                  </button>
+                  <button
+                    onClick={() => navigate(`/messaging?customer=${selected.id}`)}
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-purple-600 text-white rounded-xl text-xs font-medium hover:bg-purple-700 transition-colors"
+                    title="이 고객 한 명에게 문자·카카오를 보냅니다"
+                  >
+                    <MessageSquare size={12} />메시지
                   </button>
                   <button
                     onClick={openEditModal}

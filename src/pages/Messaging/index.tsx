@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
 import { notify } from '../../lib/notify';
+import { useSearchParams } from 'react-router-dom';
 import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../../lib/mobileBridge';
 import Header from '../../components/layout/Header';
@@ -64,6 +65,17 @@ export default function Messaging() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendSegment, setSendSegment] = useState<Segment>('all');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  // 고객 상세 [메시지](?customer=<id>) → 그 고객 한 명에게 보내는 발송 모달 (1회 캡처 후 URL 비움, 2026-11-18)
+  const [sendCustomerId, setSendCustomerId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('customer');
+    if (!id) return;
+    setSendCustomerId(id);
+    setSendSegment('all');
+    setShowSendModal(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [reloadKey, setReloadKey] = useState(0);
 
   const reload = useCallback(() => setReloadKey(k => k + 1), []);
@@ -133,9 +145,10 @@ export default function Messaging() {
 
       {showSendModal && (
         <SendMessageModal
-          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); }}
+          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); setSendCustomerId(null); }}
           initialTemplate={selectedTemplate}
           initialSegment={sendSegment}
+          initialCustomerId={sendCustomerId}
           onSent={reload}
         />
       )}
@@ -746,7 +759,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
   );
 }
 
-function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; onSent: () => void }) {
+function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; onSent: () => void }) {
   const [msgType, setMsgType] = useState<MessageType>('sms');
   const [recipientMode, setRecipientMode] = useState<Segment>(initialSegment ?? 'all');
   const [content, setContent] = useState('');
@@ -760,6 +773,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
   const charLimit = msgType === 'sms' ? 90 : 1000;
 
   const customers = CustomerStore.getAll().filter(c => c.isActive !== false);
+  // 개별 고객 발송 — 고객 상세에서 열었을 때. [대상 바꾸기]로 세그먼트 발송으로 되돌릴 수 있다
+  const [onlyCustomer, setOnlyCustomer] = useState<Customer | null>(() => (initialCustomerId && customers.find(c => c.id === initialCustomerId)) || null);
   const templates = MessageTemplateStore.getAll();
   const kakaoSettings = SettingsStore.get().kakao;
 
@@ -783,7 +798,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
   ];
 
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준)
-  const targetCustomers = customers.filter(SEGMENT_FILTERS[recipientMode]);
+  const targetCustomers = onlyCustomer ? [onlyCustomer] : customers.filter(SEGMENT_FILTERS[recipientMode]);
   const recipientCount = targetCustomers.length;
 
   // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
@@ -958,6 +973,12 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
           {/* Recipients */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">수신 대상</label>
+            {onlyCustomer ? (
+              <div className="flex items-center gap-2 flex-wrap" data-testid="recipient-single">
+                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-purple-600 text-white">개별 발송: {onlyCustomer.name}{onlyCustomer.phone ? ` (${onlyCustomer.phone})` : ''}</span>
+                <button type="button" onClick={() => setOnlyCustomer(null)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">대상 바꾸기</button>
+              </div>
+            ) : (
             <div className="flex gap-2 flex-wrap">
               {(['all', 'vip', 'birthday', 'novisit'] as Segment[]).map(key => ({
                 key,
@@ -977,6 +998,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                 </button>
               ))}
             </div>
+            )}
           </div>
 
           {/* Template selector */}
