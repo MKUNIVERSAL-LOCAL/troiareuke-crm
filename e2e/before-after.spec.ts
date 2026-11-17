@@ -18,7 +18,7 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await page.goto('/treatments');
   await page.getByRole('button', { name: '시술 기록 추가' }).click();
   await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
-  await page.locator('input[type="file"][accept="image/*"]').setInputFiles([
+  await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles([
     { name: 'before.png', mimeType: 'image/png', buffer: solidPng(64, [214, 120, 120]) },
     { name: 'after.png', mimeType: 'image/png', buffer: solidPng(64, [120, 200, 150]) },
   ]);

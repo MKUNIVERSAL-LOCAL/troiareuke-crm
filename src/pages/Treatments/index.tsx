@@ -12,6 +12,11 @@ import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makeP
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import { isAuthApiConfigured } from '../../lib/authApi';
 
+/** 목록 표시용 사진 장수 (로컬 캐시 기준) */
+function photoCount(logId: string): number {
+  return getPhotos(`treatment:${logId}`).length;
+}
+
 export default function Treatments() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -102,6 +107,7 @@ export default function Treatments() {
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
+                      {photoCount(t.id) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCount(t.id)}장</span>}
                     </p>
                     {t.skinCondition && (
                       <p className="text-xs text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
@@ -162,6 +168,7 @@ export default function Treatments() {
                   </p>
                   <p className="text-[11px] text-gray-400 mt-0.5">
                     {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
+                    {photoCount(t.id) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCount(t.id)}장</span>}
                   </p>
                   {t.skinCondition && (
                     <p className="text-[11px] text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
@@ -234,6 +241,8 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
   const [photos, setPhotoList] = useState<PhotoEntry[]>(() => (editing ? getPhotos(`treatment:${editing.id}`) : []));
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 모바일: capture 속성이 있는 입력은 앨범 대신 카메라 앱을 바로 연다 (PC 브라우저는 무시하고 파일 선택)
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Get active programs for the selected customer
   const activePrograms = customerId ? CustomerProgramStore.getActive(customerId) : [];
@@ -264,6 +273,7 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
 
@@ -517,11 +527,40 @@ function AddTreatmentModal({ treatment: editing, onClose, onSave }: { treatment?
               </div>
             </div>
           )}
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePickPhotos}
+            className="hidden"
+          />
+          {/* 모바일(lg 미만): 카메라 촬영 / 앨범 선택 두 갈래 — 시술 직후 바로 찍어 붙이는 흐름 (2026-11-17, P3) */}
+          <div className="grid grid-cols-2 gap-2 lg:hidden">
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={uploading}
+              className="border-2 border-dashed border-purple-200 rounded-xl py-4 flex flex-col items-center gap-1.5 text-purple-500 disabled:opacity-50"
+            >
+              {uploading ? <Loader2 size={22} className="animate-spin" /> : <Camera size={22} />}
+              <span className="text-sm font-medium">{uploading ? '처리 중...' : '카메라로 촬영'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="border-2 border-dashed border-gray-200 rounded-xl py-4 flex flex-col items-center gap-1.5 text-gray-500 disabled:opacity-50"
+            >
+              <ClipboardList size={22} />
+              <span className="text-sm font-medium">앨범에서 선택</span>
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="w-full border-2 border-dashed border-gray-200 rounded-xl py-6 flex flex-col items-center gap-2 text-gray-400 hover:border-purple-300 hover:text-purple-400 transition-colors disabled:opacity-50"
+            className="hidden lg:flex w-full border-2 border-dashed border-gray-200 rounded-xl py-6 flex-col items-center gap-2 text-gray-400 hover:border-purple-300 hover:text-purple-400 transition-colors disabled:opacity-50"
           >
             {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}
             <span className="text-sm">{uploading ? '사진 처리 중...' : '사진 추가 (여러 장 가능)'}</span>

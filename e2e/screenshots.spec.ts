@@ -27,7 +27,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   await page.goto('/treatments');
   await page.getByRole('button', { name: '시술 기록 추가' }).click();
   await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
-  await page.locator('input[type="file"][accept="image/*"]').setInputFiles([
+  await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles([
     { name: 'before.png', mimeType: 'image/png', buffer: solidPng(64, [214, 150, 140]) },
     { name: 'after.png', mimeType: 'image/png', buffer: solidPng(64, [150, 200, 170]) },
   ]);
