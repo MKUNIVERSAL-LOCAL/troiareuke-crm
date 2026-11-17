@@ -117,6 +117,28 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByRole('button', { name: '시술 기록 저장' }).click();
   await expect(page.getByText('잔여 9회').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
+  // ── 7-2. 프로그램 관리 (2026-11-18): 만료일 +30일·총 회차 12회로 보정 → 잔여 11회, 변경 기록이 notes에 남는다 ──
+  await page.getByRole('button', { name: '회차권10 관리' }).filter({ visible: true }).first().click();
+  const manageDialog = page.getByRole('dialog', { name: '프로그램 관리' });
+  const expiryBefore = await manageDialog.getByLabel('만료일').inputValue();
+  await manageDialog.getByRole('button', { name: '+30일' }).click();
+  const expiryAfter = await manageDialog.getByLabel('만료일').inputValue();
+  expect(expiryAfter > expiryBefore).toBe(true);
+  await manageDialog.getByLabel('총 회차').fill('12');
+  await manageDialog.getByLabel('사유').fill('서비스 2회 추가');
+  await manageDialog.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(manageDialog).toHaveCount(0);
+  await expect(page.getByText('잔여 11회').filter({ visible: true }).first()).toBeVisible();
+  const managed = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;
+    const cp = JSON.parse(localStorage.getItem(key) || '[]').find((x: { programName: string }) => x.programName === '회차권10');
+    return { expiryDate: cp.expiryDate as string, totalSessions: cp.totalSessions as number, notes: (cp.notes || '') as string };
+  });
+  expect(managed.expiryDate).toBe(expiryAfter);
+  expect(managed.totalSessions).toBe(12);
+  expect(managed.notes).toContain('총 회차 10회 → 12회');
+  expect(managed.notes).toContain('서비스 2회 추가');
+
   // ── 6-1. 내일 예약 안내 (2026-11-17): 오늘 예약을 내일로 복제하면 대시보드 카드에 뜨고 안내 초안이 만들어진다 ──
   await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;

@@ -22,6 +22,7 @@ import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
+import ProgramManageModal from '../../components/ProgramManageModal';
 import { mergeBlockReason, findSamePhoneCustomers } from '../../lib/customerMerge';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { FileText } from 'lucide-react';
@@ -386,6 +387,12 @@ export default function Customers() {
   // 프로그램 등록 모달
   const [showProgramModal, setShowProgramModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false); // 중복 고객 병합 (2026-11-18)
+  const [manageProgram, setManageProgram] = useState<CustomerProgram | null>(null); // 프로그램 만료일·회차·완료 관리 (2026-11-18)
+  const handleProgramManaged = () => {
+    setManageProgram(null);
+    if (selected) setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
+    loadAll();
+  };
   const [mergeQuery, setMergeQuery] = useState(''); // 중복 의심 안내에서 열면 전화번호가 미리 입력된다
   const samePhone = useMemo(() => (selected ? findSamePhoneCustomers(selected, customers) : []), [selected, customers]);
   const openMergeFromHint = () => { setMergeQuery(selected?.phone ?? ''); setShowMergeModal(true); };
@@ -1313,10 +1320,15 @@ export default function Customers() {
                       <div key={cp.id} className="p-3 bg-slate-50 rounded-lg">
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                            !cp.isCompleted ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'
-                          }`}>{!cp.isCompleted ? '진행중' : '완료'}</span>
+                          <span className="flex items-center gap-1.5">
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                              !cp.isCompleted ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'
+                            }`}>{!cp.isCompleted ? '진행중' : '완료'}</span>
+                            <button type="button" onClick={() => setManageProgram(cp)} aria-label={`${cp.programName} 관리`}
+                              className="px-2 py-0.5 text-[11px] font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
+                          </span>
                         </div>
+                        {cp.expiryDate && <p className="text-[11px] text-gray-400">만료일 {formatDate(cp.expiryDate)}</p>}
                         {cp.totalSessions != null && (
                           <p className="text-xs text-gray-500">
                             {cp.usedSessions || 0}/{cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
@@ -1888,9 +1900,13 @@ export default function Customers() {
                             </div>
                             <p className="font-semibold text-sm text-gray-900 mt-1">{cp.programName}</p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-xs text-gray-400">결제</p>
-                            <p className="text-sm font-bold text-gray-800">{formatPrice(cp.pricePaid)}</p>
+                          <div className="flex items-start gap-2">
+                            <div className="text-right">
+                              <p className="text-xs text-gray-400">결제</p>
+                              <p className="text-sm font-bold text-gray-800">{formatPrice(cp.pricePaid)}</p>
+                            </div>
+                            <button type="button" onClick={() => setManageProgram(cp)} aria-label={`${cp.programName} 관리`}
+                              className="px-2 py-1 text-[11px] font-medium rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 whitespace-nowrap">관리</button>
                           </div>
                         </div>
 
@@ -2717,6 +2733,7 @@ export default function Customers() {
         document.body,
       )}
       {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
+      {manageProgram && <ProgramManageModal program={manageProgram} onClose={() => setManageProgram(null)} onDone={handleProgramManaged} />}
       {showMergeModal && selected && <CustomerMergeModal target={selected} initialQuery={mergeQuery} onClose={() => { setShowMergeModal(false); setMergeQuery(''); }} onMerged={handleMerged} />}
       </div>
     </div>
