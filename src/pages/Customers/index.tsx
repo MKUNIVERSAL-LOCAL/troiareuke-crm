@@ -134,6 +134,8 @@ export default function Customers() {
 
   // 고객 추가 모달
   const [showAddModal, setShowAddModal] = useState(false);
+  // 대시보드 빠른 작업(/customers?new=1) → 바로 등록 모달
+  useEffect(() => { if (searchParams.get('new') === '1') setShowAddModal(true); }, [searchParams]);
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
   const [addPrivacyConsent, setAddPrivacyConsent] = useState(false);
 

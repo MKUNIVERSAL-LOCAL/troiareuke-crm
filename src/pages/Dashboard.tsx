@@ -1,6 +1,8 @@
 ﻿import { HIDE_ON_MOBILE } from '../lib/platform';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { UserPlus, CalendarPlus, ClipboardPlus } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag, Store, Globe, Apple, Play } from 'lucide-react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -108,6 +110,13 @@ export default function Dashboard() {
   const reservationsOn = useFeature('module.reservations');
   const customersOn = useFeature('module.customers');
   const productsOn = useFeature('module.products');
+  const treatmentsOn = useFeature('module.treatments');
+  // 빠른 작업 — 매장에서 가장 잦은 세 동작을 홈에서 한 번에 (대상 화면이 ?new=1 로 등록 모달을 연다, 2026-11-17)
+  const quickActions = [
+    customersOn && { label: '고객 추가', icon: <UserPlus size={18} />, to: '/customers?new=1', cls: 'bg-[#1a3a8f] text-white' },
+    reservationsOn && { label: '예약 추가', icon: <CalendarPlus size={18} />, to: '/reservations?new=1', cls: 'bg-indigo-500 text-white' },
+    treatmentsOn && { label: '시술 기록', icon: <ClipboardPlus size={18} />, to: '/treatments?new=1', cls: 'bg-green-500 text-white' },
+  ].filter(Boolean) as { label: string; icon: ReactNode; to: string; cls: string }[];
 
   // 다른 페이지에서 CRUD 후 돌아오거나 창에 포커스가 돌아오면 최신 데이터로 재계산 (stale 방지)
   useEffect(() => {
@@ -138,6 +147,15 @@ export default function Dashboard() {
 
       {/* ── 모바일 뷰 (< lg) ─────────────────────────────────── */}
       <div className="block lg:hidden px-4 py-3 space-y-4">
+        {quickActions.length > 0 && (
+          <div className="grid grid-cols-3 gap-2" aria-label="빠른 작업">
+            {quickActions.map(a => (
+              <button key={a.to} onClick={() => navigate(a.to)} className={`${a.cls} rounded-xl py-3 flex flex-col items-center gap-1 text-xs font-semibold active:scale-95 transition`}>
+                {a.icon}{a.label}
+              </button>
+            ))}
+          </div>
+        )}
         {/* StatCards 2열 */}
         <div className="grid grid-cols-2 gap-3">
           {salesOn && (
@@ -244,6 +262,15 @@ export default function Dashboard() {
 
       {/* ── 데스크톱 뷰 (lg+) ────────────────────────────────── */}
       <div className="hidden lg:block p-8 space-y-6 flex-1">
+        {quickActions.length > 0 && (
+          <div className="flex flex-wrap gap-2" aria-label="빠른 작업">
+            {quickActions.map(a => (
+              <button key={a.to} onClick={() => navigate(a.to)} className={`${a.cls} rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm font-semibold hover:opacity-90 hover:-translate-y-0.5 transition-all shadow-sm`}>
+                {a.icon}{a.label}
+              </button>
+            ))}
+          </div>
+        )}
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {salesOn && (

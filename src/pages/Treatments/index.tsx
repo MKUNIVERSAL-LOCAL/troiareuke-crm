@@ -1,5 +1,6 @@
 import { notify } from '../../lib/notify';
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -15,6 +16,9 @@ import { isAuthApiConfigured } from '../../lib/authApi';
 export default function Treatments() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  // 대시보드 빠른 작업(?new=1) → 바로 추가 모달
+  const [searchParams] = useSearchParams();
+  useEffect(() => { if (searchParams.get('new') === '1') setShowAddModal(true); }, [searchParams]);
   const [editing, setEditing] = useState<TreatmentLog | null>(null);
   const [selected, setSelected] = useState<TreatmentLog | null>(null);
   const [treatmentLogs, setTreatmentLogs] = useState<TreatmentLog[]>([]);

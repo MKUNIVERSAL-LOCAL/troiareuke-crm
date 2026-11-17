@@ -71,6 +71,13 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
     await expectNoHorizontalOverflow(page, aria);
   }
 
+  // 홈 빠른 작업 → 고객 추가 모달이 바로 열린다 (2026-11-17)
+  await page.goto('/');
+  await page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first().click();
+  expect(page.url()).toContain('/customers?new=1');
+  await expect(page.getByRole('heading', { name: '고객 추가' }).filter({ visible: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: '취소', exact: true }).filter({ visible: true }).first().click();
+
   // 지점 화면 전부를 모바일 폭으로 열어 가로 넘침 검사 (2026-11-17: 탭바 밖 화면 포함 전수)
   for (const route of BRANCH_ROUTES) {
     await page.goto(route);

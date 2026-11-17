@@ -1,4 +1,5 @@
 ﻿import { useState, useCallback, useEffect, type CSSProperties } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
@@ -132,6 +133,9 @@ export default function Reservations() {
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
+  // 대시보드 빠른 작업(?new=1) → 바로 추가 모달
+  const [searchParams] = useSearchParams();
+  useEffect(() => { if (searchParams.get('new') === '1') setShowAddModal(true); }, [searchParams]);
   const [editReservation, setEditReservation] = useState<Reservation | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
