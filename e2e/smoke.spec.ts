@@ -290,6 +290,16 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByRole('button', { name: '대상 바꾸기' }).click();
   await expect(page.getByTestId('recipient-single')).toHaveCount(0);
 
+  // ── 9-0-1. 기록 → 고객 상세 역링크 (2026-11-18): 예약 상세의 고객명을 누르면 고객 상세가 열린다 ──
+  const firstResId = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
+    return JSON.parse(localStorage.getItem(key) || '[]')[0].id as string;
+  });
+  await page.goto(`/reservations?open=${firstResId}`);
+  await page.getByRole('button', { name: `${acc.customer} 고객 상세 열기` }).click();
+  await expect(page).toHaveURL(/\/customers$/);
+  await expect(desk.getByTestId('customer-timeline')).toBeVisible();
+
   // ── 9-1. 중복 고객 병합 (2026-11-18): 같은 전화번호의 중복 레코드(결제·예약·시술 1건, 방문 2회)를 만들면 상세에 "중복 의심" 안내가 뜨고, 본 고객으로 흡수 → 기록·방문·누적 결제가 합쳐지고 중복은 사라진다 ──
   const dupName = acc.customer + '중복';
   const beforeMerge = await page.evaluate(dupName => {

@@ -1,6 +1,6 @@
 import { notify } from '../../lib/notify';
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
   ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search, Layers,
@@ -98,6 +98,12 @@ export default function Sales() {
 
   // 시술 기록 저장 → 결제 연계 / 대시보드 빠른 작업: ?new=1(&customer=&amount=&memo=&reference=) 이면 등록 모달을 프리필해 연다 (2026-11-17, reference 2026-11-18)
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  // 결제 행의 고객명 → 고객 상세 (2026-11-18)
+  const customerLink = (p: Payment, fallback: string) => p.customerId ? (
+    <button type="button" onClick={e => { e.stopPropagation(); navigate(`/customers?open=${encodeURIComponent(p.customerId!)}`); }}
+      className="hover:underline text-left" title="고객 상세 열기">{p.customerName || fallback}</button>
+  ) : (p.customerName || fallback);
   useEffect(() => {
     if (searchParams.get('new') !== '1') return;
     const customerId = searchParams.get('customer') || '';
@@ -609,7 +615,7 @@ export default function Sales() {
                         {p.type === 'product' ? <ShoppingBag size={13} className="text-purple-500" /> : <Scissors size={13} className="text-blue-500" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{p.customerName || '고객'}</p>
+                        <p className="text-sm font-medium text-gray-800 truncate">{customerLink(p, '고객')}</p>
                         <p className="text-xs text-gray-400">{p.typeLabel} · {p.paymentDate}</p>
                       </div>
                       <p className="text-sm font-bold text-gray-900 flex-shrink-0">{formatPrice(p.amount)}</p>
@@ -677,7 +683,7 @@ export default function Sales() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">
-                          {p.customerName || '—'}
+                          {customerLink(p, '—')}
                           {p.status === 'refunded' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
                           {p.status === 'pending' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
                         </p>
@@ -712,7 +718,7 @@ export default function Sales() {
                     <div key={p.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
                       <span className="text-gray-500 text-xs">{p.paymentDate}</span>
                       <span className="col-span-2 font-medium text-gray-800">
-                        {p.customerName || '—'}
+                        {customerLink(p, '—')}
                         {p.discountAmount > 0 && <span className="ml-1.5 text-[11px] text-orange-500">-{formatPrice(p.discountAmount)}</span>}
                         {p.status === 'refunded' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
                         {p.status === 'pending' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}

@@ -1128,7 +1128,14 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
                 <span className="text-white font-bold">{r.customerName[0]}</span>
               </div>
               <div>
-                <p className="font-bold text-gray-900">{r.customerName}</p>
+                {r.customerId ? (
+                  <button type="button" onClick={() => { onClose(); goTo(`/customers?open=${encodeURIComponent(r.customerId)}`); }}
+                    className="font-bold text-gray-900 hover:underline text-left" title="고객 상세 열기" aria-label={`${r.customerName} 고객 상세 열기`}>
+                    {r.customerName}
+                  </button>
+                ) : (
+                  <p className="font-bold text-gray-900">{r.customerName}</p>
+                )}
                 <p className="text-xs text-gray-400">{maskPhone(r.customerPhone, user?.role ?? 'staff')}</p>
               </div>
             </div>

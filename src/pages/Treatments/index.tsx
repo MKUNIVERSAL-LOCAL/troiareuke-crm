@@ -757,7 +757,10 @@ function TreatmentDetailModal({
             <span className="text-white text-lg font-bold">{t.customerName[0]}</span>
           </div>
           <div className="flex-1">
-            <p className="font-bold text-gray-900 text-base">{t.customerName}</p>
+            <button type="button" onClick={() => { onClose(); navigate(`/customers?open=${encodeURIComponent(t.customerId)}`); }}
+              className="font-bold text-gray-900 text-base hover:underline text-left" title="고객 상세 열기" aria-label={`${t.customerName} 고객 상세 열기`}>
+              {t.customerName}
+            </button>
             <p className="text-xs text-gray-400">
               {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
             </p>
