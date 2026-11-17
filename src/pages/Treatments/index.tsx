@@ -12,11 +12,6 @@ import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makeP
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import { isAuthApiConfigured } from '../../lib/authApi';
 
-/** 목록 표시용 사진 장수 (로컬 캐시 기준) */
-function photoCount(logId: string): number {
-  return getPhotos(`treatment:${logId}`).length;
-}
-
 export default function Treatments() {
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -27,6 +22,11 @@ export default function Treatments() {
   const loadLogs = () => {
     setTreatmentLogs(TreatmentLogStore.getAll());
   };
+  // 목록 표시용 사진 장수 — base64 캐시를 매 렌더·매 키 입력마다 파싱하지 않도록 목록이 바뀔 때만 계산
+  const photoCounts = useMemo(
+    () => new Map(treatmentLogs.map(t => [t.id, getPhotos(`treatment:${t.id}`).length])),
+    [treatmentLogs],
+  );
 
   useEffect(() => {
     loadLogs();
@@ -107,7 +107,7 @@ export default function Treatments() {
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
-                      {photoCount(t.id) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCount(t.id)}장</span>}
+                      {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
                     </p>
                     {t.skinCondition && (
                       <p className="text-xs text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
@@ -168,7 +168,7 @@ export default function Treatments() {
                   </p>
                   <p className="text-[11px] text-gray-400 mt-0.5">
                     {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
-                    {photoCount(t.id) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCount(t.id)}장</span>}
+                    {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
                   </p>
                   {t.skinCondition && (
                     <p className="text-[11px] text-purple-600 mt-1">피부상태: {t.skinCondition}</p>

@@ -22,6 +22,10 @@ function storageKey(entityKey: string): string {
 // 푸시가 실패한(오프라인 등) 엔티티는 dirty로 표시한다. dirty인 동안에는
 // 서버본이 로컬을 덮어쓰지 못하고(사진 유실 방지), 재푸시로 해소된다.
 const DIRTY_KEY = 'troiareuke_photos_dirty';
+// 용량 초과로 비워진 캐시 표식 — "삭제됨"과 구분해 dirty 재전송 때 빈 배열을 서버에 올리지 않게 한다
+const EVICTED_KEY = 'crm_photo_evicted';
+// 서버 전송이 끝나지 않은 엔티티 — 이 캐시를 비우면 실패 시 재전송할 원본이 사라진다
+const PENDING_PUSH = new Set<string>();
 
 function getDirtyKeys(): string[] {
   try {
@@ -30,6 +34,25 @@ function getDirtyKeys(): string[] {
   } catch {
     return [];
   }
+}
+
+function getEvictedKeys(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(EVICTED_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function setEvicted(entityKey: string, evicted: boolean): void {
+  try {
+    const keys = new Set(getEvictedKeys());
+    if (evicted) keys.add(entityKey);
+    else keys.delete(entityKey);
+    if (keys.size === 0) localStorage.removeItem(EVICTED_KEY);
+    else localStorage.setItem(EVICTED_KEY, JSON.stringify([...keys]));
+  } catch { /* noop */ }
 }
 
 function setDirty(entityKey: string, dirty: boolean): void {
@@ -68,6 +91,7 @@ function setTombstone(entityKey: string, pending: boolean): void {
 // NAS 중앙 서버로 사진 백업. 실패 시 dirty로 표시해 다음 sync에서 재푸시.
 function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
   if (!isAuthApiConfigured) return;
+  PENDING_PUSH.add(entityKey);
   apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
     method: 'PUT',
     body: JSON.stringify({ photos }),
@@ -80,7 +104,8 @@ function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
     .catch(e => {
       setDirty(entityKey, true);
       console.error(`[NAS] 사진 동기화 실패 (${entityKey}):`, e);
-    });
+    })
+    .finally(() => PENDING_PUSH.delete(entityKey));
 }
 
 /**
@@ -101,8 +126,17 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
   if (entityKeys.length === 0) return false;
 
   const dirty = new Set(getDirtyKeys());
+  const evicted = new Set(getEvictedKeys());
   for (const key of entityKeys) {
-    if (dirty.has(key)) pushToNas(key, getPhotos(key));
+    if (!dirty.has(key)) continue;
+    const local = getPhotos(key);
+    if (local.length === 0 && evicted.has(key)) {
+      // 용량 초과로 캐시가 비워진 것이지 삭제가 아니다 — 서버본을 정본으로 두고 표식만 정리
+      setDirty(key, false);
+      setEvicted(key, false);
+      continue;
+    }
+    pushToNas(key, local);
   }
   const cleanKeys = entityKeys.filter(k => !dirty.has(k));
   if (cleanKeys.length === 0) return false;
@@ -131,6 +165,7 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
           try {
             if (remote.length === 0) localStorage.removeItem(storageKey(entityKey));
             else localStorage.setItem(storageKey(entityKey), JSON.stringify(remote));
+            setEvicted(entityKey, false);
             changed = true;
           } catch { /* 로컬 캐시 용량 초과 — 서버본은 남아 있으므로 무시 */ }
         }
@@ -157,18 +192,23 @@ export function getPhotos(entityKey: string): PhotoEntry[] {
 
 /**
  * 로컬 사진 캐시 비우기 (NAS 모드 전용) — 서버가 정본이므로 다른 엔티티의 캐시는 다음 동기화 때 다시 받는다.
- * dirty(미전송)·현재 엔티티는 남긴다. 모바일 WebView(localStorage 5~10MB)에서 "용량 초과" 막다른 길을 없앤다.
+ * dirty(미전송)·전송 중·현재 엔티티는 남긴다. 모바일 WebView(localStorage 5~10MB)에서 "용량 초과" 막다른 길을 없앤다.
  * @returns 비운 엔티티 수
  */
-export function evictPhotoCache(keepEntityKey?: string): number {
+function evictPhotoCache(keepEntityKey?: string): number {
   if (!isAuthApiConfigured) return 0;
   const dirty = new Set(getDirtyKeys());
   let evicted = 0;
   for (const key of Object.keys(localStorage)) {
-    if (!key.startsWith(PREFIX)) continue;
+    if (!key.startsWith(PREFIX) || key === DIRTY_KEY) continue; // dirty 목록 자체는 PREFIX로 시작하는 메타키
     const entityKey = key.slice(PREFIX.length);
-    if (entityKey === keepEntityKey || dirty.has(entityKey)) continue;
-    try { localStorage.removeItem(key); evicted += 1; } catch { /* noop */ }
+    // 현재 저장 중·미전송(dirty)·전송 진행 중 엔티티는 서버에 원본이 확정되지 않았으므로 비우지 않는다
+    if (entityKey === keepEntityKey || dirty.has(entityKey) || PENDING_PUSH.has(entityKey)) continue;
+    try {
+      localStorage.removeItem(key);
+      setEvicted(entityKey, true);
+      evicted += 1;
+    } catch { /* noop */ }
   }
   return evicted;
 }

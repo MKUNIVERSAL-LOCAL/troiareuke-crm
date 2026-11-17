@@ -276,7 +276,8 @@ function publicUser(row) {
 // 클라이언트(authApi.ts)가 매 요청에 X-App-Version / X-App-Mode를 실어 보낸다.
 // 값이 바뀌었거나 마지막 기록이 5분 이상 지났을 때만 UPDATE (요청마다 쓰지 않음).
 const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}([-.][0-9A-Za-z.-]{0,20})?$/;
-const APP_MODES = new Set(['portable', 'folder', 'admin', 'web']);
+// android/ios: 스토어 앱(Capacitor) — 채널(latest.json) 버전 비교·구버전 경보 대상에서 제외하기 위해 모드를 보존한다
+const APP_MODES = new Set(['portable', 'folder', 'admin', 'web', 'android', 'ios']);
 const APP_SEEN_REFRESH_MS = 5 * 60 * 1000;
 /** 로그인 시도 기록(성공·실패 모두). 실패해도 로그인 흐름을 막지 않는다(fire-and-forget). */
 function recordLoginAttempt(req, { userId = null, email, branchId = null, branchName = null, status, failReason = null }) {
