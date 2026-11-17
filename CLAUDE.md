@@ -14,7 +14,7 @@
 
 ## 3. 검증 없이 완료 보고 금지
 - 수정 후: `npx tsc --noEmit` 0 에러 + `npm run build` 통과 확인.
-- 사용자에게 "테스트해보세요" 전에: 백엔드 생존 확인(NAS `/health`, Supabase) + 가능하면 E2E/스모크.
+- 사용자에게 "테스트해보세요" 전에: 백엔드 생존 확인(NAS `/health`) + 가능하면 E2E/스모크. (Supabase 폴백 프로젝트는 2026-11-17 소멸 확인 — 제거 계획 `docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md` P1)
 - 회귀 점검: 변경 함수의 호출자 전수 추적 (상위 CLAUDE.md 원칙 4).
 
 ## 4. 기록

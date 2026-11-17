@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured } from '../../lib/authApi';
@@ -53,7 +54,7 @@ export default function Announcements() {
         })));
       } catch (e: any) {
         console.warn('[Announcements] NAS 로드 실패:', e?.message);
-        alert(`공지 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+        notify.error(`공지 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
         setList([]);
       }
       setLoading(false);
@@ -88,7 +89,7 @@ export default function Announcements() {
         else await adminCreateAnnouncement(payload);
       } catch (e: any) {
         setSaving(false);
-        alert(`공지 저장에 실패했습니다: ${e?.message || '서버 오류'}`);
+        notify.error(`공지 저장에 실패했습니다: ${e?.message || '서버 오류'}`);
         return; // 저장 실패 시 모달을 닫지 않아 내용이 유실되지 않게 함
       }
       setSaving(false);
@@ -101,7 +102,7 @@ export default function Announcements() {
       : await supabase.from('announcements').insert(form);
     setSaving(false);
     if (error) {
-      alert(`공지 저장에 실패했습니다: ${error.message}`);
+      notify.error(`공지 저장에 실패했습니다: ${error.message}`);
       return; // 저장 실패 시 모달을 닫지 않아 내용이 유실되지 않게 함
     }
     setShowModal(false);
@@ -115,13 +116,13 @@ export default function Announcements() {
       try {
         await adminDeleteAnnouncement(id);
       } catch (e: any) {
-        alert(`삭제 실패: ${e?.message || '서버 오류'}`);
+        notify.error(`삭제 실패: ${e?.message || '서버 오류'}`);
       }
       load();
       return;
     }
     const { error } = await supabase.from('announcements').delete().eq('id', id);
-    if (error) alert(`삭제 실패: ${error.message}`);
+    if (error) notify.error(`삭제 실패: ${error.message}`);
     load();
   }
 
@@ -131,13 +132,13 @@ export default function Announcements() {
       try {
         await adminUpdateAnnouncement(a.id, { isActive: !a.is_active });
       } catch (e: any) {
-        alert(`변경 실패: ${e?.message || '서버 오류'}`);
+        notify.error(`변경 실패: ${e?.message || '서버 오류'}`);
       }
       load();
       return;
     }
     const { error } = await supabase.from('announcements').update({ is_active: !a.is_active }).eq('id', a.id);
-    if (error) alert(`변경 실패: ${error.message}`);
+    if (error) notify.error(`변경 실패: ${error.message}`);
     load();
   }
 

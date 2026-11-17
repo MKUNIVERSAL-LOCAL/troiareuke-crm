@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { notify } from '../../lib/notify';
 import { Users, Building2, Search, UserPlus, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser, adminGetApplication, adminApproveUser, adminRejectUser, type AdminApplicationDetail } from '../../lib/authApi';
@@ -67,7 +68,7 @@ export default function AdminUsers() {
       const detail = await adminGetApplication(userId);
       setReviewTarget(detail);
     } catch (e: any) {
-      alert(`신청 상세를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+      notify.error(`신청 상세를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
     } finally {
       setReviewLoading(false);
     }
@@ -82,7 +83,7 @@ export default function AdminUsers() {
       setReviewTarget(null);
       await loadData();
     } catch (e: any) {
-      alert(e?.message || '승인 처리에 실패했습니다.');
+      notify.error(e?.message || '승인 처리에 실패했습니다.');
     } finally {
       setReviewBusy(false);
     }
@@ -91,7 +92,7 @@ export default function AdminUsers() {
   async function handleReject() {
     if (!reviewTarget) return;
     const reason = rejectReason.trim();
-    if (!reason) { alert('거부 사유를 입력해주세요 (1~500자).'); return; }
+    if (!reason) { notify.error('거부 사유를 입력해주세요 (1~500자).'); return; }
     if (!confirm(`${reviewTarget.email} 신청을 거부합니다. 계속할까요?\n사유: ${reason}`)) return;
     setReviewBusy(true);
     try {
@@ -99,7 +100,7 @@ export default function AdminUsers() {
       setReviewTarget(null);
       await loadData();
     } catch (e: any) {
-      alert(e?.message || '거부 처리에 실패했습니다.');
+      notify.error(e?.message || '거부 처리에 실패했습니다.');
     } finally {
       setReviewBusy(false);
     }
@@ -215,7 +216,7 @@ export default function AdminUsers() {
       await adminUpdateUser(user.id, { isActive: next });
       await loadData();
     } catch (e: any) {
-      alert(e?.message || '계정 상태 변경에 실패했습니다.');
+      notify.error(e?.message || '계정 상태 변경에 실패했습니다.');
     } finally {
       setActionBusy(null);
     }
@@ -247,7 +248,7 @@ export default function AdminUsers() {
       setCopied(false);
       setTempPwResult({ email: user.email, password: temp });
     } catch (e: any) {
-      alert(e?.message || '비밀번호 재설정에 실패했습니다.');
+      notify.error(e?.message || '비밀번호 재설정에 실패했습니다.');
     } finally {
       setActionBusy(null);
     }
@@ -261,7 +262,7 @@ export default function AdminUsers() {
 
   async function handleInvite() {
     const email = inviteEmail.trim();
-    if (!email) { alert('초대할 이메일을 입력해주세요.'); return; }
+    if (!email) { notify.error('초대할 이메일을 입력해주세요.'); return; }
     if (!confirm(`${email} 을(를) 슈퍼어드민(관리자 콘솔 전체 권한)으로 초대할까요?`)) return;
     setInviteBusy(true);
     try {
@@ -275,7 +276,7 @@ export default function AdminUsers() {
       }
       await loadData();
     } catch (e: any) {
-      alert(e?.message || '관리자 초대에 실패했습니다.');
+      notify.error(e?.message || '관리자 초대에 실패했습니다.');
     } finally {
       setInviteBusy(false);
     }
@@ -294,7 +295,7 @@ export default function AdminUsers() {
   async function savePeriod(unlimited: boolean) {
     if (!periodTarget) return;
     if (!unlimited && !periodDate) {
-      alert('만료일을 선택하거나 [무제한으로 설정]을 눌러주세요.');
+      notify.error('만료일을 선택하거나 [무제한으로 설정]을 눌러주세요.');
       return;
     }
     const value = unlimited ? null : periodDate;
@@ -307,7 +308,7 @@ export default function AdminUsers() {
       setPeriodTarget(null);
       await loadData();
     } catch (e: any) {
-      alert(e?.message || '사용기간 변경에 실패했습니다.');
+      notify.error(e?.message || '사용기간 변경에 실패했습니다.');
     } finally {
       setPeriodBusy(false);
     }

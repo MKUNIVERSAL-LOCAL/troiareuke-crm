@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { notify } from '../../lib/notify';
 import { SlidersHorizontal, Save, RotateCcw, Globe, Building2 } from 'lucide-react';
 import clsx from 'clsx';
 import { isAuthApiConfigured, adminListUsers } from '../../lib/authApi';
@@ -41,7 +42,7 @@ export default function AdminFeatures() {
       }
       setBranches([...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ko')));
     } catch (e: any) {
-      alert(`기능 설정을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+      notify.error(`기능 설정을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
     }
     setLoading(false);
   }
@@ -103,7 +104,7 @@ export default function AdminFeatures() {
       setScopes((prev) => ({ ...prev, [selected]: res.flags }));
       setSavedAt(Date.now());
     } catch (e: any) {
-      alert(`저장에 실패했습니다: ${e?.message || '서버 오류'}`);
+      notify.error(`저장에 실패했습니다: ${e?.message || '서버 오류'}`);
     }
     setSaving(false);
   }

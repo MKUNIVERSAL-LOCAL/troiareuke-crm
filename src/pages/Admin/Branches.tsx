@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
 import { createBranchAdmin, adminDeleteBranch, type AdminApiResult } from '../../lib/adminApi';
@@ -319,14 +320,14 @@ export default function Branches() {
       try {
         for (const u of users) await adminUpdateUser(u.id, { isActive: nextActive });
       } catch (e: any) {
-        alert(`변경 실패: ${e?.message || '서버 오류'}`);
+        notify.error(`변경 실패: ${e?.message || '서버 오류'}`);
       }
       loadBranches();
       return;
     }
     if (isSupabaseConfigured) {
       const { error } = await supabase.from('branches').update({ is_active: !b.is_active }).eq('id', b.id);
-      if (error) alert(`변경 실패: ${error.message}`);
+      if (error) notify.error(`변경 실패: ${error.message}`);
     } else {
       const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
       const idx = localBranches.findIndex(x => x.id === b.id);

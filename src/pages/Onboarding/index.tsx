@@ -5,6 +5,7 @@ import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, Cre
 import { useAuth } from '../../contexts/AuthContext';
 import { StaffStore, ServiceStore, ProgramStore, SettingsStore } from '../../lib/store';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { isAuthApiConfigured } from '../../lib/authApi';
 import { PLANS } from '../../lib/payment';
 import type { ShopSettings, SubscriptionPlan } from '../../types';
 import * as XLSX from 'xlsx';
@@ -181,7 +182,8 @@ export default function Onboarding() {
       notes: plan === 'trial' ? '14일 무료 체험' : `${plan} 플랜 결제`,
     };
 
-    if (isSupabaseConfigured) {
+    // Supabase 구독 기록은 NAS 미설정 구빌드 폴백 전용 — NAS 모드는 서버가 플랜을 보유한다
+    if (isSupabaseConfigured && !isAuthApiConfigured) {
       // 라이브 subscriptions 테이블에는 currency 컬럼이 없음(PGRST204) — 제외하고 저장
       const { currency: _currency, ...dbRow } = subscriptionData;
       const { error } = await supabase.from('subscriptions').insert(dbRow);

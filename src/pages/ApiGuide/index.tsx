@@ -256,7 +256,7 @@ export default function ApiGuide() {
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="text-sm font-bold text-gray-900">연동 진행률</h3>
-              <p className="text-xs text-gray-400 mt-0.5">{connectedCount} / {apis.length} 연동 완료</p>
+              <p className="text-xs text-gray-400 mt-0.5">{connectedCount} / {apis.length} 확인 완료로 표시 (자기 체크)</p>
             </div>
             <span className="text-2xl font-black text-[#1a3a8f]">{Math.round((connectedCount / apis.length) * 100)}%</span>
           </div>
@@ -344,7 +344,7 @@ export default function ApiGuide() {
                         className={clsx('flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border-2 transition-all',
                           st === 'connected' ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-600 hover:border-blue-300')}>
                         {st === 'connected' ? <CheckCircle2 size={14} /> : <Circle size={14} />}
-                        {st === 'connected' ? '연동 완료' : st === 'pending' ? '진행 중으로 표시' : '완료로 표시'}
+                        {st === 'connected' ? '확인 완료' : st === 'pending' ? '진행 중으로 표시' : '완료로 표시'}
                       </button>
                     </div>
                   </div>

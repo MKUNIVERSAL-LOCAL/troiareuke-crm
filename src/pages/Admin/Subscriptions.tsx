@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { notify } from '../../lib/notify';
 import { CreditCard, Pencil, AlertCircle, CheckCircle, Clock, Search } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
@@ -135,7 +136,7 @@ export default function Subscriptions() {
         });
       } catch (e: any) {
         setSaving(false);
-        alert(`플랜 변경 실패: ${e?.message || '서버 오류'}`);
+        notify.error(`플랜 변경 실패: ${e?.message || '서버 오류'}`);
         return;
       }
       setSaving(false);
@@ -157,7 +158,7 @@ export default function Subscriptions() {
 
     setSaving(false);
     if (subError || branchError) {
-      alert(`저장 실패: ${(subError || branchError)!.message}`);
+      notify.error(`저장 실패: ${(subError || branchError)!.message}`);
       return;
     }
     setShowModal(false);

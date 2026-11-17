@@ -10,6 +10,11 @@ import { SettingsStore, ServiceStore, getShopId } from '../../lib/store';
 import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { isAuthApiConfigured } from '../../lib/authApi';
+
+// 구독 기록의 Supabase 경로는 NAS 미설정 구빌드 폴백 전용. NAS 모드에서는 호출하지 않는다
+// (2026-11-17: Supabase 프로젝트 도메인 소멸 확인 — NAS 모드에서 호출 시 매번 실패·플랜 전환 차단).
+const SUPABASE_FALLBACK = isSupabaseConfigured && !isAuthApiConfigured;
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFlagsChanged, PAYMENT_ENABLED } from '../../lib/featureFlags';
 import { useFeatureAllowed } from '../../hooks/useFeature';
@@ -217,7 +222,7 @@ export default function Settings() {
     try {
       let fetchedFromRemote = false;
 
-      if (isSupabaseConfigured && user?.branchId) {
+      if (SUPABASE_FALLBACK && user?.branchId) {
         const { data } = await supabase
           .from('subscriptions')
           .select('*')
@@ -303,7 +308,7 @@ export default function Settings() {
           notes: '무료 체험 전환',
         };
 
-        if (isSupabaseConfigured && user?.branchId) {
+        if (SUPABASE_FALLBACK && user?.branchId) {
           // 기존 구독 만료 처리
           if (currentSubscription?.id) {
             const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
@@ -364,7 +369,7 @@ export default function Settings() {
           notes: `${plan.name} 플랜 결제`,
         };
 
-        if (isSupabaseConfigured && user?.branchId) {
+        if (SUPABASE_FALLBACK && user?.branchId) {
           if (currentSubscription?.id) {
             const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
             if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
@@ -434,7 +439,7 @@ export default function Settings() {
 
     // 다음 로그인에서도 같은 샵명이 보이도록 지점·로컬 세션을 함께 갱신한다.
     let remoteFailed = false;
-    if (isSupabaseConfigured && user?.branchId) {
+    if (SUPABASE_FALLBACK && user?.branchId) {
       const { error } = await supabase.from('branches').update({
         name: shopName,
         phone: settings.phone || null,
