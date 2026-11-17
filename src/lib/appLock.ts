@@ -6,8 +6,15 @@
 // 기본 OFF. PIN을 잊으면 로그아웃(서버 모드)으로 해제하고 다시 로그인한다.
 // ═══════════════════════════════════════════════════════════════
 
+import { isAuthApiConfigured } from './authApi';
+
 const KEY = 'crm_app_lock';
 export const APP_LOCK_CHANGED_EVENT = 'crm:app-lock-changed';
+/**
+ * 서버(NAS) 모드에서만 제공 — 로컬 모드는 로그인이 없어 "PIN을 잊었을 때" 되돌릴 신원이 없고, 끄기 버튼을 두면 장식 잠금이 된다(리뷰 2026-11-18).
+ * E2E는 로컬 모드 빌드(--mode e2e)라 잠금 흐름 검증을 위해서만 예외.
+ */
+export const APP_LOCK_AVAILABLE: boolean = isAuthApiConfigured || import.meta.env.MODE === 'e2e';
 
 export interface AppLockConfig {
   hash: string;       // PIN 해시 (SHA-256 hex, SubtleCrypto 불가 시 폴백 해시)

@@ -79,7 +79,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [ ] 사업자등록번호 국세청 진위확인 API(공공데이터포털 키 필요, 무료) → 가입 승인 보조.
 
 ### P4-2. 보안 (2026-11-18 새벽 추가)
-- [x] 앱 잠금(PIN) — `appLock.ts`(기기별 localStorage, SHA-256 해시, 즉시/1/5/15분), `AppLockOverlay`(visibilitychange·blur/focus, 화면 전체 덮기, 잊으면 로그아웃/잠금 끄기), 설정 > 데이터 백업 `AppLockCard`. 기본 OFF. 모바일 E2E로 켜기→잠금→오답→해제→끄기 검증.
+- [x] 앱 잠금(PIN) — `appLock.ts`(기기별 localStorage, SHA-256 해시, 즉시/1/5/15분), `AppLockOverlay`(visibilitychange·blur/focus, 화면 전체 덮기, 잊으면 로그아웃/잠금 끄기), 설정 > 데이터 백업 `AppLockCard`. 기본 OFF. 모바일 E2E로 켜기→잠금→오답→해제→새로고침 재잠금→끄기 검증. 리뷰(med 3/low 5) 반영: 시작·새로고침 때도 잠금, 이벤트 순서 무관 복귀 판정, 잠금 중 #root inert(키보드 우회 차단), Capacitor appStateChange 병행, 오답 5회 30초 대기, 로컬 모드는 미제공(E2E 빌드만 예외), 로그아웃 시 해제 문구. **코어 메모**: AuthContext 로그아웃이 crm_app_lock도 지움(기기별 유지하려면 LOGOUT_PRESERVE 추가 — 오너 승인).
 
 ### P4-1. 매출 누수 방지 (2026-11-17 밤 추가)
 - [x] 카드 2종 코드리뷰(med 2/low 5) 반영: 회차권 날짜 기준을 지역 날짜로 통일(UTC 하루 오차), 마지막 회차 사용으로 완료된 프로그램도 소진 알림(재구매 핵심 순간, 이미 재구매했으면 제외), 대시보드 포커스 복귀 시 카드 재계산(refreshKey), 복사 피드백 분리, 생성기 회차권 시드 실제 삽입, 접근성 라벨·E2E 선택자.

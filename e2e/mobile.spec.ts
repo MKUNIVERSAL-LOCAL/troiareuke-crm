@@ -204,6 +204,13 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await lock.getByLabel('PIN').fill('2580');
   await lock.getByRole('button', { name: '확인' }).click();
   await expect(lock).toBeHidden();
+  // 새로고침·앱 재시작으로 우회되지 않는다 — PIN이 켜져 있으면 시작 때도 잠근다 (리뷰 2026-11-18)
+  await page.reload();
+  await expect(page.getByTestId('app-lock')).toBeVisible();
+  await page.getByTestId('app-lock').getByLabel('PIN').fill('2580');
+  await page.getByTestId('app-lock').getByRole('button', { name: '확인' }).click();
+  await expect(page.getByTestId('app-lock')).toBeHidden();
+  await page.getByRole('button', { name: '데이터 백업', exact: true }).filter({ visible: true }).first().click();
   await lockCard.getByLabel('현재 PIN').fill('2580');
   await lockCard.getByRole('button', { name: '잠금 끄기' }).click();
   await expect(lockCard.getByText('사용 안 함')).toBeVisible();

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Lock } from 'lucide-react';
-import { getAppLock, enableAppLock, disableAppLock, verifyPin, isValidPin, LOCK_TIMEOUTS } from '../../lib/appLock';
+import { getAppLock, enableAppLock, disableAppLock, verifyPin, isValidPin, LOCK_TIMEOUTS, APP_LOCK_AVAILABLE } from '../../lib/appLock';
 import { notify } from '../../lib/notify';
 
 /**
@@ -48,9 +48,11 @@ export default function AppLockCard() {
       <div className="px-6 py-5 space-y-3">
         <p className="text-sm text-gray-500 leading-relaxed">
           자리를 비운 사이 고객 정보가 보이지 않도록, 이 기기에서 화면을 떠났다가(다른 앱·탭·창) 돌아오면 PIN을 묻습니다.
-          기기마다 따로 설정되며 서버에는 저장되지 않습니다. PIN을 잊으면 잠금 화면에서 로그아웃해 해제할 수 있습니다.
+          기기마다 따로 설정되며 서버에는 저장되지 않습니다. PIN을 잊으면 잠금 화면에서 로그아웃해 해제할 수 있고, 로그아웃하면 잠금도 함께 해제되므로 다시 로그인한 뒤 PIN을 다시 켜세요.
         </p>
-        {cfg ? (
+        {!APP_LOCK_AVAILABLE ? (
+          <p className="text-xs text-gray-400">중앙 서버(NAS) 연동 계정에서만 사용할 수 있습니다. (로컬 모드에는 PIN을 잊었을 때 되돌릴 로그인이 없습니다)</p>
+        ) : cfg ? (
           <div className="flex flex-wrap items-end gap-2">
             <div>
               <label className="block text-[11px] text-gray-500 mb-0.5">현재 PIN</label>

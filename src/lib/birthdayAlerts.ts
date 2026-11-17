@@ -30,9 +30,16 @@ export function getUpcomingBirthdays(today = new Date(), windowDays = BIRTHDAY_W
     if (!m) continue;
     const month = Number(m[1]) - 1, day = Number(m[2]);
     if (month < 0 || month > 11 || day < 1 || day > 31) continue;
-    // 올해 생일이 이미 지났으면 내년 생일로 (연말 → 연초 경계)
-    let next = new Date(base.getFullYear(), month, day);
-    if (next < base) next = new Date(base.getFullYear() + 1, month, day);
+    // 올해 생일이 이미 지났으면 내년 생일로 (연말 → 연초 경계). 2/29는 평년에 2/28로, 그 밖의 존재하지 않는 날짜는 제외
+    const birthdayIn = (year: number): Date | null => {
+      const d = new Date(year, month, day);
+      if (d.getMonth() === month) return d;
+      if (month === 1 && day === 29) return new Date(year, 1, 28);
+      return null;
+    };
+    let next = birthdayIn(base.getFullYear());
+    if (next && next < base) next = birthdayIn(base.getFullYear() + 1);
+    if (!next) continue;
     const daysUntil = Math.round((next.getTime() - base.getTime()) / 86_400_000);
     if (daysUntil <= windowDays) out.push({ customer: c, daysUntil, dateLabel: `${month + 1}/${day}` });
   }
