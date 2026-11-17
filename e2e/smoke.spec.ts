@@ -183,40 +183,63 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const dupName = acc.customer + '중복';
   const beforeMerge = await page.evaluate(dupName => {
     const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
-    const customers = JSON.parse(localStorage.getItem(key(/^crm_.*_customers$/)) || '[]');
-    const payments = JSON.parse(localStorage.getItem(key(/^crm_.*_payments$/)) || '[]');
+    const read = (re: RegExp) => JSON.parse(localStorage.getItem(key(re)) || '[]');
+    const write = (re: RegExp, v: unknown) => localStorage.setItem(key(re), JSON.stringify(v));
+    const customers = read(/^crm_.*_customers$/);
+    const payments = read(/^crm_.*_payments$/);
+    const reservations = read(/^crm_.*_reservations$/);
+    const logs = read(/^crm_.*_treatment_logs$/);
+    const programs = read(/^crm_.*_customer_programs$/);
     const main = customers.find((c: { name: string }) => c.name === dupName.replace('중복', ''));
-    const dup = { ...main, id: 'dup_' + Date.now(), name: dupName, phone: '010-9999-0001', totalVisits: 2, totalSpent: 7000, memo: '중복 메모', createdAt: new Date().toISOString() };
-    customers.push(dup);
-    payments.push({ ...payments[0], id: 'duppay_' + Date.now(), customerId: dup.id, customerName: dupName, amount: 7000, referenceId: undefined, referenceType: undefined });
-    localStorage.setItem(key(/^crm_.*_customers$/), JSON.stringify(customers));
-    localStorage.setItem(key(/^crm_.*_payments$/), JSON.stringify(payments));
-    return { visits: main.totalVisits as number, spent: main.totalSpent as number, payments: payments.filter((p: { customerId: string }) => p.customerId === main.id).length as number };
+    const dupId = 'dup_' + Date.now();
+    const now = new Date().toISOString();
+    customers.push({ ...main, id: dupId, name: dupName, phone: '010-9999-0001', totalVisits: 2, totalSpent: 7000, memo: '중복 메모', grade: 'VIP', registeredAt: '2020-01-01T00:00:00.000Z' });
+    payments.push({ id: 'duppay_' + Date.now(), shopId: main.shopId, customerId: dupId, customerName: dupName, paymentDate: '2026-01-10', type: 'other', typeLabel: '기타', amount: 7000, paymentMethod: 'cash', discountAmount: 0, status: 'completed', createdAt: now });
+    reservations.push({ ...reservations[0], id: 'dupres_' + Date.now(), customerId: dupId, customerName: dupName, customerPhone: '010-9999-0001', date: '2026-01-10', status: 'completed' });
+    logs.push({ id: 'duplog_' + Date.now(), shopId: main.shopId, customerId: dupId, customerName: dupName, treatmentDate: '2026-01-10', sessionsUsed: 0, treatmentDetails: '중복 시술', createdAt: now });
+    write(/^crm_.*_customers$/, customers); write(/^crm_.*_payments$/, payments); write(/^crm_.*_reservations$/, reservations); write(/^crm_.*_treatment_logs$/, logs);
+    const byMain = (list: { customerId: string }[]) => list.filter(x => x.customerId === main.id).length;
+    return { visits: main.totalVisits as number, spent: main.totalSpent as number, payments: byMain(payments), reservations: byMain(reservations), logs: byMain(logs), used: programs.map((p: { usedSessions: number }) => p.usedSessions) as number[] };
   }, dupName);
   await page.goto('/customers');
   await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
   await desk.getByRole('button', { name: '병합' }).click();
   const mergeDialog = page.getByRole('dialog', { name: '고객 병합' });
   await mergeDialog.getByLabel('병합할 고객 검색').fill('9999-0001');
-  const dupOption = mergeDialog.locator('option', { hasText: '중복' });
+  const dupOption = mergeDialog.getByRole('radio', { name: new RegExp(dupName) });
   await expect(dupOption).toHaveCount(1);
-  await mergeDialog.getByLabel('흡수할 고객').selectOption(await dupOption.getAttribute('value') as string);
-  await expect(mergeDialog.getByTestId('merge-preview')).toContainText('결제 1');
+  await dupOption.check();
+  await expect(mergeDialog.getByTestId('merge-preview')).toContainText('예약 1 · 시술 1 · 프로그램 0 · 결제 1');
   await mergeDialog.getByRole('button', { name: '병합 실행' }).click(); // confirm은 dialog 핸들러가 수락
   await expect(mergeDialog).toHaveCount(0);
   await expect(desk).toContainText('중복 메모'); // 흡수된 고객의 메모가 본 고객 메모에 합쳐짐
   const afterMerge = await page.evaluate(name => {
     const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
-    const customers = JSON.parse(localStorage.getItem(key(/^crm_.*_customers$/)) || '[]');
-    const payments = JSON.parse(localStorage.getItem(key(/^crm_.*_payments$/)) || '[]');
+    const read = (re: RegExp) => JSON.parse(localStorage.getItem(key(re)) || '[]');
+    const customers = read(/^crm_.*_customers$/);
     const main = customers.find((c: { name: string }) => c.name === name);
-    return { count: customers.filter((c: { name: string }) => c.name.startsWith(name)).length, visits: main.totalVisits, spent: main.totalSpent, memo: main.memo, payments: payments.filter((p: { customerId: string }) => p.customerId === main.id).length };
+    const byMain = (list: { customerId: string }[]) => list.filter(x => x.customerId === main.id).length;
+    const orphan = (list: { customerId: string }[]) => list.filter(x => x.customerId.startsWith('dup_')).length;
+    const payments = read(/^crm_.*_payments$/), reservations = read(/^crm_.*_reservations$/), logs = read(/^crm_.*_treatment_logs$/);
+    return {
+      count: customers.filter((c: { name: string }) => c.name.startsWith(name)).length,
+      visits: main.totalVisits, spent: main.totalSpent, memo: main.memo, grade: main.grade, registeredAt: main.registeredAt,
+      payments: byMain(payments), reservations: byMain(reservations), logs: byMain(logs),
+      orphans: orphan(payments) + orphan(reservations) + orphan(logs),
+      used: read(/^crm_.*_customer_programs$/).map((p: { usedSessions: number }) => p.usedSessions),
+    };
   }, acc.customer);
   expect(afterMerge.count).toBe(1);
   expect(afterMerge.visits).toBe(beforeMerge.visits + 2);
   expect(afterMerge.spent).toBe(beforeMerge.spent + 7000);
   expect(afterMerge.payments).toBe(beforeMerge.payments + 1);
+  expect(afterMerge.reservations).toBe(beforeMerge.reservations + 1);
+  expect(afterMerge.logs).toBe(beforeMerge.logs + 1);
+  expect(afterMerge.orphans).toBe(0); // 흡수 고객 id를 가리키는 기록이 남지 않는다
+  expect(afterMerge.used).toEqual(beforeMerge.used); // 시술 이동이 회차권 사용 횟수를 건드리지 않는다
   expect(afterMerge.memo).toContain('중복 메모');
+  expect(afterMerge.grade).toBe('VIP'); // 등급은 높은 쪽
+  expect(afterMerge.registeredAt).toBe('2020-01-01T00:00:00.000Z'); // 등록일은 이른 쪽
 
   // ── 10. 개인정보 보존기간 정책 (P4, 2026-11-17): 1년으로 켜고 고객을 2년 전 방문으로 만들면 안내 → 목록 → 익명화 ──
   await page.goto('/settings');

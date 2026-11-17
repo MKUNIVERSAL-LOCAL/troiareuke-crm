@@ -21,6 +21,7 @@ import { exportFile } from '../../lib/mobileBridge';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
+import { mergeBlockReason } from '../../lib/customerMerge';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { FileText } from 'lucide-react';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
@@ -1409,7 +1410,7 @@ export default function Customers() {
               >
                 <Pencil size={14} />고객 정보 수정
               </button>
-              {!selected.id.startsWith('sample_') && (
+              {!mergeBlockReason(selected) && (
                 <button
                   type="button"
                   onClick={() => setShowMergeModal(true)}
@@ -1654,7 +1655,7 @@ export default function Customers() {
                   >
                     <Pencil size={12} />수정
                   </button>
-                  {!selected.id.startsWith('sample_') && (
+                  {!mergeBlockReason(selected) && (
                     <button
                       type="button"
                       onClick={() => setShowMergeModal(true)}
