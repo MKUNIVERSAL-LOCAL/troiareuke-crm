@@ -59,4 +59,27 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/BeforeAfter_\d{4}-\d{2}-\d{2}\.png$/);
   await expect(page.getByText('비교 이미지를 내려받았습니다.').first()).toBeVisible();
+
+  // ── 상담 기록에 비교 이미지 첨부 (2026-11-17) ──
+  await desk.getByRole('button', { name: '상담 기록' }).first().click();
+  const consult = page.getByRole('dialog').filter({ hasText: 'Before/After 비교 이미지 첨부' });
+  await expect(consult).toBeVisible();
+  await expect(consult.getByLabel('비교 Before 사진')).toHaveValue('0');
+  await expect(consult.getByLabel('비교 After 사진')).toHaveValue('1');
+  await consult.getByRole('button', { name: '비교 이미지 만들기' }).click();
+  await expect(consult.getByAltText('비교 이미지 미리보기')).toBeVisible({ timeout: 10_000 });
+  await expect(consult.getByText(/D\+0 비교 이미지가 준비됐습니다/)).toBeVisible();
+  await consult.getByRole('button', { name: '상담 저장' }).click();
+  await expect(consult).toBeHidden();
+  const strip = desk.getByRole('button', { name: '상담 사진 크게 보기' });
+  await expect(strip).toHaveCount(1);
+  await strip.click();
+  const lightbox = page.getByRole('dialog', { name: '사진 크게 보기' });
+  await expect(lightbox.getByText(/상담 · Before\/After 비교/)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(lightbox).toBeHidden();
+  // 새로고침 후에도 상담 사진이 남는다 (photoStore 'consult:<id>')
+  await page.reload();
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  await expect(desk.getByRole('button', { name: '상담 사진 크게 보기' })).toHaveCount(1, { timeout: 10_000 });
 });

@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ChevronDown, Tag,
-  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send
+  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -14,7 +14,11 @@ import {
 } from '../../lib/consultationStore';
 import { HOMECARE_PROBLEMS, recommendHomecare } from '../../data/homecareGuide';
 import TimelapseViewer from '../../components/TimelapseViewer';
-import { resizeImageFile, getPhotos } from '../../lib/photoStore';
+import { resizeImageFile, getPhotos, setPhotos as savePhotos, clearPhotos, makePhotoId, syncPhotosFromNas, type PhotoEntry } from '../../lib/photoStore';
+import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, comparisonFileName, type DatedPhoto } from '../../lib/beforeAfter';
+import { exportFile } from '../../lib/mobileBridge';
+import { IS_MOBILE_APP } from '../../lib/platform';
+import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
@@ -118,6 +122,35 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
   );
 }
 
+/** 상담 기록에 저장된 사진(AI 분석 사진·Before/After 비교) 썸네일 — 탭하면 크게 보기 (2026-11-17) */
+function ConsultPhotoStrip({ consultId, consultDate, customerName, tick, onOpen }: { consultId: string; consultDate: string; customerName: string; tick: number; onOpen: (p: LightboxPhoto) => void }) {
+  void tick; // NAS 동기화 후 재읽기
+  const photos = getPhotos(`consult:${consultId}`);
+  if (photos.length === 0) return null;
+  return (
+    <div className="flex gap-1.5 mt-2 flex-wrap">
+      {photos.map(p => {
+        const isCompare = p.label === 'compare';
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onOpen({
+              dataUrl: p.dataUrl,
+              caption: `${formatDate(consultDate)} 상담 · ${isCompare ? 'Before/After 비교' : '상담 사진'}`,
+              fileName: isCompare ? comparisonFileName(customerName) : `${customerName}_상담사진_${consultDate}.jpg`,
+            })}
+            aria-label="상담 사진 크게 보기"
+            className={`rounded-lg border border-indigo-100 overflow-hidden bg-white ${isCompare ? 'w-24 h-14' : 'w-14 h-14'}`}
+          >
+            <img src={p.dataUrl} alt={isCompare ? 'Before/After 비교 이미지' : '상담 사진'} className="w-full h-full object-cover" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 다음 방문 권장 표시 — 예약이 잡혀 있으면 예약일, 아니면 권장일과 남은 일수 */
 function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 'sm' | 'md' }) {
   const info = getCustomerRevisitInfo(customerId);
@@ -209,6 +242,58 @@ export default function Customers() {
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState<SkinAnalysisResult | null>(null);
   const consultPhotoRef = useRef<HTMLInputElement>(null);
+  const aiPhotoIdRef = useRef(makePhotoId()); // 저장+카톡 → 저장 재호출 시에도 같은 사진 id 유지
+
+  // Before/After 비교 이미지를 상담 기록에 첨부 (킬러② 잔여 항목, 2026-11-17)
+  const [baPhotos, setBaPhotos] = useState<DatedPhoto[]>([]);
+  const [baBefore, setBaBefore] = useState(0);
+  const [baAfter, setBaAfter] = useState(0);
+  const [comparison, setComparison] = useState<{ id: string; dataUrl: string; blob: Blob; days: number } | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [lightbox, setLightbox] = useState<LightboxPhoto | null>(null);
+  const [consultPhotoTick, setConsultPhotoTick] = useState(0);
+
+  // 상담 모달이 열릴 때마다 사진 관련 상태를 한 곳에서 초기화 (여는 버튼이 4곳이라 각각 초기화하지 않는다)
+  useEffect(() => {
+    if (!showConsultModal || !selected) return;
+    const photos = collectCustomerPhotos(selected.id);
+    setBaPhotos(photos);
+    setBaBefore(0);
+    setBaAfter(Math.max(0, photos.length - 1));
+    setComparison(null);
+    setAiPhoto(null);
+    setAiResult(null);
+    aiPhotoIdRef.current = makePhotoId();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showConsultModal]);
+
+  async function buildComparison() {
+    if (!selected) return;
+    const before = baPhotos[baBefore];
+    const after = baPhotos[baAfter];
+    if (!before || !after) return;
+    setComparing(true);
+    try {
+      const blob = await renderComparison({ before, after, customerName: selected.name });
+      // 상담 기록 저장용은 JPEG로 압축(PNG 1200×750 그대로 넣으면 localStorage 용량을 빨리 채운다)
+      const dataUrl = await resizeImageFile(new File([blob], 'compare.png', { type: 'image/png' }), 1200, 0.8);
+      setComparison({ id: makePhotoId(), dataUrl, blob, days: daysBetween(before.date, after.date) });
+    } catch (e) {
+      notify(e instanceof Error ? e.message : '비교 이미지를 만들지 못했습니다.');
+    } finally {
+      setComparing(false);
+    }
+  }
+
+  async function exportComparison() {
+    if (!comparison || !selected) return;
+    try {
+      const result = await exportFile(comparisonFileName(selected.name), comparison.blob);
+      if (result === 'downloaded') notify('비교 이미지를 내려받았습니다.');
+    } catch (e) {
+      notify(e instanceof Error ? e.message : '비교 이미지를 내보내지 못했습니다.');
+    }
+  }
 
   // 상담 결과 카카오 전송 상태
   const [kakaoSending, setKakaoSending] = useState(false);
@@ -275,7 +360,10 @@ export default function Customers() {
   useEffect(() => {
     if (selected) {
       setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
-      setConsultations(ConsultationStore.getByCustomer(selected.id));
+      const list = ConsultationStore.getByCustomer(selected.id);
+      setConsultations(list);
+      // 상담 사진(AI 분석·비교 이미지)은 photoStore(NAS crm_photos)에 있으므로 다른 PC/앱에서 저장한 것도 받아온다
+      syncPhotosFromNas(list.map(c => `consult:${c.id}`)).then(changed => { if (changed) setConsultPhotoTick(t => t + 1); });
     }
   }, [selected]);
 
@@ -324,11 +412,23 @@ export default function Customers() {
       nextConsultDate: consultForm.nextConsultDate || undefined,
       photos: [],
     };
+    let consultId: string;
     if (savedConsultId && ConsultationStore.getById(savedConsultId)) {
       ConsultationStore.update(savedConsultId, payload);
+      consultId = savedConsultId;
     } else {
       const saved = ConsultationStore.save(payload);
       setSavedConsultId(saved.id);
+      consultId = saved.id;
+    }
+    // 상담 사진: AI 분석에 쓴 얼굴 사진 + Before/After 비교 이미지 (photoStore → NAS crm_photos)
+    const takenAt = new Date().toISOString();
+    const entries: PhotoEntry[] = [];
+    if (aiPhoto) entries.push({ id: aiPhotoIdRef.current, dataUrl: aiPhoto, label: 'consult', takenAt });
+    if (comparison) entries.push({ id: comparison.id, dataUrl: comparison.dataUrl, label: 'compare', takenAt });
+    if (entries.length > 0) {
+      try { savePhotos(`consult:${consultId}`, entries); } catch { notify('사진 저장 용량을 초과해 상담 사진은 저장되지 않았습니다.'); }
+      setConsultPhotoTick(t => t + 1);
     }
     // 상담에서 판정한 피부타입을 고객 프로필에도 반영(있을 때)
     if (consultForm.skinTypeResult && consultForm.skinTypeResult !== selected.skinType) {
@@ -983,7 +1083,7 @@ export default function Customers() {
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase">피부 상담 이력</p>
                   <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
+                    onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
                     className="text-xs font-medium text-indigo-600 flex items-center gap-1"
                   >
                     <Sparkles size={12} />상담 기록
@@ -1001,6 +1101,7 @@ export default function Customers() {
                         </div>
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
                         {c.recommendedSolution && <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
+                        <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick} onOpen={setLightbox} />
                       </div>
                     ))}
                   </div>
@@ -1196,7 +1297,7 @@ export default function Customers() {
                 {/* 1366px 폭에서 버튼 글자가 세로로 깨지지 않도록 — 줄바꿈은 버튼 단위로 (2026-11-17) */}
                 <div className="flex flex-wrap justify-end gap-2">
                   <button
-                    onClick={() => { setConsultForm(emptyConsultForm()); setAiPhoto(null); setAiResult(null); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
+                    onClick={() => { setConsultForm(emptyConsultForm()); setKakaoMsg(null); setSavedConsultId(null); setShowConsultModal(true); }}
                     className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-indigo-600 text-white rounded-xl text-xs font-medium hover:bg-indigo-700 transition-colors"
                   >
                     <Sparkles size={12} />피부 상담
@@ -1303,6 +1404,7 @@ export default function Customers() {
                             onClick={() => {
                               if (window.confirm('이 상담 기록을 삭제할까요?')) {
                                 ConsultationStore.delete(c.id);
+                                clearPhotos(`consult:${c.id}`);
                                 setConsultations(ConsultationStore.getByCustomer(selected.id));
                               }
                             }}
@@ -1347,6 +1449,7 @@ export default function Customers() {
                         {c.nextConsultDate && (
                           <p className="text-xs text-indigo-500 mt-1.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>
                         )}
+                        <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick} onOpen={setLightbox} />
                       </div>
                     );
                   })}
@@ -1910,7 +2013,7 @@ export default function Customers() {
       {/* 모바일에서도 열리도록 body 포털 (2026-11-17) */}
       {showConsultModal && selected && createPortal(
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-[60] p-4 overflow-y-auto">
-          <div className="modal-card my-auto bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div role="dialog" aria-modal="true" aria-label="피부 상담" className="modal-card my-auto bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white flex items-center justify-between p-5 border-b border-gray-100 z-10">
               <div>
                 <h2 className="font-bold text-gray-900 flex items-center gap-1.5">
@@ -1973,7 +2076,7 @@ export default function Customers() {
                     )}
                     {!aiPhoto && (
                       <p className="text-[11px] text-gray-500 leading-relaxed">
-                        고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다.
+                        고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다. 사진은 상담 기록에 함께 저장됩니다.
                         {!skinAiAvailable && ' (본사 AI 미설정 — 설정 > 연동 설정 > AI 피부분석에서 OpenAI/Gemini 키 입력 필요)'}
                       </p>
                     )}
@@ -1995,6 +2098,60 @@ export default function Customers() {
                     )}
                   </div>
                 </div>
+              </div>
+              )}
+
+              {/* Before/After 비교 이미지 첨부 — 시술 사진이 2장 이상인 고객만 (킬러②, 2026-11-17) */}
+              {baPhotos.length >= 2 && (
+              <div className="bg-slate-50 border border-gray-200 rounded-xl p-3.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Images size={14} className="text-indigo-600" />
+                  <label className="text-xs font-semibold text-gray-800">Before/After 비교 이미지 첨부</label>
+                  <span className="text-[10px] text-gray-400">· 시술 사진 {baPhotos.length}장</span>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="block text-[10px] text-gray-500 mb-0.5">Before</label>
+                    <select aria-label="비교 Before 사진" value={baBefore} onChange={e => { setBaBefore(Number(e.target.value)); setComparison(null); }}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
+                      {baPhotos.map((p, i) => <option key={p.id} value={i}>{photoCaption(p)}</option>)}
+                    </select>
+                  </div>
+                  <ArrowLeftRight size={14} className="text-gray-400 mb-2 flex-shrink-0" />
+                  <div className="flex-1 min-w-[120px]">
+                    <label className="block text-[10px] text-gray-500 mb-0.5">After</label>
+                    <select aria-label="비교 After 사진" value={baAfter} onChange={e => { setBaAfter(Number(e.target.value)); setComparison(null); }}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
+                      {baPhotos.map((p, i) => <option key={p.id} value={i}>{photoCaption(p)}</option>)}
+                    </select>
+                  </div>
+                  <button type="button" onClick={buildComparison} disabled={comparing || baBefore === baAfter}
+                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap">
+                    {comparing ? <><Loader2 size={12} className="animate-spin" />만드는 중...</> : <><Images size={12} />{comparison ? '다시 만들기' : '비교 이미지 만들기'}</>}
+                  </button>
+                </div>
+                {comparison ? (
+                  <div className="flex flex-wrap gap-3 mt-3">
+                    <button type="button" onClick={() => setLightbox({ dataUrl: comparison.dataUrl, caption: `${selected?.name ?? ''} Before/After 비교`, fileName: comparisonFileName(selected?.name) })}
+                      aria-label="비교 이미지 크게 보기" className="rounded-lg overflow-hidden border border-gray-200 bg-white w-40 h-24 flex-shrink-0">
+                      <img src={comparison.dataUrl} alt="비교 이미지 미리보기" className="w-full h-full object-cover" />
+                    </button>
+                    <div className="flex-1 min-w-[140px] text-xs text-gray-600">
+                      <p className="font-medium text-gray-800">D+{comparison.days} 비교 이미지가 준비됐습니다.</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">상담 저장 시 상담 기록에 함께 저장됩니다.</p>
+                      <div className="flex gap-2 mt-2">
+                        <button type="button" onClick={exportComparison}
+                          className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50 flex items-center gap-1">
+                          <Download size={12} />{IS_MOBILE_APP ? '이미지 공유' : '이미지 저장'}
+                        </button>
+                        <button type="button" onClick={() => setComparison(null)}
+                          className="px-3 py-1.5 bg-white border border-gray-200 text-gray-500 rounded-lg text-xs font-medium hover:bg-gray-50">제거</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-500 mt-2">고객에게 보여줄 Before/After를 골라 만들면 상담 기록에 첨부됩니다. (기본: 최초 ↔ 최신)</p>
+                )}
               </div>
               )}
 
@@ -2175,6 +2332,7 @@ export default function Customers() {
         </div>,
         document.body,
       )}
+      {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
       </div>
     </div>
   );

@@ -106,6 +106,18 @@ export async function shareText(text: string, title = '더마솔루션'): Promis
   return false;
 }
 
+/** data URL → Blob — 저장된 사진(base64)을 파일로 내보낼 때. fetch('data:')는 CSP connect-src에 걸릴 수 있어 직접 디코드한다 */
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(',');
+  const meta = dataUrl.slice(0, comma);
+  const mime = /^data:([^;,]+)/.exec(meta)?.[1] || 'application/octet-stream';
+  const body = dataUrl.slice(comma + 1);
+  const bin = /;base64/i.test(meta) ? atob(body) : decodeURIComponent(body);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 export function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
