@@ -6,7 +6,7 @@
 // 최근 90일만 본다 — 그보다 오래된 것은 "잊은 체크아웃"이 아니라 이력이고, 일괄 처리가 수백 건의 저장·서버 전송을 일으키지 않게.
 // ═══════════════════════════════════════════════════════════════
 
-import { ReservationStore } from './store';
+import { ReservationStore, PaymentStore } from './store';
 import { todayISO, toISODate } from './format';
 import type { Reservation } from '../types';
 
@@ -26,6 +26,11 @@ export function getPendingCompletionReservations(today = todayISO()): Reservatio
 /** 일괄 완료 대상 — 확정 예약만. 대기(미확정)는 왔는지 알 수 없어 건별로만 처리한다 */
 export function bulkCompletableIds(list: Reservation[]): string[] {
   return list.filter(r => r.status === 'confirmed').map(r => r.id);
+}
+
+/** 이 예약에 연결된 결제(referenceId)가 이미 있는지 — 예약 화면의 완료→결제 브리지와 같은 기준 */
+export function hasPaymentFor(reservationId: string): boolean {
+  return PaymentStore.getAll().some(p => p.referenceId === reservationId);
 }
 
 /** 상태 일괄 변경 — 한 건씩 updateStatus를 거쳐 방문 통계가 맞게 반영된다. @returns 바뀐 건수 */

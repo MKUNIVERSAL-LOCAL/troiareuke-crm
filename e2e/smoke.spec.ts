@@ -136,20 +136,27 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     const t = new Date(); t.setDate(t.getDate() - 1);
     const date = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
     const id = 'pending_' + Date.now();
-    list.push({ ...list[0], id, date, status: 'confirmed', startTime: '11:00', endTime: '12:00' });
+    list.push({ ...list[0], id, date, status: 'confirmed', startTime: '11:00', endTime: '12:00', totalPrice: 30000 });
     localStorage.setItem(key, JSON.stringify(list));
     return id;
   });
   await page.goto('/');
   const pendingCard = page.getByTestId('pending-completion-card').filter({ visible: true }).first();
   await expect(pendingCard.getByTestId('pending-completion-count')).toHaveText('1건');
-  await pendingCard.getByRole('button', { name: /완료$/ }).first().click();
-  await expect(page.getByTestId('pending-completion-card')).toHaveCount(0);
-  const pendingStatus = await page.evaluate(id => {
-    const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
-    return JSON.parse(localStorage.getItem(key) || '[]').find((r: { id: string }) => r.id === id)?.status;
+  await pendingCard.getByRole('button', { name: /완료$/ }).first().click(); // 완료 → 결제 미등록이라 confirm(수락) → 매출 등록 모달로
+  await expect(page).toHaveURL(/\/sales/);
+  const pendingPayForm = page.locator('form').filter({ hasText: '결제 구분' });
+  await expect(pendingPayForm.getByPlaceholder('0').first()).toHaveValue('30,000');
+  await pendingPayForm.getByRole('button', { name: '결제 등록' }).click();
+  const pendingAfter = await page.evaluate(id => {
+    const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
+    const status = JSON.parse(localStorage.getItem(key(/^crm_.*_reservations$/)) || '[]').find((r: { id: string }) => r.id === id)?.status;
+    const linked = JSON.parse(localStorage.getItem(key(/^crm_.*_payments$/)) || '[]').filter((p: { referenceId?: string }) => p.referenceId === id);
+    return { status, linked: linked.length, amount: linked[0]?.amount };
   }, pendingId);
-  expect(pendingStatus).toBe('completed');
+  expect(pendingAfter).toEqual({ status: 'completed', linked: 1, amount: 30000 }); // 예약 id로 연결된 결제 1건
+  await page.goto('/');
+  await expect(page.getByTestId('pending-completion-card')).toHaveCount(0);
 
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
   await page.evaluate(() => {

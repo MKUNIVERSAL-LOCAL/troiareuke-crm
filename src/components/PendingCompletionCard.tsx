@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck, Check, UserX } from 'lucide-react';
-import { getPendingCompletionReservations, settleReservations, bulkCompletableIds, PENDING_LOOKBACK_DAYS } from '../lib/pendingCompletion';
+import { getPendingCompletionReservations, settleReservations, bulkCompletableIds, hasPaymentFor, PENDING_LOOKBACK_DAYS } from '../lib/pendingCompletion';
 import { formatDate } from '../lib/format';
 import { notify } from '../lib/notify';
+import type { Reservation } from '../types';
 
 const PAGE_COMPACT = 4;
 const PAGE = 8;
@@ -29,6 +30,15 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
     notify(status === 'completed' ? `${n}건을 완료 처리했습니다.` : `${n}건을 노쇼로 처리했습니다.`);
     onSettled?.();
   };
+  // 건별 완료 — 예약 화면의 완료 처리처럼 결제 미등록이면 매출 등록으로 바로 잇는다(예약 id를 referenceId로 연결해 중복 등록 방지)
+  const settleOneAndPay = (r: Reservation) => {
+    settle([r.id], 'completed');
+    if (r.totalPrice > 0 && !hasPaymentFor(r.id)) {
+      if (window.confirm(`완료 처리했습니다. 이 예약의 결제 ${r.totalPrice.toLocaleString()}원을 지금 매출에 등록할까요?`)) {
+        navigate(`/sales?new=1&customer=${encodeURIComponent(r.customerId)}&amount=${r.totalPrice}&memo=${encodeURIComponent('예약 완료 처리(대시보드)')}&reference=${encodeURIComponent(r.id)}`);
+      }
+    }
+  };
   const settleAll = () => {
     if (confirmedIds.length === 0) return;
     const extra = pendingCount > 0 ? `\n대기 상태 ${pendingCount}건은 왔는지 알 수 없어 그대로 둡니다 — 건별로 처리해 주세요.` : '';
@@ -53,6 +63,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
       </div>
       <p className="text-[11px] text-gray-400 mb-2">
         최근 {PENDING_LOOKBACK_DAYS}일 기준. 완료 처리해야 방문 횟수·마지막 방문일·재방문 리마인더·직원 실적에 반영됩니다. 오지 않은 고객은 [노쇼]로 남겨 주세요.
+        건별 [완료]는 결제가 없으면 매출 등록으로 이어지고, 일괄 완료는 상태만 바꿉니다(결제는 매출 화면에서).
       </p>
       <ul className="divide-y divide-gray-50">
         {shown.map(r => (
@@ -64,7 +75,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
               </p>
               <p className="text-xs text-gray-500 truncate">{r.services.map(s => s.serviceName).join(', ') || '서비스 미지정'}{r.staffName ? ` · ${r.staffName}` : ''}</p>
             </button>
-            <button type="button" onClick={() => settle([r.id], 'completed')} aria-label={`${r.customerName} ${formatDate(r.date)} 완료`}
+            <button type="button" onClick={() => settleOneAndPay(r)} aria-label={`${r.customerName} ${formatDate(r.date)} 완료`}
               className="px-2 py-1 rounded-lg text-[11px] font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
             <button type="button" onClick={() => settle([r.id], 'noshow')} aria-label={`${r.customerName} ${formatDate(r.date)} 노쇼`}
               className="px-2 py-1 rounded-lg text-[11px] font-medium bg-rose-50 text-rose-600 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>

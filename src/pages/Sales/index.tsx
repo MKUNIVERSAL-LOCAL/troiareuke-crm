@@ -91,11 +91,12 @@ export default function Sales() {
     memo: '',
     discountAmount: '0',
     status: 'completed' as Payment['status'],
+    referenceId: '', // 예약 완료 처리에서 넘어온 결제 → 예약 id (중복 등록 방지·예약 화면 "결제 완료" 표시)
   });
 
   const customers = useMemo(() => CustomerStore.getAll(), []);
 
-  // 시술 기록 저장 → 결제 연계 / 대시보드 빠른 작업: ?new=1(&customer=&amount=&memo=) 이면 등록 모달을 프리필해 연다 (2026-11-17)
+  // 시술 기록 저장 → 결제 연계 / 대시보드 빠른 작업: ?new=1(&customer=&amount=&memo=&reference=) 이면 등록 모달을 프리필해 연다 (2026-11-17, reference 2026-11-18)
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     if (searchParams.get('new') !== '1') return;
@@ -109,6 +110,7 @@ export default function Sales() {
       amount: amount || prev.amount,
       memo: searchParams.get('memo') || prev.memo,
       type: 'single_treatment',
+      referenceId: searchParams.get('reference') || '',
     }));
     setShowModal(true);
     setSearchParams({}, { replace: true }); // 1회 캡처 후 URL 정리 — 뒤로가기 때 프리필 모달이 다시 뜨지 않게 (리뷰 2026-11-17)
@@ -291,7 +293,7 @@ export default function Sales() {
     setViewMonth(getYearMonth(d));
   }
 
-  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: '카드', paymentDate: today(), memo: '', discountAmount: '0', status: 'completed' });
+  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: '카드', paymentDate: today(), memo: '', discountAmount: '0', status: 'completed', referenceId: '' });
 
   function closeModal() {
     setShowModal(false);
@@ -311,6 +313,7 @@ export default function Sales() {
       memo: p.memo || '',
       discountAmount: String(p.discountAmount || 0),
       status: p.status,
+      referenceId: p.referenceId || '',
     });
     setEditingId(p.id);
     setShowModal(true);
@@ -352,6 +355,7 @@ export default function Sales() {
       discountAmount,
       status: form.status,
       memo: form.memo || undefined,
+      referenceId: form.referenceId || undefined,
     };
 
     // 제품 결제를 '환불'로 저장하면 매출에선 빠지지만 재고·판매기록은 안 돌아오는
