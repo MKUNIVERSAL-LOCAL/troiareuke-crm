@@ -6,6 +6,7 @@ import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
+import PrereqHint from '../../components/ui/PrereqHint';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, PaymentStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
@@ -222,7 +223,9 @@ export default function Treatments() {
             {filtered.length === 0 && (
               <div className="px-6 py-12 text-center text-sm text-gray-400">
                 {isFiltered ? '조건에 맞는 시술 기록이 없습니다' : '시술 기록이 없습니다. 관리 후 사진과 함께 남겨 두면 다음 방문 때 비교할 수 있습니다.'}
-                <button type="button" onClick={() => setShowAddModal(true)} className="block mx-auto mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">첫 시술 기록 남기기</button>
+                {isFiltered
+                  ? <button type="button" onClick={() => { setPeriod('all'); setStaffFilter(''); setSearch(''); }} className="block mx-auto mt-3 px-4 py-2 bg-slate-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-slate-200">필터 초기화</button>
+                  : <button type="button" onClick={() => setShowAddModal(true)} className="block mx-auto mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">첫 시술 기록 남기기</button>}
               </div>
             )}
             {visible.map(t => (
@@ -341,7 +344,9 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const isEdit = !!editing;
   const customers = CustomerStore.getAll();
   const staff = StaffStore.getAll().filter(s => s.isActive || s.name === editing?.staffName || s.name === prefill?.staffName); // 퇴사 직원은 새 시술 담당자 목록에서 제외 (기존 기록의 담당자는 유지)
-  const services = ServiceStore.getAll().filter(s => s.isActive); // 비활성 메뉴는 새 기록에서 제외 (예약 추가와 동일). 수정 중인 기록의 옛 항목은 선택값에 남는다
+  // 비활성 메뉴는 새 기록에서 제외(예약 추가와 동일). 단 수정 중인 기록에 이미 들어간 메뉴는 남긴다 — 빼면 selectedServices에서도 빠져 저장 때 내역이 조용히 사라진다 (리뷰 2026-11-18)
+  const editedNames = new Set((editing?.treatmentDetails ?? '').split(',').map(s => s.trim()).filter(Boolean));
+  const services = ServiceStore.getAll().filter(s => s.isActive || editedNames.has(s.name));
 
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
   const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? '');
@@ -516,12 +521,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
                 <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>
               ))}
             </select>
-            {customers.length === 0 && (
-              <p className="mt-1.5 text-xs text-amber-700 flex items-center gap-2 flex-wrap">
-                등록된 고객이 없습니다
-                <button type="button" onClick={() => { onClose(); goTo('/customers?new=1'); }} className="px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 font-medium hover:bg-amber-100">고객 등록 →</button>
-              </p>
-            )}
+            {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원</label>
@@ -569,12 +569,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 항목</label>
-          {services.length === 0 && (
-            <p className="text-xs text-amber-700 flex items-center gap-2 flex-wrap mb-1">
-              등록된 시술 메뉴가 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다
-              <button type="button" onClick={() => { onClose(); goTo('/settings?tab=services'); }} className="px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 font-medium hover:bg-amber-100">시술 메뉴 등록 →</button>
-            </p>
-          )}
+          {services.length === 0 && <PrereqHint text="등록된 시술 메뉴가 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다" action="시술 메뉴 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
           <div className="space-y-2">
             {services.map(s => (
               <label key={s.id} className="flex items-center gap-3 p-2.5 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">

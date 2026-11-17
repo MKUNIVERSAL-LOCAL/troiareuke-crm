@@ -30,7 +30,7 @@ export default function StaffPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     if (searchParams.get('new') === '1') { setShowAddModal(true); setSearchParams({}, { replace: true }); }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, setSearchParams]);
   const [selected, setSelected] = useState<Staff | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');

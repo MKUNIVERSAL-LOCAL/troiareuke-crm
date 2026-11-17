@@ -112,7 +112,7 @@ export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<SettingTab>(() => {
     const q = searchParams.get('tab');
-    return q && allTabs.some(t => t.key === q) ? (q as SettingTab) : 'shop';
+    return q && tabs.some(t => t.key === q) ? (q as SettingTab) : 'shop'; // 모바일 앱에서 숨긴 탭(구독)은 받지 않는다
   });
   useEffect(() => { if (searchParams.has('tab')) setSearchParams({}, { replace: true }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [settings, setSettings] = useState<ShopSettings>(() => {

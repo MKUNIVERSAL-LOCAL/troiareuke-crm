@@ -23,16 +23,21 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const checklist = page.getByTestId('setup-checklist').filter({ visible: true }).first();
   await expect(checklist).toBeVisible();
   await expect(checklist).toContainText('첫 고객 등록');
-  await checklist.getByRole('button', { name: /매장 정보/ }).click();
-  await expect(page).toHaveURL(/\/settings$/); // ?tab=shop 캡처 후 정리
+  await expect(checklist).toContainText('3/4 완료'); // 온보딩으로 매장 이름·직원·시술 메뉴는 끝난 상태
+  await checklist.getByRole('button', { name: /첫 고객 등록/ }).click();
+  await expect(page).toHaveURL(/\/customers$/); // ?new=1 캡처 후 정리
+  const quickAddDialog = page.getByRole('dialog', { name: '고객 추가' });
+  await expect(quickAddDialog).toBeVisible();
+  await quickAddDialog.getByRole('button', { name: '닫기' }).click();
   await page.goto('/settings?tab=services');
   await expect(page.getByText('시술 항목 관리').filter({ visible: true }).first()).toBeVisible();
   await expect(page).toHaveURL(/\/settings$/);
 
   await createCustomer(page, acc);
-  // 고객을 등록하면 체크리스트의 그 줄은 완료로 바뀐다
+  // 마지막 항목(첫 고객)까지 끝나면 체크리스트는 사라진다
   await page.goto('/');
-  await expect(page.getByTestId('setup-checklist').filter({ visible: true }).first()).not.toContainText('이름과 전화번호만 있으면 됩니다');
+  await expect(page.getByText('오늘 예약 현황').filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByTestId('setup-checklist')).toHaveCount(0);
   await page.goto('/customers'); // 아래 검색 품질 검증은 고객 화면에서
 
   // 검색 품질: 전화 뒷자리 4자리·초성으로도 찾힌다 (2026-11-17)
