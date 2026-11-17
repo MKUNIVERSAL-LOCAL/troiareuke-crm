@@ -66,5 +66,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>시술 전후 사진을 촬영 가이드에 맞춰 찍기 위해 카메라를 사용합니다.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>시술 전후 사진을 앨범에서 골라 기록에 첨부하기 위해 사진 보관함을 사용합니다.</string>
 </dict>
 </plist>

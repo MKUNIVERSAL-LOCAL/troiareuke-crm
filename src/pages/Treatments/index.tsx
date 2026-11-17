@@ -646,7 +646,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               references={referencePhotos}
               onCapture={handleCameraCapture}
               onClose={() => setShowCamera(false)}
-              onUnavailable={() => { setShowCamera(false); cameraInputRef.current?.click(); }}
+              onPickFromAlbum={() => { setShowCamera(false); fileInputRef.current?.click(); }} // 사용자 탭 안에서 동기 호출 — 파일 선택창이 열린다
             />
           )}
         </div>
