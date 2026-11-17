@@ -145,13 +145,22 @@ export default function Reservations() {
     setReservations(ReservationStore.getAll());
   }, []);
 
-  // Google Calendar 이벤트 로드
+  const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
+  const [mobileMonthOffset, setMobileMonthOffset] = useState(0); // '이번달' 탭에서 ‹ › 로 다른 달 보기 (2026-11-18) — 다음 달 예약을 모바일에서도 찾을 수 있게
+
+  // Google Calendar 이벤트 로드 — PC 주/일 범위와 모바일 목록 탭(오늘/이번주/이번달 ‹ ›) 범위의 합집합.
+  // 모바일은 currentDate/viewMode를 바꾸지 않아 PC 주간만 받으면 월 탭에서 Google 일정이 빠진다 (리뷰 2026-11-18)
   const loadGoogleEvents = useCallback(async () => {
     if (!googleConnected) { setGoogleEvents([]); return; }
     try {
       const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-      const start = viewMode === 'day' ? new Date(currentDate) : weekStart;
-      const end = viewMode === 'day' ? addDays(currentDate, 1) : addDays(weekStart, 7);
+      const pcStart = viewMode === 'day' ? new Date(currentDate) : weekStart;
+      const pcEnd = viewMode === 'day' ? addDays(currentDate, 1) : addDays(weekStart, 7);
+      const mDate = new Date(); mDate.setDate(1); mDate.setMonth(mDate.getMonth() + mobileMonthOffset);
+      const mStart = mobileTab === 'today' ? new Date() : mobileTab === 'week' ? startOfWeek(new Date(), { weekStartsOn: 1 }) : startOfMonth(mDate);
+      const mEnd = mobileTab === 'today' ? new Date() : mobileTab === 'week' ? endOfWeek(new Date(), { weekStartsOn: 1 }) : endOfMonth(mDate);
+      const start = new Date(Math.min(pcStart.getTime(), mStart.getTime()));
+      const end = new Date(Math.max(pcEnd.getTime(), mEnd.getTime()));
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
       const { asReservationLike } = await fetchCalendarEventsAsReservations(start, end);
@@ -159,7 +168,7 @@ export default function Reservations() {
     } catch {
       setGoogleEvents([]);
     }
-  }, [googleConnected, currentDate, viewMode]);
+  }, [googleConnected, currentDate, viewMode, mobileTab, mobileMonthOffset]);
 
   useEffect(() => { loadGoogleEvents(); }, [loadGoogleEvents]);
 
@@ -190,8 +199,7 @@ export default function Reservations() {
   };
 
   // 모바일 전용 상태
-  const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
-  const [mobileMonthOffset, setMobileMonthOffset] = useState(0); // '이번달' 탭에서 ‹ › 로 다른 달 보기 (2026-11-18) — 다음 달 예약을 모바일에서도 찾을 수 있게
+  // (mobileTab·mobileMonthOffset 선언은 위 Google 로드 앞으로 옮김)
   const mobileMonthDate = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + mobileMonthOffset); return d; })();
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
