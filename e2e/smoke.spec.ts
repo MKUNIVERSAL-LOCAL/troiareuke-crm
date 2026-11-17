@@ -85,6 +85,16 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await linkSelect.selectOption(await linkSelect.locator('option', { hasText: '회차권10' }).getAttribute('value') as string);
   await page.getByRole('button', { name: '시술 기록 저장' }).click();
   await expect(page.getByText('잔여 9회').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+
+  // ── 8. 고객 상세 결제 내역 — 시술 연계로 등록한 50,000원이 보이고, [결제 등록]은 고객 프리필로 매출 화면을 연다 (2026-11-17) ──
+  const desk = page.getByTestId('customers-desktop');
+  await expect(desk.getByRole('heading', { name: '결제 내역' })).toBeVisible();
+  await expect(desk.getByTestId('customer-payments').getByText(/50,000/).first()).toBeVisible();
+  await desk.getByRole('button', { name: '결제 등록' }).click();
+  await expect(page).toHaveURL(/\/sales\?new=1&customer=/);
+  const payForm3 = page.locator('form').filter({ hasText: '결제 구분' });
+  await expect(payForm3).toBeVisible();
+  await expect(payForm3.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
 });
 
 test('로그인 화면은 잘못된 계정을 거부한다', async ({ page }) => {

@@ -1,13 +1,13 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ChevronDown, Tag,
-  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight
+  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard
 } from 'lucide-react';
-import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore } from '../../lib/store';
+import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
 import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
@@ -151,6 +151,63 @@ function ConsultPhotoStrip({ consultId, consultDate, customerName, tick, onOpen 
   );
 }
 
+const PAYMENT_STATUS_LABEL: Record<string, string> = { completed: '완료', refunded: '환불', pending: '대기' };
+
+/**
+ * 고객 결제 내역 — 매출 화면(PaymentStore)의 이 고객 건만 최신순으로. 완료 합계·건수 요약 + 최근 10건,
+ * [결제 등록]은 매출 화면 등록 모달을 고객 프리필(?new=1&customer=)로 연다 (2026-11-17, PC·모바일 공용)
+ */
+function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: string; compact?: boolean; onAdd: () => void }) {
+  const payments = PaymentStore.getAll()
+    .filter(p => p.customerId === customerId)
+    .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate) || b.createdAt.localeCompare(a.createdAt));
+  const completed = payments.filter(p => p.status === 'completed');
+  const total = completed.reduce((sum, p) => sum + p.amount, 0);
+  const shown = payments.slice(0, 10);
+  return (
+    <div data-testid="customer-payments" className={compact ? 'bg-white rounded-xl border border-slate-200 p-4' : 'bg-white rounded-2xl border border-gray-100 p-5'}>
+      <div className={`flex items-center justify-between ${compact ? 'mb-3' : 'mb-4'}`}>
+        {compact
+          ? <p className="text-xs font-semibold text-gray-500 uppercase">결제 내역</p>
+          : <h3 className="font-bold text-gray-900">결제 내역</h3>}
+        <button type="button" onClick={onAdd} className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
+          <Plus size={12} />결제 등록
+        </button>
+      </div>
+      {payments.length === 0 ? (
+        <div className={compact ? 'text-center py-3' : 'text-center py-6'}>
+          {!compact && <CreditCard size={28} className="text-gray-200 mx-auto mb-2" />}
+          <p className={compact ? 'text-xs text-gray-400' : 'text-sm text-gray-400'}>결제 내역이 없어요</p>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-baseline justify-between px-3 py-2 bg-gray-50 rounded-lg mb-2">
+            <span className="text-xs text-gray-500">완료 {completed.length}건{payments.length !== completed.length ? ` · 전체 ${payments.length}건` : ''}</span>
+            <span className="text-sm font-bold text-gray-900">{formatPrice(total)}</span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {shown.map(p => (
+              <div key={p.id} className="flex items-center gap-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-800 truncate">
+                    {p.typeLabel}
+                    {p.status !== 'completed' && (
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${p.status === 'refunded' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'}`}>{PAYMENT_STATUS_LABEL[p.status] ?? p.status}</span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-gray-400 truncate">{formatDate(p.paymentDate)} · {p.paymentMethod}{p.memo ? ` · ${p.memo}` : ''}</p>
+                </div>
+                <span className={`text-sm font-semibold whitespace-nowrap ${p.status === 'refunded' ? 'text-rose-500 line-through' : 'text-gray-900'}`}>{formatPrice(p.amount)}</span>
+              </div>
+            ))}
+          </div>
+          {payments.length > shown.length && <p className="text-[11px] text-gray-300 mt-1">외 {payments.length - shown.length}건 — 전체는 매출 화면 참조</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 /** 다음 방문 권장 표시 — 예약이 잡혀 있으면 예약일, 아니면 권장일과 남은 일수 */
 function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 'sm' | 'md' }) {
   const info = getCustomerRevisitInfo(customerId);
@@ -175,6 +232,7 @@ export default function Customers() {
   const [customerPrograms, setCustomerPrograms] = useState<CustomerProgram[]>([]);
   // 헤더 전역 검색(?q=)에서 넘어온 검색어를 초기값·변경 모두 반영
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('q') || '');
   useEffect(() => {
     const q = searchParams.get('q');
@@ -1078,6 +1136,8 @@ export default function Customers() {
                 })()}
               </div>
 
+              <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => navigate(`/sales?new=1&customer=${selected.id}`)} />
+
               {/* 피부 상담 이력 (모바일) */}
               <div className="bg-white rounded-xl border border-slate-200 p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -1603,6 +1663,8 @@ export default function Customers() {
                 );
               })()}
             </div>
+
+            <CustomerPaymentHistory customerId={selected.id} onAdd={() => navigate(`/sales?new=1&customer=${selected.id}`)} />
           </div>
         </div>
       ) : (
