@@ -280,6 +280,19 @@ export function buildExportSheets(keys: string[]): ExportSheet[] {
   return sheets;
 }
 
+/**
+ * 워크북 저장 공통 경로 — PC/브라우저는 내려받기, 모바일 앱(WebView)은 <a download>가 동작하지 않으므로
+ * 캐시에 쓰고 공유 시트(카카오톡·메일·파일 앱). 고객 목록·업로드 양식·데이터 내보내기가 같은 결정을 쓴다 (2026-11-17)
+ */
+export async function writeWorkbook(workbook: XLSX.WorkBook, fileName: string): Promise<void> {
+  if (IS_MOBILE_APP) {
+    const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' }) as string;
+    await saveOrShareFile(fileName, base64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return;
+  }
+  XLSX.writeFile(workbook, fileName);
+}
+
 export interface ExportResult {
   fileName: string;
   /** 시트별 행 수 (0행 시트도 헤더 안내와 함께 포함됨) */
@@ -318,12 +331,6 @@ export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult
   const shopName = (SettingsStore.get().name || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const date = new Date().toISOString().slice(0, 10);
   const fileName = `${shopName}_데이터내보내기_${date}.xlsx`;
-  if (IS_MOBILE_APP) {
-    // WebView는 <a download>를 지원하지 않음 → 캐시에 쓰고 공유 시트(카카오톡·메일·파일 앱)
-    const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' }) as string;
-    await saveOrShareFile(fileName, base64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  } else {
-    XLSX.writeFile(workbook, fileName);
-  }
+  await writeWorkbook(workbook, fileName);
   return { fileName, counts };
 }

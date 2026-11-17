@@ -26,6 +26,7 @@ import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalys
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import { refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
 import * as XLSX from 'xlsx';
+import { writeWorkbook } from '../../lib/dataExport';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
 import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
@@ -696,7 +697,7 @@ export default function Customers() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '고객목록');
     const today = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `고객목록_${today}.xlsx`);
+    writeWorkbook(wb, `고객목록_${today}.xlsx`).catch(e => notify(e instanceof Error ? e.message : '엑셀 파일을 내보내지 못했습니다.'));
   }
 
   // 업로드 가이드 모달 — 양식을 모르면 쓸 수 없는 기능이라 안내+양식 다운로드를 먼저 보여줌
@@ -720,7 +721,7 @@ export default function Customers() {
     ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 6 }, { wch: 6 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 24 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '고객업로드양식');
-    XLSX.writeFile(wb, '고객_업로드_양식.xlsx');
+    writeWorkbook(wb, '고객_업로드_양식.xlsx').catch(e => notify(e instanceof Error ? e.message : '양식 파일을 내보내지 못했습니다.'));
   }
 
   // 고객 엑셀/CSV 대량 업로드 — 다운로드와 동일한 헤더(이름/전화번호/이메일/성별/등급/생년월일/피부유형/유입경로/메모)를 인식

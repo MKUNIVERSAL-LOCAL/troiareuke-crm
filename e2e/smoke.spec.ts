@@ -86,6 +86,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByRole('button', { name: '시술 기록 저장' }).click();
   await expect(page.getByText('잔여 9회').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
+  // ── 7-1. 고객 목록 엑셀 다운로드 (2026-11-17: 공통 저장 경로 회귀) ──
+  const xlsxDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '다운로드', exact: true }).filter({ visible: true }).first().click();
+  expect((await xlsxDownload).suggestedFilename()).toMatch(/^고객목록_\d{4}-\d{2}-\d{2}\.xlsx$/);
+
   // ── 8. 고객 상세 결제 내역 — 시술 연계로 등록한 50,000원이 보이고, [결제 등록]은 고객 프리필로 매출 화면을 연다 (2026-11-17) ──
   const desk = page.getByTestId('customers-desktop');
   await expect(desk.getByRole('heading', { name: '결제 내역' })).toBeVisible();

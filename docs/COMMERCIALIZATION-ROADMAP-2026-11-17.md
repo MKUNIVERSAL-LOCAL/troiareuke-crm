@@ -56,6 +56,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] 2026-11-17 밤: 모바일 고객 상세 PC 동등화(피부 상담·시술 기록·프로그램 등록·정보 수정), 모바일 폭 전 화면 가로 넘침 전수 검사, 2차 코드리뷰 10건 반영(사진 캐시 dirty/전송 중 보호·서버 android/ios 모드 저장·중첩 모달 Esc·타임랩스 1회 마운트).
 - [x] 2026-11-17 밤: 고객 상세 결제 내역(PC·모바일 공용 `CustomerPaymentHistory`, 완료 합계·건수·최근 10건·환불/대기 배지, [결제 등록] → 매출 등록 모달 고객 프리필). smoke E2E 8단계 검증.
 - [x] 2026-11-17 밤 시각 QA 3차(상담 모달·고객 상세 하단·결제 내역, PC+모바일): 결함 없음. 모바일 최근 시술 기록에 사진 썸네일 추가(PC 동등) + 썸네일 크게 보기(`TreatmentPhotoStrip`). 생성기에 `customer-detail-full`·`customer-detail-bottom`·`modal-consult` 샷 추가. 모바일 E2E: 시술 사진 업로드 → 상세 썸네일 → 크게 보기.
+- [x] 2026-11-17 밤: 모바일 앱에서 조용히 실패하던 파일 내보내기 2곳(고객 목록 xlsx·업로드 양식) → `writeWorkbook` 공통 경로(PC 내려받기/모바일 공유 시트)로 통일. 전수 조사: `XLSX.writeFile`·`<a download>`·`createObjectURL` 호출은 이제 dataExport·mobileBridge 안에서만. smoke E2E에 xlsx 다운로드 회귀 추가.
 - [ ] D4 사진 저장 localStorage → Capacitor Filesystem/IndexedDB 정식 이관(현재는 용량 초과 시 캐시 비우기로 방어), 직전 사진 반투명 오버레이(네이티브 카메라 플러그인). 스토어 등록 준비는 오너 지시로 맨 마지막.
 - 오너 준비물: Play 개발자 계정, Apple Developer(D-U-N-S), 아이콘 1024, 스크린샷, 개인정보처리방침 URL.
 
