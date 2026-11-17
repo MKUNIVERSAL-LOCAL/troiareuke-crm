@@ -17,7 +17,7 @@ import TimelapseViewer from '../../components/TimelapseViewer';
 import { resizeImageFile, getPhotos, setPhotos as savePhotos, clearPhotos, makePhotoId, syncPhotosFromNas, type PhotoEntry } from '../../lib/photoStore';
 import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, comparisonFileName, angleLabel, type DatedPhoto } from '../../lib/beforeAfter';
 import { PHOTO_LABELS } from '../../lib/photoStore';
-import { exportFile } from '../../lib/mobileBridge';
+import { exportFile, dataUrlToBlob } from '../../lib/mobileBridge';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
@@ -469,6 +469,39 @@ export default function Customers() {
     setAiPhoto(null);
     setAiResult(null);
     aiPhotoIdRef.current = makePhotoId();
+    setShowConsultModal(true);
+  }
+
+  // 기존 상담 수정 (2026-11-18) — 기록 값으로 폼을 채우고 savedConsultId를 둬 저장이 update로 가게. 사진은 상태로 되살린다(persistConsultation이 상태 기준으로 사진을 다시 쓰므로 비우면 삭제됨)
+  function openConsultEdit(c: Consultation) {
+    if (!selected) return;
+    const photos = collectCustomerPhotos(selected.id);
+    const metrics: Record<string, string> = {};
+    for (const [k, v] of Object.entries(c.beaconMetrics || {})) if (typeof v === 'number') metrics[k] = String(v);
+    setConsultForm({
+      ...emptyConsultForm(),
+      consultDate: c.consultDate,
+      staffName: c.staffName || '',
+      concerns: [...(c.concerns || [])],
+      metrics,
+      skinTypeResult: c.skinTypeResult || '',
+      managerNote: c.managerNote || '',
+      recommendedSolution: c.recommendedSolution || '',
+      recommendedProducts: (c.recommendedProducts || []).join(', '),
+      nextConsultDate: c.nextConsultDate || '',
+    });
+    setKakaoMsg(null);
+    setSavedConsultId(c.id);
+    setBaPhotos(photos);
+    setBaBefore(0);
+    setBaAfter(Math.max(0, photos.length - 1));
+    const saved = getPhotos(`consult:${c.id}`);
+    const ai = saved.find(p => p.label === 'consult');
+    const cmp = saved.find(p => p.label === 'compare');
+    setAiPhoto(ai?.dataUrl ?? null);
+    aiPhotoIdRef.current = ai?.id ?? makePhotoId();
+    setComparison(cmp ? { id: cmp.id, dataUrl: cmp.dataUrl, blob: dataUrlToBlob(cmp.dataUrl), days: 0 } : null);
+    setAiResult(null);
     setShowConsultModal(true);
   }
 
@@ -1402,6 +1435,14 @@ export default function Customers() {
                         >
                           <FileText size={12} />{pdfBusyId === c.id ? '만드는 중...' : '결과지 PDF'}
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => openConsultEdit(c)}
+                          aria-label={`${formatDate(c.consultDate)} 상담 수정`}
+                          className="mt-2 ml-1.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
+                        >
+                          <Pencil size={12} />수정
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1852,6 +1893,14 @@ export default function Customers() {
                           className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
                         >
                           <FileText size={12} />{pdfBusyId === c.id ? '만드는 중...' : '결과지 PDF'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openConsultEdit(c)}
+                          aria-label={`${formatDate(c.consultDate)} 상담 수정`}
+                          className="mt-2 ml-1.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
+                        >
+                          <Pencil size={12} />수정
                         </button>
                       </div>
                     );

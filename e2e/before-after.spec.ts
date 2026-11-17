@@ -85,6 +85,24 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await expect(desk.getByRole('button', { name: '상담 사진 크게 보기' })).toHaveCount(1, { timeout: 10_000 });
 
+  // ── 상담 수정 (2026-11-18): 기록을 열어 소견을 고쳐 저장해도 첨부된 비교 사진이 남는다 ──
+  const photosBeforeEdit = await countPhotoEntries(page);
+  await desk.getByRole('button', { name: /상담 수정$/ }).first().click();
+  const editConsult = page.getByRole('dialog').filter({ hasText: 'Before/After 비교 이미지 첨부' });
+  await expect(editConsult).toBeVisible();
+  await expect(editConsult.getByAltText('비교 이미지 미리보기')).toBeVisible({ timeout: 10_000 }); // 저장된 비교 이미지가 되살아난다
+  await editConsult.getByPlaceholder('고객 피부 상태 관찰 소견을 기록하세요').fill('수정된 관리사 소견');
+  await editConsult.getByRole('button', { name: '상담 저장' }).click();
+  await expect(editConsult).toBeHidden();
+  await expect(desk.getByText('수정된 관리사 소견')).toBeVisible();
+  const consultCount = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_consultations$/.test(k))!;
+    return (JSON.parse(localStorage.getItem(key) || '[]') as unknown[]).length;
+  });
+  expect(consultCount).toBe(1); // 새 기록이 아니라 같은 기록을 고쳤다
+  await expect.poll(() => countPhotoEntries(page), { timeout: 10_000 }).toBe(photosBeforeEdit);
+  await expect(desk.getByRole('button', { name: '상담 사진 크게 보기' })).toHaveCount(1);
+
   // ── 상담 결과지 PDF (2026-11-17): 사진(비교 이미지) 포함 A4가 내려받힌다 ──
   const pdfDownload = page.waitForEvent('download');
   await desk.getByRole('button', { name: /상담 결과지 PDF$/ }).first().click();
