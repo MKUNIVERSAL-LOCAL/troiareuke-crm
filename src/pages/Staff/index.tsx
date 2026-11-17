@@ -76,7 +76,7 @@ export default function StaffPage() {
               aria-label="직원 검색"
             />
           </label>
-          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto no-scrollbar">
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto no-scrollbar pr-6">
             {([
               ['active', '재직'],
               ['inactive', '퇴사·비활성'],

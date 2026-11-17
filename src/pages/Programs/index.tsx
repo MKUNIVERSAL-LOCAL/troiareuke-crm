@@ -174,7 +174,7 @@ export default function Programs() {
             aria-label="프로그램 검색"
           />
         </label>
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto no-scrollbar">
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto no-scrollbar pr-6">
           {([
             ['all', '전체 상태'],
             ['active', '활성'],
@@ -193,7 +193,7 @@ export default function Programs() {
       </div>
 
       {/* 카테고리 필터 */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar sm:flex-wrap">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar pr-6 sm:flex-wrap">
         {['전체', ...CATEGORIES].map(cat => (
           <button
             key={cat}

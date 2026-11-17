@@ -483,7 +483,7 @@ export default function Sales() {
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto no-scrollbar max-w-full">
+      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto no-scrollbar pr-6 max-w-full">
         <button onClick={() => setTab('overview')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'overview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
           매출 현황
         </button>
@@ -631,7 +631,7 @@ export default function Sales() {
                 aria-label="결제 내역 검색"
               />
             </label>
-            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pr-6">
               <select
                 value={listType}
                 onChange={e => setListType(e.target.value as 'all' | Payment['type'])}
@@ -769,7 +769,7 @@ export default function Sales() {
 
           {/* 지출 목록 */}
           <div className="bg-white rounded-2xl border border-gray-100">
-            <div className="p-3 border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <div className="p-3 border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar pr-6">
               <button
                 onClick={() => setExpenseCategoryFilter('all')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === 'all' ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}

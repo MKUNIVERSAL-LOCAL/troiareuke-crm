@@ -580,7 +580,7 @@ export default function Settings() {
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
           {/* Sidebar tabs */}
           <div className="w-full lg:w-48 flex-shrink-0">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 flex lg:block gap-1 overflow-x-auto no-scrollbar lg:space-y-0.5">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 flex lg:block gap-1 overflow-x-auto no-scrollbar pr-6 lg:space-y-0.5">
               {tabs.map(t => (
                 <button
                   key={t.key}

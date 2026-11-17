@@ -1056,7 +1056,7 @@ export default function Customers() {
               <Plus size={18} />
             </button>
           </div>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar pr-6">
             {(['전체', ...GRADES] as const).map(g => (
               <button
                 key={g}

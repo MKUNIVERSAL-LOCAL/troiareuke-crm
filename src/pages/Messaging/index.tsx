@@ -103,7 +103,7 @@ export default function Messaging() {
         )}
 
         {/* Connection Status — 실제 발송 경로 기준 (설정값 장식 아님) */}
-        <div className="flex gap-3 mb-6 overflow-x-auto no-scrollbar">
+        <div className="flex gap-3 mb-6 overflow-x-auto no-scrollbar pr-6">
           <StatusChip label="발송 서버" connected={messagingLive} />
           <StatusChip label="카카오 채널" connected={!!settings.kakao?.channelConnected} />
           <StatusChip label="카카오 오픈채팅" connected={!!settings.kakao?.openchatConnected} />
@@ -111,7 +111,7 @@ export default function Messaging() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar mb-6">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar pr-6 mb-6">
           {tabs.map(t => (
             <button
               key={t.key}
@@ -166,10 +166,11 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
   }, [reloadKey]);
 
   const autoMessages = [
-    { title: '예약 확인 문자', desc: '예약 완료 시 자동 발송', type: 'sms', key: 'reservationConfirm' as const },
-    { title: '예약 리마인더', desc: '예약 전날 09:00 자동 발송', type: 'sms', key: 'reservationReminder' as const },
-    { title: '생일 축하 메시지', desc: '생일 당일 오전 자동 발송', type: 'kakao-channel', key: 'birthdayMessage' as const },
-    { title: '미방문 고객 케어', desc: '60일 미방문 시 자동 발송', type: 'kakao-channel', key: 'novisitMessage' as const },
+    // 설명은 설정 > 알림 설정과 같은 문구 (UX QA 2026-11-17)
+    { title: '예약 확인 문자', desc: '예약 등록 시 즉시 발송', type: 'sms', key: 'reservationConfirm' as const },
+    { title: '예약 리마인더', desc: '예약 전날 오전 9시 발송', type: 'sms', key: 'reservationReminder' as const },
+    { title: '생일 축하 메시지', desc: '생일 당일 오전 10시 카카오 발송', type: 'kakao-channel', key: 'birthdayMessage' as const },
+    { title: '미방문 고객 케어', desc: '60일 미방문 시 카카오 발송', type: 'kakao-channel', key: 'novisitMessage' as const },
   ];
 
   const handleToggle = (key: keyof typeof settings.notificationSettings, checked: boolean) => {
@@ -315,7 +316,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
             aria-label="메시지 템플릿 검색"
           />
         </label>
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pr-6">
         {categories.map(c => (
           <button
             key={c}
