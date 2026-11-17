@@ -20,6 +20,8 @@ import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile } from '../../lib/mobileBridge';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
+import { exportConsultationPdf } from '../../lib/consultReport';
+import { FileText } from 'lucide-react';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
@@ -360,6 +362,21 @@ export default function Customers() {
   const [comparing, setComparing] = useState(false);
   const [lightbox, setLightbox] = useState<LightboxPhoto | null>(null);
   const [consultPhotoTick, setConsultPhotoTick] = useState(0);
+
+  // 상담 결과지 PDF — 고객에게 건네는 A4 (PC 내려받기 / 모바일 공유 시트) (2026-11-17)
+  const [pdfBusyId, setPdfBusyId] = useState<string | null>(null);
+  async function handleConsultPdf(c: Consultation) {
+    if (!selected || pdfBusyId) return;
+    setPdfBusyId(c.id);
+    try {
+      const result = await exportConsultationPdf(c, selected);
+      if (result === 'downloaded') notify('상담 결과지 PDF를 내려받았습니다.');
+    } catch (e) {
+      notify(e instanceof Error ? e.message : '상담 결과지를 만들지 못했습니다.');
+    } finally {
+      setPdfBusyId(null);
+    }
+  }
 
   // 상담 모달 열기 — 여는 버튼 4곳이 같은 초기화를 쓴다. 렌더 전에 동기 초기화해 이전 고객의 AI 사진이 한 프레임 비치지 않게 (리뷰 2026-11-17)
   function openConsultModal() {
@@ -1271,6 +1288,15 @@ export default function Customers() {
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
                         {c.recommendedSolution && <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
                         <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
+                        <button
+                          type="button"
+                          onClick={() => handleConsultPdf(c)}
+                          disabled={pdfBusyId === c.id}
+                          aria-label={`${formatDate(c.consultDate)} 상담 결과지 PDF`}
+                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                        >
+                          <FileText size={12} />{pdfBusyId === c.id ? '만드는 중...' : '결과지 PDF'}
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1657,6 +1683,15 @@ export default function Customers() {
                           <p className="text-xs text-indigo-500 mt-1.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>
                         )}
                         <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
+                        <button
+                          type="button"
+                          onClick={() => handleConsultPdf(c)}
+                          disabled={pdfBusyId === c.id}
+                          aria-label={`${formatDate(c.consultDate)} 상담 결과지 PDF`}
+                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                        >
+                          <FileText size={12} />{pdfBusyId === c.id ? '만드는 중...' : '결과지 PDF'}
+                        </button>
                       </div>
                     );
                   })}

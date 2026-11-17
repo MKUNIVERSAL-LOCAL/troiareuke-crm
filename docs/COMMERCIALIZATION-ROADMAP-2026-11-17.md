@@ -46,6 +46,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] 촬영 가이드(PC): 시술 기록 폼에 같은 고객의 직전 사진을 각도별 최신 1장씩 표시 — "같은 각도·거리·조명" 안내. 카메라 오버레이는 모바일 P3에서.
 - [x] 타임랩스 뷰어: Before/After 각각 선택(기본 최초↔최신), 각도 필터, D+N 표시, 비교 이미지 PNG 합성(`src/lib/beforeAfter.ts`, 1200×750, 샵명·날짜·각도·주의문구) → PC 내려받기 / 모바일 공유 시트 / PC 클립보드 복사(카카오톡 PC 붙여넣기).
 - [x] 2026-11-17 밤: 고객 상담 모달에서 Before/After 비교 이미지 생성·첨부 — Before/After 사진 선택(기본 최초↔최신), JPEG 압축 후 photoStore `consult:<id>`(NAS crm_photos)에 AI 분석 사진과 함께 저장, 상담 카드 썸네일 → 크게 보기(`PhotoLightbox`, 저장/공유), 상담 삭제 시 사진 정리, 다른 PC/앱에서 저장한 상담 사진 동기화. E2E(before-after.spec)로 생성→저장→새로고침 보존 검증.
+- [x] 2026-11-17 밤: 피부 상담 결과지 PDF — `consultReport.ts`(jspdf+나눔고딕 지연 로드, A4 세로, 측정값 타일, 상담 사진·Before/After 비교 임베드, 면책 문구), 상담 카드 [결과지 PDF](PC 내려받기/모바일 공유). before-after E2E로 내려받기 검증.
 - [x] 2026-11-17 밤: 모바일 카메라 촬영 시 직전 사진 반투명 오버레이(`CameraOverlay`, P3 항목 참조). P2 코드 항목 전부 완료.
 - 사진 저장 구조는 그대로(NAS `crm_photos`), 중기 과제인 파일 스토리지 전환은 별도.
 

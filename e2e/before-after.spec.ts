@@ -85,6 +85,14 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await expect(desk.getByRole('button', { name: '상담 사진 크게 보기' })).toHaveCount(1, { timeout: 10_000 });
 
+  // ── 상담 결과지 PDF (2026-11-17): 사진(비교 이미지) 포함 A4가 내려받힌다 ──
+  const pdfDownload = page.waitForEvent('download');
+  await desk.getByRole('button', { name: /상담 결과지 PDF$/ }).first().click();
+  const pdf = await pdfDownload;
+  if (process.env.PDF_OUT) await pdf.saveAs(process.env.PDF_OUT); // 시각 QA용: 결과지 PDF를 밖에 저장
+  expect(pdf.suggestedFilename()).toMatch(/_상담결과지_\d{4}-\d{2}-\d{2}\.pdf$/);
+  await expect(page.getByText('상담 결과지 PDF를 내려받았습니다.').first()).toBeVisible();
+
   // ── D4 (2026-11-17): 사진 캐시는 IndexedDB에 있고 localStorage에는 사진 키가 남지 않는다 ──
   const storage = await page.evaluate(async () => {
     const names = (await indexedDB.databases()).map(d => d.name);
