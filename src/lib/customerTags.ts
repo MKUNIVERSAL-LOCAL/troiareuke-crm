@@ -14,7 +14,7 @@ export function parseTags(input: string | undefined | null): string[] {
   if (!input) return [];
   const out: string[] = [];
   for (const raw of input.split(/[,，\n]/)) {
-    const t = raw.replace(/^#/, '').trim().slice(0, MAX_TAG_LEN);
+    const t = raw.trim().replace(/^#+/, '').trim().slice(0, MAX_TAG_LEN).trim(); // 공백 → # 순서로 벗겨야 " #vip"가 "#vip"로 남지 않는다
     if (t && !out.includes(t)) out.push(t);
     if (out.length >= MAX_TAGS) break;
   }

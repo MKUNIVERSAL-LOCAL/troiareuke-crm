@@ -857,11 +857,16 @@ export default function Customers() {
     const matchRetention = !retentionOnly || expiredIds.has(c.id);
     return matchSearch && matchGrade && matchTag && matchRetention;
   }).sort(compareCustomers);
+  const tagOptions = useMemo(() => topTags(customers, 12), [customers]);
+  // 걸러 둔 태그가 사라지면(마지막 고객에서 지움·병합·익명화·상위 12 밖) 빈 목록에 갇히지 않게 자동 해제
+  useEffect(() => {
+    if (tagFilter && !tagOptions.some(t => t.tag === tagFilter)) setTagFilter('');
+  }, [tagOptions, tagFilter]);
   const tagChipsRow = (() => {
-    const tags = topTags(customers, 12);
+    const tags = tagOptions;
     if (tags.length === 0) return null;
     return (
-      <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar pr-6" role="group" aria-label="태그 필터" data-testid="tag-filter">
+      <div className="flex flex-wrap gap-1.5 pb-1" role="group" aria-label="태그 필터" data-testid="tag-filter">
         {tags.map(({ tag, count }) => (
           <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
             className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
@@ -1355,7 +1360,7 @@ export default function Customers() {
                       <span className="text-xs font-medium text-rose-600">{selectedNoShows}회</span>
                     </div>
                   )}
-                  {tagChips}{dupHint}
+                  {dupHint}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 결제</span>
                     <span className="text-xs font-medium text-gray-900">{(selected.totalSpent || 0).toLocaleString()}원</span>
@@ -1371,6 +1376,7 @@ export default function Customers() {
                     <RevisitBadge customerId={selected.id} size="sm" />
                   </div>
                 </div>
+                {tagChips}
                 <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">메모</p>
                   {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line">{selected.memo}</p> : <p className="text-xs text-gray-300">메모 없음</p>}

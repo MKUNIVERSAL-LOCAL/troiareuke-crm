@@ -31,7 +31,7 @@ function segmentLabel(seg: Segment): string {
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 function segmentFilter(seg: Segment): (c: Customer) => boolean {
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
-  return SEGMENT_FILTERS[seg] ?? (() => true);
+  return SEGMENT_FILTERS[seg] ?? (() => false); // 모르는 세그먼트는 '아무에게도' — 전체 발송 사고 방지
 }
 
 const SEGMENT_FILTERS: Record<string, (c: Customer) => boolean> = {
@@ -224,7 +224,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
           ...topTags(customers, 4).map(t => ({ key: `tag:${t.tag}` as Segment, label: `#${t.tag}`, count: t.count, color: 'amber' })),
         ].map(t => (
           <button
-            key={t.label}
+            key={t.key}
             onClick={() => onSend(t.key)}
             className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all text-left hover:-translate-y-0.5"
           >
@@ -998,7 +998,12 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               </div>
             ) : (
             <div className="flex gap-2 flex-wrap">
-              {([...(['all', 'vip', 'birthday', 'novisit'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)]).map(key => ({
+              {(() => {
+                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
+                // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
+                if (recipientMode.startsWith('tag:') && !keys.includes(recipientMode)) keys.push(recipientMode);
+                return keys;
+              })().map(key => ({
                 key,
                 label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key)).length}명)`,
               })).map(r => (
