@@ -555,9 +555,10 @@ export default function Sales() {
                   contentStyle={{ borderRadius: 12, border: '1px solid #f0f0f0', fontSize: 12 }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="시술" stackId="a" fill="#1a3a8f" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="제품" stackId="a" fill="#7c3aed" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="기타" stackId="a" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                {/* isAnimationActive=false: 애니메이션 첫 프레임(막대 높이 0)이 화면·캡처에 남아 "데이터가 있는데 빈 차트"로 보이던 문제 (UX QA 2026-11-17) */}
+                <Bar dataKey="시술" stackId="a" fill="#1a3a8f" radius={[0, 0, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="제품" stackId="a" fill="#7c3aed" radius={[0, 0, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="기타" stackId="a" fill="#94a3b8" radius={[4, 4, 0, 0]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1237,8 +1238,8 @@ export default function Sales() {
                 </div>
               </div>
 
-              {/* 결제 수단 & 날짜 */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* 결제 수단 & 날짜 — 모바일은 1열(지불 수단 칩이 한 줄씩 끊기지 않게, UX QA 2026-11-17) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">지불 수단</label>
                   <PaymentMethodPicker

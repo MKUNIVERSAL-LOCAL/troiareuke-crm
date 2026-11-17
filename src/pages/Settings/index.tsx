@@ -702,7 +702,7 @@ export default function Settings() {
                             disabled={hours.isOff}
                             className="form-input text-sm w-28 min-w-0 disabled:opacity-40"
                           />
-                          {hours.isOff && <span className="text-xs text-red-400 font-medium">휴무</span>}
+                          {hours.isOff && <span className="text-xs text-red-400 font-medium whitespace-nowrap">휴무</span>}
                         </div>
                       </div>
                     );

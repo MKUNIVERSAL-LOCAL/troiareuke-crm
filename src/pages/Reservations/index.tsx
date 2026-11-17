@@ -248,7 +248,7 @@ export default function Reservations() {
     noshow: 'bg-red-100 text-red-600',
   };
   const STATUS_LABELS: Record<string, string> = {
-    confirmed: '확정', pending: '대기', completed: '완료', cancelled: '취소', noshow: '노쇼',
+    confirmed: '예약확정', pending: '대기', completed: '완료', cancelled: '취소', noshow: '노쇼', // StatusBadge와 같은 문구
   };
 
   return (

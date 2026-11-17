@@ -199,7 +199,7 @@ export default function Dashboard() {
               onClick={() => navigate('/reservations')}
               className="text-xs text-[#1a3a8f] font-medium"
             >
-              전체 &rsaquo;
+              전체보기 &rsaquo;
             </button>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-gray-50">
@@ -315,7 +315,6 @@ export default function Dashboard() {
               value={`${totalCustomers}명`}
               subtitle={`이번 달 신규 ${newThisMonth}명`}
               icon={<Users size={20} />}
-              trend={{ value: newThisMonth, label: '이번 달 신규' }}
               accent="blue"
             />
           </div>

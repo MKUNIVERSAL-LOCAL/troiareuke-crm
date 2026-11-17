@@ -1131,7 +1131,7 @@ export default function Customers() {
                         {maskPhone(customer.phone, user?.role ?? 'staff')}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {daysSince !== null ? `${daysSince}일 전 방문` : '방문 기록 없음'} · 방문 {customer.totalVisits}회
+                        {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {customer.totalVisits}회
                       </p>
                     </div>
                     <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
@@ -1367,14 +1367,14 @@ export default function Customers() {
               title="엑셀(xlsx)/CSV로 고객 대량 등록 (이름·전화번호 필수, 중복 자동 제외)"
               className="flex items-center gap-1 px-3 py-1.5 whitespace-nowrap bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
-              <Upload size={12} />업로드
+              <Upload size={12} /><span className="hidden xl:inline">업로드</span>
             </button>
             <button
               onClick={exportToExcel}
               title="현재 목록을 엑셀(xlsx)로 다운로드"
               className="flex items-center gap-1 px-3 py-1.5 whitespace-nowrap bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
-              <Download size={12} />다운로드
+              <Download size={12} /><span className="hidden xl:inline">다운로드</span>
             </button>
             <button
               onClick={() => setShowAddModal(true)}
@@ -1905,8 +1905,8 @@ export default function Customers() {
       {/* ───── 고객 추가 모달 ───── */}
       {/* 모바일(lg 미만)에서도 열리도록 body 포털로 렌더 — 이 블록은 데스크톱 전용(hidden lg:flex) 래퍼 안에 있다 */}
       {showAddModal && createPortal(
-        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="modal-card bg-white rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
+          <div className="modal-card my-auto bg-white rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">고객 추가</h2>
               <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 hover:rotate-90 transition-all duration-200"><X size={18} /></button>

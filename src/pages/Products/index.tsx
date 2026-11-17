@@ -123,7 +123,7 @@ export default function Products() {
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출</p>
             <p className="text-2xl font-black text-[#1a3a8f]">
-              {Math.round(totalSalesRevenue / 10000)}<span className="text-sm font-medium ml-1">만원</span>
+              {Math.round(totalSalesRevenue / 10000)}<span className="text-sm font-medium">만원</span>
             </p>
           </div>
         </div>
