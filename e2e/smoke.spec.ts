@@ -323,8 +323,14 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   });
   await backupCard.getByLabel('백업 파일 선택').setInputFiles(backupPath!);
   await expect(backupCard.getByTestId('restore-preview')).toContainText('고객');
-  await backupCard.getByRole('button', { name: '복원 실행' }).click(); // confirm은 dialog 핸들러가 수락 → 새로고침
-  await page.waitForURL(/\/settings/);
+  const reloaded = page.waitForEvent('load'); // 복원 뒤 location.reload() — 끝나기 전에 이동하면 내비게이션이 끊긴다
+  await backupCard.getByRole('button', { name: '복원 실행' }).click(); // confirm은 dialog 핸들러가 수락
+  await reloaded;
+  const restoredShopName = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!;
+    return JSON.parse(localStorage.getItem(key) || '{}').name;
+  });
+  expect(restoredShopName).toBe(acc.shop); // 배열이 아닌 테이블(설정)도 살아난다
   await page.goto('/customers');
   await expect(page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
