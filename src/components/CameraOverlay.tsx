@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Camera, SwitchCamera, Eye, EyeOff, Loader2, Images, RefreshCw } from 'lucide-react';
 import { notify } from '../lib/notify';
 import { angleLabel, type DatedPhoto } from '../lib/beforeAfter';
+import { useOverlayClose } from '../lib/overlayStack';
 
 /**
  * 촬영 가이드 카메라 (킬러② 잔여 항목, 2026-11-17)
@@ -53,9 +54,6 @@ export default function CameraOverlay({ references, onCapture, onClose, onPickFr
   const reference = references[refIndex] ?? null;
   const mirrored = facing === 'user';
 
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
   // 스트림 열기 — facing·재시도가 바뀌면 다시 연다
   useEffect(() => {
     let cancelled = false;
@@ -97,21 +95,35 @@ export default function CameraOverlay({ references, onCapture, onClose, onPickFr
     return () => { cancelled = true; stop(); };
   }, [facing, attempt]);
 
+  // Esc·Android 뒤로가기 — 공용 스택이 가장 위의 이 오버레이만 닫는다 (아래 모달은 유지)
+  useOverlayClose(true, onClose);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); closeRef.current(); } };
-    window.addEventListener('keydown', onKey, true);
     // 포커스를 대화상자 안(촬영 버튼)으로 옮기고, 닫히면 열었던 버튼으로 되돌린다
     const opener = document.activeElement as HTMLElement | null;
     shutterRef.current?.focus();
-    return () => {
-      window.removeEventListener('keydown', onKey, true);
-      opener?.focus?.();
+    return () => { opener?.focus?.(); };
+  }, []);
+
+  // 백그라운드 복귀 — iOS WKWebView(와 일부 Android)는 앱이 뒤로 가면 카메라 트랙을 끝내 버린다(readyState 'ended').
+  // 돌아왔을 때 멈춘 마지막 프레임이 미리보기로 남지 않게 다시 연다
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (streamRef.current?.getVideoTracks()[0]?.readyState === 'ended') setAttempt(n => n + 1);
     };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   function capture() {
     const video = videoRef.current;
     if (!video || !ready) return;
+    if (streamRef.current?.getVideoTracks()[0]?.readyState === 'ended') {
+      // 트랙이 끝난 뒤의 <video>는 마지막 프레임을 보여주고 있어 그대로 찍으면 오래된 장면이 저장된다
+      notify('카메라 연결이 끊겨 다시 엽니다. 잠시 후 다시 촬영해주세요.');
+      setAttempt(n => n + 1);
+      return;
+    }
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       notify('카메라 영상이 아직 준비되지 않았습니다. 잠시 후 다시 눌러주세요.');
       return;

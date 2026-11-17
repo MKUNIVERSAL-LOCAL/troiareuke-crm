@@ -4,6 +4,7 @@ import { X, Download } from 'lucide-react';
 import { exportFile, dataUrlToBlob } from '../lib/mobileBridge';
 import { notify } from '../lib/notify';
 import { IS_MOBILE_APP } from '../lib/platform';
+import { useOverlayClose } from '../lib/overlayStack';
 
 export interface LightboxPhoto {
   dataUrl: string;
@@ -17,20 +18,14 @@ export interface LightboxPhoto {
  * - Esc·배경 탭으로 닫기, 저장(PC 내려받기)/공유(모바일 공유 시트).
  */
 export default function PhotoLightbox({ photo, onClose }: { photo: LightboxPhoto; onClose: () => void }) {
-  // 부모가 인라인 람다를 넘겨도 리스너를 다시 달지 않도록 ref로 보관 (Modal.tsx와 같은 패턴)
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  // Esc·Android 뒤로가기 — 공용 스택이 가장 위의 이 라이트박스만 닫는다 (아래 모달은 유지)
+  useOverlayClose(true, onClose);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); closeRef.current(); } };
-    window.addEventListener('keydown', onKey, true);
     // 포커스를 대화상자 안으로 옮기고, 닫히면 열었던 썸네일로 되돌린다 (키보드·스크린리더)
     const opener = document.activeElement as HTMLElement | null;
     closeBtnRef.current?.focus();
-    return () => {
-      window.removeEventListener('keydown', onKey, true);
-      opener?.focus?.();
-    };
+    return () => { opener?.focus?.(); };
   }, []);
 
   async function handleExport() {
@@ -41,6 +36,7 @@ export default function PhotoLightbox({ photo, onClose }: { photo: LightboxPhoto
       const fileName = (photo.fileName || 'photo').replace(/\.(png|jpe?g|webp)$/i, '') + '.' + ext;
       const result = await exportFile(fileName, blob);
       if (result === 'downloaded') notify('사진을 내려받았습니다.');
+      else if (result === 'cancelled') notify('공유를 취소했습니다 — 사진은 저장되지 않았습니다.');
     } catch (e) {
       notify(e instanceof Error ? e.message : '사진을 내보내지 못했습니다.');
     }

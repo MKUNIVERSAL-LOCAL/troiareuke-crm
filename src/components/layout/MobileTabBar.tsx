@@ -10,6 +10,7 @@ import { featureForPath } from '../../lib/featureRegistry';
 import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
 import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
 import { useFeatureFlagsTick } from '../../hooks/useFeature';
+import { useOverlayClose } from '../../lib/overlayStack';
 
 const TAB_ITEMS = [
   { to: '/', label: '홈', icon: LayoutDashboard, ariaLabel: '홈으로 이동' },
@@ -20,6 +21,7 @@ const TAB_ITEMS = [
 
 export default function MobileTabBar() {
   const [moreOpen, setMoreOpen] = useState(false);
+  useOverlayClose(moreOpen, () => setMoreOpen(false)); // Android 뒤로가기·Esc로 더보기 시트 닫기
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   useFeatureFlagsTick();

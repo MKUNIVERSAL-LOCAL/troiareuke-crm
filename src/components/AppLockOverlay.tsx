@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { isAuthApiConfigured } from '../lib/authApi';
 import { IS_MOBILE_APP } from '../lib/platform';
 import { resetFeatureFlags } from '../lib/featureFlags';
+import { setAppLocked } from '../lib/overlayStack';
 import { clearLocalPhotoCacheForLogout } from '../lib/photoStore';
 
 const MAX_FAILS = 5;
@@ -74,10 +75,11 @@ export default function AppLockOverlay() {
 
   // 잠금 중에는 앱 본문(#root)을 inert — 탭·Enter·Esc가 뒤 화면에 닿지 않게 (오버레이는 body 포털이라 영향 없음)
   useEffect(() => {
+    setAppLocked(locked); // 잠금 중 Android 뒤로가기는 화면을 바꾸지 않고 앱을 내린다
     const root = document.getElementById('root');
     if (!root) return;
     root.toggleAttribute('inert', locked);
-    return () => root.removeAttribute('inert');
+    return () => { root.removeAttribute('inert'); setAppLocked(false); };
   }, [locked]);
 
   useEffect(() => { if (locked) { setPin(''); setError(null); setTimeout(() => inputRef.current?.focus(), 50); } }, [locked]);

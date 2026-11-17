@@ -77,11 +77,8 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
     setBusy('save');
     try {
       const result = await exportFile(comparisonFileName(customerName), await buildImage());
-      notify.success(
-        result === 'shared' ? '비교 이미지를 공유했습니다.'
-          : result === 'saved' ? '비교 이미지를 저장했습니다.'
-            : '비교 이미지를 내려받았습니다.',
-      );
+      if (result === 'cancelled') notify.info('공유를 취소했습니다 — 비교 이미지는 저장되지 않았습니다.');
+      else notify.success(result === 'shared' ? '비교 이미지를 공유했습니다.' : '비교 이미지를 내려받았습니다.');
     } catch (e: any) {
       notify.error(`비교 이미지 생성 실패: ${e?.message || '알 수 없는 오류'}`);
     } finally {

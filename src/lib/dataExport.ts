@@ -285,19 +285,23 @@ export function buildExportSheets(keys: string[]): ExportSheet[] {
  * 워크북 저장 공통 경로 — PC/브라우저는 내려받기, 모바일 앱(WebView)은 <a download>가 동작하지 않으므로
  * 캐시에 쓰고 공유 시트(카카오톡·메일·파일 앱). 고객 목록·업로드 양식·데이터 내보내기가 같은 결정을 쓴다 (2026-11-17)
  */
-export async function writeWorkbook(workbook: XLSX.WorkBook, fileName: string): Promise<void> {
+export type ExportDelivery = 'shared' | 'cancelled' | 'downloaded';
+
+export async function writeWorkbook(workbook: XLSX.WorkBook, fileName: string): Promise<ExportDelivery> {
   if (IS_MOBILE_APP) {
     const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' }) as string;
-    await saveOrShareFile(fileName, base64);
-    return;
+    return saveOrShareFile(fileName, base64);
   }
   XLSX.writeFile(workbook, fileName);
+  return 'downloaded';
 }
 
 export interface ExportResult {
   fileName: string;
   /** 시트별 행 수 (0행 시트도 헤더 안내와 함께 포함됨) */
   counts: Record<string, number>;
+  /** 파일이 실제로 어디로 갔는지 — 모바일 공유 시트 취소는 '저장 완료'가 아니다 */
+  delivery: ExportDelivery;
 }
 
 /** 선택 데이터셋을 하나의 xlsx 파일로 다운로드 */
@@ -331,6 +335,6 @@ export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult
 
   const shopName = (SettingsStore.get().name || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const fileName = `${shopName}_데이터내보내기_${todayISO()}.xlsx`;
-  await writeWorkbook(workbook, fileName);
-  return { fileName, counts };
+  const delivery = await writeWorkbook(workbook, fileName);
+  return { fileName, counts, delivery };
 }

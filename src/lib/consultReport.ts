@@ -33,7 +33,7 @@ export function consultReportFileName(customerName: string, consultDate: string)
   return `${shop}_${who}_상담결과지_${consultDate}.pdf`;
 }
 
-export async function exportConsultationPdf(c: Consultation, customer: Customer): Promise<'shared' | 'saved' | 'downloaded'> {
+export async function exportConsultationPdf(c: Consultation, customer: Customer): Promise<'shared' | 'cancelled' | 'downloaded'> {
   const [{ jsPDF }, fontModule] = await Promise.all([import('jspdf'), import('../assets/fonts/nanumGothicBase64')]);
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
   doc.addFileToVFS('NanumGothic.ttf', fontModule.default);

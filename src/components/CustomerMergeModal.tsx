@@ -10,6 +10,7 @@ import { matchesSearch, formatPrice } from '../lib/format';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
 import { notify } from '../lib/notify';
+import { useOverlayClose } from '../lib/overlayStack';
 import type { Customer } from '../types';
 
 const MAX_CANDIDATES = 50;
@@ -86,6 +87,8 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
       setBusy(false);
     }
   }
+
+  useOverlayClose(true, onClose); // Esc·Android 뒤로가기
 
   return createPortal(
     <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-[60] p-4 overflow-y-auto" onClick={onClose}>

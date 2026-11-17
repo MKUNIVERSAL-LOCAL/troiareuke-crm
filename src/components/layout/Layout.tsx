@@ -10,6 +10,7 @@ import OfflineBanner from '../ui/OfflineBanner';
 import AppLockOverlay from '../AppLockOverlay';
 import FeatureRouteGate from '../FeatureGate';
 import ErrorBoundary from '../ui/ErrorBoundary';
+import { useOverlayClose } from '../../lib/overlayStack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { BLOCK_STAFF_UI } from '../../lib/buildTarget';
@@ -19,6 +20,7 @@ import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
 export default function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  useOverlayClose(sidebarOpen, () => setSidebarOpen(false)); // 모바일 서랍 메뉴 — Android 뒤로가기·Esc로 닫기
   const { user, logout } = useAuth();
   const { programName } = useCrmBrand(user?.shopName);
 

@@ -82,7 +82,7 @@ export function summarizeBackup(b: BackupFile): { label: string; count: number }
     .sort((a, b) => b.count - a.count);
 }
 
-export async function saveBackupFile(b: BackupFile): Promise<'shared' | 'saved' | 'downloaded'> {
+export async function saveBackupFile(b: BackupFile): Promise<'shared' | 'cancelled' | 'downloaded'> {
   const safeName = (b.shopName || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const blob = new Blob([JSON.stringify(b)], { type: 'application/json' });
   return exportFile(`${safeName}_전체백업_${todayISO()}.json`, blob);

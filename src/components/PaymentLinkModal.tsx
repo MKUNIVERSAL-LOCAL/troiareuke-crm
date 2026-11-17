@@ -6,6 +6,7 @@
  * PG 키 미설정이면 서버가 enabled=false를 내려 생성 버튼이 준비 중으로 표시된다.
  */
 import { notify } from '../lib/notify';
+import { useOverlayClose } from '../lib/overlayStack';
 import { useState, useEffect } from 'react';
 import { X, Link2, Copy, CheckCircle, MessageSquare, RefreshCw, Ban } from 'lucide-react';
 import type { Customer } from '../types';
@@ -60,6 +61,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
     setLoading(false);
   }
 
+  useOverlayClose(open, onClose); // Esc·Android 뒤로가기
   if (!open) return null;
 
   const selectedCustomer = customers.find(c => c.id === form.customerId);

@@ -2,8 +2,10 @@
 // 웹 코드가 그대로 동작하지 않는 세 지점을 여기서만 처리한다:
 //  1) 외부 링크(target=_blank / window.open) → 시스템 브라우저 (iOS WKWebView는 기본으로 무반응)
 //  2) 파일 내려받기(xlsx/pdf) → 캐시 폴더 저장 후 공유 시트 (WebView는 <a download> 미지원)
-//  3) Android 하드웨어 뒤로가기 → 라우터 back, 루트에서는 앱 최소화(종료 아님)
+//  3) Android 하드웨어 뒤로가기 → 열린 오버레이(모달·시트·카메라)부터 닫고, 없으면 라우터 back, 루트에서는 앱 최소화(종료 아님)
+//  4) 저장소 영속성 요청
 import { IS_MOBILE_APP } from './platform';
+import { closeTopOverlay, isAppLocked } from './overlayStack';
 
 const EXTERNAL_LINK_RE = /^https?:\/\//i;
 
@@ -35,6 +37,8 @@ export function installMobileBridge(): void {
   // 4) Android 뒤로가기
   void import('@capacitor/app').then(({ App }) => {
     App.addListener('backButton', ({ canGoBack }) => {
+      if (isAppLocked()) { void App.minimizeApp(); return; } // 잠금 화면 뒤의 라우트를 바꾸지 않는다
+      if (closeTopOverlay()) return; // 모달·시트·라이트박스·카메라·고객 상세가 열려 있으면 그것만 닫는다
       const atRoot = /^#?\/?(dashboard)?$/.test(location.hash.replace(/^#/, '')) || !canGoBack;
       if (atRoot) void App.minimizeApp();
       else history.back();
@@ -53,18 +57,21 @@ export async function openExternal(url: string): Promise<void> {
 
 /**
  * 파일 저장/공유 — 모바일 앱에서는 캐시에 쓰고 공유 시트를 띄운다(카카오톡·메일·파일 앱으로 보냄).
+ * 사용자가 시트를 닫으면 'cancelled' — 파일은 앱 캐시에만 있어 사용자가 열 수 없으므로 "저장됨"으로 보고하지 않는다.
+ * 공유 시트 자체가 안 뜨면 throw (호출 쪽이 실패로 알림).
  * @param base64 파일 본문(base64, data: 접두어 없음)
  */
-export async function saveOrShareFile(fileName: string, base64: string): Promise<'shared' | 'saved'> {
+export async function saveOrShareFile(fileName: string, base64: string): Promise<'shared' | 'cancelled'> {
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const { Share } = await import('@capacitor/share');
   const written = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
   try {
     await Share.share({ title: fileName, url: written.uri, dialogTitle: '내보낸 파일 공유' });
     return 'shared';
-  } catch {
-    // 사용자가 공유 시트를 닫은 경우 — 파일은 캐시에 남아 있음
-    return 'saved';
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e ?? '');
+    if (/cancel/i.test(msg)) return 'cancelled'; // @capacitor/share: "Share canceled" (Android·iOS 동일)
+    throw new Error(`공유 시트를 열지 못했습니다: ${msg || '알 수 없는 오류'}`);
   }
 }
 
@@ -72,7 +79,7 @@ export async function saveOrShareFile(fileName: string, base64: string): Promise
  * 파일 내보내기 공통 경로 — 모바일 앱은 캐시 저장 + 공유 시트, PC/브라우저는 <a download>.
  * (beforeAfter 비교 이미지, 어드민 반출 JSON 등이 같은 결정을 반복하지 않도록 한 곳에 둔다)
  */
-export async function exportFile(fileName: string, blob: Blob): Promise<'shared' | 'saved' | 'downloaded'> {
+export async function exportFile(fileName: string, blob: Blob): Promise<'shared' | 'cancelled' | 'downloaded'> {
   if (IS_MOBILE_APP) return saveOrShareFile(fileName, await blobToBase64(blob));
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

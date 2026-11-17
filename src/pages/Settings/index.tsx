@@ -185,7 +185,12 @@ export default function Settings() {
         ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys)
         : await exportDatasetsToXlsx(keys);
       const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
-      setExportMessage(`다운로드 완료: ${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행`);
+      const detail = `${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행`;
+      setExportMessage(
+        result.delivery === 'cancelled' ? '공유를 취소했습니다 — 파일은 저장되지 않았습니다. 다시 내보내 보낼 앱을 고르세요.'
+          : result.delivery === 'shared' ? `공유 시트로 전달: ${detail}`
+            : `다운로드 완료: ${detail}`,
+      );
     } catch (e: any) {
       setExportMessage(e?.message || '내보내기에 실패했습니다.');
     } finally {

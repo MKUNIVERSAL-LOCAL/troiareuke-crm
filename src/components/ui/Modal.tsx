@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
+import { useOverlayClose } from '../../lib/overlayStack';
 
 interface ModalProps {
   isOpen: boolean;
@@ -20,19 +21,6 @@ const sizes = {
 // 풀면 안 되므로, 열린 모달 수를 전역으로 세어 0이 될 때만 복원한다.
 let openModalCount = 0;
 
-// Esc는 가장 위(마지막에 열린) 모달만 닫는다 — 중첩 모달(예약 상세 → 결제 등록)에서 한 번에 다 닫히지 않게
-const escStack: Array<{ close: () => void }> = [];
-let escListenerInstalled = false;
-function ensureEscListener() {
-  if (escListenerInstalled || typeof window === 'undefined') return;
-  escListenerInstalled = true;
-  window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key !== 'Escape' || e.isComposing) return;
-    const top = escStack[escStack.length - 1];
-    if (top) top.close();
-  });
-}
-
 export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return;
@@ -44,19 +32,8 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
     };
   }, [isOpen]);
 
-  // Esc로 닫기 (PC 키보드 흐름, 2026-11-17) — 입력 중인 IME 조합은 건드리지 않고, 최상위 모달만 닫는다
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  useEffect(() => {
-    if (!isOpen) return;
-    const entry = { close: () => closeRef.current() };
-    escStack.push(entry);
-    ensureEscListener();
-    return () => {
-      const i = escStack.indexOf(entry);
-      if (i >= 0) escStack.splice(i, 1);
-    };
-  }, [isOpen]);
+  // Esc(PC)·Android 뒤로가기(모바일 앱)로 닫기 — 공용 스택이 최상위 모달만 닫는다 (중첩: 예약 상세 → 결제 등록)
+  useOverlayClose(isOpen, onClose);
 
   if (!isOpen) return null;
 

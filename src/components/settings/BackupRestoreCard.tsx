@@ -20,7 +20,7 @@ export default function BackupRestoreCard() {
     setSaving(true);
     try {
       const result = await saveBackupFile(buildBackup(__APP_VERSION__, SettingsStore.get().name));
-      notify(result === 'shared' ? '백업 파일을 공유 시트로 전달했습니다.' : result === 'saved' ? '백업 파일을 저장했습니다.' : '백업 파일을 다운로드했습니다.');
+      notify(result === 'shared' ? '백업 파일을 공유 시트로 전달했습니다.' : result === 'cancelled' ? '공유를 취소했습니다 — 백업 파일은 저장되지 않았습니다.' : '백업 파일을 다운로드했습니다.');
     } catch (e) {
       notify(e instanceof Error ? e.message : '백업 파일을 만들지 못했습니다.');
     } finally {

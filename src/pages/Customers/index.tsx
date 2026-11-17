@@ -18,6 +18,7 @@ import { resizeImageFile, getPhotos, getPhotosAsync, setPhotos as savePhotos, cl
 import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, comparisonFileName, angleLabel, type DatedPhoto } from '../../lib/beforeAfter';
 import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile, dataUrlToBlob } from '../../lib/mobileBridge';
+import { useOverlayClose } from '../../lib/overlayStack';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
@@ -451,6 +452,7 @@ export default function Customers() {
     try {
       const result = await exportConsultationPdf(c, selected);
       if (result === 'downloaded') notify('상담 결과지 PDF를 내려받았습니다.');
+      else if (result === 'cancelled') notify('공유를 취소했습니다 — 결과지는 저장되지 않았습니다.');
     } catch (e) {
       notify(e instanceof Error ? e.message : '상담 결과지를 만들지 못했습니다.');
     } finally {
@@ -540,12 +542,21 @@ export default function Customers() {
     }
   }
 
+  // Android 뒤로가기 — 열린 것 중 가장 위부터 하나씩 닫는다(상세 → 목록). 폼 모달은 Esc로는 닫지 않는다(입력 유실 방지, 취소 버튼으로)
+  useOverlayClose(!!selected && isMobileLayout, () => setSelected(null), { escape: false });
+  useOverlayClose(showAddModal, () => setShowAddModal(false), { escape: false });
+  useOverlayClose(showEditModal, () => setShowEditModal(false), { escape: false });
+  useOverlayClose(showProgramModal, () => setShowProgramModal(false), { escape: false });
+  useOverlayClose(showTreatmentModal, () => setShowTreatmentModal(false), { escape: false });
+  useOverlayClose(showConsultModal, () => { setShowConsultModal(false); setSavedConsultId(null); }, { escape: false });
+
   async function exportComparison() {
     if (!comparison || !selected) return;
     try {
       const fileName = comparison.blob.type === 'image/jpeg' ? comparisonFileName(selected.name).replace(/\.png$/, '.jpg') : comparisonFileName(selected.name);
       const result = await exportFile(fileName, comparison.blob);
       if (result === 'downloaded') notify('비교 이미지를 내려받았습니다.');
+      else if (result === 'cancelled') notify('공유를 취소했습니다 — 비교 이미지는 저장되지 않았습니다.');
     } catch (e) {
       notify(e instanceof Error ? e.message : '비교 이미지를 내보내지 못했습니다.');
     }
@@ -921,11 +932,12 @@ export default function Customers() {
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '고객목록');
-    writeWorkbook(wb, `고객목록_${today()}.xlsx`).catch(e => notify(e instanceof Error ? e.message : '엑셀 파일을 내보내지 못했습니다.'));
+    writeWorkbook(wb, `고객목록_${today()}.xlsx`).then(r => { if (r === 'cancelled') notify('공유를 취소했습니다 — 엑셀 파일은 저장되지 않았습니다.'); }, e => notify(e instanceof Error ? e.message : '엑셀 파일을 내보내지 못했습니다.'));
   }
 
   // 업로드 가이드 모달 — 양식을 모르면 쓸 수 없는 기능이라 안내+양식 다운로드를 먼저 보여줌
   const [showImportGuide, setShowImportGuide] = useState(false);
+  useOverlayClose(showImportGuide, () => setShowImportGuide(false));
 
   // 업로드 양식 엑셀 다운로드 (헤더 + 예시 2행)
   function downloadImportTemplate() {
@@ -945,7 +957,7 @@ export default function Customers() {
     ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 6 }, { wch: 6 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 24 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '고객업로드양식');
-    writeWorkbook(wb, '고객_업로드_양식.xlsx').catch(e => notify(e instanceof Error ? e.message : '양식 파일을 내보내지 못했습니다.'));
+    writeWorkbook(wb, '고객_업로드_양식.xlsx').then(r => { if (r === 'cancelled') notify('공유를 취소했습니다 — 양식 파일은 저장되지 않았습니다.'); }, e => notify(e instanceof Error ? e.message : '양식 파일을 내보내지 못했습니다.'));
   }
 
   // 고객 엑셀/CSV 대량 업로드 — 다운로드와 동일한 헤더(이름/전화번호/이메일/성별/등급/생년월일/피부유형/유입경로/메모)를 인식

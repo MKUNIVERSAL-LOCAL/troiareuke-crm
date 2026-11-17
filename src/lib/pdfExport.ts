@@ -8,7 +8,7 @@
 import { IS_MOBILE_APP } from './platform';
 import { todayISO } from './format';
 import { saveOrShareFile } from './mobileBridge';
-import { buildExportSheets, EXPORT_DATASETS, type ExportResult } from './dataExport';
+import { buildExportSheets, EXPORT_DATASETS, type ExportResult, type ExportDelivery } from './dataExport';
 import { SettingsStore } from './store';
 
 const SENSITIVE_NOTICE = '민감정보 포함 — 외부 공유 금지';
@@ -82,11 +82,12 @@ export async function exportDatasetsToPdf(keys: string[]): Promise<ExportResult>
 
   const safeShopName = shopName.replace(/[\\/:*?"<>|]/g, '');
   const fileName = `${safeShopName}_데이터내보내기_${date}.pdf`;
+  let delivery: ExportDelivery = 'downloaded';
   if (IS_MOBILE_APP) {
     const base64 = doc.output('datauristring').replace(/^data:[^;]*;base64,/, '');
-    await saveOrShareFile(fileName, base64);
+    delivery = await saveOrShareFile(fileName, base64);
   } else {
     doc.save(fileName);
   }
-  return { fileName, counts };
+  return { fileName, counts, delivery };
 }
