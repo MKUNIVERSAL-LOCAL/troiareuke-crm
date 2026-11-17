@@ -48,6 +48,10 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible();
   await searchBox.fill('없는고객zzz');
   await expect(page.getByText(acc.customer).filter({ visible: true })).toHaveCount(0);
+  // Enter → 첫 검색 결과가 바로 열린다 (데스크 입력 속도 2026-11-18)
+  await searchBox.fill(acc.customer);
+  await searchBox.press('Enter');
+  await expect(page.getByRole('heading', { name: acc.customer }).filter({ visible: true }).first()).toBeVisible();
   await searchBox.fill('');
 
   // 키보드 포커스 — 모달을 열면 첫 입력란에 커서, Tab은 창 안에서만 돌고, 닫으면 열었던 버튼으로 돌아온다 (접근성 감사 2026-11-18)

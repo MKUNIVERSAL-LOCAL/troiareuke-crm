@@ -7,7 +7,7 @@ import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
-import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, PaymentStore } from '../../lib/store';
+import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, PaymentStore, ReservationStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
@@ -282,6 +282,11 @@ export default function Treatments() {
             setShowAddModal(false);
             setPrefill(null);
             loadLogs();
+            // 예약 상세 [시술 기록 작성]에서 온 기록을 저장했으면 그 예약은 완료 — 돌아가서 [완료처리]를 또 누르지 않게 (입력 속도 감사 2026-11-18)
+            if (result && reservationId) {
+              const r = ReservationStore.getAll().find(x => x.id === reservationId);
+              if (r && (r.status === 'confirmed' || r.status === 'pending')) ReservationStore.updateStatus(reservationId, 'completed');
+            }
             // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
             const paidByReservation = !!reservationId && PaymentStore.getAll().some(p => p.referenceId === reservationId);
             if (result && !paidByReservation && window.confirm(`시술 기록을 저장했습니다.\n${result.customerName} 고객의 결제(${result.amount.toLocaleString()}원)도 바로 등록할까요?`)) {
@@ -349,7 +354,9 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const services = ServiceStore.getAll().filter(s => s.isActive || editedNames.has(s.name));
 
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
-  const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? '');
+  // 활성 회차권이 하나뿐이면 미리 연결 — 안 그러면 '단건'으로 저장돼 회차가 차감되지 않는 실수가 잦다 (입력 속도 감사 2026-11-18)
+  const onlyActiveProgram = (cid: string) => { const a = cid ? CustomerProgramStore.getActive(cid) : []; return a.length === 1 ? a[0].id : ''; };
+  const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? onlyActiveProgram(prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
   const [staffName, setStaffName] = useState(editing?.staffName ?? (prefill?.staffName && staff.some(s => s.name === prefill.staffName) ? prefill.staffName : ''));
   const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? prefill?.treatmentDate ?? todayISO());
   // 수정 모드: 기존 시술 내용에서 시술 메뉴명과 일치하는 항목을 체크 상태로 복원. 예약 프리필도 같은 규칙(존재하는 메뉴만)
@@ -513,7 +520,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
             <select
               value={customerId}
-              onChange={e => { setCustomerId(e.target.value); setCustomerProgramId(''); }}
+              onChange={e => { setCustomerId(e.target.value); setCustomerProgramId(onlyActiveProgram(e.target.value)); }}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
             >
               <option value="">고객 선택</option>

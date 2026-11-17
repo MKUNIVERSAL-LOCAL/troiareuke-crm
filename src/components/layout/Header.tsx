@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -14,6 +14,24 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const today = format(new Date(), 'yyyy년 M월 d일 (EEEE)', { locale: ko });
+  // "/" 또는 Ctrl+K → 전역 고객 검색으로 포커스 (입력 중인 칸에서는 무시, 입력 속도 감사 2026-11-18)
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
+      const isSlash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey;
+      if (!isK && !isSlash) return;
+      const t = e.target as HTMLElement | null;
+      if (!isK && t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const el = searchRef.current;
+      if (!el || el.offsetParent === null) return; // 모바일 폭에서는 숨김
+      e.preventDefault();
+      el.focus();
+      el.select();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // 전역 고객 검색 — 고객 관리로 이동하며 검색어를 넘긴다 (?q=)
   const handleSearch = (e: React.FormEvent) => {
@@ -36,10 +54,13 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
         <form onSubmit={handleSearch} className="relative hidden md:block">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
+            ref={searchRef}
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="고객 검색 후 Enter"
+            placeholder="고객 검색 (/ 또는 Ctrl+K)"
+            aria-label="고객 검색"
+            title="/ 또는 Ctrl+K로 바로 포커스 · Enter로 검색, 1명만 맞으면 바로 열림"
             className="pl-9 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent w-48 transition-all"
           />
         </form>

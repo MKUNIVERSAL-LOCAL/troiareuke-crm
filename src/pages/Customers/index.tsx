@@ -931,6 +931,19 @@ export default function Customers() {
   const [listLimit, setListLimit] = useState(LIST_PAGE);
   useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey]);
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
+  // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
+  const openCustomer = (c: Customer) => { setSelected(c); setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id)); };
+  const openFirstMatch = () => { if (filtered.length > 0) openCustomer(filtered[0]); };
+  useEffect(() => {
+    if (qParam && filtered.length === 1 && selected?.id !== filtered[0].id) openCustomer(filtered[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qParam, filtered]);
+  // 빠른 시술 기록: 활성 프로그램이 하나뿐이면 미리 연결해 둔다(회차 차감 누락 방지)
+  const openTreatmentModal = () => {
+    const active = customerPrograms.filter(cp => !cp.isCompleted);
+    setTreatForm(f => ({ ...f, customerProgramId: active.length === 1 ? active[0].id : f.customerProgramId }));
+    setShowTreatmentModal(true);
+  };
   const tagOptions = useMemo(() => topTags(customers, 12), [customers]);
   // 걸러 둔 태그가 사라지면(마지막 고객에서 지움·병합·익명화·상위 12 밖) 빈 목록에 갇히지 않게 자동 해제
   useEffect(() => {
@@ -1294,6 +1307,7 @@ export default function Customers() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); openFirstMatch(); } }}
                 aria-label="고객 검색" placeholder="고객명, 전화번호 검색"
                 className="w-full h-10 pl-9 pr-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -1655,7 +1669,7 @@ export default function Customers() {
                   </>
                 )}
                 <button
-                  onClick={() => setShowTreatmentModal(true)}
+                  onClick={openTreatmentModal}
                   className="py-2.5 bg-green-500 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
                 >
                   <Scissors size={14} />시술 기록
@@ -1741,7 +1755,8 @@ export default function Customers() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              aria-label="고객 검색" placeholder="이름, 전화번호 검색"
+              onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); openFirstMatch(); } }}
+              aria-label="고객 검색" placeholder="이름, 전화번호 검색 (Enter로 첫 결과 열기)"
               className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -1934,7 +1949,7 @@ export default function Customers() {
                     <Sparkles size={12} />피부 상담
                   </button>
                   <button
-                    onClick={() => setShowTreatmentModal(true)}
+                    onClick={openTreatmentModal}
                     className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-green-500 text-white rounded-xl text-xs font-medium hover:bg-green-600 transition-colors"
                   >
                     <Scissors size={12} />시술 기록

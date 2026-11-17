@@ -8,7 +8,8 @@ import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
-import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore } from '../../lib/store';
+import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore } from '../../lib/store';
+import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
 import type { Reservation, Staff } from '../../types';
 import {
@@ -25,6 +26,25 @@ import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 
 const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
+/** 지금 이후의 첫 시간대 — 오늘 예약을 추가할 때 기본값 (입력 속도 감사 2026-11-18). 영업 종료 뒤면 마지막 시간대 */
+function nextTimeSlot(now = new Date()): string {
+  const hh = `${String(now.getMinutes() > 0 ? now.getHours() + 1 : now.getHours()).padStart(2, '0')}:00`;
+  return TIME_SLOTS.find(t => t >= hh) ?? TIME_SLOTS[TIME_SLOTS.length - 1];
+}
+/** 고객의 활성 회차권 잔여 — 예약 추가·상세에서 바로 보이게 */
+function ProgramBalance({ customerId }: { customerId: string }) {
+  const active = customerId ? CustomerProgramStore.getActive(customerId) : [];
+  if (active.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1" aria-label="회차권 잔여">
+      {active.map(cp => (
+        <span key={cp.id} className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+          {cp.programName}{cp.totalSessions != null ? ` · 잔여 ${Math.max(0, cp.totalSessions - (cp.usedSessions || 0))}회` : ' · 기간제'}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 // ── 스케줄러 시간 비례 렌더링 ─────────────────────────────────────
 // 예약 블록을 관리시간(startTime~endTime)에 비례한 높이로 그리기 위한 유틸.
@@ -860,10 +880,12 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
 
   // 고객 상세 [예약 추가](?customer=)에서 왔으면 그 고객을 미리 선택 (2026-11-17)
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (initialCustomerId && customers.some(c => c.id === initialCustomerId) ? initialCustomerId : ''));
-  const [staffId, setStaffId] = useState(editing?.staffId ?? '');
-  const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? '');
-  const [date, setDate] = useState(editing?.date ?? initialDate ?? format(new Date(), 'yyyy-MM-dd'));
-  const [startTime, setStartTime] = useState(editing?.startTime ?? '10:00');
+  // 입력 속도: 직원이 한 명이면 그 직원, 아니면 로그인한 직원 본인; 시술이 하나면 그 시술; 오늘이면 지금 이후 첫 시간대 (입력 속도 감사 2026-11-18)
+  const [staffId, setStaffId] = useState(editing?.staffId ?? (staffList.length === 1 ? staffList[0].id : (staffList.find(s => s.name === authUser?.name)?.id ?? '')));
+  const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? (services.length === 1 ? services[0].id : ''));
+  const todayKey = format(new Date(), 'yyyy-MM-dd');
+  const [date, setDate] = useState(editing?.date ?? initialDate ?? todayKey);
+  const [startTime, setStartTime] = useState(editing?.startTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot() : '10:00'));
   const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [addToGoogle, setAddToGoogle] = useState(!isEdit && isGoogleCalendarConnected());
@@ -998,6 +1020,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>)}
             </select>
             {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
+            <ProgramBalance customerId={customerId} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원 *</label>
@@ -1196,6 +1219,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           <InfoItem label="담당자" value={r.staffName} />
           <InfoItem label="금액" value={`${r.totalPrice.toLocaleString()}원`} />
         </div>
+        <ProgramBalance customerId={r.customerId} />
 
         <div>
           <p className="text-xs font-medium text-gray-500 mb-2">시술 내역</p>
@@ -1272,7 +1296,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 // 완료처리 결제 등록 모달 — 단일 결제 + 복합(2가지 수단 분할) + 커스텀 결제수단
 function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reservation; onDone: () => void }) {
   const [mode, setMode] = useState<'single' | 'split'>('single');
-  const [method, setMethod] = useState('카드');
+  const [method, setMethod] = useState(getLastPaymentMethod() ?? '카드'); // 지난번 결제수단 (입력 속도 감사 2026-11-18)
   const [methodA, setMethodA] = useState('카드');
   const [methodB, setMethodB] = useState('현금');
   const [amountA, setAmountA] = useState(String(r.totalPrice));
@@ -1292,6 +1316,7 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
   const handleSave = () => {
     if (mode === 'single') {
       PaymentStore.save({ ...basePayment, amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
+      rememberPaymentMethod(method);
     } else {
       const a = Math.max(0, Number(amountA.replace(/\D/g, '')) || 0);
       const b = Math.max(0, Number(amountB.replace(/\D/g, '')) || 0);

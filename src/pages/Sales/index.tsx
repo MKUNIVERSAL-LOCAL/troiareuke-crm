@@ -12,6 +12,7 @@ import {
   ResponsiveContainer, BarChart, Bar, Legend
 } from 'recharts';
 import { PaymentStore, CustomerStore } from '../../lib/store';
+import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
 import type { Payment, PaymentMethod, Expense, ExpenseCategory } from '../../types';
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
@@ -93,7 +94,7 @@ export default function Sales() {
     customerName: '',
     type: 'single_treatment' as Payment['type'],
     amount: '',
-    paymentMethod: '카드' as PaymentMethod,
+    paymentMethod: (getLastPaymentMethod() ?? '카드') as PaymentMethod, // 지난번 결제수단 (입력 속도 감사 2026-11-18)
     paymentDate: today(),
     memo: '',
     discountAmount: '0',
@@ -306,7 +307,7 @@ export default function Sales() {
     setViewMonth(getYearMonth(d));
   }
 
-  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: '카드', paymentDate: today(), memo: '', discountAmount: '0', status: 'completed', referenceId: '' });
+  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: (getLastPaymentMethod() ?? '카드') as PaymentMethod, paymentDate: today(), memo: '', discountAmount: '0', status: 'completed', referenceId: '' });
 
   function closeModal() {
     setShowModal(false);
@@ -387,6 +388,7 @@ export default function Sales() {
     } else {
       PaymentStore.save(payload);
     }
+    rememberPaymentMethod(form.paymentMethod);
 
     closeModal();
     loadPayments();
