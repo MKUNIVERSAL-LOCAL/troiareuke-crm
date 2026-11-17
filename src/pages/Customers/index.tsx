@@ -950,7 +950,13 @@ export default function Customers() {
                 })()}
               </div>
 
-              <p className="text-xs text-slate-400 text-center pb-2">수정·삭제는 PC에서 이용해주세요</p>
+              <button
+                onClick={openEditModal}
+                className="w-full py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 flex items-center justify-center gap-1.5"
+              >
+                <Pencil size={14} />고객 정보 수정
+              </button>
+              <p className="text-xs text-slate-400 text-center pb-2">삭제는 PC에서 이용해주세요</p>
             </div>
           </div>
         )}
@@ -1552,8 +1558,9 @@ export default function Customers() {
       )}
 
       {/* ───── 고객 수정 모달 ───── */}
-      {showEditModal && selected && (
-        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      {/* 모바일에서도 열리도록 body 포털 (데스크톱 전용 래퍼 안에 있음) — 2026-11-17 */}
+      {showEditModal && selected && createPortal(
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4 overflow-y-auto">
           <div className="modal-card bg-white rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">고객 정보 수정</h2>
@@ -1632,7 +1639,8 @@ export default function Customers() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* ───── 프로그램 등록 모달 ───── */}

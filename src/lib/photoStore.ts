@@ -155,17 +155,45 @@ export function getPhotos(entityKey: string): PhotoEntry[] {
   }
 }
 
+/**
+ * 로컬 사진 캐시 비우기 (NAS 모드 전용) — 서버가 정본이므로 다른 엔티티의 캐시는 다음 동기화 때 다시 받는다.
+ * dirty(미전송)·현재 엔티티는 남긴다. 모바일 WebView(localStorage 5~10MB)에서 "용량 초과" 막다른 길을 없앤다.
+ * @returns 비운 엔티티 수
+ */
+export function evictPhotoCache(keepEntityKey?: string): number {
+  if (!isAuthApiConfigured) return 0;
+  const dirty = new Set(getDirtyKeys());
+  let evicted = 0;
+  for (const key of Object.keys(localStorage)) {
+    if (!key.startsWith(PREFIX)) continue;
+    const entityKey = key.slice(PREFIX.length);
+    if (entityKey === keepEntityKey || dirty.has(entityKey)) continue;
+    try { localStorage.removeItem(key); evicted += 1; } catch { /* noop */ }
+  }
+  return evicted;
+}
+
+function writePhotoCache(entityKey: string, photos: PhotoEntry[]): void {
+  if (photos.length === 0) localStorage.removeItem(storageKey(entityKey));
+  else localStorage.setItem(storageKey(entityKey), JSON.stringify(photos));
+}
+
 /** 사진 목록 저장(덮어쓰기) — NAS 설정 시 서버에도 백업 */
 export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
   try {
-    if (photos.length === 0) {
-      localStorage.removeItem(storageKey(entityKey));
-    } else {
-      localStorage.setItem(storageKey(entityKey), JSON.stringify(photos));
-    }
+    writePhotoCache(entityKey, photos);
   } catch (e) {
-    // 용량 초과(QuotaExceeded) 등 — 조용히 실패하지 않고 상위에서 처리하도록 throw
-    // (NAS 백업은 아래에서 계속 시도)
+    // 용량 초과(QuotaExceeded): NAS 모드면 다른 캐시를 비우고 1회 재시도 (서버 정본은 그대로)
+    const evicted = evictPhotoCache(entityKey);
+    if (evicted > 0) {
+      try {
+        writePhotoCache(entityKey, photos);
+        console.warn(`[photoStore] 로컬 캐시 ${evicted}건 비우고 저장 (서버 동기화는 유지)`);
+        pushToNas(entityKey, photos);
+        return;
+      } catch { /* 아래 throw */ }
+    }
+    // 로컬 모드이거나 비워도 부족 — 조용히 실패하지 않고 상위에서 처리하도록 throw (NAS 백업은 계속 시도)
     pushToNas(entityKey, photos);
     throw e;
   }

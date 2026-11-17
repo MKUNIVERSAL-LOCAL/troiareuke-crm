@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, becomeSuperadmin } from './helpers';
 
 /**
  * 전 화면 순회 안전망 (로컬 모드 빌드)
@@ -14,6 +14,12 @@ const BRANCH_ROUTES = [
   '/', '/customers', '/reservations', '/treatments', '/programs', '/products',
   '/sales', '/staff', '/messaging', '/settings', '/api-guide', '/ai-chat',
 ];
+// 본사 어드민 콘솔 — 로컬 모드에는 슈퍼어드민 계정이 없어 세션 역할을 바꿔 진입한다 (화면 렌더 안전망 목적)
+const ADMIN_ROUTES = [
+  '/admin/dashboard', '/admin/branches', '/admin/users', '/admin/subscriptions',
+  '/admin/announcements', '/admin/statistics', '/admin/features', '/admin/login-logs',
+];
+
 
 // 실제 결함이 아닌 알려진 소음 — 여기 추가할 때는 사유를 적는다
 const IGNORED_CONSOLE = [
@@ -43,6 +49,16 @@ test('지점 화면 전부가 예외·콘솔 오류·빈 화면 없이 열린다
     // 화면이 실제로 렌더됐는지 — 루트에 보이는 텍스트가 있어야 한다
     const text = (await page.locator('#root').innerText()).trim();
     expect(text.length, `${route}: 화면이 비어 있음`).toBeGreaterThan(0);
+  }
+
+  // 어드민 콘솔도 같은 기준으로
+  await becomeSuperadmin(page);
+  for (const route of ADMIN_ROUTES) {
+    await page.goto(route);
+    await page.waitForLoadState('networkidle');
+    const text = (await page.locator('#root').innerText()).trim();
+    expect(text.length, `${route}: 화면이 비어 있음`).toBeGreaterThan(0);
+    expect(page.url(), `${route}: 어드민 화면으로 진입하지 못함`).toContain('/admin/');
   }
 
   expect(pageErrors, `페이지 예외:\n${pageErrors.join('\n')}`).toEqual([]);

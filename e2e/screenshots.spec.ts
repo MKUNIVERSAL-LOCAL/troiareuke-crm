@@ -1,6 +1,7 @@
 import { test } from '@playwright/test';
 import path from 'node:path';
 import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, solidPng } from './helpers';
+import { becomeSuperadmin } from './helpers';
 
 /**
  * 화면 스크린샷 세트 생성기 — 시각 QA·스토어 등록 스크린샷용. 기본 E2E에서는 건너뛴다.
@@ -88,5 +89,13 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
     await page.goto(route);
     await page.waitForLoadState('networkidle');
     await shot(name);
+  }
+
+  // 본사 어드민 콘솔 (로컬 모드 폴백 화면)
+  await becomeSuperadmin(page);
+  for (const name of ['dashboard', 'branches', 'users', 'subscriptions', 'announcements', 'statistics', 'features', 'login-logs']) {
+    await page.goto(`/admin/${name}`);
+    await page.waitForLoadState('networkidle');
+    await shot(`admin-${name}`);
   }
 });

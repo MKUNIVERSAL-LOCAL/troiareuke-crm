@@ -128,6 +128,12 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(page.getByText('기본 정보').filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText('최근 시술 기록').filter({ visible: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page, '고객 상세');
+  // 고객 정보 수정이 모바일에서도 된다 (2026-11-17)
+  await page.getByRole('button', { name: '고객 정보 수정' }).click();
+  const memoField = page.getByPlaceholder('특이사항, 알레르기 등').filter({ visible: true }).first();
+  await memoField.fill('모바일에서 수정');
+  await page.getByRole('button', { name: '저장', exact: true }).filter({ visible: true }).first().click();
+  await expect(page.getByText('모바일에서 수정').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: '뒤로가기' }).click();
 
   // 설정 화면: 모바일에서 탭 칩이 가로로 쌓이고 입력란이 화면 안에 있다
