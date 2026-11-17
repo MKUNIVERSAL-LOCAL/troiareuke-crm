@@ -29,14 +29,33 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page.getByText(acc.customer).filter({ visible: true })).toHaveCount(0);
   await searchBox.fill('');
 
-  // ── 4. 예약 등록 ──
+  // ── 4. 예약 등록 (오늘을 휴무일로 바꿔 두면 저장 전 "휴무일" 확인이 뜨고, 수락하면 저장된다 — 2026-11-18 영업시간 점검) ──
+  const dayLabel = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!;
+    const s = JSON.parse(localStorage.getItem(key) || '{}');
+    const day = ['일', '월', '화', '수', '목', '금', '토'][new Date().getDay()];
+    s.businessHours[day].isOff = true;
+    localStorage.setItem(key, JSON.stringify(s));
+    return day;
+  });
+  const dialogMessages: string[] = [];
+  const recordDialog = (d: { message(): string }) => { dialogMessages.push(d.message()); };
+  page.on('dialog', recordDialog);
   await page.goto('/reservations');
   await page.getByRole('button', { name: '예약 추가' }).click();
   await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
   await page.locator('select').filter({ hasText: '직원 선택' }).selectOption({ index: 1 });
   await page.locator('select').filter({ hasText: '시술 선택' }).selectOption({ index: 1 });
-  await page.getByRole('button', { name: '예약 저장' }).click();
+  await page.getByRole('button', { name: '예약 저장' }).click(); // 휴무일 confirm은 page.on('dialog')가 수락
   await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+  page.off('dialog', recordDialog);
+  expect(dialogMessages.some(m => m.includes(`${dayLabel}요일은 휴무일입니다`))).toBe(true);
+  await page.evaluate(() => { // 휴무 원복 — 뒤 단계의 예약 생성이 영향받지 않게
+    const key = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!;
+    const s = JSON.parse(localStorage.getItem(key) || '{}');
+    for (const d of Object.keys(s.businessHours)) s.businessHours[d].isOff = false;
+    localStorage.setItem(key, JSON.stringify(s));
+  });
   await dismissToasts(page);
 
   // ── 5. 결제 등록 → 매출 반영 ──
