@@ -42,7 +42,7 @@ export default function Layout() {
       const now = Date.now();
       if (now - last < 10_000) return;
       last = now;
-      const msg = e.reason instanceof Error ? e.reason.message : String(e.reason ?? '');
+      const msg = e.reason instanceof Error ? e.reason.message : typeof e.reason === 'string' ? e.reason : ''; // 객체 reason은 "[object Object]"로 보이지 않게
       notify(`작업 중 오류가 났습니다${msg ? `: ${msg.slice(0, 80)}` : ''} — 화면을 새로고침해도 같다면 관리자에게 알려주세요.`);
     };
     window.addEventListener('unhandledrejection', onRejection);

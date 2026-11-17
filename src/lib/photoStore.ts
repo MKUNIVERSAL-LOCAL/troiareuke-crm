@@ -372,7 +372,7 @@ export async function retryDirtyPhotos(includeRejected = false): Promise<void> {
     if (REJECTED_PUSH.has(key)) { if (!includeRejected) continue; REJECTED_PUSH.delete(key); }
     const local = await peekCache(key);
     if (local === null) continue; // 로컬을 읽지 못했으면 빈 배열을 올리지 않는다
-    if (local.length === 0 && getEvictedKeys().includes(key)) continue; // 용량 초과로 비워진 캐시 — 서버본이 정본
+    if (local.length === 0 && getEvictedKeys().includes(key)) { setDirty(key, false); setEvicted(key, false); continue; } // 용량 초과로 비워진 캐시 — 서버본이 정본(syncPhotosFromNas와 동일)
     pushToNas(key, local);
   }
   emitSync();

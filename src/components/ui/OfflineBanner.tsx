@@ -27,14 +27,26 @@ const COLLECTION_LABELS: Record<string, string> = {
   expenses: '지출', customer_programs: '고객 프로그램', programs: '프로그램', products: '제품', product_sales: '제품 판매',
   staff: '직원', services: '시술 메뉴', settings: '설정', message_templates: '메시지 템플릿', message_history: '발송 기록',
 };
-function describeRejected(paths: string[]): string {
+function describeRejected(items: { path: string }[]): string {
   const counts = new Map<string, number>();
-  for (const p of paths) {
-    const m = /\/api\/data\/([^/?]+)/.exec(p);
+  for (const { path } of items) {
+    const m = /\/api\/data\/([^/?]+)/.exec(path);
     const label = m ? (COLLECTION_LABELS[m[1]] || m[1]) : '기타';
     counts.set(label, (counts.get(label) || 0) + 1);
   }
   return [...counts.entries()].map(([k, v]) => `${k} ${v}건`).join(' · ');
+}
+// 왜 거부됐는지 — 404 PATCH는 다른 기기에서 이미 삭제된 기록(서버 문제 아님), 404 PUT/400은 서버가 모르는 컬렉션·형식(서버 구버전 가능)
+function describeReason(items: { status: number; method: string }[]): string {
+  const reasons = new Set<string>();
+  for (const { status, method } of items) {
+    if (status === 404 && method === 'PATCH') reasons.add('다른 기기에서 이미 삭제된 기록');
+    else if (status === 404) reasons.add('서버가 모르는 항목(서버 프로그램 구버전 가능)');
+    else if (status === 400 || status === 422) reasons.add('서버가 형식을 거부(서버 프로그램 구버전 가능)');
+    else if (status === 413) reasons.add('용량 초과');
+    else reasons.add(`서버 응답 ${status}`);
+  }
+  return [...reasons].join(', ');
 }
 
 /**
@@ -48,6 +60,7 @@ export default function OfflineBanner() {
   const [sendFailed, setSendFailed] = useState(false);
   const [rejected, setRejected] = useState(() => listRejectedNasOutbox()); // 서버가 영구 거부한 저장분 — 재시작해도 남는다 (실패 경로 감사 2026-11-18)
   const [authExpired, setAuthExpired] = useState(false);
+  const [lostRejected, setLostRejected] = useState(0); // 거부분을 이 기기에 보존조차 못 한 건수(저장 공간 부족)
   const [quotaFallback, setQuotaFallback] = useState<'none' | 'sent' | 'failed'>('none');
   const [photoDirty, setPhotoDirty] = useState(() => dirtyPhotoCount());
   const [photoRejected, setPhotoRejected] = useState(() => rejectedPhotoCount());
@@ -57,16 +70,16 @@ export default function OfflineBanner() {
     const onOnline = () => {
       setOffline(false);
       setSendFailed(false); // 연결 복구 — 자동 재시도되므로 실패 배너 해제
+      setAuthExpired(false); // 재시도 루프가 아직 만료면 다시 올린다
     };
     const onOutboxChanged = (e: Event) => {
       const detail = (e as CustomEvent<{ count?: number }>).detail;
       const n = typeof detail?.count === 'number' ? detail.count : pendingNasOutboxCount();
-      setPending(n);
-      if (n === 0) setAuthExpired(false); // 다 보내졌으면 세션 문제도 해소된 것
+      setPending(prev => { if (n < prev) setAuthExpired(false); return n; }); // 전송이 진행되면 세션 문제는 해소된 것
     };
     const onOutboxError = (e: Event) => {
-      const detail = (e as CustomEvent<{ permanent?: boolean; auth?: boolean; fallback?: boolean; failed?: boolean }>).detail;
-      if (detail?.permanent) setRejected(listRejectedNasOutbox());
+      const detail = (e as CustomEvent<{ permanent?: boolean; auth?: boolean; fallback?: boolean; failed?: boolean; lost?: boolean }>).detail;
+      if (detail?.permanent) { setRejected(listRejectedNasOutbox()); if (detail.lost) setLostRejected(n => n + 1); }
       else if (detail?.auth) setAuthExpired(true);
       else if (detail?.fallback) setQuotaFallback(detail.failed ? 'failed' : 'sent');
       else setSendFailed(true);
@@ -95,16 +108,16 @@ export default function OfflineBanner() {
   }, [offline]);
 
   const photoIssue = photoDirty > 0 || photoRejected > 0;
-  if (!offline && pending === 0 && !sendFailed && rejected.length === 0 && !authExpired && quotaFallback === 'none' && !photoIssue) return null;
+  if (!offline && pending === 0 && !sendFailed && rejected.length === 0 && lostRejected === 0 && !authExpired && quotaFallback === 'none' && !photoIssue) return null;
 
   const base = 'sticky top-0 z-30 border-b text-xs py-2 px-4 flex items-center gap-2 flex-wrap';
   const linkBtn = 'text-xs underline px-1 py-1';
 
-  if (rejected.length > 0) {
+  if (rejected.length > 0 || lostRejected > 0) {
     const retry = () => {
       const n = retryRejectedNasOutbox();
       setRejected([]);
-      notify(`${n}건을 다시 전송 대기열에 넣었습니다. 서버가 또 거부하면 다시 표시됩니다.`);
+      notify(`${n}건을 다시 전송 대기열에 넣었습니다. 서버가 또 거부하면 다시 표시됩니다. (그 사이 다른 기기에서 고친 내용은 덮일 수 있습니다)`);
     };
     const download = async () => {
       try {
@@ -119,12 +132,13 @@ export default function OfflineBanner() {
       <div role="alert" data-testid="nas-rejected-banner" className={`${base} bg-rose-50 border-rose-200 text-rose-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
         <span>
-          서버가 저장분 {rejected.length}건을 거부해 반영되지 않았습니다 ({describeRejected(rejected.map(r => r.path))}) — 서버 프로그램이 구버전일 수 있습니다. 이 기기에는 남아 있습니다.
+          {rejected.length > 0 && <>서버가 저장분 {rejected.length}건을 거부해 반영되지 않았습니다 ({describeRejected(rejected)}) — 사유: {describeReason(rejected)}. 이 기기에는 남아 있습니다.</>}
+          {lostRejected > 0 && <> 추가로 {lostRejected}건은 이 기기 저장 공간이 부족해 보존하지 못했습니다 — 해당 기록을 다시 입력해야 합니다.</>}
         </span>
         <span className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={retry} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>
-          <button type="button" onClick={download} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>내려받기</button>
-          <button type="button" onClick={() => { if (window.confirm('거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.')) { clearRejectedNasOutbox(); setRejected([]); } }} className={`${linkBtn} text-rose-500 hover:text-rose-700`}>지우기</button>
+          {rejected.length > 0 && <button type="button" onClick={retry} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>}
+          {rejected.length > 0 && <button type="button" onClick={download} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>내려받기</button>}
+          <button type="button" onClick={() => { if (window.confirm('거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.')) { clearRejectedNasOutbox(); setRejected([]); setLostRejected(0); } }} className={`${linkBtn} text-rose-500 hover:text-rose-700`}>지우기</button>
         </span>
       </div>
     );
@@ -134,7 +148,7 @@ export default function OfflineBanner() {
     return (
       <div role="alert" className={`${base} bg-rose-50 border-rose-200 text-rose-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
-        <span>로그인 세션이 만료돼 저장분 {pending}건을 보내지 못하고 있습니다 — [로그아웃]은 누르지 말고(대기분이 지워짐) 프로그램을 다시 시작해 로그인하면 이어서 전송됩니다.</span>
+        <span>로그인 세션이 만료돼 저장분 {pending}건을 보내지 못하고 있습니다 — 프로그램을 다시 시작해 로그인하면 이어서 전송됩니다 (대기분은 이 기기에 보존됩니다).</span>
       </div>
     );
   }

@@ -11,7 +11,9 @@
 import { apiRequest, isAuthApiConfigured, AuthApiError } from './authApi';
 
 const OUTBOX_PREFIX = 'troiareuke_nas_outbox_';
-const REJECTED_PREFIX = 'troiareuke_nas_rejected_'; // 서버가 영구 거부한 저장분 — 재시작해도 남아 배너·다시 시도·내려받기에 쓴다
+// 서버가 영구 거부한 저장분 — 재시작·로그아웃해도 남아 배너·다시 시도·내려받기에 쓴다.
+// 코어 AuthContext의 로그아웃 wipe는 'troiareuke_nas_outbox_' 접두사만 보존하므로 그 아래에 둔다 (outboxKey()는 정확한 키만 읽어 충돌 없음)
+const REJECTED_PREFIX = 'troiareuke_nas_outbox_rejected_';
 const REJECTED_MAX = 200;
 const RETRY_INTERVAL_MS = 60_000;
 const QUEUE_WARN_SIZE = 1_000;
@@ -85,11 +87,16 @@ function readRejected(): RejectedNasMutation[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch { return []; }
 }
-function writeRejected(list: RejectedNasMutation[]): void {
+/** @returns 저장 성공 여부 — 실패(용량 초과)면 호출 쪽이 유실을 알려야 한다 */
+function writeRejected(list: RejectedNasMutation[]): boolean {
   try {
     if (list.length === 0) localStorage.removeItem(rejectedKey());
-    else localStorage.setItem(rejectedKey(), JSON.stringify(list.slice(-REJECTED_MAX)));
-  } catch (e) { console.error('[NAS] 거부 목록 저장 실패:', e); }
+    else {
+      if (list.length > REJECTED_MAX) console.warn(`[NAS] 거부 목록 ${list.length}건 — 오래된 ${list.length - REJECTED_MAX}건을 버립니다`);
+      localStorage.setItem(rejectedKey(), JSON.stringify(list.slice(-REJECTED_MAX)));
+    }
+    return true;
+  } catch (e) { console.error('[NAS] 거부 목록 저장 실패:', e); return false; }
 }
 export function rejectedNasOutboxCount(): number { return readRejected().length; }
 export function listRejectedNasOutbox(): RejectedNasMutation[] { return readRejected(); }
@@ -172,8 +179,8 @@ export function flushNasOutbox(): Promise<void> {
         const status = (error as AuthApiError).status;
         console.error(`[NAS] ${next.method} ${next.path} 영구 실패(${status}) — 거부 목록으로 이동:`, error);
         // 서버가 거부(400/404 — 구버전 서버가 모르는 컬렉션 등): 화면에선 이미 저장 성공으로 보였으므로 본문째 보존하고 반드시 알린다
-        writeRejected([...readRejected(), { ...next, status, rejectedAt: new Date().toISOString() }]);
-        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status } })); } catch { /* noop */ }
+        const kept = writeRejected([...readRejected(), { ...next, status, rejectedAt: new Date().toISOString() }]);
+        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status, lost: !kept } })); } catch { /* noop */ }
       }
       // 전송 중 새 항목이 추가될 수 있으므로 현재 큐를 다시 읽어 처리된 항목만 제거
       writeOutbox(key, readOutbox(key).filter(item => item.id !== next.id));
