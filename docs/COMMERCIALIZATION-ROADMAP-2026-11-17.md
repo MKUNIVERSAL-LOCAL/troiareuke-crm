@@ -61,6 +61,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] 2026-11-17 밤: 예약 상세 [시술 기록 작성] → `/treatments?new=1&customer=&date=&staff=&services=&reservation=` 프리필(존재하는 고객·담당자·메뉴만), 예약 결제(referenceId) 있으면 결제 연계 생략. 예약→완료→결제→시술 기록(사진)까지 한 흐름. 모바일 E2E 검증.
 - [x] 2026-11-17 밤 3차 코드리뷰(오늘 커밋 6건, high 0/med 2/low 6) 전부 반영: 쿼리 프리필(?new=1&customer=…) 1회 캡처 후 URL 정리(수동 열기·뒤로가기에 이전 값 재부착 방지, Treatments·Reservations·Sales·Customers), 모바일 폭에서 데스크톱 상세 미렌더(사진 스트립·결제 내역 2중 실행 제거), 상담 모달 열기 단일 함수(이전 고객 AI 사진 플래시 제거), 첨부 제거 후 재저장 시 기록 사진도 삭제, 비교 이미지 .jpg 확장자, Before≥After 생성 차단, services 반복 키(쉼표 메뉴명), PhotoLightbox 포커스 이동·복원.
 - [x] 2026-11-17 밤 D4 완료: 사진 로컬 캐시 localStorage(5~10MB) → IndexedDB(수백 MB) 이관. `photoStore` 백엔드 분리(IDB 기본, 열기 실패 시 localStorage 폴백), 동기 read-through 메모리 캐시 + `onPhotoCacheChange`/`usePhotoCacheVersion` 구독(Customers·Treatments·TimelapseViewer), 구버전 localStorage 사진은 첫 실행 때 읽기 확인 후 무손실 이관, NAS 동기화는 캐시 준비 후에만(이관 전 빈 로컬을 정본으로 올리지 않음). dirty·evicted·tombstone 메타키는 그대로. E2E: IDB 존재·localStorage 사진 키 0·이관 3장 검증.
+- [x] 2026-11-17 밤 D4 전용 코드리뷰(high 1/med 4/low 5) 전부 반영: 수정 모달은 확정값(getPhotosAsync)을 읽기 전 사진 변경·저장 차단(빈 목록으로 서버 사진 덮어쓰기 사고 차단), IDB 읽기 실패는 캐시하지 않고 null(동기화 판단 보류), 트랜잭션 oncomplete 기준 확정 + 저장 실패 시 용량 초과 토스트, 메모리 LRU 64MB + 목록은 장수만(getPhotoCount), 로그아웃 시 로컬 사진 캐시 삭제(서버 모드, 비코어 5곳), BroadcastChannel 다중 탭 무효화, open 8초 타임아웃→폴백, 연결 강제 종료 시 재연결, 백업 탭 사진 미포함 안내.
 - [ ] 직전 사진 반투명 오버레이(네이티브 카메라 플러그인). 스토어 등록 준비는 오너 지시로 맨 마지막.
 - 오너 준비물: Play 개발자 계정, Apple Developer(D-U-N-S), 아이콘 1024, 스크린샷, 개인정보처리방침 URL.
 

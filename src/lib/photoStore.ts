@@ -24,16 +24,32 @@ function storageKey(entityKey: string): string {
 // ── 로컬 캐시 백엔드 (IndexedDB 기본 / localStorage 폴백) ─────────────────
 // 모바일 WebView의 localStorage는 5~10MB라 사진 수십 장이면 "용량 초과"에 막혔다(D4).
 // IndexedDB는 수백 MB 이상이라 캐시 비우기 없이 보관한다. 메타키(dirty·evicted·tombstone)는 작은 목록이라 localStorage에 그대로 둔다.
+// 메모리 캐시는 상한(MEM_BUDGET)이 있는 LRU — IndexedDB 덕에 총량 제한이 사라진 만큼 힙이 무한히 자라지 않게 한다 (리뷰 2026-11-17).
 const IDB_NAME = 'troiareuke_photos';
 const IDB_STORE = 'photos';
+const IDB_OPEN_TIMEOUT_MS = 8000;
+const MEM_BUDGET = 64 * 1024 * 1024; // dataUrl 글자수 합 기준
 type CacheBackend = 'idb' | 'ls';
 let backend: CacheBackend = typeof indexedDB !== 'undefined' ? 'idb' : 'ls';
-const mem = new Map<string, PhotoEntry[]>();   // entityKey → 사진 (IDB 백엔드의 동기 read-through 캐시)
+let db: IDBDatabase | null = null;
+const mem = new Map<string, PhotoEntry[]>();   // LRU — Map 삽입 순서(오래된 → 최신)
+let memBytes = 0;
+const counts = new Map<string, number>();       // 장수만 — 목록 화면이 base64를 힙에 올리지 않게
 const inflight = new Set<string>();             // IDB에서 읽는 중인 키
+const PENDING_WRITE = new Set<string>();        // IDB 저장이 끝나지 않은 키 — 메모리에서 내리면 안 됨
 const listeners = new Set<() => void>();
 let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+// 브라우저 빌드의 다른 탭이 같은 키를 저장하면 이 탭의 메모리 사본을 무효화한다 (Electron·앱은 단일 창이라 영향 없음)
+const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(IDB_NAME) : null;
+if (bc) bc.onmessage = ev => {
+  const key = (ev.data as { key?: unknown } | null)?.key;
+  if (typeof key !== 'string') return;
+  memDrop(key);
+  counts.delete(key);
+  emitChange();
+};
 
-/** 캐시 내용이 비동기로 바뀌었을 때(최초 적재·NAS 동기화) 화면을 다시 그리기 위한 구독 */
+/** 캐시 내용이 비동기로 바뀌었을 때(최초 적재·NAS 동기화·다른 탭 저장) 화면을 다시 그리기 위한 구독 */
 export function onPhotoCacheChange(cb: () => void): () => void {
   listeners.add(cb);
   return () => { listeners.delete(cb); };
@@ -46,26 +62,74 @@ function emitChange(): void {
   }, 30);
 }
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('indexedDB open failed'));
-    req.onblocked = () => reject(new Error('indexedDB blocked'));
-  });
+function sizeOf(photos: PhotoEntry[]): number {
+  return photos.reduce((n, p) => n + (p.dataUrl?.length ?? 0), 0);
 }
-function idbRun<T>(db: IDBDatabase, mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(IDB_STORE, mode);
-    const req = fn(tx.objectStore(IDB_STORE));
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('indexedDB request failed'));
-    tx.onabort = () => reject(tx.error ?? new Error('indexedDB transaction aborted'));
-  });
+function memDrop(entityKey: string): void {
+  const prev = mem.get(entityKey);
+  if (!prev) return;
+  memBytes -= sizeOf(prev);
+  mem.delete(entityKey);
+}
+function memSet(entityKey: string, photos: PhotoEntry[]): void {
+  memDrop(entityKey);
+  mem.set(entityKey, photos);
+  memBytes += sizeOf(photos);
+  counts.set(entityKey, photos.length);
+  // 상한 초과분은 오래된 키부터 내린다 — 저장 중·전송 중·방금 쓴 키는 제외
+  for (const [k, v] of mem) {
+    if (memBytes <= MEM_BUDGET) break;
+    if (k === entityKey || PENDING_WRITE.has(k) || PENDING_PUSH.has(k)) continue;
+    mem.delete(k);
+    memBytes -= sizeOf(v);
+  }
+}
+function memTouch(entityKey: string): PhotoEntry[] | undefined {
+  const v = mem.get(entityKey);
+  if (v) { mem.delete(entityKey); mem.set(entityKey, v); } // 최근 사용으로 갱신
+  return v;
 }
 
-let db: IDBDatabase | null = null;
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    // 잠긴/손상된 백엔드에서 open이 영영 응답하지 않으면 localStorage 폴백으로 넘어가게 시간 제한
+    const timer = setTimeout(() => reject(new Error('indexedDB open timeout')), IDB_OPEN_TIMEOUT_MS);
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = () => {
+      clearTimeout(timer);
+      const database = req.result;
+      // 브라우저/WebView가 연결을 강제로 닫으면(저장소 정리·iOS 백그라운드) 다음 접근 때 다시 연다
+      database.onclose = () => { if (db === database) db = null; };
+      database.onversionchange = () => { database.close(); if (db === database) db = null; };
+      resolve(database);
+    };
+    req.onerror = () => { clearTimeout(timer); reject(req.error ?? new Error('indexedDB open failed')); };
+    req.onblocked = () => { clearTimeout(timer); reject(new Error('indexedDB blocked')); };
+  });
+}
+/** 트랜잭션 완료(oncomplete) 시점에 확정 — 요청 성공 뒤 커밋 단계에서 나는 용량 초과도 거부로 잡힌다 */
+function idbRun<T>(database: IDBDatabase, mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let result: T;
+    const tx = database.transaction(IDB_STORE, mode);
+    const req = fn(tx.objectStore(IDB_STORE));
+    req.onsuccess = () => { result = req.result; };
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error ?? req.error ?? new Error('indexedDB transaction failed'));
+    tx.onabort = () => reject(tx.error ?? req.error ?? new Error('indexedDB transaction aborted'));
+  });
+}
+/** 준비 완료 후 연결 반환 — 끊겼으면 다시 연다. IDB를 못 쓰면 null */
+async function getDb(): Promise<IDBDatabase | null> {
+  await photoCacheReady;
+  if (backend !== 'idb') return null;
+  if (!db) {
+    try { db = await openDb(); } catch (e) { console.error('[photoStore] IndexedDB 재연결 실패:', e); return null; }
+  }
+  return db;
+}
+
 function isMetaKey(lsKey: string): boolean {
   return lsKey === DIRTY_KEY; // DIRTY_KEY도 PREFIX로 시작한다
 }
@@ -99,6 +163,7 @@ export const photoCacheReady: Promise<void> = backend === 'idb'
       .catch(e => { console.warn('[photoStore] IndexedDB 사용 불가 — localStorage 폴백:', e); backend = 'ls'; db = null; })
   : Promise.resolve();
 
+function isLsBackend(): boolean { return backend === 'ls'; }
 function lsRead(entityKey: string): PhotoEntry[] {
   try {
     const raw = localStorage.getItem(storageKey(entityKey));
@@ -112,49 +177,108 @@ function lsRead(entityKey: string): PhotoEntry[] {
 /** 동기 읽기 — IDB 백엔드는 메모리에 없으면 []를 돌려주고 비동기로 채운 뒤 onPhotoCacheChange로 알린다 */
 function readCache(entityKey: string): PhotoEntry[] {
   if (backend === 'ls') return lsRead(entityKey);
-  const cached = mem.get(entityKey);
+  const cached = memTouch(entityKey);
   if (cached) return cached;
   // 이관 전이면 localStorage에 아직 남아 있을 수 있다 — 그 값을 그대로 보여준다
   const legacy = lsRead(entityKey);
   if (!inflight.has(entityKey)) {
     inflight.add(entityKey);
-    void loadCache(entityKey).then(v => { if (v.length > 0) emitChange(); }).finally(() => inflight.delete(entityKey));
+    void loadCache(entityKey).then(v => { if (v && v.length > 0) emitChange(); }).finally(() => inflight.delete(entityKey));
   }
   return legacy;
 }
-/** 비동기 읽기(확정값) — NAS 동기화처럼 실제 값이 필요한 곳에서 사용 */
-async function loadCache(entityKey: string): Promise<PhotoEntry[]> {
+/**
+ * 비동기 읽기(확정값) — 실제 값이 필요한 곳(수정 모달·NAS 동기화)에서 사용.
+ * 읽기 실패는 캐시하지 않고 null — "사진 없음"과 "읽지 못함"을 구분해 빈 배열로 덮어쓰는 사고를 막는다.
+ */
+async function loadCache(entityKey: string): Promise<PhotoEntry[] | null> {
+  await photoCacheReady;
+  if (backend === 'ls') return lsRead(entityKey);
+  const cached = memTouch(entityKey);
+  if (cached) return cached;
+  const database = await getDb();
+  if (!database) return null;
+  try {
+    const v = await idbRun<PhotoEntry[] | undefined>(database, 'readonly', s => s.get(entityKey));
+    const value = Array.isArray(v) ? v : [];
+    if (!mem.has(entityKey)) memSet(entityKey, value); // 읽는 사이 쓰기가 먼저 들어왔으면 그 값을 유지
+    return mem.get(entityKey) ?? value;
+  } catch (e) {
+    console.error('[photoStore] IndexedDB 읽기 실패:', entityKey, e);
+    return null;
+  }
+}
+/** 메모리에 올리지 않는 읽기 — 전수 동기화가 모든 사진을 힙에 고정하지 않게 */
+async function peekCache(entityKey: string): Promise<PhotoEntry[] | null> {
   await photoCacheReady;
   if (backend === 'ls') return lsRead(entityKey);
   const cached = mem.get(entityKey);
   if (cached) return cached;
-  let value: PhotoEntry[] = [];
+  const database = await getDb();
+  if (!database) return null;
   try {
-    const v = db ? await idbRun<PhotoEntry[] | undefined>(db, 'readonly', s => s.get(entityKey)) : undefined;
-    value = Array.isArray(v) ? v : [];
+    const v = await idbRun<PhotoEntry[] | undefined>(database, 'readonly', s => s.get(entityKey));
+    const value = Array.isArray(v) ? v : [];
+    counts.set(entityKey, value.length);
+    return value;
   } catch (e) {
     console.error('[photoStore] IndexedDB 읽기 실패:', entityKey, e);
+    return null;
   }
-  if (!mem.has(entityKey)) mem.set(entityKey, value); // 읽는 사이 쓰기가 먼저 들어왔으면 그 값을 유지
-  return mem.get(entityKey)!;
 }
-/** 쓰기 — localStorage 백엔드는 동기(용량 초과 시 throw), IDB 백엔드는 메모리 즉시 + 비동기 저장 */
+/** 쓰기 — localStorage 백엔드는 동기(용량 초과 시 throw), IDB 백엔드는 메모리 즉시 + 비동기 저장(실패 시 용량 초과 토스트) */
 function writeCache(entityKey: string, photos: PhotoEntry[]): void {
   if (backend === 'ls') {
     if (photos.length === 0) localStorage.removeItem(storageKey(entityKey));
     else localStorage.setItem(storageKey(entityKey), JSON.stringify(photos));
     return;
   }
-  mem.set(entityKey, photos);
-  void photoCacheReady.then(async () => {
-    if (backend === 'ls') { writeCache(entityKey, photos); return; } // 열기 실패로 폴백된 경우
-    if (!db) return;
+  memSet(entityKey, photos);
+  PENDING_WRITE.add(entityKey);
+  void (async () => {
     try {
-      if (photos.length === 0) await idbRun(db, 'readwrite', s => s.delete(entityKey));
-      else await idbRun(db, 'readwrite', s => s.put(photos, entityKey));
+      await photoCacheReady;
+      if (isLsBackend()) { writeCache(entityKey, photos); return; } // 열기 실패로 폴백된 경우 (TS가 클로저 안에서 좁힌 타입을 우회)
+      const database = await getDb();
+      if (!database) throw new Error('indexedDB unavailable');
+      if (photos.length === 0) await idbRun(database, 'readwrite', s => s.delete(entityKey));
+      else await idbRun(database, 'readwrite', s => s.put(photos, entityKey));
+      bc?.postMessage({ key: entityKey });
     } catch (e) {
-      console.error('[photoStore] IndexedDB 저장 실패 (서버 정본은 별도 동기화):', entityKey, e);
+      console.error('[photoStore] 로컬 사진 저장 실패 (서버 정본은 별도 동기화):', entityKey, e);
+      memDrop(entityKey); // 다음 읽기는 디스크 상태를 반영
+      counts.delete(entityKey);
+      // App.tsx가 듣는 용량 초과 토스트 — 저장이 조용히 사라지지 않게
+      try { window.dispatchEvent(new CustomEvent('crm:storage-quota-exceeded', { detail: { key: storageKey(entityKey) } })); } catch { /* noop */ }
+    } finally {
+      PENDING_WRITE.delete(entityKey);
     }
+  })();
+}
+
+/** 비동기 확정값 읽기 — 수정 모달처럼 "아직 안 읽음"을 빈 목록으로 오해하면 안 되는 곳. 읽기 실패는 null */
+export function getPhotosAsync(entityKey: string): Promise<PhotoEntry[] | null> {
+  return loadCache(entityKey);
+}
+
+/** 장수만 — 목록 화면용. 모르면 읽기를 걸어 두고 0을 돌려준다(적재 후 onPhotoCacheChange) */
+export function getPhotoCount(entityKey: string): number {
+  if (backend === 'ls') return lsRead(entityKey).length;
+  const c = counts.get(entityKey);
+  if (c !== undefined) return c;
+  return readCache(entityKey).length;
+}
+
+/** 로그아웃(공용 PC 개인정보 보호) 때 로컬 사진 캐시 전부 삭제 — 서버 정본은 그대로. 서버 모드에서만 (로컬 모드는 이 캐시가 유일한 저장소) */
+export function clearLocalPhotoCacheForLogout(): void {
+  if (!isAuthApiConfigured) return;
+  mem.clear(); memBytes = 0; counts.clear();
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith(PREFIX) && !isMetaKey(k)) localStorage.removeItem(k);
+  } catch { /* noop */ }
+  void getDb().then(async database => {
+    if (!database) return;
+    try { await idbRun(database, 'readwrite', s => s.clear()); } catch (e) { console.error('[photoStore] 로그아웃 캐시 삭제 실패:', e); }
   });
 }
 
@@ -270,7 +394,8 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
   const evicted = new Set(getEvictedKeys());
   for (const key of entityKeys) {
     if (!dirty.has(key)) continue;
-    const local = await loadCache(key);
+    const local = await peekCache(key);
+    if (local === null) continue; // 로컬을 읽지 못했으면 빈 배열을 올리지 않는다 (서버본 보호)
     if (local.length === 0 && evicted.has(key)) {
       // 용량 초과로 캐시가 비워진 것이지 삭제가 아니다 — 서버본을 정본으로 두고 표식만 정리
       setDirty(key, false);
@@ -300,7 +425,8 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
 
     for (const entityKey of chunk) {
       const remote = entries[entityKey]; // undefined = 서버에 행 없음
-      const local = await loadCache(entityKey);
+      const local = await peekCache(entityKey);
+      if (local === null) continue; // 로컬 읽기 실패 — 판단 보류
       if (remote !== undefined) {
         if (JSON.stringify(remote) !== JSON.stringify(local)) {
           try {

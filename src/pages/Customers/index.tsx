@@ -359,6 +359,17 @@ export default function Customers() {
     setShowConsultModal(true);
   }
 
+  // 상담 모달을 IndexedDB 적재 전에 열었으면(빠른 탭) 적재 후 Before/After 후보를 다시 모은다
+  useEffect(() => {
+    if (!showConsultModal || !selected || baPhotos.length > 0) return;
+    const photos = collectCustomerPhotos(selected.id);
+    if (photos.length === 0) return;
+    setBaPhotos(photos);
+    setBaBefore(0);
+    setBaAfter(photos.length - 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoCacheVersion]);
+
   async function buildComparison() {
     if (!selected) return;
     const before = baPhotos[baBefore];

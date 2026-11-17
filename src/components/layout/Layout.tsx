@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { BLOCK_STAFF_UI } from '../../lib/buildTarget';
 import { refreshFeatureFlags } from '../../lib/featureFlags';
+import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
 
 export default function Layout() {
   const location = useLocation();
@@ -44,7 +45,7 @@ export default function Layout() {
             프로그램을 사용해주세요.
           </p>
           <button
-            onClick={async () => { await logout(); window.location.hash = '#/admin/login'; window.location.reload(); }}
+            onClick={async () => { clearLocalPhotoCacheForLogout(); await logout(); window.location.hash = '#/admin/login'; window.location.reload(); }}
             className="px-5 py-2.5 bg-[#1a3a8f] hover:bg-[#0d2260] text-white text-sm font-semibold rounded-xl transition-colors"
           >
             관리자 로그인으로 돌아가기

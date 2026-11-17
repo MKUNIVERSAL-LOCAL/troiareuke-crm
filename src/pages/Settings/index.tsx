@@ -1415,6 +1415,7 @@ export default function Settings() {
                       </div>
                       <p className="text-xs text-gray-400">
                         백업 파일 위치: 앱 데이터 폴더 / backups / troiareuke-YYYYMMDD-HHmmss.json
+                        <br />사진은 이 JSON에 들어가지 않습니다 — 중앙 서버(NAS) 연동 시 서버에 보관되고, 이 기기에는 대용량 저장소(IndexedDB)에 캐시됩니다.
                       </p>
                     </div>
                   ) : (

@@ -11,7 +11,7 @@ import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
-import { getPhotos, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, PHOTO_ANGLES, PHOTO_LABELS, type PhotoEntry, type PhotoAngle, type PhotoLabel } from '../../lib/photoStore';
+import { getPhotos, getPhotosAsync, getPhotoCount, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, PHOTO_ANGLES, PHOTO_LABELS, type PhotoEntry, type PhotoAngle, type PhotoLabel } from '../../lib/photoStore';
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import { isAuthApiConfigured } from '../../lib/authApi';
 
@@ -45,7 +45,7 @@ export default function Treatments() {
   // 목록 표시용 사진 장수 — base64 캐시를 매 렌더·매 키 입력마다 파싱하지 않도록 목록이 바뀔 때만 계산
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시 적재·동기화 후 장수 갱신
   const photoCounts = useMemo(
-    () => new Map(treatmentLogs.map(t => [t.id, getPhotos(`treatment:${t.id}`).length])),
+    () => new Map(treatmentLogs.map(t => [t.id, getPhotoCount(`treatment:${t.id}`)])),
     [treatmentLogs, photoCacheVersion],
   );
 
@@ -270,12 +270,21 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
   // 사진 (시술 전/후) — 로컬 photoStore에 별도 저장
   const [photos, setPhotoList] = useState<PhotoEntry[]>(() => (editing ? getPhotos(`treatment:${editing.id}`) : []));
+  // 수정 모드: 저장된 사진을 확정값으로 읽을 때까지 사진 변경·저장을 막는다 — "아직 안 읽음"을 빈 목록으로 저장해 서버 사진을 지우는 사고 방지 (리뷰 2026-11-17)
+  const [photosReady, setPhotosReady] = useState(!editing);
+  const photosTouchedRef = useRef(false);
   const editCacheVersion = usePhotoCacheVersion();
   useEffect(() => {
-    // IndexedDB 최초 적재가 모달을 연 뒤에 끝난 경우 — 사용자가 아직 아무것도 안 붙였을 때만 캐시값으로 채운다
     if (!editing) return;
-    setPhotoList(prev => (prev.length === 0 ? getPhotos(`treatment:${editing.id}`) : prev));
-  }, [editing, editCacheVersion]);
+    let cancelled = false;
+    getPhotosAsync(`treatment:${editing.id}`).then(v => {
+      if (cancelled) return;
+      if (v === null) { notify('저장된 사진을 읽지 못했습니다. 이번 저장에서는 사진을 바꾸지 않습니다.'); return; }
+      if (!photosTouchedRef.current) setPhotoList(v);
+      setPhotosReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [editing]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // 모바일: capture 속성이 있는 입력은 앨범 대신 카메라 앱을 바로 연다 (PC 브라우저는 무시하고 파일 선택)
@@ -306,6 +315,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
       }
       // 기본 태그: 기록의 첫 사진은 '시술 전', 이후는 '시술 후' (썸네일 아래에서 수정 가능).
       // 리사이즈 중 목록이 바뀔 수 있어 커밋 시점의 prev 길이로 판정한다.
+      photosTouchedRef.current = true;
       setPhotoList(prev => [...prev, ...added.map((p, i) => ({ ...p, label: prev.length + i === 0 ? 'before' : 'after' }))]);
     } finally {
       setUploading(false);
@@ -314,14 +324,16 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
     }
   };
 
-  const removePhotoLocal = (id: string) => setPhotoList(prev => prev.filter(p => p.id !== id));
-  const updatePhotoMeta = (id: string, patch: Pick<PhotoEntry, 'label' | 'angle'>) =>
+  const removePhotoLocal = (id: string) => { photosTouchedRef.current = true; setPhotoList(prev => prev.filter(p => p.id !== id)); };
+  const updatePhotoMeta = (id: string, patch: Pick<PhotoEntry, 'label' | 'angle'>) => {
+    photosTouchedRef.current = true;
     setPhotoList(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+  };
   // 촬영 가이드 — 같은 고객의 직전 시술 사진(각도별 최신 1장). 편집 중인 기록은 제외.
   // 사진 base64를 전부 읽는 작업이라 고객 선택이 바뀔 때만 계산한다 (키 입력마다 재계산 금지)
   const referencePhotos = useMemo(
     () => (customerId ? findReferencePhotos(customerId, editing?.id) : []),
-    [customerId, editing?.id],
+    [customerId, editing?.id, editCacheVersion], // IndexedDB 적재가 모달을 연 뒤 끝나도 가이드가 채워지게
   );
 
   const handleSave = () => {
@@ -352,7 +364,9 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         staffNotes: staffNotes || undefined,
         nextAppointment: nextAppointment || undefined,
       });
-      try { savePhotos(`treatment:${editing.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
+      if (photosReady) {
+        try { savePhotos(`treatment:${editing.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
+      }
     } else {
       const saved = TreatmentLogStore.save({
         customerId,
@@ -583,7 +597,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             <button
               type="button"
               onClick={() => cameraInputRef.current?.click()}
-              disabled={uploading}
+              disabled={uploading || !photosReady}
               className="border-2 border-dashed border-purple-200 rounded-xl py-4 flex flex-col items-center gap-1.5 text-purple-500 disabled:opacity-50"
             >
               {uploading ? <Loader2 size={22} className="animate-spin" /> : <Camera size={22} />}
@@ -592,7 +606,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
+              disabled={uploading || !photosReady}
               className="border-2 border-dashed border-gray-200 rounded-xl py-4 flex flex-col items-center gap-1.5 text-gray-500 disabled:opacity-50"
             >
               <ClipboardList size={22} />
@@ -602,11 +616,11 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
+            disabled={uploading || !photosReady}
             className="hidden lg:flex w-full border-2 border-dashed border-gray-200 rounded-xl py-6 flex-col items-center gap-2 text-gray-400 hover:border-purple-300 hover:text-purple-400 transition-colors disabled:opacity-50"
           >
             {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}
-            <span className="text-sm">{uploading ? '사진 처리 중...' : '사진 추가 (여러 장 가능)'}</span>
+            <span className="text-sm">{uploading ? '사진 처리 중...' : !photosReady ? '저장된 사진 읽는 중...' : '사진 추가 (여러 장 가능)'}</span>
           </button>
           <p className="text-[11px] text-gray-400 mt-1">
             {isAuthApiConfigured

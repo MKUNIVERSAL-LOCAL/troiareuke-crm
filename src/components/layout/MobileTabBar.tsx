@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { featureForPath } from '../../lib/featureRegistry';
 import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
+import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
 import { useFeatureFlagsTick } from '../../hooks/useFeature';
 
 const TAB_ITEMS = [
@@ -33,6 +34,7 @@ export default function MobileTabBar() {
   const handleLogout = () => {
     setMoreOpen(false);
     resetFeatureFlags(); // 계정 간 플래그 잔류 방지
+    clearLocalPhotoCacheForLogout(); // 공용 기기 개인정보 보호 — 서버 모드에서만
     logout();
   };
 

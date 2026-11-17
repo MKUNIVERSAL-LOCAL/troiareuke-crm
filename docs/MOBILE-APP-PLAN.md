@@ -29,7 +29,7 @@
 ### P0 — 데이터 유실·기능 파손 (착수 전 필수)
 
 **1. 사진·오프라인 큐·로그인 토큰이 전부 localStorage에 있다**
-- 사진: `photoStore.ts:16` — 1280px JPEG **base64**를 엔티티당 1키로 저장 (장당 200~400KB)
+- 사진: ~~`photoStore.ts` localStorage~~ → **2026-11-17 IndexedDB로 이관 완료**(D4, 폴백 localStorage, 메모리 LRU 64MB, 구버전 자동 이관)
 - 상담 사진: `consultationStore.ts` + `types:322` — 레코드 배열 통짜에 base64 혼입
 - 미전송 큐: `nasOutbox.ts:13` / 인증 토큰: `authApi.ts:32`
 - **문제**: 모바일 WebView의 localStorage는 오리진당 대략 5~10MB이고, **iOS는 저장공간이 부족하면 website data를 통째로 삭제할 수 있다.** 사진 15~25장이면 포화되고, 그 시점에 **미전송 매출·시술 기록과 로그인 세션이 함께 증발**한다.
