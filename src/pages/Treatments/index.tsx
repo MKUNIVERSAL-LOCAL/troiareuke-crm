@@ -67,8 +67,7 @@ export default function Treatments() {
     });
   }, []);
 
-  // 기간·담당자 필터 (2026-11-18) — PC·모바일 공용 칩. 기간은 로컬 날짜 기준(오늘/이번 주(월~)/이번 달/전체)
-  type Period = 'all' | 'today' | 'week' | 'month';
+  // 기간·담당자 필터 (2026-11-18) — PC·모바일 공용 칩. 기간은 달력 단위(오늘/이번 주 월~일/이번 달 1일~말일, 로컬 날짜) — 미리 입력한 미래 기록도 그 기간 안이면 보인다
   const [period, setPeriod] = useState<Period>('all');
   const [staffFilter, setStaffFilter] = useState('');
   const staffNames = useMemo(() => {
@@ -76,23 +75,18 @@ export default function Treatments() {
     const fromLogs = treatmentLogs.map(t => t.staffName).filter((n): n is string => !!n);
     return [...new Set([...fromStaff, ...fromLogs])];
   }, [treatmentLogs]);
-  const periodFrom = useMemo(() => {
-    const today = todayISO();
-    if (period === 'today') return today;
-    if (period === 'month') return `${thisYearMonthISO()}-01`;
-    if (period === 'week') { const d = new Date(); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return toISODate(d); }
-    return '';
-  }, [period]);
+  const today = todayISO(); // 렌더마다 계산 — 자정을 넘겨 켜 둔 PC에서도 다음 렌더부터 새 날짜
+  const range = periodRange(period, today);
   const filtered = treatmentLogs
     .filter(t => matchesSearch(search, [t.customerName, t.staffName, t.treatmentDetails, t.programName]))
-    .filter(t => !periodFrom || (t.treatmentDate >= periodFrom && t.treatmentDate <= todayISO()))
+    .filter(t => !range || (t.treatmentDate >= range.from && t.treatmentDate <= range.to))
     .filter(t => !staffFilter || t.staffName === staffFilter)
     .sort((a, b) => b.treatmentDate.localeCompare(a.treatmentDate)); // 최신 시술 먼저
 
-  const PERIOD_LABELS: Record<Period, string> = { all: '전체', today: '오늘', week: '이번 주', month: '이번 달' };
+  const isFiltered = period !== 'all' || !!staffFilter || !!search.trim();
   const filterChips = (
-    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label="시술 기록 필터">
-      {(['all', 'today', 'week', 'month'] as Period[]).map(p => (
+    <div className="flex items-center gap-1.5 overflow-x-auto py-0.5" role="group" aria-label="시술 기록 필터">
+      {PERIODS.map(p => (
         <button key={p} type="button" aria-pressed={period === p} onClick={() => setPeriod(p)}
           className={clsx('flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border', period === p ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200')}>
           {PERIOD_LABELS[p]}
@@ -100,7 +94,7 @@ export default function Treatments() {
       ))}
       {staffNames.length > 0 && (
         <select value={staffFilter} onChange={e => setStaffFilter(e.target.value)} aria-label="담당자 필터"
-          className="flex-shrink-0 ml-1 text-[11px] border border-gray-200 rounded-full px-2 py-1 bg-white text-gray-600">
+          className="flex-shrink-0 ml-1 max-w-[9rem] truncate text-[11px] border border-gray-200 rounded-full px-2 py-1 bg-white text-gray-600">
           <option value="">담당자 전체</option>
           {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
@@ -189,7 +183,7 @@ export default function Treatments() {
       </div>
 
       {/* ── 데스크톱 뷰 (lg+) ── 기존 테이블 그대로 */}
-      <div className="hidden lg:block p-8 flex-1">
+      <div className="hidden lg:block p-8 flex-1" data-testid="treatments-desktop">
         <div className="flex gap-3 mb-6">
           <div className="relative flex-1 max-w-sm">
             <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -205,7 +199,7 @@ export default function Treatments() {
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-bold text-gray-700">총 {filtered.length}건</p>
+            <p className="text-sm font-bold text-gray-700">{isFiltered ? '검색 결과' : '총'} {filtered.length}건</p>
             {filterChips}
           </div>
           <div className="divide-y divide-gray-50">
@@ -297,6 +291,23 @@ export default function Treatments() {
 export interface TreatmentSaveResult { customerId: string; customerName: string; amount: number; details: string }
 
 /** 예약 상세 [시술 기록 작성]에서 넘어온 프리필 — 존재하는 고객·담당자·시술 메뉴만 반영한다 (2026-11-17) */
+type Period = 'all' | 'today' | 'week' | 'month';
+const PERIODS: Period[] = ['all', 'today', 'week', 'month'];
+const PERIOD_LABELS: Record<Period, string> = { all: '전체', today: '오늘', week: '이번 주', month: '이번 달' };
+/** 달력 단위 기간 — 이번 주는 월~일, 이번 달은 1일~말일 (로컬 날짜). 전체면 null */
+function periodRange(period: Period, today: string): { from: string; to: string } | null {
+  if (period === 'all') return null;
+  if (period === 'today') return { from: today, to: today };
+  if (period === 'month') {
+    const [y, m] = today.split('-').map(Number);
+    return { from: `${thisYearMonthISO()}-01`, to: toISODate(new Date(y, m, 0)) };
+  }
+  const d = new Date(); const dow = (d.getDay() + 6) % 7;
+  const mon = new Date(d); mon.setDate(d.getDate() - dow);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  return { from: toISODate(mon), to: toISODate(sun) };
+}
+
 export interface TreatmentPrefill { customerId?: string; treatmentDate?: string; staffName?: string; serviceNames?: string[] }
 
 function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { treatment?: TreatmentLog | null; prefill?: TreatmentPrefill; onClose: () => void; onSave: (result?: TreatmentSaveResult) => void }) {
