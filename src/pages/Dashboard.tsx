@@ -14,6 +14,7 @@ import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
 import RevisitReminderCard from '../components/RevisitReminderCard';
 import RetentionNoticeCard from '../components/RetentionNoticeCard';
+import ProgramAlertCard from '../components/ProgramAlertCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 import { useFeature } from '../hooks/useFeature';
@@ -222,6 +223,11 @@ export default function Dashboard() {
         </div>
         )}
 
+        {/* 행동이 필요한 카드 — 회차권 임박·보존기간 경과·재방문 리마인더. 차트보다 위(첫 화면 안)에 둔다 (2026-11-17 시각 QA) */}
+        <ProgramAlertCard compact />
+        <RetentionNoticeCard compact />
+        <RevisitReminderCard compact />
+
         {/* 주간 매출 차트 */}
         {salesOn && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
@@ -257,10 +263,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* 개인정보 보존기간 경과 (P4) — 정책 ON + 경과 고객 있을 때만 */}
-        <RetentionNoticeCard compact />
-        {/* 재방문 리마인더 (킬러③) */}
-        <RevisitReminderCard compact />
       </div>
 
       {/* ── 데스크톱 뷰 (lg+) ────────────────────────────────── */}
@@ -498,6 +500,8 @@ export default function Dashboard() {
           {/* Alerts */}
           <div className="space-y-4">
             {/* 개인정보 보존기간 경과 (P4) */}
+            {/* 회차권 소진·만료 임박 — 재구매 안내 (2026-11-17) */}
+            <ProgramAlertCard />
             <RetentionNoticeCard />
             {/* 재방문 리마인더 (킬러③) */}
             <RevisitReminderCard />

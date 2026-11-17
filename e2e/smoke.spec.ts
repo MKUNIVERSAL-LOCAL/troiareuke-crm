@@ -86,6 +86,24 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByRole('button', { name: '시술 기록 저장' }).click();
   await expect(page.getByText('잔여 9회').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
+  // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    for (const cp of list) if (cp.totalSessions) cp.usedSessions = cp.totalSessions - 1;
+    localStorage.setItem(key, JSON.stringify(list));
+  });
+  await page.goto('/');
+  const programCard = page.getByTestId('program-alert-card').filter({ visible: true }).first();
+  await expect(programCard).toContainText('잔여 1회');
+  await programCard.getByRole('button', { name: '재구매 안내' }).first().click();
+  await expect(programCard.getByText(/잔여 회차가 1회 남았어요/)).toBeVisible();
+  await programCard.getByRole('button', { name: `${acc.customer} 고객 보기` }).click();
+  await expect(page).toHaveURL(/\/customers/);
+  await expect(page.getByTestId('customers-desktop').getByRole('heading', { name: '결제 내역' })).toBeVisible();
+  await page.goto('/customers');
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+
   // ── 7-1. 고객 목록 엑셀 다운로드 (2026-11-17: 공통 저장 경로 회귀) ──
   const xlsxDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: '다운로드', exact: true }).filter({ visible: true }).first().click();

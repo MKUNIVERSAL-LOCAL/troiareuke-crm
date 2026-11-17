@@ -75,6 +75,9 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] 2026-11-17 밤: 개인정보 보존기간 정책 — 설정 > 알림 설정 `RetentionPolicyCard`(기본 OFF, 1~10년, 지점 환경설정 서버 동기 `preferences.retentionPolicy`), 마지막 활동(방문·등록 중 늦은 날) 후 기간 경과 고객을 대시보드 `RetentionNoticeCard` + 고객 화면 `?retention=1` 칩/목록으로 모아 **사람이 확인 후 일괄 익명화**(이름→탈퇴고객, 전화·이메일·주소·생년월일·메모·태그·동의 삭제, 방문·결제 통계와 기록 연결은 유지). 자동 삭제는 하지 않음(분쟁 방지). smoke E2E 10단계. **오너 결정: 기간(년)과 켜기 — 기본 3년.** 리뷰(med 3/low 4/info 1) 반영: 익명화가 예약·시술·프로그램·결제·상담 기록의 이름(예약은 전화)과 시술·상담 사진(NAS tombstone 포함)까지 파기, 익명화 고객은 재방문 리마인더·예약/결제링크/발송 대상에서 제외(`isActive=false`), sample_ 제외, 정책 끄기 입력칸 무관, 상세의 동의 표시 "익명화됨". **남은 한계: 제품 판매 기록(`ProductSale.customerName`)은 수정 API가 없어 이름이 남음 — 코어 `store.ts`에 `ProductSaleStore.update` 추가 필요(오너 승인·CORE_EDIT=1).**
 - [ ] 사업자등록번호 국세청 진위확인 API(공공데이터포털 키 필요, 무료) → 가입 승인 보조.
 
+### P4-1. 매출 누수 방지 (2026-11-17 밤 추가)
+- [x] 회차권 소진·만료 임박 알림 — `programAlerts.ts`(잔여 0/1회, 만료 지남/14일 이내, 긴급 순), 대시보드 `ProgramAlertCard`(PC·모바일, 재구매 안내 초안 복사/공유, 항목 → `/customers?open=<id>` 고객 상세 바로 열기). smoke E2E 7-0.
+
 ### P5. 가격·플랜 반영
 - RESEARCH-MESSAGING-BILLING 6절 오너 가격안(첫 1년 9,900 → Start 24,900 → AI Pro 59,000) 확정 시: 플랜별 발송 제공량·잔여 표시·어드민 청구액 표. PG 개통 전에는 "청구 예정액" 표시까지만.
 

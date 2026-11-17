@@ -284,6 +284,15 @@ export default function Customers() {
     const next = new URLSearchParams(searchParams); next.delete('new');
     setSearchParams(next, { replace: true }); // 뒤로가기 때 추가 모달이 다시 뜨지 않게 (리뷰 2026-11-17)
   }, [searchParams, setSearchParams]);
+  // 대시보드 카드(회차권 임박 등)에서 /customers?open=<id> → 해당 고객 상세를 바로 연다 (2026-11-17)
+  useEffect(() => {
+    const id = searchParams.get('open');
+    if (!id) return;
+    const target = CustomerStore.getById(id);
+    if (target) setSelected(target);
+    const next = new URLSearchParams(searchParams); next.delete('open');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '' });
   const [addPrivacyConsent, setAddPrivacyConsent] = useState(false);
 
