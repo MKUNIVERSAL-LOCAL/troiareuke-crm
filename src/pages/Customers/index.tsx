@@ -1339,7 +1339,7 @@ export default function Customers() {
         {selected && isMobileLayout && (
           <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
             {/* 헤더 */}
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 shadow-sm">
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-4 pb-3 pt-safe-3 flex items-center gap-3 shadow-sm">
               <button
                 onClick={() => setSelected(null)}
                 className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200"

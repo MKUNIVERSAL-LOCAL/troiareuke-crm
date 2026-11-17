@@ -35,12 +35,6 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
     return () => { alive = false; };
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   // 서버 결제 요청 중 미결(pending/vbank_wait)을 고객별로 센다 — 실패하면 null 유지 → 병합 버튼 비활성(가짜 성공 금지)
   useEffect(() => {
     if (!isPaymentLinkAvailable) return;

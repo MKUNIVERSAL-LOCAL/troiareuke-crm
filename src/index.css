@@ -6,6 +6,11 @@
 @layer utilities {
   .pt-safe { padding-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)); }
   .pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px)); }
+  /* 가산형 — 기존 여백(0.5/0.75/1rem) + inset. Tailwind py-*와 같은 요소에 섞지 말고 px·pb 유틸과 함께 쓴다 */
+  .pt-safe-2 { padding-top: calc(0.5rem + max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px))); }
+  .pt-safe-3 { padding-top: calc(0.75rem + max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px))); }
+  .pt-safe-4 { padding-top: calc(1rem + max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px))); }
+  .pb-safe-4 { padding-bottom: calc(1rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
   .pb-tabbar-safe { padding-bottom: calc(4rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
   .bottom-toast-safe { bottom: calc(5rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
 }
@@ -55,12 +60,6 @@ input:focus, select:focus, textarea:focus {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-/* PWA safe-area 탭바용 */
-.pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-bottom: constant(safe-area-inset-bottom);
 }
 
 /* 스크롤바 숨김 (모바일 필터 칩 가로 스크롤 등) */

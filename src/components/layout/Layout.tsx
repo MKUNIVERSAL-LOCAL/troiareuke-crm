@@ -86,7 +86,7 @@ export default function Layout() {
         {/* 앱 잠금(PIN) — 설정에서 켠 기기에서만 (2026-11-18) */}
         <AppLockOverlay />
         {/* 모바일 상단 헤더 */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 pt-safe bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm" style={{ paddingTop: 'calc(0.75rem + max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)))' }}>
+        <div className="lg:hidden flex items-center gap-3 px-4 pb-3 pt-safe-3 bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
           <button
             onClick={() => setSidebarOpen(true)}
             className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"

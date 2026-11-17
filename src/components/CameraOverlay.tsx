@@ -41,7 +41,7 @@ function describeError(e: unknown): string {
 export default function CameraOverlay({ references, onCapture, onClose, onPickFromAlbum }: CameraOverlayProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const hadStreamRef = useRef(false); // 한 번이라도 열린 적 있으면 전환 실패는 폴백이 아니라 되돌리기
+  const switchingRef = useRef(false); // 사용자가 [카메라 전환]을 눌러 여는 중 — 실패하면 폴백이 아니라 이전 카메라로 되돌리기
   const shutterRef = useRef<HTMLButtonElement>(null);
   const [facing, setFacing] = useState<Facing>('environment');
   const [attempt, setAttempt] = useState(0); // [다시 시도]
@@ -70,7 +70,7 @@ export default function CameraOverlay({ references, onCapture, onClose, onPickFr
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
         stop();
         streamRef.current = stream;
-        hadStreamRef.current = true;
+        switchingRef.current = false;
         const video = videoRef.current;
         if (video) {
           video.srcObject = stream;
@@ -83,12 +83,14 @@ export default function CameraOverlay({ references, onCapture, onClose, onPickFr
       } catch (e) {
         if (cancelled) return;
         stop();
-        if (hadStreamRef.current) {
-          // 전환 실패(HAL이 이전 카메라를 놓는 중 등) — 멀쩡하던 카메라를 버리지 말고 되돌린다
+        if (switchingRef.current) {
+          // 전환 실패(HAL이 이전 카메라를 놓는 중 등) — 멀쩡하던 카메라를 버리지 말고 되돌린다. 한 번만(되돌리기도 실패하면 아래 오류 화면)
+          switchingRef.current = false;
           notify('카메라를 전환할 수 없어 이전 카메라로 돌아갑니다.');
           setFacing(prevFacing);
           return;
         }
+        // 백그라운드 복귀 재개·[다시 시도] 실패 — 전환 왕복 루프 대신 오류 화면([다시 시도]/[앨범에서 선택])
         setError(describeError(e));
       }
     })();
@@ -160,7 +162,7 @@ export default function CameraOverlay({ references, onCapture, onClose, onPickFr
             </button>
           )}
           {canSwitch && !error && (
-            <button type="button" onClick={() => setFacing(f => (f === 'environment' ? 'user' : 'environment'))} aria-label="카메라 전환"
+            <button type="button" onClick={() => { switchingRef.current = true; setFacing(f => (f === 'environment' ? 'user' : 'environment')); }} aria-label="카메라 전환"
               className="p-2 rounded-lg hover:bg-white/15">
               <SwitchCamera size={18} />
             </button>

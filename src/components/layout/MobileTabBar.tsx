@@ -50,7 +50,7 @@ export default function MobileTabBar() {
       {/* 탭바 */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-slate-200 lg:hidden"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))' }}
       >
         <div className="flex h-14">
           {visibleTabs.map(({ to, label, icon: Icon, ariaLabel }) => (
@@ -106,7 +106,7 @@ export default function MobileTabBar() {
             aria-modal="true"
             aria-label="더보기 메뉴"
             className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl lg:hidden"
-            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))' }}
           >
             {/* 드래그 핸들 */}
             <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-2" />

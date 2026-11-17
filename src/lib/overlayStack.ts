@@ -16,6 +16,7 @@ function ensureEscListener() {
   escListenerInstalled = true;
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || e.isComposing) return; // IME 조합 중 Esc는 입력 취소
+    if (appLocked) return; // 잠금 PIN 입력(body 포털)에서 누른 Esc가 뒤의 모달을 닫지 않게
     const top = stack[stack.length - 1];
     if (top?.escape) top.close();
   });
