@@ -52,7 +52,8 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - [x] 2026-11-17: 모바일 고객 등록 허용(모달 body 포털), 매출·제품 화면 모바일 카드 뷰, 모바일 E2E에 고객·제품·결제 등록 검증 추가.
 - [x] 2026-11-17 시각 QA(스크린샷 세트 `SHOTS=1 npx playwright test e2e/screenshots.spec.ts`): 설정 2단 레이아웃이 412px에서 깨지던 문제(탭 칩 가로 스크롤·FormRow 세로 배치), 제품 헤더 "+ +" 중복, 모바일 고객 상세에 Before/After·최근 시술 기록 추가. 전 라우트 순회 안전망(e2e/routes.spec.ts).
 - [x] 2026-11-17 저녁: 모바일 고객 정보 수정, 예약 상세 모달 검증, 카메라 바로 촬영(capture), 사진 캐시 용량 초과 자동 정리(NAS 모드), 설정 모바일 레이아웃, ErrorBoundary·모달 Esc. 어드민 콘솔 8화면 순회 안전망.
-- [ ] D4 사진 저장 localStorage → Capacitor Filesystem/IndexedDB 정식 이관(현재는 용량 초과 시 캐시 비우기로 방어), 직전 사진 반투명 오버레이(네이티브 카메라 플러그인), 피부 상담 입력 모바일 지원.
+- [x] 2026-11-17 밤: 모바일 고객 상세 PC 동등화(피부 상담·시술 기록·프로그램 등록·정보 수정), 모바일 폭 전 화면 가로 넘침 전수 검사, 2차 코드리뷰 10건 반영(사진 캐시 dirty/전송 중 보호·서버 android/ios 모드 저장·중첩 모달 Esc·타임랩스 1회 마운트).
+- [ ] D4 사진 저장 localStorage → Capacitor Filesystem/IndexedDB 정식 이관(현재는 용량 초과 시 캐시 비우기로 방어), 직전 사진 반투명 오버레이(네이티브 카메라 플러그인). 스토어 등록 준비는 오너 지시로 맨 마지막.
 - 오너 준비물: Play 개발자 계정, Apple Developer(D-U-N-S), 아이콘 1024, 스크린샷, 개인정보처리방침 URL.
 
 ### P4. 운영·법규 자동화
