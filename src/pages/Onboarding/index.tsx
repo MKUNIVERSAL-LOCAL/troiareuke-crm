@@ -626,7 +626,7 @@ export default function Onboarding() {
           {/* Step 5: 완료 */}
           {step === 5 && (
             <div className="p-8 text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-200">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center mx-auto mb-6">
                 <CheckCircle size={36} className="text-white" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">설정 완료!</h2>

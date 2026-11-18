@@ -39,12 +39,33 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
 
   if (!isOpen) return null;
 
-  // Ctrl/⌘+Enter → 모달 안 폼 제출 (데스크 키보드 흐름). 폼이 없는 모달(상세·확인)은 무시
+  // Ctrl/⌘+Enter → 모달 안 폼 제출 (데스크 키보드 흐름). 폼이 없는 모달(상세·확인)은 무시, 제출 버튼이 비활성(저장 중 등)이면 무시(이중 저장 방지)
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       const form = cardRef.current?.querySelector('form');
-      if (form) { e.preventDefault(); form.requestSubmit(); }
+      if (!form) return;
+      const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (submit?.disabled) return;
+      e.preventDefault();
+      form.requestSubmit();
     }
+  };
+  // 모바일 바텀시트 핸들: 아래로 80px 이상 끌면 닫힌다 (장식이 아닌 실제 제스처). 핸들에서만 시작해 본문 스크롤과 충돌하지 않는다
+  const dragY = useRef<number | null>(null);
+  const onHandleTouchStart = (e: React.TouchEvent) => { dragY.current = e.touches[0].clientY; };
+  const onHandleTouchMove = (e: React.TouchEvent) => {
+    if (dragY.current === null || !cardRef.current) return;
+    const dy = Math.max(0, e.touches[0].clientY - dragY.current);
+    cardRef.current.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+    cardRef.current.style.transition = 'none';
+  };
+  const onHandleTouchEnd = (e: React.TouchEvent) => {
+    if (dragY.current === null || !cardRef.current) return;
+    const dy = e.changedTouches[0].clientY - dragY.current;
+    dragY.current = null;
+    cardRef.current.style.transition = 'transform 0.18s ease-out';
+    cardRef.current.style.transform = '';
+    if (dy > 80) onClose();
   };
 
   return (
@@ -52,7 +73,9 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
     <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center px-4 pt-safe-4 pb-safe-4" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div ref={cardRef} tabIndex={-1} onKeyDown={onKeyDown} className={`modal-card relative bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} max-h-[90vh] flex flex-col outline-none`}>
-        <div className="lg:hidden mx-auto mt-2 h-1 w-10 rounded-full bg-gray-300" aria-hidden="true" />
+        <div className="lg:hidden py-2 cursor-grab touch-none" onTouchStart={onHandleTouchStart} onTouchMove={onHandleTouchMove} onTouchEnd={onHandleTouchEnd} aria-hidden="true">
+          <div className="mx-auto h-1 w-10 rounded-full bg-gray-300" />
+        </div>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h3 className="text-base font-bold text-gray-900">{title}</h3>
           <button

@@ -603,15 +603,15 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
           const dayKey = format(day, 'yyyy-MM-dd');
           const dayReservations = reservations.filter(r => r.date === dayKey);
           return (
-            <div key={i} className={clsx('py-3 px-2 text-center border-r border-gray-100 last:border-r-0', isToday && 'bg-purple-50')}>
+            <div key={i} className={clsx('py-3 px-2 text-center border-r border-gray-100 last:border-r-0', isToday && 'bg-primary-50')}>
               <p className={clsx('text-xs font-medium', i === 5 ? 'text-blue-500' : i === 6 ? 'text-red-500' : 'text-gray-500')}>
                 {dayNames[i]}
               </p>
-              <p className={clsx('text-sm font-bold mt-0.5', isToday ? 'text-purple-600' : 'text-gray-800')}>
+              <p className={clsx('text-sm font-bold mt-0.5', isToday ? 'text-primary-700' : 'text-gray-800')}>
                 {format(day, 'd')}
               </p>
               {dayReservations.length > 0 && (
-                <span className="text-xs text-purple-500 font-medium">{dayReservations.length}건</span>
+                <span className="text-xs text-primary-600 font-medium">{dayReservations.length}건</span>
               )}
             </div>
           );
@@ -636,7 +636,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                 return (
                   <div key={di} className={clsx(
                     'border-r border-gray-50 last:border-r-0 relative',
-                    isToday && 'bg-purple-50/30'
+                    isToday && 'bg-primary-50/40'
                   )}>
                     {slotEvents.map(ev => {
                       if (ev.item.kind === 'reservation') {
@@ -808,9 +808,9 @@ function ListView({ reservations, onSelect, googleEvents = [], filterKey }: { re
           >
             <div className="text-center w-20 flex-shrink-0">
               <p className="text-xs font-medium text-gray-500">{r.date.slice(5).replace('-', '/')}</p>
-              <p className="text-sm font-bold text-purple-600 mt-0.5">{r.startTime}</p>
+              <p className="text-sm font-bold text-primary-700 mt-0.5">{r.startTime}</p>
             </div>
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
               <span className="text-white text-sm font-bold">{r.customerName[0]}</span>
             </div>
             <div className="flex-1 min-w-0">
@@ -1185,7 +1185,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
         <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center">
                 <span className="text-white font-bold">{r.customerName[0]}</span>
               </div>
               <div>

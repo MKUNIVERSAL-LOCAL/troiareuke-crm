@@ -609,11 +609,11 @@ export default function Settings() {
                   className={clsx(
                     'flex-shrink-0 lg:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap',
                     tab === t.key
-                      ? 'bg-purple-50 text-purple-700'
+                      ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-600 hover:bg-gray-50'
                   )}
                 >
-                  <span className={tab === t.key ? 'text-purple-500' : 'text-gray-400'}>{t.icon}</span>
+                  <span className={tab === t.key ? 'text-primary-600' : 'text-gray-400'}>{t.icon}</span>
                   {t.label}
                 </button>
               ))}
@@ -1106,7 +1106,7 @@ export default function Settings() {
                 <p className="text-sm text-gray-500 mb-4">시술 항목을 추가·수정·삭제할 수 있습니다.</p>
                 <button
                   onClick={openAddService}
-                  className="mb-4 px-4 py-2 text-sm font-medium bg-purple-50 text-purple-700 rounded-xl border border-purple-200 hover:bg-purple-100 flex items-center gap-1.5"
+                  className="mb-4 px-4 py-2 text-sm font-medium bg-primary-50 text-primary-700 rounded-xl border border-primary-100 hover:bg-primary-100 flex items-center gap-1.5"
                 >
                   <Plus size={14} /> 시술 추가
                 </button>

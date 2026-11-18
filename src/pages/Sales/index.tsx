@@ -542,14 +542,14 @@ export default function Sales() {
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">시술 매출</p>
-              <p className="text-2xl font-bold text-blue-600">{formatPrice(thisSummary.treatment)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.treatment)}</p>
               <p className="text-xs text-gray-300 mt-1">
                 {thisSummary.total > 0 ? Math.round((thisSummary.treatment / thisSummary.total) * 100) : 0}% 비중
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">제품 매출</p>
-              <p className="text-2xl font-bold text-purple-600">{formatPrice(thisSummary.product)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.product)}</p>
               <p className="text-xs text-gray-300 mt-1">
                 {thisSummary.total > 0 ? Math.round((thisSummary.product / thisSummary.total) * 100) : 0}% 비중
               </p>

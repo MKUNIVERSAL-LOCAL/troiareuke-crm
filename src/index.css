@@ -124,6 +124,7 @@ input:focus, select:focus, textarea:focus {
     border-bottom-left-radius: 0 !important;
     border-bottom-right-radius: 0 !important;
     max-height: 92vh;
+    max-height: 92dvh; /* iOS 키보드가 뜨면 줄어드는 뷰포트 기준 — 저장 버튼이 키보드 아래 숨지 않게 */
     overflow-y: auto;
     padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
     animation: sheet-up 0.26s cubic-bezier(0.22, 1, 0.36, 1);
