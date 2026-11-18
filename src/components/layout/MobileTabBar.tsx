@@ -78,7 +78,7 @@ export default function MobileTabBar() {
               {({ isActive }) => (
                 <>
                   <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
-                  <span className={clsx('text-2xs', isActive ? 'font-semibold' : 'font-normal')}>
+                  <span className={clsx('text-xs', isActive ? 'font-semibold' : 'font-normal')}>
                     {label}
                   </span>
                 </>
@@ -93,7 +93,7 @@ export default function MobileTabBar() {
             className="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-slate-400 hover:text-slate-500 transition-colors"
           >
             <MoreHorizontal size={20} strokeWidth={1.8} />
-            <span className="text-2xs font-normal">더보기</span>
+            <span className="text-xs font-normal">더보기</span>
           </button>
         </div>
       </nav>

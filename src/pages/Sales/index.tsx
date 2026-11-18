@@ -1026,8 +1026,8 @@ export default function Sales() {
 
       {/* 결제 등록 모달 */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
-          <div ref={payModalRef} role="dialog" aria-modal="true" aria-label={editingId ? '결제 수정' : '결제 등록'} className="bg-white rounded-2xl w-full max-w-md my-auto">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
+          <div ref={payModalRef} role="dialog" aria-modal="true" aria-label={editingId ? '결제 수정' : '결제 등록'} className="modal-card bg-white rounded-2xl w-full max-w-md my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editingId ? '결제 수정' : '결제 등록'}</h2>
               <button onClick={closeModal} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
@@ -1185,8 +1185,8 @@ export default function Sales() {
 
       {/* 지출(매입) 등록 모달 */}
       {showExpenseModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div ref={expenseModalRef} role="dialog" aria-modal="true" aria-label={editingExpenseId ? '지출 수정' : '지출(매입) 등록'} className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div ref={expenseModalRef} role="dialog" aria-modal="true" aria-label={editingExpenseId ? '지출 수정' : '지출(매입) 등록'} className="modal-card bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editingExpenseId ? '지출 수정' : '지출(매입) 등록'}</h2>
               <button onClick={closeExpenseModal} aria-label="닫기"><X size={18} className="text-gray-400" /></button>

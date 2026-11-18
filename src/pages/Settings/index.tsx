@@ -1462,8 +1462,8 @@ export default function Settings() {
 
       {/* Service Add/Edit Modal */}
       {showServiceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div ref={serviceModalRef} role="dialog" aria-modal="true" aria-label={editingService ? '시술 수정' : '시술 추가'} className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div ref={serviceModalRef} role="dialog" aria-modal="true" aria-label={editingService ? '시술 수정' : '시술 추가'} className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
             <button
               type="button"
               onClick={() => setShowServiceModal(false)}

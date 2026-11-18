@@ -120,10 +120,7 @@ export default function Layout() {
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
             </div>
-            <div>
-              <p className="max-w-[220px] truncate text-xs font-bold text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
-              <p className="text-2xs text-gray-400">에스테틱 고객관리</p>
-            </div>
+            <p className="max-w-[220px] truncate text-sm font-bold text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
           </div>
         </div>
 

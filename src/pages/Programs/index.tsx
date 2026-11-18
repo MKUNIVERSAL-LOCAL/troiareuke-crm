@@ -318,8 +318,8 @@ export default function Programs() {
 
       {/* 삭제 확인 */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div ref={deleteModalRef} role="dialog" aria-modal="true" aria-label="프로그램 삭제" className="bg-white rounded-2xl p-6 w-full max-w-sm">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div ref={deleteModalRef} role="dialog" aria-modal="true" aria-label="프로그램 삭제" className="modal-card bg-white rounded-2xl p-6 w-full max-w-sm">
             <h3 className="font-bold text-gray-900 mb-2">프로그램 삭제</h3>
             <p className="text-sm text-gray-500 mb-5">
               이 프로그램을 삭제하면 복구할 수 없습니다. 고객에게 등록된 기존 회차권에는 영향이 없습니다.
@@ -334,8 +334,8 @@ export default function Programs() {
 
       {/* 프로그램 추가/수정 모달 — 모바일에서 모달이 화면보다 길면 items-center가 위를 잘라낸다 → 카드 my-auto로 중앙 정렬+스크롤 (2026-11-17) */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
-          <div ref={formModalRef} role="dialog" aria-modal="true" aria-label={editTarget ? '프로그램 수정' : '프로그램 추가'} className="bg-white rounded-2xl w-full max-w-lg my-auto">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
+          <div ref={formModalRef} role="dialog" aria-modal="true" aria-label={editTarget ? '프로그램 수정' : '프로그램 추가'} className="modal-card bg-white rounded-2xl w-full max-w-lg my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editTarget ? '프로그램 수정' : '프로그램 추가'}</h2>
               <button onClick={() => setShowModal(false)} aria-label="닫기" className="text-gray-400 hover:text-gray-600">

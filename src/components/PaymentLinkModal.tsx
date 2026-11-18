@@ -138,8 +138,8 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div ref={cardRef} role="dialog" aria-modal="true" aria-label="결제 요청" className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div ref={cardRef} role="dialog" aria-modal="true" aria-label="결제 요청" className="modal-card bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
           <h2 className="font-bold text-gray-900 flex items-center gap-2">
             <Link2 size={16} className="text-[#1a3a8f]" />결제 요청 (카드·무통장입금)

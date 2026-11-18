@@ -110,6 +110,25 @@ input:focus, select:focus, textarea:focus {
 .modal-card {
   animation: modal-pop 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* 모바일(lg 미만): 모달은 바텀시트 — 엄지가 닿는 아래쪽, 전체 폭, 위 모서리만 둥글게, 아래에서 올라옴 (UI 품질 기준 2026-11-18) */
+@keyframes sheet-up {
+  from { transform: translateY(28px); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}
+@media (max-width: 1023px) {
+  .modal-backdrop { align-items: flex-end !important; padding: 0 !important; }
+  .modal-card {
+    margin: auto 0 0 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    max-height: 92vh;
+    overflow-y: auto;
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+    animation: sheet-up 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
 
 /* ───── 커서 & 인터랙션 폴리시 ───── */
 button:not(:disabled),
@@ -146,6 +165,6 @@ textarea:hover:not(:focus) {
 /* 모션 최소화 선호 사용자 존중 (접근성) */
 @media (prefers-reduced-motion: reduce) {
   .modal-backdrop, .modal-card, .animate-slide-down, .animate-fade-in-up {
-    animation: none;
+    animation: none !important;
   }
 }
