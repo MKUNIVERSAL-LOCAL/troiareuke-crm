@@ -266,7 +266,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
                   readOnly
                   checked={settings.notificationSettings[m.key]}
                 />
-                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-500"></div>
+                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
               </label>
             </div>
           ))}
@@ -387,7 +387,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
                 </button>
                 <button
                   onClick={() => onSelect(t.id)}
-                  className="px-3 py-1.5 bg-primary-500 text-white rounded-lg text-xs font-medium hover:bg-primary-600 transition-colors"
+                  className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 transition-colors"
                 >
                   발송
                 </button>

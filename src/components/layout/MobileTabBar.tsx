@@ -193,9 +193,9 @@ export default function MobileTabBar() {
                   <span className={clsx(
                     'ml-auto flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-full',
                     user.role === 'superadmin'
-                      ? 'bg-primary-100 text-primary-700'
+                      ? 'bg-primary-600 text-white'
                       : user.role === 'admin'
-                        ? 'bg-blue-100 text-[#1a3a8f]'
+                        ? 'bg-primary-100 text-primary-700'
                         : 'bg-slate-200 text-slate-600',
                   )}>
                     {user.role === 'superadmin' ? '슈퍼관리자' : user.role === 'admin' ? '관리자' : '직원'}
