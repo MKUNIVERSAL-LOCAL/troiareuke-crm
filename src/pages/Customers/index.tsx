@@ -20,6 +20,8 @@ import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile, dataUrlToBlob } from '../../lib/mobileBridge';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import PhoneLink from '../../components/ui/PhoneLink';
+import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
@@ -558,6 +560,7 @@ export default function Customers() {
   const [showAllMobileConsults, setShowAllMobileConsults] = useState(false);
   useEffect(() => { setShowAllMobileConsults(false); }, [selected?.id]);
 
+  const pull = usePullToRefresh(() => { loadAll(); }); // 모바일: 맨 위에서 당겨서 새로고침
   // Android 뒤로가기 — 열린 것 중 가장 위부터 하나씩 닫는다(상세 → 목록). 폼 모달은 Esc로는 닫지 않는다(입력 유실 방지, 취소 버튼으로)
   useOverlayClose(!!selected && isMobileLayout, () => setSelected(null), { escape: false });
   useOverlayClose(showAddModal, () => setShowAddModal(false), { escape: false });
@@ -1424,6 +1427,7 @@ export default function Customers() {
           )}
         </div>
 
+        <PullToRefreshIndicator {...pull} />
         {/* 모바일 고객 상세 — 풀스크린 모달 (활성 레이아웃일 때만 마운트) */}
         {selected && isMobileLayout && (
           <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">

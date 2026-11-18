@@ -11,6 +11,8 @@ import PrereqHint from '../../components/ui/PrereqHint';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import PhoneLink from '../../components/ui/PhoneLink';
 import DateQuickChips from '../../components/ui/DateQuickChips';
+import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
@@ -194,6 +196,24 @@ export default function Reservations() {
   }, [googleConnected, currentDate, viewMode, mobileTab, mobileMonthOffset]);
 
   useEffect(() => { loadGoogleEvents(); }, [loadGoogleEvents]);
+  // 모바일: 맨 위에서 당겨서 새로고침(이 기기 저장분 + Google 일정 다시 읽기)
+  const pull = usePullToRefresh(async () => { reloadReservations(); await loadGoogleEvents(); });
+  // PC 키보드: ← → 주/일 이동, T 오늘, N 새 예약 — 입력 중이거나 모달이 열려 있으면 무시 (UI 품질 기준 2026-11-18)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); navigate('prev'); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); navigate('next'); }
+      else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setCurrentDate(new Date()); }
+      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setShowAddModal(true); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, viewMode]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -278,6 +298,7 @@ export default function Reservations() {
       />
 
       {/* ── 모바일 뷰 (< lg) ── 일별 리스트 */}
+      <PullToRefreshIndicator {...pull} />
       <div className="block lg:hidden flex-1 flex flex-col">
         {/* 탭 필터 */}
         <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
@@ -427,6 +448,7 @@ export default function Reservations() {
             <button onClick={() => navigate('next')} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
               <ChevronRight size={18} className="text-gray-600" />
             </button>
+            <span className="hidden xl:inline ml-2 text-xs text-gray-400" title="키보드 단축키">← → 이동 · T 오늘 · N 새 예약</span>
             <h3 className="text-base font-bold text-gray-900">
               {viewMode === 'week'
                 ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`

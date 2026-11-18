@@ -9,6 +9,8 @@ import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import DateQuickChips from '../../components/ui/DateQuickChips';
+import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, PaymentStore, ReservationStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
@@ -53,6 +55,7 @@ export default function Treatments() {
   const loadLogs = () => {
     setTreatmentLogs(TreatmentLogStore.getAll());
   };
+  const pull = usePullToRefresh(() => { loadLogs(); }); // 모바일: 맨 위에서 당겨서 새로고침
   // 목록 표시용 사진 장수 — base64 캐시를 매 렌더·매 키 입력마다 파싱하지 않도록 목록이 바뀔 때만 계산
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시 적재·동기화 후 장수 갱신
 
@@ -131,6 +134,7 @@ export default function Treatments() {
       />
 
       {/* ── 모바일 뷰 (< lg) ── 타임라인 카드 */}
+      <PullToRefreshIndicator {...pull} />
       <div className="block lg:hidden flex-1 flex flex-col">
         {/* 검색바 */}
         <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
