@@ -171,7 +171,7 @@ export default function Signup() {
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 확인 *</label>
                   <input type="password" value={form.confirm} onChange={e => set('confirm', e.target.value)} className="auth-input" placeholder="비밀번호 재입력" required />
                 </div>
-                <button type="submit" className="w-full py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-100 mt-2">다음 단계</button>
+                <button type="submit" className="w-full py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all mt-2">다음 단계</button>
               </form>
             </>
           )}

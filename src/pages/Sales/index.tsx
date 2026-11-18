@@ -466,8 +466,8 @@ export default function Sales() {
       {/* 헤더 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">매출·손익 관리</h1>
-          <p className="text-sm text-gray-400 mt-0.5">매출 · 지출(매입) · 손익계산서 통합 현황</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900">매출·손익 관리</h1>
+          <p className="text-xs text-gray-400 mt-0.5">매출 · 지출(매입) · 손익계산서 통합 현황</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {isPaymentLinkAvailable && (
@@ -486,7 +486,7 @@ export default function Sales() {
           </button>
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors shadow-md shadow-blue-200"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors"
           >
             <Plus size={16} />결제 등록
           </button>

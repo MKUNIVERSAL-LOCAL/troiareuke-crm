@@ -138,7 +138,7 @@ export default function Login() {
               </div>
               <button
                 type="submit" disabled={loading}
-                className="w-full min-h-[48px] py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+                className="w-full min-h-[48px] py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">

@@ -133,12 +133,12 @@ export default function Programs() {
       {/* 헤더 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">시술 프로그램 관리</h1>
-          <p className="text-sm text-gray-400 mt-0.5">회차권·패키지처럼 여러 번 관리하는 프로그램을 등록하고 관리하세요</p>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900">시술 프로그램 관리</h1>
+          <p className="text-xs text-gray-400 mt-0.5">회차권·패키지처럼 여러 번 관리하는 프로그램을 등록하고 관리하세요</p>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors shadow-md shadow-blue-200"
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors"
         >
           <Plus size={16} />
           프로그램 추가

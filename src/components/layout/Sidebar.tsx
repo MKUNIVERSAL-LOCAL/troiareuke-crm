@@ -78,7 +78,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-[#1a3a8f] rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 flex-shrink-0">
+          <div className="w-9 h-9 bg-[#1a3a8f] rounded-xl flex items-center justify-center flex-shrink-0">
             <Sparkles size={18} className="text-white" />
           </div>
           <div>

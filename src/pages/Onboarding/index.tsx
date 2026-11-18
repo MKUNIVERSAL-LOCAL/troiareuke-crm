@@ -342,7 +342,7 @@ export default function Onboarding() {
               <p className="text-xs text-gray-400">에스테틱 전용 CRM</p>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">안녕하세요, {user?.name}님!</h1>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900">안녕하세요, {user?.name}님!</h1>
           <p className="text-sm text-gray-400 mt-1">에스테틱 샵 정보를 설정하고 CRM을 시작해보세요</p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
             <Sparkles size={12} className="text-[#1a3a8f]" />
@@ -355,7 +355,7 @@ export default function Onboarding() {
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center">
               <div className={`flex flex-col items-center gap-1 transition-all ${i <= step ? 'opacity-100' : 'opacity-40'}`}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-500 text-white' : i === step ? 'bg-[#1a3a8f] text-white shadow-lg shadow-blue-200' : 'bg-gray-100 text-gray-400'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-500 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
                 <p className={`text-xs font-medium hidden sm:block ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400'}`}>{s.label}</p>
@@ -648,7 +648,7 @@ export default function Onboarding() {
                   </div>
                 ))}
               </div>
-              <button onClick={finish} className="w-full py-3.5 bg-[#1a3a8f] text-white font-bold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 text-base">
+              <button onClick={finish} className="w-full py-3.5 bg-[#1a3a8f] text-white font-bold rounded-xl hover:bg-[#0d2260] transition-all text-base">
                 더마솔루션 시작하기
               </button>
             </div>
@@ -683,7 +683,7 @@ function StepNav({ onPrev, onNext, nextDisabled, skipLabel, onSkip }: {
       {onPrev && <button onClick={onPrev} className="px-6 py-2.5 bg-gray-100 text-gray-600 font-medium rounded-xl hover:bg-gray-200 text-sm">이전</button>}
       <div className="flex-1" />
       {skipLabel && onSkip && <button onClick={onSkip} className="px-4 py-2.5 text-gray-400 text-sm hover:text-gray-600">{skipLabel}</button>}
-      {onNext && <button onClick={onNext} disabled={nextDisabled} className="px-8 py-2.5 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-sm shadow-md shadow-blue-100">다음</button>}
+      {onNext && <button onClick={onNext} disabled={nextDisabled} className="px-8 py-2.5 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-sm">다음</button>}
     </div>
   );
 }

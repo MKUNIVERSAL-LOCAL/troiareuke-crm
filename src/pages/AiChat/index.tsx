@@ -195,7 +195,7 @@ function AiChatComingSoon() {
       <Header title="AI 분석 챗봇" subtitle="Claude AI 기반 CRM 데이터 실시간 분석" />
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center bg-white border border-gray-100 rounded-2xl shadow-sm px-8 py-12">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center shadow-md shadow-blue-200">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center">
             <Bot size={28} className="text-white" />
           </div>
           <span className="inline-block mt-5 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-[#1a3a8f]">
@@ -506,7 +506,7 @@ function AiChatInner() {
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             {messages.map(msg => (
               <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#1a3a8f] to-blue-400 shadow-md shadow-blue-200' : 'bg-gray-100'}`}>
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-[#1a3a8f] to-blue-400' : 'bg-gray-100'}`}>
                   {msg.role === 'assistant' ? <Sparkles size={14} className="text-white" /> : <User size={14} className="text-gray-500" />}
                 </div>
                 <div className={`flex flex-col gap-1 max-w-[75%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -537,7 +537,7 @@ function AiChatInner() {
 
             {isLoading && (
               <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-200">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center flex-shrink-0">
                   <Sparkles size={14} className="text-white" />
                 </div>
                 <div className="px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl rounded-tl-sm flex items-center gap-2">
@@ -563,7 +563,7 @@ function AiChatInner() {
                 style={{ maxHeight: '120px' }}
               />
               <button onClick={() => sendMessage()} disabled={isLoading || !input.trim() || !hasAnyKey}
-                className="w-10 h-10 bg-[#1a3a8f] text-white rounded-xl flex items-center justify-center hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 shadow-md shadow-blue-200">
+                className="w-10 h-10 bg-[#1a3a8f] text-white rounded-xl flex items-center justify-center hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0">
                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
