@@ -20,8 +20,9 @@ function cspMetaPlugin(): Plugin {
     "default-src 'self'",
     // iamport CDN — payment.ts가 존재하므로 유지(미사용 시 제거 가능)
     "script-src 'self' 'unsafe-inline' https://cdn.iamport.kr",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    // 글꼴은 자체 번들(Pretendard) — 외부 폰트 출처 불필요 (2026-11-18)
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     // ⚠️ NAS 중앙서버(crm-api)가 빠지면 앱의 모든 NAS 요청(로그인 포함)이 CSP에서 차단되어
     //    "인증 실패"로만 보인다 — 새 API 도메인 추가 시 반드시 여기도 갱신할 것
     "connect-src 'self' https://crm-api.mkcorp.familyds.com https://crm-update.mkcorp.familyds.com https://api.anthropic.com https://www.googleapis.com https://oauth2.googleapis.com https://github.com https://objects.githubusercontent.com http://127.0.0.1:19876",

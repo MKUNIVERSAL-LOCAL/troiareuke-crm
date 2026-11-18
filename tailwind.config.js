@@ -33,7 +33,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Pretendard', 'Noto Sans KR', 'system-ui', 'sans-serif'],
+        sans: ['Pretendard Variable', 'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', 'system-ui', 'sans-serif'],
       },
     },
   },

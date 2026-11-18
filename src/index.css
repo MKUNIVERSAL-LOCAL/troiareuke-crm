@@ -1,3 +1,7 @@
+/* 본문 글꼴 Pretendard Variable(OFL) 자체 번들 — 오프라인 Electron·Capacitor에서도 PC·폰이 같은 글꼴로 렌더된다.
+   전에는 Google Fonts Noto Sans KR(온라인 전용)이라 매장 PC가 오프라인이면 시스템 글꼴로 떨어졌다 (UI 품질 기준 2026-11-18) */
+@import 'pretendard/dist/web/variable/pretendardvariable.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -16,9 +20,16 @@
 }
 
 * {
-  font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  /* 한글 UI 권장 자간(Pretendard -0.01em) · 숫자는 표 정렬용 고정폭(금액·날짜·시간이 줄마다 흔들리지 않게) */
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  text-rendering: optimizeLegibility;
 }
 
 body {

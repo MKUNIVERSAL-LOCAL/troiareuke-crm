@@ -131,7 +131,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 
 ### P6. UI 품질 절대 기준 (오너 지시 2026-11-18 09:15 — 상시)
 - **"UI가 대한민국에서 가장 편리하고, 디자인이 깔끔하고, 폰트가 이쁘고, 사용하기 편리한 UI여야 한다."** 모든 화면·컴포넌트·문구 작업과 리뷰의 판단 기준. 네 가지 자문: ① 클릭/탭 수 ② 여백·정렬·색의 깔끔함(장식 요소 제거) ③ 글꼴(한글 가독성·숫자 정렬·크기 위계) ④ 설명 없이 쓰는가. 시각 확인은 스크린샷 세트로 PC·모바일 둘 다.
-- [ ] 현황: 본문 폰트는 Google Fonts Noto Sans KR(온라인 전용) — 오프라인 Electron·Capacitor에서는 시스템 글꼴로 떨어짐. tailwind.config의 Pretendard는 로드되지 않음. → Pretendard Variable 자체 번들(오프라인 동일 렌더링)·숫자 tabular·본문 행간 토큰부터.
+- [x] 글꼴 1차: Pretendard Variable(OFL, `pretendard` npm) 자체 번들 — `src/index.css` @import → Vite가 woff2를 자산으로 묶어 오프라인 Electron·Capacitor에서도 PC·폰 동일 렌더링(전에는 Google Fonts Noto Sans KR 온라인 전용, tailwind의 Pretendard는 로드조차 안 됨). html에 자간 -0.01em·`tabular-nums`(금액·날짜 줄맞춤). index.html Google Fonts 링크·CSP 외부 폰트 출처 제거.
 - [ ] UI 품질 감사(에이전트, PC 50장·모바일 51장 스크린샷 + 토큰 코드) 결과에 따라 8묶음 이하로 반영.
 
 ### P5. 가격·플랜 반영
