@@ -14,6 +14,7 @@ import {
 import { PaymentStore, CustomerStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import { useAuth } from '../../contexts/AuthContext';
 import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
 import type { Payment, PaymentMethod, Expense, ExpenseCategory } from '../../types';
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
@@ -53,6 +54,7 @@ function periodLabel(months: string[], mode: PnlPeriodMode): string {
 
 
 export default function Sales() {
+  const { user: authUser } = useAuth(); // 전화번호 마스킹 기준 역할 (리뷰 2026-11-18)
   const [tab, setTab] = useState<'overview' | 'list' | 'expense' | 'pnl'>('overview');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -1064,7 +1066,7 @@ export default function Sales() {
               {/* 고객 선택 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">고객</label>
-                <CustomerCombobox customers={customers} value={form.customerId} onChange={id => setForm(f => ({ ...f, customerId: id }))} maskRole="admin" placeholder="이름·전화번호 검색 (선택사항)" />
+                <CustomerCombobox customers={customers} value={form.customerId} onChange={id => setForm(f => ({ ...f, customerId: id }))} maskRole={authUser?.role ?? 'staff'} placeholder="이름·전화번호 검색 (선택사항)" />
               </div>
 
               {/* 금액 */}

@@ -35,9 +35,17 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
   const blurTimer = useRef<number | null>(null);
   const listId = useId();
 
-  // 프리필·초기화 등 밖에서 value가 바뀌면 표시 텍스트도 맞춘다
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setText(selected ? labelOf(selected) : ''); }, [selected?.id]);
+  // 프리필·초기화 등 "밖에서" value가 바뀌면 표시 텍스트도 맞춘다. 이 컴포넌트가 직접 올린 변경(타이핑·선택·해제)은
+  // pushed에 기록해 두고 건너뛴다 — 안 그러면 고른 고객 위에 글자를 치는 순간 onChange('') → 효과가 text를 지워 입력이 날아간다 (리뷰 2026-11-18)
+  const pushed = useRef(value);
+  useEffect(() => {
+    const id = selected?.id ?? '';
+    if (id === pushed.current) return;
+    pushed.current = id;
+    setText(selected ? labelOf(selected) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+  const push = (id: string) => { pushed.current = id; onChange(id); };
 
   // 고른 고객 표시 그대로면 검색어 없음(전체 목록), 아니면 친 글자로 검색
   const query = selected && text === labelOf(selected) ? '' : text;
@@ -46,16 +54,21 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
     const list = q ? customers.filter(c => matchesSearch(q, [c.name, c.phone])) : customers;
     return list.slice(0, MAX_ROWS);
   }, [customers, query]);
-  useEffect(() => { setHi(0); }, [query, open]);
+  // 목록이 열릴 때 강조 행: 검색 중이면 첫 행, 이미 고른 고객이 있으면 그 고객(Enter가 엉뚱한 첫 고객으로 바꾸지 않게, 리뷰 2026-11-18)
+  useEffect(() => {
+    const idx = !query.trim() && selected ? matches.findIndex(c => c.id === selected.id) : 0;
+    setHi(idx < 0 ? 0 : idx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, open]);
 
   const choose = (c: Customer) => {
     if (blurTimer.current) { window.clearTimeout(blurTimer.current); blurTimer.current = null; }
-    onChange(c.id);
+    push(c.id);
     setText(labelOf(c));
     setOpen(false);
   };
   const clear = () => {
-    onChange('');
+    push('');
     setText('');
     setOpen(true);
     inputRef.current?.focus();
@@ -99,8 +112,8 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
           autoComplete="off"
           value={text}
           placeholder={placeholder}
-          onChange={e => { setText(e.target.value); setOpen(true); if (selected) onChange(''); }}
-          onFocus={e => { setOpen(true); e.target.select(); }}
+          onChange={e => { setText(e.target.value); setOpen(true); if (selected) push(''); }}
+          onFocus={e => { if (!selected) setOpen(true); e.target.select(); }} // 고른 고객이 있으면 목록을 펼치지 않는다(↓로 열기) — 포커스 트랩이 첫 칸에 포커스를 줄 때 50명이 펼쳐지지 않게
           onBlur={onBlur}
           onKeyDown={onKeyDown}
           className="w-full px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
