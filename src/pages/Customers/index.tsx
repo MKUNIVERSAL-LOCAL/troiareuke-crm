@@ -18,7 +18,7 @@ import { resizeImageFile, getPhotos, getPhotosAsync, setPhotos as savePhotos, cl
 import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, comparisonFileName, angleLabel, type DatedPhoto } from '../../lib/beforeAfter';
 import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile, dataUrlToBlob } from '../../lib/mobileBridge';
-import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
+import { useOverlayClose, useFocusTrap, useMenuKeys } from '../../lib/overlayStack';
 import PhoneLink from '../../components/ui/PhoneLink';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
@@ -567,6 +567,7 @@ export default function Customers() {
   useOverlayClose(showGradeMenu, () => setShowGradeMenu(false)); // 등급 메뉴 — Esc·뒤로가기로 닫기
   useOverlayClose(showMoreMenu, () => setShowMoreMenu(false));
   useFocusTrap(showMoreMenu, moreMenuRef);
+  useMenuKeys(showMoreMenu, moreMenuRef);
   // 포커스 트랩 — 첫 입력란 포커스·Tab 순환·닫힐 때 열었던 버튼으로 복원 (키보드 접근성 감사 2026-11-18)
   const addModalRef = useRef<HTMLDivElement>(null);
   const editModalRef = useRef<HTMLDivElement>(null);
@@ -1021,6 +1022,7 @@ export default function Customers() {
   useFocusTrap(showImportGuide, importGuideRef);
   const gradeMenuRef = useRef<HTMLDivElement>(null);
   useFocusTrap(showGradeMenu, gradeMenuRef); // 현재 등급 항목(data-autofocus)에 포커스, 닫히면 등급 버튼으로
+  useMenuKeys(showGradeMenu, gradeMenuRef);
 
   // 업로드 양식 엑셀 다운로드 (헤더 + 예시 2행)
   function downloadImportTemplate() {

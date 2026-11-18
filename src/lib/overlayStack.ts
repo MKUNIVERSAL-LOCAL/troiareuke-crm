@@ -60,6 +60,33 @@ export function useOverlayClose(isOpen: boolean, onClose: () => void, opts?: { e
 // 닫히면 열었던 요소로 되돌린다. 중첩 모달은 각자 자기 카드에서만 듣고 전파를 멈춰 바깥 트랩과 겹치지 않는다.
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 const FIRST_FIELD = 'input:not([disabled]):not([type="hidden"]):not([readonly]),select:not([disabled]),textarea:not([disabled])';
+/**
+ * role="menu" 드롭다운의 키보드 이동 — ↑↓로 항목 사이를 순환, Home/End로 처음·끝 (ARIA 메뉴 패턴, 2026-11-18).
+ * Tab 순환·Esc 닫기는 useFocusTrap·useOverlayClose가 맡고, 이 훅은 role="menuitem" 사이의 화살표 이동만 더한다.
+ */
+export function useMenuKeys(isOpen: boolean, ref: RefObject<HTMLElement>): void {
+  useEffect(() => {
+    if (!isOpen) return;
+    const root = ref.current;
+    if (!root) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+      const items = Array.from(root.querySelectorAll<HTMLElement>('[role="menuitem"]')).filter(el => el.offsetParent !== null && !el.hasAttribute('disabled'));
+      if (items.length === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      const next = e.key === 'Home' ? 0
+        : e.key === 'End' ? items.length - 1
+        : e.key === 'ArrowDown' ? (i + 1) % items.length
+        : (i - 1 + items.length) % items.length;
+      items[next].focus({ preventScroll: true });
+    };
+    root.addEventListener('keydown', onKey);
+    return () => root.removeEventListener('keydown', onKey);
+  }, [isOpen, ref]);
+}
+
 export function useFocusTrap(isOpen: boolean, ref: RefObject<HTMLElement>): void {
   useEffect(() => {
     if (!isOpen) return;

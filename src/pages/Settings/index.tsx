@@ -1357,7 +1357,7 @@ export default function Settings() {
                         <label
                           key={d.key}
                           className={`flex items-start gap-2.5 px-3 py-2.5 border rounded-xl cursor-pointer transition-colors ${
-                            exportSelection.has(d.key) ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 hover:bg-gray-50'
+                            exportSelection.has(d.key) ? 'border-primary-300 bg-primary-50/60' : 'border-gray-200 hover:bg-gray-50'
                           }`}
                         >
                           <input

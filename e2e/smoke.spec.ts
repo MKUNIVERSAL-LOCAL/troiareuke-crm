@@ -570,6 +570,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(moreMenu).toBeVisible();
   await expect(moreMenu.getByRole('menuitem', { name: '고객 익명화' })).toHaveCount(0);
   await expect(moreMenu.getByRole('menuitem', { name: '고객 삭제' })).toBeVisible();
+  // ARIA 메뉴 키보드: End → 마지막 항목, Home → 첫 항목에 포커스 (2026-11-18)
+  await page.keyboard.press('End');
+  await expect(moreMenu.getByRole('menuitem').last()).toBeFocused();
+  await page.keyboard.press('Home');
+  await expect(moreMenu.getByRole('menuitem').first()).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(moreMenu).toHaveCount(0);
   // 목록 정렬 선택이 동작한다 (2026-11-18)
