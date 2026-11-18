@@ -1,3 +1,4 @@
+import { formatDate } from './format';
 // ═══════════════════════════════════════════════════════════════
 // customerTimeline — 고객 활동 타임라인 (비코어, 2026-11-18)
 // ───────────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
       title: `${cp.programName} 등록`,
       detail: [
         cp.totalSessions ? `${cp.totalSessions}회` : '기간제',
-        cp.expiryDate ? `~${cp.expiryDate}` : '',
+        cp.expiryDate ? `~${formatDate(cp.expiryDate)}` : '',
         cp.pricePaid ? formatPrice(cp.pricePaid) : '',
       ].filter(Boolean).join(' · '),
     });
