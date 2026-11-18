@@ -340,7 +340,7 @@ export default function DataBrowser() {
                       <input
                         value={searchInput}
                         onChange={e => setSearchInput(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { setOffset(0); setQuery(searchInput.trim()); } }}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { setOffset(0); setQuery(searchInput.trim()); } }}
                         placeholder="검색 후 Enter (이름·전화·내용 등)"
                         className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
                       />
