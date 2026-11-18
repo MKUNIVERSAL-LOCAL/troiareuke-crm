@@ -2402,11 +2402,11 @@ export default function Customers() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs font-medium text-gray-600 mb-1">생년월일</label>
                   <BirthDateSelect value={addForm.birthDate} onChange={v => setAddForm(f => ({ ...f, birthDate: v }))} />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
                   <select aria-label="피부 유형" value={addForm.skinType} onChange={e => setAddForm(f => ({ ...f, skinType: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
@@ -2506,11 +2506,11 @@ export default function Customers() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs font-medium text-gray-600 mb-1">생년월일</label>
                   <BirthDateSelect value={editForm.birthDate} onChange={v => setEditForm(f => ({ ...f, birthDate: v }))} />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
                   <select aria-label="피부 유형" value={editForm.skinType} onChange={e => setEditForm(f => ({ ...f, skinType: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
