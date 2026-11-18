@@ -183,7 +183,7 @@ export default function StaffPage() {
           {/* Add Staff Card */}
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-white rounded-2xl p-5 border-2 border-dashed border-gray-200 hover:border-purple-300 transition-colors flex flex-col items-center justify-center gap-3 text-gray-400 hover:text-purple-400 min-h-[120px] md:min-h-[280px]"
+            className="hidden lg:flex bg-white rounded-2xl p-5 border-2 border-dashed border-gray-200 hover:border-primary-300 transition-colors flex-col items-center justify-center gap-3 text-gray-400 hover:text-primary-500 min-h-[120px] md:min-h-[280px]"
           >
             <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
               <Plus size={20} />

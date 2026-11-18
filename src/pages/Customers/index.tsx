@@ -1657,13 +1657,13 @@ export default function Customers() {
                   <>
                     <button
                       onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
-                      className="py-2.5 bg-sky-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
+                      className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
                     >
                       <CalendarPlus size={14} />예약 추가
                     </button>
                     <button
                       onClick={() => navigate(`/messaging?customer=${selected.id}`)}
-                      className="py-2.5 bg-purple-600 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
+                      className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
                     >
                       <MessageSquare size={14} />메시지
                     </button>
@@ -1671,13 +1671,13 @@ export default function Customers() {
                 )}
                 <button
                   onClick={openTreatmentModal}
-                  className="py-2.5 bg-green-500 text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
+                  className="py-2.5 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
                 >
                   <Scissors size={14} />시술 기록
                 </button>
                 <button
                   onClick={() => setShowProgramModal(true)}
-                  className="py-2.5 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
+                  className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
                 >
                   <Plus size={14} />프로그램 등록
                 </button>
@@ -1951,13 +1951,13 @@ export default function Customers() {
                   </button>
                   <button
                     onClick={openTreatmentModal}
-                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-green-500 text-white rounded-xl text-xs font-medium hover:bg-green-600 transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75] transition-colors"
                   >
                     <Scissors size={12} />시술 기록
                   </button>
                   <button
                     onClick={() => setShowProgramModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75] transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors"
                   >
                     <Plus size={12} />프로그램 등록
                   </button>
@@ -1965,14 +1965,14 @@ export default function Customers() {
                     <>
                       <button
                         onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
-                        className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-sky-600 text-white rounded-xl text-xs font-medium hover:bg-sky-700 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors"
                         title="이 고객으로 예약 추가 창을 엽니다"
                       >
                         <CalendarPlus size={12} />예약 추가
                       </button>
                       <button
                         onClick={() => navigate(`/messaging?customer=${selected.id}`)}
-                        className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-purple-600 text-white rounded-xl text-xs font-medium hover:bg-purple-700 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors"
                         title="이 고객 한 명에게 문자·카카오를 보냅니다"
                       >
                         <MessageSquare size={12} />메시지
@@ -2038,7 +2038,7 @@ export default function Customers() {
                 </div>
               </div>
 
-              <div className="mt-3 p-3 bg-yellow-50 rounded-xl">
+              <div className="mt-3 p-3 bg-gray-50 rounded-xl">
                 {selected.memo ? <p className="text-xs text-yellow-700 whitespace-pre-line">📝 {selected.memo}</p> : <p className="text-xs text-yellow-600/60">📝 메모 없음</p>}
                 {quickMemoRow(false)}
               </div>

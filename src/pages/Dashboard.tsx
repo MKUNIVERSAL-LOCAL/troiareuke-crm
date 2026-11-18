@@ -121,8 +121,8 @@ export default function Dashboard() {
   // 빠른 작업 — 매장에서 가장 잦은 세 동작을 홈에서 한 번에 (대상 화면이 ?new=1 로 등록 모달을 연다, 2026-11-17)
   const quickActions = [
     customersOn && { label: '고객 추가', icon: <UserPlus size={18} />, to: '/customers?new=1', cls: 'bg-[#1a3a8f] text-white' },
-    reservationsOn && { label: '예약 추가', icon: <CalendarPlus size={18} />, to: '/reservations?new=1', cls: 'bg-indigo-500 text-white' },
-    treatmentsOn && { label: '시술 기록', icon: <ClipboardPlus size={18} />, to: '/treatments?new=1', cls: 'bg-green-500 text-white' },
+    reservationsOn && { label: '예약 추가', icon: <CalendarPlus size={18} />, to: '/reservations?new=1', cls: 'bg-white border border-gray-200 text-gray-800 hover:bg-gray-50' },
+    treatmentsOn && { label: '시술 기록', icon: <ClipboardPlus size={18} />, to: '/treatments?new=1', cls: 'bg-white border border-gray-200 text-gray-800 hover:bg-gray-50' },
   ].filter(Boolean) as { label: string; icon: ReactNode; to: string; cls: string }[];
 
   // 다른 페이지에서 CRUD 후 돌아오거나 창에 포커스가 돌아오면 최신 데이터로 재계산 (stale 방지)
@@ -383,14 +383,14 @@ export default function Dashboard() {
         )}
 
         {/* 트로이몰 바로가기 — 링크는 Electron setWindowOpenHandler가 외부 브라우저로 위임 */}
-        <div className="bg-gradient-to-r from-[#1a3a8f] to-[#2b55c4] rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex items-center gap-4 flex-1 min-w-0">
-            <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Store size={22} className="text-white" />
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center flex-shrink-0">
+              <Store size={22} className="text-[#1a3a8f]" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-white">트로이몰에서 제품 구매</p>
-              <p className="text-xs text-blue-100 mt-0.5">홈케어·시술 제품을 온라인몰과 앱에서 바로 주문하세요</p>
+              <p className="text-sm font-bold text-gray-900">트로이몰에서 제품 구매</p>
+              <p className="text-xs text-gray-500 mt-0.5">홈케어·시술 제품을 온라인몰과 앱에서 바로 주문하세요</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -398,7 +398,7 @@ export default function Dashboard() {
               href="https://www.troimall.com/"
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-semibold text-[#1a3a8f] hover:bg-blue-50 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#1a3a8f] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#15306e] transition-colors"
             >
               <Globe size={14} /> 트로이몰 웹사이트
             </a>
@@ -407,7 +407,7 @@ export default function Dashboard() {
               href="https://play.google.com/store/apps/details?id=com.troimall"
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/25 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-blue-200 px-3.5 py-2 text-xs font-semibold text-[#1a3a8f] hover:bg-blue-100 transition-colors"
             >
               <Play size={14} /> Google Play
             </a>
@@ -415,7 +415,7 @@ export default function Dashboard() {
               href="https://apps.apple.com/kr/app/%ED%8A%B8%EB%A1%9C%EC%9D%B4%EB%AA%B0/id1488430207"
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/25 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-blue-200 px-3.5 py-2 text-xs font-semibold text-[#1a3a8f] hover:bg-blue-100 transition-colors"
             >
               <Apple size={14} /> App Store
             </a>
