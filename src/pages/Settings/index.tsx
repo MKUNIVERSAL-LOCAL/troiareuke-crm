@@ -629,6 +629,7 @@ export default function Settings() {
                     <div className="space-y-2">
                       <input
                         type="text"
+                        aria-label="샵 이름"
                         value={settings.name}
                         onChange={e => setSettings(prev => ({ ...prev, name: e.target.value }))}
                         className="form-input"
@@ -734,7 +735,7 @@ export default function Settings() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-xs text-gray-300">지정 휴일 없음</p>
+                      <p className="text-xs text-gray-500">지정 휴일 없음</p>
                     )}
                   </div>
                   <div className="pt-4">
@@ -806,7 +807,7 @@ export default function Settings() {
                       </div>
                       <button
                         disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed"
                         title="준비 중입니다"
                       >
                         연동하기
@@ -857,7 +858,7 @@ export default function Settings() {
                       </div>
                       <button
                         disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed"
                         title="준비 중입니다"
                       >
                         연동하기
@@ -879,7 +880,7 @@ export default function Settings() {
                       </div>
                       <button
                         disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed"
                         title="준비 중입니다"
                       >
                         연동하기
@@ -961,7 +962,7 @@ export default function Settings() {
                       ) : (
                         <button
                           disabled
-                          className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
+                          className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed"
                           title="Google OAuth 클라이언트가 설정되지 않은 빌드입니다"
                         >
                           이 빌드에서는 연결 불가
@@ -1582,17 +1583,17 @@ function SettingCard({ title, children }: { title: string; children: React.React
 }
 
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
-  // 자식이 input/select/textarea 하나뿐이고 이름이 없으면 이 라벨을 접근성 이름으로 연결 — 스크린리더·axe "label" 위반 해소 (2026-11-18)
-  const id = useId();
+  // 자식이 input/select/textarea 하나뿐이면 id를 붙이고 라벨 htmlFor로 연결 — 접근성 이름 + 라벨 클릭으로 포커스 (axe "label" 위반 해소, 2026-11-18)
+  const generated = useId();
   const only = Children.count(children) === 1 && isValidElement(children) ? children : null;
   const props = (only?.props ?? {}) as Record<string, unknown>;
-  const labelled = only && typeof only.type === 'string' && ['input', 'select', 'textarea'].includes(only.type) && !props['aria-label'] && !props['aria-labelledby']
-    ? cloneElement(only, { 'aria-labelledby': id } as Record<string, unknown>)
-    : children;
+  const native = !!only && typeof only.type === 'string' && ['input', 'select', 'textarea'].includes(only.type);
+  const controlId = native ? ((props.id as string | undefined) ?? generated) : undefined;
+  const content = native && controlId ? cloneElement(only, { id: controlId } as Record<string, unknown>) : children;
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
-      <label id={id} className="text-sm font-medium text-gray-600 sm:w-32 flex-shrink-0">{label}</label>
-      <div className="flex-1 min-w-0">{labelled}</div>
+      <label htmlFor={controlId} className="text-sm font-medium text-gray-600 sm:w-32 flex-shrink-0">{label}</label>
+      <div className="flex-1 min-w-0">{content}</div>
     </div>
   );
 }

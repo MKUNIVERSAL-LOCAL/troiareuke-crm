@@ -12,8 +12,8 @@ import { makeAccount, signupAndOnboard, createCustomer, BRANCH_ROUTES } from './
 const acc = makeAccount('AX');
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
-type Node = { target: string; html: string; detail: string };
-type Row = { route: string; id: string; impact: string; help: string; nodes: Node[] };
+type ViolationNode = { target: string; html: string; detail: string };
+type Row = { route: string; id: string; impact: string; help: string; nodes: ViolationNode[] };
 
 async function scan(page: import('@playwright/test').Page, route: string, out: Row[]) {
   const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
@@ -31,6 +31,7 @@ async function scan(page: import('@playwright/test').Page, route: string, out: R
 }
 
 test('지점 화면 전부에 serious·critical 접근성 위반이 없다', async ({ page }) => {
+  test.slow(); // 가입·온보딩 + 13회 axe 분석 ≈ 40s — CI 여유
   page.on('dialog', d => d.accept());
   const rows: Row[] = [];
 

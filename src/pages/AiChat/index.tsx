@@ -434,7 +434,7 @@ function AiChatInner() {
           <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-gray-800">AI API 키 설정</h3>
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Claude 우선 사용</span>
+              <span className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">Claude 우선 사용</span>
             </div>
             <div className="space-y-3">
               {/* Claude (Primary) */}

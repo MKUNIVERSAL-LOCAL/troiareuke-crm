@@ -287,7 +287,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                     <div key={r.id} className="flex items-center gap-2 px-3 py-2 border border-gray-100 rounded-xl text-xs">
                       <span className={`px-2 py-0.5 rounded-full font-medium text-2xs whitespace-nowrap ${
                         status.tone === 'ok' ? 'bg-emerald-50 text-emerald-600'
-                          : status.tone === 'bad' ? 'bg-gray-100 text-gray-400'
+                          : status.tone === 'bad' ? 'bg-gray-100 text-gray-600'
                           : 'bg-amber-50 text-amber-600'
                       }`}>{status.label}</span>
                       <div className="flex-1 min-w-0">

@@ -204,7 +204,7 @@ export default function Programs() {
           >
             {cat}
             {cat !== '전체' && (
-              <span className="ml-1 text-xs font-normal">{/* 반투명(opacity-70)은 비활성 칩에서 3.6:1 — 칩 글자색 그대로 */}
+              <span className="ml-1 text-xs font-normal">
                 ({programs.filter(p => normalizeCategory(p.category) === cat).length})
               </span>
             )}
@@ -225,7 +225,7 @@ export default function Programs() {
           ) : (
             <>
               <p className="text-gray-400 font-medium">조건에 맞는 프로그램이 없어요</p>
-              <p className="text-sm text-gray-300 mt-1">검색어나 필터를 바꾸거나 새 프로그램을 추가하세요</p>
+              <p className="text-sm text-gray-500 mt-1">검색어나 필터를 바꾸거나 새 프로그램을 추가하세요</p>
             </>
           )}
         </div>

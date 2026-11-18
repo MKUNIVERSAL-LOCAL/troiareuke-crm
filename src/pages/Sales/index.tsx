@@ -515,7 +515,7 @@ export default function Sales() {
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-gray-400">총 매출</p>
                 {growthRate !== 0 && (
-                  <span className={`text-xs font-medium flex items-center gap-0.5 ${growthRate > 0 ? 'text-green-500' : 'text-red-400'}`}>
+                  <span className={`text-xs font-medium flex items-center gap-0.5 ${growthRate > 0 ? 'text-green-700' : 'text-red-600'}`}>
                     {growthRate > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                     {Math.abs(growthRate)}%
                   </span>

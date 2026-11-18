@@ -222,7 +222,7 @@ export default function Products() {
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-gray-900">
                               {p.name}
-                              {!p.isActive && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-2xs font-medium align-middle">비활성</span>}
+                              {!p.isActive && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full text-2xs font-medium align-middle">비활성</span>}
                             </p>
                             {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}
                             <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
@@ -276,7 +276,7 @@ export default function Products() {
                                 <p className="text-sm font-semibold text-gray-900">
                                   {p.name}
                                   {!p.isActive && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-2xs font-medium align-middle">비활성</span>
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full text-2xs font-medium align-middle">비활성</span>
                                   )}
                                 </p>
                                 {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}

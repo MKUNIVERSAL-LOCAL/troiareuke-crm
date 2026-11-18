@@ -563,7 +563,7 @@ export default function Onboarding() {
                       <p className="text-sm font-semibold text-gray-900">{item.name}</p>
                       <p className="text-xs text-gray-400">{item.desc}</p>
                     </div>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg">나중에 설정</span>
+                    <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-lg">나중에 설정</span>
                   </div>
                 ))}
                 <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-600">

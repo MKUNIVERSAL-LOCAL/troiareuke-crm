@@ -109,7 +109,7 @@ export default function Signup() {
         <div className="flex items-center justify-center gap-2 mb-8">
           {['계정 정보', '약관 동의', '완료'].map((s, i) => (
             <div key={s} className="flex items-center gap-2">
-              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${step > i + 1 ? 'bg-green-100 text-green-700' : step === i + 1 ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${step > i + 1 ? 'bg-green-100 text-green-700' : step === i + 1 ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600'}`}>
                 {step > i + 1 ? <CheckCircle2 size={12} /> : <span>{i + 1}</span>}
                 {s}
               </div>

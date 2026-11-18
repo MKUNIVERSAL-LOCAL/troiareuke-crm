@@ -2204,7 +2204,7 @@ export default function Customers() {
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 font-medium">{cp.category}</span>
-                              {cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">완료</span>}
+                              {cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">완료</span>}
                               {isExpired && !cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-400">만료</span>}
                             </div>
                             <p className="font-semibold text-sm text-gray-900 mt-1">{cp.programName}</p>

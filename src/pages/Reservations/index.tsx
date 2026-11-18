@@ -641,7 +641,8 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
       </div>
 
       {/* Time Grid — 예약 블록은 관리시간(1시간=1칸, 2시간=2칸)에 비례한 높이로 표시 */}
-      <div className="overflow-y-auto max-h-[550px]" role="region" aria-label="시간표" tabIndex={0}>{/* 스크롤 영역 키보드 접근 (axe scrollable-region-focusable) */}
+      {/* 스크롤 영역 키보드 접근(axe scrollable-region-focusable) — 부모 overflow-hidden이 바깥 outline을 잘라 inset ring으로 표시 */}
+      <div className="overflow-y-auto max-h-[550px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="시간표" tabIndex={0}>
         {TIME_SLOTS.map(time => {
           const slotStartMin = timeToMin(time);
           return (
@@ -748,7 +749,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
         </div>
       </div>
       {/* 예약 블록은 관리시간에 비례한 높이로 표시 (1시간=1칸, 2시간=2칸) */}
-      <div className="overflow-y-auto max-h-[600px]">
+      <div className="overflow-y-auto max-h-[600px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="시간표" tabIndex={0}>
         {TIME_SLOTS.map(time => {
           const slotStartMin = timeToMin(time);
           const slotEvents = dayLayout.filter(ev =>
