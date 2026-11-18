@@ -8,6 +8,7 @@ import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
 import PasswordChangeGate from '../../components/PasswordChangeGate';
 import ToastHost from '../../components/ui/ToastHost';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
+import { usePreloadReload } from '../../hooks/usePreloadReload';
 
 // search가 있는 항목은 pathname+search까지 일치해야 활성 (통계 vs 전체 데이터 구분)
 const adminNav = [
@@ -24,6 +25,7 @@ const adminNav = [
 ];
 
 export default function AdminLayout() {
+  usePreloadReload(); // 어드민 콘솔(웹 배포)도 옛 지연 청크(차트) 404면 1회 새로고침
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();

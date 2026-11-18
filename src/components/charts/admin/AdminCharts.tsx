@@ -5,7 +5,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 const DARK_TOOLTIP = { background: '#1e293b', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0', fontSize: 12 } as const;
 
 /** 지점 손익계산서 — 지점별 비교 또는 월/분기 추이 (매출·지출·영업이익) */
-export function PnlCompareChart({ data, won }: { data: object[]; won: (v: number) => string }) {
+export function PnlCompareChart({ data, won }: { data: { name: string; 매출: number; 지출: number; 영업이익: number }[]; won: (v: number) => string }) {
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data} margin={{ top: 0, right: 0, left: 8, bottom: 0 }}>
@@ -27,7 +27,7 @@ export function PnlCompareChart({ data, won }: { data: object[]; won: (v: number
 }
 
 /** 통계 — 최근 6개월 매출·환불 */
-export function MonthlyRevenueChart({ data, won, wonShort }: { data: object[]; won: (v: number) => string; wonShort: (v: number) => string }) {
+export function MonthlyRevenueChart({ data, won, wonShort }: { data: { month: string; 매출: number; 환불: number }[]; won: (v: number) => string; wonShort: (v: number) => string }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
       <BarChart data={data}>
@@ -44,7 +44,7 @@ export function MonthlyRevenueChart({ data, won, wonShort }: { data: object[]; w
 }
 
 /** 통계 — 최근 30일 일별 매출(영역) */
-export function DailyRevenueAreaChart({ data, won, wonShort }: { data: object[]; won: (v: number) => string; wonShort: (v: number) => string }) {
+export function DailyRevenueAreaChart({ data, won, wonShort }: { data: { date: string; 매출: number }[]; won: (v: number) => string; wonShort: (v: number) => string }) {
   return (
     <ResponsiveContainer width="100%" height={220}>
       <AreaChart data={data}>
@@ -65,7 +65,7 @@ export function DailyRevenueAreaChart({ data, won, wonShort }: { data: object[];
 }
 
 /** 통계 — 지점별 누적 매출 비교(가로 막대). 높이는 지점 수에 비례 */
-export function BranchCompareChart({ data, height, won, wonShort }: { data: object[]; height: number; won: (v: number) => string; wonShort: (v: number) => string }) {
+export function BranchCompareChart({ data, height, won, wonShort }: { data: { name: string; 매출: number }[]; height: number; won: (v: number) => string; wonShort: (v: number) => string }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} layout="vertical">
