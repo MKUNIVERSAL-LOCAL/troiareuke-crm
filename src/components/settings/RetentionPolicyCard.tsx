@@ -75,7 +75,7 @@ export default function RetentionPolicyCard() {
             </button>
           )}
         </div>
-        {message && <p className={`text-xs ${message.tone === 'ok' ? 'text-emerald-600' : 'text-amber-700'}`}>{message.text}</p>}
+        {message && <p className={`text-xs ${message.tone === 'ok' ? 'text-emerald-700' : 'text-amber-700'}`}>{message.text}</p>}
       </div>
     </div>
   );

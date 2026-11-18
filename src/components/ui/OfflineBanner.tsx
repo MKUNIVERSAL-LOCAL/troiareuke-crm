@@ -178,7 +178,7 @@ export default function OfflineBanner() {
           {pending > 0 ? ` · 저장분 ${pending}건 전송 대기` : ''}
           {photoDirty > 0 ? ` · 사진 ${photoDirty}건 전송 대기` : ''}
         </span>
-        <span className="ml-1 text-amber-600">
+        <span className="ml-1 text-amber-700">
           {pending > 0 || photoDirty > 0 ? '연결이 복구되면 자동 전송됩니다' : '인터넷 연결을 확인해주세요'}
         </span>
       </div>
@@ -209,7 +209,7 @@ export default function OfflineBanner() {
       <div role="status" aria-live="polite" className={`${base} bg-amber-50 border-amber-200 text-amber-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
         <span>이 기기 저장 공간이 부족해 대기열 없이 바로 전송했습니다 — 실패하면 유실될 수 있으니 설정 &gt; 데이터 백업으로 공간을 확보해주세요.</span>
-        <button type="button" onClick={() => setQuotaFallback('none')} className={`${linkBtn} ml-auto text-amber-600 hover:text-amber-800`}>닫기</button>
+        <button type="button" onClick={() => setQuotaFallback('none')} className={`${linkBtn} ml-auto text-amber-700 hover:text-amber-800`}>닫기</button>
       </div>
     );
   }

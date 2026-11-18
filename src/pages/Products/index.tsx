@@ -107,7 +107,7 @@ export default function Products() {
               lowStockOnly ? 'bg-orange-100 border-orange-300' : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
             )}
           >
-            <AlertTriangle size={16} className="text-orange-500 flex-shrink-0" />
+            <AlertTriangle size={16} className="text-orange-700 flex-shrink-0" />
             <p className="text-sm text-orange-700 font-medium flex-1">
               재고 부족 제품이 <strong>{lowStockCount}종</strong> 있습니다. 빠른 발주가 필요합니다.
             </p>
@@ -125,7 +125,7 @@ export default function Products() {
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">재고 부족</p>
-            <p className={clsx('text-2xl font-bold', lowStockCount > 0 ? 'text-red-500' : 'text-gray-900')}>
+            <p className={clsx('text-2xl font-bold', lowStockCount > 0 ? 'text-red-600' : 'text-gray-900')}>
               {lowStockCount}<span className="text-sm font-medium ml-1">종</span>
             </p>
           </div>
@@ -227,9 +227,9 @@ export default function Products() {
                             {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}
                             <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
                               <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{p.category}</span>
-                              <span className={clsx('font-bold', isLow ? 'text-red-500' : 'text-gray-700')}>재고 {p.stock}{p.unit}</span>
+                              <span className={clsx('font-bold', isLow ? 'text-red-600' : 'text-gray-700')}>재고 {p.stock}{p.unit}</span>
                               {isLow && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs font-medium"><AlertTriangle size={10} /> 부족</span>}
-                              <span className={clsx('font-semibold', margin >= 50 ? 'text-green-600' : margin >= 30 ? 'text-blue-600' : 'text-orange-500')}>마진 {margin}%</span>
+                              <span className={clsx('font-semibold', margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-blue-600' : 'text-orange-700')}>마진 {margin}%</span>
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -238,7 +238,7 @@ export default function Products() {
                               <button onClick={() => handleSell(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg"><ShoppingCart size={11} />판매</button>
                               <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
                               <button onClick={() => setEditProduct(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={16} /></button>
-                              <button onClick={() => handleDeleteProduct(p)} className="p-2.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="제품 삭제"><Trash2 size={16} /></button>
+                              <button onClick={() => handleDeleteProduct(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="제품 삭제"><Trash2 size={16} /></button>
                             </span>
                           </div>
                         </div>
@@ -293,7 +293,7 @@ export default function Products() {
                             {p.cost.toLocaleString()}원
                           </td>
                           <td className="px-4 py-4 text-center">
-                            <p className={clsx('text-sm font-bold', isLow ? 'text-red-500' : 'text-gray-800')}>
+                            <p className={clsx('text-sm font-bold', isLow ? 'text-red-600' : 'text-gray-800')}>
                               {p.stock}{p.unit}
                             </p>
                             <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit}</p>
@@ -304,13 +304,13 @@ export default function Products() {
                                 <AlertTriangle size={10} /> 부족
                               </span>
                             ) : (
-                              <span className="px-2.5 py-1 bg-green-100 text-green-600 rounded-full text-xs font-medium">정상</span>
+                              <span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">정상</span>
                             )}
                           </td>
                           <td className="px-4 py-4 text-right">
                             <span className={clsx(
                               'text-sm font-bold',
-                              margin >= 50 ? 'text-green-600' : margin >= 30 ? 'text-blue-600' : 'text-orange-500'
+                              margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-blue-600' : 'text-orange-700'
                             )}>
                               {margin}%
                             </span>
@@ -342,7 +342,7 @@ export default function Products() {
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(p)}
-                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                 aria-label="제품 삭제"
                               >
                                 <Trash2 size={14} />
@@ -398,7 +398,7 @@ export default function Products() {
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="text-sm font-bold text-gray-900">{sale.totalPrice.toLocaleString()}원</span>
-                        <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>
+                        <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>
                       </div>
                     </div>
                   </li>
@@ -439,7 +439,7 @@ export default function Products() {
                       <td className="px-4 py-3.5 text-center">
                         <button
                           onClick={() => handleDeleteSale(sale)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
                           aria-label="판매 취소"
                           title="판매 취소 및 재고 복구"
                         >
@@ -750,7 +750,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
               <span className="text-xs text-gray-400">·</span>
               <span className="text-xs font-medium text-[#1a3a8f]">정가 {product.price.toLocaleString()}원</span>
               <span className="text-xs text-gray-400">·</span>
-              <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-500' : 'text-gray-500')}>
+              <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-600' : 'text-gray-500')}>
                 재고 {product.stock}{product.unit}
               </span>
             </div>

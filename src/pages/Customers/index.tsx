@@ -206,7 +206,7 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
         {compact
           ? <p className="text-xs font-semibold text-gray-500 uppercase">결제 내역</p>
           : <h3 className="font-bold text-gray-900">결제 내역</h3>}
-        <button type="button" onClick={onAdd} className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1">
+        <button type="button" onClick={onAdd} className="text-xs text-primary-600 hover:text-blue-700 font-medium flex items-center gap-1">
           <Plus size={12} />결제 등록
         </button>
       </div>
@@ -228,7 +228,7 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
                   <p className="text-xs font-medium text-gray-800 truncate">
                     {p.typeLabel}
                     {p.status !== 'completed' && (
-                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-2xs ${p.status === 'refunded' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'}`}>{PAYMENT_STATUS_LABEL[p.status] ?? p.status}</span>
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-2xs ${p.status === 'refunded' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-700'}`}>{PAYMENT_STATUS_LABEL[p.status] ?? p.status}</span>
                     )}
                   </p>
                   <p className="text-xs text-gray-400 truncate">{formatDate(p.paymentDate)} · {p.paymentMethod}{p.memo ? ` · ${p.memo}` : ''}</p>
@@ -259,7 +259,7 @@ function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 
   }
   const late = info.daysLeft < 0;
   return (
-    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-600' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술 기록의 다음 방문 권장일' : '마지막 방문일 + 재방문 권장 주기'}>
+    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-700' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술 기록의 다음 방문 권장일' : '마지막 방문일 + 재방문 권장 주기'}>
       {formatDate(info.dueDate)} ({late ? `${-info.daysLeft}일 지남` : info.daysLeft === 0 ? '오늘' : `D-${info.daysLeft}`})
     </span>
   );
@@ -1552,7 +1552,7 @@ export default function Customers() {
                           <p className="text-xs font-semibold text-gray-800">{c.consultDate}{c.staffName ? <span className="font-normal text-gray-400"> · {c.staffName}</span> : null}</p>
                           <span className="flex items-center gap-1.5">
                             {c.skinTypeResult && <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
-                            <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-2.5 -m-2 text-gray-300 active:text-red-400"><X size={16} /></button>
+                            <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-2.5 -m-2 text-gray-300 active:text-red-600"><X size={16} /></button>
                           </span>
                         </div>
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
@@ -1601,7 +1601,7 @@ export default function Customers() {
                           <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
                           <span className="flex items-center gap-1.5">
                             <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                              cp.isCompleted ? 'bg-slate-200 text-slate-600' : (cp.expiryDate && cp.expiryDate < today()) ? 'bg-red-100 text-red-500' : 'bg-green-100 text-green-700'
+                              cp.isCompleted ? 'bg-slate-200 text-slate-600' : (cp.expiryDate && cp.expiryDate < today()) ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'
                             }`}>{cp.isCompleted ? '완료' : (cp.expiryDate && cp.expiryDate < today()) ? '만료' : '진행중'}</span>
                             <button type="button" onClick={() => setManageProgram(cp)} aria-label={`${cp.programName} 관리`}
                               className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
@@ -1854,7 +1854,7 @@ export default function Customers() {
                   <div className="flex items-center justify-between text-xs text-gray-400 pl-10">
                     <span>방문 {customer.totalVisits}회</span>
                     {activeProgs > 0 && (
-                      <span className="text-blue-500 font-medium">활성 {activeProgs}개</span>
+                      <span className="text-primary-600 font-medium">활성 {activeProgs}개</span>
                     )}
                     {isRisk && <AlertCircle size={11} className="text-orange-400" />}
                   </div>
@@ -1934,7 +1934,7 @@ export default function Customers() {
                     {selected.allergies && (
                       <p className="text-xs mt-0.5 text-amber-800 font-medium bg-amber-50 border border-amber-100 rounded-lg px-2 py-0.5 inline-block" data-testid="allergy-row">⚠ 알레르기·주의: {selected.allergies}</p>
                     )}
-                    <p className={`text-xs mt-0.5 ${isAnonymized(selected) ? 'text-gray-400' : selected.privacyConsent ? 'text-green-600' : 'text-amber-500'}`}>
+                    <p className={`text-xs mt-0.5 ${isAnonymized(selected) ? 'text-gray-400' : selected.privacyConsent ? 'text-green-700' : 'text-amber-700'}`}>
                       개인정보 동의: {isAnonymized(selected)
                         ? '익명화됨 (보존기간 경과)'
                         : selected.privacyConsent
@@ -2056,7 +2056,7 @@ export default function Customers() {
               </div>
 
               <div className="mt-3 p-3 bg-gray-50 rounded-xl">
-                {selected.memo ? <p className="text-xs text-yellow-700 whitespace-pre-line">📝 {selected.memo}</p> : <p className="text-xs text-yellow-600/60">📝 메모 없음</p>}
+                {selected.memo ? <p className="text-xs text-yellow-700 whitespace-pre-line">📝 {selected.memo}</p> : <p className="text-xs text-amber-700/60">📝 메모 없음</p>}
                 {quickMemoRow(false)}
               </div>
             </div>
@@ -2103,7 +2103,7 @@ export default function Customers() {
                           </div>
                           <button
                             onClick={() => handleConsultDelete(c)}
-                            className="text-gray-300 hover:text-red-400"
+                            className="text-gray-300 hover:text-red-600"
                             aria-label="상담 삭제"
                           >
                             <X size={14} />
@@ -2175,7 +2175,7 @@ export default function Customers() {
                 <h3 className="font-bold text-gray-900">등록 프로그램</h3>
                 <button
                   onClick={() => setShowProgramModal(true)}
-                  className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1"
+                  className="text-xs text-primary-600 hover:text-blue-700 font-medium flex items-center gap-1"
                 >
                   <Plus size={12} />추가
                 </button>
@@ -2185,7 +2185,7 @@ export default function Customers() {
                 <div className="text-center py-6">
                   <Tag size={28} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">등록된 프로그램이 없어요</p>
-                  <button onClick={() => setShowProgramModal(true)} className="mt-2 text-xs text-blue-500 hover:underline">
+                  <button onClick={() => setShowProgramModal(true)} className="mt-2 text-xs text-primary-600 hover:underline">
                     프로그램 등록하기
                   </button>
                 </div>
@@ -2205,7 +2205,7 @@ export default function Customers() {
                             <div className="flex items-center gap-2">
                               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 font-medium">{cp.category}</span>
                               {cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">완료</span>}
-                              {isExpired && !cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-400">만료</span>}
+                              {isExpired && !cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600">만료</span>}
                             </div>
                             <p className="font-semibold text-sm text-gray-900 mt-1">{cp.programName}</p>
                           </div>
@@ -2255,7 +2255,7 @@ export default function Customers() {
                                     {formatDate(t.treatmentDate)} · {t.treatmentDetails || t.programName || '관리'}
                                     {t.staffName ? ` (${t.staffName})` : ''}
                                   </span>
-                                  <span className="font-semibold text-orange-500 whitespace-nowrap">-{t.sessionsUsed}회</span>
+                                  <span className="font-semibold text-orange-700 whitespace-nowrap">-{t.sessionsUsed}회</span>
                                 </div>
                               ))}
                               {deductions.length > 10 && (
@@ -2290,7 +2290,7 @@ export default function Customers() {
                     {logs.map(log => (
                       <div key={log.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
                         <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
-                          <Scissors size={14} className="text-green-600" />
+                          <Scissors size={14} className="text-green-700" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
@@ -2338,7 +2338,7 @@ export default function Customers() {
               </p>
               <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-xs text-gray-600">
                 <p className="font-bold text-gray-800 text-sm mb-1">양식 안내</p>
-                <p>• <strong className="text-red-500">필수</strong>: <strong>이름</strong>, <strong>전화번호</strong> — 둘 중 하나라도 없으면 그 줄은 건너뜁니다</p>
+                <p>• <strong className="text-red-600">필수</strong>: <strong>이름</strong>, <strong>전화번호</strong> — 둘 중 하나라도 없으면 그 줄은 건너뜁니다</p>
                 <p>• 선택: 성별(남성/여성), 등급(신규·VIP 등), 생년월일(1990-01-15 형식), 피부유형, 유입경로, 이메일, 주소, 메모</p>
                 <p>• 첫 번째 줄은 반드시 <strong>항목 이름(헤더)</strong>이어야 하고, 첫 번째 시트만 읽습니다</p>
                 <p>• 이미 등록된 고객과 <strong>전화번호가 같으면 자동으로 건너뜁니다</strong> (중복 걱정 없음)</p>
@@ -2617,7 +2617,7 @@ export default function Customers() {
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
                 </div>
                 {selectedProgForForm && progForm.pricePaid && parseInt(progForm.pricePaid) < selectedProgForForm.price && (
-                  <p className="text-xs text-orange-500 mt-1">
+                  <p className="text-xs text-orange-700 mt-1">
                     💡 정가보다 {formatPrice(selectedProgForForm.price - parseInt(progForm.pricePaid))} 할인
                   </p>
                 )}
@@ -2809,7 +2809,7 @@ export default function Customers() {
                       </p>
                     )}
                     {aiResult && !aiResult.available && (
-                      <p className="text-xs text-amber-600">{aiResult.reason}</p>
+                      <p className="text-xs text-amber-700">{aiResult.reason}</p>
                     )}
                     {aiResult?.available && aiResult.scores && (
                       <div className="grid grid-cols-5 gap-1.5">

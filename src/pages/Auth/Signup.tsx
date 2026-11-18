@@ -151,7 +151,7 @@ export default function Signup() {
                     <div className="flex items-center gap-3 px-4 py-3 border border-gray-200 rounded-xl bg-gray-50">
                       <img src={licenseImage} alt="사업자등록증 미리보기" className="w-12 h-12 rounded-lg object-cover border border-gray-200" />
                       <span className="flex-1 text-sm text-gray-600 truncate">{licenseFileName}</span>
-                      <button type="button" onClick={() => { setLicenseImage(''); setLicenseFileName(''); }} className="p-1.5 text-gray-400 hover:text-red-500" aria-label="첨부 삭제"><X size={16} /></button>
+                      <button type="button" onClick={() => { setLicenseImage(''); setLicenseFileName(''); }} className="p-1.5 text-gray-400 hover:text-red-600" aria-label="첨부 삭제"><X size={16} /></button>
                     </div>
                   ) : (
                     <button type="button" onClick={() => licenseInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-[#1a3a8f] hover:text-[#1a3a8f] transition-all">
@@ -208,7 +208,7 @@ export default function Signup() {
                       type="checkbox"
                       checked={form[item.key]}
                       onChange={e => set(item.key, e.target.checked)}
-                      className="rounded text-blue-500 w-4 h-4"
+                      className="rounded text-primary-600 w-4 h-4"
                     />
                     <span className="text-sm text-gray-700">{item.label}</span>
                   </label>
@@ -218,7 +218,7 @@ export default function Signup() {
                     type="checkbox"
                     checked={form.agreeTerms && form.agreePrivacy && form.agreeMarketing}
                     onChange={e => setForm(p => ({ ...p, agreeTerms: e.target.checked, agreePrivacy: e.target.checked, agreeMarketing: e.target.checked }))}
-                    className="rounded text-blue-500 w-4 h-4"
+                    className="rounded text-primary-600 w-4 h-4"
                   />
                   <span className="text-sm font-medium text-gray-500">전체 동의</span>
                 </label>

@@ -611,7 +611,7 @@ export default function Sales() {
                   {[...monthPayments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate)).slice(0, 5).map(p => (
                     <div key={p.id} className="flex items-center gap-3 py-1.5">
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${p.type === 'product' ? 'bg-purple-50' : 'bg-blue-50'}`}>
-                        {p.type === 'product' ? <ShoppingBag size={13} className="text-purple-500" /> : <Scissors size={13} className="text-blue-500" />}
+                        {p.type === 'product' ? <ShoppingBag size={13} className="text-purple-500" /> : <Scissors size={13} className="text-primary-600" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{customerLink(p, '고객')}</p>
@@ -683,21 +683,21 @@ export default function Sales() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">
                           {customerLink(p, '—')}
-                          {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
-                          {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
+                          {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full font-medium">환불</span>}
+                          {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
                         </p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                           <span>{formatDate(p.paymentDate)}</span>
                           <span className={`px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{p.typeLabel}</span>
                           <span>{p.paymentMethod}</span>
-                          {p.discountAmount > 0 && <span className="text-orange-500">-{formatPrice(p.discountAmount)}</span>}
+                          {p.discountAmount > 0 && <span className="text-orange-700">-{formatPrice(p.discountAmount)}</span>}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
                         <span className="flex items-center gap-1">
                           <button onClick={() => openEdit(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="결제 수정"><Pencil size={16} /></button>
-                          <button onClick={() => handleDelete(p)} className="p-2.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="결제 삭제"><Trash2 size={16} /></button>
+                          <button onClick={() => handleDelete(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="결제 삭제"><Trash2 size={16} /></button>
                         </span>
                       </div>
                     </div>
@@ -718,9 +718,9 @@ export default function Sales() {
                       <span className="text-gray-500 text-xs">{formatDate(p.paymentDate)}</span>
                       <span className="col-span-2 font-medium text-gray-800">
                         {customerLink(p, '—')}
-                        {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-500">-{formatPrice(p.discountAmount)}</span>}
-                        {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
-                        {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
+                        {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-700">-{formatPrice(p.discountAmount)}</span>}
+                        {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full font-medium">환불</span>}
+                        {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
                       </span>
                       <span>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -733,7 +733,7 @@ export default function Sales() {
                         <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">
                           <Pencil size={13} />
                         </button>
-                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
+                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
                           <Trash2 size={13} />
                         </button>
                       </span>
@@ -827,7 +827,7 @@ export default function Sales() {
                           <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
                           <span className="flex items-center gap-1">
                             <button onClick={() => openExpenseEdit(x)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="지출 수정"><Pencil size={16} /></button>
-                            <button onClick={() => handleExpenseDelete(x)} className="p-2.5 text-gray-400 hover:text-red-500 rounded-lg" aria-label="지출 삭제"><Trash2 size={16} /></button>
+                            <button onClick={() => handleExpenseDelete(x)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="지출 삭제"><Trash2 size={16} /></button>
                           </span>
                         </div>
                       </div>
@@ -861,7 +861,7 @@ export default function Sales() {
                           <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 수정">
                             <Pencil size={13} />
                           </button>
-                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
+                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
                             <Trash2 size={13} />
                           </button>
                         </span>
@@ -939,7 +939,7 @@ export default function Sales() {
                 ))}
                 <div className="flex justify-between py-2 font-bold text-gray-900 bg-gray-50 -mx-2 px-2 rounded-lg my-1">
                   <span>매출총이익</span>
-                  <span className={pnl.cur.grossProfit >= 0 ? 'text-gray-900' : 'text-red-500'}>{formatPrice(pnl.cur.grossProfit)}</span>
+                  <span className={pnl.cur.grossProfit >= 0 ? 'text-gray-900' : 'text-red-600'}>{formatPrice(pnl.cur.grossProfit)}</span>
                 </div>
                 {/* 판관비 */}
                 <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100">
@@ -1124,7 +1124,7 @@ export default function Sales() {
                   ))}
                 </div>
                 {form.status === 'refunded' && (
-                  <p className="text-xs text-red-400 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
+                  <p className="text-xs text-red-600 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
                 )}
               </div>
 

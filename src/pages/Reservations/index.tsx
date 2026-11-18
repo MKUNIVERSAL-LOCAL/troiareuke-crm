@@ -626,7 +626,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
           const dayReservations = reservations.filter(r => r.date === dayKey);
           return (
             <div key={i} className={clsx('py-3 px-2 text-center border-r border-gray-100 last:border-r-0', isToday && 'bg-primary-50')}>
-              <p className={clsx('text-xs font-medium', i === 5 ? 'text-blue-500' : i === 6 ? 'text-red-500' : 'text-gray-500')}>
+              <p className={clsx('text-xs font-medium', i === 5 ? 'text-primary-600' : i === 6 ? 'text-red-600' : 'text-gray-500')}>
                 {dayNames[i]}
               </p>
               <p className={clsx('text-sm font-bold mt-0.5', isToday ? 'text-primary-700' : 'text-gray-800')}>
@@ -737,7 +737,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
         <p className="text-sm font-bold text-gray-800">
           {dayReservations.length}건의 예약
-          {dayGoogleEvents.length > 0 && <span className="text-blue-500 ml-2">+ Google {dayGoogleEvents.length}건</span>}
+          {dayGoogleEvents.length > 0 && <span className="text-primary-600 ml-2">+ Google {dayGoogleEvents.length}건</span>}
         </p>
         <div className="flex items-center gap-3">
           {staffList.map(s => (
@@ -1118,9 +1118,9 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               type="checkbox"
               checked={addToGoogle}
               onChange={e => setAddToGoogle(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-primary-300"
+              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-300"
             />
-            <Calendar size={14} className="text-blue-500" />
+            <Calendar size={14} className="text-primary-600" />
             <span className="text-sm text-gray-700">Google 캘린더에도 추가</span>
           </label>
         )}

@@ -135,7 +135,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         {serviceDaysLeft !== null && serviceDaysLeft >= 0 && serviceDaysLeft <= 14 && (
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl px-4 py-3">
             <p className="text-xs font-bold text-amber-700">사용기간 만료 예정</p>
-            <p className="text-xs text-amber-500 mt-0.5">
+            <p className="text-xs text-amber-700 mt-0.5">
               {serviceEndsAt!.slice(0, 10).replace(/-/g, '.')}까지 (D-{serviceDaysLeft})
             </p>
             <p className="text-2xs text-amber-400 mt-1">연장은 본사에 문의해주세요</p>
@@ -156,7 +156,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
         </div>
         <button
           onClick={() => { resetFeatureFlags(); clearLocalPhotoCacheForLogout(); logout(); }}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
         >
           <LogOut size={14} />
           <span>로그아웃</span>

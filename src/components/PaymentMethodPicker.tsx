@@ -54,7 +54,7 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
                   setMethods(getAllPaymentMethods());
                   if (value === m) onChange('카드');
                 }}
-                className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${value === m ? 'text-white/70 hover:text-white' : 'text-gray-300 hover:text-red-400'}`}
+                className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${value === m ? 'text-white/70 hover:text-white' : 'text-gray-300 hover:text-red-600'}`}
               >
                 <X size={12} />
               </button>

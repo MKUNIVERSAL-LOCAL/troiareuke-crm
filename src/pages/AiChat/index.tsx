@@ -381,7 +381,7 @@ function AiChatInner() {
         {/* 웹 환경 안내 배너 */}
         {!IS_ELECTRON && (
           <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-            <AlertTriangle size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+            <AlertTriangle size={18} className="text-amber-700 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-amber-800">브라우저 환경 안내</p>
               <p className="text-xs text-amber-700 mt-1">
@@ -389,7 +389,7 @@ function AiChatInner() {
                 <br />
                 <strong>OpenAI</strong> 또는 <strong>Gemini</strong> API 키를 설정하면 웹에서도 AI 분석을 사용할 수 있습니다.
               </p>
-              <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+              <p className="text-xs text-amber-700 mt-1 flex items-center gap-1">
                 <Monitor size={12} />
                 Claude를 사용하려면 데스크탑 앱(Windows/Mac)에서 접속해주세요.
               </p>
@@ -406,16 +406,16 @@ function AiChatInner() {
             'bg-red-50 text-red-600 border-red-200'
           }`}>
             <Zap size={12} className={
-              status.color === 'green' ? 'text-green-500' :
-              status.color === 'yellow' ? 'text-yellow-500' :
-              'text-red-400'
+              status.color === 'green' ? 'text-green-700' :
+              status.color === 'yellow' ? 'text-amber-700' :
+              'text-red-600'
             } />
             {status.label}
           </div>
 
           <div className="flex-1" />
 
-          <button onClick={clearChat} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+          <button onClick={clearChat} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
             <Trash2 size={14} /> 초기화
           </button>
 
@@ -442,7 +442,7 @@ function AiChatInner() {
                 <label className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-violet-500 inline-block" />
                   Claude (Anthropic) — CRM 분석에 최적화 (추천)
-                  <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline ml-auto">키 발급 &rarr;</a>
+                  <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-primary-600 hover:underline ml-auto">키 발급 &rarr;</a>
                 </label>
                 <input type="password" value={claudeKey} onChange={e => setClaudeKey(e.target.value)}
                   placeholder="sk-ant-..." className="w-full px-3 py-2.5 text-sm border border-violet-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 font-mono bg-violet-50/30" />
@@ -457,7 +457,7 @@ function AiChatInner() {
                 <label className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-emerald-400 inline-block" />
                   OpenAI (ChatGPT) — 대안
-                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline ml-auto">키 발급 &rarr;</a>
+                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-primary-600 hover:underline ml-auto">키 발급 &rarr;</a>
                 </label>
                 <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)}
                   placeholder="sk-..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 font-mono" />
@@ -467,7 +467,7 @@ function AiChatInner() {
                 <label className="text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-blue-400 inline-block" />
                   Google Gemini — 대안 (무료 한도 있음)
-                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline ml-auto">키 발급 &rarr;</a>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-primary-600 hover:underline ml-auto">키 발급 &rarr;</a>
                 </label>
                 <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)}
                   placeholder="AIza..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 font-mono" />
@@ -519,7 +519,7 @@ function AiChatInner() {
                     {msg.usedProvider && (
                       <span className={`text-2xs px-1.5 py-0.5 rounded-full font-medium ${
                         msg.usedProvider === 'claude' ? 'bg-violet-100 text-violet-600' :
-                        msg.usedProvider === 'openai' ? 'bg-emerald-100 text-emerald-600' :
+                        msg.usedProvider === 'openai' ? 'bg-emerald-100 text-emerald-700' :
                         'bg-blue-100 text-blue-600'
                       }`}>
                         {msg.usedProvider === 'claude' ? 'Claude' : msg.usedProvider === 'openai' ? 'GPT' : msg.usedProvider === 'server' ? '본사 AI' : 'Gemini'}
@@ -527,7 +527,7 @@ function AiChatInner() {
                     )}
                     {msg.role === 'assistant' && msg.id !== '0' && (
                       <button onClick={() => copyMessage(msg.id, msg.content)} className="text-gray-300 hover:text-gray-500 transition-colors">
-                        {copiedId === msg.id ? <Check size={11} className="text-green-500" /> : <Copy size={11} />}
+                        {copiedId === msg.id ? <Check size={11} className="text-green-700" /> : <Copy size={11} />}
                       </button>
                     )}
                   </div>
@@ -582,7 +582,7 @@ function AiChatInner() {
           ].map(item => (
             <div key={item.label} className="bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
               <p className="text-xs text-gray-400">{item.label}</p>
-              <p className={`text-lg font-bold mt-0.5 ${item.color === 'blue' ? 'text-[#1a3a8f]' : item.color === 'red' ? 'text-red-500' : 'text-orange-500'}`}>
+              <p className={`text-lg font-bold mt-0.5 ${item.color === 'blue' ? 'text-[#1a3a8f]' : item.color === 'red' ? 'text-red-600' : 'text-orange-700'}`}>
                 {item.value}
               </p>
             </div>

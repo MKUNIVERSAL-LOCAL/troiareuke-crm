@@ -144,7 +144,7 @@ export default function Programs() {
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <p className="text-xs text-gray-400 mb-1">활성 프로그램</p>
-          <p className="text-2xl font-bold text-green-600">{activeCount}개</p>
+          <p className="text-2xl font-bold text-green-700">{activeCount}개</p>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <p className="text-xs text-gray-400 mb-1">최저가</p>
@@ -247,14 +247,14 @@ export default function Programs() {
                       {normalizeCategory(program.category)}
                     </span>
                     {!program.isActive && (
-                      <span className="text-xs text-red-400 bg-red-50 px-2 py-0.5 rounded-full">비활성</span>
+                      <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full">비활성</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(program)} aria-label={`${program.name} 수정`} className="p-2.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
+                    <button onClick={() => openEdit(program)} aria-label={`${program.name} 수정`} className="p-2.5 text-gray-400 hover:text-primary-600 hover:bg-blue-50 rounded-lg transition-colors">
                       <Edit2 size={16} />
                     </button>
-                    <button onClick={() => setDeleteConfirm(program.id)} aria-label={`${program.name} 삭제`} className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                    <button onClick={() => setDeleteConfirm(program.id)} aria-label={`${program.name} 삭제`} className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -470,7 +470,7 @@ export default function Programs() {
               {parseInt(form.price) > 0 && form.costPrice !== '' && (
                 <div className="bg-gray-50 rounded-xl p-3 text-sm flex items-center justify-between">
                   <span className="text-gray-500">예상 마진</span>
-                  <span className="font-bold text-green-600">
+                  <span className="font-bold text-green-700">
                     {formatPrice(parseInt(form.price) - (parseInt(form.costPrice) || 0))}
                     {' '}({Math.round(((parseInt(form.price) - (parseInt(form.costPrice) || 0)) / parseInt(form.price)) * 100)}%)
                   </span>

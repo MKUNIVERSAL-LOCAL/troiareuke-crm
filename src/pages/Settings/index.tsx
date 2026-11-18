@@ -713,7 +713,7 @@ export default function Settings() {
                             disabled={hours.isOff}
                             className="form-input text-sm w-28 min-w-0 disabled:opacity-40"
                           />
-                          {hours.isOff && <span className="text-xs text-red-400 font-medium whitespace-nowrap">휴무</span>}
+                          {hours.isOff && <span className="text-xs text-red-600 font-medium whitespace-nowrap">휴무</span>}
                         </div>
                       </div>
                     );
@@ -1083,7 +1083,7 @@ export default function Settings() {
                       <div>
                         <p className="text-sm font-semibold text-gray-900">{n.label}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{n.desc}</p>
-                        <p className="text-xs text-amber-600 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
+                        <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
                         <input
@@ -1135,7 +1135,7 @@ export default function Settings() {
                               <button
                                 onClick={() => handleDeleteService(svc.id)}
                                 aria-label={`${svc.name} 삭제`}
-                                className="text-xs text-red-500 hover:text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
+                                className="text-xs text-red-600 hover:text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
                               >
                                 <Trash2 size={12} /> 삭제
                               </button>
@@ -1365,12 +1365,12 @@ export default function Settings() {
                             type="checkbox"
                             checked={exportSelection.has(d.key)}
                             onChange={() => toggleExport(d.key)}
-                            className="mt-0.5 rounded text-blue-500"
+                            className="mt-0.5 rounded text-primary-600"
                           />
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-gray-800">
                               {d.label}
-                              {d.sensitive && <span className="ml-1.5 text-2xs font-bold text-amber-600">민감정보</span>}
+                              {d.sensitive && <span className="ml-1.5 text-2xs font-bold text-amber-700">민감정보</span>}
                             </span>
                             <span className="block text-xs text-gray-400 mt-0.5">{d.description}</span>
                           </span>
@@ -1378,7 +1378,7 @@ export default function Settings() {
                       ))}
                     </div>
                     <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-                      <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                      <AlertCircle size={14} className="text-amber-700 mt-0.5 shrink-0" />
                       <p className="text-xs text-amber-700 leading-relaxed">
                         고객 연락처·피부상담 내역은 개인정보(민감정보)입니다. 다운로드한 파일은
                         외부 공유를 금지하고, 사용 후 안전하게 삭제해주세요. 시술 사진은 용량 문제로

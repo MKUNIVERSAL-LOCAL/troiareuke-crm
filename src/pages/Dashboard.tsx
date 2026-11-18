@@ -373,7 +373,7 @@ export default function Dashboard() {
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>
             <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <TrendingUp size={22} className="text-green-500" />
+              <TrendingUp size={22} className="text-green-700" />
             </div>
             <div>
               <p className="text-xs text-gray-500">결제 건수 (이번 달)</p>
@@ -548,7 +548,7 @@ export default function Dashboard() {
             {productsOn && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-50">
-                <AlertCircle size={15} className="text-orange-500" />
+                <AlertCircle size={15} className="text-orange-700" />
                 <h3 className="text-sm font-bold text-gray-900">재고 부족 알림</h3>
               </div>
               <div className="divide-y divide-gray-50">
@@ -568,7 +568,7 @@ export default function Dashboard() {
                         <span className="block text-xs text-gray-400">{p.category}</span>
                       </span>
                       <span className="block text-right">
-                        <span className="block text-xs font-bold text-red-500">{p.stock}{p.unit}</span>
+                        <span className="block text-xs font-bold text-red-600">{p.stock}{p.unit}</span>
                         <span className="block text-xs text-gray-400">최소 {p.minStock}{p.unit} · <span className="text-[#1a3a8f] font-medium">입고</span></span>
                       </span>
                     </button>

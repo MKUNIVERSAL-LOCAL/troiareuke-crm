@@ -24,6 +24,7 @@ async function expectNoHorizontalOverflow(page: Page, label: string) {
 test.describe.configure({ mode: 'serial' });
 
 test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없이 동작한다', async ({ page }) => {
+  test.slow(); // 단독 ≈40s — 병렬 부하 여유 (2026-11-18)
   page.on('dialog', d => d.accept());
 
   await page.goto('/signup');

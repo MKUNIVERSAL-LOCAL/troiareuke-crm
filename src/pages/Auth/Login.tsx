@@ -160,7 +160,7 @@ export default function Login() {
             </div>
 
             <div className="mt-4 text-center">
-              <Link to="/admin/login" className="text-xs text-gray-400 hover:text-blue-500 transition-colors">
+              <Link to="/admin/login" className="text-xs text-gray-400 hover:text-primary-600 transition-colors">
                 관리자 로그인 →
               </Link>
             </div>

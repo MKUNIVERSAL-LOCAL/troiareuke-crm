@@ -27,6 +27,8 @@ on:
       - 'tsconfig*.json'
       - 'vite.config.*'
       - 'scripts/check-routes.mjs'
+      - 'e2e/**'
+      - 'playwright.config.ts'
       - '.github/workflows/client-ci.yml'
   workflow_dispatch:
 
@@ -44,6 +46,8 @@ jobs:
         run: npm run build
       - name: Dead-route static check
         run: node scripts/check-routes.mjs
+      - name: E2E spec type check (e2e/tsconfig.json, strict + unused)
+        run: npm run check:e2e-types
       - name: Distribution invariants (no-redownload policy)
         run: node scripts/check-distribution-invariants.mjs
 

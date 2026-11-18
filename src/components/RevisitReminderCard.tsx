@@ -118,7 +118,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
                 rows={6}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 resize-none focus:outline-none"
               />
-              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
                 ⚠️ 자동 발송은 문자/카카오 게이트웨이(회사 NAS 서버) 연동 후 지원됩니다. 현재는 초안을 복사해 직접 발송해주세요.
               </p>
               <div className="flex gap-2">

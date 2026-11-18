@@ -66,7 +66,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
                 <td className={td}>{formatPrice(r.productAmount)}</td>
                 <td className={td}>{r.customers}명</td>
                 <td className={`${td} pr-4 sm:pr-6 text-gray-500`} title={r.pendingCompletion > 0 ? `완료 처리 안 된 지난 예약 ${r.pendingCompletion}건` : undefined}>
-                  {r.upcomingReservations}건{r.pendingCompletion > 0 && <span className="text-amber-600"> · 미완료 {r.pendingCompletion}</span>}
+                  {r.upcomingReservations}건{r.pendingCompletion > 0 && <span className="text-amber-700"> · 미완료 {r.pendingCompletion}</span>}
                 </td>
               </tr>
             ))}

@@ -49,7 +49,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
     <div className={`bg-white rounded-xl border border-amber-200 ${compact ? 'p-4' : 'p-5 shadow-sm'}`} data-testid="pending-completion-card">
       <div className="flex items-center justify-between mb-3 gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <ClipboardCheck size={16} className="text-amber-600 flex-shrink-0" />
+          <ClipboardCheck size={16} className="text-amber-700 flex-shrink-0" />
           <h3 className="text-sm font-bold text-gray-900 truncate">완료 처리 안 된 지난 예약</h3>
           <span className="text-xs font-semibold text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 whitespace-nowrap" data-testid="pending-completion-count">{list.length}건</span>
         </div>

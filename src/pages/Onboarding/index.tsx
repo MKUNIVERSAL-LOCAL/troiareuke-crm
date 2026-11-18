@@ -447,7 +447,7 @@ export default function Onboarding() {
                         <input value={s.price} onChange={e => updateCustomService(i, 'price', e.target.value)}
                           className="w-28 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 text-right"
                           placeholder="가격 (원)" />
-                        <button onClick={() => removeCustomService(i)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
+                        <button onClick={() => removeCustomService(i)} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors">
                           <X size={16} />
                         </button>
                       </div>
@@ -631,13 +631,13 @@ export default function Onboarding() {
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">설정 완료!</h2>
               <p className="text-gray-400 mb-2 text-sm">{shopName}의 에스테틱 CRM이 준비되었습니다</p>
-              <p className="text-xs text-blue-500 mb-2 font-medium">
+              <p className="text-xs text-primary-600 mb-2 font-medium">
                 {selectedPlan === 'trial'
                   ? '14일 무료 체험이 시작됩니다'
                   : `${PLANS.find(p => p.id === selectedPlan)?.name || ''} 플랜이 활성화되었습니다`}
               </p>
               {selectedPlan !== 'trial' && (
-                <p className="text-xs text-green-600 mb-6 font-medium flex items-center justify-center gap-1">
+                <p className="text-xs text-green-700 mb-6 font-medium flex items-center justify-center gap-1">
                   <CheckCircle size={12} /> 결제가 성공적으로 완료되었습니다
                 </p>
               )}

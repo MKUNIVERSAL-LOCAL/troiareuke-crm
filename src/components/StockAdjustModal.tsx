@@ -86,7 +86,7 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
           <input inputMode="numeric" value={qty} onChange={e => setQty(e.target.value)} placeholder="0" aria-label={mode === 'in' ? '입고 수량' : '실제 재고 수량'} autoFocus
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30" />
           <p className="text-xs text-gray-400 mt-1">
-            {qty && n === null ? <span className="text-rose-600">숫자만 입력하세요</span> : <>저장 후 재고: <b className={previewStock !== null && previewStock <= product.minStock ? 'text-red-500' : 'text-gray-700'}>{previewStock ?? product.stock}{product.unit}</b></>}
+            {qty && n === null ? <span className="text-rose-600">숫자만 입력하세요</span> : <>저장 후 재고: <b className={previewStock !== null && previewStock <= product.minStock ? 'text-red-600' : 'text-gray-700'}>{previewStock ?? product.stock}{product.unit}</b></>}
           </p>
         </div>
         {mode === 'in' && (

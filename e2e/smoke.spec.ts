@@ -13,6 +13,7 @@ const acc = makeAccount('E2E');
 test.describe.configure({ mode: 'serial' });
 
 test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는다', async ({ page }) => {
+  test.slow(); // 단독 ≈50s — 9개 테스트 병렬 부하에서 60s 전체 제한을 넘겨 실패(2026-11-18 17:00·17:20 재현) → 3배 여유
   page.on('dialog', d => d.accept());
 
   // ── 1~3. 가입 → 온보딩 → 고객 등록 (공통 헬퍼) ──

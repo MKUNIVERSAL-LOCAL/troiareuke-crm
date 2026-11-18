@@ -156,7 +156,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
           {pgEnabled === false && (
             <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
               <p className="text-xs text-amber-700 font-medium">온라인 결제 준비 중입니다</p>
-              <p className="text-xs text-amber-500 mt-1 leading-relaxed">
+              <p className="text-xs text-amber-700 mt-1 leading-relaxed">
                 본사에서 토스페이먼츠 가맹 계약을 완료하면 자동으로 활성화됩니다.
                 활성화되면 여기서 만든 링크로 고객이 카드·무통장입금 결제를 할 수 있어요.
               </p>
@@ -262,7 +262,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   </button>
                 )}
               </div>
-              {smsResult && <p className="text-xs text-blue-500">{smsResult}</p>}
+              {smsResult && <p className="text-xs text-primary-600">{smsResult}</p>}
               <p className="text-xs text-blue-400">
                 카톡·문자로 링크를 보내면 고객이 휴대폰에서 바로 결제할 수 있어요. 결제 완료 시 매출에 자동 기록됩니다.
               </p>
@@ -286,9 +286,9 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   return (
                     <div key={r.id} className="flex items-center gap-2 px-3 py-2 border border-gray-100 rounded-xl text-xs">
                       <span className={`px-2 py-0.5 rounded-full font-medium text-2xs whitespace-nowrap ${
-                        status.tone === 'ok' ? 'bg-emerald-50 text-emerald-600'
+                        status.tone === 'ok' ? 'bg-emerald-50 text-emerald-700'
                           : status.tone === 'bad' ? 'bg-gray-100 text-gray-600'
-                          : 'bg-amber-50 text-amber-600'
+                          : 'bg-amber-50 text-amber-700'
                       }`}>{status.label}</span>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-800 truncate">
@@ -300,9 +300,9 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                       {(r.status === 'pending' || r.status === 'vbank_wait') && (
                         <>
                           <button onClick={() => copyLink(r.url, r.id)} className="p-1 text-gray-300 hover:text-[#1a3a8f]" aria-label="링크 복사">
-                            {copiedId === r.id ? <CheckCircle size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                            {copiedId === r.id ? <CheckCircle size={13} className="text-emerald-700" /> : <Copy size={13} />}
                           </button>
-                          <button onClick={() => handleCancel(r)} className="p-1 text-gray-300 hover:text-red-500" aria-label="요청 취소">
+                          <button onClick={() => handleCancel(r)} className="p-1 text-gray-300 hover:text-red-600" aria-label="요청 취소">
                             <Ban size={13} />
                           </button>
                         </>

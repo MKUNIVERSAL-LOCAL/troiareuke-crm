@@ -381,7 +381,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
                 </button>
                 <button
                   onClick={() => handleDelete(t.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   title="삭제"
                 >
                   <Trash2 size={14} />
@@ -557,7 +557,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
 const SCHEDULE_STATUS_LABELS: Record<ScheduledMessage['status'], { label: string; color: string }> = {
   pending: { label: '대기', color: 'bg-blue-100 text-blue-600' },
   processing: { label: '발송 중', color: 'bg-primary-100 text-primary-600' },
-  sent: { label: '발송 완료', color: 'bg-green-100 text-green-600' },
+  sent: { label: '발송 완료', color: 'bg-green-100 text-green-700' },
   partial: { label: '일부 실패', color: 'bg-amber-100 text-amber-800' },
   failed: { label: '실패', color: 'bg-red-100 text-red-600' },
   canceled: { label: '취소됨', color: 'bg-gray-100 text-gray-500' },
@@ -610,7 +610,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
               {item.status === 'pending' && (
                 <button
                   onClick={() => handleCancel(item.id)}
-                  className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
+                  className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
                 >
                   취소
                 </button>
@@ -714,10 +714,10 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
                     h.status === 'sent' ? 'bg-green-100' : isGatewayPending ? 'bg-amber-100' : 'bg-red-100'
                   )}>
                     {h.status === 'sent'
-                      ? <CheckCircle size={16} className="text-green-600" />
+                      ? <CheckCircle size={16} className="text-green-700" />
                       : isGatewayPending
-                        ? <AlertCircle size={16} className="text-amber-500" />
-                        : <AlertCircle size={16} className="text-red-500" />
+                        ? <AlertCircle size={16} className="text-amber-700" />
+                        : <AlertCircle size={16} className="text-red-600" />
                     }
                   </div>
                   <div>
@@ -739,12 +739,12 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-bold text-gray-800">{h.recipients}명 대상</p>
                   {h.status === 'sent'
-                    ? <p className="text-xs text-green-500">성공 {h.successCount}명</p>
+                    ? <p className="text-xs text-green-700">성공 {h.successCount}명</p>
                     : isGatewayPending
-                      ? <p className="text-xs text-amber-500">미발송 (미연동)</p>
-                      : <p className="text-xs text-red-400">실패 {h.failCount}명</p>
+                      ? <p className="text-xs text-amber-700">미발송 (미연동)</p>
+                      : <p className="text-xs text-red-600">실패 {h.failCount}명</p>
                   }
-                  {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-400">실패 {h.failCount}명</p>}
+                  {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-600">실패 {h.failCount}명</p>}
                   {h.status === 'sent' && h.cost !== undefined && h.cost > 0 && (
                     <p className="text-xs text-gray-400 mt-1">예상 비용 {h.cost.toLocaleString()}원</p>
                   )}
@@ -926,7 +926,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     <Modal isOpen={true} onClose={onClose} title="메시지 발송" size="lg">
       {sendResult === 'success' ? (
         <div className="flex flex-col items-center justify-center py-12">
-          <CheckCircle size={48} className="text-green-500 mb-3" />
+          <CheckCircle size={48} className="text-green-700 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 완료!</p>
           <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다`}</p>
         </div>
@@ -944,7 +944,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         </div>
       ) : sendResult === 'error' ? (
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-          <AlertCircle size={48} className="text-red-400 mb-3" />
+          <AlertCircle size={48} className="text-red-600 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 실패</p>
           <p className="text-xs text-gray-400 mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
           <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
@@ -1056,7 +1056,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               <label className="text-xs font-medium text-gray-600">메시지 내용 *</label>
               <span className={clsx(
                 'text-xs font-medium',
-                content.length > charLimit ? 'text-red-500' : 'text-gray-400'
+                content.length > charLimit ? 'text-red-600' : 'text-gray-400'
               )}>
                 {content.length}/{charLimit}자
               </span>

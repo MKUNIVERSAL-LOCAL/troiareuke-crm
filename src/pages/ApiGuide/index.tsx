@@ -342,7 +342,7 @@ export default function ApiGuide() {
                       <button
                         onClick={() => toggleStatus(api.id, st)}
                         className={clsx('flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border-2 transition-all',
-                          st === 'connected' ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-600 hover:border-blue-300')}>
+                          st === 'connected' ? 'border-green-500 text-green-700 bg-green-50' : 'border-gray-200 text-gray-600 hover:border-blue-300')}>
                         {st === 'connected' ? <CheckCircle2 size={14} /> : <Circle size={14} />}
                         {st === 'connected' ? '확인 완료' : st === 'pending' ? '진행 중으로 표시' : '완료로 표시'}
                       </button>
@@ -403,7 +403,7 @@ export default function ApiGuide() {
 
         {/* Alert */}
         <div className="mt-4 flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <AlertCircle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
+          <AlertCircle size={16} className="text-amber-700 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-amber-700">
             <strong>백엔드 서버가 필요합니다.</strong> 위 API들은 실제 서버(Node.js, Python 등)와 데이터베이스(PostgreSQL 등)가 있어야 연동됩니다. 현재는 프론트엔드 프로토타입 단계입니다. 상용화를 위해서는 백엔드 개발이 필요합니다.
           </div>

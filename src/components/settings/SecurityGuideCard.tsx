@@ -74,9 +74,9 @@ export default function SecurityGuideCard() {
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h3 className="text-sm font-bold text-gray-900">백신·보안 예외 등록 (설치 후 1회)</h3>
         {doneAt ? (
-          <span className="flex items-center gap-1 text-xs font-medium text-emerald-600"><CheckCircle size={14} /> 완료 표시됨</span>
+          <span className="flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle size={14} /> 완료 표시됨</span>
         ) : (
-          <span className="text-xs font-medium text-amber-600">미완료</span>
+          <span className="text-xs font-medium text-amber-700">미완료</span>
         )}
       </div>
       <div className="px-6 py-5 space-y-4">

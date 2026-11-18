@@ -43,7 +43,7 @@ export default function SetupChecklistCard({ refreshKey = 0 }: { refreshKey?: nu
           <li key={i.key}>
             {i.done ? (
               <div className="flex items-center gap-3 px-5 py-3 text-sm text-gray-400">
-                <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0" />
+                <CheckCircle2 size={18} className="text-emerald-700 flex-shrink-0" />
                 <span className="line-through">{i.label}</span>
               </div>
             ) : (

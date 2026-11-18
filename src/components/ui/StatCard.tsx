@@ -14,9 +14,9 @@ interface StatCardProps {
 const accents = {
   primary: 'bg-primary-50 text-primary-600',
   pink: 'bg-rose-50 text-rose-600',
-  green: 'bg-emerald-50 text-emerald-600',
+  green: 'bg-emerald-50 text-emerald-700',
   blue: 'bg-blue-50 text-blue-600',
-  orange: 'bg-amber-50 text-amber-600',
+  orange: 'bg-amber-50 text-amber-700',
 };
 
 export default function StatCard({ title, value, subtitle, icon, trend, accent = 'primary' }: StatCardProps) {
@@ -30,7 +30,7 @@ export default function StatCard({ title, value, subtitle, icon, trend, accent =
           {trend && (
             <div className={clsx(
               'flex items-center gap-1 mt-2 text-xs font-medium',
-              trend.value >= 0 ? 'text-green-600' : 'text-red-500'
+              trend.value >= 0 ? 'text-green-700' : 'text-red-600'
             )}>
               {trend.value >= 0
                 ? <TrendingUp size={12} />

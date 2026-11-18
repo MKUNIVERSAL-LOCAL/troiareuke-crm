@@ -848,7 +848,7 @@ function TreatmentDetailModal({
 
         {t.nextAppointment && (
           <div className="flex items-center gap-2 bg-green-50 rounded-xl p-3">
-            <ClipboardList size={14} className="text-green-600 flex-shrink-0" />
+            <ClipboardList size={14} className="text-green-700 flex-shrink-0" />
             <p className="text-sm text-green-700 flex-1 min-w-0">다음 방문 권장: <strong>{t.nextAppointment}</strong></p>
             {/^\d{4}-\d{2}-\d{2}$/.test(t.nextAppointment) && (
               <button

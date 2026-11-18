@@ -35,9 +35,9 @@ export default function MobileTabBar() {
   // 서랍(햄버거) 없이 더보기에서 바로 — 어드민이 끈 모듈은 서랍과 같은 기준으로 제외
   const MORE_LINKS = [
     { to: '/programs', label: '시술 프로그램', icon: Tag, bg: 'bg-blue-50', fg: 'text-blue-600' },
-    { to: '/products', label: '제품/재고', icon: Package, bg: 'bg-amber-50', fg: 'text-amber-600' },
+    { to: '/products', label: '제품/재고', icon: Package, bg: 'bg-amber-50', fg: 'text-amber-700' },
     { to: '/staff', label: '직원 관리', icon: UserCog, bg: 'bg-teal-50', fg: 'text-teal-600' },
-    { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, bg: 'bg-emerald-50', fg: 'text-emerald-600' },
+    { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, bg: 'bg-emerald-50', fg: 'text-emerald-700' },
   ].filter(l => { const def = featureForPath(l.to); return !def || isFeatureEnabled(def.id); });
 
   const handleLogout = () => {
@@ -173,7 +173,7 @@ export default function MobileTabBar() {
                 className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors text-left"
               >
                 <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
-                  <LogOut size={20} className="text-red-500" />
+                  <LogOut size={20} className="text-red-600" />
                 </div>
                 <span className="text-sm font-medium text-red-600">로그아웃</span>
               </button>

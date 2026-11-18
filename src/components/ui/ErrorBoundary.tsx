@@ -29,7 +29,7 @@ export default class ErrorBoundary extends Component<Props, State> {
       <div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center space-y-4">
           <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto">
-            <AlertTriangle size={24} className="text-red-500" />
+            <AlertTriangle size={24} className="text-red-600" />
           </div>
           <h1 className="text-lg font-bold text-gray-900">화면을 표시하는 중 문제가 생겼습니다</h1>
           <p className="text-sm text-gray-500 leading-relaxed">
