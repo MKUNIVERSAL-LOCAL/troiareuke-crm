@@ -1304,7 +1304,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
         </div>
       </div>
       {showPayModal && (
-        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={CustomerProgramStore.getActive(r.customerId).length > 0 ? openTreatmentLog : undefined} />
+        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={CustomerProgramStore.getActive(r.customerId).length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined} />
       )}
     </Modal>
   );

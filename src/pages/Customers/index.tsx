@@ -567,7 +567,6 @@ export default function Customers() {
   useOverlayClose(showGradeMenu, () => setShowGradeMenu(false)); // 등급 메뉴 — Esc·뒤로가기로 닫기
   useOverlayClose(showMoreMenu, () => setShowMoreMenu(false));
   useFocusTrap(showMoreMenu, moreMenuRef);
-  useEffect(() => { setShowMoreMenu(false); }, [selected?.id]);
   // 포커스 트랩 — 첫 입력란 포커스·Tab 순환·닫힐 때 열었던 버튼으로 복원 (키보드 접근성 감사 2026-11-18)
   const addModalRef = useRef<HTMLDivElement>(null);
   const editModalRef = useRef<HTMLDivElement>(null);
@@ -1994,6 +1993,7 @@ export default function Customers() {
                       type="button"
                       onClick={() => setShowMoreMenu(v => !v)}
                       aria-label="더보기"
+                      title="병합·익명화·삭제"
                       aria-haspopup="menu"
                       aria-expanded={showMoreMenu}
                       className="flex items-center gap-1 px-2.5 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors"
@@ -2015,7 +2015,7 @@ export default function Customers() {
                             <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); handleAnonymizeOne(); }} aria-label="고객 익명화"
                               title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
                               className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                              <UserX size={13} className="text-gray-400" />익명화 (개인정보 삭제)
+                              <UserX size={13} className="text-gray-400" />고객 익명화
                             </button>
                           )}
                           <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); handleDeleteCustomer(); }} aria-label="고객 삭제"

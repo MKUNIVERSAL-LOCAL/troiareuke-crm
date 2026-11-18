@@ -565,7 +565,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(desk.getByRole('button', { name: '예약 추가' })).toHaveCount(0);
   await expect(desk.getByRole('button', { name: '고객 익명화' })).toHaveCount(0); // 이미 익명화된 고객에는 [익명화] 없음
   // PC 상세의 병합·익명화·삭제는 [⋯ 더보기] 메뉴 안에 있다 (2026-11-18) — 열면 role=menu, 익명화 고객에는 [익명화] 항목이 없고 [고객 삭제]만, Esc로 닫힘
-  await desk.getByRole('button', { name: '더보기' }).click();
+  await desk.getByRole('button', { name: '더보기', exact: true }).click();
   const moreMenu = desk.getByRole('menu', { name: '고객 관리 더보기' });
   await expect(moreMenu).toBeVisible();
   await expect(moreMenu.getByRole('menuitem', { name: '고객 익명화' })).toHaveCount(0);
