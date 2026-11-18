@@ -8,6 +8,7 @@ import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import DateQuickChips from '../../components/ui/DateQuickChips';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, PaymentStore, ReservationStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
@@ -541,10 +542,12 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술일</label>
           <input
             type="date"
+            aria-label="시술일"
             value={treatmentDate}
             onChange={e => setTreatmentDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
+          <DateQuickChips value={treatmentDate} onChange={setTreatmentDate} options={[{ label: '오늘', days: 0 }, { label: '어제', days: -1 }]} />
         </div>
 
         {/* 프로그램 연결 (회차 차감) */}

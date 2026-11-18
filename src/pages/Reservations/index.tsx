@@ -10,6 +10,7 @@ import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import PhoneLink from '../../components/ui/PhoneLink';
+import DateQuickChips from '../../components/ui/DateQuickChips';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
@@ -1051,6 +1052,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               onChange={e => setDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
+            <DateQuickChips value={date} onChange={setDate} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">시작 시간 *</label>

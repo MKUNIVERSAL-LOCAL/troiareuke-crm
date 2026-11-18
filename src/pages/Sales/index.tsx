@@ -14,6 +14,7 @@ import {
 import { PaymentStore, CustomerStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import DateQuickChips from '../../components/ui/DateQuickChips';
 import { useAuth } from '../../contexts/AuthContext';
 import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
 import type { Payment, PaymentMethod, Expense, ExpenseCategory } from '../../types';
@@ -1154,6 +1155,7 @@ export default function Sales() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제일</label>
                   <input aria-label="결제일" type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                  <DateQuickChips value={form.paymentDate} onChange={iso => setForm(f => ({ ...f, paymentDate: iso }))} options={[{ label: '오늘', days: 0 }, { label: '어제', days: -1 }]} />
                 </div>
               </div>
 
