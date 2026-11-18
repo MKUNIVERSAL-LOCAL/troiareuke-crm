@@ -1,3 +1,4 @@
+import { isImeKey } from '../../lib/ime';
 ﻿import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
@@ -1314,7 +1315,7 @@ export default function Customers() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); openFirstMatch(); } }}
+                onKeyDown={e => { if (e.key === 'Enter' && !isImeKey(e)) { e.preventDefault(); openFirstMatch(); } }}
                 aria-label="고객 검색" placeholder="고객명, 전화번호 검색"
                 className="w-full h-10 pl-9 pr-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               />
@@ -1763,7 +1764,7 @@ export default function Customers() {
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); openFirstMatch(); } }}
+              onKeyDown={e => { if (e.key === 'Enter' && !isImeKey(e)) { e.preventDefault(); openFirstMatch(); } }}
               aria-label="고객 검색" placeholder="이름, 전화번호 검색 (Enter로 첫 결과 열기)"
               className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />

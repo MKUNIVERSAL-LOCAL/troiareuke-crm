@@ -1,3 +1,4 @@
+import { isImeKey } from '../lib/ime';
 import { notify } from '../lib/notify';
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
@@ -77,7 +78,7 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
             autoFocus
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleAdd(); } }} // 한글 조합 중 Enter로 반쪽 이름이 추가되지 않게
+            onKeyDown={e => { if (e.key === 'Enter' && !isImeKey(e)) { e.preventDefault(); handleAdd(); } }} // 한글 조합 중 Enter로 반쪽 이름이 추가되지 않게
             placeholder="결제수단 이름 (예: 상품권, 제로페이)"
             className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
           />

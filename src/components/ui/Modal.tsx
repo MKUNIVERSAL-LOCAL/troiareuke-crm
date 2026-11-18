@@ -1,3 +1,4 @@
+import { isImeKey } from '../../lib/ime';
 import { X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
@@ -41,7 +42,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
 
   // Ctrl/⌘+Enter → 모달 안 폼 제출 (데스크 키보드 흐름). 폼이 없는 모달(상세·확인)은 무시, 제출 버튼이 비활성(저장 중 등)이면 무시(이중 저장 방지)
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isImeKey(e)) {
       const form = cardRef.current?.querySelector('form');
       if (!form) return;
       const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');

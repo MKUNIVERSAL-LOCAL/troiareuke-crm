@@ -122,7 +122,6 @@ function NasAnalytics() {
     .map(b => ({
       name: b.branchName || b.branchId.slice(0, 8),
       매출: b.revenue.total,
-      고객: b.customers.total,
     }))
     .sort((a, b) => b.매출 - a.매출);
 

@@ -1,3 +1,4 @@
+import { isImeKey } from '../../lib/ime';
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check, Zap, AlertTriangle, Monitor } from 'lucide-react';
 
@@ -555,7 +556,7 @@ function AiChatInner() {
               <textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); sendMessage(); } }} // 한글 조합 중 Enter는 글자 확정이지 전송이 아니다
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !isImeKey(e)) { e.preventDefault(); sendMessage(); } }} // 한글 조합 중 Enter는 글자 확정이지 전송이 아니다
                 placeholder={hasAnyKey ? '질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)' : '먼저 API 키를 설정해주세요 →'}
                 disabled={isLoading || !hasAnyKey}
                 rows={1}

@@ -1,3 +1,4 @@
+import { isImeKey } from '../../lib/ime';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { Customer } from '../../types';
@@ -73,7 +74,7 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.nativeEvent.isComposing) return;
+    if (isImeKey(e)) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); if (!open) setOpen(true); else setHi(h => Math.min(h + 1, Math.max(0, matches.length - 1))); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(h - 1, 0)); }
     else if (e.key === 'Enter') {
