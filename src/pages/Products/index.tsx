@@ -659,7 +659,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             type="checkbox"
             checked={form.isActive}
             onChange={e => set('isActive', e.target.checked)}
-            className="rounded text-[#1a3a8f]"
+            className="rounded"
           />
           <span className="text-sm text-gray-700">판매 활성</span>
         </label>

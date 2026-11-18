@@ -692,7 +692,7 @@ export default function Settings() {
                             type="checkbox"
                             checked={!hours.isOff}
                             onChange={e => updateHours(day, 'isOff', !e.target.checked)}
-                            className="rounded text-primary-600"
+                            className="rounded"
                           />
                           <span className="text-xs text-gray-500">영업</span>
                         </label>
@@ -1365,7 +1365,7 @@ export default function Settings() {
                             type="checkbox"
                             checked={exportSelection.has(d.key)}
                             onChange={() => toggleExport(d.key)}
-                            className="mt-0.5 rounded text-primary-600"
+                            className="mt-0.5 rounded"
                           />
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-gray-800">
