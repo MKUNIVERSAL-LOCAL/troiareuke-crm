@@ -208,7 +208,7 @@ export default function Signup() {
                       type="checkbox"
                       checked={form[item.key]}
                       onChange={e => set(item.key, e.target.checked)}
-                      className="rounded text-primary-600 w-4 h-4"
+                      className="rounded w-4 h-4"
                     />
                     <span className="text-sm text-gray-700">{item.label}</span>
                   </label>
@@ -218,7 +218,7 @@ export default function Signup() {
                     type="checkbox"
                     checked={form.agreeTerms && form.agreePrivacy && form.agreeMarketing}
                     onChange={e => setForm(p => ({ ...p, agreeTerms: e.target.checked, agreePrivacy: e.target.checked, agreeMarketing: e.target.checked }))}
-                    className="rounded text-primary-600 w-4 h-4"
+                    className="rounded w-4 h-4"
                   />
                   <span className="text-sm font-medium text-gray-500">전체 동의</span>
                 </label>

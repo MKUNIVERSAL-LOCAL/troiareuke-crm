@@ -229,7 +229,7 @@ export default function Products() {
                               <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{p.category}</span>
                               <span className={clsx('font-bold', isLow ? 'text-red-600' : 'text-gray-700')}>재고 {p.stock}{p.unit}</span>
                               {isLow && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs font-medium"><AlertTriangle size={10} /> 부족</span>}
-                              <span className={clsx('font-semibold', margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-blue-600' : 'text-orange-700')}>마진 {margin}%</span>
+                              <span className={clsx('font-semibold', margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600')}>마진 {margin}%</span>
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -310,7 +310,7 @@ export default function Products() {
                           <td className="px-4 py-4 text-right">
                             <span className={clsx(
                               'text-sm font-bold',
-                              margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-blue-600' : 'text-orange-700'
+                              margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600'
                             )}>
                               {margin}%
                             </span>

@@ -583,7 +583,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
                   type="checkbox"
                   checked={selectedServices.includes(s.name)}
                   onChange={() => toggleService(s.name)}
-                  className="rounded text-primary-600"
+                  className="rounded"
                 />
                 <span className="text-sm text-gray-700 flex-1">{s.name}</span>
                 <span className="text-sm font-medium text-gray-800">{s.price.toLocaleString()}원</span>
