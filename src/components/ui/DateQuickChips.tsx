@@ -4,12 +4,12 @@ import { toISODate } from '../../lib/format';
  * 날짜 입력 옆 빠른 선택 칩 — 데스크에서 가장 잦은 값(오늘·내일·+7일 / 어제)을 한 번에 (UI 품질 기준 2026-11-18)
  * 네이티브 <input type="date">를 대체하지 않고 보조한다. 현재 값과 같은 칩은 눌린 상태(aria-pressed).
  */
-export interface DateQuickOption { label: string; days: number }
+interface DateQuickOption { label: string; days: number }
 
 const DEFAULT_OPTIONS: DateQuickOption[] = [
   { label: '오늘', days: 0 },
   { label: '내일', days: 1 },
-  { label: '+7일', days: 7 },
+  { label: '1주 후', days: 7 },
 ];
 
 function shift(days: number): string {

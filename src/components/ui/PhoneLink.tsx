@@ -8,10 +8,10 @@ import { notify } from '../../lib/notify';
  * 직원(staff) 역할은 마스킹 정책대로 번호를 보지도 걸지도 못한다(표시만).
  */
 export default function PhoneLink({ phone, role, className }: { phone: string; role: 'staff' | 'admin' | 'superadmin'; className?: string }) {
-  const shown = maskPhone(phone, role);
   if (!phone) return <span className={className}>-</span>;
+  const shown = maskPhone(phone, role);
   if (role === 'staff') return <span className={className}>{shown}</span>;
-  const digits = phone.replace(/\D/g, '');
+  const digits = phone.replace(/[^\d+]/g, ''); // 국제번호 앞의 +는 남긴다
   if (IS_MOBILE_APP) {
     return <a href={`tel:${digits}`} className={`${className ?? ''} underline decoration-dotted underline-offset-2`} aria-label={`${shown}로 전화 걸기`}>{shown}</a>;
   }
@@ -21,6 +21,7 @@ export default function PhoneLink({ phone, role, className }: { phone: string; r
       onClick={async () => { notify((await copyText(phone)) ? '전화번호를 복사했습니다.' : '복사하지 못했습니다 — 번호를 드래그해 복사하세요.'); }}
       className={`${className ?? ''} text-left hover:underline decoration-dotted underline-offset-2`}
       title="클릭하면 전화번호가 복사됩니다"
+      aria-label={`${shown} 복사`}
     >
       {shown}
     </button>

@@ -1052,7 +1052,6 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               onChange={e => setDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
-            <DateQuickChips value={date} onChange={setDate} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">시작 시간 *</label>
@@ -1079,6 +1078,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               <option value="app">앱</option>
             </select>
           </div>
+          <DateQuickChips value={date} onChange={setDate} className="col-span-2 sm:col-span-3 !mt-0" />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">메모</label>
