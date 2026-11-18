@@ -5,9 +5,10 @@
  * 기간 단위 손익 표와 분류 상세, 지점 비교를 렌더링한다.
  * 매출원가/판관비 구분은 지점 화면(Sales 손익 탭)과 동일한 기준을 사용한다.
  */
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { RefreshCw, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import ChartFallback from '../../components/charts/ChartFallback';
+const PnlCompareChart = lazy(() => import('../../components/charts/admin/AdminCharts').then(m => ({ default: m.PnlCompareChart }))); // recharts 지연 로드 (2026-11-18)
 import { fetchAdminPnl, type AdminPnlResponse } from '../../lib/adminApi';
 import { COGS_CATEGORIES, EXPENSE_CATEGORIES, type ExpenseCategory } from '../../types';
 
@@ -343,27 +344,14 @@ export default function PnlReport() {
               <h3 className="text-sm font-bold text-white mb-4">
                 {selected === 'all' ? `${year}년 지점별 손익 비교` : `${year}년 ${mode === 'quarter' ? '분기별' : '월별'} 추이`}
               </h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart
+              <Suspense fallback={<ChartFallback height={280} dark />}>
+                <PnlCompareChart
                   data={selected === 'all'
                     ? branchCompare
                     : rows.map(r => ({ name: r.label, 매출: r.revenue.total, 지출: r.totalExpense, 영업이익: r.operatingProfit }))}
-                  margin={{ top: 0, right: 0, left: 8, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={v => `${Math.round(Number(v) / 10000).toLocaleString('ko-KR')}만`} />
-                  <Tooltip
-                    formatter={(v: number, name: string) => [won(v), name]}
-                    contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, fontSize: 12 }}
-                    labelStyle={{ color: '#e2e8f0' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="매출" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="지출" fill="#f97316" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="영업이익" fill="#10b981" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+                  won={won}
+                />
+              </Suspense>
             </div>
           </div>
 

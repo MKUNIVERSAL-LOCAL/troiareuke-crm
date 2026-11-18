@@ -1,13 +1,11 @@
 ﻿import { HIDE_ON_MOBILE } from '../lib/platform';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserPlus, CalendarPlus, ClipboardPlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Users, Calendar, TrendingUp, Star, Clock, ChevronRight, CheckCircle2, AlertCircle, Package, ShoppingBag, Store, Globe, Apple, Play } from 'lucide-react';
-import {
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Legend
-} from 'recharts';
+import ChartFallback from '../components/charts/ChartFallback';
+const WeeklySalesChart = lazy(() => import('../components/charts/WeeklySalesChart')); // recharts는 첫 화면 번들에서 분리 (2026-11-18)
 import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
@@ -249,19 +247,7 @@ export default function Dashboard() {
         {salesOn && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <p className="text-sm font-bold text-gray-900 mb-3">주간 매출 현황</p>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={weeklyData} barSize={12}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} unit="만" />
-              <Tooltip
-                formatter={(v, name) => [`${v}만원`, name === '시술' ? '시술 매출' : '홈케어']}
-                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '11px' }}
-              />
-              <Bar dataKey="시술" stackId="a" fill="#1a3a8f" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="제품" stackId="a" fill="#60a5fa" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <Suspense fallback={<ChartFallback height={180} />}><WeeklySalesChart data={weeklyData} compact /></Suspense>
         </div>
         )}
 
@@ -434,20 +420,7 @@ export default function Dashboard() {
                 <p className="text-xs text-gray-400 mt-0.5">최근 7일 · 시술 + 홈케어 (만원)</p>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={weeklyData} barSize={14}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} unit="만" />
-                <Tooltip
-                  formatter={(v, name) => [`${v}만원`, name === '시술' ? '시술 매출' : '홈케어 판매']}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
-                <Bar dataKey="시술" stackId="a" fill="#1a3a8f" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="제품" stackId="a" fill="#60a5fa" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<ChartFallback height={200} />}><WeeklySalesChart data={weeklyData} /></Suspense>
           </div>
 
           {/* Recent Payments */}

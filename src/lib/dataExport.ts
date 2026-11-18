@@ -10,9 +10,6 @@ import { IS_MOBILE_APP } from './platform';
 import { todayISO } from './format';
 import { saveOrShareFile } from './mobileBridge';
 import type { WorkBook, WorkSheet } from 'xlsx';
-
-/** SheetJS(≈400KB)는 내보내기·업로드 순간에만 로드 — 첫 화면 번들에서 제외 (2026-11-18) */
-export const loadXlsx = () => import('xlsx');
 import {
   CustomerStore, PaymentStore, ProductStore, ProductSaleStore,
   ReservationStore, TreatmentLogStore, ProgramStore, CustomerProgramStore,
@@ -23,6 +20,9 @@ import { ExpenseStore } from './expenseStore';
 import { getLocalLogs } from './loginLog';
 import type { BeaconMetrics } from '../types';
 import { COGS_CATEGORIES } from '../types';
+
+/** SheetJS(≈400KB)는 내보내기·업로드 순간에만 로드 — 첫 화면 번들에서 제외 (2026-11-18). 실패하면 전역 핸들러가 보여줄 한국어 메시지로 */
+export const loadXlsx = () => import('xlsx').catch(() => { throw new Error('엑셀 기능을 불러오지 못했습니다. 네트워크를 확인하고 다시 시도해주세요.'); });
 
 export interface ExportDataset {
   key: string;
@@ -310,9 +310,9 @@ export interface ExportResult {
 
 /** 선택 데이터셋을 하나의 xlsx 파일로 다운로드 */
 export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult> {
-  const XLSX = await loadXlsx();
   const sheets = buildExportSheets(keys);
   if (sheets.length === 0) throw new Error('내보낼 데이터를 선택해주세요.');
+  const XLSX = await loadXlsx();
 
   const workbook = XLSX.utils.book_new();
   const counts: Record<string, number> = {};

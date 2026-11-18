@@ -1,14 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { fetchAdminAnalytics, type AdminBranchAnalytics } from '../../lib/adminApi';
 import DataBrowser from './DataBrowser';
 import PnlReport from './PnlReport';
 import { format, subDays } from 'date-fns';
-import {
-  AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
-} from 'recharts';
+import ChartFallback from '../../components/charts/ChartFallback';
+// recharts 지연 로드 (2026-11-18) — 통계 차트 3종은 한 모듈에서
+const MonthlyRevenueChart = lazy(() => import('../../components/charts/admin/AdminCharts').then(m => ({ default: m.MonthlyRevenueChart })));
+const DailyRevenueAreaChart = lazy(() => import('../../components/charts/admin/AdminCharts').then(m => ({ default: m.DailyRevenueAreaChart })));
+const BranchCompareChart = lazy(() => import('../../components/charts/admin/AdminCharts').then(m => ({ default: m.BranchCompareChart })));
 import { TrendingUp, Users, CalendarCheck, Sparkles, RefreshCw } from 'lucide-react';
 
 const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
@@ -199,43 +200,13 @@ function NasAnalytics() {
             {/* 월별 매출 */}
             <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6">
               <h2 className="text-sm font-bold text-white mb-6">최근 6개월 매출</h2>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={view.monthlySeries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={wonShort} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    formatter={(v: number) => won(v)}
-                    contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0', fontSize: 12 }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-                  <Bar dataKey="매출" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="환불" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <Suspense fallback={<ChartFallback height={220} dark />}><MonthlyRevenueChart data={view.monthlySeries} won={won} wonShort={wonShort} /></Suspense>
             </div>
 
             {/* 일별 매출 */}
             <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6">
               <h2 className="text-sm font-bold text-white mb-6">최근 30일 일별 매출</h2>
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={view.dailySeries}>
-                  <defs>
-                    <linearGradient id="dailyRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} interval={4} />
-                  <YAxis tickFormatter={wonShort} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    formatter={(v: number) => won(v)}
-                    contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0', fontSize: 12 }}
-                  />
-                  <Area type="monotone" dataKey="매출" stroke="#3b82f6" fill="url(#dailyRev)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <Suspense fallback={<ChartFallback height={220} dark />}><DailyRevenueAreaChart data={view.dailySeries} won={won} wonShort={wonShort} /></Suspense>
             </div>
           </div>
 
@@ -245,18 +216,7 @@ function NasAnalytics() {
               {branches.length > 1 && (
                 <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-6 mb-6">
                   <h2 className="text-sm font-bold text-white mb-6">지점별 누적 매출 비교</h2>
-                  <ResponsiveContainer width="100%" height={Math.max(160, compareData.length * 44)}>
-                    <BarChart data={compareData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
-                      <XAxis type="number" tickFormatter={wonShort} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-                      <YAxis type="category" dataKey="name" width={120} tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        formatter={(v: number) => won(v)}
-                        contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0', fontSize: 12 }}
-                      />
-                      <Bar dataKey="매출" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <Suspense fallback={<ChartFallback height={Math.max(160, compareData.length * 44)} dark />}><BranchCompareChart data={compareData} height={Math.max(160, compareData.length * 44)} won={won} wonShort={wonShort} /></Suspense>
                 </div>
               )}
 

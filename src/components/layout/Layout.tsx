@@ -46,7 +46,10 @@ export default function Layout() {
       notify(`작업 중 오류가 났습니다${msg ? `: ${msg.slice(0, 80)}` : ''} — 화면을 새로고침해도 같다면 관리자에게 알려주세요.`);
     };
     window.addEventListener('unhandledrejection', onRejection);
-    return () => window.removeEventListener('unhandledrejection', onRejection);
+    // 웹(PWA) 재배포 뒤 열려 있던 탭이 옛 해시의 지연 청크(xlsx·차트·PDF)를 못 받는 경우 — 한 번 새로고침해 새 번들로 (패키지 빌드는 로컬 파일이라 해당 없음)
+    const onPreloadError = (e: Event) => { e.preventDefault(); if (!sessionStorage.getItem('crm_preload_reloaded')) { sessionStorage.setItem('crm_preload_reloaded', '1'); window.location.reload(); } };
+    window.addEventListener('vite:preloadError', onPreloadError);
+    return () => { window.removeEventListener('unhandledrejection', onRejection); window.removeEventListener('vite:preloadError', onPreloadError); };
   }, []);
 
   // 프로그램 분리: 어드민 전용 exe에서는 지점(일반 CRM) 화면을 표시하지 않는다

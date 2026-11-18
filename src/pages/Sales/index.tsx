@@ -1,16 +1,15 @@
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
   ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search, Layers,
   Receipt, FileText, CreditCard
 } from 'lucide-react';
-import {
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Legend
-} from 'recharts';
+import ChartFallback from '../../components/charts/ChartFallback';
+const DailySalesChart = lazy(() => import('../../components/charts/DailySalesChart')); // recharts는 첫 화면 번들에서 분리 (2026-11-18)
+const PnlTrendChart = lazy(() => import('../../components/charts/PnlTrendChart'));
 import { PaymentStore, CustomerStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
@@ -553,23 +552,7 @@ export default function Sales() {
           {/* 일별 매출 차트 */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <h3 className="font-bold text-gray-900 mb-4">일별 매출 현황 (만원)</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={dailyChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#9ca3af' }}
-                  tickFormatter={(v, i) => i % 5 === 0 ? v : ''} />
-                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <Tooltip
-                  formatter={(v: number, name: string) => [`${v.toFixed(0)}만원`, name]}
-                  contentStyle={{ borderRadius: 12, border: '1px solid #f0f0f0', fontSize: 12 }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {/* isAnimationActive=false: 애니메이션 첫 프레임(막대 높이 0)이 화면·캡처에 남아 "데이터가 있는데 빈 차트"로 보이던 문제 (UX QA 2026-11-17) */}
-                <Bar dataKey="시술" stackId="a" fill="#1a3a8f" radius={[0, 0, 0, 0]} isAnimationActive={false} />
-                <Bar dataKey="제품" stackId="a" fill="#7c3aed" radius={[0, 0, 0, 0]} isAnimationActive={false} />
-                <Bar dataKey="기타" stackId="a" fill="#94a3b8" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<ChartFallback height={220} />}><DailySalesChart data={dailyChartData} /></Suspense>
           </div>
 
           {/* 결제 수단 & 최근 결제 */}
@@ -990,21 +973,7 @@ export default function Sales() {
                 <h3 className="font-bold text-gray-900 mb-4">
                   {pnlMode === 'month' ? '최근 6개월 손익 추이 (만원)' : `${pnl.label} 월별 손익 (만원)`}
                 </h3>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={pnlTrend} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                    <Tooltip
-                      formatter={(v: number, name: string) => [`${v.toLocaleString('ko-KR')}만원`, name]}
-                      contentStyle={{ borderRadius: 12, border: '1px solid #f0f0f0', fontSize: 12 }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="매출" fill="#1a3a8f" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="지출" fill="#f97316" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="이익" fill="#10b981" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<ChartFallback height={200} />}><PnlTrendChart data={pnlTrend} /></Suspense>
               </div>
             </div>
           </div>
