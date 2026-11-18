@@ -1,5 +1,5 @@
 import { notify } from '../../lib/notify';
-import { matchesSearch, todayISO, toISODate, thisYearMonthISO } from '../../lib/format';
+import { matchesSearch, todayISO, toISODate, thisYearMonthISO, formatDate } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
@@ -168,14 +168,14 @@ export default function Treatments() {
                 className="w-full bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-left"
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
                     <span className="text-white text-sm font-bold">{t.customerName[0]}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-bold text-gray-900">{t.customerName}</p>
                       {t.programName && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-700">
                           {t.programName}
                         </span>
                       )}
@@ -184,7 +184,7 @@ export default function Treatments() {
                       {t.treatmentDetails || t.programName || '시술 내역 없음'}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
+                      {formatDate(t.treatmentDate)}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
                       {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
                     </p>
                     {t.skinCondition && (
@@ -239,14 +239,14 @@ export default function Treatments() {
                 onClick={() => setSelected(t)}
                 className="w-full flex items-start gap-4 px-6 py-4 hover:bg-gray-50/50 transition-colors text-left"
               >
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <span className="text-white text-sm font-bold">{t.customerName[0]}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 flex-wrap">
                     <p className="text-sm font-bold text-gray-900">{t.customerName}</p>
                     {t.programName && (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary-700">
                         {t.programName}
                       </span>
                     )}
@@ -255,7 +255,7 @@ export default function Treatments() {
                     {t.treatmentDetails || t.programName || '시술 내역 없음'}
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
+                    {formatDate(t.treatmentDate)}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
                     {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
                   </p>
                   {t.skinCondition && (
@@ -794,7 +794,7 @@ function TreatmentDetailModal({
     <Modal isOpen={true} onClose={onClose} title="시술 기록 상세" size="lg">
       <div className="space-y-4">
         <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-2xl bg-primary-500 flex items-center justify-center">
             <span className="text-white text-lg font-bold">{t.customerName[0]}</span>
           </div>
           <div className="flex-1">
@@ -807,7 +807,7 @@ function TreatmentDetailModal({
               <p className="font-bold text-gray-900 text-base">{t.customerName}</p>
             )}
             <p className="text-xs text-gray-400">
-              {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
+              {formatDate(t.treatmentDate)}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
             </p>
           </div>
         </div>

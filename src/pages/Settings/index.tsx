@@ -691,7 +691,7 @@ export default function Settings() {
                             type="checkbox"
                             checked={!hours.isOff}
                             onChange={e => updateHours(day, 'isOff', !e.target.checked)}
-                            className="rounded text-purple-500"
+                            className="rounded text-primary-600"
                           />
                           <span className="text-xs text-gray-500">영업</span>
                         </label>
@@ -1092,7 +1092,7 @@ export default function Settings() {
                           readOnly
                           checked={settings.notificationSettings[n.key]}
                         />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
+                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
                       </label>
                     </div>
                   ))}
@@ -1154,12 +1154,12 @@ export default function Settings() {
                 <SettingCard title="현재 구독 플랜">
                   {subscriptionLoading ? (
                     <div className="flex items-center justify-center py-8">
-                      <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100">
-                        <div className="w-12 h-12 rounded-xl bg-purple-500 text-white flex items-center justify-center">
+                      <div className="flex items-center gap-4 p-4 bg-primary-50 rounded-xl border border-primary-100">
+                        <div className="w-12 h-12 rounded-xl bg-primary-600 text-white flex items-center justify-center">
                           {currentSubscription?.plan === 'pro' ? <Crown size={24} /> :
                            currentSubscription?.plan === 'starter' ? <Zap size={24} /> :
                            <Star size={24} />}
@@ -1225,7 +1225,7 @@ export default function Settings() {
                           key={plan.id}
                           className={clsx(
                             'p-4 rounded-xl border-2 transition-all',
-                            isCurrent ? 'border-purple-300 bg-purple-50' : 'border-gray-100 hover:border-gray-200'
+                            isCurrent ? 'border-primary-300 bg-primary-50' : 'border-gray-100 hover:border-gray-200'
                           )}
                         >
                           <div className="flex items-start gap-3">
@@ -1243,9 +1243,9 @@ export default function Settings() {
                               <div className="flex items-center justify-between">
                                 <h4 className="text-sm font-bold text-gray-900">
                                   {plan.name}
-                                  {isCurrent && <span className="ml-2 text-xs font-medium text-purple-600">(현재 플랜)</span>}
+                                  {isCurrent && <span className="ml-2 text-xs font-medium text-primary-600">(현재 플랜)</span>}
                                 </h4>
-                                <p className="text-sm font-bold text-purple-700">
+                                <p className="text-sm font-bold text-primary-700">
                                   {plan.price === 0 ? '무료' : `${plan.price.toLocaleString()}원/월`}
                                 </p>
                               </div>

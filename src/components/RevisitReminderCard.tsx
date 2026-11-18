@@ -68,7 +68,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
         <div className="divide-y divide-gray-50">
           {list.map(d => (
             <div key={d.customer.id} className="flex items-center gap-3 py-2.5">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-300 to-orange-300 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
                 <span className="text-white text-xs font-bold">{(d.customer.name || '고')[0]}</span>
               </div>
               <div className="flex-1 min-w-0">

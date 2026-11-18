@@ -2771,10 +2771,10 @@ export default function Customers() {
 
               {/* AI 피부 분석 (킬러①) — 사진 → 비전 AI 분석. 비컨 토글이 켜졌거나 AI(본사 중계·지점 키)를 쓸 수 있으면 노출 (2026-09-07) */}
               {(beaconEnabled || skinAiAvailable) && (
-              <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-indigo-100 rounded-xl p-3.5">
+              <div className="bg-primary-50 border border-primary-100 rounded-xl p-3.5">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <Sparkles size={14} className="text-violet-600" />
-                  <label className="text-xs font-semibold text-violet-900">AI 피부 분석 (사진)</label>
+                  <Sparkles size={14} className="text-primary-600" />
+                  <label className="text-xs font-semibold text-primary-800">AI 피부 분석 (사진)</label>
                   <span className="text-2xs text-gray-400">· 관리 참고용 (의학적 진단 아님)</span>
                 </div>
                 <input ref={consultPhotoRef} type="file" accept="image/*" onChange={handleConsultPhoto} className="hidden" />

@@ -269,7 +269,7 @@ export default function Products() {
                         <tr key={p.id} className={clsx('hover:bg-gray-50/50 transition-colors', isLow && 'bg-orange-50/40')}>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center flex-shrink-0">
+                              <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center flex-shrink-0">
                                 <Package size={16} className="text-[#1a3a8f]" />
                               </div>
                               <div>

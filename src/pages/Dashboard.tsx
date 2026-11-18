@@ -466,7 +466,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 {recentPayments.map(p => (
                   <div key={p.id} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
                       <span className="text-white text-xs font-bold">{(p.customerName || '?')[0]}</span>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -505,7 +505,7 @@ export default function Dashboard() {
                       <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
                       <p className="text-xs text-gray-400">{r.endTime}</p>
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-400 flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
                       <span className="text-white text-xs font-bold">{r.customerName[0]}</span>
                     </div>
                     <div className="flex-1 min-w-0">
