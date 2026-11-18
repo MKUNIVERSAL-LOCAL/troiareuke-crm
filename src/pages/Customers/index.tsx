@@ -5,7 +5,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ChevronDown, Tag,
-  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus, GitMerge, MessageSquare
+  Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus, GitMerge, MessageSquare, MoreHorizontal, UserX, FileText
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -30,7 +30,6 @@ import ProgramManageModal from '../../components/ProgramManageModal';
 import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../lib/customerMerge';
 import { parseTags, topTags } from '../../lib/customerTags';
 import { exportConsultationPdf } from '../../lib/consultReport';
-import { FileText } from 'lucide-react';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
@@ -381,6 +380,8 @@ export default function Customers() {
 
   // 등급(VIP) 변경 드롭다운
   const [showGradeMenu, setShowGradeMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false); // PC 상세 [⋯] — 병합·익명화·삭제 (파괴적 동작은 주 버튼 줄에서 분리, 2026-11-18)
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   // 선택된 고객의 등급을 변경 (뱃지 클릭 → 드롭다운)
   function changeGrade(grade: CustomerGrade) {
@@ -564,6 +565,9 @@ export default function Customers() {
   useOverlayClose(!!selected && isMobileLayout, () => setSelected(null), { escape: false });
   useOverlayClose(showAddModal, () => setShowAddModal(false), { escape: false });
   useOverlayClose(showGradeMenu, () => setShowGradeMenu(false)); // 등급 메뉴 — Esc·뒤로가기로 닫기
+  useOverlayClose(showMoreMenu, () => setShowMoreMenu(false));
+  useFocusTrap(showMoreMenu, moreMenuRef);
+  useEffect(() => { setShowMoreMenu(false); }, [selected?.id]);
   // 포커스 트랩 — 첫 입력란 포커스·Tab 순환·닫힐 때 열었던 버튼으로 복원 (키보드 접근성 감사 2026-11-18)
   const addModalRef = useRef<HTMLDivElement>(null);
   const editModalRef = useRef<HTMLDivElement>(null);
@@ -1985,33 +1989,43 @@ export default function Customers() {
                   >
                     <Pencil size={12} />수정
                   </button>
-                  {!mergeBlockReason(selected) && (
+                  <div className="relative">
                     <button
                       type="button"
-                      onClick={() => setShowMergeModal(true)}
-                      className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-amber-50 text-amber-700 rounded-xl text-xs font-medium hover:bg-amber-100 transition-colors"
-                      title="같은 사람이 두 번 등록된 경우, 다른 고객의 기록을 이 고객으로 합칩니다"
+                      onClick={() => setShowMoreMenu(v => !v)}
+                      aria-label="더보기"
+                      aria-haspopup="menu"
+                      aria-expanded={showMoreMenu}
+                      className="flex items-center gap-1 px-2.5 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors"
                     >
-                      <GitMerge size={12} />병합
+                      <MoreHorizontal size={14} />
                     </button>
-                  )}
-                  {!isAnonymized(selected) && !selected.id.startsWith('sample_') && (
-                    <button
-                      onClick={handleAnonymizeOne}
-                      className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-gray-100 text-gray-600 rounded-xl text-xs font-medium hover:bg-gray-200 transition-colors"
-                      aria-label="고객 익명화"
-                      title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
-                    >
-                      익명화
-                    </button>
-                  )}
-                  <button
-                    onClick={handleDeleteCustomer}
-                    className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors"
-                    aria-label="고객 삭제"
-                  >
-                    <Trash2 size={12} />삭제
-                  </button>
+                    {showMoreMenu && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)} />
+                        <div ref={moreMenuRef} role="menu" aria-label="고객 관리 더보기" className="absolute right-0 mt-1 z-20 w-56 bg-white border border-gray-100 rounded-xl shadow-lg py-1">
+                          {!mergeBlockReason(selected) && (
+                            <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); setShowMergeModal(true); }}
+                              title="같은 사람이 두 번 등록된 경우, 다른 고객의 기록을 이 고객으로 합칩니다"
+                              className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                              <GitMerge size={13} className="text-gray-400" />중복 고객 병합
+                            </button>
+                          )}
+                          {!isAnonymized(selected) && !selected.id.startsWith('sample_') && (
+                            <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); handleAnonymizeOne(); }} aria-label="고객 익명화"
+                              title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
+                              className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                              <UserX size={13} className="text-gray-400" />익명화 (개인정보 삭제)
+                            </button>
+                          )}
+                          <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); handleDeleteCustomer(); }} aria-label="고객 삭제"
+                            className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
+                            <Trash2 size={13} />고객 삭제
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
