@@ -21,7 +21,7 @@ import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
 import type { Payment, PaymentMethod, Expense, ExpenseCategory } from '../../types';
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
-import { formatPrice, todayISO as today } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today } from '../../lib/format';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import PaymentLinkModal from '../../components/PaymentLinkModal';
 import { isPaymentLinkAvailable } from '../../lib/paymentLinks';
@@ -615,7 +615,7 @@ export default function Sales() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{customerLink(p, '고객')}</p>
-                        <p className="text-xs text-gray-400">{p.typeLabel} · {p.paymentDate}</p>
+                        <p className="text-xs text-gray-400">{p.typeLabel} · {formatDate(p.paymentDate)}</p>
                       </div>
                       <p className="text-sm font-bold text-gray-900 flex-shrink-0">{formatPrice(p.amount)}</p>
                     </div>
@@ -687,7 +687,7 @@ export default function Sales() {
                           {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
                         </p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-                          <span>{p.paymentDate}</span>
+                          <span>{formatDate(p.paymentDate)}</span>
                           <span className={`px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{p.typeLabel}</span>
                           <span>{p.paymentMethod}</span>
                           {p.discountAmount > 0 && <span className="text-orange-500">-{formatPrice(p.discountAmount)}</span>}
@@ -715,7 +715,7 @@ export default function Sales() {
                   </div>
                   {listPayments.map(p => (
                     <div key={p.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
-                      <span className="text-gray-500 text-xs">{p.paymentDate}</span>
+                      <span className="text-gray-500 text-xs">{formatDate(p.paymentDate)}</span>
                       <span className="col-span-2 font-medium text-gray-800">
                         {customerLink(p, '—')}
                         {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-500">-{formatPrice(p.discountAmount)}</span>}

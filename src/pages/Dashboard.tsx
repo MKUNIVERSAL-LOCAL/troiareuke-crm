@@ -12,6 +12,7 @@ import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
+import { formatDate } from '../lib/format';
 import RevisitReminderCard from '../components/RevisitReminderCard';
 import RetentionNoticeCard from '../components/RetentionNoticeCard';
 import ProgramAlertCard from '../components/ProgramAlertCard';
@@ -471,7 +472,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-gray-800 truncate">{p.customerName || '고객'}</p>
-                      <p className="text-xs text-gray-400">{p.paymentDate} · {p.typeLabel}</p>
+                      <p className="text-xs text-gray-400">{formatDate(p.paymentDate)} · {p.typeLabel}</p>
                     </div>
                     <span className="text-xs font-bold text-gray-800 flex-shrink-0">{p.amount.toLocaleString()}원</span>
                   </div>
