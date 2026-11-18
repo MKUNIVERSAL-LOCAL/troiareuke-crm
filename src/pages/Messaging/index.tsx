@@ -206,7 +206,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
       {/* Quick Send Targets */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { key: 'all' as Segment, label: '전체 고객', count: customers.length, color: 'purple' },
+          { key: 'all' as Segment, label: '전체 고객', count: customers.length, color: 'primary' },
           { key: 'vip' as Segment, label: 'VIP 고객', count: customers.filter(SEGMENT_FILTERS.vip).length, color: 'yellow' },
           { key: 'birthday' as Segment, label: '이번달 생일', count: birthdayCount, color: 'pink' },
           { key: 'novisit' as Segment, label: '미방문 60일+', count: customers.filter(SEGMENT_FILTERS.novisit).length, color: 'orange' },
@@ -221,7 +221,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
               <Users size={20} className="text-gray-400" />
               <span className={clsx(
                 'text-xs font-bold px-2 py-0.5 rounded-full',
-                t.color === 'purple' && 'bg-purple-100 text-purple-700',
+                t.color === 'primary' && 'bg-primary-100 text-primary-700',
                 t.color === 'yellow' && 'bg-yellow-100 text-yellow-700',
                 t.color === 'pink' && 'bg-pink-100 text-pink-700',
                 t.color === 'orange' && 'bg-orange-100 text-orange-700',
@@ -231,7 +231,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
               </span>
             </div>
             <p className="text-sm font-bold text-gray-900">{t.label}</p>
-            <p className="text-xs text-purple-500 mt-1 font-medium">메시지 발송 →</p>
+            <p className="text-xs text-primary-500 mt-1 font-medium">메시지 발송 →</p>
           </button>
         ))}
       </div>
@@ -266,7 +266,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
                   readOnly
                   checked={settings.notificationSettings[m.key]}
                 />
-                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
+                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-500"></div>
               </label>
             </div>
           ))}
@@ -336,7 +336,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
             onClick={() => setCat(c)}
             className={clsx(
               'px-3 py-1.5 text-sm font-medium rounded-lg border transition-all',
-              cat === c ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'
+              cat === c ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200'
             )}
           >
             {c}
@@ -345,7 +345,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="lg:ml-auto flex items-center justify-center gap-1 px-3 py-2.5 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg border border-purple-200 hover:bg-purple-100 whitespace-nowrap"
+          className="lg:ml-auto flex items-center justify-center gap-1 px-3 py-2.5 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg border border-primary-200 hover:bg-primary-100 whitespace-nowrap"
         >
           <Plus size={14} /> 템플릿 추가
         </button>
@@ -373,7 +373,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setEditing(t)}
-                  className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                   title="수정"
                 >
                   <Pencil size={14} />
@@ -387,7 +387,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
                 </button>
                 <button
                   onClick={() => onSelect(t.id)}
-                  className="px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-medium hover:bg-purple-600 transition-colors"
+                  className="px-3 py-1.5 bg-primary-500 text-white rounded-lg text-xs font-medium hover:bg-primary-600 transition-colors"
                 >
                   발송
                 </button>
@@ -399,7 +399,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
               {t.variables.length > 0 && (
                 <div className="flex gap-1 mt-2 flex-wrap">
                   {t.variables.map(v => (
-                    <span key={v} className="px-1.5 py-0.5 bg-purple-50 text-purple-500 rounded text-xs">{'{' + v + '}'}</span>
+                    <span key={v} className="px-1.5 py-0.5 bg-primary-50 text-primary-500 rounded text-xs">{'{' + v + '}'}</span>
                   ))}
                 </div>
               )}
@@ -473,8 +473,8 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
                 className={clsx(
                   'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                   type === t.key
-                    ? 'bg-purple-600 text-white border-purple-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
                 )}
               >
                 {t.label}
@@ -493,8 +493,8 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
                 className={clsx(
                   'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                   category === c
-                    ? 'bg-purple-600 text-white border-purple-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
                 )}
               >
                 {c}
@@ -555,7 +555,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
 
 const SCHEDULE_STATUS_LABELS: Record<ScheduledMessage['status'], { label: string; color: string }> = {
   pending: { label: '대기', color: 'bg-blue-100 text-blue-600' },
-  processing: { label: '발송 중', color: 'bg-purple-100 text-purple-600' },
+  processing: { label: '발송 중', color: 'bg-primary-100 text-primary-600' },
   sent: { label: '발송 완료', color: 'bg-green-100 text-green-600' },
   partial: { label: '일부 실패', color: 'bg-amber-100 text-amber-600' },
   failed: { label: '실패', color: 'bg-red-100 text-red-600' },
@@ -962,8 +962,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                   className={clsx(
                     'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                     msgType === t.key
-                      ? 'bg-purple-600 text-white border-purple-600'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300',
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300',
                     t.disabled && 'opacity-50 cursor-not-allowed hover:border-gray-200'
                   )}
                 >
@@ -982,7 +982,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               </p>
             ) : onlyCustomer ? (
               <div className="flex items-center gap-2 flex-wrap" data-testid="recipient-single">
-                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-purple-600 text-white">개별 발송: {onlyCustomer.name} ({onlyCustomer.phone || '전화번호 없음'})</span>
+                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-primary-600 text-white">개별 발송: {onlyCustomer.name} ({onlyCustomer.phone || '전화번호 없음'})</span>
                 <button type="button" onClick={() => setOnlyCustomer(null)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">대상 바꾸기</button>
               </div>
             ) : (
@@ -1002,7 +1002,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                   className={clsx(
                     'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                     recipientMode === r.key
-                      ? 'bg-purple-600 text-white border-purple-600'
+                      ? 'bg-primary-600 text-white border-primary-600'
                       : 'bg-white text-gray-600 border-gray-200'
                   )}
                 >
@@ -1080,7 +1080,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                 type="button"
                 onClick={() => setScheduleMode('now')}
                 className={clsx('px-4 py-2 text-sm font-medium rounded-xl border',
-                  scheduleMode === 'now' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
+                  scheduleMode === 'now' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
               >
                 즉시 발송
               </button>
@@ -1089,7 +1089,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                   type="button"
                   onClick={() => setScheduleMode('later')}
                   className={clsx('px-4 py-2 text-sm font-medium rounded-xl border',
-                    scheduleMode === 'later' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
+                    scheduleMode === 'later' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
                 >
                   예약 발송
                 </button>
@@ -1127,7 +1127,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">예상 발송 비용</p>
-              <p className="text-base font-bold text-purple-600 mt-0.5">약 {estimatedCost.toLocaleString()}원</p>
+              <p className="text-base font-bold text-primary-600 mt-0.5">약 {estimatedCost.toLocaleString()}원</p>
             </div>
           </div>
 

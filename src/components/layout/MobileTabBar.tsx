@@ -138,8 +138,8 @@ export default function MobileTabBar() {
                   onClick={() => handleNavigate('/sales')}
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors text-left"
                 >
-                  <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center">
-                    <TrendingUp size={20} className="text-purple-600" />
+                  <div className="w-10 h-10 bg-primary-50 rounded-xl flex items-center justify-center">
+                    <TrendingUp size={20} className="text-primary-600" />
                   </div>
                   <span className="text-sm font-medium text-gray-800">매출·손익</span>
                 </button>
@@ -193,7 +193,7 @@ export default function MobileTabBar() {
                   <span className={clsx(
                     'ml-auto flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-full',
                     user.role === 'superadmin'
-                      ? 'bg-purple-100 text-purple-700'
+                      ? 'bg-primary-100 text-primary-700'
                       : user.role === 'admin'
                         ? 'bg-blue-100 text-[#1a3a8f]'
                         : 'bg-slate-200 text-slate-600',
