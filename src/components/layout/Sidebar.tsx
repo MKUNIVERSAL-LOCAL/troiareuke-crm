@@ -82,8 +82,8 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
             <Sparkles size={18} className="text-white" />
           </div>
           <div>
-            <p className="max-w-[145px] truncate text-[13px] font-black text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
-            <p className="text-[10px] text-gray-400 font-medium tracking-wide">에스테틱 고객관리</p>
+            <p className="max-w-[145px] truncate text-[13px] font-bold text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
+            <p className="text-2xs text-gray-400 font-medium tracking-wide">에스테틱 고객관리</p>
           </div>
         </div>
         {/* 모바일 닫기 버튼 */}
@@ -118,7 +118,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
                   <Icon size={16} className={clsx('flex-shrink-0', isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-600')} />
                   <span className="flex-1 truncate">{label}</span>
                   {badge && !isActive && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">
+                    <span className="text-2xs font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">
                       {badge}
                     </span>
                   )}
@@ -134,16 +134,16 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
       <div className="px-4 py-4 border-t border-gray-100 space-y-3">
         {serviceDaysLeft !== null && serviceDaysLeft >= 0 && serviceDaysLeft <= 14 && (
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl px-4 py-3">
-            <p className="text-[11px] font-bold text-amber-700">⏰ 사용기간 만료 예정</p>
+            <p className="text-xs font-bold text-amber-700">사용기간 만료 예정</p>
             <p className="text-xs text-amber-500 mt-0.5">
               {serviceEndsAt!.slice(0, 10).replace(/-/g, '.')}까지 (D-{serviceDaysLeft})
             </p>
-            <p className="text-[10px] text-amber-400 mt-1">연장은 본사에 문의해주세요</p>
+            <p className="text-2xs text-amber-400 mt-1">연장은 본사에 문의해주세요</p>
           </div>
         )}
         {user?.plan === 'trial' && trialDaysLeft !== null && trialDaysLeft >= 0 && (
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl px-4 py-3">
-            <p className="text-[11px] font-bold text-blue-700">🎁 무료 체험 중</p>
+            <p className="text-xs font-bold text-blue-700">무료 체험 중</p>
             <p className="text-xs text-blue-400 mt-0.5">남은 기간: {trialDaysLeft}일</p>
             <div className="mt-2 bg-blue-200 rounded-full h-1">
               <div className="bg-blue-500 rounded-full h-1" style={{ width: `${Math.max(5, ((14 - trialDaysLeft) / 14) * 100)}%` }} />
@@ -151,7 +151,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
           </div>
         )}
         <div className="bg-gray-50 rounded-xl px-4 py-3">
-          <p className="text-[11px] font-bold text-gray-700 truncate">{shopName || '샵 정보 미설정'}</p>
+          <p className="text-xs font-bold text-gray-700 truncate">{shopName || '샵 정보 미설정'}</p>
           <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
         </div>
         <button

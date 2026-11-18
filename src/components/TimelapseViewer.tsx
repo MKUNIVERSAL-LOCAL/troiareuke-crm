@@ -116,7 +116,7 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
                 <button
                   key={a.id}
                   onClick={() => setAngleFilter(a.id)}
-                  className={clsx('text-[11px] px-2 py-1 rounded-lg font-medium transition-colors',
+                  className={clsx('text-xs px-2 py-1 rounded-lg font-medium transition-colors',
                     effectiveFilter === a.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
                 >
                   {a.label}
@@ -239,7 +239,7 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
               >
                 <img src={p.dataUrl} alt="" className="w-full h-full object-cover" />
                 {labelBadge(p) && (
-                  <span className={clsx('absolute bottom-0 left-0 px-1 text-[9px] font-bold text-white', p.label === 'after' ? 'bg-indigo-600/90' : 'bg-gray-800/80')}>
+                  <span className={clsx('absolute bottom-0 left-0 px-1 text-2xs font-bold text-white', p.label === 'after' ? 'bg-indigo-600/90' : 'bg-gray-800/80')}>
                     {labelBadge(p)}
                   </span>
                 )}

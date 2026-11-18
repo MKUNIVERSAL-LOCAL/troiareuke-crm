@@ -228,7 +228,7 @@ export default function Subscriptions() {
             <thead>
               <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
                 {['지점명', '플랜', '상태', '금액', '만료일', '메모', '액션'].map(h => (
-                  <th key={h} className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                  <th key={h} className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -241,7 +241,7 @@ export default function Subscriptions() {
                   <tr key={s.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-white">{s.branch_name}</td>
                     <td className="px-6 py-4">
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${plan.color}`}>{plan.label}</span>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${plan.color}`}>{plan.label}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`flex items-center gap-1.5 text-xs font-medium ${status.color}`}>
@@ -291,7 +291,7 @@ export default function Subscriptions() {
                     .map(o => <option key={o.value} value={o.value}>{NAS_MODE && o.value === 'cancelled' ? '해지 (로그인 차단)' : o.label}</option>)}
                 </select>
                 {NAS_MODE && (
-                  <p className="text-[11px] text-slate-500 mt-1">중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다.</p>
+                  <p className="text-xs text-slate-500 mt-1">중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다.</p>
                 )}
               </Field>
               {NAS_MODE && (
@@ -307,7 +307,7 @@ export default function Subscriptions() {
               <Field label={NAS_MODE ? '사용기간 만료일 (비우면 무제한)' : '만료일'}>
                 <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
                 {NAS_MODE && (
-                  <p className="text-[11px] text-slate-500 mt-1">만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.</p>
+                  <p className="text-xs text-slate-500 mt-1">만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.</p>
                 )}
               </Field>
               <Field label="메모">

@@ -34,11 +34,11 @@ export default function BirthdayCard({ compact = false, refreshKey = 0 }: { comp
             >
               <p className="text-sm font-medium text-gray-800 truncate">
                 {a.customer.name}
-                <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${a.daysUntil === 0 ? 'bg-pink-100 text-pink-700' : 'bg-slate-100 text-slate-600'}`}>
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded text-2xs font-semibold ${a.daysUntil === 0 ? 'bg-pink-100 text-pink-700' : 'bg-slate-100 text-slate-600'}`}>
                   {a.daysUntil === 0 ? '오늘' : `D-${a.daysUntil}`}
                 </span>
               </p>
-              <p className="text-[11px] text-gray-400 truncate">생일 {a.dateLabel}{a.customer.grade ? ` · ${a.customer.grade}` : ''}</p>
+              <p className="text-xs text-gray-400 truncate">생일 {a.dateLabel}{a.customer.grade ? ` · ${a.customer.grade}` : ''}</p>
             </button>
             <button
               type="button"
@@ -52,7 +52,7 @@ export default function BirthdayCard({ compact = false, refreshKey = 0 }: { comp
           </li>
         ))}
       </ul>
-      {list.length > shown.length && <p className="text-[11px] text-gray-400 mt-2">외 {list.length - shown.length}명 — 문자/카카오 발송의 생일 고객 대상에서 전체 확인</p>}
+      {list.length > shown.length && <p className="text-xs text-gray-400 mt-2">외 {list.length - shown.length}명 — 문자/카카오 발송의 생일 고객 대상에서 전체 확인</p>}
 
       {draftFor && (
         <MessageDraftPanel

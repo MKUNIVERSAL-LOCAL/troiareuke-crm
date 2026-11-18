@@ -190,7 +190,7 @@ function NasAnalytics() {
                 </div>
                 <p className="text-xl font-bold text-white truncate" title={c.value}>{c.value}</p>
                 <p className="text-xs text-slate-400 mt-1">{c.label}</p>
-                <p className="text-[11px] text-slate-500 mt-1 truncate" title={c.sub}>{c.sub}</p>
+                <p className="text-xs text-slate-500 mt-1 truncate" title={c.sub}>{c.sub}</p>
               </div>
             ))}
           </div>

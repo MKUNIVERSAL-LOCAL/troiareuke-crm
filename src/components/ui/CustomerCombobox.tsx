@@ -144,7 +144,7 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
             </li>
           ))}
           {customers.length > MAX_ROWS && matches.length === MAX_ROWS && (
-            <li className="px-3 py-2 text-[11px] text-gray-400">{MAX_ROWS}명까지만 표시 — 더 정확히 검색하세요</li>
+            <li className="px-3 py-2 text-xs text-gray-400">{MAX_ROWS}명까지만 표시 — 더 정확히 검색하세요</li>
           )}
         </ul>
       )}

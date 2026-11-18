@@ -338,7 +338,7 @@ export default function Onboarding() {
               <Sparkles size={20} className="text-white" />
             </div>
             <div className="text-left">
-              <p className="text-sm font-black tracking-wider text-[#1a3a8f] leading-tight">DERMASOLUTION</p>
+              <p className="text-sm font-bold tracking-wider text-[#1a3a8f] leading-tight">DERMASOLUTION</p>
               <p className="text-xs text-gray-400">에스테틱 전용 CRM</p>
             </div>
           </div>
@@ -489,7 +489,7 @@ export default function Onboarding() {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                                    <p className="text-[11px] text-gray-400 truncate">{p.desc}</p>
+                                    <p className="text-xs text-gray-400 truncate">{p.desc}</p>
                                   </div>
                                   <div className="text-right flex-shrink-0">
                                     <p className="text-sm font-bold text-[#1a3a8f]">{p.price.toLocaleString()}원</p>

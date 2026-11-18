@@ -160,7 +160,7 @@ export default function Login() {
             </div>
 
             <div className="mt-4 text-center">
-              <Link to="/admin/login" className="text-[11px] text-gray-400 hover:text-blue-500 transition-colors">
+              <Link to="/admin/login" className="text-xs text-gray-400 hover:text-blue-500 transition-colors">
                 관리자 로그인 →
               </Link>
             </div>
@@ -238,7 +238,7 @@ export function TroiareukeLogo({ white = false }: { white?: boolean }) {
         <Sparkles size={18} className={white ? 'text-white' : 'text-white'} />
       </div>
       <div>
-        <p className={`text-sm font-black tracking-wider leading-tight ${white ? 'text-white' : 'text-[#1a3a8f]'}`}>DERMASOLUTION</p>
+        <p className={`text-sm font-bold tracking-wider leading-tight ${white ? 'text-white' : 'text-[#1a3a8f]'}`}>DERMASOLUTION</p>
         <p className={`text-xs font-medium tracking-wide ${white ? 'text-blue-200' : 'text-gray-400'}`}>에스테틱 전용 CRM</p>
       </div>
     </div>

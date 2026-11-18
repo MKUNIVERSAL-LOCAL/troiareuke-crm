@@ -31,7 +31,7 @@ export default function MessageDraftPanel({ title, text, shareTitle, hint, onClo
         <button type="button" onClick={onClose} aria-label="닫기" className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
       </div>
       <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">{text}</pre>
-      {hint && <p className="text-[10px] text-gray-400 mt-1">{hint}</p>}
+      {hint && <p className="text-2xs text-gray-400 mt-1">{hint}</p>}
       <div className="flex gap-2 mt-2">
         <button type="button" onClick={copy}
           className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1">

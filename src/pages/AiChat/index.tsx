@@ -517,7 +517,7 @@ function AiChatInner() {
                     <span className="text-xs text-gray-300">{format(msg.timestamp, 'HH:mm')}</span>
                     {/* 어떤 AI가 답했는지 표시 */}
                     {msg.usedProvider && (
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                      <span className={`text-2xs px-1.5 py-0.5 rounded-full font-medium ${
                         msg.usedProvider === 'claude' ? 'bg-violet-100 text-violet-600' :
                         msg.usedProvider === 'openai' ? 'bg-emerald-100 text-emerald-600' :
                         'bg-blue-100 text-blue-600'

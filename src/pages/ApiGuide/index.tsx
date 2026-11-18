@@ -258,7 +258,7 @@ export default function ApiGuide() {
               <h3 className="text-sm font-bold text-gray-900">연동 진행률</h3>
               <p className="text-xs text-gray-400 mt-0.5">{connectedCount} / {apis.length} 확인 완료로 표시 (자기 체크)</p>
             </div>
-            <span className="text-2xl font-black text-[#1a3a8f]">{Math.round((connectedCount / apis.length) * 100)}%</span>
+            <span className="text-2xl font-bold text-[#1a3a8f]">{Math.round((connectedCount / apis.length) * 100)}%</span>
           </div>
           <div className="bg-gray-100 rounded-full h-2.5">
             <div className="bg-[#1a3a8f] rounded-full h-2.5 transition-all duration-500" style={{ width: `${(connectedCount / apis.length) * 100}%` }} />
@@ -299,8 +299,8 @@ export default function ApiGuide() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-bold text-gray-900">{api.name}</p>
-                      <span className={clsx('px-2 py-0.5 rounded-full text-[11px] font-bold', priorities[api.priority].color)}>{priorities[api.priority].label}</span>
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[11px]">{api.category}</span>
+                      <span className={clsx('px-2 py-0.5 rounded-full text-xs font-bold', priorities[api.priority].color)}>{priorities[api.priority].label}</span>
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">{api.category}</span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5 truncate">{api.description}</p>
                   </div>
@@ -369,7 +369,7 @@ export default function ApiGuide() {
             ].map(p => (
               <div key={p.plan} className={clsx('rounded-xl p-4', p.highlight ? 'bg-white/20 border-2 border-white/40' : 'bg-white/10')}>
                 <p className="font-bold text-sm">{p.plan}</p>
-                <p className="text-lg font-black mt-1">{p.price}</p>
+                <p className="text-lg font-bold mt-1">{p.price}</p>
                 <p className="text-blue-200 text-xs mt-1">{p.features}</p>
               </div>
             ))}
@@ -417,7 +417,7 @@ export default function ApiGuide() {
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-gray-50 rounded-xl p-3">
-      <p className="text-[11px] font-bold text-gray-400 mb-1">{label}</p>
+      <p className="text-xs font-bold text-gray-400 mb-1">{label}</p>
       <p className="text-sm text-gray-700 leading-relaxed">{value}</p>
     </div>
   );

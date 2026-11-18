@@ -171,29 +171,29 @@ export default function Dashboard() {
           {salesOn && (
             <button type="button" onClick={() => navigate('/sales')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">이번 달 총 매출</p>
-              <p className="text-lg font-black text-gray-900 mt-1">{Math.round(thisMonth.totalRevenue / 10000)}만원</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{revenueGrowth === null ? '전월 매출 없음' : `전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}</p>
+              <p className="text-lg font-bold text-gray-900 mt-1">{Math.round(thisMonth.totalRevenue / 10000)}만원</p>
+              <p className="text-xs text-gray-400 mt-0.5">{revenueGrowth === null ? '전월 매출 없음' : `전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}</p>
             </button>
           )}
           {reservationsOn && (
             <button type="button" onClick={() => navigate('/reservations')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">오늘 예약</p>
-              <p className="text-lg font-black text-gray-900 mt-1">{todayActiveReservations.length}건</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">완료 {todayReservations.filter(r => r.status === 'completed').length}건 · 대기 {todayReservations.filter(r => r.status === 'pending').length}건</p>
+              <p className="text-lg font-bold text-gray-900 mt-1">{todayActiveReservations.length}건</p>
+              <p className="text-xs text-gray-400 mt-0.5">완료 {todayReservations.filter(r => r.status === 'completed').length}건 · 대기 {todayReservations.filter(r => r.status === 'pending').length}건</p>
             </button>
           )}
           {customersOn && (
             <button type="button" onClick={() => navigate('/customers')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">전체 고객</p>
-              <p className="text-lg font-black text-gray-900 mt-1">{totalCustomers}명</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">이번 달 신규 {newThisMonth}명</p>
+              <p className="text-lg font-bold text-gray-900 mt-1">{totalCustomers}명</p>
+              <p className="text-xs text-gray-400 mt-0.5">이번 달 신규 {newThisMonth}명</p>
             </button>
           )}
           {customersOn && (
             <button type="button" onClick={() => navigate('/customers')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">VIP 고객</p>
-              <p className="text-lg font-black text-gray-900 mt-1">{vipCount}명</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">전체의 {totalPercent}%</p>
+              <p className="text-lg font-bold text-gray-900 mt-1">{vipCount}명</p>
+              <p className="text-xs text-gray-400 mt-0.5">전체의 {totalPercent}%</p>
             </button>
           )}
         </div>
@@ -358,7 +358,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs text-gray-500">시술 매출 (이번 달)</p>
-              <p className="text-xl font-black text-gray-900">{Math.round(thisMonth.treatmentRevenue / 10000)}만원</p>
+              <p className="text-xl font-bold text-gray-900">{Math.round(thisMonth.treatmentRevenue / 10000)}만원</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(productsOn ? '/products' : '/sales')}>
@@ -367,7 +367,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs text-gray-500">홈케어 판매 (이번 달)</p>
-              <p className="text-xl font-black text-gray-900">{Math.round(thisMonth.productRevenue / 10000)}만원</p>
+              <p className="text-xl font-bold text-gray-900">{Math.round(thisMonth.productRevenue / 10000)}만원</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>
@@ -376,7 +376,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs text-gray-500">결제 건수 (이번 달)</p>
-              <p className="text-xl font-black text-gray-900">{thisMonth.paymentCount}건</p>
+              <p className="text-xl font-bold text-gray-900">{thisMonth.paymentCount}건</p>
             </div>
           </div>
         </div>
@@ -564,7 +564,7 @@ export default function Dashboard() {
                       className="w-full flex items-center justify-between px-5 py-3 hover:bg-amber-50/60 text-left" title="입고 창 열기">
                       <span className="block">
                         <span className="block text-xs font-semibold text-gray-800">{p.name}</span>
-                        <span className="block text-[11px] text-gray-400">{p.category}</span>
+                        <span className="block text-xs text-gray-400">{p.category}</span>
                       </span>
                       <span className="block text-right">
                         <span className="block text-xs font-bold text-red-500">{p.stock}{p.unit}</span>
@@ -592,7 +592,7 @@ export default function Dashboard() {
                     <div key={r.id} className="flex items-center gap-3">
                       <span className="text-xs font-medium text-[#1a3a8f] w-10 flex-shrink-0">{r.startTime}</span>
                       <div className="flex-1 bg-blue-50 rounded-lg px-3 py-1.5">
-                        <p className="text-[11px] font-semibold text-gray-800">{r.customerName}</p>
+                        <p className="text-xs font-semibold text-gray-800">{r.customerName}</p>
                         <p className="text-xs text-gray-400">{r.staffName}</p>
                       </div>
                     </div>

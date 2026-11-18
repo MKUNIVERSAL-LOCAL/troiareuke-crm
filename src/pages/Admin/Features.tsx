@@ -232,7 +232,7 @@ export default function AdminFeatures() {
                         <p className="text-sm font-semibold text-white">
                           {def.label}
                           {def.deviceToggle && (
-                            <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full align-middle">
+                            <span className="ml-2 text-2xs font-bold px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full align-middle">
                               샵에서 추가 토글
                             </span>
                           )}

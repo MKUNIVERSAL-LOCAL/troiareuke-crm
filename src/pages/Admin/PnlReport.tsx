@@ -247,7 +247,7 @@ export default function PnlReport() {
                 <p className="text-xs text-slate-400">{c.label}</p>
                 <p className={`text-lg font-bold mt-1 ${c.color}`}>{won(c.value)}</p>
                 {c.label === '영업이익' && (
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     이익률 {yearTotal.revenue.total > 0 ? Math.round((yearTotal.operatingProfit / yearTotal.revenue.total) * 100) : 0}%
                   </p>
                 )}
@@ -267,7 +267,7 @@ export default function PnlReport() {
                 <thead>
                   <tr className="border-b border-slate-700/30">
                     {['기간', '매출액', '매출원가', '매출총이익', '판매비·관리비', '영업이익', '이익률'].map(h => (
-                      <th key={h} className="text-right first:text-left px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                      <th key={h} className="text-right first:text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -328,7 +328,7 @@ export default function PnlReport() {
                   <div key={c} className="flex justify-between py-1 pl-3 text-xs">
                     <span className="text-slate-400">
                       {c}
-                      <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${COGS_CATEGORIES.includes(c as ExpenseCategory) ? 'bg-orange-500/10 text-orange-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                      <span className={`ml-1.5 text-2xs px-1.5 py-0.5 rounded-full ${COGS_CATEGORIES.includes(c as ExpenseCategory) ? 'bg-orange-500/10 text-orange-400' : 'bg-rose-500/10 text-rose-400'}`}>
                         {COGS_CATEGORIES.includes(c as ExpenseCategory) ? '매출원가' : '판관비'}
                       </span>
                     </span>
@@ -367,7 +367,7 @@ export default function PnlReport() {
             </div>
           </div>
 
-          <p className="text-[11px] text-slate-600">
+          <p className="text-xs text-slate-600">
             * 지점이 CRM에 등록한 결제(완료)·지출 기록 기준의 운영 참고용 집계입니다. 세무 신고 자료와 다를 수 있습니다.
           </p>
         </div>

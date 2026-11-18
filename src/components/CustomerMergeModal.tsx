@@ -113,7 +113,7 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
               ))}
             </div>
             {matched.length > MAX_CANDIDATES && (
-              <p className="mt-1 text-[11px] text-gray-400">{matched.length}명 중 {MAX_CANDIDATES}명만 표시 — 이름이나 전화번호를 더 입력하세요</p>
+              <p className="mt-1 text-xs text-gray-400">{matched.length}명 중 {MAX_CANDIDATES}명만 표시 — 이름이나 전화번호를 더 입력하세요</p>
             )}
           </div>
           {source && preview && (

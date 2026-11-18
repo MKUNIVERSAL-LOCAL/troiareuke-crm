@@ -45,7 +45,7 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center px-8 gap-4 sticky top-0 z-20">
       <div className="flex-1">
-        <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+        <h2 className="text-xl font-bold tracking-tight text-gray-900">{title}</h2>
         {subtitle && <p className="text-xs text-gray-400">{subtitle}</p>}
       </div>
 

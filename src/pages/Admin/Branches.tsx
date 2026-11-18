@@ -371,17 +371,17 @@ export default function Branches() {
           <table className="w-full min-w-[850px]">
             <thead>
               <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">지점명</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">유형</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">플랜</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">상태</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">지점명</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">유형</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">플랜</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">상태</th>
                 {NAS_MODE && (
-                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     프로그램 버전{latestVersion && <span className="ml-1 normal-case text-slate-600">(최신 v{latestVersion})</span>}
                   </th>
                 )}
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">등록일</th>
-                <th className="text-right px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">액션</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">등록일</th>
+                <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">액션</th>
               </tr>
             </thead>
             <tbody>
@@ -397,7 +397,7 @@ export default function Branches() {
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-400">{b.shop_type || '—'}</td>
                     <td className="px-6 py-4">
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${plan.color}`}>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${plan.color}`}>
                         {plan.label}
                       </span>
                     </td>
@@ -423,9 +423,9 @@ export default function Branches() {
                             <div className="text-xs">
                               <span className={outdated ? 'font-bold text-red-400' : 'text-emerald-400'}>v{info.version}</span>
                               {outdated && (
-                                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
+                                <span className="ml-1.5 text-2xs font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
                               )}
-                              <p className="text-[11px] text-slate-500 mt-0.5">
+                              <p className="text-xs text-slate-500 mt-0.5">
                                 {appModeLabel[info.mode] || info.mode}
                                 {info.lastSeenAt && ` · ${format(parseISO(info.lastSeenAt), 'MM/dd HH:mm', { locale: ko })}`}
                               </p>
@@ -549,7 +549,7 @@ export default function Branches() {
                     value={form.service_ends_at}
                     onChange={e => setForm(f => ({ ...f, service_ends_at: e.target.value }))}
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     이 지점의 모든 계정에 일괄 적용됩니다. 만료일이 지나면 로그인할 수 없습니다 (데이터는 유지).
                   </p>
                 </Field>

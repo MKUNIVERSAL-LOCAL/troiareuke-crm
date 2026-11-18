@@ -181,19 +181,19 @@ export default function Announcements() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${type.color}`}>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${type.color}`}>
                         {type.label}
                       </span>
                       {a.is_active ? (
-                        <span className="flex items-center gap-1 text-[11px] text-emerald-400">
+                        <span className="flex items-center gap-1 text-xs text-emerald-400">
                           <CheckCircle size={11} /> 게시 중
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                        <span className="flex items-center gap-1 text-xs text-slate-500">
                           <XCircle size={11} /> 숨김
                         </span>
                       )}
-                      <span className="text-[11px] text-slate-600 ml-auto">
+                      <span className="text-xs text-slate-600 ml-auto">
                         {format(parseISO(a.created_at), 'yyyy.MM.dd HH:mm', { locale: ko })}
                       </span>
                     </div>

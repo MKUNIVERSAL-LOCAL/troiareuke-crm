@@ -121,21 +121,21 @@ export default function Products() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">전체 제품</p>
-            <p className="text-2xl font-black text-gray-900">{products.length}<span className="text-sm font-medium ml-1">종</span></p>
+            <p className="text-2xl font-bold text-gray-900">{products.length}<span className="text-sm font-medium ml-1">종</span></p>
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">재고 부족</p>
-            <p className={clsx('text-2xl font-black', lowStockCount > 0 ? 'text-red-500' : 'text-gray-900')}>
+            <p className={clsx('text-2xl font-bold', lowStockCount > 0 ? 'text-red-500' : 'text-gray-900')}>
               {lowStockCount}<span className="text-sm font-medium ml-1">종</span>
             </p>
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">총 판매건수</p>
-            <p className="text-2xl font-black text-gray-900">{sales.length}<span className="text-sm font-medium ml-1">건</span></p>
+            <p className="text-2xl font-bold text-gray-900">{sales.length}<span className="text-sm font-medium ml-1">건</span></p>
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출</p>
-            <p className="text-2xl font-black text-[#1a3a8f]">
+            <p className="text-2xl font-bold text-[#1a3a8f]">
               {Math.round(totalSalesRevenue / 10000)}<span className="text-sm font-medium">만원</span>
             </p>
           </div>
@@ -222,13 +222,13 @@ export default function Products() {
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-gray-900">
                               {p.name}
-                              {!p.isActive && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-[10px] font-medium align-middle">비활성</span>}
+                              {!p.isActive && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-2xs font-medium align-middle">비활성</span>}
                             </p>
                             {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}
                             <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
                               <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{p.category}</span>
                               <span className={clsx('font-bold', isLow ? 'text-red-500' : 'text-gray-700')}>재고 {p.stock}{p.unit}</span>
-                              {isLow && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-[11px] font-medium"><AlertTriangle size={10} /> 부족</span>}
+                              {isLow && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs font-medium"><AlertTriangle size={10} /> 부족</span>}
                               <span className={clsx('font-semibold', margin >= 50 ? 'text-green-600' : margin >= 30 ? 'text-blue-600' : 'text-orange-500')}>마진 {margin}%</span>
                             </p>
                           </div>
@@ -276,7 +276,7 @@ export default function Products() {
                                 <p className="text-sm font-semibold text-gray-900">
                                   {p.name}
                                   {!p.isActive && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-[10px] font-medium align-middle">비활성</span>
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-2xs font-medium align-middle">비활성</span>
                                   )}
                                 </p>
                                 {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}
@@ -300,11 +300,11 @@ export default function Products() {
                           </td>
                           <td className="px-4 py-4 text-center">
                             {isLow ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-600 rounded-full text-[11px] font-medium">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-600 rounded-full text-xs font-medium">
                                 <AlertTriangle size={10} /> 부족
                               </span>
                             ) : (
-                              <span className="px-2.5 py-1 bg-green-100 text-green-600 rounded-full text-[11px] font-medium">정상</span>
+                              <span className="px-2.5 py-1 bg-green-100 text-green-600 rounded-full text-xs font-medium">정상</span>
                             )}
                           </td>
                           <td className="px-4 py-4 text-right">
@@ -405,7 +405,7 @@ export default function Products() {
                 ))}
                 <li className="px-4 py-3 bg-gray-50/50 flex items-center justify-between text-xs font-semibold text-gray-500">
                   <span>표시분 합계(최근 60건)</span>
-                  <span className="text-sm font-black text-[#1a3a8f]">{visibleSalesRevenue.toLocaleString()}원</span>
+                  <span className="text-sm font-bold text-[#1a3a8f]">{visibleSalesRevenue.toLocaleString()}원</span>
                 </li>
               </ul>
               <div className="hidden lg:block overflow-auto max-h-[65vh]">
@@ -452,7 +452,7 @@ export default function Products() {
                 <tfoot>
                   <tr className="border-t border-gray-100 bg-gray-50/50">
                     <td colSpan={5} className="px-6 py-3 text-xs font-semibold text-gray-500 text-right">표시분 합계(최근 60건)</td>
-                    <td className="px-4 py-3 text-sm font-black text-[#1a3a8f] text-right">
+                    <td className="px-4 py-3 text-sm font-bold text-[#1a3a8f] text-right">
                       {visibleSalesRevenue.toLocaleString()}원
                     </td>
                     <td colSpan={2} />
@@ -808,7 +808,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
         {/* Total Price */}
         <div className="px-4 py-3 bg-gray-50 rounded-xl flex items-center justify-between">
           <span className="text-sm text-gray-600">결제 금액</span>
-          <span className="text-xl font-black text-[#1a3a8f]">{totalPrice.toLocaleString()}원</span>
+          <span className="text-xl font-bold text-[#1a3a8f]">{totalPrice.toLocaleString()}원</span>
         </div>
 
         {/* Payment Method */}

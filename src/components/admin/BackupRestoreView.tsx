@@ -163,7 +163,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                   </button>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 mt-2">선택한 항목은 현재 데이터를 지우고 백업 시점 데이터로 교체됩니다. 선택하지 않은 항목은 그대로 유지됩니다.</p>
+              <p className="text-xs text-slate-500 mt-2">선택한 항목은 현재 데이터를 지우고 백업 시점 데이터로 교체됩니다. 선택하지 않은 항목은 그대로 유지됩니다.</p>
             </div>
 
             <div>

@@ -364,10 +364,10 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
               <div>
                 <p className="text-sm font-bold text-gray-900">{t.name}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={clsx('px-2 py-0.5 rounded text-[11px] font-medium', MSG_TYPE_COLORS[t.type])}>
+                  <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', MSG_TYPE_COLORS[t.type])}>
                     {MSG_TYPE_LABELS[t.type]}
                   </span>
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[11px]">{t.category}</span>
+                  <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">{t.category}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -600,7 +600,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
             <div key={item.id} className="px-6 py-3 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={clsx('text-[11px] px-2 py-0.5 rounded-full font-medium', badge.color)}>{badge.label}</span>
+                  <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', badge.color)}>{badge.label}</span>
                   <span className="text-xs text-gray-500">{new Date(item.send_at).toLocaleString()}</span>
                   <span className="text-xs text-gray-400">{item.phones.length}명</span>
                 </div>
@@ -722,16 +722,16 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-bold text-gray-900">{h.templateName || '직접 작성'}</p>
-                      <span className={clsx('px-2 py-0.5 rounded text-[11px] font-medium', MSG_TYPE_COLORS[h.type])}>
+                      <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', MSG_TYPE_COLORS[h.type])}>
                         {MSG_TYPE_LABELS[h.type]}
                       </span>
                       {isGatewayPending && (
-                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-700">미연동</span>
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">미연동</span>
                       )}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{formatSentAt(h.sentAt)}</p>
                     {isGatewayPending && (
-                      <p className="text-[11px] text-amber-600 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
+                      <p className="text-xs text-amber-600 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
                     )}
                   </div>
                 </div>
@@ -745,7 +745,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
                   }
                   {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-400">실패 {h.failCount}명</p>}
                   {h.status === 'sent' && h.cost !== undefined && h.cost > 0 && (
-                    <p className="text-[11px] text-gray-400 mt-1">예상 비용 {h.cost.toLocaleString()}원</p>
+                    <p className="text-xs text-gray-400 mt-1">예상 비용 {h.cost.toLocaleString()}원</p>
                   )}
                 </div>
               </div>
@@ -1068,7 +1068,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               placeholder={'발송할 메시지 내용을 입력하세요\n{고객명}, {날짜} 등의 변수를 사용할 수 있습니다'}
             />
             {msgType === 'sms' && (
-              <p className="text-[11px] text-gray-400 mt-1">90자 초과 시 자동으로 LMS로 전환됩니다</p>
+              <p className="text-xs text-gray-400 mt-1">90자 초과 시 자동으로 LMS로 전환됩니다</p>
             )}
           </div>
 
@@ -1115,7 +1115,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               />
             )}
             {!isScheduleAvailable && (
-              <p className="text-[11px] text-gray-400 mt-1.5">예약 발송은 준비 중입니다.</p>
+              <p className="text-xs text-gray-400 mt-1.5">예약 발송은 준비 중입니다.</p>
             )}
           </div>
 

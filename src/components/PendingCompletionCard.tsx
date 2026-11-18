@@ -61,7 +61,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
           </button>
         )}
       </div>
-      <p className="text-[11px] text-gray-400 mb-2">
+      <p className="text-xs text-gray-400 mb-2">
         최근 {PENDING_LOOKBACK_DAYS}일 기준. 완료 처리해야 방문 횟수·마지막 방문일·재방문 리마인더·직원 실적에 반영됩니다. 오지 않은 고객은 [노쇼]로 남겨 주세요.
         건별 [완료]는 결제가 없으면 매출 등록으로 이어지고, 일괄 완료는 상태만 바꿉니다(결제는 매출 화면에서).
       </p>
@@ -71,14 +71,14 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
             <button type="button" onClick={() => navigate(`/reservations?open=${r.id}`)} className="flex-1 min-w-0 text-left" title="예약 상세 열기">
               <p className="text-sm font-medium text-gray-800 truncate">
                 {r.customerName} <span className="text-xs text-gray-400">· {formatDate(r.date)} {r.startTime}</span>
-                {r.status === 'pending' && <span className="ml-1 text-[10px] font-semibold text-gray-500 bg-gray-100 rounded px-1 py-0.5 align-middle">대기</span>}
+                {r.status === 'pending' && <span className="ml-1 text-2xs font-semibold text-gray-500 bg-gray-100 rounded px-1 py-0.5 align-middle">대기</span>}
               </p>
               <p className="text-xs text-gray-500 truncate">{r.services.map(s => s.serviceName).join(', ') || '시술 항목 미지정'}{r.staffName ? ` · ${r.staffName}` : ''}</p>
             </button>
             <button type="button" onClick={() => settleOneAndPay(r)} aria-label={`${r.customerName} ${formatDate(r.date)} 완료`}
-              className="px-2 py-1 rounded-lg text-[11px] font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
+              className="px-2 py-1 rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
             <button type="button" onClick={() => settle([r.id], 'noshow')} aria-label={`${r.customerName} ${formatDate(r.date)} 노쇼`}
-              className="px-2 py-1 rounded-lg text-[11px] font-medium bg-rose-50 text-rose-600 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
+              className="px-2 py-1 rounded-lg text-xs font-medium bg-rose-50 text-rose-600 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
           </li>
         ))}
       </ul>

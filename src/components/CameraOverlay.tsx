@@ -229,7 +229,7 @@ export default function CameraOverlay({ references, onCapture, onClose, onPickFr
           </div>
         )}
         {reference && showGuide && !error && (
-          <label className="flex items-center gap-2 text-[11px] text-white/80">
+          <label className="flex items-center gap-2 text-xs text-white/80">
             가이드 투명도
             <input type="range" min={0.1} max={0.9} step={0.05} value={opacity} onChange={e => setOpacity(Number(e.target.value))} className="flex-1" aria-label="가이드 투명도" />
           </label>

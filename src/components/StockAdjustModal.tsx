@@ -74,11 +74,11 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
         <div className="grid grid-cols-2 gap-2" role="group" aria-label="작업 종류">
           <button type="button" aria-pressed={mode === 'in'} onClick={() => setMode('in')}
             className={`py-2 rounded-xl text-sm font-medium border leading-tight ${mode === 'in' ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200'}`}>
-            입고<span className="block text-[11px] opacity-70">수량 더하기</span>
+            입고<span className="block text-xs opacity-70">수량 더하기</span>
           </button>
           <button type="button" aria-pressed={mode === 'set'} onClick={() => setMode('set')}
             className={`py-2 rounded-xl text-sm font-medium border leading-tight ${mode === 'set' ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200'}`}>
-            실사 조정<span className="block text-[11px] opacity-70">재고 맞추기</span>
+            실사 조정<span className="block text-xs opacity-70">재고 맞추기</span>
           </button>
         </div>
         <div>

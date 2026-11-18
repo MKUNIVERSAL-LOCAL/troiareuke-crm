@@ -35,7 +35,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <p className="text-sm text-gray-500 leading-relaxed">
             저장된 데이터는 안전합니다. 다시 시도해도 반복되면 본사에 아래 내용을 전달해주세요.
           </p>
-          <pre className="text-left text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-xl p-3 overflow-x-auto max-h-32">
+          <pre className="text-left text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-xl p-3 overflow-x-auto max-h-32">
             {this.state.error.message}
           </pre>
           <div className="flex gap-2 justify-center">

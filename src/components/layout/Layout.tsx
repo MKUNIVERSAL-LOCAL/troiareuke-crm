@@ -55,7 +55,7 @@ export default function Layout() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="max-w-md text-center space-y-4">
           <div className="w-14 h-14 bg-[#1a3a8f] rounded-2xl flex items-center justify-center mx-auto">
-            <span className="text-white text-xl font-black">T</span>
+            <span className="text-white text-xl font-bold">T</span>
           </div>
           <h1 className="text-xl font-bold text-gray-900">관리자 전용 프로그램입니다</h1>
           <p className="text-sm text-gray-500 leading-relaxed">
@@ -121,8 +121,8 @@ export default function Layout() {
               </svg>
             </div>
             <div>
-              <p className="max-w-[220px] truncate text-xs font-black text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
-              <p className="text-[9px] text-gray-400">에스테틱 고객관리</p>
+              <p className="max-w-[220px] truncate text-xs font-bold text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
+              <p className="text-2xs text-gray-400">에스테틱 고객관리</p>
             </div>
           </div>
         </div>

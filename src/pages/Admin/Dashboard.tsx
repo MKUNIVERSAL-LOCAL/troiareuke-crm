@@ -191,7 +191,7 @@ export default function AdminDashboard() {
               {backupState === 'running' ? '백업 중...' : '지금 서버 백업'}
             </button>
             {backupMessage && (
-              <p className={`text-[11px] mt-1.5 ${backupState === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{backupMessage}</p>
+              <p className={`text-xs mt-1.5 ${backupState === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{backupMessage}</p>
             )}
           </div>
         )}
@@ -220,7 +220,7 @@ export default function AdminDashboard() {
                 </div>
                 <p className="text-2xl font-bold text-white">{card.value}</p>
                 <p className="text-xs font-medium text-slate-300 mt-1">{card.label}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">{card.sub}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{card.sub}</p>
               </div>
             ))}
           </div>
@@ -260,7 +260,7 @@ export default function AdminDashboard() {
                     </>
                   )}
                   {unknownBranches.length > 0 && (
-                    <p className="mt-3 text-[11px] text-slate-500">
+                    <p className="mt-3 text-xs text-slate-500">
                       버전 기록 없음 {unknownBranches.length}곳 ({unknownBranches.map(b => b.name).join(', ')}) — v1.0.48 이상 프로그램이 접속하면 표시됩니다
                     </p>
                   )}
@@ -302,7 +302,7 @@ export default function AdminDashboard() {
             <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
               <h2 className="text-sm font-bold text-white">
                 최근 로그인 기록
-                {!logsFromServer && <span className="ml-2 text-[11px] font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
+                {!logsFromServer && <span className="ml-2 text-xs font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
               </h2>
               <Link to="/admin/login-logs" className="text-xs text-blue-400 hover:text-blue-300">전체 보기 →</Link>
             </div>
@@ -310,10 +310,10 @@ export default function AdminDashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-700/30">
-                    <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">이메일</th>
-                    <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">지점</th>
-                    <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">상태</th>
-                    <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">시간</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">이메일</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">지점</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">상태</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">시간</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -30,7 +30,7 @@ export default function DailyCloseCard({ compact = false, refreshKey = 0 }: { co
 
   const Stat = ({ label, value }: { label: string; value: string }) => (
     <div className="bg-slate-50 rounded-lg px-3 py-2 min-w-0">
-      <p className="text-[11px] text-gray-400">{label}</p>
+      <p className="text-xs text-gray-400">{label}</p>
       <p className="text-sm font-bold text-gray-900 truncate">{value}</p>
     </div>
   );
@@ -61,7 +61,7 @@ export default function DailyCloseCard({ compact = false, refreshKey = 0 }: { co
         <Stat label="예약 완료/노쇼" value={`${close.reservations.completed} / ${close.reservations.noshow}`} />
       </div>
       {(close.byMethod.length > 0 || close.refunds > 0 || close.expenses > 0) && (
-        <p className="text-[11px] text-gray-500 mt-2 truncate">
+        <p className="text-xs text-gray-500 mt-2 truncate">
           {[
             ...close.byMethod.map(m => `${m.method} ${m.amount.toLocaleString()}원`),
             close.refunds ? `환불(오늘 결제분) ${close.refunds.toLocaleString()}원` : '',

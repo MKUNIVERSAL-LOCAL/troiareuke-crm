@@ -39,7 +39,7 @@ function ProgramBalance({ customerId }: { customerId: string }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1" aria-label="회차권 잔여">
       {active.map(cp => (
-        <span key={cp.id} className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+        <span key={cp.id} className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
           {cp.programName}{cp.totalSessions != null ? ` · 잔여 ${Math.max(0, cp.totalSessions - (cp.usedSessions || 0))}회` : ' · 기간제'}
         </span>
       ))}
@@ -302,7 +302,7 @@ export default function Reservations() {
           {mobileTab === 'month' && (
             <div className="flex items-center justify-between mt-2" data-testid="mobile-month-nav">
               <button type="button" onClick={() => setMobileMonthOffset(o => o - 1)} aria-label="이전 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronLeft size={16} /></button>
-              <button type="button" onClick={() => setMobileMonthOffset(0)} data-testid="mobile-month-label" className="text-sm font-semibold text-gray-800">{format(mobileMonthDate, 'yyyy년 M월')}{mobileMonthOffset !== 0 && <span className="ml-1 text-[11px] font-normal text-[#1a3a8f]">(이번달로)</span>}</button>
+              <button type="button" onClick={() => setMobileMonthOffset(0)} data-testid="mobile-month-label" className="text-sm font-semibold text-gray-800">{format(mobileMonthDate, 'yyyy년 M월')}{mobileMonthOffset !== 0 && <span className="ml-1 text-xs font-normal text-[#1a3a8f]">(이번달로)</span>}</button>
               <button type="button" onClick={() => setMobileMonthOffset(o => o + 1)} aria-label="다음 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronRight size={16} /></button>
             </div>
           )}
@@ -604,7 +604,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
           const dayReservations = reservations.filter(r => r.date === dayKey);
           return (
             <div key={i} className={clsx('py-3 px-2 text-center border-r border-gray-100 last:border-r-0', isToday && 'bg-purple-50')}>
-              <p className={clsx('text-[11px] font-medium', i === 5 ? 'text-blue-500' : i === 6 ? 'text-red-500' : 'text-gray-500')}>
+              <p className={clsx('text-xs font-medium', i === 5 ? 'text-blue-500' : i === 6 ? 'text-red-500' : 'text-gray-500')}>
                 {dayNames[i]}
               </p>
               <p className={clsx('text-sm font-bold mt-0.5', isToday ? 'text-purple-600' : 'text-gray-800')}>
@@ -624,7 +624,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
           const slotStartMin = timeToMin(time);
           return (
             <div key={time} className="grid grid-cols-8 border-b border-gray-50 h-14">
-              <div className="py-2 px-3 text-[11px] text-gray-400 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
+              <div className="py-2 px-3 text-xs text-gray-400 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
                 {time}
               </div>
               {weekDays.map((day, di) => {
@@ -1392,7 +1392,7 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-gray-50 rounded-xl p-3">
-      <p className="text-[11px] text-gray-400 mb-0.5">{label}</p>
+      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
       <p className="text-sm font-semibold text-gray-800">{value}</p>
     </div>
   );

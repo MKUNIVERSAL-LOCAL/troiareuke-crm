@@ -1318,7 +1318,7 @@ export default function Settings() {
                         <div key={c.shopId} className="flex items-center justify-between gap-3 p-3 border border-gray-200 rounded-xl">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-gray-800">고객 {c.customerCount}명 · 데이터 {c.keyCount}종</p>
-                            <p className="text-[11px] text-gray-400 font-mono truncate">이전 지점 ID: {c.shopId}</p>
+                            <p className="text-xs text-gray-400 font-mono truncate">이전 지점 ID: {c.shopId}</p>
                           </div>
                           <button
                             onClick={() => handleLegacyImport(c)}
@@ -1369,7 +1369,7 @@ export default function Settings() {
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-gray-800">
                               {d.label}
-                              {d.sensitive && <span className="ml-1.5 text-[10px] font-bold text-amber-600">민감정보</span>}
+                              {d.sensitive && <span className="ml-1.5 text-2xs font-bold text-amber-600">민감정보</span>}
                             </span>
                             <span className="block text-xs text-gray-400 mt-0.5">{d.description}</span>
                           </span>

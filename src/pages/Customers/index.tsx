@@ -151,7 +151,7 @@ function TreatmentPhotoStrip({ logId, treatmentDate, customerName, tick, onOpen 
           </button>
         );
       })}
-      {thumbs.length > 4 && <span className="text-[11px] text-gray-400">+{thumbs.length - 4}</span>}
+      {thumbs.length > 4 && <span className="text-xs text-gray-400">+{thumbs.length - 4}</span>}
     </div>
   );
 }
@@ -226,16 +226,16 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
                   <p className="text-xs font-medium text-gray-800 truncate">
                     {p.typeLabel}
                     {p.status !== 'completed' && (
-                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] ${p.status === 'refunded' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'}`}>{PAYMENT_STATUS_LABEL[p.status] ?? p.status}</span>
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-2xs ${p.status === 'refunded' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'}`}>{PAYMENT_STATUS_LABEL[p.status] ?? p.status}</span>
                     )}
                   </p>
-                  <p className="text-[11px] text-gray-400 truncate">{formatDate(p.paymentDate)} · {p.paymentMethod}{p.memo ? ` · ${p.memo}` : ''}</p>
+                  <p className="text-xs text-gray-400 truncate">{formatDate(p.paymentDate)} · {p.paymentMethod}{p.memo ? ` · ${p.memo}` : ''}</p>
                 </div>
                 <span className={`text-sm font-semibold whitespace-nowrap ${p.status === 'refunded' ? 'text-rose-500 line-through' : 'text-gray-900'}`}>{formatPrice(p.amount)}</span>
               </div>
             ))}
           </div>
-          {payments.length > shown.length && <p className="text-[11px] text-gray-300 mt-1">외 {payments.length - shown.length}건 — 전체는 매출 화면 참조</p>}
+          {payments.length > shown.length && <p className="text-xs text-gray-300 mt-1">외 {payments.length - shown.length}건 — 전체는 매출 화면 참조</p>}
         </>
       )}
     </div>
@@ -966,7 +966,7 @@ export default function Customers() {
   })();
   const tagChips = selected && (selected.tags || []).length > 0 ? (
     <span className="flex flex-wrap gap-1 mt-1" data-testid="customer-tags">
-      {(selected.tags || []).map(t => <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">#{t}</span>)}
+      {(selected.tags || []).map(t => <span key={t} className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">#{t}</span>)}
     </span>
   ) : null;
 
@@ -1546,22 +1546,22 @@ export default function Customers() {
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-semibold text-gray-800">{c.consultDate}{c.staffName ? <span className="font-normal text-gray-400"> · {c.staffName}</span> : null}</p>
                           <span className="flex items-center gap-1.5">
-                            {c.skinTypeResult && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
+                            {c.skinTypeResult && <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
                             <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-2.5 -m-2 text-gray-300 active:text-red-400"><X size={16} /></button>
                           </span>
                         </div>
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
-                        {c.recommendedSolution && <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
-                        {c.recommendedProducts.length > 0 && <p className="text-[11px] text-gray-500 mt-0.5">🧴 {c.recommendedProducts.join(', ')}</p>}
-                        {c.managerNote && <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">📝 {c.managerNote}</p>}
-                        {c.nextConsultDate && <p className="text-[11px] text-indigo-500 mt-0.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>}
+                        {c.recommendedSolution && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
+                        {c.recommendedProducts.length > 0 && <p className="text-xs text-gray-500 mt-0.5">🧴 {c.recommendedProducts.join(', ')}</p>}
+                        {c.managerNote && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">📝 {c.managerNote}</p>}
+                        {c.nextConsultDate && <p className="text-xs text-indigo-500 mt-0.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>}
                         <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
                         <button
                           type="button"
                           onClick={() => handleConsultPdf(c)}
                           disabled={pdfBusyId === c.id}
                           aria-label={`${formatDate(c.consultDate)} 상담 결과지 PDF`}
-                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
                         >
                           <FileText size={12} />{pdfBusyId === c.id ? '만드는 중...' : '결과지 PDF'}
                         </button>
@@ -1569,7 +1569,7 @@ export default function Customers() {
                           type="button"
                           onClick={() => openConsultEdit(c)}
                           aria-label={`${formatDate(c.consultDate)} 상담 수정`}
-                          className="mt-2 ml-1.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
+                          className="mt-2 ml-1.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50"
                         >
                           <Pencil size={12} />수정
                         </button>
@@ -1602,7 +1602,7 @@ export default function Customers() {
                               className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
                           </span>
                         </div>
-                        <p className="text-[11px] text-gray-400">결제 {formatPrice(cp.pricePaid)} · 등록 {formatDate(cp.purchaseDate)}{cp.expiryDate ? ` · 만료일 ${formatDate(cp.expiryDate)}` : ''}</p>
+                        <p className="text-xs text-gray-400">결제 {formatPrice(cp.pricePaid)} · 등록 {formatDate(cp.purchaseDate)}{cp.expiryDate ? ` · 만료일 ${formatDate(cp.expiryDate)}` : ''}</p>
                         {cp.totalSessions != null && (
                           <>
                             <p className="text-xs text-gray-500">
@@ -1635,10 +1635,10 @@ export default function Customers() {
                         <div key={log.id} className="p-3 bg-slate-50 rounded-lg">
                           <div className="flex items-center justify-between">
                             <p className="text-xs font-semibold text-gray-800">{log.treatmentDate}</p>
-                            {log.staffName && <span className="text-[11px] text-gray-400">{log.staffName}</span>}
+                            {log.staffName && <span className="text-xs text-gray-400">{log.staffName}</span>}
                           </div>
                           <p className="text-xs text-gray-600 mt-0.5">{log.treatmentDetails || log.programName || '시술 내역 없음'}</p>
-                          {log.skinCondition && <p className="text-[11px] text-gray-400 mt-0.5">피부 상태: {log.skinCondition}</p>}
+                          {log.skinCondition && <p className="text-xs text-gray-400 mt-0.5">피부 상태: {log.skinCondition}</p>}
                           <TreatmentPhotoStrip logId={log.id} treatmentDate={log.treatmentDate} customerName={selected.name} tick={photoTick + photoCacheVersion} onOpen={setLightbox} />
                         </div>
                       ))}
@@ -2105,7 +2105,7 @@ export default function Customers() {
                           <div className="grid grid-cols-3 gap-1.5 mb-2">
                             {metricEntries.map(e => (
                               <div key={e.label} className="text-center bg-white rounded-lg py-1 border border-indigo-50">
-                                <p className="text-[10px] text-gray-400">{e.label}</p>
+                                <p className="text-2xs text-gray-400">{e.label}</p>
                                 <p className="text-xs font-bold text-indigo-700">{e.v}</p>
                               </div>
                             ))}
@@ -2114,7 +2114,7 @@ export default function Customers() {
 
                         {c.recommendedSolution && (
                           <div className="mt-1 p-2.5 bg-white rounded-lg border border-indigo-50">
-                            <p className="text-[10px] font-semibold text-indigo-500 mb-0.5">추천 솔루션</p>
+                            <p className="text-2xs font-semibold text-indigo-500 mb-0.5">추천 솔루션</p>
                             <p className="text-xs text-gray-700 whitespace-pre-line">{c.recommendedSolution}</p>
                           </div>
                         )}
@@ -2133,7 +2133,7 @@ export default function Customers() {
                           onClick={() => handleConsultPdf(c)}
                           disabled={pdfBusyId === c.id}
                           aria-label={`${formatDate(c.consultDate)} 상담 결과지 PDF`}
-                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-[11px] font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-indigo-100 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
                         >
                           <FileText size={12} />{pdfBusyId === c.id ? '만드는 중...' : '결과지 PDF'}
                         </button>
@@ -2141,7 +2141,7 @@ export default function Customers() {
                           type="button"
                           onClick={() => openConsultEdit(c)}
                           aria-label={`${formatDate(c.consultDate)} 상담 수정`}
-                          className="mt-2 ml-1.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-[11px] font-medium text-gray-600 hover:bg-gray-50"
+                          className="mt-2 ml-1.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50"
                         >
                           <Pencil size={12} />수정
                         </button>
@@ -2198,7 +2198,7 @@ export default function Customers() {
                               <p className="text-sm font-bold text-gray-800">{formatPrice(cp.pricePaid)}</p>
                             </div>
                             <button type="button" onClick={() => setManageProgram(cp)} aria-label={`${cp.programName} 관리`}
-                              className="px-2 py-1 text-[11px] font-medium rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 whitespace-nowrap">관리</button>
+                              className="px-2 py-1 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 whitespace-nowrap">관리</button>
                           </div>
                         </div>
 
@@ -2231,9 +2231,9 @@ export default function Customers() {
                           if (deductions.length === 0) return null;
                           return (
                             <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                              <p className="text-[11px] font-medium text-gray-400">차감 내역 ({deductions.length}건)</p>
+                              <p className="text-xs font-medium text-gray-400">차감 내역 ({deductions.length}건)</p>
                               {deductions.slice(0, 10).map(t => (
-                                <div key={t.id} className="flex items-center justify-between text-[11px] text-gray-500">
+                                <div key={t.id} className="flex items-center justify-between text-xs text-gray-500">
                                   <span className="truncate mr-2">
                                     {formatDate(t.treatmentDate)} · {t.treatmentDetails || t.programName || '관리'}
                                     {t.staffName ? ` (${t.staffName})` : ''}
@@ -2242,7 +2242,7 @@ export default function Customers() {
                                 </div>
                               ))}
                               {deductions.length > 10 && (
-                                <p className="text-[11px] text-gray-300">외 {deductions.length - 10}건 — 전체는 최근 시술 기록 참조</p>
+                                <p className="text-xs text-gray-300">외 {deductions.length - 10}건 — 전체는 최근 시술 기록 참조</p>
                               )}
                             </div>
                           );
@@ -2761,7 +2761,7 @@ export default function Customers() {
                 <div className="flex items-center gap-1.5 mb-2">
                   <Sparkles size={14} className="text-violet-600" />
                   <label className="text-xs font-semibold text-violet-900">AI 피부 분석 (사진)</label>
-                  <span className="text-[10px] text-gray-400">· 관리 참고용 (의학적 진단 아님)</span>
+                  <span className="text-2xs text-gray-400">· 관리 참고용 (의학적 진단 아님)</span>
                 </div>
                 <input ref={consultPhotoRef} type="file" accept="image/*" onChange={handleConsultPhoto} className="hidden" />
                 <div className="flex gap-3">
@@ -2771,7 +2771,7 @@ export default function Customers() {
                     <button type="button" onClick={() => consultPhotoRef.current?.click()}
                       className="w-20 h-20 rounded-xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center gap-1 text-indigo-400 hover:border-indigo-400 transition-colors flex-shrink-0">
                       <Camera size={18} />
-                      <span className="text-[10px]">사진</span>
+                      <span className="text-2xs">사진</span>
                     </button>
                   )}
                   <div className="flex-1 min-w-0">
@@ -2786,26 +2786,26 @@ export default function Customers() {
                       </div>
                     )}
                     {!aiPhoto && (
-                      <p className="text-[11px] text-gray-500 leading-relaxed">
+                      <p className="text-xs text-gray-500 leading-relaxed">
                         고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다. 사진은 상담 기록에 함께 저장됩니다.
                         {!skinAiAvailable && ' (본사 AI 미설정 — 설정 > 연동 설정 > AI 피부분석에서 OpenAI/Gemini 키 입력 필요)'}
                       </p>
                     )}
                     {aiResult && !aiResult.available && (
-                      <p className="text-[11px] text-amber-600">{aiResult.reason}</p>
+                      <p className="text-xs text-amber-600">{aiResult.reason}</p>
                     )}
                     {aiResult?.available && aiResult.scores && (
                       <div className="grid grid-cols-5 gap-1.5">
                         {SKIN_LABELS.map(({ key, label }) => (
                           <div key={key} className="bg-white rounded-lg py-1.5 text-center border border-indigo-50">
-                            <p className="text-[10px] text-gray-400">{label}</p>
+                            <p className="text-2xs text-gray-400">{label}</p>
                             <p className="text-sm font-bold text-violet-700">{aiResult.scores![key]}</p>
                           </div>
                         ))}
                       </div>
                     )}
                     {aiResult?.available && aiResult.comment && (
-                      <p className="text-[11px] text-gray-600 mt-1.5">💬 {aiResult.comment}</p>
+                      <p className="text-xs text-gray-600 mt-1.5">💬 {aiResult.comment}</p>
                     )}
                   </div>
                 </div>
@@ -2818,11 +2818,11 @@ export default function Customers() {
                 <div className="flex items-center gap-1.5 mb-2">
                   <Images size={14} className="text-indigo-600" />
                   <label className="text-xs font-semibold text-gray-800">Before/After 비교 이미지 첨부</label>
-                  <span className="text-[10px] text-gray-400">· 시술 사진 {baPhotos.length}장</span>
+                  <span className="text-2xs text-gray-400">· 시술 사진 {baPhotos.length}장</span>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="flex-1 min-w-[120px]">
-                    <label className="block text-[10px] text-gray-500 mb-0.5">Before</label>
+                    <label className="block text-2xs text-gray-500 mb-0.5">Before</label>
                     <select aria-label="비교 Before 사진" value={baBefore} onChange={e => { setBaBefore(Number(e.target.value)); setComparison(c => (c?.restored ? c : null)); }}
                       className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
                       {baPhotos.map((p, i) => <option key={p.id} value={i}>{photoCaption(p)}</option>)}
@@ -2830,7 +2830,7 @@ export default function Customers() {
                   </div>
                   <ArrowLeftRight size={14} className="text-gray-400 mb-2 flex-shrink-0" />
                   <div className="flex-1 min-w-[120px]">
-                    <label className="block text-[10px] text-gray-500 mb-0.5">After</label>
+                    <label className="block text-2xs text-gray-500 mb-0.5">After</label>
                     <select aria-label="비교 After 사진" value={baAfter} onChange={e => { setBaAfter(Number(e.target.value)); setComparison(c => (c?.restored ? c : null)); }}
                       className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
                       {baPhotos.map((p, i) => <option key={p.id} value={i}>{photoCaption(p)}</option>)}
@@ -2850,7 +2850,7 @@ export default function Customers() {
                     </button>
                     <div className="flex-1 min-w-[140px] text-xs text-gray-600">
                       <p className="font-medium text-gray-800">{comparison.days === null ? '저장된 비교 이미지입니다.' : `D+${comparison.days} 비교 이미지가 준비됐습니다.`}</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">상담 저장 시 상담 기록에 함께 저장됩니다.</p>
+                      <p className="text-xs text-gray-500 mt-0.5">상담 저장 시 상담 기록에 함께 저장됩니다.</p>
                       <div className="flex gap-2 mt-2">
                         <button type="button" onClick={exportComparison}
                           className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50 flex items-center gap-1">
@@ -2862,7 +2862,7 @@ export default function Customers() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-[11px] text-gray-500 mt-2">{baBefore >= baAfter ? 'Before는 After보다 먼저 찍은 사진이어야 합니다.' : '고객에게 보여줄 Before/After를 골라 만들면 상담 기록에 첨부됩니다. (기본: 최초 ↔ 최신)'}</p>
+                  <p className="text-xs text-gray-500 mt-2">{baBefore >= baAfter ? 'Before는 After보다 먼저 찍은 사진이어야 합니다.' : '고객에게 보여줄 Before/After를 골라 만들면 상담 기록에 첨부됩니다. (기본: 최초 ↔ 최신)'}</p>
                 )}
               </div>
               )}
@@ -2873,7 +2873,7 @@ export default function Customers() {
                 <div className="space-y-2.5">
                   {CONCERN_GROUPS.map(grp => (
                     <div key={grp.group}>
-                      <p className="text-[11px] text-gray-400 mb-1">{grp.group}</p>
+                      <p className="text-xs text-gray-400 mb-1">{grp.group}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {grp.items.map(item => {
                           const active = consultForm.concerns.includes(item);
@@ -2921,12 +2921,12 @@ export default function Customers() {
                         <div key={s.id} className="bg-white border border-indigo-100 rounded-lg p-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-indigo-700">🧴 {s.name}</span>
-                            <span className="text-[10px] text-gray-400">{s.problem}</span>
+                            <span className="text-2xs text-gray-400">{s.problem}</span>
                           </div>
-                          <p className="text-[11px] text-gray-500 mt-1 leading-snug">{s.description}</p>
+                          <p className="text-xs text-gray-500 mt-1 leading-snug">{s.description}</p>
                           <div className="flex flex-wrap gap-1 mt-1.5">
                             {s.steps.map((step, i) => (
-                              <span key={step} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">
+                              <span key={step} className="text-2xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">
                                 {i + 1}. {step}
                               </span>
                             ))}
@@ -2958,7 +2958,7 @@ export default function Customers() {
                 <div className="grid grid-cols-3 gap-2">
                   {BEACON_FIELDS.map(f => (
                     <div key={f.key as string}>
-                      <label className="block text-[11px] text-gray-500 mb-0.5" title={f.hint}>{f.label}</label>
+                      <label className="block text-xs text-gray-500 mb-0.5" title={f.hint}>{f.label}</label>
                       <input type="number" min={0} max={100} inputMode="numeric"
                         value={consultForm.metrics[f.key as string] ?? ''}
                         onChange={e => setConsultForm(prev => ({ ...prev, metrics: { ...prev.metrics, [f.key as string]: e.target.value } }))}
@@ -3011,14 +3011,14 @@ export default function Customers() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
               </div>
 
-              <p className="text-[11px] text-gray-400">
+              <p className="text-xs text-gray-400">
                 {beaconEnabled
                   ? '※ 비컨은 피부 상태를 분석·측정하는 미용 기기입니다. 본 상담은 의료 진단·처방·치료가 아닙니다.'
                   : '※ 본 상담은 의료 진단·처방·치료가 아닌 피부 분석·관리 소견입니다.'}
               </p>
 
               {kakaoMsg && (
-                <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-3 py-2 leading-relaxed">
+                <div className="text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-3 py-2 leading-relaxed">
                   {kakaoMsg}
                 </div>
               )}

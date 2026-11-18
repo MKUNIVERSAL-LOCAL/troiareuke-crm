@@ -34,7 +34,7 @@ export default function AdminLayout() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
         <div className="max-w-md text-center space-y-4">
           <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto">
-            <span className="text-white text-xl font-black">T</span>
+            <span className="text-white text-xl font-bold">T</span>
           </div>
           <h1 className="text-xl font-bold text-white">관리자 전용 기능입니다</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
@@ -84,10 +84,10 @@ export default function AdminLayout() {
         <div className="px-5 py-5 border-b border-slate-700/50">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm font-black">D</span>
+              <span className="text-white text-sm font-bold">D</span>
             </div>
             <div>
-              <p className="text-xs font-black tracking-widest text-white leading-tight">DERMASOLUTION</p>
+              <p className="text-xs font-bold tracking-widest text-white leading-tight">DERMASOLUTION</p>
               <p className="text-xs text-blue-400 font-medium">관리자 콘솔</p>
             </div>
           </div>

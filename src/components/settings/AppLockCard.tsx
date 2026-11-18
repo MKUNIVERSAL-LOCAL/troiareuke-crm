@@ -41,7 +41,7 @@ export default function AppLockCard() {
       <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
         <Lock size={15} className="text-[#1a3a8f]" />
         <h3 className="text-sm font-bold text-gray-900">앱 잠금 (PIN)</h3>
-        <span className={`ml-auto text-[11px] px-2 py-0.5 rounded-full ${cfg ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+        <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${cfg ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
           {cfg ? `사용 중 · ${LOCK_TIMEOUTS.find(t => t.value === cfg.timeoutMin)?.label ?? `${cfg.timeoutMin}분`}` : '사용 안 함'}
         </span>
       </div>
@@ -55,7 +55,7 @@ export default function AppLockCard() {
         ) : cfg ? (
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="block text-[11px] text-gray-500 mb-0.5">현재 PIN</label>
+              <label className="block text-xs text-gray-500 mb-0.5">현재 PIN</label>
               <input type="password" inputMode="numeric" maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
                 aria-label="현재 PIN" className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a8f]" />
             </div>
@@ -67,17 +67,17 @@ export default function AppLockCard() {
         ) : (
           <div className="flex flex-wrap items-end gap-2">
             <div>
-              <label className="block text-[11px] text-gray-500 mb-0.5">PIN (숫자 4~6자리)</label>
+              <label className="block text-xs text-gray-500 mb-0.5">PIN (숫자 4~6자리)</label>
               <input type="password" inputMode="numeric" maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
                 aria-label="새 PIN" className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a8f]" />
             </div>
             <div>
-              <label className="block text-[11px] text-gray-500 mb-0.5">PIN 확인</label>
+              <label className="block text-xs text-gray-500 mb-0.5">PIN 확인</label>
               <input type="password" inputMode="numeric" maxLength={6} value={pin2} onChange={e => setPin2(e.target.value.replace(/\D/g, ''))}
                 aria-label="PIN 확인" className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#1a3a8f]" />
             </div>
             <div>
-              <label className="block text-[11px] text-gray-500 mb-0.5">잠금까지</label>
+              <label className="block text-xs text-gray-500 mb-0.5">잠금까지</label>
               <select value={timeoutMin} onChange={e => setTimeoutMin(Number(e.target.value))} aria-label="잠금 대기 시간"
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
                 {LOCK_TIMEOUTS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}

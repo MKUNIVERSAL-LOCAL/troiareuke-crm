@@ -44,11 +44,11 @@ export default function ProgramAlertCard({ compact = false, refreshKey = 0 }: { 
             >
               <p className="text-sm font-medium text-gray-800 truncate">
                 {a.customer.name}
-                <span className={`ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${badgeCls[a.reason]}`}>
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded text-2xs font-semibold ${badgeCls[a.reason]}`}>
                   {a.reason === 'expiring' && a.daysToExpiry !== null ? `만료 D-${a.daysToExpiry}` : REASON_LABEL[a.reason]}
                 </span>
               </p>
-              <p className="text-[11px] text-gray-400 truncate">
+              <p className="text-xs text-gray-400 truncate">
                 {a.program.programName}{a.remaining !== null ? ` · 잔여 ${a.remaining}회` : ''}{a.program.expiryDate ? ` · 만료 ${a.program.expiryDate}` : ''}
               </p>
             </button>
@@ -65,7 +65,7 @@ export default function ProgramAlertCard({ compact = false, refreshKey = 0 }: { 
         ))}
       </ul>
       {alerts.length > list.length && (
-        <p className="text-[11px] text-gray-400 mt-2">외 {alerts.length - list.length}건</p>
+        <p className="text-xs text-gray-400 mt-2">외 {alerts.length - list.length}건</p>
       )}
 
       {draftFor && (

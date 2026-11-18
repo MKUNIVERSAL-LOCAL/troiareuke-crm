@@ -123,7 +123,7 @@ export default function StaffPage() {
                   >
                     {staff.name[0]}
                   </div>
-                  <h3 className="text-base font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-1.5 align-middle text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">퇴사</span>}</h3>
+                  <h3 className="text-base font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-1.5 align-middle text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">퇴사</span>}</h3>
                   <p className="text-xs text-gray-400 mt-0.5">{staff.role}</p>
                 </div>
 
@@ -135,13 +135,13 @@ export default function StaffPage() {
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center" title="완료·예정 포함, 취소·노쇼 제외">
                     <p className="text-base font-bold text-gray-800">{(monthlyRevenue / 10000).toFixed(0)}만</p>
                     <p className="text-xs text-gray-400 whitespace-nowrap">월 예약액</p>
-                    <p className="text-[10px] text-gray-300 whitespace-nowrap">예정 포함</p>
+                    <p className="text-2xs text-gray-300 whitespace-nowrap">예정 포함</p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 mb-4">
                   {staff.specialty.map(s => (
-                    <span key={s} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-[11px] font-medium">{normalizeSpecialty(s)}</span>
+                    <span key={s} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs font-medium">{normalizeSpecialty(s)}</span>
                   ))}
                 </div>
 
@@ -620,16 +620,16 @@ function StaffDetailModal({
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-purple-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-purple-700">{staffReservations.length}</p>
-            <p className="text-[11px] text-purple-400 mt-0.5">총 예약</p>
+            <p className="text-xs text-purple-400 mt-0.5">총 예약</p>
           </div>
           <div className="bg-pink-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-pink-700">{(monthRevenue / 10000).toFixed(0)}만</p>
-            <p className="text-[11px] text-pink-400 mt-0.5">이번달 예약액(예정 포함)</p>
-            <p className="text-[10px] text-pink-300">(완료·예정 포함, 취소·노쇼 제외)</p>
+            <p className="text-xs text-pink-400 mt-0.5">이번달 예약액(예정 포함)</p>
+            <p className="text-2xs text-pink-300">(완료·예정 포함, 취소·노쇼 제외)</p>
           </div>
           <div className="bg-blue-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-blue-700">{staff.hireDate.split('-')[0]}</p>
-            <p className="text-[11px] text-blue-400 mt-0.5">입사년도</p>
+            <p className="text-xs text-blue-400 mt-0.5">입사년도</p>
           </div>
         </div>
 

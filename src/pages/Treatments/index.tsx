@@ -103,13 +103,13 @@ export default function Treatments() {
       ))}
       {staffNames.length > 0 && (
         <select value={staffFilter} onChange={e => setStaffFilter(e.target.value)} aria-label="담당자 필터"
-          className="flex-shrink-0 ml-1 max-w-[9rem] truncate text-[11px] border border-gray-200 rounded-full px-2 py-1 bg-white text-gray-600">
+          className="flex-shrink-0 ml-1 max-w-[9rem] truncate text-xs border border-gray-200 rounded-full px-2 py-1 bg-white text-gray-600">
           <option value="">담당자 전체</option>
           {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
       )}
       {(period !== 'all' || staffFilter) && (
-        <button type="button" onClick={() => { setPeriod('all'); setStaffFilter(''); }} className="flex-shrink-0 text-[11px] text-gray-400 hover:text-gray-600 px-1">초기화</button>
+        <button type="button" onClick={() => { setPeriod('all'); setStaffFilter(''); }} className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 px-1">초기화</button>
       )}
     </div>
   );
@@ -241,7 +241,7 @@ export default function Treatments() {
                   <div className="flex items-center gap-3 flex-wrap">
                     <p className="text-sm font-bold text-gray-900">{t.customerName}</p>
                     {t.programName && (
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-100 text-purple-700">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                         {t.programName}
                       </span>
                     )}
@@ -249,12 +249,12 @@ export default function Treatments() {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {t.treatmentDetails || t.programName || '시술 내역 없음'}
                   </p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-400 mt-0.5">
                     {t.treatmentDate}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
                     {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
                   </p>
                   {t.skinCondition && (
-                    <p className="text-[11px] text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
+                    <p className="text-xs text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
                   )}
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -657,7 +657,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
                     <select
                       value={p.label ?? ''}
                       onChange={e => updatePhotoMeta(p.id, { label: (e.target.value || undefined) as PhotoLabel | undefined })}
-                      className="flex-1 min-w-0 text-[11px] border border-gray-200 rounded-lg px-1 py-1 bg-white"
+                      className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-1 py-1 bg-white"
                       aria-label="시술 전후 구분"
                     >
                       <option value="">전/후</option>
@@ -666,7 +666,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
                     <select
                       value={p.angle ?? ''}
                       onChange={e => updatePhotoMeta(p.id, { angle: (e.target.value || undefined) as PhotoAngle | undefined })}
-                      className="flex-1 min-w-0 text-[11px] border border-gray-200 rounded-lg px-1 py-1 bg-white"
+                      className="flex-1 min-w-0 text-xs border border-gray-200 rounded-lg px-1 py-1 bg-white"
                       aria-label="촬영 각도"
                     >
                       <option value="">각도</option>
@@ -679,14 +679,14 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           )}
           {referencePhotos.length > 0 && (
             <div className="mb-2 p-2.5 bg-indigo-50/60 border border-indigo-100 rounded-xl">
-              <p className="text-[11px] font-semibold text-indigo-900 mb-1.5">
+              <p className="text-xs font-semibold text-indigo-900 mb-1.5">
                 직전 시술 사진 참고 — 같은 각도·거리·조명으로 찍으면 Before/After 비교가 정확해집니다
               </p>
               <div className="flex gap-2 overflow-x-auto">
                 {referencePhotos.map(r => (
                   <figure key={r.id} className="flex-shrink-0 w-16">
                     <img src={r.dataUrl} alt="직전 시술 사진" className="w-16 h-16 object-cover rounded-lg border border-indigo-100" />
-                    <figcaption className="text-[10px] text-gray-500 text-center mt-0.5 truncate">
+                    <figcaption className="text-2xs text-gray-500 text-center mt-0.5 truncate">
                       {r.date.slice(5)}{r.angle ? ` · ${angleLabel(r.angle)}` : ''}
                     </figcaption>
                   </figure>
@@ -732,7 +732,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}
             <span className="text-sm">{uploading ? '사진 처리 중...' : !photosReady ? '저장된 사진 읽는 중...' : '사진 추가 (여러 장 가능)'}</span>
           </button>
-          <p className="text-[11px] text-gray-400 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             {isAuthApiConfigured
               ? '사진은 기기에 저장되고 중앙 서버(NAS)와 동기화되어 다른 기기에서도 볼 수 있습니다.'
               : '사진은 이 기기에만 저장됩니다. (다른 기기 동기화는 중앙 서버 연동 후 지원)'}
@@ -816,18 +816,18 @@ function TreatmentDetailModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-[11px] text-gray-400 mb-0.5">사용 회차</p>
+            <p className="text-xs text-gray-400 mb-0.5">사용 회차</p>
             <p className="text-sm font-semibold text-gray-800">{t.sessionsUsed}회</p>
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-[11px] text-gray-400 mb-0.5">시술일</p>
+            <p className="text-xs text-gray-400 mb-0.5">시술일</p>
             <p className="text-sm font-semibold text-gray-800">{t.treatmentDate}</p>
           </div>
         </div>
 
         {t.skinCondition && (
           <div className="bg-purple-50 rounded-xl p-3">
-            <p className="text-[11px] text-purple-500 font-medium mb-0.5">피부 상태</p>
+            <p className="text-xs text-purple-500 font-medium mb-0.5">피부 상태</p>
             <p className="text-sm text-purple-700">{t.skinCondition}</p>
           </div>
         )}
@@ -863,7 +863,7 @@ function TreatmentDetailModal({
                 <a key={p.id} href={p.dataUrl} target="_blank" rel="noreferrer" className="relative aspect-square">
                   <img src={p.dataUrl} alt="시술 사진" className="w-full h-full object-cover rounded-xl border border-gray-100 hover:opacity-90 transition" />
                   {(p.label === 'before' || p.label === 'after' || p.angle) && (
-                    <span className={clsx('absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-white', p.label === 'after' ? 'bg-indigo-600/90' : 'bg-gray-800/80')}>
+                    <span className={clsx('absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold text-white', p.label === 'after' ? 'bg-indigo-600/90' : 'bg-gray-800/80')}>
                       {p.label === 'before' ? '전' : p.label === 'after' ? '후' : ''}{p.angle ? (p.label === 'before' || p.label === 'after' ? ' · ' : '') + angleLabel(p.angle) : ''}
                     </span>
                   )}

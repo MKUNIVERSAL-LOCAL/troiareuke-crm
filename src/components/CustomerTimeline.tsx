@@ -44,7 +44,7 @@ export default function CustomerTimeline({ customerId, compact = false, tick = 0
           {(['all', ...kindsPresent] as const).map(k => (
             <button key={k} type="button" aria-pressed={effFilter === k}
               onClick={() => { setFilter(k); setLimit(PAGE); }}
-              className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-medium border ${effFilter === k ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200'}`}>
+              className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border ${effFilter === k ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200'}`}>
               {k === 'all' ? '전체' : TIMELINE_KIND_LABEL[k]}
             </button>
           ))}
@@ -62,7 +62,7 @@ export default function CustomerTimeline({ customerId, compact = false, tick = 0
                 <span className={`absolute -left-[5px] top-2 w-2.5 h-2.5 rounded-full ring-2 ring-white ${dot}`} aria-hidden="true" />
                 <span className="flex items-start justify-between gap-2">
                   <span className="block min-w-0">
-                    <span className="block text-[11px] text-gray-400">
+                    <span className="block text-xs text-gray-400">
                       <Icon size={11} aria-hidden="true" className="inline mr-1 -mt-0.5" />{TIMELINE_KIND_LABEL[item.kind]} · {formatDate(item.date)}
                     </span>
                     <span className={`block text-sm font-medium truncate ${item.tone === 'bad' ? 'text-rose-600' : item.tone === 'muted' ? 'text-gray-500' : 'text-gray-800'}`}>{item.title}</span>

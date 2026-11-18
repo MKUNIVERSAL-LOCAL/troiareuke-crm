@@ -62,7 +62,7 @@ export default function TomorrowReservationCard({ compact = false, refreshKey = 
               aria-label={`${r.customerName} 예약 보기`}
             >
               <p className="text-sm font-medium text-gray-800 truncate">{r.customerName}</p>
-              <p className="text-[11px] text-gray-400 truncate">
+              <p className="text-xs text-gray-400 truncate">
                 {r.services.map(s => s.serviceName).join(', ') || '시술 미지정'}{r.staffName ? ` · ${r.staffName}` : ''} · {maskPhone(r.customerPhone, user?.role ?? 'staff')}
               </p>
             </button>
@@ -78,7 +78,7 @@ export default function TomorrowReservationCard({ compact = false, refreshKey = 
           </li>
         ))}
       </ul>
-      {list.length > shown.length && <p className="text-[11px] text-gray-400 mt-2">외 {list.length - shown.length}건 — 예약 관리에서 확인</p>}
+      {list.length > shown.length && <p className="text-xs text-gray-400 mt-2">외 {list.length - shown.length}건 — 예약 관리에서 확인</p>}
 
       {draftFor && (
         <MessageDraftPanel

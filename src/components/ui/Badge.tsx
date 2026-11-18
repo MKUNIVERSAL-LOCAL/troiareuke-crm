@@ -21,7 +21,7 @@ export default function Badge({ children, variant = 'gray', size = 'sm' }: Badge
     <span className={clsx(
       'inline-flex items-center font-medium rounded-full',
       variants[variant],
-      size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-3 py-1 text-xs'
+      size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-xs'
     )}>
       {children}
     </span>
@@ -30,10 +30,10 @@ export default function Badge({ children, variant = 'gray', size = 'sm' }: Badge
 
 export function GradeBadge({ grade }: { grade: string }) {
   const config = {
-    'VIP': { variant: 'purple' as const, label: '👑 VIP' },
-    '골드': { variant: 'yellow' as const, label: '⭐ 골드' },
+    'VIP': { variant: 'purple' as const, label: 'VIP' },
+    '골드': { variant: 'yellow' as const, label: '골드' },
     '일반': { variant: 'blue' as const, label: '일반' },
-    '신규': { variant: 'green' as const, label: '✨ 신규' },
+    '신규': { variant: 'green' as const, label: '신규' },
   };
   const { variant, label } = config[grade as keyof typeof config] || { variant: 'gray' as const, label: grade };
   return <Badge variant={variant}>{label}</Badge>;

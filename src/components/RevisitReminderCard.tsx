@@ -49,7 +49,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
           <BellRing size={16} className="text-rose-500" />
           재방문 리마인더
           {due.length > 0 && (
-            <span className="ml-1 px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full text-[11px] font-bold">{due.length}명</span>
+            <span className="ml-1 px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full text-xs font-bold">{due.length}명</span>
           )}
         </h3>
         {due.length > 0 && (
@@ -63,7 +63,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
         <div className="py-8 text-center">
           <BellRing size={24} className="mx-auto mb-2 text-gray-200" />
           <p className="text-sm text-gray-400">재방문 안내가 필요한 고객이 없어요</p>
-          <p className="text-[11px] text-gray-300 mt-1">권장 재방문일이 지나면 여기에 표시됩니다</p>
+          <p className="text-xs text-gray-300 mt-1">권장 재방문일이 지나면 여기에 표시됩니다</p>
         </div>
       ) : (
         <div className="divide-y divide-gray-50">
@@ -75,9 +75,9 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">
                   {d.customer.name}
-                  <span className="ml-1.5 text-[11px] text-gray-400">{maskPhone(d.customer.phone, user?.role ?? 'staff')}</span>
+                  <span className="ml-1.5 text-xs text-gray-400">{maskPhone(d.customer.phone, user?.role ?? 'staff')}</span>
                 </p>
-                <p className="text-[11px] text-gray-400">
+                <p className="text-xs text-gray-400">
                   {d.overdueDays <= 0 ? '오늘 권장일' : `${d.overdueDays}일 지남`}
                   {' · '}
                   {d.basis === 'recommended' ? '권장일 기준' : '방문주기 추정'}
@@ -99,7 +99,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
             </div>
           ))}
           {due.length > list.length && (
-            <p className="pt-2 text-[11px] text-gray-400 text-center">외 {due.length - list.length}명 더 있음</p>
+            <p className="pt-2 text-xs text-gray-400 text-center">외 {due.length - list.length}명 더 있음</p>
           )}
         </div>
       )}
@@ -119,7 +119,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
                 rows={6}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 resize-none focus:outline-none"
               />
-              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
                 ⚠️ 자동 발송은 문자/카카오 게이트웨이(회사 NAS 서버) 연동 후 지원됩니다. 현재는 초안을 복사해 직접 발송해주세요.
               </p>
               <div className="flex gap-2">

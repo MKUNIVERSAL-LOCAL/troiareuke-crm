@@ -696,8 +696,8 @@ export default function Sales() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">
                           {customerLink(p, '—')}
-                          {p.status === 'refunded' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
-                          {p.status === 'pending' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
+                          {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
+                          {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
                         </p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                           <span>{p.paymentDate}</span>
@@ -731,9 +731,9 @@ export default function Sales() {
                       <span className="text-gray-500 text-xs">{p.paymentDate}</span>
                       <span className="col-span-2 font-medium text-gray-800">
                         {customerLink(p, '—')}
-                        {p.discountAmount > 0 && <span className="ml-1.5 text-[11px] text-orange-500">-{formatPrice(p.discountAmount)}</span>}
-                        {p.status === 'refunded' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
-                        {p.status === 'pending' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
+                        {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-500">-{formatPrice(p.discountAmount)}</span>}
+                        {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
+                        {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
                       </span>
                       <span>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
@@ -989,7 +989,7 @@ export default function Sales() {
                       <div key={label} className="bg-gray-50 rounded-xl p-3">
                         <p className="text-xs text-gray-400 mb-1">{label}</p>
                         <p className="text-sm font-bold text-gray-900">{formatPrice(cur)}</p>
-                        <p className={`text-[11px] mt-1 font-medium ${diff > 0 ? 'text-green-500' : diff < 0 ? 'text-red-400' : 'text-gray-300'}`}>
+                        <p className={`text-xs mt-1 font-medium ${diff > 0 ? 'text-green-500' : diff < 0 ? 'text-red-400' : 'text-gray-300'}`}>
                           {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatPrice(diff)}`}
                         </p>
                       </div>
@@ -1107,7 +1107,7 @@ export default function Sales() {
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
                 </div>
                 {form.amount && parseInt(form.discountAmount || '0') > 0 && (
-                  <p className="text-[11px] text-gray-400 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     결제 금액(할인 반영 후): <strong className="text-gray-600">{formatPrice((parseInt(form.amount.replace(/,/g, '')) || 0))}</strong> — 위 결제 금액란에 할인을 뺀 실수령액을 입력하세요
                   </p>
                 )}
@@ -1137,7 +1137,7 @@ export default function Sales() {
                   ))}
                 </div>
                 {form.status === 'refunded' && (
-                  <p className="text-[11px] text-red-400 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
+                  <p className="text-xs text-red-400 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
                 )}
               </div>
 
@@ -1214,7 +1214,7 @@ export default function Sales() {
                     </button>
                   ))}
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   제품·소모품 매입은 손익계산서에서 매출원가로, 나머지는 판매비·관리비로 집계돼요
                 </p>
               </div>

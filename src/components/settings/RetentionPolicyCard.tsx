@@ -37,7 +37,7 @@ export default function RetentionPolicyCard() {
       <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
         <ShieldCheck size={15} className="text-[#1a3a8f]" />
         <h3 className="text-sm font-bold text-gray-900">개인정보 보존기간</h3>
-        <span className={`ml-auto text-[11px] px-2 py-0.5 rounded-full ${policy.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+        <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${policy.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
           {policy.enabled ? `사용 중 · ${policy.years}년` : '사용 안 함'}
         </span>
       </div>

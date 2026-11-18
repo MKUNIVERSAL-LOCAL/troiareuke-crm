@@ -103,7 +103,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
             <button type="button" onClick={() => shift(90)} className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-gray-700 hover:bg-slate-200">+90일</button>
             {expiryDate && <button type="button" onClick={() => setExpiryDate('')} className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-500">만료 없음</button>}
           </div>
-          <p className="text-[11px] text-gray-400 mt-1">+30/+90일은 만료일과 오늘 중 늦은 날부터 더합니다.</p>
+          <p className="text-xs text-gray-400 mt-1">+30/+90일은 만료일과 오늘 중 늦은 날부터 더합니다.</p>
         </div>
         {isSessionBased && (
           <div>
@@ -118,7 +118,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
         </div>
         {changeLog.length > 0 && (
           <div className="p-3 bg-slate-50 rounded-xl">
-            <p className="text-[11px] font-medium text-gray-400 mb-1">변경 기록</p>
+            <p className="text-xs font-medium text-gray-400 mb-1">변경 기록</p>
             <p className="text-xs text-gray-600 whitespace-pre-line max-h-28 overflow-y-auto">{changeLog.slice(-10).join('\n')}</p>
           </div>
         )}

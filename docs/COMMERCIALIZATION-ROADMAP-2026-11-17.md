@@ -132,7 +132,8 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 ### P6. UI 품질 절대 기준 (오너 지시 2026-11-18 09:15 — 상시)
 - **"UI가 대한민국에서 가장 편리하고, 디자인이 깔끔하고, 폰트가 이쁘고, 사용하기 편리한 UI여야 한다."** 모든 화면·컴포넌트·문구 작업과 리뷰의 판단 기준. 네 가지 자문: ① 클릭/탭 수 ② 여백·정렬·색의 깔끔함(장식 요소 제거) ③ 글꼴(한글 가독성·숫자 정렬·크기 위계) ④ 설명 없이 쓰는가. 시각 확인은 스크린샷 세트로 PC·모바일 둘 다.
 - [x] 글꼴 1차: Pretendard Variable(OFL, `pretendard` npm) 자체 번들 — `src/index.css` @import → Vite가 woff2를 자산으로 묶어 오프라인 Electron·Capacitor에서도 PC·폰 동일 렌더링(전에는 Google Fonts Noto Sans KR 온라인 전용, tailwind의 Pretendard는 로드조차 안 됨). html에 자간 -0.01em·`tabular-nums`(금액·날짜 줄맞춤). index.html Google Fonts 링크·CSP 외부 폰트 출처 제거.
-- [ ] UI 품질 감사(에이전트, PC 50장·모바일 51장 스크린샷 + 토큰 코드) 결과에 따라 8묶음 이하로 반영.
+- [x] UI 품질 감사(에이전트, PC 50장·모바일 51장 + 토큰 코드) — 8묶음 계획: ① 글꼴·스케일·토큰 ② Button/Segmented 공용 + 그라데이션 18곳·포커스 링 7종 통일 ③ StatCard 플랫·카드 1종·대시보드 저채도 ④ 모바일 바텀시트 Modal + footer 슬롯·스티키 저장·Ctrl+Enter ⑤ 모바일 쉘(헤더 1줄·FAB·탭바 라벨) ⑥ 매출·프로그램 Header 채택·고객 상세 액션바 ⑦ 날짜/시간 피커·tel: ⑧ 당겨서 새로고침·스와이프·주간뷰 단축키·인라인 편집.
+- [x] ① 완료: Pretendard 번들(위) + tailwind fontSize 스케일(2xs 11/16, xs 12/18, sm 14/21, base 16/24, lg 17/26, xl 20/28 …) + 9·10px → 2xs, 11px 207곳 → xs(12px), font-black 30곳 → bold(Pretendard 900은 뭉개짐), primary 토큰을 브랜드 네이비 스케일로(리터럴 #1a3a8f 239곳 흡수 준비), 등급 배지·사이드바 이모지 제거(OS별 렌더 제각각), 페이지 제목 text-xl tracking-tight.
 
 ### P5. 가격·플랜 반영
 - RESEARCH-MESSAGING-BILLING 6절 오너 가격안(첫 1년 9,900 → Start 24,900 → AI Pro 59,000) 확정 시: 플랜별 발송 제공량·잔여 표시·어드민 청구액 표. PG 개통 전에는 "청구 예정액" 표시까지만.

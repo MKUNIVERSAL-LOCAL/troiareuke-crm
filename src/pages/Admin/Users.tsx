@@ -377,7 +377,7 @@ export default function AdminUsers() {
                   {copied ? '복사됨 ✓' : '복사'}
                 </button>
               </div>
-              <p className="text-[11px] text-amber-400/90 leading-relaxed">
+              <p className="text-xs text-amber-400/90 leading-relaxed">
                 {tempPwResult.invited
                   ? '이 창을 닫으면 다시 확인할 수 없습니다. 지금 복사해서 초대한 관리자에게 전달하세요. 첫 로그인 시 비밀번호 변경이 자동으로 강제됩니다.'
                   : '이 창을 닫으면 다시 확인할 수 없습니다. 지금 복사해서 해당 지점에 전달하세요. (첫 로그인 후 비밀번호 변경을 안내해주세요)'}
@@ -411,32 +411,32 @@ export default function AdminUsers() {
             <div className="px-6 py-5 space-y-4 overflow-auto">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-[11px] text-slate-500 mb-1">상호명</p>
+                  <p className="text-xs text-slate-500 mb-1">상호명</p>
                   <p className="text-slate-100 font-medium">{reviewTarget.shopName || reviewTarget.name}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-500 mb-1">이메일</p>
+                  <p className="text-xs text-slate-500 mb-1">이메일</p>
                   <p className="text-slate-100 font-medium">{reviewTarget.email}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-500 mb-1">사업자등록번호</p>
+                  <p className="text-xs text-slate-500 mb-1">사업자등록번호</p>
                   <p className="text-slate-100 font-mono">{reviewTarget.businessNumber}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-500 mb-1">휴대폰</p>
+                  <p className="text-xs text-slate-500 mb-1">휴대폰</p>
                   <p className="text-slate-100">{reviewTarget.phone || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-500 mb-1">신청 일시</p>
+                  <p className="text-xs text-slate-500 mb-1">신청 일시</p>
                   <p className="text-slate-100">{format(parseISO(reviewTarget.createdAt), 'yyyy.MM.dd HH:mm', { locale: ko })}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-500 mb-1">상태</p>
+                  <p className="text-xs text-slate-500 mb-1">상태</p>
                   <p className="text-amber-300 font-semibold">승인 대기</p>
                 </div>
               </div>
               <div>
-                <p className="text-[11px] text-slate-500 mb-2">사업자등록증 사진</p>
+                <p className="text-xs text-slate-500 mb-2">사업자등록증 사진</p>
                 {reviewTarget.businessLicenseImage ? (
                   <img
                     src={reviewTarget.businessLicenseImage}
@@ -449,7 +449,7 @@ export default function AdminUsers() {
               </div>
               {showRejectInput && (
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1.5">거부 사유 * (1~500자, 지점에 다음 로그인 시 표시됩니다)</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5">거부 사유 * (1~500자, 지점에 다음 로그인 시 표시됩니다)</label>
                   <textarea
                     value={rejectReason}
                     onChange={e => setRejectReason(e.target.value.slice(0, 500))}
@@ -457,7 +457,7 @@ export default function AdminUsers() {
                     placeholder="예: 사업자등록증의 업종이 피부미용업/에스테틱이 아닙니다. 정확한 서류로 재신청 부탁드립니다."
                     className="w-full px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-sm text-white outline-none focus:border-red-500"
                   />
-                  <p className="text-[11px] text-slate-500 mt-1 text-right">{rejectReason.length}/500</p>
+                  <p className="text-xs text-slate-500 mt-1 text-right">{rejectReason.length}/500</p>
                 </div>
               )}
             </div>
@@ -531,13 +531,13 @@ export default function AdminUsers() {
                       base.setMonth(base.getMonth() + months);
                       setPeriodDate(toISODate(base));
                     }}
-                    className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    className="px-2.5 py-1 text-xs rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"
                   >
                     +{months}개월
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-xs text-slate-500 leading-relaxed">
                 만료일이 지나면 해당 계정은 로그인할 수 없습니다 (저장된 데이터는 유지).
                 무제한으로 설정하면 기간 제한이 해제됩니다.
               </p>
@@ -603,7 +603,7 @@ export default function AdminUsers() {
             <Clock size={14} />
             승인 대기
             {pendingCount > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-slate-900">
+              <span className="px-1.5 py-0.5 text-2xs font-bold rounded-full bg-amber-500 text-slate-900">
                 {pendingCount}
               </span>
             )}
@@ -639,7 +639,7 @@ export default function AdminUsers() {
                   className="w-full px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-sm text-white outline-none focus:border-blue-500"
                 />
               </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-xs text-slate-500 leading-relaxed">
                 발급 즉시 임시 비밀번호가 1회 표시됩니다. 초대받은 관리자는 첫 로그인 시
                 비밀번호 변경이 강제되며, 지점 데이터·기능 관리 등 콘솔 전체에 접근할 수 있습니다.
                 초대한 기록은 서버 감사 로그에 남습니다.
@@ -722,10 +722,10 @@ export default function AdminUsers() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-1">
                     <p className="text-sm font-semibold text-white truncate">{u.name || '(상호명 없음)'}</p>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">승인 대기</span>
+                    <span className="text-2xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">승인 대기</span>
                   </div>
                   <p className="text-xs text-slate-500">{u.email}</p>
-                  <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-400">
+                  <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
                     {u.business_number && <span>사업자번호 <span className="text-slate-200">{u.business_number}</span></span>}
                     <span>신청 <span className="text-slate-200">{format(parseISO(u.created_at), 'yyyy.MM.dd HH:mm', { locale: ko })}</span></span>
                   </div>
@@ -745,21 +745,21 @@ export default function AdminUsers() {
           <table className="w-full min-w-[760px]">
             <thead>
               <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">이름 / 이메일</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">역할</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">소속 지점</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">온보딩</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">이름 / 이메일</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">역할</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">소속 지점</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">온보딩</th>
                 {isAuthApiConfigured && (
-                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">사용기간</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">사용기간</th>
                 )}
                 {isAuthApiConfigured && (
-                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     프로그램 버전{latestVersion && <span className="ml-1 normal-case text-slate-600">(최신 v{latestVersion})</span>}
                   </th>
                 )}
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">가입일</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">가입일</th>
                 {isAuthApiConfigured && (
-                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">관리</th>
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">관리</th>
                 )}
               </tr>
             </thead>
@@ -772,16 +772,16 @@ export default function AdminUsers() {
                       <p className="text-sm font-medium text-white">
                         {u.name || '(이름 없음)'}
                         {!u.is_active && (
-                          <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400">비활성</span>
+                          <span className="ml-2 text-2xs font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400">비활성</span>
                         )}
                         {u.status === 'rejected' && (
-                          <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-300">신청 거부됨</span>
+                          <span className="ml-2 text-2xs font-bold px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-300">신청 거부됨</span>
                         )}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">{u.email}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${role.color}`}>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${role.color}`}>
                         {role.label}
                       </span>
                     </td>
@@ -812,9 +812,9 @@ export default function AdminUsers() {
                               v{u.last_app_version}
                             </span>
                             {isOutdated(u.last_app_version, latestVersion) && (
-                              <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
+                              <span className="ml-1.5 text-2xs font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
                             )}
-                            <p className="text-[11px] text-slate-500 mt-0.5">
+                            <p className="text-xs text-slate-500 mt-0.5">
                               {appModeLabel[u.last_app_mode || ''] || u.last_app_mode || ''}
                               {u.last_seen_at && ` · ${format(parseISO(u.last_seen_at), 'MM/dd HH:mm', { locale: ko })}`}
                             </p>
@@ -834,7 +834,7 @@ export default function AdminUsers() {
                             <button
                               onClick={() => handleToggleActive(u)}
                               disabled={actionBusy === u.id}
-                              className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors disabled:opacity-50 ${
+                              className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
                                 u.is_active
                                   ? 'text-red-400 border-red-500/20 hover:bg-red-500/10'
                                   : 'text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/10'
@@ -845,21 +845,21 @@ export default function AdminUsers() {
                             <button
                               onClick={() => handleResetPassword(u)}
                               disabled={actionBusy === u.id}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50"
+                              className="px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50"
                             >
                               비밀번호 재설정
                             </button>
                             <button
                               onClick={() => openPeriodModal(u)}
                               disabled={actionBusy === u.id}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+                              className="px-2.5 py-1 text-xs font-medium rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
                             >
                               사용기간
                             </button>
                             <button
                               onClick={() => { setDeleteTarget(u); setPurgeBranchData(false); }}
                               disabled={actionBusy === u.id}
-                              className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                              className="px-2.5 py-1 text-xs font-medium rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                               title="계정과 개인정보를 완전히 삭제합니다 (되돌릴 수 없음, 삭제 직전 스냅샷 자동 보관)"
                             >
                               완전 삭제

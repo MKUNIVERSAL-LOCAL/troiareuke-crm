@@ -157,7 +157,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
           {pgEnabled === false && (
             <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
               <p className="text-xs text-amber-700 font-medium">온라인 결제 준비 중입니다</p>
-              <p className="text-[11px] text-amber-500 mt-1 leading-relaxed">
+              <p className="text-xs text-amber-500 mt-1 leading-relaxed">
                 본사에서 토스페이먼츠 가맹 계약을 완료하면 자동으로 활성화됩니다.
                 활성화되면 여기서 만든 링크로 고객이 카드·무통장입금 결제를 할 수 있어요.
               </p>
@@ -244,7 +244,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   readOnly
                   value={createdUrl}
                   onFocus={e => e.currentTarget.select()}
-                  className="flex-1 px-2.5 py-2 bg-white border border-blue-200 rounded-lg text-[11px] text-gray-600 outline-none"
+                  className="flex-1 px-2.5 py-2 bg-white border border-blue-200 rounded-lg text-xs text-gray-600 outline-none"
                 />
                 <button
                   onClick={() => copyLink(createdUrl, 'new')}
@@ -263,8 +263,8 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   </button>
                 )}
               </div>
-              {smsResult && <p className="text-[11px] text-blue-500">{smsResult}</p>}
-              <p className="text-[11px] text-blue-400">
+              {smsResult && <p className="text-xs text-blue-500">{smsResult}</p>}
+              <p className="text-xs text-blue-400">
                 카톡·문자로 링크를 보내면 고객이 휴대폰에서 바로 결제할 수 있어요. 결제 완료 시 매출에 자동 기록됩니다.
               </p>
             </div>
@@ -274,7 +274,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-bold text-gray-600">최근 결제 요청</p>
-              <button onClick={refresh} className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600">
+              <button onClick={refresh} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
                 <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />새로고침
               </button>
             </div>
@@ -286,7 +286,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   const status = PAYMENT_STATUS_LABELS[r.status] || PAYMENT_STATUS_LABELS.pending;
                   return (
                     <div key={r.id} className="flex items-center gap-2 px-3 py-2 border border-gray-100 rounded-xl text-xs">
-                      <span className={`px-2 py-0.5 rounded-full font-medium text-[10px] whitespace-nowrap ${
+                      <span className={`px-2 py-0.5 rounded-full font-medium text-2xs whitespace-nowrap ${
                         status.tone === 'ok' ? 'bg-emerald-50 text-emerald-600'
                           : status.tone === 'bad' ? 'bg-gray-100 text-gray-400'
                           : 'bg-amber-50 text-amber-600'
@@ -295,7 +295,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                         <p className="font-medium text-gray-800 truncate">
                           {r.customerName ? `${r.customerName} · ` : ''}{r.orderName}
                         </p>
-                        <p className="text-[10px] text-gray-400">{r.createdAt.slice(0, 10)}{r.paidAt ? ` → 결제 ${r.paidAt.slice(0, 10)}` : ''}</p>
+                        <p className="text-2xs text-gray-400">{r.createdAt.slice(0, 10)}{r.paidAt ? ` → 결제 ${r.paidAt.slice(0, 10)}` : ''}</p>
                       </div>
                       <span className="font-bold text-gray-900 whitespace-nowrap">{formatPrice(r.amount)}</span>
                       {(r.status === 'pending' || r.status === 'vbank_wait') && (
@@ -313,7 +313,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                 })}
               </div>
             )}
-            <p className="text-[10px] text-gray-300 mt-2">
+            <p className="text-2xs text-gray-300 mt-2">
               결제 완료된 건은 매출 관리에 자동 기록돼요 (프로그램 재시작 또는 다음 동기화 때 목록에 반영). 오늘 날짜 기준: {todayISO()}
             </p>
           </div>
