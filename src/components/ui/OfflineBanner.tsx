@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { WifiOff, UploadCloud, AlertTriangle, Image } from 'lucide-react';
 import {
-  pendingNasOutboxCount, rejectedNasOutboxCount, listRejectedNasOutbox, clearRejectedNasOutbox, retryRejectedNasOutbox,
+  pendingNasOutboxCount, listRejectedNasOutbox, clearRejectedNasOutbox, retryRejectedNasOutbox,
   OUTBOX_CHANGED_EVENT, OUTBOX_ERROR_EVENT,
 } from '../../lib/nasOutbox';
 import { dirtyPhotoCount, rejectedPhotoCount, retryDirtyPhotos, PHOTO_SYNC_EVENT } from '../../lib/photoStore';

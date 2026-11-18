@@ -123,8 +123,8 @@ export default function Messaging() {
           </div>
         )}
 
-        {/* Connection Status — 실제 발송 경로 기준 (설정값 장식 아님) */}
-        <div className="flex gap-2 mb-6 flex-wrap">{/* 연동 상태 칩 — 포커스 가능한 자식이 없는 가로 스크롤은 키보드로 못 보므로 줄바꿈 (axe, 2026-11-18) */}
+        {/* Connection Status — 실제 발송 경로 기준 (설정값 장식 아님). 칩은 포커스 가능한 자식이 없어 가로 스크롤 대신 줄바꿈(axe, 2026-11-18); 아래 탭·카테고리 스트립은 버튼이라 스크롤 유지 */}
+        <div className="flex gap-2 mb-6 flex-wrap">
           <StatusChip label="발송 서버" connected={messagingLive} />
           <StatusChip label="카카오 채널" connected={!!settings.kakao?.channelConnected} />
           <StatusChip label="카카오 오픈채팅" connected={!!settings.kakao?.openchatConnected} />

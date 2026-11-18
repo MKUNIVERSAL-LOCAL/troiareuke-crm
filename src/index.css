@@ -160,13 +160,9 @@ textarea:hover:not(:focus) {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-in-up {
-  animation: fade-in-up 0.3s ease-out both;
-}
-
 /* 모션 최소화 선호 사용자 존중 (접근성) */
 @media (prefers-reduced-motion: reduce) {
-  .modal-backdrop, .modal-card, .animate-slide-down, .animate-fade-in-up {
+  .modal-backdrop, .modal-card, .animate-slide-down {
     animation: none !important;
   }
 }

@@ -2,7 +2,7 @@
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
-import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
+import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';

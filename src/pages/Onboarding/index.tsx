@@ -351,7 +351,7 @@ export default function Onboarding() {
         </div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-center mb-8 overflow-x-auto">
+        <div className="flex items-center justify-center mb-8">{/* 6단계가 폰 폭(≈364px)에 들어가도록 연결선을 좁힘 — overflow+center는 왼쪽이 잘려 접근 불가 (리뷰 2026-11-18) */}
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center">
               <div className={`flex flex-col items-center gap-1 transition-all ${i <= step ? 'opacity-100' : 'opacity-40'}`}>
@@ -361,7 +361,7 @@ export default function Onboarding() {
                 <p className={`text-xs font-medium hidden sm:block ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400'}`}>{s.label}</p>
               </div>
               {i < steps.length - 1 && (
-                <div className={`w-8 sm:w-12 h-0.5 mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />
+                <div className={`w-4 sm:w-12 h-0.5 mx-0.5 sm:mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />
               )}
             </div>
           ))}

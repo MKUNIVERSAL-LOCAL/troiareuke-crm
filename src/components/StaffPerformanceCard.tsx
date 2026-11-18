@@ -22,7 +22,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
   return (
     <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" data-testid="staff-performance">
       <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5"><BarChart3 size={15} className="text-[#1a3a8f]" />직원별 월 실적</h3>
+        <h3 id="staff-perf-title" className="text-sm font-bold text-gray-900 flex items-center gap-1.5"><BarChart3 size={15} className="text-[#1a3a8f]" />직원별 월 실적</h3>
         <div className="flex items-center gap-2">
           <select value={yearMonth} onChange={e => { setYearMonth(e.target.value); setDraftOpen(false); }} aria-label="실적 월"
             className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
@@ -34,8 +34,8 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
           </button>
         </div>
       </div>
-      <p className="sm:hidden px-4 pt-2 text-xs text-gray-400">표를 옆으로 밀면 응대 고객·남은 일정까지 보입니다.</p>
-      <div className="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="직원별 월 실적 표" tabIndex={0}>
+      <p id="staff-perf-scroll-hint" className="sm:hidden px-4 pt-2 text-xs text-gray-400">표를 옆으로 밀면 응대 고객·남은 일정까지 보입니다.</p>
+      <div className="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-labelledby="staff-perf-title" aria-describedby="staff-perf-scroll-hint" tabIndex={0}>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-gray-400 border-b border-gray-50">
