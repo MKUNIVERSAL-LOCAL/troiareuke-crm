@@ -356,7 +356,7 @@ export default function Customers() {
     const id = searchParams.get('open');
     if (!id) return;
     const target = CustomerStore.getById(id);
-    if (target) setSelected(target);
+    if (target) openCustomer(target); // 프로그램 목록까지 같이 (리뷰 2026-11-18)
     const next = new URLSearchParams(searchParams); next.delete('open');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
@@ -934,14 +934,15 @@ export default function Customers() {
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   const openCustomer = (c: Customer) => { setSelected(c); setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id)); };
   const openFirstMatch = () => { if (filtered.length > 0) openCustomer(filtered[0]); };
+  const qHandled = useRef<string | null>(null); // 같은 q로는 1회만 — 검색어를 더 치거나 목록이 갱신될 때 다시 열리지 않게 (리뷰 2026-11-18)
   useEffect(() => {
-    if (qParam && filtered.length === 1 && selected?.id !== filtered[0].id) openCustomer(filtered[0]);
+    if (qParam && qHandled.current !== qParam && filtered.length === 1) { qHandled.current = qParam; openCustomer(filtered[0]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qParam, filtered]);
   // 빠른 시술 기록: 활성 프로그램이 하나뿐이면 미리 연결해 둔다(회차 차감 누락 방지)
   const openTreatmentModal = () => {
     const active = customerPrograms.filter(cp => !cp.isCompleted);
-    setTreatForm(f => ({ ...f, customerProgramId: active.length === 1 ? active[0].id : f.customerProgramId }));
+    setTreatForm(f => ({ ...f, customerProgramId: active.length === 1 ? active[0].id : '' })); // 이전 고객의 프로그램 id가 남아 엉뚱한 회차권이 차감되지 않게 항상 새로 (리뷰 2026-11-18)
     setShowTreatmentModal(true);
   };
   const tagOptions = useMemo(() => topTags(customers, 12), [customers]);

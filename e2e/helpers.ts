@@ -1,5 +1,5 @@
 import { deflateSync } from 'node:zlib';
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * E2E 공통 흐름 — 로컬 모드 빌드(dist-e2e)에서 가입·온보딩·고객 등록까지.
@@ -150,4 +150,17 @@ export function countPhotoEntries(page: Page): Promise<number> {
       count.onerror = () => { db.close(); resolve(-1); };
     };
   }));
+}
+
+/**
+ * 검색형 고객 선택(ui/CustomerCombobox)에서 고객 고르기 (2026-11-18 — 네이티브 select 대체)
+ * name이 없으면 목록을 열어 첫 고객(옛 selectOption({ index: 1 })과 같은 순서)을 고른다.
+ */
+export async function pickCustomer(page: Page, name?: string, scope?: Locator) {
+  const root = scope ?? page;
+  const box = root.getByRole('combobox', { name: '고객' }).filter({ visible: true }).first();
+  if (name) await box.fill(name); else await box.click();
+  const option = root.getByRole('option', name ? { name: new RegExp(name) } : {}).filter({ visible: true }).first();
+  await option.click();
+  await expect(box).toHaveValue(name ? new RegExp(name) : /\S/);
 }

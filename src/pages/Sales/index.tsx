@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { PaymentStore, CustomerStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
+import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
 import type { Payment, PaymentMethod, Expense, ExpenseCategory } from '../../types';
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
@@ -1063,13 +1064,7 @@ export default function Sales() {
               {/* 고객 선택 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">고객</label>
-                <select aria-label="고객" value={form.customerId} onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">고객 선택 (선택사항)</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
-                  ))}
-                </select>
+                <CustomerCombobox customers={customers} value={form.customerId} onChange={id => setForm(f => ({ ...f, customerId: id }))} maskRole="admin" placeholder="이름·전화번호 검색 (선택사항)" />
               </div>
 
               {/* 금액 */}

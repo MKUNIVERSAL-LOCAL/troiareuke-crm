@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { makeAccount, signupAndOnboard, createCustomer, dismissToasts } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, pickCustomer } from './helpers';
 
 /**
  * 핵심 사용 흐름 E2E 스모크 (로컬 모드 빌드, 외부 서버 없음)
@@ -83,7 +83,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   page.on('dialog', recordDialog);
   await page.goto('/reservations');
   await page.getByRole('button', { name: '예약 추가' }).click();
-  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await pickCustomer(page);
   await page.locator('select').filter({ hasText: '직원 선택' }).selectOption({ index: 1 });
   await page.locator('select').filter({ hasText: '시술 선택' }).selectOption({ index: 1 });
   await page.getByRole('button', { name: '예약 저장' }).click(); // 휴무일 confirm은 page.on('dialog')가 수락
@@ -102,7 +102,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.goto('/sales');
   await page.getByRole('button', { name: '결제 등록' }).first().click();
   const form = page.locator('form').filter({ hasText: '결제 구분' });
-  await form.locator('select').first().selectOption({ index: 1 });
+  await pickCustomer(page, acc.customer, form); // 결제 등록 창의 고객 선택 — 검색형 콤보박스
   await form.getByPlaceholder('0').first().fill('50000');
   await form.getByRole('button', { name: '결제 등록' }).click();
   await expect(page.getByText(/결제 내역 \(1\)/)).toBeVisible({ timeout: 10_000 });
@@ -110,7 +110,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
 
   // ── 5-1. 시술 기록 저장 → 결제 등록 연계 (2026-11-17) ──
   await page.goto('/treatments?new=1');
-  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await pickCustomer(page);
   await page.getByText('테스트관리', { exact: true }).filter({ visible: true }).first().click(); // 시술 항목 체크
   await page.getByRole('button', { name: '저장', exact: true }).click(); // confirm 은 page.on('dialog')가 수락
   await expect(page).toHaveURL(/\/sales/, { timeout: 10_000 }); // 프리필 파라미터는 캡처 후 URL에서 제거됨
@@ -308,7 +308,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page).toHaveURL(/\/sales/);
   const payForm3 = page.locator('form').filter({ hasText: '결제 구분' });
   await expect(payForm3).toBeVisible();
-  await expect(payForm3.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
+  await expect(payForm3.getByRole('combobox', { name: '고객' })).toHaveValue(new RegExp(acc.customer));
 
   // ── 8-1. 노쇼 (2026-11-17, 상세 버튼 2026-11-18): 지난 확정 예약을 상세에서 [노쇼] 처리하면 고객 상세에 "노쇼 1회"가 보인다 ──
   const noshowId = await page.evaluate(() => {
@@ -335,7 +335,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await desk.getByRole('button', { name: '예약 추가' }).click();
   await expect(page).toHaveURL(/\/reservations/);
-  await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1);
+  await expect(page.getByRole('combobox', { name: '고객' }).filter({ visible: true }).first()).toHaveValue(new RegExp(acc.customer));
 
   // ── 9-0. 고객 상세 [메시지] → 발송 모달이 그 고객 한 명을 수신 대상으로 연다 (2026-11-18) ──
   await page.goto('/customers');
@@ -446,7 +446,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByRole('button', { name: '이 날짜로 예약' }).click();
   await expect(page).toHaveURL(/\/reservations$/);
   await expect(page.getByLabel('예약 날짜')).toHaveValue('2026-12-24');
-  await expect(page.locator('option:checked', { hasText: acc.customer })).toHaveCount(1); // 병합돼 본 고객으로 옮겨진 기록
+  await expect(page.getByRole('combobox', { name: '고객' }).filter({ visible: true }).first()).toHaveValue(new RegExp(acc.customer)); // 병합돼 본 고객으로 옮겨진 기록
 
   // ── 9-3. 직원별 월 실적 (2026-11-18): 첫 예약을 완료로 만들면 직원 화면 실적 표에 완료 예약·예약액이 집계되고, 보고 문구가 만들어진다 ──
   const perfExpected = await page.evaluate(() => {

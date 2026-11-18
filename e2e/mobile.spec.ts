@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { BRANCH_ROUTES, solidPng, countPhotoEntries } from './helpers';
+import { BRANCH_ROUTES, solidPng, countPhotoEntries, pickCustomer } from './helpers';
 
 /**
  * 모바일 최적화 게이트 — 스토어 앱과 같은 화면 폭(Pixel 7, 412×915)에서 핵심 화면이
@@ -136,7 +136,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.goto('/sales');
   await page.getByRole('button', { name: '결제 등록' }).filter({ visible: true }).first().click();
   const payForm = page.locator('form').filter({ hasText: '결제 구분' });
-  await payForm.locator('select').first().selectOption({ index: 1 });
+  await pickCustomer(page, '모바일고객', payForm);
   await payForm.getByPlaceholder('0').first().fill('50000');
   await payForm.getByRole('button', { name: '결제 등록' }).click();
   await page.getByRole('button', { name: /결제 내역/ }).filter({ visible: true }).first().click();
@@ -170,7 +170,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
 
   // 시술 기록 화면에서 사진 1장 첨부 → 고객 상세 최근 시술 기록 썸네일 → 크게 보기 (모바일도 PC와 동일, 2026-11-17)
   await page.goto('/treatments?new=1');
-  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await pickCustomer(page);
   // 촬영 가이드 카메라(getUserMedia 가짜 장치) → 촬영 → 사진 1장 (2026-11-17)
   await page.getByRole('button', { name: '카메라로 촬영' }).click();
   const camera = page.getByRole('dialog', { name: '카메라 촬영' });
@@ -304,7 +304,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await monthNav.getByRole('button', { name: '이전 달' }).click();
   await page.getByRole('button', { name: '오늘', exact: true }).click();
   await page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click();
-  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await pickCustomer(page);
   await page.locator('select').filter({ hasText: '직원 선택' }).selectOption({ index: 1 });
   await page.locator('select').filter({ hasText: '시술 선택' }).selectOption({ index: 1 });
   await page.getByRole('button', { name: '예약 저장' }).click();
@@ -330,7 +330,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   // 예약 상세 [시술 기록 작성] → 고객·시술 항목이 채워진 시술 기록 창 (2026-11-17)
   await page.getByRole('button', { name: '시술 기록 작성' }).click();
   await expect(page).toHaveURL(/\/treatments/); // 프리필 파라미터는 캡처 후 URL에서 제거됨
-  await expect(page.locator('option:checked', { hasText: '모바일고객' })).toHaveCount(1);
+  await expect(page.getByRole('combobox', { name: '고객' }).filter({ visible: true }).first()).toHaveValue(/모바일고객/); // 프리필된 고객
   await expect(page.locator('input[type="checkbox"]:checked')).not.toHaveCount(0);
   await page.getByRole('button', { name: '취소', exact: true }).filter({ visible: true }).first().click();
   await page.goto('/');

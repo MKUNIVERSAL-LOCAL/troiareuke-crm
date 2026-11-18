@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 import path from 'node:path';
-import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, solidPng } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, solidPng, pickCustomer } from './helpers';
 import { becomeSuperadmin } from './helpers';
 
 /**
@@ -61,7 +61,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   // 시술 기록 + 사진 2장 (Before/After 카드가 보이도록)
   await page.goto('/treatments');
   await page.getByRole('button', { name: '시술 기록 추가', exact: true }).click(); // 모바일 빈 상태 '시술 기록 추가하기'와 구분
-  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await pickCustomer(page);
   await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles([
     { name: 'before.png', mimeType: 'image/png', buffer: solidPng(64, [214, 150, 140]) },
     { name: 'after.png', mimeType: 'image/png', buffer: solidPng(64, [150, 200, 170]) },
@@ -98,7 +98,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   // 예약
   await page.goto('/reservations');
   await page.getByRole('button', { name: '예약 추가' }).first().click();
-  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await pickCustomer(page);
   await page.locator('select').filter({ hasText: '직원 선택' }).selectOption({ index: 1 });
   await page.locator('select').filter({ hasText: '시술 선택' }).selectOption({ index: 1 });
   await page.getByRole('button', { name: '예약 저장' }).click();
@@ -170,7 +170,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   if (test.info().project.name === 'mobile') {
   await page.goto('/treatments?new=1');
   await tryShot('camera-overlay', async () => {
-    await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+    await pickCustomer(page);
     await page.getByRole('button', { name: '카메라로 촬영' }).click();
     await page.getByRole('dialog', { name: '카메라 촬영' }).getByRole('button', { name: '촬영' }).waitFor({ state: 'visible' });
     await page.waitForTimeout(800);

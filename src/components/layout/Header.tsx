@@ -23,6 +23,7 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
       if (!isK && !isSlash) return;
       const t = e.target as HTMLElement | null;
       if (!isK && t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (document.querySelector('[aria-modal="true"]')) return; // 모달 포커스 트랩 밖으로 끌어내지 않는다
       const el = searchRef.current;
       if (!el || el.offsetParent === null) return; // 모바일 폭에서는 숨김
       e.preventDefault();

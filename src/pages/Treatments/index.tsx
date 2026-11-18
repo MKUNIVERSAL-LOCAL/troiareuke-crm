@@ -7,10 +7,10 @@ import { Search, ClipboardList, Camera, ChevronRight, Trash2, Pencil, X, Loader2
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
+import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, PaymentStore, ReservationStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
-import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 import { getPhotos, getPhotosAsync, getPhotoCount, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, PHOTO_ANGLES, PHOTO_LABELS, type PhotoEntry, type PhotoAngle, type PhotoLabel } from '../../lib/photoStore';
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
@@ -277,15 +277,16 @@ export default function Treatments() {
         <AddTreatmentModal
           prefill={prefill ?? undefined}
           onClose={() => { setShowAddModal(false); setPrefill(null); }}
-          onSave={result => {
+          onSave={(result, savedDate) => {
             const reservationId = prefill?.reservationId;
             setShowAddModal(false);
             setPrefill(null);
             loadLogs();
             // 예약 상세 [시술 기록 작성]에서 온 기록을 저장했으면 그 예약은 완료 — 돌아가서 [완료처리]를 또 누르지 않게 (입력 속도 감사 2026-11-18)
-            if (result && reservationId) {
+            // 회차권 연결(금액 0) 저장도 포함(result 없음). 예약 날짜와 다른 날짜로 저장했으면 건드리지 않는다(방문 횟수 2중 증가, 리뷰)
+            if (reservationId) {
               const r = ReservationStore.getAll().find(x => x.id === reservationId);
-              if (r && (r.status === 'confirmed' || r.status === 'pending')) ReservationStore.updateStatus(reservationId, 'completed');
+              if (r && (r.status === 'confirmed' || r.status === 'pending') && (!savedDate || r.date === savedDate)) ReservationStore.updateStatus(reservationId, 'completed');
             }
             // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
             const paidByReservation = !!reservationId && PaymentStore.getAll().some(p => p.referenceId === reservationId);
@@ -343,7 +344,7 @@ function periodRange(period: Period, today: string): { from: string; to: string 
 
 export interface TreatmentPrefill { customerId?: string; treatmentDate?: string; staffName?: string; serviceNames?: string[] }
 
-function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { treatment?: TreatmentLog | null; prefill?: TreatmentPrefill; onClose: () => void; onSave: (result?: TreatmentSaveResult) => void }) {
+function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { treatment?: TreatmentLog | null; prefill?: TreatmentPrefill; onClose: () => void; onSave: (result?: TreatmentSaveResult, savedDate?: string) => void }) {
   const { user: authUser } = useAuth();
   const goTo = useNavigate();
   const isEdit = !!editing;
@@ -504,12 +505,12 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
       // 결제 연계: 회차권 차감이 아닌 단건 시술이고 선택한 시술 항목에 금액이 있으면 결제 등록으로 이어준다 (2026-11-17)
       const amount = linkedProgram ? 0 : selectedServices.reduce((sum, name) => sum + (services.find(s => s.name === name)?.price ?? 0), 0);
       if (saved && amount > 0) {
-        onSave({ customerId, customerName: customer.name, amount, details: details || '' });
+        onSave({ customerId, customerName: customer.name, amount, details: details || '' }, treatmentDate);
         return;
       }
     }
 
-    onSave();
+    onSave(undefined, treatmentDate);
   };
 
   return (
@@ -518,16 +519,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
-            <select
-              value={customerId}
-              onChange={e => { setCustomerId(e.target.value); setCustomerProgramId(onlyActiveProgram(e.target.value)); }}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
-            >
-              <option value="">고객 선택</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>
-              ))}
-            </select>
+            <CustomerCombobox customers={customers} value={customerId} onChange={id => { setCustomerId(id); setCustomerProgramId(onlyActiveProgram(id)); }} maskRole={authUser?.role ?? 'staff'} />
             {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
           </div>
           <div>

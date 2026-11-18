@@ -8,6 +8,7 @@ import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
+import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
@@ -1011,14 +1012,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
-            <select aria-label="고객"
-              value={customerId}
-              onChange={e => setCustomerId(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
-            >
-              <option value="">고객 선택</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>)}
-            </select>
+            <CustomerCombobox customers={customers} value={customerId} onChange={setCustomerId} maskRole={authUser?.role ?? 'staff'} />
             {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
             <ProgramBalance customerId={customerId} />
           </div>

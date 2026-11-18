@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, solidPng, countPhotoEntries } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, solidPng, countPhotoEntries, pickCustomer } from './helpers';
 
 /**
  * 킬러 기능 ② Before/After E2E (로컬 모드 빌드)
@@ -17,7 +17,7 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   // ── 시술 기록 + 사진 2장 ──
   await page.goto('/treatments');
   await page.getByRole('button', { name: '시술 기록 추가' }).click();
-  await page.locator('select').filter({ hasText: '고객 선택' }).selectOption({ index: 1 });
+  await pickCustomer(page);
   await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles([
     { name: 'before.png', mimeType: 'image/png', buffer: solidPng(64, [214, 120, 120]) },
     { name: 'after.png', mimeType: 'image/png', buffer: solidPng(64, [120, 200, 150]) },
