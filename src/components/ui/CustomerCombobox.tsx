@@ -81,7 +81,12 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
     else if (e.key === 'Enter') {
       if (open && matches[hi]) { e.preventDefault(); choose(matches[hi]); } // 열린 목록에서 Enter = 선택 (폼 제출 아님)
     } else if (e.key === 'Escape') {
-      if (open) { e.preventDefault(); e.nativeEvent.stopPropagation(); setOpen(false); setText(selected ? labelOf(selected) : ''); } // 모달의 Esc까지 가지 않게
+      if (open) {
+        setOpen(false);
+        setText(selected ? labelOf(selected) : '');
+        // 검색 중이던 목록만 닫고 모달은 둔다. 검색어 없이 자동으로 펼쳐진 목록(포커스 직후)이면 그대로 전파해 Esc 한 번에 모달이 닫히게
+        if (query.trim()) { e.preventDefault(); e.nativeEvent.stopPropagation(); }
+      }
     }
   };
   const onBlur = () => {
