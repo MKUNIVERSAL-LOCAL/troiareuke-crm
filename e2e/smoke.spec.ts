@@ -386,6 +386,18 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   }, dupName);
   await page.goto('/customers');
   await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
+  // [⋯ 더보기] 메뉴 키보드(ARIA 메뉴 패턴, 2026-11-18): 중복이 있는 일반 고객이라 병합·익명화·삭제 3항목 — End → 마지막, Home → 첫, ↑는 첫에서 마지막으로 순환
+  await desk.getByRole('button', { name: '더보기', exact: true }).click();
+  const kbMenu = desk.getByRole('menu', { name: '고객 관리 더보기' });
+  await expect(kbMenu.getByRole('menuitem')).toHaveCount(3);
+  await page.keyboard.press('End');
+  await expect(kbMenu.getByRole('menuitem', { name: '고객 삭제' })).toBeFocused();
+  await page.keyboard.press('Home');
+  await expect(kbMenu.getByRole('menuitem', { name: '중복 고객 병합' })).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(kbMenu.getByRole('menuitem', { name: '고객 삭제' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(kbMenu).toHaveCount(0);
   await desk.getByTestId('dup-hint').click(); // "같은 전화번호 고객 1명 — 병합하기" → 전화번호가 검색칸에 미리 입력된다
   const mergeDialog = page.getByRole('dialog', { name: '고객 병합' });
   await expect(mergeDialog.getByLabel('병합할 고객 검색')).toHaveValue(acc.customerPhone);
@@ -570,11 +582,6 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(moreMenu).toBeVisible();
   await expect(moreMenu.getByRole('menuitem', { name: '고객 익명화' })).toHaveCount(0);
   await expect(moreMenu.getByRole('menuitem', { name: '고객 삭제' })).toBeVisible();
-  // ARIA 메뉴 키보드: End → 마지막 항목, Home → 첫 항목에 포커스 (2026-11-18)
-  await page.keyboard.press('End');
-  await expect(moreMenu.getByRole('menuitem').last()).toBeFocused();
-  await page.keyboard.press('Home');
-  await expect(moreMenu.getByRole('menuitem').first()).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(moreMenu).toHaveCount(0);
   // 목록 정렬 선택이 동작한다 (2026-11-18)

@@ -1903,6 +1903,7 @@ export default function Customers() {
                               {GRADES.map(g => (
                                 <button
                                   key={g}
+                                  type="button"
                                   role="menuitem"
                                   data-autofocus={g === selected.grade ? '' : undefined}
                                   onClick={() => changeGrade(g)}
