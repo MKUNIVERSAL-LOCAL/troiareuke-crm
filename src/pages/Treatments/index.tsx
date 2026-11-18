@@ -689,7 +689,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               <p className="text-xs font-semibold text-indigo-900 mb-1.5">
                 직전 시술 사진 참고 — 같은 각도·거리·조명으로 찍으면 Before/After 비교가 정확해집니다
               </p>
-              <div className="flex gap-2 overflow-x-auto">
+              <div className="flex gap-2 overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="직전 시술 사진" tabIndex={0}>
                 {referencePhotos.map(r => (
                   <figure key={r.id} className="flex-shrink-0 w-16">
                     <img src={r.dataUrl} alt="직전 시술 사진" className="w-16 h-16 object-cover rounded-lg border border-indigo-100" />

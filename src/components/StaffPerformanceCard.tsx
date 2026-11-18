@@ -35,7 +35,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
         </div>
       </div>
       <p className="sm:hidden px-4 pt-2 text-xs text-gray-400">표를 옆으로 밀면 응대 고객·남은 일정까지 보입니다.</p>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="직원별 월 실적 표" tabIndex={0}>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-gray-400 border-b border-gray-50">

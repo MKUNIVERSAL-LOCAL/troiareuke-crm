@@ -71,7 +71,7 @@ export default function MobileTabBar() {
                   'flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] transition-colors',
                   isActive
                     ? 'text-[#1a3a8f]'
-                    : 'text-slate-400 hover:text-slate-500',
+                    : 'text-slate-500 hover:text-slate-700',
                 )
               }
             >
@@ -90,7 +90,7 @@ export default function MobileTabBar() {
           <button
             onClick={() => setMoreOpen(true)}
             aria-label="더보기 메뉴 열기"
-            className="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-slate-400 hover:text-slate-500 transition-colors"
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-slate-500 hover:text-slate-700 transition-colors"
           >
             <MoreHorizontal size={20} strokeWidth={1.8} />
             <span className="text-xs font-normal">더보기</span>
