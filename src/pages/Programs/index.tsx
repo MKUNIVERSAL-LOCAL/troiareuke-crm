@@ -181,13 +181,13 @@ export default function Programs() {
             <button
               key={value}
               onClick={() => setStatusFilter(value)}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${statusFilter === value ? 'bg-white text-[#1a3a8f] shadow-sm' : 'text-gray-500'}`}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${statusFilter === value ? 'bg-white text-[#1a3a8f] shadow-sm' : 'text-gray-600'}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-400 whitespace-nowrap">{filtered.length}개 표시</span>
+        <span className="text-xs text-gray-600 whitespace-nowrap">{filtered.length}개 표시</span>
       </div>
 
       {/* 카테고리 필터 */}
@@ -204,7 +204,7 @@ export default function Programs() {
           >
             {cat}
             {cat !== '전체' && (
-              <span className="ml-1 text-xs opacity-70">
+              <span className="ml-1 text-xs font-normal">{/* 반투명(opacity-70)은 비활성 칩에서 3.6:1 — 칩 글자색 그대로 */}
                 ({programs.filter(p => normalizeCategory(p.category) === cat).length})
               </span>
             )}
@@ -243,7 +243,7 @@ export default function Programs() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: program.color }} />
-                    <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
                       {normalizeCategory(program.category)}
                     </span>
                     {!program.isActive && (
@@ -296,7 +296,7 @@ export default function Programs() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400">마진율</p>
-                    <p className={`text-sm font-bold ${margin >= 50 ? 'text-green-500' : margin >= 30 ? 'text-yellow-500' : 'text-red-400'}`}>
+                    <p className={`text-sm font-bold ${margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600'}`}>
                       {margin}%
                     </p>
                   </div>

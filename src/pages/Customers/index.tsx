@@ -237,7 +237,7 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
               </div>
             ))}
           </div>
-          {payments.length > shown.length && <p className="text-xs text-gray-300 mt-1">외 {payments.length - shown.length}건 — 전체는 매출 화면 참조</p>}
+          {payments.length > shown.length && <p className="text-xs text-gray-500 mt-1">외 {payments.length - shown.length}건 — 전체는 매출 화면 참조</p>}
         </>
       )}
     </div>
@@ -1523,7 +1523,7 @@ export default function Customers() {
                 {tagChips}
                 <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">메모</p>
-                  {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line">{selected.memo}</p> : <p className="text-xs text-gray-300">메모 없음</p>}
+                  {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                   {quickMemoRow(true)}
                 </div>
               </div>
@@ -2259,7 +2259,7 @@ export default function Customers() {
                                 </div>
                               ))}
                               {deductions.length > 10 && (
-                                <p className="text-xs text-gray-300">외 {deductions.length - 10}건 — 전체는 최근 시술 기록 참조</p>
+                                <p className="text-xs text-gray-500">외 {deductions.length - 10}건 — 전체는 최근 시술 기록 참조</p>
                               )}
                             </div>
                           );
@@ -2318,7 +2318,7 @@ export default function Customers() {
           <div className="text-center">
             <User size={48} className="text-gray-200 mx-auto mb-3" />
             <p className="text-gray-400 font-medium">고객을 선택하세요</p>
-            <p className="text-sm text-gray-300 mt-1">왼쪽 목록에서 고객을 클릭하면 상세 정보가 표시됩니다</p>
+            <p className="text-sm text-gray-500 mt-1">왼쪽 목록에서 고객을 클릭하면 상세 정보가 표시됩니다</p>
           </div>
         </div>
       )}

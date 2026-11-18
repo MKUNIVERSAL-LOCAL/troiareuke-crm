@@ -217,7 +217,7 @@ const apis: ApiItem[] = [
 
 const categories = ['전체', '예약', '메시지', '인증', '결제', '연동'];
 const priorities = { must: { label: '필수', color: 'bg-red-100 text-red-700' }, recommended: { label: '권장', color: 'bg-orange-100 text-orange-700' }, optional: { label: '선택', color: 'bg-gray-100 text-gray-600' } };
-const statuses = { connected: { label: '✅ 연동완료', color: 'text-green-600' }, pending: { label: '⏳ 진행중', color: 'text-orange-500' }, 'not-started': { label: '⬜ 미시작', color: 'text-gray-400' } };
+const statuses = { connected: { label: '✅ 연동완료', color: 'text-green-700' }, pending: { label: '⏳ 진행중', color: 'text-orange-700' }, 'not-started': { label: '⬜ 미시작', color: 'text-gray-400' } };
 
 const LEGACY_API_STATUS_KEY = 'crm_api_guide_status';
 
@@ -293,14 +293,14 @@ export default function ApiGuide() {
               <div key={api.id} className={clsx('bg-white rounded-2xl border shadow-sm overflow-hidden transition-all',
                 st === 'connected' ? 'border-green-200' : st === 'pending' ? 'border-orange-200' : 'border-gray-100')}>
                 <div className="flex items-center gap-4 px-6 py-4 cursor-pointer" onClick={() => setExpandedId(isOpen ? null : api.id)}>
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600">
                     {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-bold text-gray-900">{api.name}</p>
                       <span className={clsx('px-2 py-0.5 rounded-full text-xs font-bold', priorities[api.priority].color)}>{priorities[api.priority].label}</span>
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs">{api.category}</span>
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs">{api.category}</span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5 truncate">{api.description}</p>
                   </div>

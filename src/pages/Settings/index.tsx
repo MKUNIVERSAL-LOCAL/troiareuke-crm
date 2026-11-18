@@ -2,7 +2,7 @@ import { HIDE_ON_MOBILE } from '../../lib/platform';
 import { formatPhoneInput } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
@@ -1582,10 +1582,17 @@ function SettingCard({ title, children }: { title: string; children: React.React
 }
 
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  // 자식이 input/select/textarea 하나뿐이고 이름이 없으면 이 라벨을 접근성 이름으로 연결 — 스크린리더·axe "label" 위반 해소 (2026-11-18)
+  const id = useId();
+  const only = Children.count(children) === 1 && isValidElement(children) ? children : null;
+  const props = (only?.props ?? {}) as Record<string, unknown>;
+  const labelled = only && typeof only.type === 'string' && ['input', 'select', 'textarea'].includes(only.type) && !props['aria-label'] && !props['aria-labelledby']
+    ? cloneElement(only, { 'aria-labelledby': id } as Record<string, unknown>)
+    : children;
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
-      <label className="text-sm font-medium text-gray-600 sm:w-32 flex-shrink-0">{label}</label>
-      <div className="flex-1 min-w-0">{children}</div>
+      <label id={id} className="text-sm font-medium text-gray-600 sm:w-32 flex-shrink-0">{label}</label>
+      <div className="flex-1 min-w-0">{labelled}</div>
     </div>
   );
 }

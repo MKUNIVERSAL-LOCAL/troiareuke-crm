@@ -62,7 +62,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
         <div className="py-8 text-center">
           <BellRing size={24} className="mx-auto mb-2 text-gray-200" />
           <p className="text-sm text-gray-400">재방문 안내가 필요한 고객이 없어요</p>
-          <p className="text-xs text-gray-300 mt-1">권장 재방문일이 지나면 여기에 표시됩니다</p>
+          <p className="text-xs text-gray-500 mt-1">권장 재방문일이 지나면 여기에 표시됩니다</p>
         </div>
       ) : (
         <div className="divide-y divide-gray-50">

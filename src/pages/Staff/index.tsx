@@ -94,7 +94,7 @@ export default function StaffPage() {
               <button
                 key={value}
                 onClick={() => setStatusFilter(value)}
-                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${statusFilter === value ? 'bg-white text-[#1a3a8f] shadow-sm' : 'text-gray-500'}`}
+                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${statusFilter === value ? 'bg-white text-[#1a3a8f] shadow-sm' : 'text-gray-600'}`}
               >
                 {label}
               </button>
@@ -135,7 +135,7 @@ export default function StaffPage() {
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center" title="완료·예정 포함, 취소·노쇼 제외">
                     <p className="text-base font-bold text-gray-800">{(monthlyRevenue / 10000).toFixed(0)}만</p>
                     <p className="text-xs text-gray-400 whitespace-nowrap">월 예약액</p>
-                    <p className="text-2xs text-gray-300 whitespace-nowrap">예정 포함</p>
+                    <p className="text-2xs text-gray-500 whitespace-nowrap">예정 포함</p>
                   </div>
                 </div>
 
@@ -210,7 +210,7 @@ export default function StaffPage() {
                   </div>
                   <div className="flex-1 flex gap-2 flex-wrap">
                     {todayRes.length === 0 ? (
-                      <span className="text-xs text-gray-300">예약 없음</span>
+                      <span className="text-xs text-gray-500">예약 없음</span>
                     ) : (
                       todayRes.map(r => (
                         <div

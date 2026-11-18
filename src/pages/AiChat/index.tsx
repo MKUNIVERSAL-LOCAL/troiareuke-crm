@@ -514,7 +514,7 @@ function AiChatInner() {
                     {msg.content}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-300">{format(msg.timestamp, 'HH:mm')}</span>
+                    <span className="text-xs text-gray-500">{format(msg.timestamp, 'HH:mm')}</span>
                     {/* 어떤 AI가 답했는지 표시 */}
                     {msg.usedProvider && (
                       <span className={`text-2xs px-1.5 py-0.5 rounded-full font-medium ${
@@ -567,7 +567,7 @@ function AiChatInner() {
                 {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
-            <p className="text-xs text-gray-300 mt-2 text-center">
+            <p className="text-xs text-gray-500 mt-2 text-center">
               Claude (Anthropic) 기반 CRM 데이터 실시간 분석 | OpenAI / Gemini 폴백 지원
             </p>
           </div>

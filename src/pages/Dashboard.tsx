@@ -391,7 +391,7 @@ export default function Dashboard() {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-gray-900">트로이몰에서 제품 구매</p>
-              <p className="text-xs text-gray-500 mt-0.5">홈케어·시술 제품을 온라인몰과 앱에서 바로 주문하세요</p>
+              <p className="text-xs text-gray-600 mt-0.5">홈케어·시술 제품을 온라인몰과 앱에서 바로 주문하세요</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -554,7 +554,7 @@ export default function Dashboard() {
               <div className="divide-y divide-gray-50">
                 {lowStockProducts.length === 0 ? (
                   <div className="px-5 py-4">
-                    <div className="flex items-center gap-2 text-green-600">
+                    <div className="flex items-center gap-2 text-green-700">
                       <CheckCircle2 size={14} />
                       <span className="text-xs font-medium">재고 정상</span>
                     </div>

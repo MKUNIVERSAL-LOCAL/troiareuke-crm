@@ -278,7 +278,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               </button>
             </div>
             {requests.length === 0 ? (
-              <p className="text-xs text-gray-300 text-center py-4">아직 결제 요청이 없어요</p>
+              <p className="text-xs text-gray-500 text-center py-4">아직 결제 요청이 없어요</p>
             ) : (
               <div className="space-y-1.5 max-h-56 overflow-y-auto">
                 {requests.map(r => {
@@ -312,7 +312,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                 })}
               </div>
             )}
-            <p className="text-2xs text-gray-300 mt-2">
+            <p className="text-2xs text-gray-500 mt-2">
               결제 완료된 건은 매출 관리에 자동 기록돼요 (프로그램 재시작 또는 다음 동기화 때 목록에 반영). 오늘 날짜 기준: {todayISO()}
             </p>
           </div>

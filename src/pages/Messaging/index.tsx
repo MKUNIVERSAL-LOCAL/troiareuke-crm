@@ -138,7 +138,7 @@ export default function Messaging() {
               onClick={() => setTab(t.key)}
               className={clsx(
                 'flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
               )}
             >
               {t.icon} {t.label}
@@ -255,13 +255,14 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
                       {MSG_TYPE_LABELS[m.type]}
                     </span>
                   </div>
-                  <p className="text-xs text-amber-600 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
+                  <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
                 </div>
               </div>
               <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
                 <input
                   type="checkbox"
                   className="sr-only peer"
+                  aria-label={m.title + ' 자동 발송 (준비 중)'}
                   disabled
                   readOnly
                   checked={settings.notificationSettings[m.key]}
@@ -557,7 +558,7 @@ const SCHEDULE_STATUS_LABELS: Record<ScheduledMessage['status'], { label: string
   pending: { label: '대기', color: 'bg-blue-100 text-blue-600' },
   processing: { label: '발송 중', color: 'bg-primary-100 text-primary-600' },
   sent: { label: '발송 완료', color: 'bg-green-100 text-green-600' },
-  partial: { label: '일부 실패', color: 'bg-amber-100 text-amber-600' },
+  partial: { label: '일부 실패', color: 'bg-amber-100 text-amber-800' },
   failed: { label: '실패', color: 'bg-red-100 text-red-600' },
   canceled: { label: '취소됨', color: 'bg-gray-100 text-gray-500' },
 };
@@ -731,7 +732,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{formatSentAt(h.sentAt)}</p>
                     {isGatewayPending && (
-                      <p className="text-xs text-amber-600 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
+                      <p className="text-xs text-amber-700 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
                     )}
                   </div>
                 </div>

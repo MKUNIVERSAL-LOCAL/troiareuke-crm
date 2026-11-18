@@ -438,13 +438,13 @@ export default function Reservations() {
         {/* Controls */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('prev')} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
+            <button type="button" onClick={() => navigate('prev')} aria-label="이전" className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
               <ChevronLeft size={18} className="text-gray-600" />
             </button>
             <button onClick={() => setCurrentDate(new Date())} className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2">
               <RefreshCw size={14} /> 오늘
             </button>
-            <button onClick={() => navigate('next')} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
+            <button type="button" onClick={() => navigate('next')} aria-label="다음" className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
               <ChevronRight size={18} className="text-gray-600" />
             </button>
             <span className="hidden xl:inline ml-2 text-xs text-gray-400" title="키보드 단축키">← → 이동 · T 오늘 · N 새 예약</span>
@@ -479,7 +479,7 @@ export default function Reservations() {
                     onClick={() => setViewMode(m)}
                     className={clsx(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-                      viewMode === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                      viewMode === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
                     )}
                   >
                     {icons[m]} {labels[m]}
@@ -641,7 +641,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
       </div>
 
       {/* Time Grid — 예약 블록은 관리시간(1시간=1칸, 2시간=2칸)에 비례한 높이로 표시 */}
-      <div className="overflow-y-auto max-h-[550px]">
+      <div className="overflow-y-auto max-h-[550px]" role="region" aria-label="시간표" tabIndex={0}>{/* 스크롤 영역 키보드 접근 (axe scrollable-region-focusable) */}
         {TIME_SLOTS.map(time => {
           const slotStartMin = timeToMin(time);
           return (

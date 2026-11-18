@@ -493,16 +493,16 @@ export default function Sales() {
 
       {/* 탭 */}
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto no-scrollbar pr-6 max-w-full">
-        <button onClick={() => setTab('overview')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'overview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setTab('overview')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'overview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
           매출 현황
         </button>
-        <button onClick={() => setTab('list')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setTab('list')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
           결제 내역 ({monthAllPayments.length})
         </button>
-        <button onClick={() => setTab('expense')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setTab('expense')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
           지출 내역 ({monthExpenses.length})
         </button>
-        <button onClick={() => setTab('pnl')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'pnl' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setTab('pnl')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'pnl' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
           손익계산서
         </button>
       </div>
@@ -522,7 +522,7 @@ export default function Sales() {
                 )}
               </div>
               <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.total)}</p>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 지난달 {formatPrice(lastSummary.total)}
                 {thisSummary.other > 0 && <span className="ml-1.5 text-gray-400">· 기타 {formatPrice(thisSummary.other)} 포함</span>}
               </p>
@@ -530,21 +530,21 @@ export default function Sales() {
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">시술 매출</p>
               <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.treatment)}</p>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 {thisSummary.total > 0 ? Math.round((thisSummary.treatment / thisSummary.total) * 100) : 0}% 비중
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">제품 매출</p>
               <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.product)}</p>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 {thisSummary.total > 0 ? Math.round((thisSummary.product / thisSummary.total) * 100) : 0}% 비중
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">결제 건수</p>
               <p className="text-2xl font-bold text-gray-900">{thisSummary.count}건</p>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 건당 {thisSummary.count > 0 ? formatPrice(Math.round(thisSummary.total / thisSummary.count)) : '-'}
               </p>
             </div>
@@ -577,7 +577,7 @@ export default function Sales() {
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <h3 className="font-bold text-gray-900 mb-4">결제 수단</h3>
               {methodData.length === 0 ? (
-                <p className="text-sm text-gray-300 text-center py-6">데이터 없음</p>
+                <p className="text-sm text-gray-500 text-center py-6">데이터 없음</p>
               ) : (
                 <div className="space-y-3">
                   {methodData.map(({ name, value }) => {
@@ -604,7 +604,7 @@ export default function Sales() {
                 <div className="text-center py-6">
                   <DollarSign size={32} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">이번 달 결제 내역이 없어요</p>
-                  <button onClick={() => setShowModal(true)} className="mt-2 text-xs text-blue-500 hover:underline">결제 등록하기</button>
+                  <button onClick={() => setShowModal(true)} className="mt-2 text-xs text-primary-600 hover:underline">결제 등록하기</button>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -763,12 +763,12 @@ export default function Sales() {
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">매입 (매출원가)</p>
               <p className="text-2xl font-bold text-orange-600">{formatPrice(expenseSummary.cogs)}</p>
-              <p className="text-xs text-gray-300 mt-1">제품·소모품 매입</p>
+              <p className="text-xs text-gray-500 mt-1">제품·소모품 매입</p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">판매비·관리비</p>
               <p className="text-2xl font-bold text-rose-500">{formatPrice(expenseSummary.sga)}</p>
-              <p className="text-xs text-gray-300 mt-1">인건비·임대료 등</p>
+              <p className="text-xs text-gray-500 mt-1">인건비·임대료 등</p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">지출 건수</p>
@@ -801,7 +801,7 @@ export default function Sales() {
                 <p className="text-gray-400">
                   {expenseCategoryFilter === 'all' ? '이번 달 지출 내역이 없어요' : '해당 분류의 지출이 없어요'}
                 </p>
-                <p className="text-xs text-gray-300 mt-1">제품 매입, 임대료, 인건비 등을 기록하면 손익계산서가 자동 작성돼요</p>
+                <p className="text-xs text-gray-500 mt-1">제품 매입, 임대료, 인건비 등을 기록하면 손익계산서가 자동 작성돼요</p>
                 <button onClick={() => setShowExpenseModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
                   지출 등록하기
                 </button>
@@ -894,7 +894,7 @@ export default function Sales() {
                 <button
                   key={v}
                   onClick={() => setPnlMode(v)}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${pnlMode === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${pnlMode === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
                 >
                   {label}
                 </button>
@@ -976,7 +976,7 @@ export default function Sales() {
                       <div key={label} className="bg-gray-50 rounded-xl p-3">
                         <p className="text-xs text-gray-400 mb-1">{label}</p>
                         <p className="text-sm font-bold text-gray-900">{formatPrice(cur)}</p>
-                        <p className={`text-xs mt-1 font-medium ${diff > 0 ? 'text-green-500' : diff < 0 ? 'text-red-400' : 'text-gray-300'}`}>
+                        <p className={`text-xs mt-1 font-medium ${diff > 0 ? 'text-green-700' : diff < 0 ? 'text-red-600' : 'text-gray-500'}`}>
                           {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatPrice(diff)}`}
                         </p>
                       </div>
