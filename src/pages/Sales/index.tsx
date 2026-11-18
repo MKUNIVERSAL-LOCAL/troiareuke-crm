@@ -926,7 +926,7 @@ export default function Sales() {
                 </div>
                 {/* 판관비 */}
                 <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100">
-                  <span>판매비와 관리비</span><span className="text-rose-500">−{formatPrice(pnl.cur.sga)}</span>
+                  <span>판매비와 관리비</span><span className="text-rose-700">−{formatPrice(pnl.cur.sga)}</span>
                 </div>
                 {EXPENSE_CATEGORIES.filter(c => !COGS_CATEGORIES.includes(c)).map(c => (pnl.cur.byCategory[c] || 0) > 0 && (
                   <div key={c} className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
