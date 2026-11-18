@@ -2451,7 +2451,7 @@ export default function Customers() {
               </div>
               <label className="flex items-start gap-2 p-3 bg-blue-50/60 border border-blue-100 rounded-xl cursor-pointer">
                 <input type="checkbox" checked={addPrivacyConsent} onChange={e => setAddPrivacyConsent(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded border-gray-300 focus:ring-primary-300" />
+                  className="mt-0.5 w-4 h-4" />
                 <span className="text-xs text-gray-700 leading-relaxed">
                   <span className="font-semibold">[필수] 개인정보 수집·이용 동의</span><br />
                   고객 관리 목적으로 이름·연락처 등 개인정보를 수집·이용하는 것에 대해 고객 본인의 동의를 받았습니다.

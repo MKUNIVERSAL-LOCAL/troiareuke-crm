@@ -92,7 +92,7 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
         {mode === 'in' && (
           <div className="space-y-3 p-3 bg-slate-50 rounded-xl">
             <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input type="checkbox" checked={logExpense} onChange={e => setLogExpense(e.target.checked)} className="accent-[#1a3a8f]" />
+              <input type="checkbox" checked={logExpense} onChange={e => setLogExpense(e.target.checked)} />
               매입 비용을 지출 원장에 기록 (손익계산서 원가)
             </label>
             {logExpense && (

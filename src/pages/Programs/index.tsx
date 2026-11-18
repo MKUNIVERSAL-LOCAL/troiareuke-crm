@@ -470,10 +470,12 @@ export default function Programs() {
               {parseInt(form.price) > 0 && form.costPrice !== '' && (
                 <div className="bg-gray-50 rounded-xl p-3 text-sm flex items-center justify-between">
                   <span className="text-gray-500">예상 마진</span>
-                  <span className="font-bold text-green-700">
+                  {(() => { const m = Math.round(((parseInt(form.price) - (parseInt(form.costPrice) || 0)) / parseInt(form.price)) * 100); return (
+                  <span className={`font-bold ${m >= 50 ? 'text-green-700' : m >= 30 ? 'text-amber-700' : 'text-red-600'}`}>{/* 목록 카드와 같은 기준 */}
                     {formatPrice(parseInt(form.price) - (parseInt(form.costPrice) || 0))}
-                    {' '}({Math.round(((parseInt(form.price) - (parseInt(form.costPrice) || 0)) / parseInt(form.price)) * 100)}%)
+                    {' '}({m}%)
                   </span>
+                  ); })()}
                 </div>
               )}
 
@@ -513,7 +515,7 @@ export default function Programs() {
                   id="isActive"
                   checked={form.isActive}
                   onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
-                  className="w-4 h-4 rounded text-blue-600"
+                  className="w-4 h-4"
                 />
                 <label htmlFor="isActive" className="text-sm text-gray-700">프로그램 활성화 (고객에게 판매 가능)</label>
               </div>

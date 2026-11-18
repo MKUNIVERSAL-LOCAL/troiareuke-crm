@@ -168,6 +168,6 @@ textarea:hover:not(:focus) {
 }
 
 /* 네이티브 체크박스·라디오를 브랜드 네이비로 — forms 플러그인 없이 accent-color 한 줄 (text-* 클래스는 네이티브 입력에 효과 없음, 2026-11-18) */
-input[type="checkbox"], input[type="radio"] {
-  accent-color: #1a3a8f;
+:where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: #1a3a8f; /* :where로 특이도 0 — accent-* 유틸리티(병합 모달 amber 등)가 덮어쓸 수 있게 (리뷰 2026-11-18) */
 }

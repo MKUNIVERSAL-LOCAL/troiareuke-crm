@@ -345,7 +345,7 @@ export default function AdminUsers() {
           }
           extra={sameBranchCount <= 1 && deleteTarget.branch_name ? (
             <label className="flex items-start gap-2 text-xs text-slate-300 bg-red-500/5 border border-red-500/20 rounded-xl px-3 py-2 cursor-pointer">
-              <input type="checkbox" checked={purgeBranchData} onChange={e => setPurgeBranchData(e.target.checked)} className="mt-0.5" />
+              <input type="checkbox" checked={purgeBranchData} onChange={e => setPurgeBranchData(e.target.checked)} className="mt-0.5 accent-sky-400" />
               <span>지점 데이터(고객·예약·시술기록·사진·메시지 기록)도 함께 완전 삭제 — 삭제 직전 상태는 서버 백업 폴더에 자동 스냅샷으로 보관되며, 결제 요청 기록은 법정 보존 의무로 고객 식별 정보만 지운 채 남습니다.</span>
             </label>
           ) : undefined}

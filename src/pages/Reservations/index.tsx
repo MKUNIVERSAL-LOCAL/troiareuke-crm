@@ -1118,7 +1118,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               type="checkbox"
               checked={addToGoogle}
               onChange={e => setAddToGoogle(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-300"
+              className="w-4 h-4"
             />
             <Calendar size={14} className="text-primary-600" />
             <span className="text-sm text-gray-700">Google 캘린더에도 추가</span>
