@@ -620,12 +620,12 @@ function StaffDetailModal({
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-purple-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-purple-700">{staffReservations.length}</p>
-            <p className="text-xs text-purple-400 mt-0.5">총 예약</p>
+            <p className="text-xs text-purple-700 mt-0.5">총 예약</p>
           </div>
           <div className="bg-pink-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-pink-700">{(monthRevenue / 10000).toFixed(0)}만</p>
-            <p className="text-xs text-pink-400 mt-0.5">이번달 예약액(예정 포함)</p>
-            <p className="text-2xs text-pink-300">(완료·예정 포함, 취소·노쇼 제외)</p>
+            <p className="text-xs text-pink-700 mt-0.5">이번달 예약액(예정 포함)</p>
+            <p className="text-2xs text-pink-700">(완료·예정 포함, 취소·노쇼 제외)</p>
           </div>
           <div className="bg-blue-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-blue-700">{staff.hireDate.split('-')[0]}</p>

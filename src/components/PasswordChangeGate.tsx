@@ -64,7 +64,7 @@ export default function PasswordChangeGate() {
           autoComplete="new-password"
           className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
         />
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-400">{error}</p>}
         <button
           type="submit"
           disabled={saving}

@@ -819,7 +819,7 @@ export default function Sales() {
                           </p>
                           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                             <span>{x.expenseDate}</span>
-                            <span className={`px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-600' : 'bg-rose-50 text-rose-500'}`}>{x.category}</span>
+                            <span className={`px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-800' : 'bg-rose-50 text-rose-700'}`}>{x.category}</span>
                             <span>{x.paymentMethod}</span>
                           </p>
                         </div>
@@ -847,7 +847,7 @@ export default function Sales() {
                       <div key={x.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
                         <span className="text-gray-500 text-xs">{x.expenseDate}</span>
                         <span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-600' : 'bg-rose-50 text-rose-500'}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-800' : 'bg-rose-50 text-rose-700'}`}>
                             {x.category}
                           </span>
                         </span>
@@ -930,7 +930,7 @@ export default function Sales() {
                 )}
                 {/* 매출원가 */}
                 <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100 mt-1">
-                  <span>매출원가 (매입)</span><span className="text-orange-600">−{formatPrice(pnl.cur.cogs)}</span>
+                  <span>매출원가 (매입)</span><span className="text-orange-700">−{formatPrice(pnl.cur.cogs)}</span>
                 </div>
                 {COGS_CATEGORIES.map(c => (pnl.cur.byCategory[c] || 0) > 0 && (
                   <div key={c} className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
@@ -1193,7 +1193,7 @@ export default function Sales() {
                       className={`py-2 rounded-xl border text-xs font-medium transition-colors ${
                         expenseForm.category === c
                           ? COGS_CATEGORIES.includes(c)
-                            ? 'border-orange-400 bg-orange-50 text-orange-600'
+                            ? 'border-orange-400 bg-orange-50 text-orange-700'
                             : 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                       }`}

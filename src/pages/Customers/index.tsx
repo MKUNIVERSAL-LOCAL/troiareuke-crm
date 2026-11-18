@@ -206,7 +206,7 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
         {compact
           ? <p className="text-xs font-semibold text-gray-500 uppercase">결제 내역</p>
           : <h3 className="font-bold text-gray-900">결제 내역</h3>}
-        <button type="button" onClick={onAdd} className="text-xs text-primary-600 hover:text-blue-700 font-medium flex items-center gap-1">
+        <button type="button" onClick={onAdd} className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1">
           <Plus size={12} />결제 등록
         </button>
       </div>
@@ -1559,7 +1559,7 @@ export default function Customers() {
                         {c.recommendedSolution && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
                         {c.recommendedProducts.length > 0 && <p className="text-xs text-gray-500 mt-0.5">🧴 {c.recommendedProducts.join(', ')}</p>}
                         {c.managerNote && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">📝 {c.managerNote}</p>}
-                        {c.nextConsultDate && <p className="text-xs text-indigo-500 mt-0.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>}
+                        {c.nextConsultDate && <p className="text-xs text-indigo-600 mt-0.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>}
                         <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
                         <button
                           type="button"
@@ -2056,7 +2056,7 @@ export default function Customers() {
               </div>
 
               <div className="mt-3 p-3 bg-gray-50 rounded-xl">
-                {selected.memo ? <p className="text-xs text-yellow-700 whitespace-pre-line">📝 {selected.memo}</p> : <p className="text-xs text-amber-700/60">📝 메모 없음</p>}
+                {selected.memo ? <p className="text-xs text-amber-700 whitespace-pre-line">📝 {selected.memo}</p> : <p className="text-xs text-gray-400">📝 메모 없음</p>}
                 {quickMemoRow(false)}
               </div>
             </div>
@@ -2131,7 +2131,7 @@ export default function Customers() {
 
                         {c.recommendedSolution && (
                           <div className="mt-1 p-2.5 bg-white rounded-lg border border-indigo-50">
-                            <p className="text-2xs font-semibold text-indigo-500 mb-0.5">추천 솔루션</p>
+                            <p className="text-2xs font-semibold text-indigo-600 mb-0.5">추천 솔루션</p>
                             <p className="text-xs text-gray-700 whitespace-pre-line">{c.recommendedSolution}</p>
                           </div>
                         )}
@@ -2142,7 +2142,7 @@ export default function Customers() {
                           <p className="text-xs text-gray-500 mt-1.5">📝 {c.managerNote}</p>
                         )}
                         {c.nextConsultDate && (
-                          <p className="text-xs text-indigo-500 mt-1.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>
+                          <p className="text-xs text-indigo-600 mt-1.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>
                         )}
                         <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
                         <button
@@ -2175,7 +2175,7 @@ export default function Customers() {
                 <h3 className="font-bold text-gray-900">등록 프로그램</h3>
                 <button
                   onClick={() => setShowProgramModal(true)}
-                  className="text-xs text-primary-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
                 >
                   <Plus size={12} />추가
                 </button>

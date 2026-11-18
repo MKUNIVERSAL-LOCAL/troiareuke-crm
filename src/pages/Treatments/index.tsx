@@ -185,7 +185,7 @@ export default function Treatments() {
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {formatDate(t.treatmentDate)}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
-                      {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
+                      {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-600">· 사진 {photoCounts.get(t.id)}장</span>}
                     </p>
                     {t.skinCondition && (
                       <p className="text-xs text-primary-600 mt-1">피부상태: {t.skinCondition}</p>
@@ -256,7 +256,7 @@ export default function Treatments() {
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {formatDate(t.treatmentDate)}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
-                    {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
+                    {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-600">· 사진 {photoCounts.get(t.id)}장</span>}
                   </p>
                   {t.skinCondition && (
                     <p className="text-xs text-primary-600 mt-1">피부상태: {t.skinCondition}</p>

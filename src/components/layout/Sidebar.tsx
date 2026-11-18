@@ -138,7 +138,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
             <p className="text-xs text-amber-700 mt-0.5">
               {serviceEndsAt!.slice(0, 10).replace(/-/g, '.')}까지 (D-{serviceDaysLeft})
             </p>
-            <p className="text-2xs text-amber-400 mt-1">연장은 본사에 문의해주세요</p>
+            <p className="text-2xs text-amber-700 mt-1">연장은 본사에 문의해주세요</p>
           </div>
         )}
         {user?.plan === 'trial' && trialDaysLeft !== null && trialDaysLeft >= 0 && (

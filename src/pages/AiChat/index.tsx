@@ -402,7 +402,7 @@ function AiChatInner() {
           {/* AI 상태 */}
           <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border ${
             status.color === 'green' ? 'bg-green-50 text-green-700 border-green-200' :
-            status.color === 'yellow' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+            status.color === 'yellow' ? 'bg-amber-50 text-amber-700 border-amber-200' :
             'bg-red-50 text-red-600 border-red-200'
           }`}>
             <Zap size={12} className={
@@ -446,7 +446,7 @@ function AiChatInner() {
                 </label>
                 <input type="password" value={claudeKey} onChange={e => setClaudeKey(e.target.value)}
                   placeholder="sk-ant-..." className="w-full px-3 py-2.5 text-sm border border-violet-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 font-mono bg-violet-50/30" />
-                <p className="text-xs text-violet-500 mt-1">
+                <p className="text-xs text-violet-700 mt-1">
                   {IS_ELECTRON
                     ? '클로드 맥스 사용자 추천! 데스크탑 앱에서 CORS 없이 바로 사용 가능'
                     : '브라우저에서는 CORS 정책으로 차단됨 — 데스크탑 앱에서만 사용 가능'}

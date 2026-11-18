@@ -111,7 +111,7 @@ export default function Products() {
             <p className="text-sm text-orange-700 font-medium flex-1">
               재고 부족 제품이 <strong>{lowStockCount}종</strong> 있습니다. 빠른 발주가 필요합니다.
             </p>
-            <span className="text-xs font-semibold text-orange-600">
+            <span className="text-xs font-semibold text-orange-700">
               {lowStockOnly ? '전체 보기 ↩' : '재고 부족만 보기 →'}
             </span>
           </button>

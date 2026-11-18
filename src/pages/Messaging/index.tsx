@@ -946,7 +946,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
           <AlertCircle size={48} className="text-red-600 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 실패</p>
-          <p className="text-xs text-gray-400 mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
+          <p className="text-xs mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
           <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
         </div>
       ) : (
