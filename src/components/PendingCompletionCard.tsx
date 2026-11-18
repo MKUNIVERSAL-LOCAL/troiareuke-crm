@@ -17,7 +17,6 @@ const PAGE = 8;
 export default function PendingCompletionCard({ compact = false, refreshKey = 0, onSettled }: { compact?: boolean; refreshKey?: number; onSettled?: () => void }) {
   const navigate = useNavigate();
   const [showAll, setShowAll] = useState(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const list = useMemo(() => getPendingCompletionReservations(), [refreshKey]);
   if (list.length === 0) return null;
   const page = compact ? PAGE_COMPACT : PAGE;

@@ -43,7 +43,6 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
     if (id === pushed.current) return;
     pushed.current = id;
     setText(selected ? labelOf(selected) : '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
   const push = (id: string) => { pushed.current = id; onChange(id); };
 
@@ -58,7 +57,6 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
   useEffect(() => {
     const idx = !query.trim() && selected ? matches.findIndex(c => c.id === selected.id) : 0;
     setHi(idx < 0 ? 0 : idx);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, open]);
 
   const choose = (c: Customer) => {

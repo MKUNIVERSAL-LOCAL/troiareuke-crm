@@ -42,7 +42,7 @@ export default function SecurityGuideCard() {
   useEffect(() => {
     if (!api) return;
     api.targets().then(setTargets).catch(() => setTargets(null));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!api) return null;
 

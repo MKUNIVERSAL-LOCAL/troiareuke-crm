@@ -526,7 +526,6 @@ export default function Customers() {
     setBaPhotos(photos);
     setBaBefore(0);
     setBaAfter(photos.length - 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoCacheVersion]);
 
   async function buildComparison() {
@@ -560,7 +559,7 @@ export default function Customers() {
   const [showAllMobileConsults, setShowAllMobileConsults] = useState(false);
   useEffect(() => { setShowAllMobileConsults(false); }, [selected?.id]);
 
-  const pull = usePullToRefresh(() => { loadAll(); }); // 모바일: 맨 위에서 당겨서 새로고침
+  const pull = usePullToRefresh(() => { loadAll(); }, { enabled: !(selected && isMobileLayout) }); // 모바일: 목록에서만 당겨서 새로고침(풀스크린 상세 안에서는 무시)
   // Android 뒤로가기 — 열린 것 중 가장 위부터 하나씩 닫는다(상세 → 목록). 폼 모달은 Esc로는 닫지 않는다(입력 유실 방지, 취소 버튼으로)
   useOverlayClose(!!selected && isMobileLayout, () => setSelected(null), { escape: false });
   useOverlayClose(showAddModal, () => setShowAddModal(false), { escape: false });
@@ -910,7 +909,6 @@ export default function Customers() {
   // 보존기간 경과 고객 id — 고객 목록이나 정책이 바뀔 때만 재계산
   const expiredIds = useMemo(
     () => new Set(getExpiredCustomers().map(c => c.id)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [customers, retentionPolicy.enabled, retentionPolicy.years],
   );
   // 필터링 — 입력·정렬·목록이 바뀔 때만 (3,000명 × 초성 검색 + 한글 정렬을 매 렌더마다 하지 않게, 성능 감사 2026-11-18)
@@ -921,7 +919,6 @@ export default function Customers() {
     const matchRetention = !retentionOnly || expiredIds.has(c.id);
     return matchSearch && matchGrade && matchTag && matchRetention;
   }).sort(compareCustomers),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
@@ -929,7 +926,6 @@ export default function Customers() {
     for (const cp of CustomerProgramStore.getAll()) if (!cp.isCompleted) m.set(cp.customerId, (m.get(cp.customerId) || 0) + 1);
     return m;
     // detailTick: 프로그램 등록·관리는 고객 테이블을 바꾸지 않아 customers 참조가 그대로다 — loadAll이 올리는 tick으로 재계산 (리뷰 2026-11-18)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customers, detailTick]);
   // 목록은 100명씩 — 전부 마운트하면 수백 명부터 폰에서 버벅인다. 검색·필터·정렬이 바뀌면 처음부터
   const [listLimit, setListLimit] = useState(LIST_PAGE);
@@ -941,7 +937,6 @@ export default function Customers() {
   const qHandled = useRef<string | null>(null); // 같은 q로는 1회만 — 검색어를 더 치거나 목록이 갱신될 때 다시 열리지 않게 (리뷰 2026-11-18)
   useEffect(() => {
     if (qParam && qHandled.current !== qParam && filtered.length === 1) { qHandled.current = qParam; openCustomer(filtered[0]); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qParam, filtered]);
   // 빠른 시술 기록: 활성 프로그램이 하나뿐이면 미리 연결해 둔다(회차 차감 누락 방지)
   const openTreatmentModal = () => {

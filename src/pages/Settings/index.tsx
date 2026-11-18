@@ -114,7 +114,7 @@ export default function Settings() {
     const q = searchParams.get('tab');
     return q && tabs.some(t => t.key === q) ? (q as SettingTab) : 'shop'; // 모바일 앱에서 숨긴 탭(구독)은 받지 않는다
   });
-  useEffect(() => { if (searchParams.has('tab')) setSearchParams({}, { replace: true }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (searchParams.has('tab')) setSearchParams({}, { replace: true }); }, []);
   const [settings, setSettings] = useState<ShopSettings>(() => {
     const current = SettingsStore.get();
     if (current.name === '내 에스테틱 샵' && user?.shopName) {

@@ -11,7 +11,6 @@ import MessageDraftPanel from './ui/MessageDraftPanel';
 export default function ProgramAlertCard({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
   const navigate = useNavigate();
   // 대시보드 포커스/가시성 복귀(refreshKey)마다 다시 계산 — 모바일·PC 블록이 함께 마운트돼도 비용은 호출 2회
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const alerts = useMemo<ProgramAlert[]>(() => getProgramAlerts(), [refreshKey]);
   const [draftFor, setDraftFor] = useState<ProgramAlert | null>(null);
   if (alerts.length === 0) return null;

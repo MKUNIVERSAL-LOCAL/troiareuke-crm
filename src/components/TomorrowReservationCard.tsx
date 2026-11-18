@@ -15,7 +15,6 @@ import type { Reservation } from '../types';
 export default function TomorrowReservationCard({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const list = useMemo<Reservation[]>(() => getTomorrowReservations(), [refreshKey]);
   const [draftFor, setDraftFor] = useState<Reservation | null>(null);
   const [copiedAll, setCopiedAll] = useState(false); // 헤더 [전체 복사] 피드백 (개별 초안은 MessageDraftPanel이 담당)

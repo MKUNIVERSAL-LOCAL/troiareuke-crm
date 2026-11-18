@@ -140,7 +140,7 @@ export default function PnlReport() {
       const expense = data.expenses.filter(x => x.branchId === id).reduce((s, x) => s + x.amount, 0);
       return { name: branchLabel(id), 매출: revenue, 지출: expense, 영업이익: revenue - expense };
     }).sort((a, b) => b.영업이익 - a.영업이익);
-  }, [data, branchIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, branchIds]);
 
   // 등록된 분류 중 금액이 있는 것 전부 — 표준 9개에 없는 값(구버전·수기 입력)도 빠뜨리지 않아야
   // 상세 항목 합계가 총지출과 어긋나지 않는다

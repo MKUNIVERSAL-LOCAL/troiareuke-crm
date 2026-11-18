@@ -27,7 +27,6 @@ function buildSetupItems(): Item[] {
 export default function SetupChecklistCard({ refreshKey = 0 }: { refreshKey?: number }) {
   const navigate = useNavigate();
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(hiddenKey()) === '1'; } catch { return false; } });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const items = useMemo(buildSetupItems, [refreshKey]);
   const remaining = items.filter(i => !i.done);
   if (hidden || remaining.length === 0) return null;

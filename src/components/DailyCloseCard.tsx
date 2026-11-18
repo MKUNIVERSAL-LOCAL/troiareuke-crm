@@ -12,7 +12,6 @@ import { useFeature } from '../hooks/useFeature';
  */
 export default function DailyCloseCard({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
   const salesOn = useFeature('module.sales');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const close = useMemo(() => getDailyClose(), [refreshKey]);
   const [copied, setCopied] = useState(false);
   if (!salesOn) return null;

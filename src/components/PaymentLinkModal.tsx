@@ -46,7 +46,6 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
     setCreatedUrl(null);
     setSmsResult('');
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   async function refresh() {

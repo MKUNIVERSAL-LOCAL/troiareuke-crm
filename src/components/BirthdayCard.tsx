@@ -10,7 +10,6 @@ import MessageDraftPanel from './ui/MessageDraftPanel';
  */
 export default function BirthdayCard({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
   const navigate = useNavigate();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const list = useMemo<BirthdayAlert[]>(() => getUpcomingBirthdays(), [refreshKey]);
   const [draftFor, setDraftFor] = useState<BirthdayAlert | null>(null);
   if (list.length === 0) return null;

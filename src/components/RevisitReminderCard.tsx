@@ -24,7 +24,6 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
   const navigate = useNavigate();
   const { user } = useAuth();
   // 대시보드 포커스/가시성 복귀(refreshKey)마다 다시 계산 — 다른 알림 카드와 같은 규칙 (2026-11-18)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const due = useMemo<DueCustomer[]>(() => getRevisitDueCustomers(0), [refreshKey]);
   const [draftFor, setDraftFor] = useState<DueCustomer | null>(null);
   useOverlayClose(!!draftFor, () => setDraftFor(null)); // Android 뒤로가기·Esc

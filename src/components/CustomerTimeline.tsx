@@ -23,7 +23,6 @@ export default function CustomerTimeline({ customerId, compact = false, tick = 0
   const navigate = useNavigate();
   const [filter, setFilter] = useState<TimelineKind | 'all'>('all');
   const [limit, setLimit] = useState(PAGE);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const all = useMemo(() => buildCustomerTimeline(customerId), [customerId, tick]);
   const kindsPresent = (Object.keys(TIMELINE_KIND_LABEL) as TimelineKind[]).filter(k => all.some(i => i.kind === k));
   // 걸러 둔 종류의 마지막 기록이 삭제되면 '전체'로 — 빈 화면에 갇히지 않게

@@ -31,7 +31,6 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
       onSynced?.(); // 부모(고객 상세 썸네일 등)도 같은 캐시를 다시 읽게
     });
     // onSynced는 호출 시점의 최신 콜백이면 충분 — 의존성에 넣으면 부모 리렌더마다 재동기화된다
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
 
   const cacheVersion = usePhotoCacheVersion(); // IndexedDB 최초 적재·동기화로 캐시가 채워지면 재수집

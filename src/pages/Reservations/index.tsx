@@ -212,7 +212,6 @@ export default function Reservations() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate, viewMode]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });

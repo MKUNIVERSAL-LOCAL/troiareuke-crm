@@ -12,7 +12,6 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
   const months = useMemo(() => recentMonths(6), []);
   const [yearMonth, setYearMonth] = useState(months[0]);
   const [draftOpen, setDraftOpen] = useState(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const report = useMemo(() => getStaffMonthReport(yearMonth), [yearMonth, tick]);
   const draft = useMemo(() => (draftOpen ? buildStaffReportMessage(report) : null), [draftOpen, report]);
   const caveats = staffReportCaveats(report);
