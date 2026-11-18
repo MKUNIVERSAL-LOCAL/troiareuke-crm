@@ -140,7 +140,7 @@ export default function Treatments() {
               placeholder="고객명, 시술명, 직원명 검색"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full h-10 pl-9 pr-4 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full h-10 pl-9 pr-4 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
           </div>
           <div className="mt-2">{filterChips}</div>
@@ -209,7 +209,7 @@ export default function Treatments() {
               placeholder="고객명, 시술명, 직원명 검색"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
           </div>
         </div>
@@ -527,7 +527,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             <select
               value={staffName}
               onChange={e => setStaffName(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="">직원 선택</option>
               {staff.map(s => (
@@ -543,7 +543,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             type="date"
             value={treatmentDate}
             onChange={e => setTreatmentDate(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
         </div>
 
@@ -554,7 +554,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             <select
               value={customerProgramId}
               onChange={e => setCustomerProgramId(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="">프로그램 미연결 (단건 시술)</option>
               {activePrograms.map(cp => (
@@ -591,7 +591,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             rows={2}
             value={treatmentDetails}
             onChange={e => setTreatmentDetails(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="시술 내용을 상세히 기록하세요 (비워두면 선택한 시술 항목으로 자동 기록)"
           />
         </div>
@@ -602,7 +602,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             type="text"
             value={skinCondition}
             onChange={e => setSkinCondition(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             placeholder="예: 건조함, 트러블, 모공 확장 등"
           />
         </div>
@@ -613,7 +613,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             type="date"
             value={nextAppointment}
             onChange={e => setNextAppointment(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
         </div>
 
@@ -623,7 +623,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             rows={3}
             value={staffNotes}
             onChange={e => setStaffNotes(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="시술 특이사항, 다음 방문 시 주의사항 등"
           />
         </div>
@@ -756,7 +756,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             className={clsx(
               'flex-1 py-2.5 text-sm font-medium text-white rounded-xl transition-all shadow-md',
               customerId
-                ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
+                ? 'bg-[#1a3a8f] hover:bg-[#15306e]'
                 : 'bg-gray-300 cursor-not-allowed'
             )}
           >
@@ -894,7 +894,7 @@ function TreatmentDetailModal({
           <div className="flex-1" />
           <button
             onClick={onEdit}
-            className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all"
+            className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e] transition-colors"
           >
             <Pencil size={14} />
             수정

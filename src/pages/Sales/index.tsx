@@ -1078,7 +1078,7 @@ export default function Sales() {
                     type="text"
                     value={form.amount && !Number.isNaN(parseInt(form.amount, 10)) ? parseInt(form.amount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setForm(f => ({ ...f, amount: e.target.value.replace(/,/g, '') }))}
-                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
@@ -1101,7 +1101,7 @@ export default function Sales() {
                     type="text"
                     value={form.discountAmount && form.discountAmount !== '0' && !Number.isNaN(parseInt(form.discountAmount, 10)) ? parseInt(form.discountAmount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value.replace(/,/g, '') || '0' }))}
-                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
@@ -1153,7 +1153,7 @@ export default function Sales() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제일</label>
                   <input aria-label="결제일" type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
               </div>
 
@@ -1162,7 +1162,7 @@ export default function Sales() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
                 <input aria-label="메모" value={form.memo} onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
                   placeholder="시술명, 제품명 등"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
               </div>
 
               <div className="flex gap-2">
@@ -1227,7 +1227,7 @@ export default function Sales() {
                   value={expenseForm.description}
                   onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="예: 앰플 20개 매입, 8월 임대료"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
               </div>
               <div>
@@ -1236,7 +1236,7 @@ export default function Sales() {
                   value={expenseForm.vendor}
                   onChange={e => setExpenseForm(f => ({ ...f, vendor: e.target.value }))}
                   placeholder="예: 본사, 건물주 (선택)"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
               </div>
 
@@ -1249,7 +1249,7 @@ export default function Sales() {
                     type="text"
                     value={expenseForm.amount && !Number.isNaN(parseInt(expenseForm.amount, 10)) ? parseInt(expenseForm.amount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value.replace(/,/g, '') }))}
-                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
@@ -1271,7 +1271,7 @@ export default function Sales() {
                     type="date"
                     value={expenseForm.expenseDate}
                     onChange={e => setExpenseForm(f => ({ ...f, expenseDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
                 </div>
               </div>
@@ -1283,7 +1283,7 @@ export default function Sales() {
                   value={expenseForm.memo}
                   onChange={e => setExpenseForm(f => ({ ...f, memo: e.target.value }))}
                   placeholder="세금계산서 발행 여부 등 (선택)"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
               </div>
 

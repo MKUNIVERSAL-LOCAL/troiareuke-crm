@@ -115,7 +115,7 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
   function emit(ny: string, nm: string, nd: string) {
     onChange(ny && nm && nd ? `${ny}-${nm}-${nd}` : '');
   }
-  const sel = 'px-2 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-indigo-300 transition cursor-pointer';
+  const sel = 'px-2 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-300 hover:border-indigo-300 transition cursor-pointer';
   return (
     <div className="grid grid-cols-3 gap-1.5">
       <select className={sel} value={y} onChange={e => { setY(e.target.value); emit(e.target.value, mo, d); }}>
@@ -1310,7 +1310,7 @@ export default function Customers() {
                 onChange={e => setSearch(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); openFirstMatch(); } }}
                 aria-label="고객 검색" placeholder="고객명, 전화번호 검색"
-                className="w-full h-10 pl-9 pr-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-10 pl-9 pr-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               />
             </div>
             {/* 모바일 고객 등록 (2026-11-17) — 스토어 앱 심사 대비: 핵심 기능이 PC 전용이면 '앱으로서 불완전' 판정 위험 */}
@@ -1758,7 +1758,7 @@ export default function Customers() {
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); openFirstMatch(); } }}
               aria-label="고객 검색" placeholder="이름, 전화번호 검색 (Enter로 첫 결과 열기)"
-              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
           </div>
           {tagChipsRow}
@@ -2360,26 +2360,26 @@ export default function Customers() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">이름 *</label>
                   <input aria-label="이름" required value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="홍길동" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="홍길동" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
                   <input aria-label="전화번호" required value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="010-0000-0000" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="010-0000-0000" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">성별</label>
                   <select aria-label="성별" value={addForm.gender} onChange={e => setAddForm(f => ({ ...f, gender: e.target.value as Gender }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     <option value="여성">여성</option><option value="남성">남성</option><option value="미입력">미입력</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">등급</label>
                   <select aria-label="등급" value={addForm.grade} onChange={e => setAddForm(f => ({ ...f, grade: e.target.value as CustomerGrade }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
@@ -2392,7 +2392,7 @@ export default function Customers() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
                   <select aria-label="피부 유형" value={addForm.skinType} onChange={e => setAddForm(f => ({ ...f, skinType: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     <option value="">선택 안함</option>
                     {['건성', '지성', '복합성', '민감성', '중성'].map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -2401,17 +2401,17 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
                 <input aria-label="이메일" type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="example@email.com" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">주소</label>
                 <input aria-label="주소" type="text" value={addForm.address} onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 서울시 강남구 테헤란로 1" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="예: 서울시 강남구 테헤란로 1" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
                 <select aria-label="유입 경로" value={addForm.referralSource} onChange={e => setAddForm(f => ({ ...f, referralSource: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">선택</option>
                   {['네이버', '카카오', '지인 소개', '간판', '유튜브', 'SNS', '직접 방문', '기타'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -2419,7 +2419,7 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">태그 <span className="text-gray-400 font-normal">(쉼표로 구분)</span></label>
                 <input value={addForm.tags} onChange={e => setAddForm(f => ({ ...f, tags: e.target.value }))} aria-label="태그" placeholder="예: 민감성, 재구매, 단골"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">알레르기·주의사항</label>
@@ -2430,11 +2430,11 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
                 <textarea aria-label="메모" value={addForm.memo} onChange={e => setAddForm(f => ({ ...f, memo: e.target.value }))}
                   rows={2} placeholder="특이사항 (알레르기는 위 칸에)"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
               </div>
               <label className="flex items-start gap-2 p-3 bg-blue-50/60 border border-blue-100 rounded-xl cursor-pointer">
                 <input type="checkbox" checked={addPrivacyConsent} onChange={e => setAddPrivacyConsent(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-[#1a3a8f] focus:ring-blue-500" />
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-[#1a3a8f] focus:ring-primary-300" />
                 <span className="text-xs text-gray-700 leading-relaxed">
                   <span className="font-semibold">[필수] 개인정보 수집·이용 동의</span><br />
                   고객 관리 목적으로 이름·연락처 등 개인정보를 수집·이용하는 것에 대해 고객 본인의 동의를 받았습니다.
@@ -2464,26 +2464,26 @@ export default function Customers() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">이름 *</label>
                   <input aria-label="이름" required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="홍길동" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="홍길동" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
                   <input aria-label="전화번호" required value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="010-0000-0000" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="010-0000-0000" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">성별</label>
                   <select aria-label="성별" value={editForm.gender} onChange={e => setEditForm(f => ({ ...f, gender: e.target.value as Gender }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     <option value="여성">여성</option><option value="남성">남성</option><option value="미입력">미입력</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">등급</label>
                   <select aria-label="등급" value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value as CustomerGrade }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
@@ -2496,7 +2496,7 @@ export default function Customers() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
                   <select aria-label="피부 유형" value={editForm.skinType} onChange={e => setEditForm(f => ({ ...f, skinType: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     <option value="">선택 안함</option>
                     {['건성', '지성', '복합성', '민감성', '중성'].map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -2505,17 +2505,17 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
                 <input aria-label="이메일" type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="example@email.com" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="example@email.com" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">주소</label>
                 <input aria-label="주소" type="text" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="예: 서울시 강남구 테헤란로 1" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="예: 서울시 강남구 테헤란로 1" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
                 <select aria-label="유입 경로" value={editForm.referralSource} onChange={e => setEditForm(f => ({ ...f, referralSource: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">선택</option>
                   {['네이버', '카카오', '지인 소개', '간판', '유튜브', 'SNS', '직접 방문', '기타'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -2523,7 +2523,7 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">태그 <span className="text-gray-400 font-normal">(쉼표로 구분)</span></label>
                 <input value={editForm.tags} onChange={e => setEditForm(f => ({ ...f, tags: e.target.value }))} aria-label="태그" placeholder="예: 민감성, 재구매, 단골"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">알레르기·주의사항</label>
@@ -2534,7 +2534,7 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
                 <textarea aria-label="메모" value={editForm.memo} onChange={e => setEditForm(f => ({ ...f, memo: e.target.value }))}
                   rows={2} placeholder="특이사항 (알레르기는 위 칸에)"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all">취소</button>
@@ -2567,7 +2567,7 @@ export default function Customers() {
                     const prog = programs.find(p => p.id === e.target.value);
                     setProgForm(f => ({ ...f, programId: e.target.value, pricePaid: prog ? prog.price.toString() : '' }));
                   }}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 >
                   <option value="">프로그램을 선택하세요</option>
                   {programs.map(p => (
@@ -2594,7 +2594,7 @@ export default function Customers() {
                     type="text"
                     value={progForm.pricePaid && !Number.isNaN(parseInt(progForm.pricePaid)) ? parseInt(progForm.pricePaid).toLocaleString('ko-KR') : ''}
                     onChange={e => setProgForm(f => ({ ...f, pricePaid: e.target.value.replace(/,/g, '') }))}
-                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
@@ -2610,21 +2610,21 @@ export default function Customers() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제 방법</label>
                   <select aria-label="결제 방법" value={progForm.paymentMethod} onChange={e => setProgForm(f => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     {getAllPaymentMethods().map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">구매 날짜</label>
                   <input aria-label="구매 날짜" type="date" value={progForm.purchaseDate} onChange={e => setProgForm(f => ({ ...f, purchaseDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모 (선택)</label>
                 <input aria-label="메모 (선택)" value={progForm.notes} onChange={e => setProgForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="특이사항 등" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="특이사항 등" />
               </div>
 
               <div className="flex gap-2">
@@ -2654,7 +2654,7 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">차감할 프로그램</label>
                 <select aria-label="차감할 프로그램" value={treatForm.customerProgramId} onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">선택 없음 (단순 기록)</option>
                   {CustomerProgramStore.getActive(selected.id).map(cp => (
                     <option key={cp.id} value={cp.id}>
@@ -2668,19 +2668,19 @@ export default function Customers() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">시술일 *</label>
                   <input aria-label="시술일" required type="date" value={treatForm.treatmentDate} onChange={e => setTreatForm(f => ({ ...f, treatmentDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">시간</label>
                   <input aria-label="시간" type="time" value={treatForm.treatmentTime} onChange={e => setTreatForm(f => ({ ...f, treatmentTime: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">담당자</label>
                 <select aria-label="담당자" value={treatForm.staffName} onChange={e => setTreatForm(f => ({ ...f, staffName: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">선택</option>
                   {StaffStore.getAll().filter(s => s.isActive).map(s => (
                     <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
@@ -2692,20 +2692,20 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">시술 내용</label>
                 <textarea aria-label="시술 내용" value={treatForm.treatmentDetails} onChange={e => setTreatForm(f => ({ ...f, treatmentDetails: e.target.value }))}
                   rows={2} placeholder="시술 내용을 기록하세요"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">피부 상태</label>
                 <input aria-label="피부 상태" value={treatForm.skinCondition} onChange={e => setTreatForm(f => ({ ...f, skinCondition: e.target.value }))}
                   placeholder="오늘 피부 상태 메모"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">다음 예약 권고일</label>
                 <input aria-label="다음 예약 권고일" type="date" value={treatForm.nextAppointment} onChange={e => setTreatForm(f => ({ ...f, nextAppointment: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
               </div>
 
               <div className="flex gap-2">
@@ -2741,12 +2741,12 @@ export default function Customers() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">상담일 *</label>
                   <input aria-label="상담일" required type="date" value={consultForm.consultDate}
                     onChange={e => setConsultForm(f => ({ ...f, consultDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">담당자</label>
                   <select aria-label="담당자" value={consultForm.staffName} onChange={e => setConsultForm(f => ({ ...f, staffName: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     <option value="">선택</option>
                     {StaffStore.getAll().filter(s => s.isActive).map(s => (
                       <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
@@ -2963,7 +2963,7 @@ export default function Customers() {
                         value={consultForm.metrics[f.key as string] ?? ''}
                         onChange={e => setConsultForm(prev => ({ ...prev, metrics: { ...prev.metrics, [f.key as string]: e.target.value } }))}
                         placeholder="-"
-                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-300" />
                     </div>
                   ))}
                 </div>
@@ -2975,7 +2975,7 @@ export default function Customers() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">종합 피부 타입</label>
                   <select aria-label="종합 피부 타입" value={consultForm.skinTypeResult} onChange={e => setConsultForm(f => ({ ...f, skinTypeResult: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     <option value="">선택</option>
                     {SKIN_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
@@ -2983,7 +2983,7 @@ export default function Customers() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">다음 관리 권고일</label>
                   <input aria-label="다음 관리 권고일" type="date" value={consultForm.nextConsultDate} onChange={e => setConsultForm(f => ({ ...f, nextConsultDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
               </div>
 
@@ -2992,7 +2992,7 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">1:1 맞춤 솔루션 (추천)</label>
                 <textarea aria-label="1:1 맞춤 솔루션 (추천)" value={consultForm.recommendedSolution} onChange={e => setConsultForm(f => ({ ...f, recommendedSolution: e.target.value }))}
                   rows={4} placeholder="피부 문제를 체크하면 추천 홈케어를 자동 입력할 수 있습니다. 자유롭게 수정하세요."
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
               </div>
 
               {/* 추천 제품/프로그램 */}
@@ -3000,7 +3000,7 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">추천 제품·프로그램 (쉼표로 구분)</label>
                 <input aria-label="추천 제품·프로그램 (쉼표로 구분)" value={consultForm.recommendedProducts} onChange={e => setConsultForm(f => ({ ...f, recommendedProducts: e.target.value }))}
                   placeholder="예: 수분 앰플, 진정 관리 10회권"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
               </div>
 
               {/* 관리사 소견 */}
@@ -3008,7 +3008,7 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">관리사 소견</label>
                 <textarea aria-label="관리사 소견" value={consultForm.managerNote} onChange={e => setConsultForm(f => ({ ...f, managerNote: e.target.value }))}
                   rows={2} placeholder="고객 피부 상태 관찰 소견을 기록하세요"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
               </div>
 
               <p className="text-xs text-gray-400">

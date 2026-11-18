@@ -1021,7 +1021,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <select aria-label="담당 직원"
               value={staffId}
               onChange={e => setStaffId(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="">직원 선택</option>
               {staffList.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
@@ -1034,7 +1034,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
           <select aria-label="시술"
             value={serviceId}
             onChange={e => setServiceId(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           >
             <option value="">시술 선택</option>
             {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {s.price.toLocaleString()}원)</option>)}
@@ -1049,7 +1049,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               aria-label="예약 날짜"
               value={date}
               onChange={e => setDate(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
           </div>
           <div>
@@ -1057,7 +1057,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <select aria-label="시작 시간"
               value={startTime}
               onChange={e => setStartTime(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -1067,7 +1067,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <select aria-label="예약 경로"
               value={source}
               onChange={e => setSource(e.target.value as Reservation['source'])}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="manual">직접등록</option>
               <option value="naver">네이버</option>
@@ -1084,7 +1084,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             rows={2}
             value={memo}
             onChange={e => setMemo(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="특이사항"
           />
         </div>
@@ -1094,7 +1094,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               type="checkbox"
               checked={addToGoogle}
               onChange={e => setAddToGoogle(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-300"
+              className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-primary-300"
             />
             <Calendar size={14} className="text-blue-500" />
             <span className="text-sm text-gray-700">Google 캘린더에도 추가</span>
@@ -1109,7 +1109,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
           <button type="button" onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
           <button
             type="submit"
-            className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-md"
+            className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e] transition-colors"
           >
             예약 저장
           </button>
@@ -1277,7 +1277,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           >
             <Trash2 size={14} /> 삭제
           </button>
-          <button onClick={onEdit} className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all">수정</button>
+          <button onClick={onEdit} className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e] transition-colors">수정</button>
         </div>
       </div>
       {showPayModal && (
@@ -1365,7 +1365,7 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
                   inputMode="numeric"
                   value={row.amt}
                   onChange={e => row.setAmt(e.target.value.replace(/[^\d]/g, ''))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-300"
                   placeholder="금액(원)"
                 />
               </div>

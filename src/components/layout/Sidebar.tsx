@@ -111,14 +111,14 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
                   className={clsx(
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group',
                     isActive
-                      ? 'bg-[#1a3a8f] text-white shadow-md shadow-blue-200'
+                      ? 'bg-[#1a3a8f] text-white'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   )}
                 >
                   <Icon size={16} className={clsx('flex-shrink-0', isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-600')} />
                   <span className="flex-1 truncate">{label}</span>
                   {badge && !isActive && (
-                    <span className="text-2xs font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">
+                    <span className="text-2xs font-bold px-1.5 py-0.5 bg-[#1a3a8f] text-white rounded-full">
                       {badge}
                     </span>
                   )}

@@ -167,7 +167,7 @@ export default function AdminLogin() {
                 <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">이메일</label>
                 <input
                   type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                  className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-300/40 focus:border-blue-500/40 transition-all"
                   placeholder="admin@troiareuke.com"
                 />
               </div>
@@ -176,7 +176,7 @@ export default function AdminLogin() {
                 <div className="relative">
                   <input
                     type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
-                    className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all pr-11"
+                    className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-300/40 focus:border-blue-500/40 transition-all pr-11"
                     placeholder="••••••••••"
                   />
                   <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">

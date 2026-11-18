@@ -353,7 +353,7 @@ export default function Programs() {
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="예: 기본 피부관리 10회권"
                   required
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
               </div>
 
@@ -409,7 +409,7 @@ export default function Programs() {
                       onChange={e => setForm(f => ({ ...f, totalSessions: e.target.value }))}
                       min="1"
                       max="100"
-                      className="w-24 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-24 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                     <span className="text-sm text-gray-500">회</span>
                   </div>
@@ -426,7 +426,7 @@ export default function Programs() {
                     onChange={e => setForm(f => ({ ...f, validityDays: e.target.value }))}
                     placeholder="180"
                     min="1"
-                    className="w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
                   <span className="text-sm text-gray-400">일 (비워두면 무제한)</span>
                 </div>
@@ -455,7 +455,7 @@ export default function Programs() {
                       onChange={e => setForm(f => ({ ...f, price: e.target.value.replace(/[^0-9]/g, '') }))}
                       placeholder="0"
                       required
-                      className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                     <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
                   </div>
@@ -468,7 +468,7 @@ export default function Programs() {
                       value={form.costPrice}
                       onChange={e => setForm(f => ({ ...f, costPrice: e.target.value.replace(/[^0-9]/g, '') }))}
                       placeholder="0"
-                      className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                     <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
                   </div>
@@ -494,7 +494,7 @@ export default function Programs() {
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="프로그램에 대한 간단한 설명을 입력하세요"
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
                 />
               </div>
 

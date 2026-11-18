@@ -55,7 +55,7 @@ body {
 
 /* Input focus */
 input:focus, select:focus, textarea:focus {
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 0 2px rgba(26, 58, 143, 0.22); /* 브랜드 네이비 포커스 (전엔 보라) */
   border-color: transparent;
 }
 /* 키보드 포커스 링 — outline-none을 쓴 버튼·링크도 키보드로 올 때는 보이게 (마우스 클릭엔 안 보임) */

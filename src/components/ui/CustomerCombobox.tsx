@@ -116,7 +116,7 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
           onFocus={e => { if (!selected) setOpen(true); e.target.select(); }} // 고른 고객이 있으면 목록을 펼치지 않는다(↓로 열기) — 포커스 트랩이 첫 칸에 포커스를 줄 때 50명이 펼쳐지지 않게
           onBlur={onBlur}
           onKeyDown={onKeyDown}
-          className="w-full px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+          className="w-full px-3 py-2.5 pr-9 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
         />
         {selected && (
           <button type="button" onMouseDown={e => e.preventDefault()} onClick={clear} aria-label="고객 선택 해제"
@@ -137,7 +137,7 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
               aria-selected={i === hi}
               onMouseDown={e => { e.preventDefault(); choose(c); }}
               onMouseEnter={() => setHi(i)}
-              className={`px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between gap-2 ${i === hi ? 'bg-purple-50 text-purple-800' : 'text-gray-700'}`}
+              className={`px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between gap-2 ${i === hi ? 'bg-primary-50 text-primary-800' : 'text-gray-700'}`}
             >
               <span className="font-medium truncate">{c.name}</span>
               <span className="text-xs text-gray-400 flex-shrink-0">{maskPhone(c.phone, maskRole)}{c.grade ? ` · ${c.grade}` : ''}</span>

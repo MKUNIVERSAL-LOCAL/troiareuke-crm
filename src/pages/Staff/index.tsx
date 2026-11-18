@@ -303,7 +303,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               placeholder="이름 입력"
             />
           </div>
@@ -312,7 +312,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
             <select
               value={role}
               onChange={e => setRole(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="대표">대표</option>
               <option value="원장">원장</option>
@@ -334,7 +334,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
             type="tel"
             value={phone}
             onChange={e => setPhone(formatPhoneInput(e.target.value))}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             placeholder="010-0000-0000"
           />
         </div>
@@ -344,7 +344,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
         </div>
         <div>
@@ -353,7 +353,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
             type="date"
             value={hireDate}
             onChange={e => setHireDate(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
         </div>
 
@@ -402,7 +402,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
 
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
-          <button onClick={handleSave} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md hover:shadow-lg transition-shadow">저장</button>
+          <button onClick={handleSave} className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl transition-colors">저장</button>
         </div>
       </div>
     </Modal>
@@ -501,7 +501,7 @@ function StaffDetailModal({
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               />
             </div>
             <div>
@@ -509,7 +509,7 @@ function StaffDetailModal({
               <select
                 value={role}
                 onChange={e => setRole(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               >
                 <option value="대표">대표</option>
                 <option value="원장">원장</option>
@@ -531,7 +531,7 @@ function StaffDetailModal({
               type="tel"
               value={phone}
               onChange={e => setPhone(formatPhoneInput(e.target.value))}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
           </div>
           <div>
@@ -540,7 +540,7 @@ function StaffDetailModal({
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
           </div>
           <div>
@@ -549,7 +549,7 @@ function StaffDetailModal({
               type="date"
               value={hireDate}
               onChange={e => setHireDate(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
           </div>
 
@@ -596,7 +596,7 @@ function StaffDetailModal({
 
           <div className="flex gap-3 pt-2">
             <button onClick={() => setEditing(false)} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
-            <button onClick={handleUpdate} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md hover:shadow-lg transition-shadow">저장</button>
+            <button onClick={handleUpdate} className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl transition-colors">저장</button>
           </div>
         </div>
       </Modal>
@@ -664,7 +664,7 @@ function StaffDetailModal({
           </button>
           <button
             onClick={() => setEditing(true)}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md hover:shadow-lg transition-shadow"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl transition-colors"
           >
             <Edit3 size={14} />
             수정

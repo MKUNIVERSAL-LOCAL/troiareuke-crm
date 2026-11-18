@@ -126,7 +126,7 @@ export default function ResetPassword() {
                     minLength={8}
                     required
                     autoFocus
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-11 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-11 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="8자 이상 입력"
                   />
                   <button
@@ -149,7 +149,7 @@ export default function ResetPassword() {
                   autoComplete="new-password"
                   minLength={8}
                   required
-                  className="mt-1.5 w-full rounded-xl border border-gray-200 px-4 py-3 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="mt-1.5 w-full rounded-xl border border-gray-200 px-4 py-3 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-300"
                   placeholder="비밀번호 다시 입력"
                 />
               </div>

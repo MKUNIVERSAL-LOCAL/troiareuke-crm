@@ -62,14 +62,14 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
             placeholder="고객 검색 (/ 또는 Ctrl+K)"
             aria-label="고객 검색"
             title="/ 또는 Ctrl+K로 바로 포커스 · Enter로 검색, 1명만 맞으면 바로 열림"
-            className="pl-9 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent w-48 transition-all"
+            className="pl-9 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent w-48 transition-all"
           />
         </form>
 
         {action && (
           <button
             onClick={action.onClick}
-            className="flex items-center gap-2 px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-lg hover:bg-[#0d2260] transition-all shadow-md shadow-blue-200 hover:shadow-lg"
+            className="flex items-center gap-2 px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors"
           >
             <Plus size={16} />
             {action.label}

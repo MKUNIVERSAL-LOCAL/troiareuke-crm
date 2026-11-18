@@ -79,7 +79,7 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
             placeholder="결제수단 이름 (예: 상품권, 제로페이)"
-            className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
           <button type="button" onClick={handleAdd} className="px-3 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm">추가</button>
           <button type="button" onClick={() => { setAdding(false); setNewName(''); }} className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-500">취소</button>

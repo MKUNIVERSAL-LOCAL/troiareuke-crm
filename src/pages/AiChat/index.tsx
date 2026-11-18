@@ -445,7 +445,7 @@ function AiChatInner() {
                   <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline ml-auto">키 발급 &rarr;</a>
                 </label>
                 <input type="password" value={claudeKey} onChange={e => setClaudeKey(e.target.value)}
-                  placeholder="sk-ant-..." className="w-full px-3 py-2.5 text-sm border border-violet-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-300 font-mono bg-violet-50/30" />
+                  placeholder="sk-ant-..." className="w-full px-3 py-2.5 text-sm border border-violet-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 font-mono bg-violet-50/30" />
                 <p className="text-xs text-violet-500 mt-1">
                   {IS_ELECTRON
                     ? '클로드 맥스 사용자 추천! 데스크탑 앱에서 CORS 없이 바로 사용 가능'
@@ -460,7 +460,7 @@ function AiChatInner() {
                   <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline ml-auto">키 발급 &rarr;</a>
                 </label>
                 <input type="password" value={openaiKey} onChange={e => setOpenaiKey(e.target.value)}
-                  placeholder="sk-..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono" />
+                  placeholder="sk-..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 font-mono" />
               </div>
               {/* Gemini */}
               <div>
@@ -470,7 +470,7 @@ function AiChatInner() {
                   <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline ml-auto">키 발급 &rarr;</a>
                 </label>
                 <input type="password" value={geminiKey} onChange={e => setGeminiKey(e.target.value)}
-                  placeholder="AIza..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-300 font-mono" />
+                  placeholder="AIza..." className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 font-mono" />
               </div>
             </div>
 
@@ -559,7 +559,7 @@ function AiChatInner() {
                 placeholder={hasAnyKey ? '질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)' : '먼저 API 키를 설정해주세요 →'}
                 disabled={isLoading || !hasAnyKey}
                 rows={1}
-                className="flex-1 px-4 py-3 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-400"
+                className="flex-1 px-4 py-3 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:bg-gray-50 disabled:text-gray-400"
                 style={{ maxHeight: '120px' }}
               />
               <button onClick={() => sendMessage()} disabled={isLoading || !input.trim() || !hasAnyKey}

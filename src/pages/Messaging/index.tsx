@@ -454,7 +454,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             placeholder="예: 예약 확인 메시지"
           />
         </div>
@@ -510,7 +510,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               placeholder="예: [우리샵] 예약 안내"
             />
           </div>
@@ -522,7 +522,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
             rows={5}
             value={content}
             onChange={e => setContent(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="메시지 내용을 입력하세요"
           />
         </div>
@@ -533,7 +533,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
             type="text"
             value={variablesStr}
             onChange={e => setVariablesStr(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             placeholder="예: 고객명, 날짜, 시간"
           />
         </div>
@@ -543,7 +543,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
           <button
             onClick={handleSave}
             disabled={!name.trim() || !content.trim()}
-            className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isEdit ? <><Pencil size={14} /> 저장</> : <><Plus size={14} /> 템플릿 추가</>}
           </button>
@@ -1017,7 +1017,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">템플릿 선택 (선택사항)</label>
             <select
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               value={selectedTemplateId || ''}
               onChange={e => {
                 const tmpl = templates.find(t => t.id === e.target.value);
@@ -1043,7 +1043,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                 type="text"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
                 placeholder="제목 입력"
               />
             </div>
@@ -1064,7 +1064,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               rows={5}
               value={content}
               onChange={e => setContent(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
               placeholder={'발송할 메시지 내용을 입력하세요\n{고객명}, {날짜} 등의 변수를 사용할 수 있습니다'}
             />
             {msgType === 'sms' && (
@@ -1110,7 +1110,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                 type="datetime-local"
                 value={scheduleAt}
                 onChange={e => setScheduleAt(e.target.value)}
-                className="mt-2 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+                className="mt-2 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
                 aria-label="예약 발송 시각"
               />
             )}
@@ -1148,7 +1148,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             <button
               onClick={handleSend}
               disabled={sending || !content.trim() || recipientCount === 0 || recipientPhones.length === 0}
-              className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sending ? <Clock size={14} className="animate-spin" /> : <Send size={14} />}
               {sending ? '처리 중...' : '발송하기'}

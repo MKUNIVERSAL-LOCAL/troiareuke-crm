@@ -409,10 +409,10 @@ export default function Onboarding() {
                 {staffList.map((s, i) => (
                   <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
                     <input value={s.name} onChange={e => updateStaff(i, 'name', e.target.value)}
-                      className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                       placeholder={`직원 ${i + 1} 이름`} />
                     <select value={s.role} onChange={e => updateStaff(i, 'role', e.target.value)}
-                      className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300">
+                      className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300">
                       {['대표', '원장', '부원장', '실장', '피부관리사', '에스테티션', '테라피스트', '상담팀', '마케팅팀', '매니저', '인턴'].map(r => <option key={r}>{r}</option>)}
                     </select>
                   </div>
@@ -439,13 +439,13 @@ export default function Onboarding() {
                     {customServices.map((s, i) => (
                       <div key={i} className="flex gap-2 items-center">
                         <input value={s.name} onChange={e => updateCustomService(i, 'name', e.target.value)}
-                          className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                           placeholder="시술명" />
                         <input value={s.duration} onChange={e => updateCustomService(i, 'duration', e.target.value)}
-                          className="w-20 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 text-center"
+                          className="w-20 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 text-center"
                           placeholder="분" />
                         <input value={s.price} onChange={e => updateCustomService(i, 'price', e.target.value)}
-                          className="w-28 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 text-right"
+                          className="w-28 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 text-right"
                           placeholder="가격 (원)" />
                         <button onClick={() => removeCustomService(i)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
                           <X size={16} />

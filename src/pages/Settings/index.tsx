@@ -668,7 +668,7 @@ export default function Settings() {
                   <div className="pt-4">
                     <button
                       onClick={handleShopSave}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                      className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors"
                     >
                       저장하기
                     </button>
@@ -740,7 +740,7 @@ export default function Settings() {
                   <div className="pt-4">
                     <button
                       onClick={handleHoursSave}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                      className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors"
                     >
                       저장하기
                     </button>
@@ -831,7 +831,7 @@ export default function Settings() {
                     <div className="pt-2">
                       <button
                         onClick={handleNaverSave}
-                        className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                        className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
                       >
                         저장하기
                       </button>
@@ -918,7 +918,7 @@ export default function Settings() {
                     <div className="pt-2">
                       <button
                         onClick={handleKakaoSave}
-                        className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                        className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
                       >
                         저장하기
                       </button>
@@ -1017,7 +1017,7 @@ export default function Settings() {
                       </button>
                       <button
                         onClick={handleSmsSave}
-                        className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                        className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
                       >
                         저장하기
                       </button>
@@ -1056,7 +1056,7 @@ export default function Settings() {
                     </FormRow>
                     <button
                       onClick={handleAiKeysSave}
-                      className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                      className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
                     >
                       저장하기
                     </button>
@@ -1127,7 +1127,7 @@ export default function Settings() {
                               <button
                                 onClick={() => openEditService(svc)}
                                 aria-label={`${svc.name} 수정`}
-                                className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-purple-50"
+                                className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-primary-50"
                               >
                                 <Pencil size={12} /> 수정
                               </button>
@@ -1233,7 +1233,7 @@ export default function Settings() {
                               'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
                               plan.id === 'trial' ? 'bg-gray-100 text-gray-500' :
                               plan.id === 'starter' ? 'bg-blue-100 text-blue-600' :
-                              'bg-purple-100 text-purple-600'
+                              'bg-primary-50 text-primary-700'
                             )}>
                               {plan.id === 'pro' ? <Crown size={20} /> :
                                plan.id === 'starter' ? <Zap size={20} /> :
@@ -1271,7 +1271,7 @@ export default function Settings() {
                               <button
                                 onClick={() => handlePlanChange(plan)}
                                 disabled={planChangeLoading}
-                                className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                               >
                                 {planChangeLoading ? '처리 중...' : plan.price > 0 ? '결제하기' : '변경하기'}
                               </button>
@@ -1540,7 +1540,7 @@ export default function Settings() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600"
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e]"
                 >
                   {editingService ? '저장' : '시술 추가'}
                 </button>

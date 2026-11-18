@@ -171,7 +171,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               <select aria-label="고객 (선택)"
                 value={form.customerId}
                 onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
               >
                 <option value="">고객 선택 — 선택하면 문자 발송 가능</option>
                 {customers.filter(c => c.isActive !== false).map(c => ( /* 익명화(탈퇴) 고객 제외 */
@@ -188,7 +188,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                     type="text"
                     value={form.amount && !Number.isNaN(parseInt(form.amount, 10)) ? parseInt(form.amount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setForm(f => ({ ...f, amount: e.target.value.replace(/,/g, '') }))}
-                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
@@ -199,7 +199,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                 <select aria-label="결제 수단"
                   value={form.method}
                   onChange={e => setForm(f => ({ ...f, method: e.target.value as typeof form.method }))}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 >
                   <option value="both">카드 + 무통장입금</option>
                   <option value="card">카드만</option>
@@ -214,7 +214,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                 value={form.orderName}
                 onChange={e => setForm(f => ({ ...f, orderName: e.target.value }))}
                 placeholder="예: 아쿠아필 1회, 수분관리 10회권"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
               />
             </div>
             <div>
@@ -223,7 +223,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                 value={form.memo}
                 onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
                 placeholder="매출 기록 메모에 함께 남습니다"
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
               />
             </div>
             <button
