@@ -8,9 +8,11 @@ interface HeaderProps {
   title: string;
   subtitle?: string;
   action?: { label: string; onClick: () => void };
+  /** 버튼이 여러 개인 페이지(매출·프로그램 등) — action 대신 그대로 렌더 */
+  actions?: React.ReactNode;
 }
 
-export default function Header({ title, subtitle, action }: HeaderProps) {
+export default function Header({ title, subtitle, action, actions }: HeaderProps) {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const today = format(new Date(), 'yyyy년 M월 d일 (EEEE)', { locale: ko });
@@ -43,13 +45,13 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-gray-100 flex items-center px-8 gap-4 sticky top-0 z-20">
+    <header className="min-h-16 py-3 bg-white border-b border-gray-100 flex flex-wrap items-center px-4 sm:px-8 gap-x-4 gap-y-2 sticky top-0 z-20">
       <div className="flex-1">
         <h2 className="text-xl font-bold tracking-tight text-gray-900">{title}</h2>
-        {subtitle && <p className="text-xs text-gray-400">{subtitle}</p>}
+        {subtitle && <p className="text-xs text-gray-400 break-keep">{subtitle}</p>}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <span className="text-xs text-gray-400 hidden lg:block">{today}</span>
 
         <form onSubmit={handleSearch} className="relative hidden md:block">
@@ -66,6 +68,7 @@ export default function Header({ title, subtitle, action }: HeaderProps) {
           />
         </form>
 
+        {actions}
         {action && (
           <button
             onClick={action.onClick}

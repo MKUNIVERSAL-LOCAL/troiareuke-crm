@@ -14,6 +14,7 @@ import {
 import { PaymentStore, CustomerStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import Header from '../../components/layout/Header';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import { useAuth } from '../../contexts/AuthContext';
 import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
@@ -463,36 +464,21 @@ export default function Sales() {
   const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
 
   return (
+    <>
+      <Header title="매출·손익 관리" subtitle="매출 · 지출(매입) · 손익계산서 통합 현황" actions={<>
+        {isPaymentLinkAvailable && (
+          <button type="button" onClick={() => setShowPaymentLinkModal(true)} className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+            <CreditCard size={16} />결제 요청
+          </button>
+        )}
+        <button type="button" onClick={() => setShowExpenseModal(true)} className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+          <Receipt size={16} />지출 등록
+        </button>
+        <button type="button" onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors">
+          <Plus size={16} />결제 등록
+        </button>
+      </>} />
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      {/* 헤더 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-gray-900">매출·손익 관리</h1>
-          <p className="text-xs text-gray-400 mt-0.5">매출 · 지출(매입) · 손익계산서 통합 현황</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {isPaymentLinkAvailable && (
-            <button
-              onClick={() => setShowPaymentLinkModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
-            >
-              <CreditCard size={16} />결제 요청
-            </button>
-          )}
-          <button
-            onClick={() => setShowExpenseModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            <Receipt size={16} />지출 등록
-          </button>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors"
-          >
-            <Plus size={16} />결제 등록
-          </button>
-        </div>
-      </div>
 
       {/* 월 선택 */}
       <div className="flex items-center gap-3 mb-6 bg-white border border-gray-100 rounded-2xl p-3 w-fit">
@@ -1300,5 +1286,6 @@ export default function Sales() {
         </div>
       )}
     </div>
+    </>
   );
 }
