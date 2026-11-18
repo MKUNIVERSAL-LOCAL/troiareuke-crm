@@ -1084,7 +1084,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <DateQuickChips value={date} onChange={setDate} className="col-span-2 sm:col-span-3 sm:order-last !mt-0" />{/* 폰: 날짜·시간 줄 바로 아래, sm+: 날짜·시간·경로 한 줄 뒤(빈 칸 없이) */}
+          <DateQuickChips value={date} onChange={setDate} className="col-span-2 sm:col-span-3 sm:order-last !-mt-2.5" />{/* 폰: 날짜·시간 줄 바로 아래, sm+: 날짜·시간·경로 한 줄 뒤(빈 칸 없이) */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">예약 경로</label>
             <select aria-label="예약 경로"
