@@ -97,6 +97,12 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     localStorage.setItem(key, JSON.stringify(s));
   });
   await dismissToasts(page);
+  // PC 키보드 단축키: N → 예약 추가 창, Esc → 닫기 (UI 품질 2026-11-18)
+  await page.keyboard.press('n');
+  const shortcutDialog = page.getByRole('dialog', { name: '예약 추가' });
+  await expect(shortcutDialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(shortcutDialog).toHaveCount(0);
 
   // ── 5. 결제 등록 → 매출 반영 ──
   await page.goto('/sales');
