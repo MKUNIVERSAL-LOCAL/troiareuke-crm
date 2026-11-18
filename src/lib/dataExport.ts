@@ -9,7 +9,10 @@
 import { IS_MOBILE_APP } from './platform';
 import { todayISO } from './format';
 import { saveOrShareFile } from './mobileBridge';
-import * as XLSX from 'xlsx';
+import type { WorkBook, WorkSheet } from 'xlsx';
+
+/** SheetJS(≈400KB)는 내보내기·업로드 순간에만 로드 — 첫 화면 번들에서 제외 (2026-11-18) */
+export const loadXlsx = () => import('xlsx');
 import {
   CustomerStore, PaymentStore, ProductStore, ProductSaleStore,
   ReservationStore, TreatmentLogStore, ProgramStore, CustomerProgramStore,
@@ -287,7 +290,8 @@ export function buildExportSheets(keys: string[]): ExportSheet[] {
  */
 export type ExportDelivery = 'shared' | 'cancelled' | 'downloaded';
 
-export async function writeWorkbook(workbook: XLSX.WorkBook, fileName: string): Promise<ExportDelivery> {
+export async function writeWorkbook(workbook: WorkBook, fileName: string): Promise<ExportDelivery> {
+  const XLSX = await loadXlsx();
   if (IS_MOBILE_APP) {
     const base64 = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' }) as string;
     return saveOrShareFile(fileName, base64);
@@ -306,6 +310,7 @@ export interface ExportResult {
 
 /** 선택 데이터셋을 하나의 xlsx 파일로 다운로드 */
 export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult> {
+  const XLSX = await loadXlsx();
   const sheets = buildExportSheets(keys);
   if (sheets.length === 0) throw new Error('내보낼 데이터를 선택해주세요.');
 
@@ -322,7 +327,7 @@ export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult
     const rows = sheet.rows.length > 0
       ? sheet.rows
       : [{ 안내: '해당 데이터가 없습니다.' }];
-    let worksheet: XLSX.WorkSheet;
+    let worksheet: WorkSheet;
     if (sensitiveKeys.has(key) && sheet.rows.length > 0) {
       // 민감정보 경고행을 1행(최상단)에 두고, 데이터(헤더 포함)는 2행부터
       worksheet = XLSX.utils.aoa_to_sheet([[SENSITIVE_NOTICE]]);

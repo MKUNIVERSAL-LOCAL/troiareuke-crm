@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { StaffStore, ServiceStore, ProgramStore, SettingsStore } from '../../lib/store';
 import { PLANS } from '../../lib/payment';
 import type { ShopSettings, SubscriptionPlan } from '../../types';
-import * as XLSX from 'xlsx';
+import { loadXlsx } from '../../lib/dataExport';
 
 const steps = [
   { icon: <Store size={20} />, label: '샵 정보', desc: '기본 정보 입력' },
@@ -124,6 +124,7 @@ export default function Onboarding() {
 
     try {
       // xlsx/xls/csv 모두 SheetJS로 실제 파싱 (엑셀 바이너리를 텍스트로 잘못 읽는 문제 해결)
+      const XLSX = await loadXlsx();
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];

@@ -37,8 +37,7 @@ import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymiz
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
 import { refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
-import * as XLSX from 'xlsx';
-import { writeWorkbook } from '../../lib/dataExport';
+import { writeWorkbook, loadXlsx } from '../../lib/dataExport';
 import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, PaymentMethod, Consultation, BeaconMetrics } from '../../types';
 import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
@@ -984,8 +983,9 @@ export default function Customers() {
   }
 
   // 고객 기록 엑셀(xlsx) 다운로드 — 현재 필터된 목록을 이메일 포함 전체 항목으로 내보냄
-  function exportToExcel() {
+  async function exportToExcel() {
     if (filtered.length === 0) { notify('내보낼 고객이 없습니다.'); return; }
+    const XLSX = await loadXlsx();
     const role = user?.role ?? 'staff';
     const rows = filtered.map(c => ({
       '이름': c.name,
@@ -1025,7 +1025,8 @@ export default function Customers() {
   useMenuKeys(showGradeMenu, gradeMenuRef);
 
   // 업로드 양식 엑셀 다운로드 (헤더 + 예시 2행)
-  function downloadImportTemplate() {
+  async function downloadImportTemplate() {
+    const XLSX = await loadXlsx();
     const rows = [
       {
         '이름': '홍길동', '전화번호': '010-1234-5678', '성별': '여성', '등급': 'VIP',
@@ -1050,8 +1051,9 @@ export default function Customers() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
+        const XLSX = await loadXlsx();
         const data = new Uint8Array(ev.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];

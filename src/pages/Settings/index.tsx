@@ -395,7 +395,14 @@ export default function Settings() {
   };
 
   // ─── Shop Info ────────────────────────────────────────────
+  // 서버 프로필 갱신(await)이 끝나기 전 연타로 두 번 저장되는 것 방지 (2026-11-18)
+  const [shopSaving, setShopSaving] = useState(false);
   const handleShopSave = async () => {
+    if (shopSaving) return;
+    setShopSaving(true);
+    try { await doShopSave(); } finally { setShopSaving(false); }
+  };
+  const doShopSave = async () => {
     const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
     if (!shopName) {
       flash('샵 이름을 입력해주세요');
@@ -668,10 +675,12 @@ export default function Settings() {
                   </FormRow>
                   <div className="pt-4">
                     <button
+                      type="button"
                       onClick={handleShopSave}
-                      className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors"
+                      disabled={shopSaving}
+                      className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors disabled:opacity-60"
                     >
-                      저장하기
+                      {shopSaving ? '저장 중...' : '저장하기'}
                     </button>
                   </div>
                 </div>
