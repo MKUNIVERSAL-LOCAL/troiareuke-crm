@@ -9,6 +9,7 @@ import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import PhoneLink from '../../components/ui/PhoneLink';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
@@ -22,7 +23,6 @@ import {
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
 import { todayISO } from '../../lib/format';
 import clsx from 'clsx';
-import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 
@@ -1197,7 +1197,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
                 ) : (
                   <p className="font-bold text-gray-900">{r.customerName}</p>
                 )}
-                <p className="text-xs text-gray-400">{maskPhone(r.customerPhone, user?.role ?? 'staff')}</p>
+                <p className="text-xs text-gray-400"><PhoneLink phone={r.customerPhone} role={user?.role ?? 'staff'} /></p>
               </div>
             </div>
             <div className="flex gap-2">

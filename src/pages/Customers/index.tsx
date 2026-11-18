@@ -19,6 +19,7 @@ import { collectCustomerPhotos, photoCaption, daysBetween, renderComparison, com
 import { PHOTO_LABELS } from '../../lib/photoStore';
 import { exportFile, dataUrlToBlob } from '../../lib/mobileBridge';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
+import PhoneLink from '../../components/ui/PhoneLink';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
@@ -1453,7 +1454,7 @@ export default function Customers() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">전화번호</span>
-                    <span className="text-xs font-medium text-gray-900">{maskPhone(selected.phone, user?.role ?? 'staff')}</span>
+                    <PhoneLink phone={selected.phone} role={user?.role ?? 'staff'} className="text-xs font-medium text-gray-900" />
                   </div>
                   {selected.email && (
                     <div className="flex justify-between">
@@ -1912,7 +1913,7 @@ export default function Customers() {
                         )}
                       </div>
                     </div>
-                    <p className="text-sm text-gray-500">{maskPhone(selected.phone, user?.role ?? 'staff')}</p>
+                    <p className="text-sm text-gray-500"><PhoneLink phone={selected.phone} role={user?.role ?? 'staff'} /></p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}
                     {(() => {
                       // 폼에서 받는 정보를 상세에서도 보이게 — 이메일·주소는 목록 내보내기(이 화면)와 같은 규칙으로 staff 역할에게 숨김, 역할을 모르면 숨김 (2026-11-18)
