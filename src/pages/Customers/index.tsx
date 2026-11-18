@@ -1637,7 +1637,7 @@ export default function Customers() {
                       {logs.map(log => (
                         <div key={log.id} className="p-3 bg-slate-50 rounded-lg">
                           <div className="flex items-center justify-between">
-                            <p className="text-xs font-semibold text-gray-800">{log.treatmentDate}</p>
+                            <p className="text-xs font-semibold text-gray-800">{formatDate(log.treatmentDate)}</p>
                             {log.staffName && <span className="text-xs text-gray-400">{log.staffName}</span>}
                           </div>
                           <p className="text-xs text-gray-600 mt-0.5">{log.treatmentDetails || log.programName || '시술 내역 없음'}</p>
@@ -2792,7 +2792,7 @@ export default function Customers() {
                     {aiPhoto && (
                       <div className="flex gap-2 mb-2">
                         <button type="button" onClick={runSkinAnalysis} disabled={aiAnalyzing}
-                          className="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
+                          className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1.5">
                           {aiAnalyzing ? <><Loader2 size={12} className="animate-spin" />분석 중...</> : <><Sparkles size={12} />AI 분석 실행</>}
                         </button>
                         <button type="button" onClick={() => consultPhotoRef.current?.click()}
@@ -2811,9 +2811,9 @@ export default function Customers() {
                     {aiResult?.available && aiResult.scores && (
                       <div className="grid grid-cols-5 gap-1.5">
                         {SKIN_LABELS.map(({ key, label }) => (
-                          <div key={key} className="bg-white rounded-lg py-1.5 text-center border border-indigo-50">
+                          <div key={key} className="bg-white rounded-lg py-1.5 text-center border border-primary-100">
                             <p className="text-2xs text-gray-400">{label}</p>
-                            <p className="text-sm font-bold text-violet-700">{aiResult.scores![key]}</p>
+                            <p className="text-sm font-bold text-primary-700">{aiResult.scores![key]}</p>
                           </div>
                         ))}
                       </div>

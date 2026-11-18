@@ -1233,7 +1233,7 @@ export default function Settings() {
                               'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
                               plan.id === 'trial' ? 'bg-gray-100 text-gray-500' :
                               plan.id === 'starter' ? 'bg-blue-100 text-blue-600' :
-                              'bg-primary-50 text-primary-700'
+                              'bg-primary-600 text-white'
                             )}>
                               {plan.id === 'pro' ? <Crown size={20} /> :
                                plan.id === 'starter' ? <Zap size={20} /> :

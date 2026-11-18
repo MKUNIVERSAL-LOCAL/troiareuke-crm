@@ -310,7 +310,7 @@ export default function Dashboard() {
               subtitle={revenueGrowth === null ? '전월 매출 없음' : `전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}
               icon={<TrendingUp size={20} />}
               trend={revenueGrowth === null ? undefined : { value: revenueGrowth, label: '전월 대비' }}
-              accent="purple"
+              accent="primary"
             />
           </div>
           )}
@@ -353,8 +353,8 @@ export default function Dashboard() {
         {salesOn && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>
-            <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <ShoppingBag size={22} className="text-purple-500" />
+            <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <ShoppingBag size={22} className="text-primary-600" />
             </div>
             <div>
               <p className="text-xs text-gray-500">시술 매출 (이번 달)</p>

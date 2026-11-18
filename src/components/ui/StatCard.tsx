@@ -7,19 +7,19 @@ interface StatCardProps {
   subtitle?: string;
   icon?: React.ReactNode;
   trend?: { value: number; label: string };
-  accent?: 'purple' | 'pink' | 'green' | 'blue' | 'orange';
+  accent?: 'primary' | 'pink' | 'green' | 'blue' | 'orange';
 }
 
 // 플랫 연한 타일 — 대시보드 2열 타일과 같은 어법(그라데이션·색 그림자 없음, UI 품질 기준 2026-11-18)
 const accents = {
-  purple: 'bg-violet-50 text-violet-600',
+  primary: 'bg-primary-50 text-primary-600',
   pink: 'bg-rose-50 text-rose-600',
   green: 'bg-emerald-50 text-emerald-600',
   blue: 'bg-blue-50 text-blue-600',
   orange: 'bg-amber-50 text-amber-600',
 };
 
-export default function StatCard({ title, value, subtitle, icon, trend, accent = 'purple' }: StatCardProps) {
+export default function StatCard({ title, value, subtitle, icon, trend, accent = 'primary' }: StatCardProps) {
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:border-gray-200 transition-colors">
       <div className="flex items-start justify-between">

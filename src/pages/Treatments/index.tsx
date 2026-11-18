@@ -188,7 +188,7 @@ export default function Treatments() {
                       {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
                     </p>
                     {t.skinCondition && (
-                      <p className="text-xs text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
+                      <p className="text-xs text-primary-600 mt-1">피부상태: {t.skinCondition}</p>
                     )}
                   </div>
                 </div>
@@ -259,7 +259,7 @@ export default function Treatments() {
                     {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-500">· 사진 {photoCounts.get(t.id)}장</span>}
                   </p>
                   {t.skinCondition && (
-                    <p className="text-xs text-purple-600 mt-1">피부상태: {t.skinCondition}</p>
+                    <p className="text-xs text-primary-600 mt-1">피부상태: {t.skinCondition}</p>
                   )}
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -583,7 +583,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
                   type="checkbox"
                   checked={selectedServices.includes(s.name)}
                   onChange={() => toggleService(s.name)}
-                  className="rounded text-purple-500"
+                  className="rounded text-primary-600"
                 />
                 <span className="text-sm text-gray-700 flex-1">{s.name}</span>
                 <span className="text-sm font-medium text-gray-800">{s.price.toLocaleString()}원</span>
@@ -715,7 +715,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               type="button"
               onClick={openCamera}
               disabled={uploading || !photosReady}
-              className="border-2 border-dashed border-purple-200 rounded-xl py-4 flex flex-col items-center gap-1.5 text-purple-500 disabled:opacity-50"
+              className="border-2 border-dashed border-primary-200 rounded-xl py-4 flex flex-col items-center gap-1.5 text-primary-600 disabled:opacity-50"
             >
               {uploading ? <Loader2 size={22} className="animate-spin" /> : <Camera size={22} />}
               <span className="text-sm font-medium">{uploading ? '처리 중...' : '카메라로 촬영'}</span>
@@ -734,7 +734,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading || !photosReady}
-            className="hidden lg:flex w-full border-2 border-dashed border-gray-200 rounded-xl py-6 flex-col items-center gap-2 text-gray-400 hover:border-purple-300 hover:text-purple-400 transition-colors disabled:opacity-50"
+            className="hidden lg:flex w-full border-2 border-dashed border-gray-200 rounded-xl py-6 flex-col items-center gap-2 text-gray-400 hover:border-primary-300 hover:text-primary-500 transition-colors disabled:opacity-50"
           >
             {uploading ? <Loader2 size={24} className="animate-spin" /> : <Camera size={24} />}
             <span className="text-sm">{uploading ? '사진 처리 중...' : !photosReady ? '저장된 사진 읽는 중...' : '사진 추가 (여러 장 가능)'}</span>
@@ -828,14 +828,14 @@ function TreatmentDetailModal({
           </div>
           <div className="bg-gray-50 rounded-xl p-3">
             <p className="text-xs text-gray-400 mb-0.5">시술일</p>
-            <p className="text-sm font-semibold text-gray-800">{t.treatmentDate}</p>
+            <p className="text-sm font-semibold text-gray-800">{formatDate(t.treatmentDate)}</p>
           </div>
         </div>
 
         {t.skinCondition && (
-          <div className="bg-purple-50 rounded-xl p-3">
-            <p className="text-xs text-purple-500 font-medium mb-0.5">피부 상태</p>
-            <p className="text-sm text-purple-700">{t.skinCondition}</p>
+          <div className="bg-primary-50 rounded-xl p-3">
+            <p className="text-xs text-primary-600 font-medium mb-0.5">피부 상태</p>
+            <p className="text-sm text-primary-800">{t.skinCondition}</p>
           </div>
         )}
 
