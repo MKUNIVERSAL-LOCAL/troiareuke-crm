@@ -7,19 +7,9 @@
  * 마이그레이션(마스터+이력 전체) 관점을 반영했다.
  */
 import { IS_MOBILE_APP } from './platform';
-import { todayISO, formatDateTime, formatLocalDate } from './format';
+import { todayISO, formatDateTime, localISODate } from './format';
 import { maskPhone } from './masking';
 
-/** 영문 코드 열을 한글로 — 시트·PDF를 보는 원장은 코드를 모른다 (산출물 감사 2026-11-20) */
-const SOURCE_LABELS: Record<string, string> = { manual: '직접 등록', naver: '네이버', kakao: '카카오', phone: '전화', 'walk-in': '방문', app: '앱' };
-const MESSAGE_TYPE_LABELS: Record<string, string> = { sms: '문자', lms: '장문 문자', mms: '사진 문자', 'kakao-channel': '카카오 채널', 'kakao-openchat': '카카오 오픈채팅' };
-const MESSAGE_STATUS_LABELS: Record<string, string> = { sent: '발송 완료', failed: '실패', sending: '발송 중', draft: '초안' };
-/** 직원 계정이 내보낼 때는 전화번호를 가리고 메모·생년월일을 비운다 — 고객 목록 화면의 역할 규칙과 동일 */
-type ExportRole = 'owner' | 'staff';
-let exportRole: ExportRole = 'owner';
-export function setExportRole(role: ExportRole): void { exportRole = role; }
-const phoneFor = (phone?: string) => (exportRole === 'staff' ? maskPhone(phone || '', 'staff') : (phone || ''));
-const privateFor = (v?: string) => (exportRole === 'staff' ? '' : (v || ''));
 import { saveOrShareFile } from './mobileBridge';
 import type { WorkBook, WorkSheet } from 'xlsx';
 import {
@@ -32,6 +22,16 @@ import { ExpenseStore } from './expenseStore';
 import { getLocalLogs } from './loginLog';
 import type { BeaconMetrics } from '../types';
 import { COGS_CATEGORIES } from '../types';
+
+/** 영문 코드 열을 한글로 — 시트·PDF를 보는 원장은 코드를 모른다 (산출물 감사 2026-11-20) */
+const SOURCE_LABELS: Record<string, string> = { manual: '직접 등록', naver: '네이버', kakao: '카카오', phone: '전화', 'walk-in': '방문', app: '앱' };
+const MESSAGE_TYPE_LABELS: Record<string, string> = { sms: '문자', lms: '장문 문자', mms: '사진 문자', 'kakao-channel': '카카오 채널', 'kakao-openchat': '카카오 오픈채팅' };
+const MESSAGE_STATUS_LABELS: Record<string, string> = { sent: '발송 완료', failed: '실패', sending: '발송 중', draft: '초안' };
+/** 직원 계정이 내보낼 때는 전화번호를 가리고 메모·생년월일을 비운다 — 고객 목록 화면의 역할 규칙과 동일. 호출자가 buildExportSheets(keys, role)로 넘기고, 시트 생성 동안만 유효 (리뷰 2026-11-20) */
+export type ExportRole = 'owner' | 'staff';
+let exportRole: ExportRole = 'owner';
+const phoneFor = (phone?: string) => (exportRole === 'staff' ? maskPhone(phone || '', 'staff') : (phone || ''));
+const privateFor = (v?: string) => (exportRole === 'staff' ? '' : (v || ''));
 
 /** SheetJS(≈400KB)는 내보내기·업로드 순간에만 로드 — 첫 화면 번들에서 제외 (2026-11-18). 실패하면 전역 핸들러가 보여줄 한국어 메시지로 */
 export const loadXlsx = () => import('xlsx').catch(() => { throw new Error('엑셀 기능을 불러오지 못했습니다. 네트워크를 확인하고 다시 시도해주세요.'); });
@@ -124,7 +124,7 @@ function buildSheet(key: string): ExportSheet | null {
           성별: c.gender, 생년월일: privateFor(c.birthDate), 등급: c.grade,
           피부타입: c.skinType || '', 알레르기: c.allergies || '',
           방문횟수: c.totalVisits, 누적결제액: c.totalSpent,
-          최근방문일: c.lastVisitDate || '', 등록일: formatLocalDate(c.registeredAt), // ISO(UTC)를 그대로 쓰면 새벽 등록이 전날로 (산출물 감사 2026-11-20)
+          최근방문일: c.lastVisitDate || '', 등록일: localISODate(c.registeredAt), // ISO(UTC)를 그대로 쓰면 새벽 등록이 전날로 — 다른 날짜 열과 같은 "YYYY-MM-DD" (산출물 감사·리뷰 2026-11-20)
           유입경로: c.referralSource || '', 태그: (c.tags || []).join(', '), 메모: privateFor(c.memo),
         })),
       };
@@ -317,13 +317,16 @@ function buildSheet(key: string): ExportSheet | null {
 }
 
 /** 선택한 데이터셋들의 시트 데이터 생성 (테스트 가능하도록 분리) */
-export function buildExportSheets(keys: string[]): ExportSheet[] {
-  const sheets: ExportSheet[] = [];
-  for (const key of keys) {
-    const sheet = buildSheet(key);
-    if (sheet) sheets.push(sheet);
-  }
-  return sheets;
+export function buildExportSheets(keys: string[], role: ExportRole = 'owner'): ExportSheet[] {
+  exportRole = role;
+  try {
+    const sheets: ExportSheet[] = [];
+    for (const key of keys) {
+      const sheet = buildSheet(key);
+      if (sheet) sheets.push(sheet);
+    }
+    return sheets;
+  } finally { exportRole = 'owner'; }
 }
 
 /**
@@ -351,8 +354,8 @@ export interface ExportResult {
 }
 
 /** 선택 데이터셋을 하나의 xlsx 파일로 다운로드 */
-export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult> {
-  const sheets = buildExportSheets(keys);
+export async function exportDatasetsToXlsx(keys: string[], role: ExportRole = 'owner'): Promise<ExportResult> {
+  const sheets = buildExportSheets(keys, role);
   if (sheets.length === 0) throw new Error('내보낼 데이터를 선택해주세요.');
   const XLSX = await loadXlsx();
 

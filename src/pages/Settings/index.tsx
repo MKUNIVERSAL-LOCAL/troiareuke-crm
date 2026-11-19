@@ -6,7 +6,7 @@ import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
-import { EXPORT_DATASETS, exportDatasetsToXlsx, setExportRole } from '../../lib/dataExport';
+import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
@@ -185,7 +185,7 @@ export default function Settings() {
     setExportMessage(null);
     try {
       const keys = EXPORT_DATASETS.filter(d => exportSelection.has(d.key)).map(d => d.key);
-      setExportRole(isAdmin ? 'owner' : 'staff'); // 직원 계정은 전화번호 가림·메모·생년월일 제외 — 고객 목록 화면과 같은 규칙 (산출물 감사 2026-11-20)
+      const exportRole = isAdmin ? 'owner' : 'staff'; // 직원 계정은 전화번호 가림·메모·생년월일 제외 — 고객 목록 화면과 같은 규칙 (산출물 감사 2026-11-20)
       // 지출 원장은 매출 페이지에 들른 적이 있어야 캐시에 있다. 다른 기기에서 로그인 직후
       // 바로 내보내면 0건으로 조용히 빠지므로 서버에서 먼저 채운다 (실패 시 로컬 캐시 사용).
       let expenseNote = '';
@@ -194,8 +194,8 @@ export default function Settings() {
         if (!ok) expenseNote = ' (지출: 서버 미응답 — 이 기기 캐시 기준)'; // loadExpenses는 실패해도 reject하지 않고 false를 돌려준다
       }
       const result = exportFormat === 'pdf'
-        ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys)
-        : await exportDatasetsToXlsx(keys);
+        ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys, exportRole)
+        : await exportDatasetsToXlsx(keys, exportRole);
       const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
       const detail = `${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행${expenseNote}`;
       setExportMessage(

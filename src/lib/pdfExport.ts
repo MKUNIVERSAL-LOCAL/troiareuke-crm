@@ -8,12 +8,12 @@
 import { IS_MOBILE_APP } from './platform';
 import { todayISO } from './format';
 import { saveOrShareFile } from './mobileBridge';
-import { buildExportSheets, EXPORT_DATASETS, type ExportResult, type ExportDelivery } from './dataExport';
+import { buildExportSheets, EXPORT_DATASETS, type ExportResult, type ExportDelivery, type ExportRole } from './dataExport';
 import { SettingsStore } from './store';
 
 const SENSITIVE_NOTICE = '민감정보 포함 — 외부 공유 금지';
 
-export async function exportDatasetsToPdf(keys: string[]): Promise<ExportResult> {
+export async function exportDatasetsToPdf(keys: string[], role: ExportRole = 'owner'): Promise<ExportResult> {
   if (keys.length === 0) throw new Error('내보낼 데이터를 선택해주세요.');
 
   // 무거운 의존성(jspdf ~390KB + 한글 폰트 ~2.7MB base64)은 지연 로드
@@ -41,7 +41,7 @@ export async function exportDatasetsToPdf(keys: string[]): Promise<ExportResult>
 
   for (const key of orderedKeys) {
     const dataset = EXPORT_DATASETS.find(d => d.key === key)!;
-    const sheet = buildExportSheets([key])[0];
+    const sheet = buildExportSheets([key], role)[0];
     if (!sheet) continue;
     counts[dataset.label] = sheet.rows.length;
 

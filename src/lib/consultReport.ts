@@ -75,8 +75,9 @@ export async function exportConsultationPdf(c: Consultation, customer: Customer)
   doc.text('피부 상담 결과지', M, y + 20);
   doc.setFontSize(10);
   doc.setTextColor(107, 114, 128);
-  doc.text(`${shop}${shop ? ' · ' : ''}${formatDate(c.consultDate)}${c.staffName ? ` · 담당 ${c.staffName}` : ''}${contact ? `\n${contact}` : ''}`, M, y + 38);
-  y += 50;
+  const contactLine = contact ? String(doc.splitTextToSize(contact, CW)[0] ?? '') : ''; // 긴 주소는 폭 안에서 한 줄만
+  doc.text(`${shop}${shop ? ' · ' : ''}${formatDate(c.consultDate)}${c.staffName ? ` · 담당 ${c.staffName}` : ''}${contactLine ? `\n${contactLine}` : ''}`, M, y + 38);
+  y += contactLine ? 62 : 50; // 둘째 줄(연락처)이 구분선에 걸리지 않게 (리뷰 2026-11-20)
   doc.setDrawColor(229, 231, 235);
   doc.setLineWidth(0.8);
   doc.line(M, y, W - M, y);

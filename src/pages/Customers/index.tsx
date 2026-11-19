@@ -46,7 +46,7 @@ import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, Payment
 import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, formatLocalDate } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, localISODate } from '../../lib/format';
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -1068,7 +1068,7 @@ export default function Customers() {
       '총방문(회)': c.totalVisits ?? 0,
       '누적결제(원)': c.totalSpent ?? 0,
       '마지막방문': c.lastVisitDate || '',
-      '등록일': c.registeredAt ? formatLocalDate(String(c.registeredAt)) : '', // UTC 앞 10자는 새벽 등록을 전날로 (산출물 감사 2026-11-20)
+      '등록일': localISODate(String(c.registeredAt || '')), // UTC 앞 10자는 새벽 등록을 전날로; 다른 날짜 열과 같은 "YYYY-MM-DD" (산출물 감사·리뷰 2026-11-20)
       '유입경로': c.referralSource || '',
       '태그': (c.tags || []).join(', '),
       '메모': role !== 'staff' ? (c.memo || '') : '', // 직원 계정은 메모·생년월일 제외(설정 내보내기와 같은 규칙)

@@ -40,6 +40,13 @@ export function formatLocalDate(value?: string | null): string {
   return isNaN(d.getTime()) ? formatDate(value) : formatDate(toISODate(d));
 }
 
+/** ISO 시각(UTC)을 이 기기 날짜의 "YYYY-MM-DD"로 — 내보내기 시트는 날짜 열을 ISO 꼴로 쓰므로 등록일도 같은 표기(단, UTC 날짜가 아닌 로컬 날짜) (리뷰 2026-11-20) */
+export function localISODate(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? value : toISODate(d);
+}
+
 export function formatPhoneInput(value: string): string {
   if (!value || value.trim().startsWith('+')) return value;
   const d = value.replace(/\D/g, '').slice(0, 11);

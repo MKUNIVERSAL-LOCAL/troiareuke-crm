@@ -34,6 +34,15 @@ test('고객 양식 다운로드 → 업로드 왕복, 설정 데이터 내보�
   await page.locator('input[type="file"][accept*=".xlsx"]').setInputFiles(templatePath!);
   await expect(page.getByText('고객 업로드 완료: 0명 추가, 2건 건너뜀(이름/전화 누락 또는 중복).')).toBeVisible({ timeout: 15_000 });
 
+  // ── 고객 목록 내보내기(1행 민감정보 안내 + 2행 머리글)를 그대로 다시 올리면 머리글을 알아보고 3명 전부 중복으로 건너뛴다 (89·90) ──
+  const listDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '다운로드', exact: true }).filter({ visible: true }).first().click();
+  const listFile = await listDownload;
+  expect(listFile.suggestedFilename()).toMatch(/_고객목록_\d{4}-\d{2}-\d{2}\.xlsx$/);
+  const listPath = await listFile.path();
+  await page.locator('input[type="file"][accept*=".xlsx"]').setInputFiles(listPath!);
+  await expect(page.getByText('고객 업로드 완료: 0명 추가, 3건 건너뜀(이름/전화 누락 또는 중복).')).toBeVisible({ timeout: 15_000 });
+
   // ── 설정 > 백업·보안: 전체 선택 → 엑셀 다운로드 ──
   await page.goto('/settings');
   await page.getByRole('button', { name: '백업·보안' }).click();
