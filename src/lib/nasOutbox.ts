@@ -87,6 +87,18 @@ function readRejected(): RejectedNasMutation[] {
     return Array.isArray(parsed) ? parsed : [];
   } catch { return []; }
 }
+/** 변이가 다루는 기록 id — PATCH/DELETE는 경로 마지막 조각, PUT은 본문 rows[].id (리뷰 2026-11-19) */
+function mutationRecordIds(m: NasMutation): string[] {
+  if (m.method === 'PUT') {
+    try {
+      const rows = JSON.parse(m.body || '{}').rows;
+      return Array.isArray(rows) ? rows.map((r: { id?: unknown }) => (r && r.id != null ? String(r.id) : '')).filter(Boolean) : [];
+    } catch { return []; }
+  }
+  const last = m.path.split('/').pop() || '';
+  if (!last) return [];
+  try { return [decodeURIComponent(last)]; } catch { return [last]; }
+}
 /** @returns 저장 성공 여부 — 실패(용량 초과)면 호출 쪽이 유실을 알려야 한다 */
 function writeRejected(list: RejectedNasMutation[]): boolean {
   try {
@@ -178,16 +190,22 @@ export function flushNasOutbox(): Promise<void> {
         const status = (error as AuthApiError).status;
         console.error(`[NAS] ${next.method} ${next.path} 영구 실패(${status}) — 거부 목록으로 이동:`, error);
         // 서버가 거부(400/404 — 구버전 서버가 모르는 컬렉션 등): 화면에선 이미 저장 성공으로 보였으므로 본문째 보존하고 반드시 알린다
-        // 같은 사용자 동작(±1초)에서 함께 만들어진 뒤 항목(예: 회차권 PUT 뒤의 결제 PUT)은 부모 없이 보내지 않고 같이 보류한다 — 재시도 때 순서대로 다시 간다 (정합성 감사 2026-11-19)
+        // 같은 사용자 동작(±1초)에서 함께 만들어진 뒤 항목 중 거부된 기록의 id를 참조하는 것(예: 회차권 PUT 뒤 referenceId가 그 회차권인 결제 PUT)은 부모 없이 보내지 않고 같이 보류한다 — 재시도 때 순서대로 다시 간다.
+        // 시간만 같은 무관한 항목(일괄 완료·직원 이름 변경·가져오기의 수백 건)은 끌려가지 않는다 (정합성 감사 2026-11-19, 리뷰 반영)
         const t0 = Date.parse(next.createdAt);
-        const siblings = readOutbox(key).filter(item => item.id !== next.id && Math.abs(Date.parse(item.createdAt) - t0) <= 1000);
+        const recordIds = mutationRecordIds(next).map(id => JSON.stringify(id));
+        const siblings = recordIds.length === 0 ? [] : readOutbox(key).filter(item => item.id !== next.id
+          && Math.abs(Date.parse(item.createdAt) - t0) <= 1000
+          && recordIds.some(q => (item.body || '').includes(q)));
         const rejectedAt = new Date().toISOString();
-        const kept = writeRejected([...readRejected(), { ...next, status, rejectedAt }, ...siblings.map(m => ({ ...m, status, rejectedAt }))]);
+        const prior = readRejected();
+        const overflow = prior.length + 1 + siblings.length > REJECTED_MAX; // 상한을 넘겨 오래된 거부 항목이 밀려나면 그것도 유실이다
+        const kept = writeRejected([...prior, { ...next, status, rejectedAt }, ...siblings.map(m => ({ ...m, status, rejectedAt }))]);
         if (siblings.length > 0) {
           console.error(`[NAS] 같은 동작의 후속 ${siblings.length}건도 함께 보류:`, siblings.map(m => `${m.method} ${m.path}`));
           writeOutbox(key, readOutbox(key).filter(item => !siblings.some(m => m.id === item.id)));
         }
-        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status, lost: !kept } })); } catch { /* noop */ }
+        try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status, lost: !kept || overflow } })); } catch { /* noop */ }
       }
       // 전송 중 새 항목이 추가될 수 있으므로 현재 큐를 다시 읽어 처리된 항목만 제거
       writeOutbox(key, readOutbox(key).filter(item => item.id !== next.id));

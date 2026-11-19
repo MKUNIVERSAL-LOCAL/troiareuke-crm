@@ -67,10 +67,10 @@ export interface CustomerRevisitInfo {
   upcomingReservation: string | null; // 이미 잡힌 다음 예약일
 }
 
-/** 고객 상세용 — 다음 방문 권장일과 남은 일수 (방문 이력이 없으면 null). 리마인더 목록과 같은 규칙 (2026-11-17) */
 /** 둘 다 있으면 나중 날짜 — 시술기록만 보면 예약 완료(방문)로만 다녀간 고객이 '기한 지남'으로 잘못 잡힌다 (정합성 감사 2026-11-19) */
 const later = (a?: string | null, b?: string | null): string | null => (a && b ? (a > b ? a : b) : a || b || null);
 
+/** 고객 상세용 — 다음 방문 권장일과 남은 일수 (방문 이력이 없으면 null). 리마인더 목록과 같은 규칙 (2026-11-17) */
 export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo | null {
   const todayStr = toISO(new Date());
   const upcoming = ReservationStore.getAll()

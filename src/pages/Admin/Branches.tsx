@@ -118,10 +118,7 @@ export default function Branches() {
       }
     } else {
       // 로컬 폴백: localStorage에서 지점 목록 읽기
-      try {
-        const data = readJson<Branch[]>('troiareuke_branches', []);
-        setBranches(data);
-      } catch { setBranches([]); }
+      setBranches(readJson<Branch[]>('troiareuke_branches', []));
     }
     setLoading(false);
   }

@@ -9,7 +9,7 @@ import {
   Scissors, ChevronDown, Tag,
   Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus, GitMerge, MessageSquare, MoreHorizontal, UserX, FileText
 } from 'lucide-react';
-import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
+import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore, initializeStores } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import {
@@ -990,11 +990,16 @@ export default function Customers() {
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
+  // 서버 하이드레이션(initializeStores)이 끝난 뒤에만 — 캐시로 먼저 그려진 화면에서 비어 있는 결제 목록으로 0을 서버에 쓰지 않게 (리뷰 2026-11-19)
   const openCustomer = (c: Customer) => {
-    const healed = healCustomerStats(c.id);
-    if (healed) loadAll();
-    setSelected(healed ?? c);
+    setSelected(c);
     setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id));
+    void initializeStores().then(() => {
+      const healed = healCustomerStats(c.id);
+      if (!healed) return;
+      loadAll();
+      setSelected(prev => (prev?.id === c.id ? healed : prev));
+    }).catch(() => { /* 로드 실패는 배너가 알린다 — 재계산만 건너뜀 */ });
   };
   const openFirstMatch = () => { if (filtered.length > 0) openCustomer(filtered[0]); };
   const qHandled = useRef<string | null>(null); // 같은 q로는 1회만 — 검색어를 더 치거나 목록이 갱신될 때 다시 열리지 않게 (리뷰 2026-11-18)
@@ -1331,9 +1336,11 @@ export default function Customers() {
       : '\n연결된 기록이 없습니다.';
     // 앞으로의 예약·진행 중 회차권이 걸린 고객을 지우면 예약은 수정 불가, 회차권은 알림에서 사라진다 — 먼저 정리하게 (정합성 감사 2026-11-19)
     const futureRes = ReservationStore.getAll().filter(r => r.customerId === selected.id && r.date >= today() && (r.status === 'confirmed' || r.status === 'pending')).length;
-    const activeProgs = CustomerProgramStore.getActive(selected.id).filter(cp => !cp.isCompleted).length;
+    const activeProgs = CustomerProgramStore.getActive(selected.id).filter(cp => !isProgramExpired(cp)).length; // 만료된 회차권은 카드도 '만료'로 보이므로 막지 않는다 (리뷰 2026-11-19)
     if (futureRes > 0 || activeProgs > 0) {
-      notify(`삭제할 수 없습니다 — 앞으로의 예약 ${futureRes}건, 진행 중 회차권 ${activeProgs}개가 있습니다. 예약은 취소하고 회차권은 [관리]에서 완료 처리(또는 등록 취소)한 뒤 삭제해주세요. 중복 고객이면 [병합]이 맞습니다.`);
+      const blockers = [futureRes > 0 ? `앞으로의 예약 ${futureRes}건` : '', activeProgs > 0 ? `진행 중 회차권 ${activeProgs}개` : ''].filter(Boolean).join(', ');
+      const guide = [futureRes > 0 ? '예약은 취소하고' : '', activeProgs > 0 ? '회차권은 [관리]에서 완료 처리(또는 등록 취소)한' : ''].filter(Boolean).join(' ');
+      notify(`삭제할 수 없습니다 — ${blockers}이(가) 있습니다. ${guide} 뒤 삭제해주세요. 중복 고객이면 [병합]이 맞습니다.`);
       return;
     }
     if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`)) return;
@@ -1406,8 +1413,8 @@ export default function Customers() {
       staffNotes: treatForm.staffNotes || undefined,
       nextAppointment: treatForm.nextAppointment || undefined,
     });
-    // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로 적어 KST 새벽엔 하루 늦다 — 시술일이 더 나중이면 시술일로 (정합성 감사 2026-11-19, 코어 전용 결함의 비코어 완화)
-    if (!selected.lastVisitDate || selected.lastVisitDate < treatForm.treatmentDate) CustomerStore.update(selected.id, { lastVisitDate: treatForm.treatmentDate });
+    // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로, 방문 횟수를 같은 날 예약 완료와 별도로 +1 한다 — 기록에서 다시 세어 바로 맞춘다 (정합성 감사·리뷰 2026-11-19)
+    healCustomerStats(selected.id);
 
     setShowTreatmentModal(false);
     setTreatForm({ customerProgramId: '', staffName: '', treatmentDate: today(), treatmentTime: '', treatmentDetails: '', skinCondition: '', staffNotes: '', nextAppointment: '' });

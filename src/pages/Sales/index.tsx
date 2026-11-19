@@ -17,7 +17,7 @@ import Header from '../../components/layout/Header';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import { useAuth } from '../../contexts/AuthContext';
 import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
-import type { Payment, PaymentMethod, Expense, ExpenseCategory } from '../../types';
+import type { Payment, PaymentMethod, Expense, ExpenseCategory, CustomerProgram } from '../../types';
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
 import { formatPrice, formatDate, todayISO as today } from '../../lib/format';
@@ -345,8 +345,12 @@ export default function Sales() {
       return;
     }
     // 회차권 결제도 같은 이유 — 지우면 회차권만 남아 계속 차감된다. 고객 상세 [관리] > [등록 취소]가 결제와 회차권을 함께 지운다 (정합성 감사 2026-11-19)
-    if (p.type === 'program' && p.referenceId && CustomerProgramStore.getById(p.referenceId)) {
-      notify('회차권 결제는 여기서 지우면 회차권만 남아 계속 차감됩니다. 고객 상세의 해당 프로그램 [관리] > [등록 취소]로 결제와 회차권을 함께 지워주세요.');
+    const linkedProgram = p.type === 'program' && p.referenceId ? CustomerProgramStore.getById(p.referenceId) : undefined;
+    if (linkedProgram) {
+      // [등록 취소]는 한 번도 쓰지 않은 회차권에만 있다 — 쓴 회차권은 환불 경로로 (리뷰 2026-11-19)
+      notify(linkedProgram.usedSessions > 0
+        ? `이미 ${linkedProgram.usedSessions}회 사용한 회차권의 결제는 삭제할 수 없습니다. 고객 상세의 [관리]에서 완료 처리한 뒤 이 결제를 [수정] > 환불로 바꿔주세요.`
+        : '회차권 결제는 여기서 지우면 회차권만 남아 계속 차감됩니다. 고객 상세의 해당 프로그램 [관리] > [등록 취소]로 결제와 회차권을 함께 지워주세요.');
       return;
     }
     if (!window.confirm(`${p.paymentDate} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
@@ -392,6 +396,8 @@ export default function Sales() {
       return;
     }
     // 회차권 결제 환불: 회차권이 살아 있으면 함께 종료해야 계속 차감되지 않는다 (정합성 감사 2026-11-19)
+    // 종료는 결제 저장과 같은 자리에서 — 사이에 다른 검사가 끼어 결제는 안 바뀌고 회차권만 닫히는 일이 없게 (리뷰 2026-11-19)
+    let closeProgram: CustomerProgram | null = null;
     if (form.status === 'refunded' && editingId && editingPayment?.type === 'program' && editingPayment.referenceId && editingPayment.status !== 'refunded') {
       const cp = CustomerProgramStore.getById(editingPayment.referenceId);
       if (cp && !cp.isCompleted) {
@@ -400,7 +406,7 @@ export default function Sales() {
           return;
         }
         if (!window.confirm(`환불로 저장하면 ${cp.programName} 회차권(${cp.totalSessions != null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'})을 함께 종료합니다. 계속할까요?`)) return;
-        CustomerProgramStore.update(cp.id, { isCompleted: true, notes: `${cp.notes ? cp.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
+        closeProgram = cp;
       }
     }
 
@@ -414,6 +420,7 @@ export default function Sales() {
 
     if (editingId) {
       PaymentStore.update(editingId, payload);
+      if (closeProgram) CustomerProgramStore.update(closeProgram.id, { isCompleted: true, notes: `${closeProgram.notes ? closeProgram.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
       // 고객 상세 카드는 회차권의 pricePaid·paymentMethod를 보여준다 — 결제 쪽만 고치면 두 숫자가 갈라진다 (정합성 감사 2026-11-19)
       if (editingPayment?.type === 'program' && editingPayment.referenceId && CustomerProgramStore.getById(editingPayment.referenceId)) {
         CustomerProgramStore.update(editingPayment.referenceId, { pricePaid: amount, paymentMethod: form.paymentMethod });
