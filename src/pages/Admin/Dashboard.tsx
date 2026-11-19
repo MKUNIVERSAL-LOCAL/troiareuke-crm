@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { readJson } from '../../lib/safeJson';
 import { Link } from 'react-router-dom';
 import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle, DatabaseBackup, Copy, MonitorDown, AlertTriangle } from 'lucide-react';
 import { isAuthApiConfigured, adminListUsers, apiRequest, type AuthApiUser } from '../../lib/authApi';
@@ -111,8 +112,8 @@ export default function AdminDashboard() {
         const todayCount = logs.filter(l => l.status === 'success' && new Date(l.logged_in_at) >= dayStart).length;
 
         // 사용자 관리·지점 관리(로컬 분기)와 같은 저장소를 센다 — 0 고정은 그 화면들과 모순이었다 (4차 UX 점검 2026-11-19)
-        const localBranches: { is_active?: boolean }[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
-        const localUsers: unknown[] = JSON.parse(localStorage.getItem('troiareuke_local_users') || '[]');
+        const localBranches = readJson<{ is_active?: boolean }[]>('troiareuke_branches', []);
+        const localUsers = readJson<unknown[]>('troiareuke_local_users', []);
         setStats({
           totalBranches: localBranches.length,
           activeBranches: localBranches.filter(b => b.is_active !== false).length,

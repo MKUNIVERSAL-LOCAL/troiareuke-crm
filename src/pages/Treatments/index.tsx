@@ -529,6 +529,8 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
       if (saved && photos.length > 0) {
         try { savePhotos(`treatment:${saved.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
       }
+      // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로 적어 KST 새벽엔 하루 늦다 — 시술일이 더 나중이면 시술일로 (정합성 감사 2026-11-19)
+      if (saved && (!customer.lastVisitDate || customer.lastVisitDate < treatmentDate)) CustomerStore.update(customerId, { lastVisitDate: treatmentDate });
       // 결제 연계: 회차권 차감이 아닌 단건 시술이고 선택한 시술 항목에 금액이 있으면 결제 등록으로 이어준다 (2026-11-17)
       const amount = linkedProgram ? 0 : selectedServices.reduce((sum, name) => sum + (services.find(s => s.name === name)?.price ?? 0), 0);
       if (saved && amount > 0) {

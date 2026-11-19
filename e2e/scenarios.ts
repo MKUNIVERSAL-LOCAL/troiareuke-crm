@@ -3,7 +3,7 @@ import { pickCustomer, visibleButton, type E2EAccount } from './helpers';
 import {
   dialog,
   registerPayment, registerExpense, expectPnl, expectSales, changeFirstExpenseCategory, refundFirstPayment,
-  addProgram, changeGrade, expectProgramEditValidity, sellProgramToCustomer, expectProgramSessions, logTreatment, openCustomer, programCard,
+  addProgram, changeGrade, expectProgramEditValidity, expectRefundBlocked, sellProgramToCustomer, expectProgramSessions, logTreatment, openCustomer, programCard,
   addProduct, expectStock, sellProduct, cancelFirstSale,
   addReservation, reservationItems, openReservationDetail, completeReservation, setReservationStatus, expectReservationDetail,
   expectTodayCard, expectStaffPerformance, expectCustomerNoShows,
@@ -58,6 +58,10 @@ export async function programsProductsScenario(page: Page, acc: E2EAccount) {
   await expect(page).toHaveURL(/\/treatments/);
   await openCustomer(page, acc);
   await expectProgramSessions(page, '수분관리 10회권', 1, 10);
+
+  // 이미 1회 쓴 회차권의 결제는 매출에서 환불로 바꿀 수 없다(회차권만 살아 계속 차감되는 것 방지, 68) — 먼저 [관리] 완료 처리 안내
+  await page.goto('/sales');
+  await expectRefundBlocked(page, /이미 1회 사용한 회차권입니다/);
 
   await addProduct(page, { name: '수분 세럼', price: 48000, stock: 12 });
   await expectStock(page, '수분 세럼', 12);

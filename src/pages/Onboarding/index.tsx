@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { readJson } from '../../lib/safeJson';
 import { todayISO } from '../../lib/format';
 import { useState, useRef } from 'react';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
@@ -193,7 +194,7 @@ export default function Onboarding() {
     // ★ 1단계: branchId를 먼저 확정한 후 localStorage에 저장
     // 이렇게 해야 이후 모든 Store.save()가 올바른 shopKey를 사용함
     const STORAGE_KEY = 'troiareuke_auth_user';
-    const currentUser = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const currentUser = readJson<any>(STORAGE_KEY, {});
     const fixedBranchId = currentUser.branchId || currentUser.id;
     const updatedUser = {
       ...currentUser,
@@ -208,7 +209,7 @@ export default function Onboarding() {
     // 온보딩이 다시 뜨고 데이터가 사라져 보이는 치명 버그가 됨 (QA⑤ 발견)
     try {
       const LOCAL_USERS_KEY = 'troiareuke_local_users';
-      const localUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+      const localUsers = readJson<any[]>(LOCAL_USERS_KEY, []);
       const idx = localUsers.findIndex(
         (r: any) => r?.user?.id === updatedUser.id || r?.email === updatedUser.email
       );

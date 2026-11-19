@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { readJson } from '../../lib/safeJson';
 import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
 import type { Branch } from '../../lib/supabase';
@@ -118,7 +119,7 @@ export default function Branches() {
     } else {
       // 로컬 폴백: localStorage에서 지점 목록 읽기
       try {
-        const data = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
+        const data = readJson<Branch[]>('troiareuke_branches', []);
         setBranches(data);
       } catch { setBranches([]); }
     }
@@ -219,7 +220,7 @@ export default function Branches() {
 
       {
         // 로컬 폴백 — 지점 정보만 저장, 계정 생성은 NAS 연동 후 지원
-        const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
+        const localBranches: Branch[] = readJson<Branch[]>('troiareuke_branches', []);
         if (editTarget) {
           const idx = localBranches.findIndex(b => b.id === editTarget.id);
           if (idx !== -1) {
@@ -281,7 +282,7 @@ export default function Branches() {
       loadBranches();
       return;
     }
-    const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
+    const localBranches: Branch[] = readJson<Branch[]>('troiareuke_branches', []);
     const idx = localBranches.findIndex(x => x.id === b.id);
     if (idx !== -1) localBranches[idx].is_active = !b.is_active;
     localStorage.setItem('troiareuke_branches', JSON.stringify(localBranches));

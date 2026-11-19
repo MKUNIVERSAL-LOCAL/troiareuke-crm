@@ -464,7 +464,10 @@ function StaffDetailModal({
       // 시술 기록은 담당자를 이름으로 들고 있어 함께 고친다(실적 표 연결 유지). 제품 판매는 코어에 수정 API가 없어 옛 이름으로 남는다.
       const logs = TreatmentLogStore.getAll().filter(t => t.staffName === staff.name);
       logs.forEach(t => TreatmentLogStore.update(t.id, { staffName: newName }));
-      if (logs.length > 0) notify(`시술 기록 ${logs.length}건의 담당자 이름도 '${newName}'(으)로 바꿨습니다.`);
+      // 예약도 담당자 이름을 비정규화해 들고 있다(타임라인·완료 누락 카드·예약 카드 표시) (정합성 감사 2026-11-19)
+      const resv = ReservationStore.getAll().filter(r => r.staffId === staff.id && r.staffName !== newName);
+      resv.forEach(r => ReservationStore.update(r.id, { staffName: newName }));
+      if (logs.length > 0 || resv.length > 0) notify(`시술 기록 ${logs.length}건·예약 ${resv.length}건의 담당자 이름도 '${newName}'(으)로 바꿨습니다.`);
     }
     StaffStore.update(staff.id, {
       name: name.trim(),
@@ -486,8 +489,9 @@ function StaffDetailModal({
       notify('같은 이름의 재직 직원이 이미 있어 복직할 수 없습니다. 이 직원의 [수정]에서 이름을 구분되게(예: 김수아B) 바꾼 뒤 복직해주세요.');
       return;
     }
+    const futureRes = leaving ? ReservationStore.getAll().filter(r => r.staffId === staff.id && r.date >= todayISO() && (r.status === 'confirmed' || r.status === 'pending')).length : 0;
     if (!window.confirm(leaving
-      ? `"${staff.name}" 직원을 퇴사 처리할까요?\n새 예약·시술의 담당자 목록에서 빠지고, 과거 기록과 실적은 그대로 남습니다. 언제든 복직할 수 있습니다.`
+      ? `"${staff.name}" 직원을 퇴사 처리할까요?${futureRes > 0 ? `\n앞으로의 예약 ${futureRes}건은 담당자가 이 직원으로 남고 그 시간은 계속 잡혀 있습니다 — 예약 화면에서 담당자를 바꿔주세요.` : ''}\n새 예약·시술의 담당자 목록에서 빠지고, 과거 기록과 실적은 그대로 남습니다. 언제든 복직할 수 있습니다.`
       : `"${staff.name}" 직원을 복직 처리할까요?`)) return;
     StaffStore.update(staff.id, { isActive: !leaving });
     if (leaving) notify.info('퇴사 처리했습니다.'); else notify.success('복직 처리했습니다.');

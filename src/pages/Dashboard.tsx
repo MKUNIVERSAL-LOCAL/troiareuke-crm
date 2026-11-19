@@ -76,7 +76,8 @@ function getDashboardData() {
 
   // Customers
   const totalCustomers = customers.length;
-  const newThisMonth = customers.filter(c => c.registeredAt.startsWith(thisMonthStr)).length;
+  // registeredAt는 UTC ISO — 자정~오전 9시(KST) 등록이 전달로 새지 않게 로컬 월로 비교 (정합성 감사 2026-11-19)
+  const newThisMonth = customers.filter(c => { const d = new Date(c.registeredAt); return !Number.isNaN(d.getTime()) && format(d, 'yyyy-MM') === thisMonthStr; }).length;
   const vipCount = customers.filter(c => c.grade === 'VIP').length;
   const totalPercent = totalCustomers > 0 ? Math.round((vipCount / totalCustomers) * 100) : 0;
 

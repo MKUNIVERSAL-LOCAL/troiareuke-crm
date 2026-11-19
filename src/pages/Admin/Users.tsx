@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
+import { readJson } from '../../lib/safeJson';
 import { notify } from '../../lib/notify';
 import { Users, Building2, Search, UserPlus, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import type { Branch } from '../../lib/supabase';
@@ -141,8 +142,8 @@ export default function AdminUsers() {
         setBranches(branchNames.map(name => ({ id: name, name } as Branch)));
       } else {
         // 로컬 폴백
-        const localUsers = JSON.parse(localStorage.getItem('troiareuke_local_users') || '[]');
-        const localBranches = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
+        const localUsers = readJson<any[]>('troiareuke_local_users', []);
+        const localBranches = readJson<any[]>('troiareuke_branches', []);
 
         setUsers(localUsers.map((u: any) => ({
           id: u.user.id,

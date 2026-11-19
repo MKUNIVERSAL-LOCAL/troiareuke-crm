@@ -75,6 +75,20 @@ export async function refundFirstPayment(page: Page) {
   await expect(d).toHaveCount(0);
 }
 
+/** 첫 결제를 환불로 바꾸려다 막히는 경우 — 안내 토스트가 뜨고 창은 그대로, [닫기]로 닫는다 (68: 사용한 회차권 결제) */
+export async function expectRefundBlocked(page: Page, text: string | RegExp) {
+  await visibleButton(page, /결제 내역 \(\d+\)/).click();
+  await visibleButton(page, '결제 수정').click();
+  const d = dialog(page, '결제 수정');
+  await expect(d).toBeVisible();
+  await d.getByRole('button', { name: '환불', exact: true }).click();
+  await d.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page.locator('[aria-live="polite"]').getByText(text)).toBeVisible();
+  await expect(d).toBeVisible();
+  await d.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(d).toHaveCount(0);
+}
+
 // ── 프로그램(회차권·기간제)·고객 상세 ───────────────────────────
 
 /**

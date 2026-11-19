@@ -1322,6 +1322,13 @@ export default function Customers() {
     const detail = linkedTotal > 0
       ? `\n연결된 기록 ${linkedTotal}건(예약 ${linked.reservations}·시술 ${linked.treatments}·프로그램 ${linked.programs}·결제 ${linked.payments}·상담 ${linked.consultations}·제품 판매 ${linked.productSales})은 남지만 고객과의 연결이 끊겨 타임라인·통계에서 빠집니다.\n${!mergeBlockReason(selected) ? '같은 사람이 두 번 등록된 경우라면 [병합]을, ' : ''}개인정보만 지우려면 [익명화]를 권장합니다.`
       : '\n연결된 기록이 없습니다.';
+    // 앞으로의 예약·진행 중 회차권이 걸린 고객을 지우면 예약은 수정 불가, 회차권은 알림에서 사라진다 — 먼저 정리하게 (정합성 감사 2026-11-19)
+    const futureRes = ReservationStore.getAll().filter(r => r.customerId === selected.id && r.date >= today() && (r.status === 'confirmed' || r.status === 'pending')).length;
+    const activeProgs = CustomerProgramStore.getActive(selected.id).filter(cp => !cp.isCompleted).length;
+    if (futureRes > 0 || activeProgs > 0) {
+      notify(`삭제할 수 없습니다 — 앞으로의 예약 ${futureRes}건, 진행 중 회차권 ${activeProgs}개가 있습니다. 예약은 취소하고 회차권은 [관리]에서 완료 처리(또는 등록 취소)한 뒤 삭제해주세요. 중복 고객이면 [병합]이 맞습니다.`);
+      return;
+    }
     if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`)) return;
     CustomerStore.delete(selected.id);
     setSelected(null);
@@ -1392,6 +1399,8 @@ export default function Customers() {
       staffNotes: treatForm.staffNotes || undefined,
       nextAppointment: treatForm.nextAppointment || undefined,
     });
+    // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로 적어 KST 새벽엔 하루 늦다 — 시술일이 더 나중이면 시술일로 (정합성 감사 2026-11-19, 코어 전용 결함의 비코어 완화)
+    if (!selected.lastVisitDate || selected.lastVisitDate < treatForm.treatmentDate) CustomerStore.update(selected.id, { lastVisitDate: treatForm.treatmentDate });
 
     setShowTreatmentModal(false);
     setTreatForm({ customerProgramId: '', staffName: '', treatmentDate: today(), treatmentTime: '', treatmentDetails: '', skinCondition: '', staffNotes: '', nextAppointment: '' });

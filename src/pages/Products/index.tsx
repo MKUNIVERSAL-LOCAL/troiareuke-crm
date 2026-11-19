@@ -730,8 +730,9 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       notify('수량은 1 이상이어야 합니다');
       return;
     }
-    if (product.stock < qty) {
-      notify(`재고가 부족합니다. (현재 재고: ${product.stock}${product.unit})`);
+    const fresh = ProductStore.getById(product.id) ?? product; // 모달을 열어 둔 사이 다른 판매가 있었을 수 있다 — 저장 직전 재고로 (정합성 감사 2026-11-19)
+    if (fresh.stock < qty) {
+      notify(`재고가 부족합니다. (현재 재고: ${fresh.stock}${product.unit})`);
       return;
     }
     setSaving(true);
