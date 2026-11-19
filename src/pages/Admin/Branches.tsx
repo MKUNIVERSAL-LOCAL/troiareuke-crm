@@ -194,10 +194,6 @@ export default function Branches() {
             if (periodChanged) updates.serviceEndsAt = nextEndsAt;
             if (Object.keys(updates).length > 0) await adminUpdateUser(u.id, updates);
           }
-          if (false) { // 지점명 입력은 NAS 수정 모드에서 비활성 — 바뀔 수 없다 (4차 UX 점검 2026-11-19)
-            setAdminNotice('지점명·주소·전화는 해당 지점 관리자가 CRM 설정에서 직접 변경해야 합니다. (플랜·사용기간 변경은 반영됨)');
-            isPending = true;
-          }
         } else {
           // NAS 모드 신규 지점 = 관리자 계정 발급 (계정에 지점 정보가 실림)
           if (!form.admin_email.trim()) {

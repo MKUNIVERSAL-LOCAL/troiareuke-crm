@@ -133,22 +133,24 @@ export default function Subscriptions() {
         setSaving(false);
         return;
       }
-      try {
-        // 지점 관리 화면의 플랜 수정과 같은 범위 — 지점 계정 전부 (한 계정만 바꾸면 지점 안에서 계정마다 기능이 달라진다)
-        for (const id of editTarget.userIds ?? [editTarget.id]) {
-          await adminUpdateUser(id, {
-            plan: form.plan,
-            isActive: form.status === 'active',
-            serviceEndsAt: nextEndsAt,
-          });
-        }
-      } catch (e: any) {
-        setSaving(false);
-        notify.error(`플랜 변경 실패: ${e?.message || '서버 오류'}`);
-        return;
+      // 지점 관리 화면의 플랜 수정과 같은 범위(지점 계정 전부)·같은 규칙(바뀐 항목만) — isActive를 늘 보내면 개별로 꺼 둔 직원 계정이 되살아난다 (리뷰 67)
+      const statusChanged = (form.status === 'active') !== (editTarget.status !== 'cancelled');
+      const prevEndsAt = editTarget.service_ends_at ? editTarget.service_ends_at.split('T')[0] : null;
+      const endsChanged = nextEndsAt !== prevEndsAt;
+      const ids = editTarget.userIds ?? [editTarget.id];
+      let changed = 0, failed = 0;
+      for (const id of ids) {
+        const updates: { plan?: string; isActive?: boolean; serviceEndsAt?: string | null } = {};
+        if (form.plan !== editTarget.plan) updates.plan = form.plan;
+        if (statusChanged) updates.isActive = form.status === 'active';
+        if (endsChanged) updates.serviceEndsAt = nextEndsAt;
+        if (Object.keys(updates).length === 0) continue;
+        try { await adminUpdateUser(id, updates); changed++; } catch { failed++; }
       }
       setSaving(false);
-      setShowModal(false);
+      // 중간에 실패해도 이미 바뀐 계정은 그대로 — 숨기지 않고 요약, 목록은 항상 다시 읽는다
+      if (failed > 0) notify.error(`${changed + failed}개 계정 중 ${changed}개 변경, ${failed}개 실패 — 다시 저장해 재시도하세요`);
+      else setShowModal(false);
       loadSubs();
       return;
     }

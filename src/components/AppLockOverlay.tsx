@@ -126,7 +126,7 @@ export default function AppLockOverlay() {
       disableAppLock(); // 다시 로그인한 뒤 PIN을 다시 설정
       setLocked(false);
     } catch {
-      notify('로그아웃에 실패했습니다(네트워크 확인). 잠금은 그대로 유지됩니다 — 연결 뒤 다시 시도해주세요.');
+      notify('로그아웃에 실패했습니다. 잠금은 그대로 유지됩니다 — 다시 시도해주세요.');
     }
   };
 

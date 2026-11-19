@@ -623,7 +623,14 @@ export default function Settings() {
               {tabs.map(t => (
                 <button
                   key={t.key}
-                  onClick={() => { if (tab === 'hours' && t.key !== 'hours' && hoursDirty && !window.confirm('영업시간 변경을 저장하지 않았습니다. 버리고 이동할까요?')) return; setTab(t.key); }}
+                  onClick={() => {
+                    if (tab === 'hours' && t.key !== 'hours' && hoursDirty) {
+                      if (!window.confirm('영업시간 변경을 저장하지 않았습니다. 버리고 이동할까요?')) return;
+                      setSettings(prev => ({ ...prev, businessHours: SettingsStore.get().businessHours })); // 메모리의 수정본을 저장본으로 되돌린다 (리뷰 67)
+                      setHoursDirty(false);
+                    }
+                    setTab(t.key);
+                  }}
                   className={clsx(
                     'flex-shrink-0 lg:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap',
                     tab === t.key

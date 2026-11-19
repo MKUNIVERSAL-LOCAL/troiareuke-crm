@@ -39,7 +39,7 @@ function gridRangeFromSettings(): { startMin: number; endMin: number } {
   const bh = SettingsStore.get().businessHours || {};
   for (const h of Object.values(bh)) {
     if (!h || h.isOff) continue;
-    const o = timeToMin(h.open), c = timeToMin(h.close);
+    const o = timeToMin(h.open), c = h.close === '00:00' ? 24 * 60 : timeToMin(h.close); // 자정 마감은 24:00 (리뷰 67)
     if (!Number.isNaN(o)) start = Math.min(start, Math.floor(o / 60) * 60);
     if (!Number.isNaN(c)) end = Math.max(end, Math.ceil(c / 60) * 60);
   }
@@ -236,6 +236,7 @@ export default function Reservations() {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
       if (document.querySelector('[aria-modal="true"]')) return;
+      if (viewMode === 'list' && e.key !== 'n' && e.key !== 'N') return; // 목록 뷰엔 날짜 머리글이 없다 — 보이지 않는 주를 옮기지 않는다 (리뷰 67)
       if (e.key === 'ArrowLeft') { e.preventDefault(); navigate('prev'); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); navigate('next'); }
       else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setCurrentDate(new Date()); }
