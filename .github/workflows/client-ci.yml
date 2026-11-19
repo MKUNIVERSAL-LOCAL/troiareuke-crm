@@ -16,6 +16,7 @@ on:
       - 'e2e/**'
       - 'playwright.config.ts'
       - '.env.e2e'
+      - '.env.e2e-nas'
       - '.github/workflows/client-ci.yml'
   pull_request:
     paths:
@@ -29,6 +30,8 @@ on:
       - 'scripts/check-routes.mjs'
       - 'e2e/**'
       - 'playwright.config.ts'
+      - '.env.e2e'
+      - '.env.e2e-nas'
       - '.github/workflows/client-ci.yml'
   workflow_dispatch:
 

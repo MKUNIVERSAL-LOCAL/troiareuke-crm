@@ -54,7 +54,7 @@ export default function Branches() {
   const [adminPending, setAdminPending] = useState(false);
   const [adminNotice, setAdminNotice] = useState('');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'outdated'>('all'); // outdated: 구버전으로 실행 중인 지점만 (8차 점검 #11, NAS 모드)
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => { loadBranches(); }, []);
@@ -68,7 +68,7 @@ export default function Branches() {
   async function runDeleteBranch() {
     if (!deleteBranchTarget) return;
     const r = await adminDeleteBranch(deleteBranchTarget.id, { confirmName: deleteBranchTarget.name });
-    setDeleteBranchNotice(`${deleteBranchTarget.name} 지점을 삭제했습니다 — 계정 ${r.accounts}개, 레코드 ${r.purged.records}건, 사진 ${r.purged.photos}건. 삭제 직전 스냅샷: ${r.snapshot}`);
+    setDeleteBranchNotice(`${deleteBranchTarget.name} 지점을 삭제했습니다 — 계정 ${r.accounts}개, 레코드 ${r.purged?.records ?? 0}건, 사진 ${r.purged?.photos ?? 0}건. 삭제 직전 스냅샷: ${r.snapshot}`);
     setDeleteBranchTarget(null);
     await loadBranches();
   }
@@ -290,7 +290,8 @@ export default function Branches() {
   const normalizedSearch = search.trim().toLowerCase();
   const filteredBranches = branches.filter(branch => {
     const statusMatches = statusFilter === 'all'
-      || (statusFilter === 'active' ? branch.is_active : !branch.is_active);
+      || (statusFilter === 'outdated' ? (() => { const info = branchVersionInfo(branch.id); return Boolean(info && isOutdated(info.version, latestVersion)); })()
+        : statusFilter === 'active' ? branch.is_active : !branch.is_active);
     const planLabel = planLabels[branch.plan]?.label || branch.plan;
     const searchMatches = !normalizedSearch || [
       branch.name,
@@ -334,6 +335,7 @@ export default function Branches() {
             ['all', '전체'],
             ['active', '운영 중'],
             ['inactive', '비활성'],
+            ...(NAS_MODE ? [['outdated', '구버전']] as const : []),
           ] as const).map(([value, label]) => (
             <button
               key={value}

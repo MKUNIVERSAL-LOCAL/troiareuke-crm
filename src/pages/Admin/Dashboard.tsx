@@ -221,7 +221,7 @@ export default function AdminDashboard() {
           {/* Stat Cards */}
           <div className="grid grid-cols-4 gap-4 mb-8">
             {statCards.map(card => (
-              <div key={card.label} className="bg-slate-900 border border-slate-700/50 rounded-2xl p-5">
+              <div key={card.label} data-testid={`admin-stat-${card.label}`} className="bg-slate-900 border border-slate-700/50 rounded-2xl p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className={`w-10 h-10 ${card.bg} rounded-xl flex items-center justify-center`}>
                     <card.icon size={18} className={card.color} />

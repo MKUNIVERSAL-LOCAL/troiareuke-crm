@@ -303,8 +303,9 @@ export default function AdminUsers() {
     const endDate = u.service_ends_at.slice(0, 10);
     const today = todayISO();
     if (endDate < today) return { label: `${endDate.replace(/-/g, '.')} 만료됨`, className: 'text-red-400 font-semibold' };
-    const endOfDay = parseISODate(endDate).getTime() + 86_400_000 - 1; // 로컬 그날 23:59:59.999 — UTC 파싱은 KST에서 D-값이 하루 빨랐다 (8차 점검 2026-11-20)
-    const daysLeft = Math.ceil((endOfDay - Date.now()) / 86_400_000);
+    // 달력 날짜 차 — 지점 앱과 같은 관례(D-0 = 오늘). 밀리초 차는 UTC 파싱·시각에 따라 하루씩 어긋났다 (8차 점검·리뷰 2026-11-20)
+    const daysLeft = Math.round((parseISODate(endDate).getTime() - parseISODate(today).getTime()) / 86_400_000);
+    if (daysLeft === 0) return { label: `${endDate.replace(/-/g, '.')} 오늘 만료`, className: 'text-amber-400 font-semibold' };
     if (daysLeft <= 14) return { label: `~${endDate.replace(/-/g, '.')} (D-${daysLeft})`, className: 'text-amber-400' };
     return { label: `~${endDate.replace(/-/g, '.')}`, className: 'text-slate-300' };
   }

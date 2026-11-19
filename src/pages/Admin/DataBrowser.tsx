@@ -58,8 +58,9 @@ function summarizeRow(data: Record<string, unknown>, showRaw: boolean): string {
 }
 
 /** 발송 로그 유형·상태 — 영문 원문 대신 (8차 점검 2026-11-20) */
-const MESSAGE_TYPE_LABEL: Record<string, string> = { sms: '문자', lms: '장문 문자', mms: '사진 문자', kakao: '카카오', 'kakao-channel': '카카오 채널', 'kakao-openchat': '카카오 오픈채팅' };
-const MESSAGE_STATUS_LABEL: Record<string, string> = { sent: '발송됨', failed: '실패', pending: '대기', scheduled: '예약', cancelled: '취소', sending: '발송 중' };
+const MESSAGE_TYPE_LABEL: Record<string, string> = { sms: '문자', lms: '장문 문자', mms: '사진 문자', kakao: '카카오', 'kakao-channel': '카카오 채널', 'kakao-openchat': '카카오 오픈채팅', 'revisit-reminder': '재방문 안내' };
+// 서버(server.js)가 내는 값 그대로: 발송 로그 sent|failed|pending, 예약 발송 pending|processing|sent|failed|partial|canceled (리뷰 2026-11-20)
+const MESSAGE_STATUS_LABEL: Record<string, string> = { sent: '발송됨', failed: '실패', pending: '대기', processing: '발송 중', partial: '일부 실패', canceled: '취소' };
 
 /** 본사 콘솔은 전 지점 최종 고객의 개인정보를 다룬다 — 기본은 가리고 [원문 보기]로만 푼다 (8차 점검 2026-11-20) */
 const PII_KEY_RE = /^(phone|mobile|tel|customer_phone|customerPhone|shop_phone|email|customer_email)$/i;
@@ -128,6 +129,12 @@ export default function DataBrowser() {
   }, []);
 
   useEffect(() => { loadOverview(); }, [loadOverview]);
+  useEffect(() => {
+    if (!detailRow) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDetailRow(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [detailRow]);
 
   const loadRows = useCallback(async (branch: AdminBranchOverview, collection: string, off: number, q: string) => {
     setLoadingRows(true);
@@ -163,6 +170,7 @@ export default function DataBrowser() {
 
   const selectBranch = (b: AdminBranchOverview) => {
     setSelectedBranch(b);
+    setShowRaw(false); // 다른 지점의 개인정보가 원문 상태로 이어지지 않게 (리뷰 2026-11-20)
     setTab('customers');
     setOffset(0);
     setQuery('');
@@ -172,6 +180,7 @@ export default function DataBrowser() {
 
   const changeTab = (t: string) => {
     setTab(t);
+    setShowRaw(false);
     setRows([]); setTotal(0); setSendLog([]); setScheduled([]); setPhotoEntities([]); setBackups([]); // 새 탭 로드가 실패하면 이전 탭의 목록이 새 탭 라벨 아래 그대로 남았다 (8차 점검 2026-11-20, 리뷰 L3)
     setOffset(0);
     setQuery('');
@@ -270,8 +279,14 @@ export default function DataBrowser() {
             </div>
           ) : (
             <>
-              {/* 컬렉션 탭 */}
-              <div className="flex flex-wrap gap-1.5 mb-4">
+              {/* 컬렉션 탭 + 개인정보 원문 토글(사진·백업 탭 제외 — 발송 로그 수신번호에도 적용, 리뷰 2026-11-20) */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-4">
+                {tab !== '__photos' && tab !== '__backups' && (
+                  <button type="button" onClick={() => setShowRaw(v => !v)} aria-pressed={showRaw}
+                    className={clsx('order-last ml-auto text-xs px-2.5 py-1.5 rounded-lg transition-colors', showRaw ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800 text-slate-400 hover:text-white')}>
+                    {showRaw ? '개인정보 가리기' : '개인정보 원문 보기'}
+                  </button>
+                )}
                 {COLLECTION_ORDER.map(c => {
                   const count = selectedBranch.recordCounts[c] ?? 0;
                   return (
@@ -367,12 +382,6 @@ export default function DataBrowser() {
                   {rows.length === 0 ? (
                     <div className="p-10 text-center text-sm text-slate-400">데이터가 없습니다.</div>
                   ) : (<>
-                    <div className="flex justify-end px-4 py-2 border-b border-slate-800/60">
-                      <button type="button" onClick={() => setShowRaw(v => !v)} aria-pressed={showRaw}
-                        className={clsx('text-xs px-2.5 py-1 rounded-lg transition-colors', showRaw ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800 text-slate-400 hover:text-white')}>
-                        {showRaw ? '개인정보 가리기' : '개인정보 원문 보기'}
-                      </button>
-                    </div>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
@@ -386,13 +395,12 @@ export default function DataBrowser() {
                           <tr
                             key={r.id}
                             onClick={() => setDetailRow(r)}
-                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailRow(r); } }}
-                            tabIndex={0}
-                            role="button"
-                            aria-label={`${r.id} 상세 보기`}
-                            className="border-b border-slate-800/60 hover:bg-slate-800/40 focus-visible:bg-slate-800/40 focus-visible:outline-none cursor-pointer transition-colors"
+                            className="border-b border-slate-800/60 hover:bg-slate-800/40 focus-within:bg-slate-800/40 cursor-pointer transition-colors"
                           >
-                            <td className="px-4 py-2.5 text-slate-400 font-mono text-xs truncate max-w-[10rem]">{r.id}</td>
+                            <td className="px-4 py-2.5 text-slate-400 font-mono text-xs truncate max-w-[10rem]">
+                              <button type="button" onClick={e => { e.stopPropagation(); setDetailRow(r); }} aria-label={`${r.id} 상세 보기`}
+                                className="text-left truncate max-w-full hover:text-white focus-visible:outline-none focus-visible:underline">{r.id}</button>
+                            </td>
                             <td className="px-4 py-2.5 text-slate-300 truncate max-w-md">{summarizeRow(r.data, showRaw)}</td>
                             <td className="px-4 py-2.5 text-slate-400 text-xs">{formatDateTime(r.updatedAt)}</td>
                           </tr>

@@ -35,13 +35,17 @@ const USERS = [
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 /** 시나리오 스위치 — 테스트 중간에 바꿔 같은 라우트가 다른 응답을 낸다 */
-const state = { manifestDown: true, flagsDown: true, announcementsDown: true, loginError: '' };
+const INITIAL = { manifestDown: true, flagsDown: true, announcementsDown: true, loginError: '' };
+const state = { ...INITIAL };
 const unmocked: string[] = [];
+// 재시도(CI retries 1)는 새 테스트처럼 시작해야 한다 — 테스트 중간에 바꾼 스위치가 남으면 첫 실패 원인이 가려진다 (리뷰 2026-11-20)
+test.beforeEach(() => { Object.assign(state, INITIAL); unmocked.length = 0; });
 
 async function mockNas(page: Page) {
   // 포괄: 두 호스트로 가는 모든 요청 — 아래 라우트가 받지 않으면 404 (실제 서버로는 절대 나가지 않는다)
   await page.route(`${API}/**`, route => { unmocked.push(new URL(route.request().url()).pathname); return json(route, { error: 'not mocked' }, 404); });
   await page.route(`${UPDATE}/**`, route => { unmocked.push(new URL(route.request().url()).pathname); return json(route, { error: 'not mocked' }, 404); });
+  await page.route('https://cdn.iamport.kr/**', route => route.abort()); // index.html 의 결제 스크립트 — 어드민과 무관, 오프라인에서도 같은 결과 (리뷰 2026-11-20)
   await page.route(`${API}/api/auth/login`, route => state.loginError ? json(route, { error: state.loginError }, 403) : json(route, { token: 'test-token', user: SUPERADMIN }));
   await page.route(`${API}/api/auth/me`, route => json(route, { user: SUPERADMIN }));
   await page.route(`${API}/api/auth/logout`, route => route.fulfill({ status: 204 }));
@@ -66,19 +70,18 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
   await mockNas(page);
 
   // ── 로그인 실패 사유는 서버 문구 그대로 (102 #28) ──
-  state.loginError = '승인 대기 중인 계정입니다. 본사 승인 후 로그인할 수 있습니다.';
+  state.loginError = '가입 심사 대기 중입니다. 본사 승인 후 로그인할 수 있습니다.'; // server.js 가 실제로 보내는 문구
   await adminLogin(page);
-  await expect(page.getByText('승인 대기 중인 계정입니다').first()).toBeVisible();
+  await expect(page.getByText('가입 심사 대기 중입니다').first()).toBeVisible();
   state.loginError = '';
   await page.locator('form button[type="submit"]').first().click();
   await expect(page).toHaveURL(/\/admin\/dashboard/, { timeout: 15_000 });
 
   // ── 대시보드: 승인 대기·거부 신청자는 지점이 아니다 (102 #1) — 전체 지점 2, 사용자 3 ──
-  const branchCard = page.locator('div').filter({ has: page.getByText('전체 지점', { exact: true }) }).filter({ hasText: '운영 중' }).last();
-  await expect(branchCard).toContainText('2');
+  const branchCard = page.getByTestId('admin-stat-전체 지점');
+  await expect(branchCard.locator('.text-2xl')).toHaveText('2'); // 4(대기·거부 포함)가 아니라 2
   await expect(branchCard).toContainText('운영 중 2개');
-  const userCard = page.locator('div').filter({ has: page.getByText('등록 사용자', { exact: true }) }).last();
-  await expect(userCard).toContainText('3');
+  await expect(page.getByTestId('admin-stat-등록 사용자').locator('.text-2xl')).toHaveText('3');
 
   // ── 버전 패널: 배포 서버 응답 없음 → "모두 최신"이 아니라 판정 보류 (102 #5) → [다시 확인]이 실제로 다시 읽는다 (102 리뷰 M1) ──
   await expect(page.getByText('구버전 판정을 보류했습니다')).toBeVisible({ timeout: 15_000 });
@@ -97,6 +100,11 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
   await expect(page.getByText('신청만한점')).toHaveCount(0);
   await expect(page.getByText('거부된점')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '강남점 지점 정보 수정' })).toBeVisible(); // 아이콘 버튼 이름 (103 #2)
+  // [구버전] 칩: 가장 낮은 버전이 최신(1.0.60)보다 낮은 지점만 — 강남점(직원 PC 1.0.55)만 남고 판교점은 빠진다 (105 #11)
+  await page.getByRole('button', { name: '구버전', exact: true }).click();
+  await expect(page.getByRole('cell', { name: '강남점' }).first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: '판교점' })).toHaveCount(0);
+  await page.getByRole('button', { name: '전체', exact: true }).click();
 
   // ── 사용자 관리: "승인된 계정" 탭 = 승인+거부(대기 제외), 대기 배지 1 ──
   await page.goto('/admin/users');
@@ -126,5 +134,8 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
   await expect(page.getByRole('button', { name: '공지 작성' })).toBeEnabled();
 
   // 실제 NAS 로 새어 나간 요청 없음 — 포괄 라우트가 받은(흉내 내지 않은) 경로는 기록만 남고 404 로 끝났다
-  console.log('[admin-nas] 흉내 내지 않은 경로:', [...new Set(unmocked)].join(', ') || '(없음)');
+  // 포괄 라우트가 받은(흉내 내지 않은) 경로는 지점 데이터 동기화(/api/data/*)뿐이어야 한다 — 어드민 화면이 새 서버 경로를 쓰기 시작하면 여기서 드러난다
+  // /api/ai/status 는 로그인 직후 AI 프록시 상태 확인(aiProxy) — 어드민 화면과 무관, 404 면 '사용 불가'로 처리된다
+  const unexpected = [...new Set(unmocked)].filter(p => !p.startsWith('/api/data/') && p !== '/api/ai/status');
+  expect(unexpected, '흉내 내지 않은 서버 경로').toEqual([]);
 });

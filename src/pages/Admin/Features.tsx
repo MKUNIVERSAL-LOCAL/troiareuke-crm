@@ -26,7 +26,12 @@ export default function AdminFeatures() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [loadError, setLoadError] = useState(''); // 로드 실패 뒤 저장하면 그 스코프의 서버 플래그 전체가 초안(한두 키)으로 덮인다 — 그동안 저장을 막는다 (8차 점검 2026-11-20)
+  const [loadError, setLoadError] = useState('');
+  const [chipQuery, setChipQuery] = useState(''); // 지점 수십 곳이면 칩이 벽처럼 쌓인다 — 이름 검색·오버라이드 있는 지점만 (8차 점검 #19)
+  const [onlyOverridden, setOnlyOverridden] = useState(false);
+  const visibleBranches = branches.filter(b =>
+    (!onlyOverridden || Object.keys(scopes[b.id] || {}).length > 0 || selected === b.id)
+    && (!chipQuery.trim() || b.name.toLowerCase().includes(chipQuery.trim().toLowerCase()))); // 로드 실패 뒤 저장하면 그 스코프의 서버 플래그 전체가 초안(한두 키)으로 덮인다 — 그동안 저장을 막는다 (8차 점검 2026-11-20)
 
   useEffect(() => { load(); }, []);
 
@@ -163,7 +168,18 @@ export default function AdminFeatures() {
         </div>
       )}
 
-      {/* 스코프 선택: 전역 + 지점 */}
+      {/* 스코프 선택: 전역 + 지점 (검색·오버라이드 필터는 지점이 8곳 넘을 때만) */}
+      {branches.length > 8 && (
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <input value={chipQuery} onChange={e => setChipQuery(e.target.value)} placeholder="지점 이름 검색" aria-label="지점 이름 검색"
+            className="w-56 bg-slate-900 border border-slate-700/50 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500" />
+          <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={onlyOverridden} onChange={e => setOnlyOverridden(e.target.checked)} />
+            개별 설정이 있는 지점만
+          </label>
+          <span className="text-xs text-slate-400">{visibleBranches.length} / {branches.length} 지점</span>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 mb-8">
         <button
           onClick={() => selectScope(GLOBAL_SCOPE)}
@@ -177,7 +193,7 @@ export default function AdminFeatures() {
           <Globe size={14} />
           전역 기본값
         </button>
-        {branches.map((b) => (
+        {visibleBranches.map((b) => (
           <button
             key={b.id}
             onClick={() => selectScope(b.id)}

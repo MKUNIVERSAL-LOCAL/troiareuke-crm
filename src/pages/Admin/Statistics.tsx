@@ -239,13 +239,13 @@ function NasAnalytics() {
                       <tr
                         key={b.branchId}
                         onClick={() => setSelected(b.branchId)}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(b.branchId); } }}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`${b.branchName || b.branchId.slice(0, 8)} 지점 통계 보기`}
-                        className="border-b border-slate-800/50 hover:bg-slate-800/40 focus-visible:bg-slate-800/40 focus-visible:outline-none cursor-pointer transition-colors"
+                        className="border-b border-slate-800/50 hover:bg-slate-800/40 focus-within:bg-slate-800/40 cursor-pointer transition-colors"
                       >
-                        <td className="px-6 py-3 text-white font-semibold">{b.branchName || b.branchId.slice(0, 8)}</td>
+                        <td className="px-6 py-3 text-white font-semibold">
+                          {/* 행 전체에 role=button 을 주면 보조기기가 숫자 칸을 잃는다 — 진짜 버튼은 지점명 칸에 (리뷰 2026-11-20) */}
+                          <button type="button" onClick={e => { e.stopPropagation(); setSelected(b.branchId); }} aria-label={`${b.branchName || b.branchId.slice(0, 8)} 지점 통계 보기`}
+                            className="text-left hover:underline focus-visible:outline-none focus-visible:underline">{b.branchName || b.branchId.slice(0, 8)}</button>
+                        </td>
                         <td className="px-4 py-3 text-right text-slate-300">{b.customers.total.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right text-emerald-400">+{b.customers.new30d}</td>
                         <td className="px-4 py-3 text-right text-slate-300">{won(b.revenue.total)}</td>

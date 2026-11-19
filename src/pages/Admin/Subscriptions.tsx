@@ -302,7 +302,7 @@ export default function Subscriptions() {
                   {planOptions.map(p => <option key={p.value} value={p.value}>{p.label} ({p.price.toLocaleString()}원/월)</option>)}
                 </select>
               </Field>
-              <Field label="상태" hint={NAS_MODE ? "중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다." : undefined}>
+              <Field label="상태" hint="'해지'는 해당 지점 계정의 로그인을 차단합니다.">
                 {/* NAS 모드: 서버 계정에는 활성/비활성만 존재 — 만료·대기 선택지를 주면
                     isActive=false로 축약 저장되어 지점 로그인이 잠기는 함정이 됨 */}
                 <select className="admin-input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
@@ -318,7 +318,7 @@ export default function Subscriptions() {
               <Field label="월 금액 (원)">
                 <p className="px-3 py-2 text-sm text-slate-300">{Number(form.amount || 0).toLocaleString()}원 — 플랜 기준 자동</p>
               </Field>
-              <Field label={NAS_MODE ? '사용기간 만료일 (비우면 무제한)' : '만료일'} hint={NAS_MODE ? '만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.' : undefined}>
+              <Field label="사용기간 만료일 (비우면 무제한)" hint="만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.">
                 <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
               </Field>
               <Field label="계정">

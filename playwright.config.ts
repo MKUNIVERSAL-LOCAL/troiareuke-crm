@@ -28,7 +28,7 @@ export default defineConfig({
     // 가짜 카메라(--use-fake-*-media-stream): 촬영 가이드 오버레이의 getUserMedia → 캔버스 캡처 경로를 실제로 통과시킨다
     { name: 'mobile', use: { ...devices['Pixel 7'], launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] } }, testMatch: /(mobile|screenshots).spec.ts/ },
     // 어드민 콘솔(NAS 흉내) — 중앙 서버 모드 빌드(dist-e2e-nas, 4174)를 따로 띄우고 서버 응답은 page.route 로 전부 가로챈다 (8차 어드민 점검 2026-11-20)
-    { name: 'admin-nas', use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:4174' }, testMatch: /admin-nas.spec.ts/ },
+    { name: 'admin-nas', use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:4174', serviceWorkers: 'block' }, testMatch: /admin-nas.spec.ts/ }, // SW 가 가로채는 요청은 page.route 가 못 본다 — 차단해야 실제 NAS 로 새지 않는다 (리뷰 2026-11-20)
   ],
   webServer: [
     {
