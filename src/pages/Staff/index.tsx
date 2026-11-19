@@ -301,6 +301,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">이름 *</label>
             <input
               type="text"
+              aria-label="이름"
               value={name}
               onChange={e => setName(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -310,6 +311,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">역할 *</label>
             <select
+              aria-label="역할"
               value={role}
               onChange={e => setRole(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -499,6 +501,7 @@ function StaffDetailModal({
               <label className="block text-xs font-medium text-gray-600 mb-1.5">이름 *</label>
               <input
                 type="text"
+                aria-label="이름"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -507,6 +510,7 @@ function StaffDetailModal({
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1.5">역할 *</label>
               <select
+                aria-label="역할"
                 value={role}
                 onChange={e => setRole(e.target.value)}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
