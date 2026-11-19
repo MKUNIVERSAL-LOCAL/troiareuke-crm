@@ -560,7 +560,7 @@ export default function Onboarding() {
             </StepWrapper>
           )}
 
-          {/* Step 4: 플랜 선택 (현재 무료 체험만 가능) */}
+          {/* Step 4: 무료 체험 시작 (플랜은 체험 뒤 설정에서 — 여기서 고를 것은 없다) */}
           {step === 4 && (
             <StepWrapper title="무료 체험 시작" subtitle="지금은 고를 것이 없어요 — 14일 무료 체험으로 시작하고, 유료 플랜은 체험 뒤 설정에서 바꿉니다">
               <div className="space-y-3">

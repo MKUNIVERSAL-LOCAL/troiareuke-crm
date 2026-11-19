@@ -40,9 +40,11 @@ function segmentLabel(seg: Segment): string {
   return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);
 }
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
-function segmentFilter(seg: Segment): (c: Customer) => boolean {
+/** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
+function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
+function segmentFilter(seg: Segment, revisitIds?: Set<string>): (c: Customer) => boolean {
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
-  if (seg === 'revisit') { const ids = new Set(getRevisitDueCustomers().map(d => d.customer.id)); return c => ids.has(c.id); }
+  if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
   return SEGMENT_FILTERS[seg] ?? (() => false); // 모르는 세그먼트는 '아무에게도' — 전체 발송 사고 방지
 }
 
@@ -203,6 +205,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
   useEffect(() => {
     setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false));
   }, [reloadKey]);
+  const revisitCount = useMemo(() => revisitIdSet().size, [reloadKey]); // 대시보드 재방문 카드와 같은 기준 (리뷰 63)
 
   const autoMessages = [
     // 설명은 설정 > 알림 설정과 같은 문구 (UX QA 2026-11-17)
@@ -228,6 +231,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
           { key: 'vip' as Segment, label: 'VIP 고객', count: customers.filter(SEGMENT_FILTERS.vip).length, color: 'yellow' },
           { key: 'birthday' as Segment, label: '이번달 생일', count: birthdayCount, color: 'pink' },
           { key: 'novisit' as Segment, label: '미방문 60일+', count: customers.filter(SEGMENT_FILTERS.novisit).length, color: 'orange' },
+          { key: 'revisit' as Segment, label: '재방문 권장', count: revisitCount, color: 'amber' },
           ...topTags(customers, 4).map(t => ({ key: `tag:${t.tag}` as Segment, label: `#${t.tag}`, count: t.count, color: 'amber' })),
         ].map(t => (
           <button
@@ -819,8 +823,12 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     { key: 'kakao-openchat', label: `카카오 오픈채팅${kakaoSettings?.openchatConnected ? '' : ' (채널 미연결)'}`, disabled: !kakaoSettings?.openchatConnected },
   ];
 
-  // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준)
-  const targetCustomers = blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode));
+  // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준). 재방문 집합은 창이 열릴 때 한 번만 — 글자 입력마다 전수 스캔하지 않게 (리뷰 63)
+  const revisitIds = useMemo(() => revisitIdSet(), []);
+  const targetCustomers = useMemo(
+    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds))),
+    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds],
+  );
   const recipientCount = targetCustomers.length;
 
   // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
@@ -1019,13 +1027,13 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             ) : (
             <div className="flex gap-2 flex-wrap">
               {(() => {
-                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
+                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
                 if (recipientMode.startsWith('tag:') && !keys.includes(recipientMode)) keys.push(recipientMode);
                 return keys;
               })().map(key => ({
                 key,
-                label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key)).length}명)`,
+                label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key, revisitIds)).length}명)`,
               })).map(r => (
                 <button
                   key={r.key}

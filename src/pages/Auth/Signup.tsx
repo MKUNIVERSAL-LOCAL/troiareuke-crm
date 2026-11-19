@@ -178,7 +178,8 @@ export default function Signup() {
 
           {step === 2 && (
             <>
-              <h2 className="text-xl font-bold text-gray-900 mb-6">약관 동의 — 14일 무료 체험으로 시작합니다</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">약관 동의</h2>
+              <p className="text-sm text-gray-400 mb-6">14일 무료 체험으로 시작합니다 · 플랜은 체험 뒤 설정에서 고릅니다</p>
               <div className="space-y-3 mb-6">
                 {plans.map(p => (
                   <div key={p.key} className={`p-4 rounded-2xl border-2 transition-all ${p.highlight ? 'border-[#1a3a8f] bg-blue-50' : 'border-gray-100'} ${p.disabled ? 'border-dashed border-gray-200 bg-gray-50' : ''}`}>

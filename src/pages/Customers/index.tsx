@@ -350,6 +350,13 @@ export default function Customers() {
     const g = searchParams.get('grade'); // 대시보드 VIP 카드 → /customers?grade=VIP (3차 UX 점검 2026-11-19)
     return g === 'VIP' || g === '골드' || g === '일반' || g === '신규' ? g : '전체';
   });
+  useEffect(() => {
+    // ?grade=는 첫 진입의 초기값으로만 쓰고 URL에서 지운다 — 남겨 두면 [필터 초기화] 뒤 보존기간 토글(URL 복사)·새로고침에 VIP로 되돌아간다 (리뷰 63)
+    if (!searchParams.get('grade')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('grade');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [tagFilter, setTagFilter] = useState(''); // 태그 칩 필터 (2026-11-18)
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
   type SortKey = 'recent' | 'name' | 'registered' | 'spent';
@@ -1206,6 +1213,10 @@ export default function Customers() {
   }
 
   // 고객 추가
+  const resetAddForm = () => {
+    setAddForm({ name: '', phone: '', email: '', address: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '', tags: '', allergies: '' });
+    setAddPrivacyConsent(false);
+  };
   function handleAddCustomer(e: React.FormEvent) {
     e.preventDefault();
     // 필수값 + 전화번호 중복 방지 (같은 고객이 두 레코드로 쪼개지지 않도록)
@@ -1223,6 +1234,7 @@ export default function Customers() {
     if (dup) {
       if (window.confirm(`이미 등록된 번호입니다: ${dup.name} (${dup.phone})\n기존 고객을 열까요? (새로 등록하지 않습니다)`)) {
         setShowAddModal(false);
+        resetAddForm(); // 다음 [고객 추가]에 중복 고객의 이름·번호가 남지 않게 (리뷰 63)
         openCustomer(dup);
       }
       return;
@@ -1239,8 +1251,7 @@ export default function Customers() {
       privacyConsent: true, privacyConsentAt: new Date().toISOString(),
     });
     setShowAddModal(false);
-    setAddForm({ name: '', phone: '', email: '', address: '', gender: '여성', grade: '신규', skinType: '', memo: '', birthDate: '', referralSource: '', tags: '', allergies: '' });
-    setAddPrivacyConsent(false);
+    resetAddForm();
     loadAll();
   }
 

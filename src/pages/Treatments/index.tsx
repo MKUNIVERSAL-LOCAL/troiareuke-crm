@@ -452,7 +452,8 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           // 개별 파일 실패는 건너뜀
         }
       }
-      // 기본 태그: 기록의 첫 사진은 '시술 전', 이후는 '시술 후' (썸네일 아래에서 수정 가능).
+      // 기본 태그: 기록의 첫 사진은 '시술 전', 이후는 '시술 후' (썸네일 아래에서 수정 가능) — 전·후 한 장씩 올리는 Before/After 흐름이 기본(E2E 계약).
+      // 각도 정보가 없는 업로드에 "전이 있으면 후" 규칙을 쓰면 전·후 2장을 한 번에 올릴 때 둘 다 '전'이 된다 — 각도 규칙은 카메라 촬영에만 (리뷰 63 검토).
       // 리사이즈 중 목록이 바뀔 수 있어 커밋 시점의 prev 길이로 판정한다.
       photosTouchedRef.current = true;
       setPhotoList(prev => [...prev, ...added.map((p, i) => ({ ...p, label: prev.length + i === 0 ? 'before' : 'after' }))]);
@@ -914,7 +915,7 @@ function TreatmentDetailModal({
 
         {confirmDelete && (
           <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-            삭제하면 {t.customerProgramId ? `연결된 회차권 잔여 ${t.sessionsUsed}회가 복구되고, ` : ''}사진 {photos.length}장이 함께 삭제됩니다. 되돌릴 수 없습니다.
+            삭제하면 {t.customerProgramId ? `연결된 회차권 잔여 ${t.sessionsUsed}회가 복구되고 ` : ''}{photos.length > 0 ? `사진 ${photos.length}장이 함께 삭제되며 ` : ''}되돌릴 수 없습니다.
           </p>
         )}
         <div className="flex gap-3 pt-2">
