@@ -111,6 +111,26 @@ test('전역 검색·예약표 단축키·모달 포커스 트랩·Ctrl+Enter �
   await expect(custDialog).toHaveCount(0);
   await expect.poll(async () => (await activeInfo(page)).text).toContain('고객 추가');
 
+  // ── 포털 창(고객 병합, 55에서 공용 트랩 적용): 상세 → [더보기] 메뉴 → 창. 첫 포커스는 검색란, 맨 앞(닫기)에서 Shift+Tab은
+  //    맨 뒤의 '켜진' 버튼(병합 실행은 선택 전이라 비활성 → 취소)으로, Esc로 닫히고 포커스는 [더보기] 버튼으로 돌아온다 ──
+  await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
+  const moreBtn = page.getByTestId('customers-desktop').getByRole('button', { name: '더보기', exact: true });
+  await moreBtn.click();
+  await page.getByRole('menuitem', { name: '중복 고객 병합' }).click();
+  const mergeDialog = page.getByRole('dialog', { name: '고객 병합' });
+  await expect(mergeDialog).toBeVisible();
+  await expect.poll(async () => (await activeInfo(page)).label).toBe('병합할 고객 검색');
+  await mergeDialog.getByRole('button', { name: '닫기', exact: true }).focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect.poll(async () => (await activeInfo(page)).text).toBe('취소');
+  await page.keyboard.press('Tab');
+  await expect.poll(async () => (await activeInfo(page)).label).toBe('닫기');
+  for (let i = 0; i < 20; i++) await page.keyboard.press('Tab');
+  expect((await activeInfo(page)).dialog).toBe('고객 병합');
+  await page.keyboard.press('Escape');
+  await expect(mergeDialog).toHaveCount(0);
+  await expect.poll(async () => (await activeInfo(page)).label).toBe('더보기');
+
   // ── 사이드바 링크: 포커스 후 Enter로 이동 ──
   await page.getByRole('link', { name: /예약 관리/ }).first().focus();
   await page.keyboard.press('Enter');
