@@ -103,7 +103,7 @@ export default function Sales() {
     memo: '',
     discountAmount: '0',
     status: 'completed' as Payment['status'],
-    referenceId: '', // 예약 완료 처리에서 넘어온 결제 → 예약 id (중복 등록 방지·예약 화면 "결제 완료" 표시)
+    referenceId: '', // 예약 완료 처리에서 넘어온 결제 → 예약 id (중복 등록 방지·예약 상세의 [결제 등록하기] 노출 판단, pendingCompletion.registeredPaymentsFor)
   });
 
   const customers = useMemo(() => CustomerStore.getAll(), []);
