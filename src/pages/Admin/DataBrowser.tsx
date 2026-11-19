@@ -271,7 +271,7 @@ export default function DataBrowser() {
                       )}
                     >
                       {COLLECTION_LABELS[c] || c}
-                      {count > 0 && <span className="ml-1.5 opacity-70">{count.toLocaleString()}</span>}
+                      {count > 0 && <span className="ml-1.5 font-normal">{count.toLocaleString()}</span>}
                     </button>
                   );
                 })}

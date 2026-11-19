@@ -181,7 +181,7 @@ export default function Signup() {
               <h2 className="text-xl font-bold text-gray-900 mb-6">플랜 선택 및 약관 동의</h2>
               <div className="space-y-3 mb-6">
                 {plans.map(p => (
-                  <div key={p.key} className={`p-4 rounded-2xl border-2 transition-all ${p.highlight ? 'border-[#1a3a8f] bg-blue-50' : 'border-gray-100'} ${p.disabled ? 'opacity-50' : ''}`}>
+                  <div key={p.key} className={`p-4 rounded-2xl border-2 transition-all ${p.highlight ? 'border-[#1a3a8f] bg-blue-50' : 'border-gray-100'} ${p.disabled ? 'border-dashed bg-gray-50' : ''}`}>
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2">

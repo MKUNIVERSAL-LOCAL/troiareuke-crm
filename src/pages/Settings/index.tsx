@@ -819,7 +819,7 @@ export default function Settings() {
                       </div>
                       <button
                         disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed"
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
                         title="준비 중입니다"
                       >
                         연동하기
@@ -870,7 +870,7 @@ export default function Settings() {
                       </div>
                       <button
                         disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed"
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
                         title="준비 중입니다"
                       >
                         연동하기
@@ -892,7 +892,7 @@ export default function Settings() {
                       </div>
                       <button
                         disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed"
+                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
                         title="준비 중입니다"
                       >
                         연동하기
@@ -974,7 +974,7 @@ export default function Settings() {
                       ) : (
                         <button
                           disabled
-                          className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 opacity-60 cursor-not-allowed"
+                          className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
                           title="Google OAuth 클라이언트가 설정되지 않은 빌드입니다"
                         >
                           이 빌드에서는 연결 불가

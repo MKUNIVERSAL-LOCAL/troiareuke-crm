@@ -998,7 +998,7 @@ export default function Customers() {
         {tags.map(({ tag, count }) => (
           <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
             className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
-            #{tag} <span className="opacity-70">{count}</span>
+            #{tag} <span className="font-normal">{count}</span>
           </button>
         ))}
       </div>

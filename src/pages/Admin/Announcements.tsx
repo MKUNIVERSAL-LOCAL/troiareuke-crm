@@ -177,7 +177,7 @@ export default function Announcements() {
           list.map(a => {
             const type = typeOptions.find(t => t.value === a.type) || typeOptions[0];
             return (
-              <div key={a.id} className={`bg-slate-900 border rounded-2xl p-5 transition-all ${a.is_active ? 'border-slate-700/50' : 'border-slate-800/30 opacity-50'}`}>
+              <div key={a.id} className={`bg-slate-900 border rounded-2xl p-5 transition-all ${a.is_active ? 'border-slate-700/50' : 'border-dashed border-slate-700'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">

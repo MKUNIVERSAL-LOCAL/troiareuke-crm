@@ -355,7 +355,7 @@ export default function Onboarding() {
         <div className="flex items-center justify-center mb-8">{/* 6단계가 폰 폭(≈364px)에 들어가도록 연결선을 좁힘 — overflow+center는 왼쪽이 잘려 접근 불가 (리뷰 2026-11-18) */}
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center">
-              <div className={`flex flex-col items-center gap-1 transition-all ${i <= step ? 'opacity-100' : 'opacity-40'}`}>
+              <div className="flex flex-col items-center gap-1 transition-all">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
@@ -597,7 +597,7 @@ export default function Onboarding() {
 
                 {/* 유료 플랜 - 준비 중 표시 */}
                 {PLANS.filter(p => p.id !== 'enterprise' && p.id !== 'trial').map(plan => (
-                  <div key={plan.id} className="w-full text-left p-4 rounded-xl border-2 border-gray-100 opacity-50">
+                  <div key={plan.id} className="w-full text-left p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
                     <div className="flex items-start gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                         plan.id === 'starter' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-600'

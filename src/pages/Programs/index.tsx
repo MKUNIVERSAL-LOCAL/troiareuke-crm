@@ -239,7 +239,7 @@ export default function Programs() {
               <div
                 key={program.id}
                 data-testid="program-item"
-                className={`bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md transition-shadow ${!program.isActive ? 'opacity-60' : ''}`}
+                className={`rounded-2xl border p-5 hover:shadow-md transition-shadow ${!program.isActive ? 'border-dashed border-gray-300 bg-slate-50' : 'border-gray-100 bg-white'}`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
