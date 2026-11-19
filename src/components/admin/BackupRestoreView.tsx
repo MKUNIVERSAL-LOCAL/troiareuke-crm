@@ -84,18 +84,18 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
       )}
 
       {!backupDirConfigured ? (
-        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-slate-500">
+        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-slate-400">
           서버에 백업 폴더(BACKUP_DIR)가 설정되어 있지 않습니다.
         </div>
       ) : backups.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-slate-500">
+        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-slate-400">
           이 지점의 백업이 아직 없습니다. 대시보드의 [지금 서버 백업]으로 첫 백업을 만들 수 있습니다.
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
+              <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
                 <th className="px-4 py-2.5 font-medium">백업</th>
                 <th className="px-4 py-2.5 font-medium">종류</th>
                 <th className="px-4 py-2.5 font-medium">포함 데이터</th>
@@ -115,7 +115,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                   <td className="px-4 py-2.5 text-xs text-slate-400">
                     {b.collections.map(c => LABELS[c] || c).join(' · ') || '—'}{b.hasPhotos ? ' · 사진' : ''}
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500">{fmt(b.createdAt)}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-400">{fmt(b.createdAt)}</td>
                   <td className="px-4 py-2.5 text-right">
                     <button
                       onClick={() => openRestore(b)}
@@ -148,7 +148,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                     <button
                       key={c}
                       onClick={() => setSelected(prev => { const next = new Set(prev); if (next.has(c)) next.delete(c); else next.add(c); return next; })}
-                      className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${on ? 'bg-amber-600/20 border-amber-500/40 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-500'}`}
+                      className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${on ? 'bg-amber-600/20 border-amber-500/40 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
                     >
                       {LABELS[c] || c}
                     </button>
@@ -157,13 +157,13 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                 {target.hasPhotos && (
                   <button
                     onClick={() => setIncludePhotos(v => !v)}
-                    className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${includePhotos ? 'bg-amber-600/20 border-amber-500/40 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-500'}`}
+                    className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${includePhotos ? 'bg-amber-600/20 border-amber-500/40 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
                   >
                     시술 사진
                   </button>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-2">선택한 항목은 현재 데이터를 지우고 백업 시점 데이터로 교체됩니다. 선택하지 않은 항목은 그대로 유지됩니다.</p>
+              <p className="text-xs text-slate-400 mt-2">선택한 항목은 현재 데이터를 지우고 백업 시점 데이터로 교체됩니다. 선택하지 않은 항목은 그대로 유지됩니다.</p>
             </div>
 
             <div>

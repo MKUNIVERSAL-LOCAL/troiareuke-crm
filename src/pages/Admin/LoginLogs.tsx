@@ -111,7 +111,7 @@ export default function LoginLogs() {
       {/* Filters */}
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             className="w-full pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 placeholder-slate-600 outline-none focus:border-blue-500"
             placeholder="이메일 또는 지점명 검색..."
@@ -120,7 +120,7 @@ export default function LoginLogs() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <Filter size={14} className="text-slate-500" />
+          <Filter size={14} className="text-slate-400" />
           {(['all', 'success', 'failed'] as const).map(s => (
             <button
               key={s}
@@ -151,18 +151,18 @@ export default function LoginLogs() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-700/30">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">이메일</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">지점</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">상태</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">실패 사유</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">기기 정보</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">시간</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">이메일</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">지점</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">상태</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">실패 사유</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">기기 정보</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">시간</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-16 text-center text-slate-500 text-sm">
+                      <td colSpan={6} className="px-6 py-16 text-center text-slate-400 text-sm">
                         기록이 없습니다
                       </td>
                     </tr>
@@ -182,10 +182,10 @@ export default function LoginLogs() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-3 text-xs text-slate-500 max-w-xs truncate">
+                        <td className="px-6 py-3 text-xs text-slate-400 max-w-xs truncate">
                           {log.fail_reason || '—'}
                         </td>
-                        <td className="px-6 py-3 text-xs text-slate-600 max-w-xs truncate" title={log.device_info || ''}>
+                        <td className="px-6 py-3 text-xs text-slate-400 max-w-xs truncate" title={log.device_info || ''}>
                           {log.device_info
                             ? log.device_info.includes('Windows') ? 'Windows'
                             : log.device_info.includes('Mac') ? 'macOS'
@@ -193,7 +193,7 @@ export default function LoginLogs() {
                             : '기타'
                             : '—'}
                         </td>
-                        <td className="px-6 py-3 text-xs text-slate-500 whitespace-nowrap">
+                        <td className="px-6 py-3 text-xs text-slate-400 whitespace-nowrap">
                           {format(parseISO(log.logged_in_at), 'yyyy.MM.dd HH:mm:ss', { locale: ko })}
                         </td>
                       </tr>
@@ -206,7 +206,7 @@ export default function LoginLogs() {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="px-6 py-4 border-t border-slate-700/30 flex items-center justify-between">
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-400">
                   {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} / {filtered.length}건
                 </p>
                 <div className="flex items-center gap-2">

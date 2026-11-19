@@ -14,6 +14,8 @@ const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '왁싱', '각질관�
 // 과거 저장 데이터의 '마사지' 전문분야는 '바디관리'로 표시 (2026-07-30 명칭 변경)
 const normalizeSpecialty = (s: string) => (s === '마사지' ? '바디관리' : s);
 const COLOR_OPTIONS = ['#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#6366F1', '#14B8A6'];
+// 색상 버튼의 읽는 이름 — 화면 낭독기가 hex를 글자 단위로 읽지 않게 (리뷰 2026-11-19)
+const COLOR_NAMES: Record<string, string> = { '#8B5CF6': '보라', '#EC4899': '분홍', '#F59E0B': '주황', '#10B981': '초록', '#3B82F6': '파랑', '#EF4444': '빨강', '#6366F1': '남보라', '#14B8A6': '청록' };
 
 // 로컬(KST) 기준 — toISOString()은 UTC라 0~9시(KST)에 전날/지난달로 어긋남 (Sales 페이지와 동일 수정)
 function getToday() {
@@ -119,13 +121,13 @@ export default function StaffPage() {
               >
                 <div className="text-center mb-5">
                   <div
-                    className="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center text-white text-2xl font-bold shadow-lg"
-                    style={{ background: `linear-gradient(135deg, ${staff.color}, ${staff.color}cc)` }}
+                    className="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center text-2xl font-bold shadow-lg"
+                    style={{ background: `linear-gradient(135deg, ${staff.color}, ${staff.color}cc)`, color: readableTextOn(staff.color) }}
                   >
                     {staff.name[0]}
                   </div>
                   <h3 className="text-base font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-1.5 align-middle text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">퇴사</span>}</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{staff.role}</p>
+                  <p className="text-xs text-slate-600 mt-0.5">{staff.role}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-4">
@@ -395,7 +397,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
               <button
                 key={c}
                 type="button"
-                aria-label={`색상 ${c}`}
+                aria-label={`색상 ${COLOR_NAMES[c] ?? c}`}
                 aria-pressed={color === c}
                 onClick={() => setColor(c)}
                 className={`w-8 h-8 rounded-full border-2 transition-all ${
@@ -602,7 +604,7 @@ function StaffDetailModal({
                 <button
                   key={c}
                   type="button"
-                  aria-label={`색상 ${c}`}
+                  aria-label={`색상 ${COLOR_NAMES[c] ?? c}`}
                   aria-pressed={color === c}
                   onClick={() => setColor(c)}
                   className={`w-8 h-8 rounded-full border-2 transition-all ${
@@ -628,13 +630,13 @@ function StaffDetailModal({
       <div className="space-y-4">
         <div className="text-center">
           <div
-            className="w-20 h-20 rounded-2xl mx-auto mb-3 flex items-center justify-center text-white text-3xl font-bold shadow-xl"
-            style={{ background: `linear-gradient(135deg, ${staff.color}, ${staff.color}cc)` }}
+            className="w-20 h-20 rounded-2xl mx-auto mb-3 flex items-center justify-center text-3xl font-bold shadow-xl"
+            style={{ background: `linear-gradient(135deg, ${staff.color}, ${staff.color}cc)`, color: readableTextOn(staff.color) }}
           >
             {staff.name[0]}
           </div>
           <h3 className="text-lg font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-2 align-middle text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">퇴사</span>}</h3>
-          <p className="text-sm text-gray-400">{staff.role}</p>
+          <p className="text-sm text-slate-600">{staff.role}</p>
         </div>
 
         <div className="grid grid-cols-3 gap-3">

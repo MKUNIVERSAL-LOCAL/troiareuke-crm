@@ -212,7 +212,7 @@ export default function AdminFeatures() {
           {FEATURE_CATEGORIES.map((category) => (
             <section key={category}>
               <h2 className="flex items-center gap-2 text-sm font-bold text-slate-300 uppercase tracking-wider mb-3">
-                <SlidersHorizontal size={14} className="text-slate-500" />
+                <SlidersHorizontal size={14} className="text-slate-400" />
                 {category}
               </h2>
               <div className="bg-slate-900 border border-slate-700/50 rounded-2xl divide-y divide-slate-800">
@@ -239,10 +239,10 @@ export default function AdminFeatures() {
                         </p>
                         <p className="text-xs text-slate-400 mt-0.5 truncate" title={def.description}>{def.description}</p>
                       </div>
-                      <span className={clsx('text-xs font-semibold w-14 text-right', effective ? 'text-emerald-400' : 'text-slate-500')}>
+                      <span className={clsx('text-xs font-semibold w-14 text-right', effective ? 'text-emerald-400' : 'text-slate-400')}>
                         {effective ? '사용 중' : '꺼짐'}
                       </span>
-                      <select
+                      <select aria-label={`${def.label} 사용 설정`}
                         value={state}
                         onChange={(e) => setState(def, e.target.value as 'inherit' | 'on' | 'off')}
                         disabled={!NAS_MODE}
@@ -259,7 +259,7 @@ export default function AdminFeatures() {
             </section>
           ))}
 
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="text-xs text-slate-400 leading-relaxed">
             우선순위: <strong className="text-slate-400">지점 설정 &gt; 전역 기본값 &gt; 프로그램 기본값</strong>.
             &lsquo;샵에서 추가 토글&rsquo; 표시가 있는 기능은 여기서 허용해도 샵 관리자가 설정 화면에서 기기별로 켜야 표시됩니다.
             지점 프로그램은 오프라인에서 마지막으로 받은 설정으로 동작합니다.

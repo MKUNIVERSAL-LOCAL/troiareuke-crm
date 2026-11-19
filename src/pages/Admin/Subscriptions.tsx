@@ -185,12 +185,12 @@ export default function Subscriptions() {
       </div>
 
       <div className="relative mb-4 max-w-xl">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="지점명, 플랜, 메모 검색"
-          className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+          className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-400 outline-none focus:border-blue-500"
           aria-label="구독 검색"
         />
       </div>
@@ -218,9 +218,9 @@ export default function Subscriptions() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-16 text-center">
-            <CreditCard size={32} className="text-slate-600 mx-auto mb-3" />
+            <CreditCard size={32} className="text-slate-400 mx-auto mb-3" />
             <p className="text-slate-400">구독 데이터가 없습니다</p>
-            <p className="text-slate-600 text-sm mt-1">지점 추가 시 자동으로 구독이 생성됩니다</p>
+            <p className="text-slate-400 text-sm mt-1">지점 추가 시 자동으로 구독이 생성됩니다</p>
           </div>
         ) : (
           <div className="overflow-auto max-h-[70vh]">
@@ -228,7 +228,7 @@ export default function Subscriptions() {
             <thead>
               <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
                 {['지점명', '플랜', '상태', '금액', '만료일', '메모', '액션'].map(h => (
-                  <th key={h} className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                  <th key={h} className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -252,7 +252,7 @@ export default function Subscriptions() {
                     <td className="px-6 py-4 text-xs text-slate-400">
                       {s.expires_at ? format(parseISO(s.expires_at), 'yyyy.MM.dd', { locale: ko }) : '—'}
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">{s.notes || '—'}</td>
+                    <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">{s.notes || '—'}</td>
                     <td className="px-6 py-4">
                       <button
                         onClick={() => openEdit(s)}
@@ -291,7 +291,7 @@ export default function Subscriptions() {
                     .map(o => <option key={o.value} value={o.value}>{NAS_MODE && o.value === 'cancelled' ? '해지 (로그인 차단)' : o.label}</option>)}
                 </select>
                 {NAS_MODE && (
-                  <p className="text-xs text-slate-500 mt-1">중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다.</p>
+                  <p className="text-xs text-slate-400 mt-1">중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다.</p>
                 )}
               </Field>
               {NAS_MODE && (
@@ -307,7 +307,7 @@ export default function Subscriptions() {
               <Field label={NAS_MODE ? '사용기간 만료일 (비우면 무제한)' : '만료일'}>
                 <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
                 {NAS_MODE && (
-                  <p className="text-xs text-slate-500 mt-1">만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.</p>
+                  <p className="text-xs text-slate-400 mt-1">만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.</p>
                 )}
               </Field>
               <Field label="메모">

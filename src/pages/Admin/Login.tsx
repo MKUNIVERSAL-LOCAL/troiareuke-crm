@@ -108,7 +108,7 @@ export default function AdminLogin() {
             시스템 관리<br />
             <span className="text-slate-400">콘솔</span>
           </h2>
-          <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
+          <p className="text-sm text-slate-400 leading-relaxed max-w-sm">
             더마솔루션 플랫폼의 지점, 사용자, 구독, 통계를 관리합니다.
           </p>
 
@@ -123,7 +123,7 @@ export default function AdminLogin() {
 
         {/* Bottom */}
         <div className="relative">
-          <p className="text-xs text-slate-600">DERMASOLUTION Platform v1.0 — Superadmin Access</p>
+          <p className="text-xs text-slate-400">DERMASOLUTION Platform v1.0 — Superadmin Access</p>
         </div>
       </div>
 
@@ -151,7 +151,7 @@ export default function AdminLogin() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white">관리자 인증</h1>
-                <p className="text-xs text-slate-500">Superadmin Authentication</p>
+                <p className="text-xs text-slate-400">Superadmin Authentication</p>
               </div>
             </div>
 
@@ -179,7 +179,7 @@ export default function AdminLogin() {
                     className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-300/40 focus:border-blue-500/40 transition-all pr-11"
                     placeholder="••••••••••"
                   />
-                  <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                  <button type="button" aria-label={showPw ? '비밀번호 숨기기' : '비밀번호 표시'} onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors">
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
@@ -213,7 +213,7 @@ export default function AdminLogin() {
                   <button
                     type="button"
                     onClick={() => { setResetMode(true); setResetEmail(email); setResetMessage(''); }}
-                    className="w-full text-center text-xs text-slate-500 hover:text-blue-400 transition-colors"
+                    className="w-full text-center text-xs text-slate-400 hover:text-blue-400 transition-colors"
                   >
                     비밀번호를 잊으셨나요? 이메일로 재설정
                   </button>
@@ -236,7 +236,7 @@ export default function AdminLogin() {
                       </button>
                     </div>
                     {resetMessage && <p className="text-xs text-blue-300">{resetMessage}</p>}
-                    <button type="button" onClick={() => setResetMode(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button type="button" onClick={() => setResetMode(false)} className="text-xs text-slate-400 hover:text-slate-300">
                       ← 로그인으로 돌아가기
                     </button>
                   </form>
@@ -245,14 +245,14 @@ export default function AdminLogin() {
             )}
 
             <div className="mt-4 pt-4 border-t border-slate-700/50 text-center">
-              <Link to="/login" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+              <Link to="/login" className="text-xs text-slate-400 hover:text-slate-300 transition-colors">
                 일반 사용자 로그인으로 돌아가기
               </Link>
             </div>
           </div>
 
           {/* Security notice */}
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-600">
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-400">
             <Lock size={10} />
             <span>이 페이지는 권한이 부여된 관리자만 접근 가능합니다</span>
           </div>

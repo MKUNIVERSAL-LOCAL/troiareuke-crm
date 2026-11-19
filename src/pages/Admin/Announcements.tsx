@@ -156,7 +156,7 @@ export default function Announcements() {
           <p className="text-xs text-slate-400 mt-1">게시 중</p>
         </div>
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl px-5 py-4">
-          <p className="text-2xl font-bold text-slate-500">{list.filter(a => !a.is_active).length}</p>
+          <p className="text-2xl font-bold text-slate-400">{list.filter(a => !a.is_active).length}</p>
           <p className="text-xs text-slate-400 mt-1">숨김</p>
         </div>
       </div>
@@ -169,9 +169,9 @@ export default function Announcements() {
           </div>
         ) : list.length === 0 ? (
           <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">
-            <Megaphone size={32} className="text-slate-600 mx-auto mb-3" />
+            <Megaphone size={32} className="text-slate-400 mx-auto mb-3" />
             <p className="text-slate-400">등록된 공지사항이 없습니다</p>
-            <p className="text-slate-600 text-sm mt-1">"공지 작성" 버튼으로 첫 공지를 작성하세요</p>
+            <p className="text-slate-400 text-sm mt-1">"공지 작성" 버튼으로 첫 공지를 작성하세요</p>
           </div>
         ) : (
           list.map(a => {
@@ -189,11 +189,11 @@ export default function Announcements() {
                           <CheckCircle size={11} /> 게시 중
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-xs text-slate-500">
+                        <span className="flex items-center gap-1 text-xs text-slate-400">
                           <XCircle size={11} /> 숨김
                         </span>
                       )}
-                      <span className="text-xs text-slate-600 ml-auto">
+                      <span className="text-xs text-slate-400 ml-auto">
                         {format(parseISO(a.created_at), 'yyyy.MM.dd HH:mm', { locale: ko })}
                       </span>
                     </div>

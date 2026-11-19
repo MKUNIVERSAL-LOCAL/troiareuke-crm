@@ -1263,7 +1263,7 @@ export default function Settings() {
                                   {plan.price === 0 ? '무료' : `${plan.price.toLocaleString()}원/월`}
                                 </p>
                               </div>
-                              <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
+                              <p className="text-xs text-slate-600 mt-0.5">{plan.description}</p>
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {plan.features.map(f => (
                                   <span key={f} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{f}</span>

@@ -783,9 +783,9 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                         <p className="truncate">
                           <span className="font-bold">{r.customerName}</span>
                           <span className="text-xs ml-2 font-normal">{r.services.map(s => s.serviceName).join(', ')}</span>
-                          <span className="text-white/70 text-xs ml-2">{r.staffName}</span>
+                          <span className="text-xs ml-2 font-normal">{r.staffName}</span>
                         </p>
-                        {tall && <p className="text-white/70 text-xs mt-0.5">{r.startTime}~{r.endTime}</p>}
+                        {tall && <p className="text-xs mt-0.5 font-normal">{r.startTime}~{r.endTime}</p>}
                       </button>
                     );
                   }
@@ -797,7 +797,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                       target="_blank"
                       rel="noopener noreferrer"
                       className={clsx(
-                        'absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
+                        'absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white bg-blue-600 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
                         !ge.htmlLink && 'pointer-events-none', // 링크 없으면 클릭 무반응 앵커 방지
                       )}
                       style={eventBlockStyle(ev, slotStartMin, ROW_H)}
@@ -806,7 +806,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                       <p className="truncate flex items-center gap-2">
                         <Calendar size={14} className="flex-shrink-0" />
                         <span className="font-bold">{ge.summary}</span>
-                        <span className="text-white/80 text-xs">{ge.startTime}~{ge.endTime}</span>
+                        <span className="text-xs font-normal">{ge.startTime}~{ge.endTime}</span>
                       </p>
                     </a>
                   );

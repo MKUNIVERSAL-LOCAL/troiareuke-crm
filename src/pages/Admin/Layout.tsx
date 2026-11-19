@@ -97,7 +97,7 @@ export default function AdminLayout() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">메뉴</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest px-3 mb-2">메뉴</p>
           <ul className="space-y-0.5">
             {adminNav.map(({ to, label, icon: Icon }) => {
               const active = isNavActive(to);
@@ -112,7 +112,7 @@ export default function AdminLayout() {
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     )}
                   >
-                    <Icon size={15} className={clsx('flex-shrink-0', active ? 'text-white' : 'text-slate-500')} />
+                    <Icon size={15} className={clsx('flex-shrink-0', active ? 'text-white' : 'text-slate-400')} />
                     <span className="flex-1">{label}</span>
                     {active && <ChevronRight size={12} className="text-white/50" />}
                   </Link>

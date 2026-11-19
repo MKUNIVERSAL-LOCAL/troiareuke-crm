@@ -2307,7 +2307,7 @@ export default function Customers() {
                             <p className="text-sm font-semibold text-gray-800 truncate">{log.programName || log.treatmentDetails || '시술 내역 없음'}</p>
                             <span className="text-xs text-slate-600 flex-shrink-0 ml-2">{formatDate(log.treatmentDate)}</span>
                           </div>
-                          {log.staffName && <p className="text-xs text-gray-400">담당: {log.staffName}</p>}
+                          {log.staffName && <p className="text-xs text-slate-600">담당: {log.staffName}</p>}
                           {log.treatmentDetails && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{log.treatmentDetails}</p>}
                           <TreatmentPhotoStrip logId={log.id} treatmentDate={log.treatmentDate} customerName={selected.name} tick={photoTick + photoCacheVersion} onOpen={setLightbox} />
                         </div>

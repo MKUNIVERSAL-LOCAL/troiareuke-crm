@@ -220,7 +220,7 @@ export default function AdminDashboard() {
                 </div>
                 <p className="text-2xl font-bold text-white">{card.value}</p>
                 <p className="text-xs font-medium text-slate-300 mt-1">{card.label}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{card.sub}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{card.sub}</p>
               </div>
             ))}
           </div>
@@ -249,7 +249,7 @@ export default function AdminDashboard() {
                         {outdatedBranches.map(b => (
                           <li key={b.name} className="flex items-center justify-between text-xs">
                             <span className="text-slate-200">{b.name}</span>
-                            <span className="text-slate-500">
+                            <span className="text-slate-400">
                               <span className="text-red-400 font-bold">v{b.version}</span>
                               {' · '}{appModeLabel[b.mode] || b.mode}
                               {b.lastSeenAt && ` · ${format(parseISO(b.lastSeenAt), 'MM/dd HH:mm', { locale: ko })}`}
@@ -260,7 +260,7 @@ export default function AdminDashboard() {
                     </>
                   )}
                   {unknownBranches.length > 0 && (
-                    <p className="mt-3 text-xs text-slate-500">
+                    <p className="mt-3 text-xs text-slate-400">
                       버전 기록 없음 {unknownBranches.length}곳 ({unknownBranches.map(b => b.name).join(', ')}) — v1.0.48 이상 프로그램이 접속하면 표시됩니다
                     </p>
                   )}
@@ -302,7 +302,7 @@ export default function AdminDashboard() {
             <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
               <h2 className="text-sm font-bold text-white">
                 최근 로그인 기록
-                {!logsFromServer && <span className="ml-2 text-xs font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
+                {!logsFromServer && <span className="ml-2 text-xs font-normal text-slate-400">(이 기기에서 기록된 로그인 기준)</span>}
               </h2>
               <Link to="/admin/login-logs" className="text-xs text-blue-400 hover:text-blue-300">전체 보기 →</Link>
             </div>
@@ -310,16 +310,16 @@ export default function AdminDashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-700/30">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">이메일</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">지점</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">상태</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">시간</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">이메일</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">지점</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">상태</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">시간</th>
                   </tr>
                 </thead>
                 <tbody>
                   {stats.recentLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-slate-500 text-sm">
+                      <td colSpan={4} className="px-6 py-12 text-center text-slate-400 text-sm">
                         아직 로그인 기록이 없습니다
                       </td>
                     </tr>
@@ -339,7 +339,7 @@ export default function AdminDashboard() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-3 text-xs text-slate-500">
+                        <td className="px-6 py-3 text-xs text-slate-400">
                           {format(parseISO(log.logged_in_at), 'MM/dd HH:mm', { locale: ko })}
                         </td>
                       </tr>

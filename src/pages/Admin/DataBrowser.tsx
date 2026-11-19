@@ -211,13 +211,13 @@ export default function DataBrowser() {
       <div className="flex gap-6">
         {/* 지점 목록 */}
         <div className="w-72 flex-shrink-0 space-y-2">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">지점 ({branches.length})</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">지점 ({branches.length})</p>
           {loadingBranches ? (
             <div className="flex items-center justify-center h-32">
               <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : branches.length === 0 ? (
-            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-5 text-sm text-slate-500">
+            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-5 text-sm text-slate-400">
               데이터가 쌓인 지점이 아직 없습니다.
             </div>
           ) : branches.map(b => {
@@ -242,7 +242,7 @@ export default function DataBrowser() {
                   <span>사진 {b.photoCount}</span>
                   <span>계정 {b.userCount}</span>
                 </div>
-                <p className="text-xs text-slate-600 mt-1">최근 활동 {formatDateTime(b.lastActivity)}</p>
+                <p className="text-xs text-slate-400 mt-1">최근 활동 {formatDateTime(b.lastActivity)}</p>
               </button>
             );
           })}
@@ -251,7 +251,7 @@ export default function DataBrowser() {
         {/* 데이터 영역 */}
         <div className="flex-1 min-w-0">
           {!selectedBranch ? (
-            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-12 text-center text-slate-500 text-sm">
+            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-12 text-center text-slate-400 text-sm">
               <Database size={28} className="mx-auto mb-3 text-slate-700" />
               왼쪽에서 지점을 선택하면 해당 지점의 모든 데이터를 확인할 수 있습니다.
             </div>
@@ -337,7 +337,7 @@ export default function DataBrowser() {
                   {/* 검색 */}
                   <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700/50">
                     <div className="relative flex-1 max-w-sm">
-                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
                         value={searchInput}
                         onChange={e => setSearchInput(e.target.value)}
@@ -346,17 +346,17 @@ export default function DataBrowser() {
                         className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500"
                       />
                     </div>
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-slate-400">
                       총 {total.toLocaleString()}건{query && ` · "${query}" 검색 결과`}
                     </span>
                   </div>
 
                   {rows.length === 0 ? (
-                    <div className="p-10 text-center text-sm text-slate-600">데이터가 없습니다.</div>
+                    <div className="p-10 text-center text-sm text-slate-400">데이터가 없습니다.</div>
                   ) : (
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
+                        <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
                           <th className="px-4 py-2.5 font-medium w-40">ID</th>
                           <th className="px-4 py-2.5 font-medium">요약</th>
                           <th className="px-4 py-2.5 font-medium w-36">수정일</th>
@@ -369,9 +369,9 @@ export default function DataBrowser() {
                             onClick={() => setDetailRow(r)}
                             className="border-b border-slate-800/60 hover:bg-slate-800/40 cursor-pointer transition-colors"
                           >
-                            <td className="px-4 py-2.5 text-slate-500 font-mono text-xs truncate max-w-[10rem]">{r.id}</td>
+                            <td className="px-4 py-2.5 text-slate-400 font-mono text-xs truncate max-w-[10rem]">{r.id}</td>
                             <td className="px-4 py-2.5 text-slate-300 truncate max-w-md">{summarizeRow(r.data)}</td>
-                            <td className="px-4 py-2.5 text-slate-500 text-xs">{formatDateTime(r.updatedAt)}</td>
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{formatDateTime(r.updatedAt)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -381,7 +381,7 @@ export default function DataBrowser() {
                   {/* 페이지네이션 */}
                   {total > PAGE_SIZE && (
                     <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50">
-                      <span className="text-xs text-slate-500">{currentPage} / {totalPages} 페이지</span>
+                      <span className="text-xs text-slate-400">{currentPage} / {totalPages} 페이지</span>
                       <div className="flex gap-2">
                         <button
                           disabled={offset === 0}
@@ -412,7 +412,7 @@ export default function DataBrowser() {
             <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden sticky top-6">
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
                 <span className="text-sm font-bold text-white">상세 보기</span>
-                <button onClick={() => setDetailRow(null)} className="text-slate-500 hover:text-white transition-colors">
+                <button onClick={() => setDetailRow(null)} className="text-slate-400 hover:text-white transition-colors">
                   <X size={15} />
                 </button>
               </div>
@@ -444,7 +444,7 @@ export default function DataBrowser() {
 function DetailField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-xs text-slate-400">{label}</p>
       <p className={clsx('text-sm text-slate-200 break-all whitespace-pre-wrap', mono && 'font-mono text-xs')}>
         {value}
       </p>
@@ -458,11 +458,11 @@ function MessagesView({ sendLog, scheduled }: { sendLog: AdminMessageLogRow[]; s
       <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-700/50 text-sm font-bold text-white">발송 로그 (최근 {sendLog.length}건)</div>
         {sendLog.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-600">발송 이력이 없습니다.</div>
+          <div className="p-8 text-center text-sm text-slate-400">발송 이력이 없습니다.</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
+              <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
                 <th className="px-4 py-2 font-medium w-32">일시</th>
                 <th className="px-4 py-2 font-medium w-20">유형</th>
                 <th className="px-4 py-2 font-medium w-28">수신번호</th>
@@ -473,7 +473,7 @@ function MessagesView({ sendLog, scheduled }: { sendLog: AdminMessageLogRow[]; s
             <tbody>
               {sendLog.map(m => (
                 <tr key={m.id} className="border-b border-slate-800/60">
-                  <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(m.createdAt)}</td>
+                  <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(m.createdAt)}</td>
                   <td className="px-4 py-2 text-xs text-slate-400">{m.type}</td>
                   <td className="px-4 py-2 text-xs text-slate-400 font-mono">{m.phone || '—'}</td>
                   <td className="px-4 py-2 text-slate-300 truncate max-w-xs">{m.title || m.content || '—'}</td>
@@ -497,11 +497,11 @@ function MessagesView({ sendLog, scheduled }: { sendLog: AdminMessageLogRow[]; s
       <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-700/50 text-sm font-bold text-white">예약 발송 ({scheduled.length}건)</div>
         {scheduled.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-600">예약된 발송이 없습니다.</div>
+          <div className="p-8 text-center text-sm text-slate-400">예약된 발송이 없습니다.</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
+              <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
                 <th className="px-4 py-2 font-medium w-32">발송 예정</th>
                 <th className="px-4 py-2 font-medium">내용</th>
                 <th className="px-4 py-2 font-medium w-24">수신자 수</th>
@@ -511,7 +511,7 @@ function MessagesView({ sendLog, scheduled }: { sendLog: AdminMessageLogRow[]; s
             <tbody>
               {scheduled.map(s => (
                 <tr key={s.id} className="border-b border-slate-800/60">
-                  <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(s.sendAt)}</td>
+                  <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(s.sendAt)}</td>
                   <td className="px-4 py-2 text-slate-300 truncate max-w-xs">{s.title || s.content || '—'}</td>
                   <td className="px-4 py-2 text-xs text-slate-400">{s.phones?.length ?? 0}명</td>
                   <td className="px-4 py-2 text-xs text-slate-400">{s.status}</td>
@@ -532,11 +532,11 @@ function PhotosView({ entities }: { entities: AdminPhotoEntity[] }) {
         시술 사진 보관 현황 ({entities.length}개 항목)
       </div>
       {entities.length === 0 ? (
-        <div className="p-8 text-center text-sm text-slate-600">저장된 사진이 없습니다.</div>
+        <div className="p-8 text-center text-sm text-slate-400">저장된 사진이 없습니다.</div>
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
+            <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
               <th className="px-4 py-2 font-medium">항목 키 (고객/시술)</th>
               <th className="px-4 py-2 font-medium w-24">사진 수</th>
               <th className="px-4 py-2 font-medium w-36">수정일</th>
@@ -547,7 +547,7 @@ function PhotosView({ entities }: { entities: AdminPhotoEntity[] }) {
               <tr key={e.entityKey} className="border-b border-slate-800/60">
                 <td className="px-4 py-2 text-slate-300 font-mono text-xs truncate max-w-md">{e.entityKey}</td>
                 <td className="px-4 py-2 text-slate-400">{e.photoCount}장</td>
-                <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(e.updatedAt)}</td>
+                <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(e.updatedAt)}</td>
               </tr>
             ))}
           </tbody>

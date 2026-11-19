@@ -231,7 +231,7 @@ export default function PnlReport() {
       ) : branchIds.length === 0 ? (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-12 text-center">
           <p className="text-slate-400">{year}년에 등록된 매출·지출 데이터가 없습니다</p>
-          <p className="text-slate-600 text-xs mt-1">지점이 CRM의 매출·손익 관리에서 결제·지출을 등록하면 여기에 집계됩니다</p>
+          <p className="text-slate-400 text-xs mt-1">지점이 CRM의 매출·손익 관리에서 결제·지출을 등록하면 여기에 집계됩니다</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -248,7 +248,7 @@ export default function PnlReport() {
                 <p className="text-xs text-slate-400">{c.label}</p>
                 <p className={`text-lg font-bold mt-1 ${c.color}`}>{won(c.value)}</p>
                 {c.label === '영업이익' && (
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-400 mt-0.5">
                     이익률 {yearTotal.revenue.total > 0 ? Math.round((yearTotal.operatingProfit / yearTotal.revenue.total) * 100) : 0}%
                   </p>
                 )}
@@ -268,7 +268,7 @@ export default function PnlReport() {
                 <thead>
                   <tr className="border-b border-slate-700/30">
                     {['기간', '매출액', '매출원가', '매출총이익', '판매비·관리비', '영업이익', '이익률'].map(h => (
-                      <th key={h} className="text-right first:text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                      <th key={h} className="text-right first:text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -280,10 +280,10 @@ export default function PnlReport() {
                       <td className="px-5 py-3 text-sm text-right text-orange-400/90">{r.cogs ? won(r.cogs) : '—'}</td>
                       <td className="px-5 py-3 text-sm text-right text-slate-300">{r.revenue.total || r.cogs ? won(r.grossProfit) : '—'}</td>
                       <td className="px-5 py-3 text-sm text-right text-rose-400/90">{r.sga ? won(r.sga) : '—'}</td>
-                      <td className={`px-5 py-3 text-sm text-right font-bold ${r.operatingProfit > 0 ? 'text-emerald-400' : r.operatingProfit < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                      <td className={`px-5 py-3 text-sm text-right font-bold ${r.operatingProfit > 0 ? 'text-emerald-400' : r.operatingProfit < 0 ? 'text-red-400' : 'text-slate-400'}`}>
                         {r.revenue.total || r.totalExpense ? won(r.operatingProfit) : '—'}
                       </td>
-                      <td className="px-5 py-3 text-xs text-right text-slate-500">
+                      <td className="px-5 py-3 text-xs text-right text-slate-400">
                         {r.revenue.total > 0 ? `${Math.round((r.operatingProfit / r.revenue.total) * 100)}%` : '—'}
                       </td>
                     </tr>
@@ -323,7 +323,7 @@ export default function PnlReport() {
                   <span>지출</span><span>{won(yearTotal.totalExpense)}</span>
                 </div>
                 {activeCategories.length === 0 && (
-                  <p className="text-xs text-slate-600 py-1 pl-3">등록된 지출이 없습니다</p>
+                  <p className="text-xs text-slate-400 py-1 pl-3">등록된 지출이 없습니다</p>
                 )}
                 {activeCategories.map(c => (
                   <div key={c} className="flex justify-between py-1 pl-3 text-xs">
@@ -355,7 +355,7 @@ export default function PnlReport() {
             </div>
           </div>
 
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-slate-400">
             * 지점이 CRM에 등록한 결제(완료)·지출 기록 기준의 운영 참고용 집계입니다. 세무 신고 자료와 다를 수 있습니다.
           </p>
         </div>

@@ -19,7 +19,13 @@ export type Row = { route: string; id: string; impact: string; help: string; nod
 /** 현재 화면을 axe로 분석해 위반을 out에 쌓는다 — 라우트 게이트(a11y.spec)와 모달 게이트(a11y-modals.spec)가 같은 기준을 쓴다 */
 export async function scan(page: import('@playwright/test').Page, route: string, out: Row[]) {
   // 모달 열림 애니메이션(opacity 전환) 중엔 글자색이 배경과 섞여 측정돼 대비 위반이 오탐된다 — 끝날 때까지 기다린 뒤 분석
-  await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished.catch(() => undefined))));
+  // 무한 반복(animate-spin·pulse)은 finished가 영원히 안 끝나므로 제외하고, 어떤 경우에도 1.5초를 넘기지 않는다 (리뷰 2026-11-19)
+  await page.evaluate(() => Promise.race([
+    Promise.all(document.getAnimations()
+      .filter(a => a.effect?.getTiming().iterations !== Infinity)
+      .map(a => a.finished.catch(() => undefined))),
+    new Promise(resolve => setTimeout(resolve, 1500)),
+  ]));
   const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   for (const v of r.violations) {
     out.push({

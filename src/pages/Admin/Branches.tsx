@@ -321,12 +321,12 @@ export default function Branches() {
 
       <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-3 mb-4 flex flex-col md:flex-row gap-3 md:items-center">
         <label className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="지점명, 주소, 연락처, 유형, 플랜 검색"
-            className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+            className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-400 outline-none focus:border-blue-500"
             aria-label="지점 검색"
           />
         </label>
@@ -345,7 +345,7 @@ export default function Branches() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-slate-500 whitespace-nowrap">{filteredBranches.length}개 지점</span>
+        <span className="text-xs text-slate-400 whitespace-nowrap">{filteredBranches.length}개 지점</span>
       </div>
 
       {loadError && !loading && (
@@ -361,9 +361,9 @@ export default function Branches() {
         </div>
       ) : filteredBranches.length === 0 ? (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">
-          <Building2 size={32} className="text-slate-600 mx-auto mb-3" />
+          <Building2 size={32} className="text-slate-400 mx-auto mb-3" />
           <p className="text-slate-400 font-medium">조건에 맞는 지점이 없습니다</p>
-          <p className="text-slate-600 text-sm mt-1">검색어나 상태 필터를 바꿔보세요</p>
+          <p className="text-slate-400 text-sm mt-1">검색어나 상태 필터를 바꿔보세요</p>
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
@@ -371,17 +371,17 @@ export default function Branches() {
           <table className="w-full min-w-[850px]">
             <thead>
               <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">지점명</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">유형</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">플랜</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">상태</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">지점명</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">유형</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">플랜</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">상태</th>
                 {NAS_MODE && (
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    프로그램 버전{latestVersion && <span className="ml-1 normal-case text-slate-600">(최신 v{latestVersion})</span>}
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    프로그램 버전{latestVersion && <span className="ml-1 normal-case text-slate-400">(최신 v{latestVersion})</span>}
                   </th>
                 )}
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">등록일</th>
-                <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">액션</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">등록일</th>
+                <th className="text-right px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">액션</th>
               </tr>
             </thead>
             <tbody>
@@ -392,7 +392,7 @@ export default function Branches() {
                     <td className="px-6 py-4">
                       <div>
                         <p className="text-sm font-semibold text-white">{b.name}</p>
-                        {b.address && <p className="text-xs text-slate-500 mt-0.5">{b.address}</p>}
+                        {b.address && <p className="text-xs text-slate-400 mt-0.5">{b.address}</p>}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-400">{b.shop_type || '—'}</td>
@@ -407,7 +407,7 @@ export default function Branches() {
                           <CheckCircle size={12} /> 운영 중
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
                           <XCircle size={12} /> 비활성
                         </span>
                       )}
@@ -418,14 +418,14 @@ export default function Branches() {
                       return (
                         <td className="px-6 py-4">
                           {!info ? (
-                            <span className="text-xs text-slate-600" title="v1.0.48 이상 프로그램이 접속하면 표시됩니다">기록 없음</span>
+                            <span className="text-xs text-slate-400" title="v1.0.48 이상 프로그램이 접속하면 표시됩니다">기록 없음</span>
                           ) : (
                             <div className="text-xs">
                               <span className={outdated ? 'font-bold text-red-400' : 'text-emerald-400'}>v{info.version}</span>
                               {outdated && (
                                 <span className="ml-1.5 text-2xs font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
                               )}
-                              <p className="text-xs text-slate-500 mt-0.5">
+                              <p className="text-xs text-slate-400 mt-0.5">
                                 {appModeLabel[info.mode] || info.mode}
                                 {info.lastSeenAt && ` · ${format(parseISO(info.lastSeenAt), 'MM/dd HH:mm', { locale: ko })}`}
                               </p>
@@ -434,7 +434,7 @@ export default function Branches() {
                         </td>
                       );
                     })()}
-                    <td className="px-6 py-4 text-xs text-slate-500">
+                    <td className="px-6 py-4 text-xs text-slate-400">
                       {format(parseISO(b.created_at), 'yyyy.MM.dd', { locale: ko })}
                     </td>
                     <td className="px-6 py-4">
@@ -549,7 +549,7 @@ export default function Branches() {
                     value={form.service_ends_at}
                     onChange={e => setForm(f => ({ ...f, service_ends_at: e.target.value }))}
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-slate-400 mt-1">
                     이 지점의 모든 계정에 일괄 적용됩니다. 만료일이 지나면 로그인할 수 없습니다 (데이터는 유지).
                   </p>
                 </Field>

@@ -174,7 +174,7 @@ function NasAnalytics() {
           <button onClick={load} className="mt-4 px-4 py-2 bg-slate-800 text-white text-sm rounded-xl">다시 시도</button>
         </div>
       ) : branches.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-10 text-center text-slate-500 text-sm">
+        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-10 text-center text-slate-400 text-sm">
           아직 지점 데이터가 없습니다. 지점 계정이 로그인해 데이터를 저장하면 여기에 표시됩니다.
         </div>
       ) : (
@@ -190,7 +190,7 @@ function NasAnalytics() {
                 </div>
                 <p className="text-xl font-bold text-white truncate" title={c.value}>{c.value}</p>
                 <p className="text-xs text-slate-400 mt-1">{c.label}</p>
-                <p className="text-xs text-slate-500 mt-1 truncate" title={c.sub}>{c.sub}</p>
+                <p className="text-xs text-slate-400 mt-1 truncate" title={c.sub}>{c.sub}</p>
               </div>
             ))}
           </div>
@@ -225,7 +225,7 @@ function NasAnalytics() {
                 </div>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
+                    <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
                       <th className="px-6 py-3 font-semibold">지점</th>
                       <th className="px-4 py-3 font-semibold text-right">고객</th>
                       <th className="px-4 py-3 font-semibold text-right">신규(30일)</th>
