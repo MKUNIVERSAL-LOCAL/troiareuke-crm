@@ -11,6 +11,7 @@ import { todayISO, formatDateTime, localISODate } from './format';
 import { maskPhone } from './masking';
 import { isProgramExpired } from './customerPrograms';
 import { buildCustomerStatsIndex, statsFor } from './customerStats';
+import { refundedOn, memoWithoutRefundTag } from './refundDate';
 
 import { saveOrShareFile } from './mobileBridge';
 import type { WorkBook, WorkSheet } from 'xlsx';
@@ -78,7 +79,7 @@ const SENSITIVE_NOTICE = '⚠ 민감정보 포함 — 외부 공유 금지';
 /** 금액 열 — 엑셀에서 50000이 아니라 50,000으로 보이게 서식(#,##0)을 건다 (산출물 감사 2026-11-20) */
 const AMOUNT_HEADER = /금액|결제액|판매가|원가|가격|비용|할인액|단가|합계|잔여금액추정|누적결제|카드|현금|계좌이체|카카오페이|혼합|기타/; // 결제수단별매출의 수단 열도 금액이다 (리뷰 2026-11-20)
 /** 합계 행에서 더하지 않을 금액 열 — 단가 합은 뜻이 없다 */
-const SUM_EXCLUDE = /단가/;
+const SUM_EXCLUDE = /단가|할인액/; // 할인액은 참고 기록 — 합계 행에 더하면 금액처럼 읽힌다 (10차 #M10)
 /** 세무·정산용 시트는 맨 아래에 합계 행 */
 const TOTAL_SHEETS = new Set(['payments', 'expenses', 'sales_by_method', 'product_sales']);
 type SheetRow = ExportSheet['rows'][number];
@@ -162,7 +163,8 @@ function buildSheet(key: string): Omit<ExportSheet, 'dataRows' | 'key'> | null {
           결제일: p.paymentDate, 고객명: p.customerName || '', 구분: p.typeLabel,
           금액: p.amount, 할인액: p.discountAmount || 0, 결제수단: p.paymentMethod,
           상태: p.status === 'completed' ? '완료' : p.status === 'refunded' ? '환불' : '대기',
-          메모: p.memo || '',
+          환불처리일: refundedOn(p) || '', 묶음ID: (p.referenceId || p.id).slice(-8), // 분할 결제는 묶음ID 가 같다 — 화면 "결제 건수"(묶음 수)와 행 수를 맞춰 볼 수 있게 (10차 #M10)
+          메모: memoWithoutRefundTag(p.memo),
         })),
       };
     case 'expenses':

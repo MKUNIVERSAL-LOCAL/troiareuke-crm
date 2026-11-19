@@ -26,6 +26,7 @@ import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import PaymentLinkModal from '../../components/PaymentLinkModal';
 import { isPaymentLinkAvailable, fetchPgConfig } from '../../lib/paymentLinks';
 import { growthPct } from '../../lib/growth';
+import { tagRefund, refundedOn } from '../../lib/refundDate';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -176,6 +177,8 @@ export default function Sales() {
     [payments, viewMonth]
   );
 
+  // 이달에 환불 "처리"한 금액 — 매출 정의(결제일 기준)와 별개로 보조 표시 (10차 #M1)
+  const monthRefunded = useMemo(() => payments.filter(p => (refundedOn(p) || '').startsWith(viewMonth)).reduce((s, p) => s + p.amount, 0), [payments, viewMonth]);
   // 이번 달 집계 — 기타(other) 포함해야 총매출과 비중 합이 일치
   const thisSummary = useMemo(() => ({
     treatment: monthPayments.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0),
@@ -400,8 +403,8 @@ export default function Sales() {
     // 크로스 모듈 불일치(QA⑤) — 신규·수정 모두 차단, 판매 기록 삭제(재고 자동 복구)로 유도
     if (form.status === 'refunded' && editingId && editingPayment?.type === 'product' && editingPayment.referenceId) {
       notify(
-        '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 해당 판매를 삭제해주세요.\n' +
-        '판매 기록을 삭제하면 재고 복구와 결제 취소가 함께 처리됩니다.'
+        '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 [판매 취소]로 처리해주세요.\n' +
+        '재고 복구와 함께 이 결제가 환불로 기록됩니다.'
       );
       return;
     }
@@ -428,6 +431,8 @@ export default function Sales() {
       return;
     }
 
+    // 환불 처리일 — Payment 에 환불일 필드가 없어 memo 태그로(이달 환불 처리 N원 표시의 근거) (10차 #M1)
+    if (form.status === 'refunded' && editingPayment?.status !== 'refunded') payload.memo = tagRefund(payload.memo, today());
     if (editingId) {
       PaymentStore.update(editingId, payload);
       if (closeProgram) CustomerProgramStore.update(closeProgram.id, { isCompleted: true, notes: `${closeProgram.notes ? closeProgram.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
@@ -583,6 +588,9 @@ export default function Sales() {
                 지난달 {formatPrice(lastSummary.total)}
                 {thisSummary.other > 0 && <span className="ml-1.5 text-gray-400">· 기타 {formatPrice(thisSummary.other)} 포함</span>}
               </p>
+              {monthRefunded > 0 && (
+                <p className="text-xs text-red-600 mt-1" data-testid="sales-month-refunded">이달 환불 처리 {formatPrice(monthRefunded)} — 원 결제월 매출에서 차감됨</p>
+              )}
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">시술 매출</p>

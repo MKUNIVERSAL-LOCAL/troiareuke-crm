@@ -8,6 +8,7 @@
 
 import type { Payment, Expense, TreatmentLog, Customer, Reservation } from '../types';
 import { countPaymentUnits } from './paymentCount';
+import { refundedOn } from './refundDate';
 
 export interface DailyClose {
   date: string;
@@ -15,16 +16,17 @@ export interface DailyClose {
   paymentCount: number;
   byMethod: { method: string; amount: number }[];   // 금액 큰 순
   byType: { treatment: number; product: number; other: number };
-  refunds: number;            // 오늘 결제분 중 환불된 금액(환불 처리일이 아님 — Payment에 환불일이 없다)
+  refunds: number;            // 오늘 결제분 중 환불된 금액(결제일 기준)
+  refundedToday: number;      // 오늘 환불 "처리"한 금액(memo 태그 [환불 YYYY-MM-DD] 기준, 10차 #M1)
   expenses: number;           // 오늘 지출 합계
   treatments: number;         // 오늘 시술 기록 수(방문)
   newCustomers: number;
-  reservations: { total: number; completed: number; noshow: number; cancelled: number; pending: number };
+  reservations: { total: number; active: number; completed: number; noshow: number; cancelled: number; pending: number }; // active = 취소·노쇼 제외(대시보드 "오늘 예약"과 같은 정의, 10차 #M3)
 }
 
 export interface DailyCloseSource {
   /** 전체 결제 — 날짜(paymentDate === date)는 여기서 걸러낸다 */
-  payments: Pick<Payment, 'id' | 'referenceId' | 'paymentDate' | 'status' | 'amount' | 'paymentMethod' | 'type'>[];
+  payments: Pick<Payment, 'id' | 'referenceId' | 'paymentDate' | 'status' | 'amount' | 'paymentMethod' | 'type' | 'memo'>[];
   expenses: Pick<Expense, 'expenseDate' | 'amount'>[];
   treatmentLogs: Pick<TreatmentLog, 'id' | 'treatmentDate'>[];
   customers: Pick<Customer, 'id' | 'registeredAt'>[];
@@ -55,11 +57,13 @@ export function summarizeDailyClose(date: string, src: DailyCloseSource): DailyC
       other: sum(completed.filter(p => p.type === 'other')),
     },
     refunds: sum(payments.filter(p => p.status === 'refunded')),
+    refundedToday: sum(src.payments.filter(p => refundedOn(p) === date)),
     expenses: sum(src.expenses.filter(e => e.expenseDate === date)),
     treatments: src.treatmentLogs.filter(t => t.treatmentDate === date && !t.id.startsWith('sample_')).length,
     newCustomers: src.customers.filter(c => !c.id.startsWith('sample_') && !!c.registeredAt && localDay(c.registeredAt) === date).length,
     reservations: {
       total: reservations.length,
+      active: reservations.filter(r => r.status !== 'cancelled' && r.status !== 'noshow').length,
       completed: reservations.filter(r => r.status === 'completed').length,
       noshow: reservations.filter(r => r.status === 'noshow').length,
       cancelled: reservations.filter(r => r.status === 'cancelled').length,
@@ -83,8 +87,10 @@ export function formatDailyCloseMessage(c: DailyClose, shop: string | undefined)
   if (c.byType.other) parts.push(`기타 ${won(c.byType.other)}`);
   if (parts.length) lines.push(`  ${parts.join(' / ')}`);
   if (c.refunds) lines.push(`· 환불(오늘 결제분) ${won(c.refunds)}`);
+  if (c.refundedToday) lines.push(`· 환불 처리(오늘) ${won(c.refundedToday)}`);
   if (c.expenses) lines.push(`· 지출 ${won(c.expenses)}`);
   lines.push(`· 시술 ${c.treatments}건 · 신규 고객 ${c.newCustomers}명`);
-  lines.push(`· 예약 ${c.reservations.total}건 (완료 ${c.reservations.completed} / 노쇼 ${c.reservations.noshow} / 취소 ${c.reservations.cancelled}${c.reservations.pending ? ` / 미처리 ${c.reservations.pending}` : ''})`);
+  // 예약 N건은 대시보드 "오늘 예약"과 같은 수(취소·노쇼 제외) — 두 화면이 다른 N을 보였다 (10차 #M3)
+  lines.push(`· 예약 ${c.reservations.active}건 (완료 ${c.reservations.completed} / 노쇼 ${c.reservations.noshow}${c.reservations.pending ? ` / 미처리 ${c.reservations.pending}` : ''})${c.reservations.cancelled ? ` · 취소 ${c.reservations.cancelled}건` : ''}`);
   return lines.join('\n');
 }

@@ -8,6 +8,7 @@ import { sanitizeStorageSnapshot } from '../src/lib/backupSanitize';
 import { computeRevisitDue, daysBetween, addDays } from '../src/lib/revisitRule';
 import { nextBirthday } from '../src/lib/birthdayRule';
 import { summarizeDailyClose, formatDailyCloseMessage } from '../src/lib/dailyCloseSummary';
+import { tagRefund, refundedOn, memoWithoutRefundTag } from '../src/lib/refundDate';
 import { statsFor } from '../src/lib/customerStatsRule';
 import { isLowStock } from '../src/lib/stockRule';
 import { isCountableCustomer } from '../src/lib/customerScope';
@@ -132,7 +133,7 @@ test('생일 임박 — 연말·연초 경계, 2/29 평년 처리, 오늘, 형�
 test('마감 요약 분해 — 완료만 매출, 분할 결제 1건, 수단별 큰 순, 구분별, 환불·지출은 당일분만, 예약 결과', () => {
   const date = '2026-11-20';
   const pay = (id: string, amount: number, method: string, type: 'program' | 'product' | 'single_treatment' | 'other', status: 'completed' | 'refunded' | 'pending' = 'completed', referenceId?: string, paymentDate = date) =>
-    ({ id, amount, paymentMethod: method, type, status, referenceId, paymentDate });
+    ({ id, amount, paymentMethod: method, type, status, referenceId, paymentDate, memo: status === 'refunded' ? '[환불 2026-11-20] 고객 요청' : undefined });
   const c = summarizeDailyClose(date, {
     payments: [
       pay('p1', 200000, '카드', 'program', 'completed', 'cp1'),
@@ -155,10 +156,11 @@ test('마감 요약 분해 — 완료만 매출, 분할 결제 1건, 수단별 �
   expect(c.byMethod).toEqual([{ method: '카드', amount: 230000 }, { method: '현금', amount: 100000 }]); // 환불·미완료 수단은 빠진다
   expect(c.byType).toEqual({ treatment: 300000, product: 30000, other: 0 });
   expect(c.refunds).toBe(50000);
+  expect(c.refundedToday).toBe(50000); // memo 태그 [환불 2026-11-20] 로 오늘 처리분을 안다
   expect(c.expenses).toBe(15000);
   expect(c.treatments).toBe(1);
   expect(c.newCustomers).toBe(1);                                   // 새벽 1:30 등록은 오늘(로컬), 샘플 제외
-  expect(c.reservations).toEqual({ total: 6, completed: 2, noshow: 1, cancelled: 1, pending: 2 });
+  expect(c.reservations).toEqual({ total: 6, active: 4, completed: 2, noshow: 1, cancelled: 1, pending: 2 }); // active = 취소·노쇼 제외 (대시보드 "오늘 예약"과 같은 수)
 
   const msg = formatDailyCloseMessage(c, '테스트샵');
   expect(msg.split('\n')).toEqual([
@@ -167,13 +169,14 @@ test('마감 요약 분해 — 완료만 매출, 분할 결제 1건, 수단별 �
     '  카드 230,000원 / 현금 100,000원',
     '  시술 300,000원 / 제품 30,000원',
     '· 환불(오늘 결제분) 50,000원',
+    '· 환불 처리(오늘) 50,000원',
     '· 지출 15,000원',
     '· 시술 1건 · 신규 고객 1명',
-    '· 예약 6건 (완료 2 / 노쇼 1 / 취소 1 / 미처리 2)',
+    '· 예약 4건 (완료 2 / 노쇼 1 / 미처리 2) · 취소 1건',
   ]);
   // 아무것도 없는 날: 0원 (0건), 수단·구분·환불·지출 줄은 생략, 미처리 0은 표시하지 않음, 매장 이름이 비면 '매장'
   const empty = summarizeDailyClose(date, { payments: [], expenses: [], treatmentLogs: [], customers: [], reservations: [] });
-  expect(formatDailyCloseMessage(empty, '').split('\n')).toEqual(['[매장] 11/20(금) 마감 보고', '· 매출 0원 (0건)', '· 시술 0건 · 신규 고객 0명', '· 예약 0건 (완료 0 / 노쇼 0 / 취소 0)']);
+  expect(formatDailyCloseMessage(empty, '').split('\n')).toEqual(['[매장] 11/20(금) 마감 보고', '· 매출 0원 (0건)', '· 시술 0건 · 신규 고객 0명', '· 예약 0건 (완료 0 / 노쇼 0)']);
 });
 
 test('공용 집계 규칙 — 재고 부족·집계 대상 고객·성장률·고객 표시값 가드 (10차 숫자 점검)', () => {
@@ -196,4 +199,15 @@ test('공용 집계 규칙 — 재고 부족·집계 대상 고객·성장률·�
   expect(statsFor(stored, { byId: new Map(), noPayments: true, noVisitRecords: true })).toEqual({ totalSpent: 150000, totalVisits: 9, lastVisitDate: '2026-11-20' }); // 로드 전엔 저장값
   expect(statsFor(stored, { ...idx, noPayments: true }).totalSpent).toBe(150000); // 결제 컬렉션만 비면 결제액은 저장값, 방문은 기록
   expect(statsFor(stored, { ...idx, noPayments: true }).totalVisits).toBe(3);
+});
+
+test('환불 처리일 태그 — memo 앞 [환불 YYYY-MM-DD], 읽기·벗기기', () => {
+  expect(tagRefund(undefined, '2026-11-20')).toBe('[환불 2026-11-20]');
+  expect(tagRefund('고객 요청', '2026-11-20')).toBe('[환불 2026-11-20] 고객 요청');
+  expect(tagRefund('[환불 2026-11-01] 이미', '2026-11-20')).toBe('[환불 2026-11-01] 이미'); // 두 번 붙이지 않는다
+  expect(refundedOn({ status: 'refunded', memo: '[환불 2026-11-20] 고객 요청' })).toBe('2026-11-20');
+  expect(refundedOn({ status: 'refunded', memo: '옛 환불(태그 없음)' })).toBeNull();
+  expect(refundedOn({ status: 'completed', memo: '[환불 2026-11-20]' })).toBeNull(); // 완료 결제면 태그가 있어도 환불이 아니다
+  expect(memoWithoutRefundTag('[환불 2026-11-20] 고객 요청')).toBe('고객 요청');
+  expect(memoWithoutRefundTag(undefined)).toBe('');
 });

@@ -1095,9 +1095,9 @@ export default function Customers() {
       '생년월일': role !== 'staff' ? (c.birthDate || '') : '',
       '피부유형': c.skinType || '',
       '알레르기': c.allergies || '',
-      '총방문(회)': c.totalVisits ?? 0,
-      '누적결제(원)': c.totalSpent ?? 0,
-      '마지막방문': c.lastVisitDate || '',
+      '총방문(회)': statsOf(c).totalVisits, // 목록 행과 같은 기록 재계산값 (리뷰 2026-11-20)
+      '누적결제(원)': statsOf(c).totalSpent,
+      '마지막방문': statsOf(c).lastVisitDate || '',
       '등록일': localISODate(String(c.registeredAt || '')), // UTC 앞 10자는 새벽 등록을 전날로; 다른 날짜 열과 같은 "YYYY-MM-DD" (산출물 감사·리뷰 2026-11-20)
       '유입경로': c.referralSource || '',
       '태그': (c.tags || []).join(', '),
@@ -1727,10 +1727,10 @@ export default function Customers() {
                     <span className="text-xs text-gray-500">총 결제</span>
                     <span className="text-sm font-medium text-gray-900 tabular-nums">{(selected.totalSpent || 0).toLocaleString()}원</span>
                   </div>
-                  {selected.lastVisitDate && (
+                  {(statsOf(selected).lastVisitDate || selected.lastVisitDate) && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">마지막 방문</span>
-                      <span className="text-sm font-medium text-gray-900 tabular-nums">{formatDate(selected.lastVisitDate)}</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums">{formatDate(statsOf(selected).lastVisitDate || selected.lastVisitDate)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
@@ -2206,7 +2206,7 @@ export default function Customers() {
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">마지막 방문</p>
-                  <p className="text-sm font-semibold text-gray-700">{formatDate(selected.lastVisitDate)}</p>
+                  <p className="text-sm font-semibold text-gray-700">{formatDate(statsOf(selected).lastVisitDate || selected.lastVisitDate)}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">등록일</p>

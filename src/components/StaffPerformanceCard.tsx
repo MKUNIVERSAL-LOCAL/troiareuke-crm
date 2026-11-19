@@ -77,7 +77,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
       </div>
       <div className="px-4 sm:px-6 py-3 border-t border-gray-50 space-y-2">
         <p className="text-xs text-gray-400">
-          완료 처리된 예약의 예약액과 담당 직원이 기록된 제품 판매액 기준입니다. 실제 입금액(결제 화면)·할인·회차권 차감은 반영되지 않으며, 취소·노쇼는 제외합니다.
+          완료 처리된 예약의 예약액과 담당 직원이 기록된 제품 판매액 기준입니다. 실결제액 열은 결제 화면의 완료 결제 합(분할 결제 포함)이고, 예약액에는 할인·회차권 차감이 반영되지 않으며, 취소·노쇼는 제외합니다.
         </p>
         {caveats.map(c => <p key={c} className="text-xs text-amber-700">{c}</p>)}
         {draft && (

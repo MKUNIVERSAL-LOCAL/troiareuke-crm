@@ -74,7 +74,8 @@ export async function programsProductsScenario(page: Page, acc: E2EAccount) {
   await cancelFirstSale(page);
   await expectStock(page, '수분 세럼', 12);
   await page.goto('/sales');
-  await expectSales(page, { total: '300,000원', product: '0원', count: 1 });
+  await expectSales(page, { total: '300,000원', product: '0원', count: 2 }); // 취소된 판매의 결제는 지워지지 않고 '환불' 행으로 남는다 (111 #H2)
+  await expect(page.getByTestId('sales-month-refunded')).toContainText('48,000원'); // 이달 환불 처리 — 환불을 처리한 달에 보인다 (111 #M1)
 }
 
 /**

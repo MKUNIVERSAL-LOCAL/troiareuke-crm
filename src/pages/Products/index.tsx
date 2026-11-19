@@ -1,4 +1,6 @@
-﻿import { useState, useCallback, useEffect } from 'react';
+﻿import { useState, useCallback, useEffect, useMemo } from 'react';
+import { tagRefund } from '../../lib/refundDate';
+import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
@@ -7,11 +9,11 @@ import StockAdjustModal from '../../components/StockAdjustModal';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
-import { ProductStore, ProductSaleStore, CustomerStore, StaffStore } from '../../lib/store';
+import { ProductStore, ProductSaleStore, CustomerStore, StaffStore, PaymentStore } from '../../lib/store';
 import { todayISO, formatDate } from '../../lib/format';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
-import type { Product, ProductSale } from '../../types';
+import type { Product, ProductSale, Payment } from '../../types';
 import type { PaymentMethod } from '../../types';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,6 +31,7 @@ export default function Products() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [products, setProducts] = useState(() => ProductStore.getAll());
   const [sales, setSales] = useState(() => ProductSaleStore.getAll());
+  const [payments, setPayments] = useState<Payment[]>([]); // 판매 취소(환불) 식별용
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
@@ -47,6 +50,7 @@ export default function Products() {
   const refresh = useCallback(() => {
     setProducts(ProductStore.getAll());
     setSales(ProductSaleStore.getAll());
+    setPayments(PaymentStore.getAll());
   }, []);
 
   const handleDeleteProduct = (product: Product) => {
@@ -55,9 +59,20 @@ export default function Products() {
     refresh();
   };
 
+  // 취소된 판매 = 연결 결제가 환불 상태 (판매 행 자체는 코어에 수정 API 가 없어 결제 쪽 상태로 식별)
+  const canceledSaleIds = useMemo(() => new Set(payments.filter(p => p.status === 'refunded' && p.referenceId).map(p => p.referenceId as string)), [payments]);
+  const isCanceled = (sale: ProductSale) => canceledSaleIds.has(sale.id);
   const handleDeleteSale = (sale: ProductSale) => {
-    if (!window.confirm(`${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제 기록은 삭제됩니다(고객 누적 결제액도 차감).`)) return;
-    ProductSaleStore.delete(sale.id);
+    if (!window.confirm(`${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.`)) return;
+    const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
+    if (linked.length === 0) {
+      // 연결 결제가 없는 옛 판매 — 예전처럼 행 삭제(코어: 재고 복구 포함)
+      ProductSaleStore.delete(sale.id);
+    } else {
+      // 결제를 지우면 매출이 소급 감소할 뿐 환불 흔적이 어디에도 남지 않았다(세무 대사 불가) — 재고만 복구하고 결제는 환불로 (10차 숫자 점검 #H2)
+      if (sale.productId) ProductStore.adjustStock(sale.productId, -sale.quantity); // 제품이 지워진 옛 판매는 재고 복구 대상이 없다
+      for (const p of linked) PaymentStore.update(p.id, { status: 'refunded', memo: tagRefund(p.memo, todayISO()) });
+    }
     refresh();
   };
 
@@ -82,8 +97,10 @@ export default function Products() {
     .sort((a, b) => b.saleDate.localeCompare(a.saleDate))
     .slice(0, 60);
 
-  const totalSalesRevenue = sales.reduce((sum, sale) => sum + sale.totalPrice, 0);
-  const visibleSalesRevenue = recentSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
+  const liveSales = sales.filter(sale => !isCanceled(sale)); // 취소(환불)된 판매는 매출 화면 '제품 매출'처럼 제외 (10차 #H2·#M5)
+  const totalSalesRevenue = liveSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
+  const monthSalesRevenue = liveSales.filter(sale => sale.saleDate.startsWith(thisYearMonthISO())).reduce((sum, sale) => sum + sale.totalPrice, 0);
+  const visibleSalesRevenue = recentSales.filter(sale => !isCanceled(sale)).reduce((sum, sale) => sum + sale.totalPrice, 0);
 
   const handleSell = (product: Product) => {
     if (!product.isActive) { notify('판매 중지된 제품입니다. [수정]에서 \'판매 활성\'을 켜면 다시 팔 수 있습니다.'); return; }
@@ -137,10 +154,11 @@ export default function Products() {
             <p className="text-2xl font-bold text-gray-900">{sales.length}<span className="text-sm font-medium ml-1">건</span></p>
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간)</p>
+            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간 · 취소 제외)</p>
             <p className="text-2xl font-bold text-[#1a3a8f]">
               {totalSalesRevenue.toLocaleString()}<span className="text-sm font-medium">원</span>
             </p>
+            <p className="text-xs text-gray-400 mt-1">이달 {monthSalesRevenue.toLocaleString()}원 — 매출 화면 '제품 매출'과 같은 기준</p>
           </div>
         </div>
 
@@ -405,8 +423,9 @@ export default function Products() {
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className="text-sm font-bold text-gray-900">{sale.totalPrice.toLocaleString()}원</span>
-                        <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>
+                        <span className={`text-sm font-bold ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{sale.totalPrice.toLocaleString()}원</span>
+                        {isCanceled(sale) ? <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
+                        <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>)}
                       </div>
                     </div>
                   </li>
@@ -440,11 +459,12 @@ export default function Products() {
                       <td className="px-4 py-3.5 text-sm text-gray-500">{sale.customerName || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-center text-gray-700 font-medium">{sale.quantity}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-500 text-right">{sale.unitPrice.toLocaleString()}원</td>
-                      <td className="px-4 py-3.5 text-sm font-bold text-gray-900 text-right">{sale.totalPrice.toLocaleString()}원</td>
+                      <td className={`px-4 py-3.5 text-sm font-bold text-right ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{sale.totalPrice.toLocaleString()}원</td>
                       <td className="px-6 py-3.5 text-center">
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs">{sale.paymentMethod}</span>
                       </td>
                       <td className="px-4 py-3.5 text-center">
+                        {isCanceled(sale) ? <span className="text-xs px-2 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
                         <button
                           onClick={() => handleDeleteSale(sale)}
                           className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
@@ -453,6 +473,7 @@ export default function Products() {
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </td>
                     </tr>
                   ))}
