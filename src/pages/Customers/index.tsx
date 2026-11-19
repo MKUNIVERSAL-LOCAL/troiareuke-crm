@@ -267,7 +267,7 @@ function ProgramUsageList({ cp, customerId }: { cp: CustomerProgram; customerId:
         </div>
       ))}
       {deductions.length > 10 && (
-        <p className="text-xs text-gray-500">외 {deductions.length - 10}건은 아래 최근 시술 기록에서 볼 수 있어요</p>
+        <p className="text-xs text-gray-500">외 {deductions.length - 10}건은 아래 최근 시술 기록에서 볼 수 있습니다</p>
       )}
     </div>
   );
@@ -428,7 +428,14 @@ export default function Customers() {
   const [manageProgram, setManageProgram] = useState<CustomerProgram | null>(null); // 프로그램 만료일·회차·완료 관리 (2026-11-18)
   const handleProgramManaged = () => {
     setManageProgram(null);
-    if (selected) setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
+    if (selected) {
+      setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
+      // 빠른 시술 기록 창에서 [만료일 연장]으로 왔다면 — 연장 뒤 쓸 수 있는 프로그램이 하나뿐이면 바로 연결해 차감 누락을 막는다 (리뷰 2026-11-19)
+      if (showTreatmentModal) {
+        const usable = getUsablePrograms(selected.id);
+        if (usable.length === 1) setTreatForm(f => (f.customerProgramId ? f : { ...f, customerProgramId: usable[0].id }));
+      }
+    }
     loadAll();
   };
   const [mergeQuery, setMergeQuery] = useState(''); // 중복 의심 안내에서 열면 전화번호가 미리 입력된다
@@ -1062,7 +1069,7 @@ export default function Customers() {
       <button
         type="button"
         onClick={() => setShowGradeMenu(v => !v)}
-        className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5 hover:ring-2 hover:ring-offset-1 hover:ring-blue-300 transition ${GRADE_COLORS[sel.grade]}`}
+        className={`${large ? 'text-sm px-2.5 py-1 min-h-[32px]' : 'text-xs px-2 py-0.5'} rounded-full font-medium flex items-center gap-0.5 hover:ring-2 hover:ring-offset-1 hover:ring-blue-300 transition ${GRADE_COLORS[sel.grade]}`}
         aria-label={`${sel.grade} 등급 변경`}
         aria-haspopup="menu"
         aria-expanded={showGradeMenu}
@@ -1078,7 +1085,8 @@ export default function Customers() {
               <button
                 key={g}
                 type="button"
-                role="menuitem"
+                role="menuitemradio"
+                aria-checked={g === sel.grade}
                 data-autofocus={g === sel.grade ? '' : undefined}
                 onClick={() => changeGrade(g)}
                 className={`w-full text-left px-3 hover:bg-gray-50 flex items-center gap-1.5 ${large ? 'py-2.5 text-sm' : 'py-1.5 text-xs'} ${g === sel.grade ? 'font-bold text-blue-700' : 'text-gray-600'}`}
@@ -2692,8 +2700,8 @@ export default function Customers() {
             </div>
             <form onSubmit={handleTreatment} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">차감할 회차권·프로그램</label>
-                <select aria-label="차감할 프로그램" aria-describedby={treatExpired.length > 0 ? 'expired-program-hint' : undefined}
+                <label htmlFor="quick-treat-program" className="block text-xs font-medium text-gray-600 mb-1">차감할 회차권·프로그램</label>
+                <select id="quick-treat-program" aria-describedby={treatExpired.length > 0 ? 'expired-program-hint' : undefined}
                   value={treatForm.customerProgramId}
                   onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
@@ -2706,8 +2714,8 @@ export default function Customers() {
                 </select>
                 {treatExpired.length > 0 && (
                   <div id="expired-program-hint" data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2">
-                    <span className="flex-1 min-w-0">{expiredProgramsHint(treatExpired, '[만료일 연장]')}</span>
-                    {/* 관리 창은 body 포털이라 이 창 위에 겹쳐 뜬다 — 연장을 저장하면 선택지가 바로 다시 계산된다 (UX 점검 2026-11-19) */}
+                    <span className="flex-1 min-w-0">{expiredProgramsHint(treatExpired, '옆의 [만료일 연장] 버튼')}</span>
+                    {/* 관리 창은 elevated Modal(z-[70])이라 이 창(z-[60]) 위에 겹쳐 뜬다 — 연장을 저장하면 handleProgramManaged가 선택지를 다시 계산하고 하나뿐이면 바로 연결한다 (UX 점검·리뷰 2026-11-19) */}
                     <button type="button" onClick={() => setManageProgram(treatExpired[0])}
                       className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-medium text-amber-800 hover:bg-amber-100">만료일 연장</button>
                   </div>

@@ -115,10 +115,35 @@ export async function programExpiryScenario(page: Page, acc: E2EAccount) {
 
   // 고객 상세의 빠른 [시술 기록] 창: 자동 연결 안 되고 선택지는 '선택 없음'뿐, 연장 안내
   await visibleButton(page, '시술 기록').click();
-  const quick = page.getByLabel('차감할 프로그램');
+  const quick = page.getByLabel('차감할 회차권·프로그램');
   await expect(quick.locator('option')).toHaveCount(1);
   await expect(quick).toHaveValue('');
   await expect(page.getByTestId('expired-program-hint')).toContainText(`만료된 회차권(${name})은 차감할 수 없습니다`);
+  // [만료일 연장] → 관리 창이 이 창 위에 열려 조작된다(리뷰: z-index로 아래에 깔려 있던 결함 — click은 가려진 요소에 실패) → +30일 저장 → 하나뿐인 프로그램이 바로 연결된다
+  await page.getByTestId('expired-program-hint').getByRole('button', { name: '만료일 연장' }).click();
+  const quickManage = dialog(page, '프로그램 관리');
+  await expect(quickManage).toBeVisible();
+  await expect(quickManage.getByLabel('만료일')).toHaveValue('2025-06-30');
+  await quickManage.getByRole('button', { name: '+30일' }).click();
+  const plus30 = plusDaysISO(30);
+  await expect(quickManage.getByLabel('만료일')).toHaveValue(plus30);
+  await quickManage.getByLabel('사유').fill('휴가 복귀 연장');
+  await quickManage.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(quickManage).toHaveCount(0);
+  await expect(quick.locator('option')).toHaveCount(2);
+  await expect(quick.locator('option:checked')).toHaveText(`${name} · 잔여 10회 (0/10)`);
+  await expect(page.getByTestId('expired-program-hint')).toHaveCount(0);
+  await dialog(page, '시술 기록 추가').getByRole('button', { name: '닫기' }).click();
+  await expect(dialog(page, '시술 기록 추가')).toHaveCount(0);
+  await expectProgramBadge(page, name, '만료', false);
+  await expectProgramExpiry(page, name, plus30);
+  // 되돌려 두고(만료 상태로) 예약·시술 기록 화면의 만료 표시를 확인한다
+  let manage = await openProgramManage(page, name);
+  await manage.getByLabel('만료일').fill('2025-06-30');
+  await manage.getByLabel('사유').fill('검증용 되돌림');
+  await manage.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(manage).toHaveCount(0);
+  await expectProgramBadge(page, name, '만료', true);
 
   // 예약 추가 창의 회차권 잔여 칩에도 '만료'
   await page.goto('/reservations');
@@ -134,18 +159,20 @@ export async function programExpiryScenario(page: Page, acc: E2EAccount) {
   await openCustomer(page, acc);
   // 등급 칩 → 메뉴 (PC·모바일 같은 동작, UX 점검 M8)
   await changeGrade(page, '신규', '골드');
-  let manage = await openProgramManage(page, name);
+  manage = await openProgramManage(page, name);
   await expect(manage.getByLabel('만료일')).toHaveValue('2025-06-30');
   await manage.getByRole('button', { name: '+30일' }).click();
-  const plus30 = plusDaysISO(30);
   await expect(manage.getByLabel('만료일')).toHaveValue(plus30);
-  await manage.getByLabel('사유').fill('휴가 복귀 연장');
+  await manage.getByLabel('사유').fill('두 번째 연장');
   await manage.getByRole('button', { name: '저장', exact: true }).click();
   await expect(manage).toHaveCount(0);
   await expectProgramBadge(page, name, '만료', false);
   await expectProgramExpiry(page, name, plus30);
+  // 변경 기록: 빠른 창에서의 첫 연장·되돌림·두 번째 연장이 모두 남는다
   manage = await openProgramManage(page, name);
   await expect(manage.getByText(/만료일 2025\.06\.30 → \d{4}\.\d{2}\.\d{2} — 휴가 복귀 연장/)).toBeVisible();
+  await expect(manage.getByText(/— 검증용 되돌림/)).toBeVisible();
+  await expect(manage.getByText(/만료일 2025\.06\.30 → \d{4}\.\d{2}\.\d{2} — 두 번째 연장/)).toBeVisible();
   await manage.getByRole('button', { name: '취소', exact: true }).click();
   await expect(manage).toHaveCount(0);
 

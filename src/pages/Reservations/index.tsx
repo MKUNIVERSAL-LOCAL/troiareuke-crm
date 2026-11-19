@@ -27,7 +27,7 @@ import { registeredPaymentsFor } from '../../lib/pendingCompletion';
 import { readableTextOn } from '../../lib/color';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
 import { todayISO } from '../../lib/format';
-import { isProgramExpired, getUsablePrograms, getExpiredPrograms } from '../../lib/customerPrograms';
+import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -1194,7 +1194,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const isClosed = r.status === 'cancelled' || r.status === 'noshow';
   const handleRestore = () => {
     const google = isGoogleCalendarConnected();
-    if (!window.confirm(`이 예약을 다시 '예약확정'으로 되돌릴까요?\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}`)) return;
+    if (!window.confirm(`이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}`)) return;
     ReservationStore.updateStatus(r.id, 'confirmed');
     if (google) {
       createCalendarEvent({ ...r, status: 'confirmed' })
@@ -1231,7 +1231,10 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   };
 
   const handleDelete = () => {
-    if (window.confirm(`이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다. 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.${logsWarn}`)) {
+    // 삭제해도 이 예약 id로 등록된 결제는 남는다(취소처리와 같은 안내). [취소처리] 권유는 그 버튼이 있을 때만 (리뷰 2026-11-19)
+    const payWarn = paidForThis.length > 0 ? `\n\n등록된 결제 ${paidAmount.toLocaleString('ko-KR')}원은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.` : '';
+    const cancelTip = isClosed ? '' : ' 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.';
+    if (window.confirm(`이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`)) {
       ReservationStore.delete(r.id);
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();
@@ -1367,7 +1370,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
             type="button"
             onClick={handleDelete}
             title="예약을 기록에서 완전히 지웁니다 — 고객이 취소한 예약은 [취소처리]를 써주세요"
-            className="text-xs text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 px-1.5 py-1 rounded"
+            className="text-xs text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 px-1.5 min-h-[44px] -my-2.5 rounded"
           >
             <Trash2 size={12} /> 이 예약 삭제
           </button>
@@ -1380,7 +1383,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
         return (
           <CompletePaymentModal reservation={r} late={r.status === 'completed'} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={usable.length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined}
             expiredNote={usable.length === 0 && expired.length > 0
-              ? `이 고객의 프로그램(${expired.map(cp => cp.programName).join(', ')})은 만료돼 차감할 수 없습니다. 연장해서 차감할 거면 [결제 등록 없이 닫기] → 고객 상세 [관리]에서 만료일을 연장한 뒤 시술 기록을 작성하세요. 단건으로 받았다면 아래에서 결제를 등록하세요.`
+              ? `${expiredProgramsHint(expired, '고객 상세의 [관리]', '')} 연장해서 차감하려면 [결제 등록 없이 닫기]로 나가 연장한 뒤 시술 기록을 작성하고, 단건으로 받았다면 아래에서 결제를 등록하세요.`
               : undefined} />
         );
       })()}

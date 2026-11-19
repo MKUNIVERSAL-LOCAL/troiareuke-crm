@@ -126,7 +126,7 @@ export async function changeGrade(page: Page, from: string, to: string) {
   await visibleButton(page, `${from} 등급 변경`).click();
   const menu = page.getByRole('menu', { name: '등급 선택' });
   await expect(menu).toBeVisible();
-  await menu.getByRole('menuitem', { name: to }).click();
+  await menu.getByRole('menuitemradio', { name: to }).click();
   await expect(menu).toHaveCount(0);
   await expect(visibleButton(page, `${to} 등급 변경`)).toBeVisible();
   await expect(toast(page, `${to} 등급으로 변경했습니다.`)).toBeVisible();
@@ -184,9 +184,9 @@ export async function logTreatment(page: Page, acc: E2EAccount, expectLinked: st
   await expect(d).toBeVisible();
   await pickCustomer(page, acc.customer);
   if (expectLinked === null) {
-    await expect(d.getByLabel('프로그램 연결')).toHaveCount(0);
+    await expect(d.getByLabel('차감할 회차권·프로그램')).toHaveCount(0);
   } else {
-    await expect(d.getByLabel('프로그램 연결').locator('option:checked')).toHaveText(expectLinked);
+    await expect(d.getByLabel('차감할 회차권·프로그램').locator('option:checked')).toHaveText(expectLinked);
     await expect(page.getByTestId('expired-program-hint')).toHaveCount(0);
   }
   await d.getByRole('checkbox', { name: '테스트관리' }).check();
@@ -199,7 +199,7 @@ export async function expectTreatmentLinkState(page: Page, acc: E2EAccount, v: {
   await page.goto('/treatments?new=1');
   await expect(dialog(page, '시술 기록 추가')).toBeVisible();
   await pickCustomer(page, acc.customer);
-  await expect(page.getByLabel('프로그램 연결')).toHaveCount(v.select ? 1 : 0);
+  await expect(page.getByLabel('차감할 회차권·프로그램')).toHaveCount(v.select ? 1 : 0);
   if (v.hint === null) await expect(page.getByTestId('expired-program-hint')).toHaveCount(0);
   else await expect(page.getByTestId('expired-program-hint')).toContainText(v.hint);
 }

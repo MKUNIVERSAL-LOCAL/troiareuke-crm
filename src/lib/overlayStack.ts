@@ -62,7 +62,7 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([typ
 const FIRST_FIELD = 'input:not([disabled]):not([type="hidden"]):not([readonly]),select:not([disabled]),textarea:not([disabled])';
 /**
  * role="menu" 드롭다운의 키보드 이동 — ↑↓로 항목 사이를 순환, Home/End로 처음·끝 (ARIA 메뉴 패턴, 2026-11-18).
- * Tab 순환·Esc 닫기는 useFocusTrap·useOverlayClose가 맡고, 이 훅은 role="menuitem" 사이의 화살표 이동만 더한다.
+ * Tab 순환·Esc 닫기는 useFocusTrap·useOverlayClose가 맡고, 이 훅은 role="menuitem"/"menuitemradio" 사이의 화살표 이동만 더한다.
  */
 export function useMenuKeys(isOpen: boolean, ref: RefObject<HTMLElement>): void {
   useEffect(() => {
@@ -71,7 +71,7 @@ export function useMenuKeys(isOpen: boolean, ref: RefObject<HTMLElement>): void 
     if (!root) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
-      const items = Array.from(root.querySelectorAll<HTMLElement>('[role="menuitem"]')).filter(el => el.offsetParent !== null && !el.hasAttribute('disabled'));
+      const items = Array.from(root.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]')).filter(el => el.offsetParent !== null && !el.hasAttribute('disabled'));
       if (items.length === 0) return;
       e.preventDefault();
       e.stopPropagation();

@@ -575,9 +575,9 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         {/* 프로그램 연결 (회차 차감) */}
         {customerId && activePrograms.length > 0 && (
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">차감할 회차권·프로그램</label>
+            <label htmlFor="treat-program-link" className="block text-xs font-medium text-gray-600 mb-1.5">차감할 회차권·프로그램</label>
             <select
-              aria-label="프로그램 연결"
+              id="treat-program-link"
               aria-describedby={expiredPrograms.length > 0 ? 'expired-program-hint' : undefined}
               value={customerProgramId}
               onChange={e => setCustomerProgramId(e.target.value)}
@@ -596,7 +596,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <div id="expired-program-hint" data-testid="expired-program-hint" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2">
             <span className="flex-1 min-w-0">{expiredProgramsHint(expiredPrograms)}</span>
             {/* 이 창에서는 [관리]가 다른 화면 — 바로 가는 길을 주되, 입력 중인 내용이 저장되지 않음을 알린다 (UX 점검 2026-11-19) */}
-            <button type="button" onClick={() => { if (window.confirm('고객 상세로 이동할까요? 지금 입력 중인 시술 기록은 저장되지 않습니다.')) { onClose(); goTo(`/customers?q=${encodeURIComponent((customers.find(x => x.id === customerId)?.name ?? ''))}`); } }}
+            <button type="button" onClick={() => { if (window.confirm('고객 상세로 이동할까요? 지금 입력 중인 시술 기록은 저장되지 않습니다.')) { onClose(); goTo(`/customers?open=${encodeURIComponent(customerId)}`); } }}
               className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-medium text-amber-800 hover:bg-amber-100">고객 상세 열기</button>
           </div>
         )}

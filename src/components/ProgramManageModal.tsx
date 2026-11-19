@@ -86,7 +86,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
 
   // body 포털 — 고객 상세의 모바일 오버레이(fixed z-50)와 데스크톱 컨테이너 밖에서 렌더해야 두 레이아웃 모두에서 보인다
   return createPortal(
-    <Modal isOpen onClose={onClose} title="프로그램 관리" size="sm">
+    <Modal isOpen onClose={onClose} title="프로그램 관리" size="sm" elevated>
       <div className="space-y-4">
         <div>
           <p className="font-semibold text-sm text-gray-900">{cp.programName}</p>
