@@ -26,6 +26,25 @@ export async function scan(page: import('@playwright/test').Page, route: string,
       .map(a => a.finished.catch(() => undefined))),
     new Promise(resolve => setTimeout(resolve, 1500)),
   ]));
+  // 마지막으로 연 창(DOM 순서 마지막 role=dialog)의 가운데가 실제로 포인터를 받는지 — z-index가 낮은 포털 창이 먼저 뜬 창 아래에 깔려
+  // 보이기만 하고 조작할 수 없던 결함(㊾ HIGH: 빠른 시술 기록 z-[60] 위의 프로그램 관리 z-50)의 재발을 모든 창에서 막는다 (2026-11-19 ㊿)
+  const covered = await page.evaluate(() => {
+    const visible = (el: Element) => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
+    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).filter(visible);
+    const top = dialogs[dialogs.length - 1];
+    if (!top) return null;
+    const card = top.querySelector<HTMLElement>('.modal-card') ?? top;
+    const b = card.getBoundingClientRect();
+    const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+    if (hit && top.contains(hit)) return null;
+    const desc = hit ? `${hit.tagName.toLowerCase()}${hit.id ? '#' + hit.id : ''} .${String(hit.className).split(' ').filter(Boolean).slice(0, 4).join('.')}` : '(없음)';
+    return { label: top.getAttribute('aria-label') ?? '(이름 없음)', hit: desc, html: (hit?.outerHTML ?? '').slice(0, 160) };
+  });
+  if (covered) {
+    out.push({ route, id: 'dialog-covered', impact: 'critical', help: `마지막으로 연 창 "${covered.label}"의 가운데를 다른 요소가 가려 조작할 수 없음 (z-index·포털 순서)`, nodes: [{ target: covered.hit, html: covered.html, detail: '마지막으로 연 창이 포인터를 받아야 한다' }] });
+    // 가려진 창은 다음 클릭이 3분 타임아웃으로 죽는다 — 바로 분명한 메시지로 실패시킨다(A11Y_OUT 기록용 행은 위에서 남김)
+    expect(covered, '마지막으로 연 창 "' + covered.label + '"의 가운데를 ' + covered.hit + ' 이(가) 가림 — z-index/포털 순서를 확인').toBeNull();
+  }
   const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   for (const v of r.violations) {
     out.push({

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, expectNoHorizontalOverflow } from './helpers';
 import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
+import { addProgram } from './flows';
 
 /**
  * 모바일 폭 모달·상세 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉞) — PC 모달 게이트(a11y-modals.spec)와 같은 창을
@@ -27,8 +28,9 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
 
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
+  await addProgram(page, { name: '접근성 10회권', sessions: 10, price: 100000 }); // 아래 프로그램 등록(만료 상태) → 빠른 기록의 [만료일 연장]에 쓴다
 
-  // ── 고객: 추가 창, 상세 오버레이, 시술 기록·프로그램 등록·상담 기록 창 ──
+  // ── 고객: 추가 창, 상세 오버레이, 프로그램 등록·시술 기록(+관리 창 겹침)·상담 기록 창 ──
   await page.goto('/customers');
   await step('m/customers 고객 추가', async () => {
     await vis('고객 추가').click();
@@ -39,16 +41,25 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
     await expect(page.getByText('기본 정보').filter({ visible: true }).first()).toBeVisible();
   });
-  await step('m/customers 시술 기록', async () => {
-    await vis('시술 기록').click();
-    await expect(page.getByRole('heading', { name: '시술 기록' }).filter({ visible: true }).first()).toBeVisible();
-  });
-  await cancel();
   await step('m/customers 프로그램 등록', async () => {
     await vis('프로그램 등록').click();
     await expect(page.getByRole('heading', { name: '프로그램 등록' }).filter({ visible: true }).first()).toBeVisible();
+    await dialog('프로그램 등록').getByLabel('프로그램 선택').selectOption({ label: '접근성 10회권 — 100,000원' });
+    await dialog('프로그램 등록').getByLabel('구매 날짜').fill('2025-01-01'); // 만료 상태로
   });
-  await cancel();
+  await dialog('프로그램 등록').getByRole('button', { name: '프로그램 등록' }).click();
+  await expect(dialog('프로그램 등록')).toHaveCount(0);
+  await step('m/customers 시술 기록', async () => {
+    await vis('시술 기록').click();
+    await expect(page.getByRole('heading', { name: '시술 기록 추가' }).filter({ visible: true }).first()).toBeVisible();
+  });
+  // 창 위의 창 — 관리 창(elevated Modal)이 빠른 기록 창 위에서 포인터를 받아야 한다(scan의 dialog-covered 검사, ㊿)
+  await step('m/customers 빠른 기록 → 만료일 연장(관리 창 겹침)', async () => {
+    await page.getByTestId('expired-program-hint').getByRole('button', { name: '만료일 연장' }).click();
+    await expect(dialog('프로그램 관리')).toBeVisible();
+  });
+  await cancel(); // 프로그램 관리
+  await cancel(); // 시술 기록 추가
   await step('m/customers 상담 기록', async () => {
     await vis('상담 기록').click();
     await expect(dialog('피부 상담')).toBeVisible();

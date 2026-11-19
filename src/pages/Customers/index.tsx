@@ -1677,7 +1677,7 @@ export default function Customers() {
                   <p className="text-xs font-semibold text-gray-500 uppercase mb-3">등록 프로그램</p>
                   <div className="space-y-2">
                     {customerPrograms.map(cp => (
-                      <div key={cp.id} data-testid="program-card" className={`p-3 bg-slate-50 rounded-lg ${cp.isCompleted || isProgramExpired(cp) ? 'opacity-60' : ''}`}>
+                      <div key={cp.id} data-testid="program-card" className={`p-3 bg-slate-50 rounded-lg ${cp.isCompleted || isProgramExpired(cp) ? 'border border-dashed border-gray-300' : ''}`}>
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
                           <span className="flex items-center gap-1.5">
@@ -2251,7 +2251,7 @@ export default function Customers() {
                       <div
                         key={cp.id}
                         data-testid="program-card"
-                        className={`border rounded-xl p-4 ${cp.isCompleted || isExpired ? 'border-gray-100 opacity-60' : 'border-blue-100 bg-blue-50/30'}`}
+                        className={`border rounded-xl p-4 ${cp.isCompleted || isExpired ? 'border-dashed border-gray-300 bg-slate-50' : 'border-blue-100 bg-blue-50/30'}`}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div>

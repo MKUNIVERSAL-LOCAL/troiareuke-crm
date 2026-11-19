@@ -55,6 +55,7 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await desk.getByRole('button', { name: '프로그램 등록' }).first().click();
     await expect(dialog('프로그램 등록')).toBeVisible();
     await dialog('프로그램 등록').getByLabel('프로그램 선택').selectOption({ label: '접근성 10회권 — 100,000원' });
+    await dialog('프로그램 등록').getByLabel('구매 날짜').fill('2025-01-01'); // 만료 상태로 — 아래 빠른 기록 창에 [만료일 연장]이 뜬다
   });
   await dialog('프로그램 등록').getByRole('button', { name: '프로그램 등록' }).click();
   await expect(dialog('프로그램 등록')).toHaveCount(0);
@@ -62,6 +63,12 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await desk.getByRole('button', { name: '시술 기록', exact: true }).first().click();
     await expect(dialog('시술 기록 추가')).toBeVisible();
   });
+  // 창 위의 창 — 관리 창(elevated Modal)이 빠른 기록 창 위에서 포인터를 받아야 한다(scan의 dialog-covered 검사, ㊿)
+  await step('/customers 빠른 기록 → 만료일 연장(관리 창 겹침)', async () => {
+    await page.getByTestId('expired-program-hint').getByRole('button', { name: '만료일 연장' }).click();
+    await expect(dialog('프로그램 관리')).toBeVisible();
+  });
+  await closeDialog('프로그램 관리');
   await closeDialog('시술 기록 추가');
   await step('/customers 프로그램 관리', async () => {
     await desk.getByRole('button', { name: '접근성 10회권 관리' }).click();
