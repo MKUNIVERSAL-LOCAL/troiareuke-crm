@@ -26,25 +26,29 @@ export async function scan(page: import('@playwright/test').Page, route: string,
       .map(a => a.finished.catch(() => undefined))),
     new Promise(resolve => setTimeout(resolve, 1500)),
   ]));
-  // 마지막으로 연 창(DOM 순서 마지막 role=dialog)의 가운데가 실제로 포인터를 받는지 — z-index가 낮은 포털 창이 먼저 뜬 창 아래에 깔려
-  // 보이기만 하고 조작할 수 없던 결함(㊾ HIGH: 빠른 시술 기록 z-[60] 위의 프로그램 관리 z-50)의 재발을 모든 창에서 막는다 (2026-11-19 ㊿)
+  // 가장 최근에 연 창이 실제로 포인터를 받는지 — z-index가 낮은 포털 창이 먼저 뜬 창 아래에 깔려 보이기만 하고 조작할 수 없던
+  // 결함(㊾ HIGH: 빠른 시술 기록 z-[60] 위의 프로그램 관리 z-50)의 재발을 role=dialog인 창 전부에서 막는다 (2026-11-19 ㊿, 리뷰 반영 52).
+  // "최근에 연 창" = 포커스를 가진 창(useFocusTrap이 새 창으로 포커스를 옮긴다 — 가려진 창도 포커스는 받으므로 그 창을 고르게 된다), 없으면 DOM 순서 마지막.
+  // 찍는 점은 카드(.modal-card 또는 창 자체)와 뷰포트의 교집합 가운데, 포함 판정은 카드 기준(ui/Modal은 role=dialog가 배경 래퍼라 배경 div도 contains가 참이 된다).
+  // 토스트(aria-live, 4초 뒤 사라짐)가 그 점에 있으면 가림으로 치지 않는다 — 모바일 바텀시트 가운데와 토스트 위치가 겹칠 수 있다.
   const covered = await page.evaluate(() => {
     const visible = (el: Element) => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
     const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).filter(visible);
-    const top = dialogs[dialogs.length - 1];
-    if (!top) return null;
+    if (dialogs.length === 0) return null;
+    const top = dialogs.find(d => d.contains(document.activeElement)) ?? dialogs[dialogs.length - 1];
     const card = top.querySelector<HTMLElement>('.modal-card') ?? top;
     const b = card.getBoundingClientRect();
-    const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
-    if (hit && top.contains(hit)) return null;
+    const left = Math.max(b.left, 0), right = Math.min(b.right, window.innerWidth), topY = Math.max(b.top, 0), bottom = Math.min(b.bottom, window.innerHeight);
+    if (right <= left || bottom <= topY) return null; // 카드가 뷰포트 밖 — 스크롤 상태라 판정 불가
+    const hit = document.elementFromPoint((left + right) / 2, (topY + bottom) / 2);
+    if (hit && (card.contains(hit) || hit.closest('[aria-live]'))) return null;
     const desc = hit ? `${hit.tagName.toLowerCase()}${hit.id ? '#' + hit.id : ''} .${String(hit.className).split(' ').filter(Boolean).slice(0, 4).join('.')}` : '(없음)';
-    return { label: top.getAttribute('aria-label') ?? '(이름 없음)', hit: desc, html: (hit?.outerHTML ?? '').slice(0, 160) };
+    const byId = top.getAttribute('aria-labelledby');
+    const label = top.getAttribute('aria-label') ?? (byId ? document.getElementById(byId)?.textContent?.trim() : null) ?? '(이름 없음)';
+    return { label, hit: desc };
   });
-  if (covered) {
-    out.push({ route, id: 'dialog-covered', impact: 'critical', help: `마지막으로 연 창 "${covered.label}"의 가운데를 다른 요소가 가려 조작할 수 없음 (z-index·포털 순서)`, nodes: [{ target: covered.hit, html: covered.html, detail: '마지막으로 연 창이 포인터를 받아야 한다' }] });
-    // 가려진 창은 다음 클릭이 3분 타임아웃으로 죽는다 — 바로 분명한 메시지로 실패시킨다(A11Y_OUT 기록용 행은 위에서 남김)
-    expect(covered, '마지막으로 연 창 "' + covered.label + '"의 가운데를 ' + covered.hit + ' 이(가) 가림 — z-index/포털 순서를 확인').toBeNull();
-  }
+  // 가려진 창은 다음 클릭이 3분 타임아웃으로 죽으므로 바로 분명한 메시지로 실패시킨다(기록용 행을 남겨도 던지는 순간 A11Y_OUT 저장 전이라 뜻이 없다)
+  expect(covered, '가장 최근에 연 창 "' + (covered?.label ?? '') + '"의 가운데를 ' + (covered?.hit ?? '') + ' 이(가) 가림 — z-index/포털 순서를 확인').toBeNull();
   const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   for (const v of r.violations) {
     out.push({

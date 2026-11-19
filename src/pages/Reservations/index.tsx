@@ -280,16 +280,6 @@ export default function Reservations() {
     .filter(ge => ge.date >= mobileRange[0] && ge.date <= mobileRange[1])
     .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 
-  const STATUS_COLORS: Record<string, string> = {
-    confirmed: 'bg-indigo-100 text-indigo-700',
-    pending: 'bg-amber-100 text-amber-700',
-    completed: 'bg-emerald-100 text-emerald-700',
-    cancelled: 'bg-slate-100 text-slate-500',
-    noshow: 'bg-red-100 text-red-700',
-  };
-  const STATUS_LABELS: Record<string, string> = {
-    confirmed: '예약확정', pending: '대기', completed: '완료', cancelled: '취소', noshow: '노쇼', // StatusBadge와 같은 문구
-  };
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -398,12 +388,7 @@ export default function Reservations() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900">{r.customerName}</p>
-                      <span className={clsx(
-                        'text-xs font-medium px-1.5 py-0.5 rounded-full',
-                        STATUS_COLORS[r.status] ?? 'bg-slate-100 text-slate-500',
-                      )}>
-                        {STATUS_LABELS[r.status] ?? r.status}
-                      </span>
+                      <StatusBadge status={r.status} />
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5 truncate">
                       {r.services.map(s => s.serviceName).join(', ')} · {r.staffName}

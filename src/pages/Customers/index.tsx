@@ -1677,7 +1677,7 @@ export default function Customers() {
                   <p className="text-xs font-semibold text-gray-500 uppercase mb-3">등록 프로그램</p>
                   <div className="space-y-2">
                     {customerPrograms.map(cp => (
-                      <div key={cp.id} data-testid="program-card" className={`p-3 bg-slate-50 rounded-lg ${cp.isCompleted || isProgramExpired(cp) ? 'border border-dashed border-gray-300' : ''}`}>
+                      <div key={cp.id} data-testid="program-card" className={`p-3 bg-slate-50 rounded-lg ${cp.isCompleted || isProgramExpired(cp) ? 'border border-dashed border-gray-300' : 'border border-transparent'}`}>
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
                           <span className="flex items-center gap-1.5">
