@@ -1157,6 +1157,7 @@ export default function Customers() {
   function handleImportExcel(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { notify('엑셀 파일이 10MB를 넘습니다. 시트를 나눠 올려주세요.'); e.target.value = ''; return; } // 파서 멈춤 방지 (보안 감사 2026-11-19)
     const reader = new FileReader();
     reader.onload = async ev => {
       try {

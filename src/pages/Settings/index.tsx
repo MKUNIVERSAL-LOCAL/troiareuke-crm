@@ -508,7 +508,7 @@ export default function Settings() {
   };
 
   const handleSmsSave = () => {
-    SettingsStore.save({ smsApiKey: settings.smsApiKey, smsCallerId: settings.smsCallerId });
+    SettingsStore.save({ smsCallerId: settings.smsCallerId }); // 발송사 API 키는 본사 서버에만 — 지점 입력란 제거 (보안 감사 2026-11-19)
     flash();
   };
 
@@ -1019,17 +1019,8 @@ export default function Settings() {
                   <div className="space-y-4">
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>엔포+ SMS 게이트웨이는 발송사 계약 후 실제 발송이 지원됩니다. API Key와 발신번호를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
+                      <span>문자 발송은 본사 계약 발송사를 통해 이뤄지며 발송사 API 키는 본사 서버에만 보관됩니다. 여기서는 이 지점의 발신번호만 입력합니다(발송사 등록 번호와 같아야 합니다).</span>
                     </div>
-                    <FormRow label="API Key">
-                      <input
-                        type="password"
-                        value={settings.smsApiKey || ''}
-                        onChange={e => setSettings(prev => ({ ...prev, smsApiKey: e.target.value }))}
-                        className="form-input"
-                        placeholder="엔포+ API Key (미리 입력 가능)"
-                      />
-                    </FormRow>
                     <FormRow label="발신번호">
                       <input
                         type="tel"

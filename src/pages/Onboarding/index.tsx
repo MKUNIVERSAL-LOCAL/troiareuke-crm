@@ -140,6 +140,7 @@ export default function Onboarding() {
     const input = e.target;
     const file = input.files?.[0];
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { notify('엑셀 파일이 10MB를 넘습니다. 시트를 나눠 올려주세요.'); input.value = ''; return; } // 파서 멈춤 방지 (보안 감사 2026-11-19)
 
     try {
       // xlsx/xls/csv 모두 SheetJS로 실제 파싱 (엑셀 바이너리를 텍스트로 잘못 읽는 문제 해결)

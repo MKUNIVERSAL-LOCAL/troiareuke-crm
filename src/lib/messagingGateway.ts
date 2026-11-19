@@ -4,13 +4,11 @@
  * 우선순위:
  *   1. NAS 중앙 서버(VITE_AUTH_API_URL) 설정 시 → POST /api/messages/send
  *      (발송사 키는 서버에만 보관. 서버의 SMS_PROVIDER 미설정 시 pending 정직 반환)
- *   2. localStorage의 게이트웨이 URL/키 (레거시 수동 설정)
- *   3. 둘 다 없으면 { pending: true } — 발송되지 않았음을 기록
+ *   2. 서버가 없으면 { pending: true } — 발송되지 않았음을 기록
+ * (localStorage의 사용자 지정 게이트웨이 URL/키로 전화번호 목록을 POST하던 레거시 경로는 보안 감사 2026-11-19로 제거)
  */
 import { apiRequest, isAuthApiConfigured } from './authApi';
 
-const GATEWAY_URL_KEY = 'crm_sms_gateway_url';
-const GATEWAY_KEY_KEY = 'crm_sms_gateway_key';
 
 export interface SendPayload {
   type: string;
@@ -49,45 +47,7 @@ export async function sendMessages(payload: SendPayload): Promise<SendResult> {
     }
   }
 
-  // 2. 레거시 수동 게이트웨이
-  let gatewayUrl: string | null = null;
-  let gatewayKey: string | null = null;
-  try {
-    gatewayUrl = localStorage.getItem(GATEWAY_URL_KEY);
-    gatewayKey = localStorage.getItem(GATEWAY_KEY_KEY);
-  } catch {
-    // localStorage 접근 불가
-  }
-
-  if (!gatewayUrl) {
-    return { sent: 0, failed: 0, pending: true, reason: '게이트웨이 미연동' };
-  }
-
-  try {
-    const res = await fetch(gatewayUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(gatewayKey ? { Authorization: `Bearer ${gatewayKey}` } : {}),
-      },
-      body: JSON.stringify({ ...payload, phones }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => res.statusText);
-      return { sent: 0, failed: phones.length, pending: false, reason: `게이트웨이 오류: ${res.status} ${errorText}` };
-    }
-
-    const data = (await res.json()) as { sent?: number; failed?: number };
-    return {
-      sent: data.sent ?? 0,
-      failed: data.failed ?? phones.length - (data.sent ?? 0),
-      pending: false,
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { sent: 0, failed: phones.length, pending: false, reason: `네트워크 오류: ${message}` };
-  }
+  return { sent: 0, failed: 0, pending: true, reason: '게이트웨이 미연동' };
 }
 
 // ── 예약 발송 (NAS 중앙 서버 전용) ─────────────────────────────

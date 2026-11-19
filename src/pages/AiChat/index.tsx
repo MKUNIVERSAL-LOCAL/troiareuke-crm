@@ -13,7 +13,6 @@ import { notify } from '../../lib/notify';
 import { useFeature } from '../../hooks/useFeature';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
 // 외부 LLM으로 나가는 프롬프트에는 전화번호를 항상 마스킹한다(권한 무관) — 다른 화면과 개인정보 정책 일치
-import { maskPhone } from '../../lib/masking';
 // 본사 AI 키 중계 — 서버에 키가 있으면 지점 키 없이 동작 (없으면 아래 지점 키 경로)
 import { isAiProxyEnabled, aiProxyChat, refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
 import { format, subMonths, parseISO, differenceInDays } from 'date-fns';
@@ -46,7 +45,13 @@ function selectProvider(claudeKey: string, openaiKey: string, geminiKey: string)
   return 'claude'; // 기본값
 }
 
-function buildCrmContext(): string {
+/** 가명(고객#번호) → 실제 이름. 답변 표시 때 되돌린다 */
+type CustomerAliases = Map<string, string>;
+function deAlias(text: string, aliases: CustomerAliases): string {
+  return text.replace(/고객#(\d+)/g, m => aliases.get(m) ?? m);
+}
+
+function buildCrmContext(): { context: string; aliases: CustomerAliases } {
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
   const customers = CustomerStore.getAll();
@@ -59,6 +64,11 @@ function buildCrmContext(): string {
   const services = ServiceStore.getAll();
   const reservations = ReservationStore.getAll();
   const treatmentLogs = TreatmentLogStore.getAll();
+  // 개인정보 보호(제3자 제공 최소화): 고객 이름은 고객#번호로 가명화해 보내고 전화번호는 보내지 않는다 — 답변의 고객#번호는 화면에서 이름으로 되돌린다 (보안 감사 2026-11-19)
+  const aliases: CustomerAliases = new Map();
+  const aliasByName = new Map<string, string>();
+  customers.forEach((c, i) => { const a = `고객#${i + 1}`; aliases.set(a, c.name); if (!aliasByName.has(c.name)) aliasByName.set(c.name, a); });
+  const alias = (name?: string) => (name ? aliasByName.get(name) ?? '고객(미등록)' : '-');
 
   const churned = customers.filter(c => {
     if (!c.lastVisitDate) return false;
@@ -72,8 +82,9 @@ function buildCrmContext(): string {
   const vipCustomers = customers.filter(c => c.grade === 'VIP');
   const lowStock = products.filter(p => p.stock <= p.minStock);
 
-  return `
+  const context = `
 === 더마솔루션 데이터 (${format(today, 'yyyy년 MM월 dd일', { locale: ko })} 기준) ===
+※ 개인정보 보호를 위해 고객 이름은 고객#번호로 표기했고 연락처는 제외했습니다. 답변에서 고객을 가리킬 때도 반드시 같은 표기(고객#번호)를 그대로 쓰세요.
 
 【고객 현황】
 - 전체 고객 수: ${customers.length}명
@@ -83,12 +94,12 @@ function buildCrmContext(): string {
 - 이탈 위험 고객 (3개월 이상 미방문): ${churned.length}명
 
 【전체 고객 목록】
-${customers.map(c => `- ${c.name} (${maskPhone(c.phone || '', 'staff')}) | 등급:${c.grade} | 피부타입:${c.skinType || '-'} | 총방문:${c.totalVisits}회 | 총결제:${c.totalSpent.toLocaleString()}원 | 마지막방문:${c.lastVisitDate || '없음'} | 가입:${c.registeredAt} | 유입경로:${c.referralSource || '-'}`).join('\n')}
+${customers.map(c => `- ${alias(c.name)} | 등급:${c.grade} | 피부타입:${c.skinType || '-'} | 총방문:${c.totalVisits}회 | 총결제:${c.totalSpent.toLocaleString()}원 | 마지막방문:${c.lastVisitDate || '없음'} | 가입:${c.registeredAt} | 유입경로:${c.referralSource || '-'}`).join('\n')}
 
 【이탈 고객 상세 (3개월 이상 미방문)】
 ${churned.length === 0 ? '해당 없음' : churned.map(c => {
     const days = differenceInDays(today, parseISO(c.lastVisitDate!));
-    return `- ${c.name} (${maskPhone(c.phone || '', 'staff')}) | ${days}일 미방문 | 등급:${c.grade} | 총방문:${c.totalVisits}회 | 마지막방문:${c.lastVisitDate}`;
+    return `- ${alias(c.name)} | ${days}일 미방문 | 등급:${c.grade} | 총방문:${c.totalVisits}회 | 마지막방문:${c.lastVisitDate}`;
   }).join('\n')}
 
 【이번 달 매출】
@@ -96,7 +107,7 @@ ${churned.length === 0 ? '해당 없음' : churned.map(c => {
 - 결제 건수: ${thisMonthPayments.length}건
 
 【전체 결제 내역 (최근 12개월)】
-${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${p.customerName} | ${p.amount.toLocaleString()}원 | ${p.paymentMethod} | ${p.status}`).join('\n')}
+${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${alias(p.customerName)} | ${p.amount.toLocaleString()}원 | ${p.paymentMethod} | ${p.status}`).join('\n')}
 
 【직원 현황】
 ${staff.map((s: any) => `- ${s.name} (${s.role}) | 전문: ${Array.isArray(s.specialty) ? s.specialty.join(', ') : s.specialty || '-'}`).join('\n')}
@@ -111,11 +122,12 @@ ${products.map(p => `- ${p.name} | 재고:${p.stock}개 | 최소재고:${p.minSt
 ${lowStock.length === 0 ? '없음' : lowStock.map(p => `- ${p.name}: 현재 ${p.stock}개 (최소 ${p.minStock}개)`).join('\n')}
 
 【예약 현황 (최근)】
-${reservations.slice(0, 10).map((r: any) => `- ${r.date} ${r.startTime} | ${r.customerName} | ${Array.isArray(r.services) ? r.services.map((s: any) => s.serviceName).join('+') : '-'} | ${r.staffName} | ${r.status}`).join('\n')}
+${reservations.slice(0, 10).map((r: any) => `- ${r.date} ${r.startTime} | ${alias(r.customerName)} | ${Array.isArray(r.services) ? r.services.map((s: any) => s.serviceName).join('+') : '-'} | ${r.staffName} | ${r.status}`).join('\n')}
 
 【시술 기록】
-${treatmentLogs.map((t: any) => `- ${t.treatmentDate} | ${t.customerName} | ${t.programName || t.treatmentDetails || '-'} | ${t.customerProgramId ? `회차 차감 ${t.sessionsUsed ?? 1}회` : '단건'} | 담당:${t.staffName || '-'}`).join('\n')}
+${treatmentLogs.map((t: any) => `- ${t.treatmentDate} | ${alias(t.customerName)} | ${t.programName || t.treatmentDetails || '-'} | ${t.customerProgramId ? `회차 차감 ${t.sessionsUsed ?? 1}회` : '단건'} | 담당:${t.staffName || '-'}`).join('\n')}
 `.trim();
+  return { context, aliases };
 }
 
 async function callClaude(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
@@ -172,10 +184,10 @@ async function callGemini(apiKey: string, messages: { role: string; content: str
   }));
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, // 키는 URL이 아니라 헤더로 — skinAnalysis와 같은 방식 (보안 감사 2026-11-19)
       body: JSON.stringify({
         contents,
         systemInstruction: { parts: [{ text: '당신은 더마솔루션 AI 어시스턴트입니다. CRM 데이터를 바탕으로 한국어로 친절하고 정확하게 답변해주세요.' }] },
@@ -226,7 +238,7 @@ function AiChatInner() {
     {
       id: '0',
       role: 'assistant',
-      content: '안녕하세요! 더마솔루션 AI 어시스턴트입니다.\n\nClaude (Anthropic) AI를 기반으로 CRM 데이터를 분석하여 고객 현황, 매출, 이탈 고객, 재고 등 다양한 질문에 답변해드립니다.\n\n연결 상태는 위 배지에서 확인할 수 있습니다. 궁금한 것을 입력해주세요!',
+      content: '안녕하세요! 더마솔루션 AI 어시스턴트입니다.\n\nClaude (Anthropic) AI를 기반으로 CRM 데이터를 분석하여 고객 현황, 매출, 이탈 고객, 재고 등 다양한 질문에 답변해드립니다.\n\n연결 상태는 위 배지에서 확인할 수 있습니다. 고객 이름은 가명(고객#번호)으로, 연락처는 빼고 전달되며 답변에서 다시 이름으로 바꿔 보여 줍니다. 궁금한 것을 입력해주세요!',
       timestamp: new Date(),
     },
   ]);
@@ -268,7 +280,7 @@ function AiChatInner() {
     setIsLoading(true);
 
     try {
-      const crmContext = buildCrmContext();
+      const { context: crmContext, aliases } = buildCrmContext();
       const history = [...messages, userMsg]
         .filter(m => m.id !== '0')
         .map(m => ({ role: m.role, content: m.content }));
@@ -284,7 +296,7 @@ function AiChatInner() {
         }
       }
       if (proxyText !== null) {
-        setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: proxyText!, timestamp: new Date(), usedProvider: 'server' }]);
+        setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: deAlias(proxyText!, aliases), timestamp: new Date(), usedProvider: 'server' }]);
         return;
       }
 
@@ -330,7 +342,7 @@ function AiChatInner() {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: responseText,
+        content: deAlias(responseText, aliases),
         timestamp: new Date(),
         usedProvider,
       }]);

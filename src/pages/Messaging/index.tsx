@@ -61,11 +61,8 @@ const SEGMENT_FILTERS: Record<string, (c: Customer) => boolean> = {
   },
 };
 
-/** 실발송 경로(NAS 서버 또는 레거시 게이트웨이)가 하나라도 살아있는가 */
-function isMessagingLive(): boolean {
-  if (isAuthApiConfigured) return true;
-  try { return Boolean(localStorage.getItem('crm_sms_gateway_url')); } catch { return false; }
-}
+/** 실발송 경로(NAS 서버)가 살아있는가 — 레거시 수동 게이트웨이는 제거됨 (보안 감사 2026-11-19) */
+function isMessagingLive(): boolean { return isAuthApiConfigured; }
 
 const MSG_TYPE_LABELS: Record<string, string> = {
   sms: 'SMS',
