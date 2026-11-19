@@ -1,4 +1,5 @@
-﻿import { useRef, useState } from 'react';
+﻿import { useRef, useState, useEffect } from 'react';
+import { readDraft, writeDraft, clearDraft } from '../../lib/formDraft';
 import { formatPhoneInput } from '../../lib/format';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, CheckCircle2, Paperclip, X, Clock } from 'lucide-react';
@@ -12,6 +13,10 @@ const plans = [
   { key: 'pro', label: 'Pro', price: '59,000원/월', desc: '2개 샵 · 직원 무제한', highlight: false, disabled: true },
 ];
 
+/** 새로고침에도 남겨 두는 가입 입력 — 비밀번호·사업자등록증 사진은 담지 않는다. 단계는 늘 1부터(비밀번호를 다시 받아야 하므로) (3차 UX 점검 후속 2026-11-19) */
+const SIGNUP_DRAFT = 'signup-draft';
+interface SignupDraft { name: string; email: string; phone: string; businessNumber: string; agreeTerms: boolean; agreePrivacy: boolean; agreeMarketing: boolean }
+
 export default function Signup() {
   const navigate = useNavigate();
   const { signup } = useAuth();
@@ -19,7 +24,15 @@ export default function Signup() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ name: '', email: '', phone: '', businessNumber: '', password: '', confirm: '', agreeTerms: false, agreePrivacy: false, agreeMarketing: false });
+  const [form, setForm] = useState(() => ({
+    name: '', email: '', phone: '', businessNumber: '', agreeTerms: false, agreePrivacy: false, agreeMarketing: false,
+    ...readDraft<Partial<SignupDraft>>(SIGNUP_DRAFT, {}),
+    password: '', confirm: '',
+  }));
+  useEffect(() => {
+    const { name, email, phone, businessNumber, agreeTerms, agreePrivacy, agreeMarketing } = form;
+    writeDraft(SIGNUP_DRAFT, { name, email, phone, businessNumber, agreeTerms, agreePrivacy, agreeMarketing } satisfies SignupDraft);
+  }, [form]);
   const [licenseImage, setLicenseImage] = useState(''); // 사업자등록증 사진 (data URL)
   const [licenseFileName, setLicenseFileName] = useState('');
   const licenseInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +79,7 @@ export default function Signup() {
           businessNumber: form.businessNumber,
           businessLicenseImage: licenseImage,
         });
+        clearDraft(SIGNUP_DRAFT);
         setStep(3);
         return;
       }
@@ -78,6 +92,7 @@ export default function Signup() {
         businessNumber: form.businessNumber,
         businessLicenseImage: licenseImage || undefined,
       });
+      clearDraft(SIGNUP_DRAFT);
       navigate('/onboarding');
     } catch (e: any) {
       const msg = e?.message || '';

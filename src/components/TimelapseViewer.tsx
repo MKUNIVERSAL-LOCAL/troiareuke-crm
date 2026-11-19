@@ -166,7 +166,7 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
           <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <span className={clsx('px-2 py-1 rounded-lg font-semibold', days > 0 ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-600')}>
-                D+{days}
+                {days > 0 ? `D+${days}` : '같은 날'}
               </span>
               <span>
                 선택 대상:

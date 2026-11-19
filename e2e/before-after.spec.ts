@@ -52,7 +52,7 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
 
   // ── 비교 보기 → 이미지 저장(내려받기) ──
   await desk.getByRole('button', { name: '비교 보기' }).click();
-  await expect(desk.getByText('D+0')).toBeVisible();
+  await expect(desk.getByText('같은 날', { exact: true })).toBeVisible(); // 같은 날 찍은 전/후는 "D+0" 대신 "같은 날"(73)
   await expect(desk.getByText(/^Before · /)).toBeVisible();
   await expect(desk.getByText(/^After · /)).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
@@ -69,7 +69,7 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await expect(consult.getByLabel('비교 After 사진')).toHaveValue('1');
   await consult.getByRole('button', { name: '비교 이미지 만들기' }).click();
   await expect(consult.getByAltText('비교 이미지 미리보기')).toBeVisible({ timeout: 10_000 });
-  await expect(consult.getByText(/D\+0 비교 이미지가 준비됐습니다/)).toBeVisible();
+  await expect(consult.getByText('같은 날 찍은 사진의 비교 이미지가 준비됐습니다.')).toBeVisible();
   await consult.getByRole('button', { name: '상담 저장' }).click();
   await expect(consult).toBeHidden();
   const strip = desk.getByRole('button', { name: '상담 사진 크게 보기' });

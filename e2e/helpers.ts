@@ -60,6 +60,10 @@ export async function signupAndOnboard(page: Page, acc: E2EAccount) {
   await page.getByRole('button', { name: '피부관리실', exact: true }).click();
   await page.getByRole('button', { name: '다음', exact: true }).click();
   await page.getByPlaceholder('직원 1 이름').fill('김테스트');
+  // 새로고침해도 입력과 단계가 남는다(세션 임시 저장, 73) — 온보딩 도중 F5를 눌러도 처음부터 다시 쓰지 않게. 임시 저장이 실제로 기록된 뒤 새로고침한다
+  await page.waitForFunction(() => Object.keys(sessionStorage).some(k => k.startsWith('onboarding-draft:') && (sessionStorage.getItem(k) || '').includes('김테스트')));
+  await page.reload();
+  await expect(page.getByPlaceholder('직원 1 이름')).toHaveValue('김테스트', { timeout: 15_000 });
   await page.getByRole('button', { name: '다음', exact: true }).click();
   await page.getByRole('button', { name: '시술 항목 추가' }).click();
   await page.getByPlaceholder('시술명').fill('테스트관리');

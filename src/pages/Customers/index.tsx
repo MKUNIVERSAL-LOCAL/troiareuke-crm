@@ -2962,7 +2962,7 @@ export default function Customers() {
                       <img src={comparison.dataUrl} alt="비교 이미지 미리보기" className="w-full h-full object-cover" />
                     </button>
                     <div className="flex-1 min-w-[140px] text-xs text-gray-600">
-                      <p className="font-medium text-gray-800">{comparison.days === null ? '저장된 비교 이미지입니다.' : `D+${comparison.days} 비교 이미지가 준비됐습니다.`}</p>
+                      <p className="font-medium text-gray-800">{comparison.days === null ? '저장된 비교 이미지입니다.' : comparison.days > 0 ? `D+${comparison.days} 비교 이미지가 준비됐습니다.` : '같은 날 찍은 사진의 비교 이미지가 준비됐습니다.'}</p>
                       <p className="text-xs text-gray-500 mt-0.5">상담 저장 시 상담 기록에 함께 저장됩니다.</p>
                       <div className="flex gap-2 mt-2">
                         <button type="button" onClick={exportComparison}

@@ -1,7 +1,8 @@
 import { notify } from '../../lib/notify';
 import { readJson } from '../../lib/safeJson';
 import { todayISO } from '../../lib/format';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { readDraft, writeDraft, clearDraft } from '../../lib/formDraft';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { StaffStore, ServiceStore, SettingsStore } from '../../lib/store';
@@ -73,23 +74,40 @@ const planIcons: Record<string, React.ReactNode> = {
   enterprise: <Sparkles size={24} />,
 };
 
+/** 새로고침·실수로 닫힘에도 남겨 두는 온보딩 입력(탭 세션, 계정별). 완료하면 지운다 (3차 UX 점검 후속 2026-11-19) */
+interface OnboardingDraft {
+  step: number; shopName: string; shopType: string; shopPhone: string; shopAddress: string;
+  staffList: { name: string; role: string }[];
+  customServices: { name: string; duration: string; price: string }[];
+  selectedTroiPrograms: string[];
+  excelServices: { name: string; duration: number; price: number }[];
+  excelFileName: string;
+  selectedPlan: SubscriptionPlan;
+}
+
 export default function Onboarding() {
   const { completeOnboarding, user } = useAuth();
-  const [step, setStep] = useState(0);
-  const [shopName, setShopName] = useState('');
-  const [shopType, setShopType] = useState('');
-  const [shopPhone, setShopPhone] = useState('');
-  const [shopAddress, setShopAddress] = useState('');
-  const [staffList, setStaffList] = useState([{ name: '', role: '대표' }]);
+  // 키는 첫 렌더에 동기적으로 정해져야 한다 — 새로고침 직후 AuthContext의 user는 잠시 비어 있어 거기서 id를 가져오면 초안을 못 찾는다(E2E 발견)
+  const [draftKey] = useState(() => `onboarding-draft:${readJson<{ id?: string }>('troiareuke_auth_user', {}).id || user?.id || 'anon'}`);
+  const [draft] = useState(() => readDraft<OnboardingDraft | null>(draftKey, null));
+  const [step, setStep] = useState(draft?.step ?? 0);
+  const [shopName, setShopName] = useState(draft?.shopName ?? '');
+  const [shopType, setShopType] = useState(draft?.shopType ?? '');
+  const [shopPhone, setShopPhone] = useState(draft?.shopPhone ?? '');
+  const [shopAddress, setShopAddress] = useState(draft?.shopAddress ?? '');
+  const [staffList, setStaffList] = useState(draft?.staffList?.length ? draft.staffList : [{ name: '', role: '대표' }]);
   // 시술 항목: 직접 입력 + 트로이아르케 프로그램 + 엑셀 업로드
-  const [customServices, setCustomServices] = useState<{ name: string; duration: string; price: string }[]>([]);
-  const [selectedTroiPrograms, setSelectedTroiPrograms] = useState<Set<string>>(new Set());
+  const [customServices, setCustomServices] = useState<{ name: string; duration: string; price: string }[]>(draft?.customServices ?? []);
+  const [selectedTroiPrograms, setSelectedTroiPrograms] = useState<Set<string>>(new Set(draft?.selectedTroiPrograms ?? []));
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
-  const [excelServices, setExcelServices] = useState<{ name: string; duration: number; price: number }[]>([]);
-  const [excelFileName, setExcelFileName] = useState('');
+  const [excelServices, setExcelServices] = useState<{ name: string; duration: number; price: number }[]>(draft?.excelServices ?? []);
+  const [excelFileName, setExcelFileName] = useState(draft?.excelFileName ?? '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('trial');
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(draft?.selectedPlan ?? 'trial');
+  useEffect(() => {
+    writeDraft(draftKey, { step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms: [...selectedTroiPrograms], excelServices, excelFileName, selectedPlan } satisfies OnboardingDraft);
+  }, [draftKey, step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms, excelServices, excelFileName, selectedPlan]);
 
   const addStaff = () => setStaffList(p => [...p, { name: '', role: '피부관리사' }]);
   const updateStaff = (i: number, k: string, v: string) =>
@@ -299,6 +317,7 @@ export default function Onboarding() {
     // 온보딩 완료의 서버 반영 실패는 삼키지 않고 알린다 — 로컬 완료는 유지되므로 진행은 계속
     try {
       await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
+      clearDraft(draftKey);
     } catch {
       notify('온보딩 완료가 서버에 반영되지 않았습니다. 인터넷 연결 후 다시 로그인하면 온보딩이 다시 표시될 수 있습니다 — 그 경우 기존 입력은 보존됩니다.');
     }
