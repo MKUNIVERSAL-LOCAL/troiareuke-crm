@@ -1214,7 +1214,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (r.totalPrice > 0) {
       const alreadyPaid = paidForThis.length > 0;
       if (alreadyPaid) {
-        notify('완료 처리했습니다. (이 예약의 결제는 이미 등록되어 있어 중복 등록하지 않았습니다)');
+        notify('완료 처리했습니다. (이 예약의 결제는 이미 등록돼 있어 중복 등록을 건너뜀)');
       } else {
         // 결제수단 선택 모달로 — 단일/복합(분할) 결제와 커스텀 수단 지원
         setShowPayModal(true);

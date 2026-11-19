@@ -23,7 +23,7 @@ test('직원 추가 → 예약 담당 → 실적 → 이름 변경 → 퇴사·�
   await addDialog.getByLabel('이름').fill('김테스트');
   await addDialog.getByPlaceholder('010-0000-0000').fill('010-2222-3333');
   await addDialog.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page.locator('[aria-live="polite"]').getByText(/같은 이름/)).toBeVisible();
+  await expect(page.locator('[aria-live="polite"]').getByRole('alert').filter({ hasText: /같은 이름/ })).toBeVisible(); // 검증 안내는 오류 톤(role=alert)으로 읽힌다 (2026-11-19 ㊶)
   await expect(addDialog).toBeVisible();
   await addDialog.getByLabel('이름').fill('박신입');
   await addDialog.getByLabel('역할').selectOption('에스테티션');
