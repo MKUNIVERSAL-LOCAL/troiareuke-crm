@@ -10,7 +10,7 @@ import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
-import { formatDate } from '../lib/format';
+import { formatDate, formatWon } from '../lib/format';
 import RevisitReminderCard from '../components/RevisitReminderCard';
 import RetentionNoticeCard from '../components/RetentionNoticeCard';
 import ProgramAlertCard from '../components/ProgramAlertCard';
@@ -176,7 +176,7 @@ export default function Dashboard() {
           {salesOn && (
             <button type="button" onClick={() => navigate('/sales')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">이번 달 총 매출</p>
-              <p className="text-lg font-bold text-gray-900 mt-1">{Math.round(thisMonth.totalRevenue / 10000)}만원</p>
+              <p className="text-lg font-bold text-gray-900 mt-1">{formatWon(thisMonth.totalRevenue)}</p>
               <p className="text-xs text-gray-400 mt-0.5">{revenueGrowth === null ? '전월 매출 없음' : `전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}</p>
             </button>
           )}
@@ -195,7 +195,7 @@ export default function Dashboard() {
             </button>
           )}
           {customersOn && (
-            <button type="button" onClick={() => navigate('/customers')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
+            <button type="button" onClick={() => navigate('/customers?grade=VIP')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">VIP 고객</p>
               <p className="text-lg font-bold text-gray-900 mt-1">{vipCount}명</p>
               <p className="text-xs text-gray-400 mt-0.5">전체의 {totalPercent}%</p>
@@ -299,7 +299,7 @@ export default function Dashboard() {
           <div className="cursor-pointer" onClick={() => navigate('/sales')}>
             <StatCard
               title="이번 달 총 매출"
-              value={`${Math.round(thisMonth.totalRevenue / 10000)}만원`}
+              value={formatWon(thisMonth.totalRevenue)}
               subtitle={revenueGrowth === null ? '전월 매출 없음' : `전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}
               icon={<TrendingUp size={20} />}
               trend={revenueGrowth === null ? undefined : { value: revenueGrowth, label: '전월 대비' }}
@@ -330,7 +330,7 @@ export default function Dashboard() {
           </div>
           )}
           {customersOn && (
-          <div className="cursor-pointer" onClick={() => navigate('/customers')}>
+          <div className="cursor-pointer" onClick={() => navigate('/customers?grade=VIP')}>
             <StatCard
               title="VIP 고객"
               value={`${vipCount}명`}
@@ -351,7 +351,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs text-gray-500">시술 매출 (이번 달)</p>
-              <p className="text-xl font-bold text-gray-900">{Math.round(thisMonth.treatmentRevenue / 10000)}만원</p>
+              <p className="text-xl font-bold text-gray-900">{formatWon(thisMonth.treatmentRevenue)}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(productsOn ? '/products' : '/sales')}>
@@ -360,7 +360,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs text-gray-500">홈케어 판매 (이번 달)</p>
-              <p className="text-xl font-bold text-gray-900">{Math.round(thisMonth.productRevenue / 10000)}만원</p>
+              <p className="text-xl font-bold text-gray-900">{formatWon(thisMonth.productRevenue)}</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>

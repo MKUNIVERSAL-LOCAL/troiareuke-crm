@@ -188,11 +188,9 @@ function StatusChip({ label, connected }: { label: string; connected: boolean })
 
 function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; reloadKey: number }) {
   const [customers, setCustomers] = useState(() => CustomerStore.getAll().filter(c => c.isActive !== false)); // 익명화 고객 제외
-  const [settings, setSettings] = useState(SettingsStore.get());
 
   useEffect(() => {
     setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false));
-    setSettings(SettingsStore.get());
   }, [reloadKey]);
 
   const autoMessages = [

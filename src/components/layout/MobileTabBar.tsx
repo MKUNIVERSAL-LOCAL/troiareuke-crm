@@ -43,6 +43,7 @@ export default function MobileTabBar() {
   ].filter(l => { const def = featureForPath(l.to); return !def || isFeatureEnabled(def.id); });
 
   const handleLogout = () => {
+    if (!window.confirm('로그아웃할까요?')) return; // 설정 바로 아래라 손가락 미스로 재로그인하던 것 방지 (3차 UX 점검 2026-11-19)
     setMoreOpen(false);
     resetFeatureFlags(); // 계정 간 플래그 잔류 방지
     clearLocalPhotoCacheForLogout(); // 공용 기기 개인정보 보호 — 서버 모드에서만

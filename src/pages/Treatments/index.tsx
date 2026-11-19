@@ -18,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getPhotos, getPhotosAsync, getPhotoCount, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, PHOTO_ANGLES, PHOTO_LABELS, type PhotoEntry, type PhotoAngle, type PhotoLabel } from '../../lib/photoStore';
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import CameraOverlay, { isCameraPreviewSupported } from '../../components/CameraOverlay';
+import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
 import { hasPaymentFor } from '../../lib/pendingCompletion';
@@ -114,8 +115,8 @@ export default function Treatments() {
           {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
       )}
-      {(period !== 'all' || staffFilter) && (
-        <button type="button" onClick={() => { setPeriod('all'); setStaffFilter(''); }} className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 px-1">초기화</button>
+      {isFiltered && (
+        <button type="button" onClick={() => { setPeriod('all'); setStaffFilter(''); setSearch(''); }} className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 px-1">초기화</button>
       )}
     </div>
   );
@@ -265,7 +266,7 @@ export default function Treatments() {
                   )}
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-medium text-gray-600">{t.sessionsUsed}회차</p>
+                  <p className="text-sm font-medium text-gray-600">{t.customerProgramId ? `회차 차감 ${t.sessionsUsed}회` : '단건'}</p>
                 </div>
                 <ChevronRight size={16} className="text-gray-300 mt-1 flex-shrink-0" />
               </button>
@@ -817,6 +818,7 @@ function TreatmentDetailModal({
 }) {
   const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [lightbox, setLightbox] = useState<LightboxPhoto | null>(null);
   const photos = getPhotos(`treatment:${t.id}`);
 
   return (
@@ -896,19 +898,24 @@ function TreatmentDetailModal({
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">시술 전후 사진 ({photos.length})</p>
             <div className="grid grid-cols-4 gap-2">
               {photos.map(p => (
-                <a key={p.id} href={p.dataUrl} target="_blank" rel="noreferrer" className="relative aspect-square">
+                <button key={p.id} type="button" onClick={() => setLightbox({ dataUrl: p.dataUrl, caption: `${t.customerName} · ${formatDate(t.treatmentDate)} 시술 사진`, fileName: `${t.customerName}_${t.treatmentDate}.jpg` })} className="relative aspect-square" aria-label="시술 사진 크게 보기">
                   <img src={p.dataUrl} alt="시술 사진" className="w-full h-full object-cover rounded-xl border border-gray-100 hover:opacity-90 transition" />
                   {(p.label === 'before' || p.label === 'after' || p.angle) && (
                     <span className={clsx('absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md text-2xs font-semibold text-white', p.label === 'after' ? 'bg-indigo-600/90' : 'bg-gray-800/80')}>
                       {p.label === 'before' ? '전' : p.label === 'after' ? '후' : ''}{p.angle ? (p.label === 'before' || p.label === 'after' ? ' · ' : '') + angleLabel(p.angle) : ''}
                     </span>
                   )}
-                </a>
+                </button>
               ))}
             </div>
           </div>
         )}
 
+        {confirmDelete && (
+          <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+            삭제하면 {t.customerProgramId ? `연결된 회차권 잔여 ${t.sessionsUsed}회가 복구되고, ` : ''}사진 {photos.length}장이 함께 삭제됩니다. 되돌릴 수 없습니다.
+          </p>
+        )}
         <div className="flex gap-3 pt-2">
           {!confirmDelete ? (
             <button
@@ -938,6 +945,7 @@ function TreatmentDetailModal({
           <button onClick={onClose} className="px-6 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">닫기</button>
         </div>
       </div>
+      {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
     </Modal>
   );
 }

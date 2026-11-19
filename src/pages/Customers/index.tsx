@@ -118,14 +118,19 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
   function emit(ny: string, nm: string, nd: string) {
     onChange(ny && nm && nd ? `${ny}-${nm}-${nd}` : '');
   }
+  // 월·연이 바뀌어 그 달에 없는 날(2월 31일 등)이 남으면 비운다 — 일 목록만 줄고 값은 남아 잘못된 생년월일이 저장되던 것 (3차 UX 점검 2026-11-19)
+  function clampDay(ny: string, nm: string, nd: string): string {
+    const max = ny && nm ? new Date(Number(ny), Number(nm), 0).getDate() : 31;
+    return nd && Number(nd) > max ? '' : nd;
+  }
   const sel = 'px-2 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-300 hover:border-indigo-300 transition cursor-pointer';
   return (
     <div className="grid grid-cols-3 gap-1.5">
-      <select className={sel} aria-label="생년" value={y} onChange={e => { setY(e.target.value); emit(e.target.value, mo, d); }}>
+      <select className={sel} aria-label="생년" value={y} onChange={e => { const nd = clampDay(e.target.value, mo, d); setY(e.target.value); if (nd !== d) setD(nd); emit(e.target.value, mo, nd); }}>
         <option value="">연도</option>
         {years.map(yr => <option key={yr} value={yr}>{yr}년</option>)}
       </select>
-      <select className={sel} aria-label="생월" value={mo} onChange={e => { setMo(e.target.value); emit(y, e.target.value, d); }}>
+      <select className={sel} aria-label="생월" value={mo} onChange={e => { const nd = clampDay(y, e.target.value, d); setMo(e.target.value); if (nd !== d) setD(nd); emit(y, e.target.value, nd); }}>
         <option value="">월</option>
         {months.map(m => <option key={m} value={m}>{Number(m)}월</option>)}
       </select>
@@ -340,7 +345,10 @@ export default function Customers() {
     // q가 실제로 바뀔 때만 — 다른 파라미터(retention 등) 변경이 손으로 고친 검색어를 되돌리지 않게 (리뷰 2026-11-17)
     if (qParam !== null) setSearch(qParam);
   }, [qParam]);
-  const [gradeFilter, setGradeFilter] = useState<CustomerGrade | '전체'>('전체');
+  const [gradeFilter, setGradeFilter] = useState<CustomerGrade | '전체'>(() => {
+    const g = searchParams.get('grade'); // 대시보드 VIP 카드 → /customers?grade=VIP (3차 UX 점검 2026-11-19)
+    return g === 'VIP' || g === '골드' || g === '일반' || g === '신규' ? g : '전체';
+  });
   const [tagFilter, setTagFilter] = useState(''); // 태그 칩 필터 (2026-11-18)
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
   type SortKey = 'recent' | 'name' | 'registered' | 'spent';
@@ -1162,6 +1170,7 @@ export default function Customers() {
           }
           if (existingPhones.has(digits)) { skipped++; return; }
           existingPhones.add(digits);
+          phone = formatPhoneInput(digits); // 직접 등록과 같은 010-0000-0000 형식 (3차 UX 점검 2026-11-19)
           // 엑셀 날짜 시리얼 숫자로 들어온 생년월일 변환
           let birthDate = pick(r, ['생년월일', '생일', 'birthDate']);
           if (/^\d+$/.test(birthDate)) {
@@ -1211,7 +1220,10 @@ export default function Customers() {
     const newPhone = normalize(addForm.phone);
     const dup = CustomerStore.getAll().find(c => normalize(c.phone) === newPhone && newPhone !== '');
     if (dup) {
-      notify(`이미 등록된 번호입니다: ${dup.name} (${dup.phone})\n기존 고객 정보를 사용해주세요.`);
+      if (window.confirm(`이미 등록된 번호입니다: ${dup.name} (${dup.phone})\n기존 고객을 열까요? (새로 등록하지 않습니다)`)) {
+        setShowAddModal(false);
+        openCustomer(dup);
+      }
       return;
     }
     CustomerStore.save({
@@ -1461,10 +1473,17 @@ export default function Customers() {
           {filtered.length === 0 ? (
             <div className="py-16 text-center">
               <User size={32} className="text-slate-300 mx-auto mb-2" />
-              <p className="text-sm text-slate-500">고객이 없습니다</p>
-              <button onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
-                첫 고객 등록하기
-              </button>
+              <p className="text-sm text-slate-500">{customers.length === 0 ? '아직 고객이 없습니다' : '조건에 맞는 고객이 없어요'}</p>
+              {customers.length === 0 ? (
+                <button onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
+                  첫 고객 등록하기
+                </button>
+              ) : (
+                // 검색 오타에 '첫 고객 등록'을 권하면 중복 고객이 생긴다 — 필터를 풀어 주는 길만 (3차 UX 점검 2026-11-19)
+                <button type="button" onClick={() => { setSearch(''); setGradeFilter('전체'); setTagFilter(''); setRetentionOnly(false); }} className="mt-3 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
+                  필터 초기화
+                </button>
+              )}
             </div>
           ) : (
             visible.map(customer => {
@@ -1939,7 +1958,7 @@ export default function Customers() {
                     {activeProgs > 0 && (
                       <span className="text-primary-600 font-medium">활성 {activeProgs}개</span>
                     )}
-                    {isRisk && <AlertCircle size={11} className="text-orange-400" />}
+                    {isRisk && <span className="inline-flex" title={`${daysSince}일 미방문`} aria-label={`${daysSince}일 미방문`}><AlertCircle size={11} className="text-orange-400" /></span>}
                   </div>
                 </button>
               );
@@ -2412,7 +2431,7 @@ export default function Customers() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
-                  <input aria-label="전화번호" required value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
+                  <input aria-label="전화번호" type="tel" inputMode="numeric" autoComplete="off" required value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="010-0000-0000" />
                 </div>
               </div>
@@ -2516,7 +2535,7 @@ export default function Customers() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
-                  <input aria-label="전화번호" required value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
+                  <input aria-label="전화번호" type="tel" inputMode="numeric" autoComplete="off" required value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="010-0000-0000" />
                 </div>
               </div>
