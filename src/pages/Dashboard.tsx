@@ -98,7 +98,7 @@ function getDashboardData() {
     todayStr
   )
     .filter(p => p.status === 'completed')
-    .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate))
+    .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate) || (b.createdAt || '').localeCompare(a.createdAt || '')) // 같은 날은 최근 등록 순 (UX 점검 2026-11-19)
     .slice(0, 5);
 
   return {
@@ -303,7 +303,7 @@ export default function Dashboard() {
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {salesOn && (
-          <div className="cursor-pointer" onClick={() => navigate('/sales')}>
+          <button type="button" className="text-left w-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate('/sales')}>
             <StatCard
               title="이번 달 총 매출"
               value={formatWon(thisMonth.totalRevenue)}
@@ -312,10 +312,10 @@ export default function Dashboard() {
               trend={revenueGrowth === null ? undefined : { value: revenueGrowth, label: '전월 대비' }}
               accent="primary"
             />
-          </div>
+          </button>
           )}
           {reservationsOn && (
-          <div className="cursor-pointer" onClick={() => navigate('/reservations')}>
+          <button type="button" className="text-left w-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate('/reservations')}>
             <StatCard
               title="오늘 예약"
               value={`${todayActiveReservations.length}건`}
@@ -323,10 +323,10 @@ export default function Dashboard() {
               icon={<Calendar size={20} />}
               accent="pink"
             />
-          </div>
+          </button>
           )}
           {customersOn && (
-          <div className="cursor-pointer" onClick={() => navigate('/customers')}>
+          <button type="button" className="text-left w-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate('/customers')}>
             <StatCard
               title="전체 고객"
               value={`${totalCustomers}명`}
@@ -334,10 +334,10 @@ export default function Dashboard() {
               icon={<Users size={20} />}
               accent="blue"
             />
-          </div>
+          </button>
           )}
           {customersOn && (
-          <div className="cursor-pointer" onClick={() => navigate('/customers?grade=VIP')}>
+          <button type="button" className="text-left w-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate('/customers?grade=VIP')}>
             <StatCard
               title="VIP 고객"
               value={`${vipCount}명`}
@@ -345,14 +345,14 @@ export default function Dashboard() {
               icon={<Star size={20} />}
               accent="orange"
             />
-          </div>
+          </button>
           )}
         </div>
 
         {/* Revenue Breakdown — 매출 데이터라 module.sales 게이트 */}
         {salesOn && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>
+          <button type="button" className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 text-left w-full cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate('/sales')}>
             <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center flex-shrink-0">
               <ShoppingBag size={22} className="text-primary-600" />
             </div>
@@ -360,8 +360,8 @@ export default function Dashboard() {
               <p className="text-xs text-gray-500">시술 매출 (이번 달)</p>
               <p className="text-xl font-bold text-gray-900">{formatWon(thisMonth.treatmentRevenue)}</p>
             </div>
-          </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(productsOn ? '/products' : '/sales')}>
+          </button>
+          <button type="button" className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 text-left w-full cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate(productsOn ? '/products' : '/sales')}>
             <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
               <Package size={22} className="text-[#1a3a8f]" />
             </div>
@@ -369,8 +369,8 @@ export default function Dashboard() {
               <p className="text-xs text-gray-500">홈케어 판매 (이번 달)</p>
               <p className="text-xl font-bold text-gray-900">{formatWon(thisMonth.productRevenue)}</p>
             </div>
-          </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/sales')}>
+          </button>
+          <button type="button" className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 text-left w-full cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate('/sales')}>
             <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
               <TrendingUp size={22} className="text-green-700" />
             </div>
@@ -378,7 +378,7 @@ export default function Dashboard() {
               <p className="text-xs text-gray-500">결제 건수 (이번 달)</p>
               <p className="text-xl font-bold text-gray-900">{thisMonth.paymentCount}건</p>
             </div>
-          </div>
+          </button>
         </div>
         )}
 
@@ -584,6 +584,11 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))
+                )}
+                {todayReservations.length > 4 && (
+                  <button type="button" onClick={() => navigate('/reservations')} className="text-xs font-medium text-[#1a3a8f] hover:underline pt-1">
+                    외 {todayReservations.length - 4}건 — 예약표에서 전체 보기
+                  </button>
                 )}
               </div>
             </div>

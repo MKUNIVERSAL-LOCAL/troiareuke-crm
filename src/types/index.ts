@@ -336,7 +336,7 @@ export interface Consultation {
   recommendedProducts: string[];
   /** 다음 상담/관리 권고일 */
   nextConsultDate?: string;
-  /** 전/후 사진 URL */
+  /** 서버 스키마 호환용 — 실제 상담 사진은 photoStore의 consult:<id> 키에 있고 이 배열은 늘 비어 있다 */
   photos: string[];
   createdAt: string;
 }

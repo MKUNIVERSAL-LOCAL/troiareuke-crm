@@ -363,6 +363,16 @@ function emitSync(): void { try { window.dispatchEvent(new CustomEvent(PHOTO_SYN
 const REJECTED_PUSH = new Map<string, number>();
 export function dirtyPhotoCount(): number { return getDirtyKeys().length; }
 export function rejectedPhotoCount(): number { return REJECTED_PUSH.size; }
+/** 서버가 거부한 사진을 이 기기에만 두기로 함 — 전송 대기(dirty)·거부 표식을 지워 배너가 영구히 빨갛지 않게. 기록의 사진을 줄여 다시 저장하면 그때 다시 올라간다 (UX 점검 2026-11-19) */
+export function keepRejectedPhotosLocal(): number {
+  const keys = [...REJECTED_PUSH.keys()];
+  for (const key of keys) { setDirty(key, false); REJECTED_PUSH.delete(key); }
+  if (keys.length > 0) emitSync();
+  return keys.length;
+}
+// 마지막 syncPhotosFromNas에서 서버 조회가 한 번이라도 실패했는지 — 화면이 "서버 사진을 못 받아 이 기기 사진만 보인다"고 말할 수 있게 (UX 점검 2026-11-19)
+let lastSyncFetchFailed = false;
+export function lastPhotoSyncFailed(): boolean { return lastSyncFetchFailed; }
 /** 전송 실패분(dirty) 재전송 — 연결 복구(자동, 거부분 제외)·배너 [다시 시도](거부분 포함) */
 export async function retryDirtyPhotos(includeRejected = false): Promise<void> {
   if (!isAuthApiConfigured) return;
@@ -464,6 +474,7 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
     pushToNas(key, local);
   }
   const cleanKeys = entityKeys.filter(k => !dirty.has(k));
+  lastSyncFetchFailed = false;
   if (cleanKeys.length === 0) return false;
 
   let changed = false;
@@ -479,7 +490,8 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
       );
       entries = response.entries;
     } catch {
-      continue; // 네트워크 실패 — 로컬 캐시 그대로 사용
+      lastSyncFetchFailed = true;
+      continue; // 네트워크 실패 — 로컬 캐시 그대로 사용(호출 쪽은 lastPhotoSyncFailed()로 안내)
     }
 
     for (const entityKey of chunk) {

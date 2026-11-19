@@ -51,7 +51,11 @@ export default function BirthdayCard({ compact = false, refreshKey = 0 }: { comp
           </li>
         ))}
       </ul>
-      {list.length > shown.length && <p className="text-xs text-gray-400 mt-2">외 {list.length - shown.length}명 — 문자/카카오 발송의 생일 고객 대상에서 전체 확인</p>}
+      {list.length > shown.length && (
+        <button type="button" onClick={() => navigate('/messaging?segment=birthday')} className="text-xs font-medium text-[#1a3a8f] hover:underline mt-2">
+          외 {list.length - shown.length}명 — 문자/카카오 발송의 생일 고객 대상에서 전체 보기
+        </button>
+      )}
 
       {draftFor && (
         <MessageDraftPanel

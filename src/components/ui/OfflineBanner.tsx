@@ -4,7 +4,8 @@ import {
   pendingNasOutboxCount, listRejectedNasOutbox, clearRejectedNasOutbox, retryRejectedNasOutbox,
   OUTBOX_CHANGED_EVENT, OUTBOX_ERROR_EVENT,
 } from '../../lib/nasOutbox';
-import { dirtyPhotoCount, rejectedPhotoCount, retryDirtyPhotos, PHOTO_SYNC_EVENT } from '../../lib/photoStore';
+import { dirtyPhotoCount, rejectedPhotoCount, retryDirtyPhotos, keepRejectedPhotosLocal, PHOTO_SYNC_EVENT } from '../../lib/photoStore';
+import { isAuthApiConfigured } from '../../lib/authApi';
 import { exportFile } from '../../lib/mobileBridge';
 import { notify } from '../../lib/notify';
 
@@ -164,6 +165,8 @@ export default function OfflineBanner() {
   }
 
   if (offline) {
+    // 로컬 모드(서버 없음)는 인터넷이 없어도 아무것도 막히지 않는다 — 전송 대기분이 없으면 띠를 띄우지 않는다 (UX 점검 2026-11-19)
+    if (!isAuthApiConfigured && pending === 0 && photoDirty === 0) return null;
     // 전송 대기분이 있으면 매장 데스크톱(lg)에서도 표시해 유실 위험을 알린다
     return (
       <div
@@ -189,8 +192,12 @@ export default function OfflineBanner() {
     return (
       <div role="alert" className={`${base} bg-rose-50 border-rose-200 text-rose-700`}>
         <Image size={14} className="flex-shrink-0" />
-        <span>사진 {photoRejected}건을 서버가 받지 않았습니다(용량 초과 등) — 이 기기에만 저장돼 있어 다른 기기에서는 보이지 않습니다.</span>
-        <button type="button" onClick={() => { void retryDirtyPhotos(true); }} className={`${linkBtn} ml-auto text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>
+        <span>사진 {photoRejected}건을 서버가 받지 않았습니다(용량 초과 등) — 이 기기에만 저장돼 있어 다른 기기에서는 보이지 않습니다. 그 기록의 사진 장수를 줄여 다시 저장하면 올라갑니다.</span>
+        <span className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={() => { void retryDirtyPhotos(true); }} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>
+          {/* 같은 413이 반복되면 [다시 시도]만으로는 영원히 빨간 띠 — 이 기기에만 두는 선택을 준다 (UX 점검 2026-11-19) */}
+          <button type="button" onClick={() => { if (window.confirm(`거부된 사진 ${photoRejected}건을 이 기기에만 보관할까요?\n서버에는 올라가지 않아 다른 기기에서는 보이지 않습니다. 나중에 그 기록의 사진을 줄여 다시 저장하면 올라갑니다.`)) { const n = keepRejectedPhotosLocal(); setPhotoRejected(0); notify.info(`사진 ${n}건을 이 기기에만 보관합니다.`); } }} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>이 기기에만 보관</button>
+        </span>
       </div>
     );
   }

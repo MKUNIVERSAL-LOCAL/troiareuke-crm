@@ -708,7 +708,12 @@ export default function Customers() {
   useEffect(() => {
     loadAll();
     // 상담 기록 중앙 서버에서 1회 동기화 후 캐시 반영 — 실패하면 이 기기 캐시를 보여 준다고 알린다(무음 폴백 금지)
-    loadConsultations().then(ok => { if (!ok) notify('서버에서 상담 기록을 받지 못해 이 기기에 저장된 기록을 표시합니다.'); }).catch(() => {});
+    // 오프라인이면 오프라인 띠가 이미 설명하고, 같은 세션에서 화면을 오갈 때마다 반복하지 않는다 (UX 점검 2026-11-19)
+    loadConsultations().then(ok => {
+      if (ok || navigator.onLine === false) return;
+      try { if (sessionStorage.getItem('consult-load-warned')) return; sessionStorage.setItem('consult-load-warned', '1'); } catch { /* 저장 못 하면 매번 알림 */ }
+      notify('서버에서 상담 기록을 받지 못해 이 기기에 저장된 기록을 표시합니다.');
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -839,7 +844,8 @@ export default function Customers() {
       recipients: 1,
       phones: selected.phone ? [selected.phone] : [],
     });
-    MessageHistoryStore.save({
+    // 게이트웨이 미연동(pending)은 발송을 시도한 것이 아니다 — 실패 건으로 이력·통계에 쌓지 않는다 (UX 점검 2026-11-19)
+    if (!result.pending) MessageHistoryStore.save({
       type: 'kakao-channel',
       templateName: '상담 결과 안내',
       title: `${selected.name}님 피부 상담 결과`,
@@ -853,7 +859,7 @@ export default function Customers() {
     });
     setKakaoSending(false);
     if (result.pending) {
-      setKakaoMsg('상담은 저장됐어요. 단, 카카오 발송 게이트웨이가 아직 연동되지 않아 실제 전송은 되지 않았습니다 (설정>연동에서 준비 예정). 발송 이력에 기록됨.');
+      setKakaoMsg('상담은 저장됐어요. 단, 카카오 발송 게이트웨이가 아직 연동되지 않아 실제 전송은 되지 않았습니다 (설정>연동에서 준비 예정). 발송 이력에는 남기지 않았습니다.');
     } else if (result.sent > 0) {
       setKakaoMsg(`상담 저장 완료 · ${selected.name}님에게 카카오로 상담 결과를 전송했습니다.`);
     } else {
@@ -2206,7 +2212,7 @@ export default function Customers() {
                           <button
                             onClick={() => handleConsultDelete(c)}
                             className="text-gray-300 hover:text-red-600"
-                            aria-label="상담 삭제"
+                            aria-label={`${formatDate(c.consultDate)} 상담 삭제`}
                           >
                             <X size={14} />
                           </button>

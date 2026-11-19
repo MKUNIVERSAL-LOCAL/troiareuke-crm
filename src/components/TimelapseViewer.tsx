@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Images, ArrowLeftRight, Download, Copy, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { TreatmentLogStore } from '../lib/store';
-import { syncPhotosFromNas, PHOTO_ANGLES, type PhotoAngle } from '../lib/photoStore';
+import { syncPhotosFromNas, lastPhotoSyncFailed, PHOTO_ANGLES, type PhotoAngle } from '../lib/photoStore';
 import { usePhotoCacheVersion } from '../hooks/usePhotoCache';
 import {
   collectCustomerPhotos, photoCaption, daysBetween,
@@ -23,9 +23,12 @@ import { exportFile } from '../lib/mobileBridge';
 export default function TimelapseViewer({ customerId, customerName, onSynced }: { customerId: string; customerName?: string; onSynced?: () => void }) {
   // NAS 동기화로 사진이 바뀌면 재수집
   const [photoVersion, setPhotoVersion] = useState(0);
+  const [syncFailed, setSyncFailed] = useState(false);
   useEffect(() => {
     const logs = TreatmentLogStore.getByCustomer(customerId);
+    setSyncFailed(false);
     syncPhotosFromNas(logs.map(log => `treatment:${log.id}`)).then(changed => {
+      if (lastPhotoSyncFailed()) setSyncFailed(true); // 다른 기기에서 찍은 사진이 그냥 없는 것처럼 보이지 않게 (UX 점검 2026-11-19)
       if (!changed) return;
       setPhotoVersion(v => v + 1);
       onSynced?.(); // 부모(고객 상세 썸네일 등)도 같은 캐시를 다시 읽게
@@ -102,6 +105,11 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5">
+      {syncFailed && (
+        <p role="status" className="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          서버에서 사진을 받지 못해 이 기기에 저장된 사진만 보입니다. 다른 기기에서 찍은 사진은 연결이 복구된 뒤 다시 열면 나타납니다.
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <h3 className="font-bold text-gray-900 flex items-center gap-1.5">
           <Images size={16} className="text-indigo-600" />

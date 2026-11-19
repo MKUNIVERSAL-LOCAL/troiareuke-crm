@@ -26,7 +26,8 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
 
   const settle = (ids: string[], status: 'completed' | 'noshow') => {
     const n = settleReservations(ids, status);
-    notify(status === 'completed' ? `${n}건을 완료 처리했습니다.` : `${n}건을 노쇼로 처리했습니다.`);
+    if (status === 'completed') notify(`${n}건을 완료 처리했습니다.`);
+    else notify.info(`${n}건을 노쇼로 처리했습니다. 잘못 눌렀다면 예약 상세의 [예약 복구]로 되돌릴 수 있습니다.`); // 노쇼는 축하할 일이 아니다 (UX 점검 2026-11-19)
     onSettled?.();
   };
   // 건별 완료 — 예약 화면의 완료 처리처럼 결제 미등록이면 매출 등록으로 바로 잇는다(예약 id를 referenceId로 연결해 중복 등록 방지)
@@ -75,9 +76,10 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
               <p className="text-xs text-gray-500 truncate">{r.services.map(s => s.serviceName).join(', ') || '시술 항목 미지정'}{r.staffName ? ` · ${r.staffName}` : ''}</p>
             </button>
             <button type="button" onClick={() => settleOneAndPay(r)} aria-label={`${r.customerName} ${formatDate(r.date)} 완료`}
-              className="px-2 py-1 rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
-            <button type="button" onClick={() => settle([r.id], 'noshow')} aria-label={`${r.customerName} ${formatDate(r.date)} 노쇼`}
-              className="px-2 py-1 rounded-lg text-xs font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
+              className="px-2.5 py-1.5 min-h-[36px] rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
+            {/* 노쇼는 고객 기록(노쇼 횟수)에 남는다 — 폰에서 [완료] 옆 오탭이 잦아 한 번 묻는다 (UX 점검 2026-11-19) */}
+            <button type="button" onClick={() => { if (window.confirm(`${r.customerName} ${formatDate(r.date)} ${r.startTime} 예약을 노쇼로 처리할까요?\n노쇼 횟수가 1 올라갑니다. 되돌리려면 예약 상세의 [예약 복구].`)) settle([r.id], 'noshow'); }} aria-label={`${r.customerName} ${formatDate(r.date)} 노쇼`}
+              className="px-2.5 py-1.5 min-h-[36px] rounded-lg text-xs font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
           </li>
         ))}
       </ul>
