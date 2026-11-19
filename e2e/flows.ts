@@ -261,3 +261,43 @@ export async function expectCustomerNoShows(page: Page, acc: E2EAccount, n: numb
   if (await pc.count()) await expect(pc.first()).toContainText(`노쇼 ${n}회`);
   else await expect(page.getByTestId('noshow-count').filter({ visible: true }).first()).toHaveText(`${n}회`);
 }
+
+// ── 날짜·안내 ───────────────────────────────────────────────────
+
+/** 오늘 + n일을 YYYY-MM-DD(지역 날짜)로 — 브라우저와 러너가 같은 호스트 TZ를 쓰는 로컬 E2E 전제 */
+export function plusDaysISO(n: number): string {
+  const d = new Date(); d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** 프로그램 카드의 만료일 — PC "만료일: 2025.06.30", 모바일 "… · 만료일 2025.06.30" */
+export async function expectProgramExpiry(page: Page, name: string, iso: string) {
+  await expect(programCard(page, name).getByText(new RegExp(`만료일:? ${iso.replace(/-/g, '\\.')}`))).toBeVisible();
+}
+
+/** 프로그램 카드의 상태 배지(만료·완료) 유무 */
+export async function expectProgramBadge(page: Page, name: string, badge: '만료' | '완료', present: boolean) {
+  await expect(programCard(page, name).getByText(badge, { exact: true })).toHaveCount(present ? 1 : 0);
+}
+
+/** 고객 상세의 [관리] 창을 연다 */
+export async function openProgramManage(page: Page, name: string): Promise<Locator> {
+  await programCard(page, name).getByRole('button', { name: `${name} 관리` }).click();
+  const d = dialog(page, '프로그램 관리');
+  await expect(d).toBeVisible();
+  return d;
+}
+
+/** 시술 기록 추가 창을 열고 고객을 고른 뒤 — 연결 select 유무와 만료 안내 유무만 확인(저장하지 않음) */
+export async function expectTreatmentLinkState(page: Page, acc: E2EAccount, v: { select: boolean; hint: string | null }) {
+  await page.goto('/treatments?new=1');
+  await expect(dialog(page, '시술 기록 추가')).toBeVisible();
+  await pickCustomer(page, acc.customer);
+  await expect(page.getByLabel('프로그램 연결')).toHaveCount(v.select ? 1 : 0);
+  if (v.hint === null) await expect(page.getByTestId('expired-program-hint')).toHaveCount(0);
+  else await expect(page.getByTestId('expired-program-hint')).toContainText(v.hint);
+}
+
+/** 토스트 한 줄 — error 톤은 role=alert, 그 외 role=status */
+export const toast = (page: Page, text: string | RegExp, tone: 'alert' | 'status' = 'status'): Locator =>
+  page.locator('[aria-live="polite"]').getByRole(tone).filter({ hasText: text });
