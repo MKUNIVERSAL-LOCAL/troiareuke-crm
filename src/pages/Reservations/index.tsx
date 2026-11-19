@@ -937,9 +937,11 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   const { user: authUser } = useAuth();
   const goTo = useNavigate();
   const isEdit = !!editing;
-  const customers = CustomerStore.getAll().filter(c => c.isActive !== false); // 익명화(탈퇴) 고객은 예약 대상에서 제외
-  const staffList = StaffStore.getAll().filter(s => s.isActive || s.id === editing?.staffId); // 퇴사 직원은 새 예약 담당자 목록에서 제외
-  const services = ServiceStore.getAll().filter(s => s.isActive);
+  // 익명화 고객·퇴사 직원·비활성 시술은 새 예약 선택지에서 빼되, 수정 중인 예약에 이미 걸린 것은 남긴다 — 아니면 메모만 고쳐도 조용히 저장이 안 됐다 (정합성 감사 2026-11-19)
+  const customers = CustomerStore.getAll().filter(c => c.isActive !== false || c.id === editing?.customerId);
+  const staffList = StaffStore.getAll().filter(s => s.isActive || s.id === editing?.staffId);
+  const editingServiceId = editing?.services?.[0]?.serviceId;
+  const services = ServiceStore.getAll().filter(s => s.isActive || s.id === editingServiceId);
 
   // 고객 상세 [예약 추가](?customer=)에서 왔으면 그 고객을 미리 선택 (2026-11-17)
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (initialCustomerId && customers.some(c => c.id === initialCustomerId) ? initialCustomerId : ''));
@@ -977,7 +979,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     const customer = customers.find(c => c.id === customerId);
     const staff = staffList.find(s => s.id === staffId);
     const service = services.find(s => s.id === serviceId);
-    if (!customer || !staff || !service) return;
+    if (!customer || !staff || !service) { setFormError('선택한 고객·담당자·시술 중 더 이상 쓸 수 없는 항목이 있습니다. 다시 선택해주세요.'); return; }
 
     // 다중 시술 예약 보호 — 편집 폼은 services[0]만 로드하므로 그대로 저장하면
     // 나머지 시술·금액이 소실됨. 시술을 안 바꿨으면 원본 전체 보존, 바꿨으면 확인 후 교체.
@@ -1044,6 +1046,14 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       totalPrice,
     };
 
+    if (isEdit && editing && editing.status === 'completed') {
+      // 완료·결제된 예약의 금액·고객 변경 — 결제(PaymentStore)는 따라 바뀌지 않는다 (정합성 감사 2026-11-19)
+      const paid = registeredPaymentsFor(editing.id).reduce((sum, p) => sum + p.amount, 0);
+      const customerChanged = customer.id !== editing.customerId;
+      if (paid > 0 && (customerChanged || totalPrice !== editing.totalPrice)) {
+        if (!window.confirm(`이 예약에는 등록된 결제 ${paid.toLocaleString('ko-KR')}원이 있습니다. 예약의 ${customerChanged ? '고객' : '금액'}을 바꿔도 결제는 바뀌지 않습니다 — 매출 화면에서 결제를 따로 수정해주세요.\n그래도 저장할까요?`)) return;
+      }
+    }
     if (isEdit && editing) {
       // 수정: 기존 예약 갱신 (상태·네이버ID 등 보존)
       ReservationStore.update(editing.id, reservation);

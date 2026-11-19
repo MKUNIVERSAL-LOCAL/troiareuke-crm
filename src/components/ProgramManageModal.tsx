@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import Modal from './ui/Modal';
-import { CustomerProgramStore } from '../lib/store';
+import { CustomerProgramStore, PaymentStore, TreatmentLogStore } from '../lib/store';
 import { todayISO, parseISODate, toISODate, formatDate } from '../lib/format';
 import { notify } from '../lib/notify';
 import type { CustomerProgram } from '../types';
@@ -69,6 +69,18 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
     onDone();
   }
 
+  // 고객·프로그램을 잘못 골라 등록한 경우 — 아직 한 번도 쓰지 않았을 때만. 연결된 결제(referenceId)를 지우면 누적 결제액은 자동 차감된다 (정합성 감사 2026-11-19)
+  const cancelable = cp.usedSessions === 0 && !TreatmentLogStore.getAll().some(t => t.customerProgramId === cp.id);
+  function cancelRegistration() {
+    const linked = PaymentStore.getAll().filter(p => p.referenceId === cp.id);
+    const paid = linked.reduce((sum, p) => sum + p.amount, 0);
+    if (!window.confirm(`${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${paid.toLocaleString('ko-KR')}원)이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.`)) return;
+    for (const p of linked) PaymentStore.delete(p.id);
+    CustomerProgramStore.delete(cp.id);
+    notify.success(`${cp.programName} 등록을 취소했습니다.${linked.length ? ` 결제 ${linked.length}건 삭제.` : ''}`);
+    onDone();
+  }
+
   function toggleCompleted() {
     if (dirty) { notify('만료일·총 회차 변경을 먼저 [저장]하거나 취소한 뒤 완료 상태를 바꿔주세요.'); return; }
     if (cp.isCompleted) {
@@ -127,6 +139,12 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
             className={`py-2.5 px-4 rounded-xl text-sm font-medium border disabled:opacity-40 ${cp.isCompleted ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-600 bg-white'}`}>
             {cp.isCompleted ? '진행중으로 되돌리기' : '완료 처리'}
           </button>
+          {cancelable && (
+            <button type="button" onClick={cancelRegistration} title="잘못 등록한 회차권 — 한 번도 쓰지 않았을 때만. 연결된 결제도 함께 삭제"
+              className="py-2.5 px-4 rounded-xl text-sm font-medium border border-red-200 text-red-700 bg-red-50 hover:bg-red-100">
+              등록 취소
+            </button>
+          )}
           <div className="flex-1" />
           <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
           <button type="button" onClick={handleSave} className="py-2.5 px-5 bg-[#1a3a8f] hover:bg-[#15306e] text-white rounded-xl text-sm font-semibold">저장</button>

@@ -300,6 +300,8 @@ export default function Treatments() {
             const paidByReservation = !!reservationId && hasPaymentFor(reservationId); // 환불된 결제는 '등록됨'으로 치지 않는다 — 예약 상세와 같은 기준
             if (result && !paidByReservation && window.confirm(`시술 기록을 저장했습니다.\n${result.customerName} 고객의 결제(${result.amount.toLocaleString()}원)도 바로 등록할까요?`)) {
               const q = new URLSearchParams({ new: '1', customer: result.customerId, amount: String(result.amount), memo: result.details });
+              // 예약에서 온 기록이면 결제를 그 예약에 연결(referenceId) — 안 넘기면 예약 상세가 "결제 미등록"으로 보여 2중 등록된다 (정합성 감사 2026-11-19)
+              if (reservationId && (!savedDate || ReservationStore.getAll().find(x => x.id === reservationId)?.date === savedDate)) q.set('reference', reservationId);
               navigate(`/sales?${q.toString()}`);
             }
           }}
