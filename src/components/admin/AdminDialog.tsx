@@ -12,15 +12,17 @@ interface Props {
   size?: 'md' | 'lg' | 'xl';
   danger?: boolean;
   closeOnBackdrop?: boolean;
+  /** false면 Esc로 닫지 않는다(뒤로가기만) — 입력 폼(실수로 잃지 않게)과 한 번만 보여주는 안내(임시 비밀번호)에 쓴다. 확인 창은 기본값(true) */
+  escape?: boolean;
   className?: string;
   children: ReactNode;
 }
 
 const sizes = { md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-2xl' };
 
-export default function AdminDialog({ title, onClose, size = 'md', danger = false, closeOnBackdrop = false, className = '', children }: Props) {
+export default function AdminDialog({ title, onClose, size = 'md', danger = false, closeOnBackdrop = false, escape = true, className = '', children }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  useOverlayClose(true, onClose);
+  useOverlayClose(true, onClose, { escape });
   useFocusTrap(true, ref);
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={closeOnBackdrop ? onClose : undefined}>

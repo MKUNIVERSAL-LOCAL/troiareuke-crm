@@ -356,7 +356,7 @@ export default function AdminUsers() {
       )}
 
       {tempPwResult && (
-        <AdminDialog title="임시 비밀번호 발급됨" onClose={() => setTempPwResult(null)}>
+        <AdminDialog title="임시 비밀번호 발급됨" onClose={() => setTempPwResult(null)} escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">임시 비밀번호 발급됨</h2>
               <p className="text-xs text-slate-400 mt-1">{tempPwResult.email}</p>
@@ -396,7 +396,7 @@ export default function AdminUsers() {
 
       {/* 지점 신청 검토 모달 (2026-09-18) — 사업자등록증 사진 확인 후 승인/거부 */}
       {reviewTarget && (
-        <AdminDialog title="지점 신청 검토" onClose={() => setReviewTarget(null)} size="xl" className="max-h-[90vh] flex flex-col">
+        <AdminDialog title="지점 신청 검토" onClose={() => !reviewBusy && setReviewTarget(null)} size="xl" escape={false} className="max-h-[90vh] flex flex-col">
             <div className="px-6 py-5 border-b border-slate-700 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-white">지점 신청 검토</h2>
@@ -406,7 +406,7 @@ export default function AdminUsers() {
                 <XCircle size={20} />
               </button>
             </div>
-            <div className="px-6 py-5 space-y-4 overflow-auto">
+            <div className="px-6 py-5 space-y-4 overflow-auto" tabIndex={-1} data-autofocus>{/* 첫 포커스가 헤더 닫기 버튼에 가지 않게 — 본문부터 읽는다 (리뷰 54) */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-xs text-slate-400 mb-1">상호명</p>
@@ -447,8 +447,8 @@ export default function AdminUsers() {
               </div>
               {showRejectInput && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1.5">거부 사유 * (1~500자, 지점에 다음 로그인 시 표시됩니다)</label>
-                  <textarea aria-label="거부 사유"
+                  <label htmlFor="review-reject-reason" className="block text-xs font-medium text-slate-400 mb-1.5">거부 사유 * (1~500자, 지점에 다음 로그인 시 표시됩니다)</label>
+                  <textarea id="review-reject-reason"
                     value={rejectReason}
                     onChange={e => setRejectReason(e.target.value.slice(0, 500))}
                     rows={3}
@@ -504,14 +504,14 @@ export default function AdminUsers() {
 
       {/* 사용기간 수정 모달 */}
       {periodTarget && (
-        <AdminDialog title="사용기간 설정" onClose={() => setPeriodTarget(null)}>
+        <AdminDialog title="사용기간 설정" onClose={() => !periodBusy && setPeriodTarget(null)} escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">사용기간 설정</h2>
               <p className="text-xs text-slate-400 mt-1">{periodTarget.name || ''} · {periodTarget.email}</p>
             </div>
             <div className="px-6 py-5 space-y-3">
-              <label className="block text-xs font-medium text-slate-400">만료일 (그날 자정까지 사용 가능)</label>
-              <input aria-label="만료일"
+              <label htmlFor="period-date" className="block text-xs font-medium text-slate-400">만료일 (그날 자정까지 사용 가능)</label>
+              <input id="period-date"
                 type="date"
                 value={periodDate}
                 onChange={e => setPeriodDate(e.target.value)}
@@ -608,15 +608,15 @@ export default function AdminUsers() {
 
       {/* 관리자 초대 모달 */}
       {inviteOpen && (
-        <AdminDialog title="관리자 초대" onClose={() => setInviteOpen(false)}>
+        <AdminDialog title="관리자 초대" onClose={() => !inviteBusy && setInviteOpen(false)} escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">관리자 초대</h2>
               <p className="text-xs text-slate-400 mt-1">관리자 콘솔 전체 권한(슈퍼어드민) 계정을 발급합니다</p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">이메일 *</label>
-                <input aria-label="이메일"
+                <label htmlFor="invite-email" className="block text-xs font-medium text-slate-400 mb-1.5">이메일 *</label>
+                <input id="invite-email"
                   type="email"
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
@@ -625,8 +625,8 @@ export default function AdminUsers() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">이름 (선택)</label>
-                <input aria-label="이름"
+                <label htmlFor="invite-name" className="block text-xs font-medium text-slate-400 mb-1.5">이름 (선택)</label>
+                <input id="invite-name"
                   value={inviteName}
                   onChange={e => setInviteName(e.target.value)}
                   placeholder="홍길동"

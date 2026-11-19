@@ -500,7 +500,7 @@ export default function Branches() {
 
       {/* Modal */}
       {showModal && (
-        <AdminDialog title={editTarget ? '지점 정보 수정' : '새 지점 추가'} onClose={() => setShowModal(false)}>
+        <AdminDialog title={editTarget ? '지점 정보 수정' : '새 지점 추가'} onClose={() => setShowModal(false)} escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">
                 {editTarget ? '지점 정보 수정' : '새 지점 추가'}
@@ -542,16 +542,13 @@ export default function Branches() {
                 </select>
               </Field>
               {NAS_MODE && editTarget && (
-                <Field label="사용기간 만료일 (비우면 무제한)">
+                <Field label="사용기간 만료일 (비우면 무제한)" hint="이 지점의 모든 계정에 일괄 적용됩니다. 만료일이 지나면 로그인할 수 없습니다 (데이터는 유지).">
                   <input
                     className="admin-input"
                     type="date"
                     value={form.service_ends_at}
                     onChange={e => setForm(f => ({ ...f, service_ends_at: e.target.value }))}
                   />
-                  <p className="text-xs text-slate-400 mt-1">
-                    이 지점의 모든 계정에 일괄 적용됩니다. 만료일이 지나면 로그인할 수 없습니다 (데이터는 유지).
-                  </p>
                 </Field>
               )}
 
@@ -623,12 +620,16 @@ export default function Branches() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
     // label로 감싸 안의 입력이 이름(implicit label)을 갖게 — 어드민 게이트가 지점 추가 창의 select-name 위반을 잡았다 (2026-11-19 53)
-    <label className="block">
-      <span className="block text-xs font-medium text-slate-400 mb-1.5">{label}</span>
-      {children}
-    </label>
+    // 도움말(hint)은 label 밖에 — 안에 두면 문장 전체가 입력의 이름으로 읽힌다 (리뷰 54)
+    <div>
+      <label className="block">
+        <span className="block text-xs font-medium text-slate-400 mb-1.5">{label}</span>
+        {children}
+      </label>
+      {hint && <p className="text-xs text-slate-400 mt-1">{hint}</p>}
+    </div>
   );
 }

@@ -35,7 +35,8 @@ export async function scan(page: import('@playwright/test').Page, route: string,
     const visible = (el: Element) => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
     const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).filter(visible);
     if (dialogs.length === 0) return null;
-    const top = dialogs.find(d => d.contains(document.activeElement)) ?? dialogs[dialogs.length - 1];
+    // 안쪽 창(예약 상세 안의 결제 창처럼 DOM이 중첩된 경우)도 바깥 창이 activeElement를 포함하므로 뒤에서부터 찾는다 (리뷰 54)
+    const top = [...dialogs].reverse().find(d => d.contains(document.activeElement)) ?? dialogs[dialogs.length - 1];
     const card = top.querySelector<HTMLElement>('.modal-card') ?? top;
     const b = card.getBoundingClientRect();
     const left = Math.max(b.left, 0), right = Math.min(b.right, window.innerWidth), topY = Math.max(b.top, 0), bottom = Math.min(b.bottom, window.innerHeight);

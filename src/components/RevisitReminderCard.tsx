@@ -104,7 +104,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
 
       {/* 메시지 초안 모달 */}
       {draftFor && (
-        <Modal isOpen onClose={() => setDraftFor(null)} title={`${draftFor.customer.name}님 재방문 안내 초안`} size="md">
+        <Modal isOpen onClose={() => setDraftFor(null)} title={`${draftFor.customer.name}님 재방문 안내 초안`} size="sm">
           <div className="space-y-3">
               <textarea
                 readOnly

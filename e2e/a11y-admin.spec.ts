@@ -40,7 +40,8 @@ test('어드민 콘솔 화면 전부에 serious·critical 접근성 위반이 �
     await page.getByRole('button', { name: '지점 추가' }).click();
     await expect(page.getByRole('dialog', { name: '새 지점 추가' })).toBeVisible();
   });
-  await page.keyboard.press('Escape'); // useOverlayClose — Esc로 닫힌다
+  // 입력 폼은 Esc로 닫지 않는다(지점 화면 폼과 같은 규칙, AdminDialog escape:false) — [취소]로 닫고 닫힘을 확인
+  await page.getByRole('dialog', { name: '새 지점 추가' }).getByRole('button', { name: '취소', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   assertNoBlocking(rows);

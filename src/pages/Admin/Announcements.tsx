@@ -234,7 +234,7 @@ export default function Announcements() {
 
       {/* 작성/수정 모달 */}
       {showModal && (
-        <AdminDialog title={editTarget ? '공지 수정' : '새 공지 작성'} onClose={() => setShowModal(false)} size="lg">
+        <AdminDialog title={editTarget ? '공지 수정' : '새 공지 작성'} onClose={() => setShowModal(false)} size="lg" escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">{editTarget ? '공지 수정' : '새 공지 작성'}</h2>
             </div>
@@ -256,8 +256,8 @@ export default function Announcements() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">제목 *</label>
-                <input aria-label="제목"
+                <label htmlFor="ann-title" className="block text-xs font-medium text-slate-400 mb-1.5">제목 *</label>
+                <input id="ann-title"
                   className="admin-input"
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -265,8 +265,8 @@ export default function Announcements() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">내용 *</label>
-                <textarea aria-label="내용"
+                <label htmlFor="ann-content" className="block text-xs font-medium text-slate-400 mb-1.5">내용 *</label>
+                <textarea id="ann-content"
                   className="admin-input resize-none"
                   rows={5}
                   value={form.content}

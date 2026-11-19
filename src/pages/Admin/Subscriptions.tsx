@@ -273,7 +273,7 @@ export default function Subscriptions() {
 
       {/* 수정 모달 */}
       {showModal && editTarget && (
-        <AdminDialog title={`${editTarget.branch_name} — 구독 수정`} onClose={() => setShowModal(false)}>
+        <AdminDialog title={`${editTarget.branch_name} — 구독 수정`} onClose={() => setShowModal(false)} escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">{editTarget.branch_name} — 구독 수정</h2>
             </div>
@@ -283,16 +283,13 @@ export default function Subscriptions() {
                   {planOptions.map(p => <option key={p.value} value={p.value}>{p.label} ({p.price.toLocaleString()}원/월)</option>)}
                 </select>
               </Field>
-              <Field label="상태">
+              <Field label="상태" hint={NAS_MODE ? "중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다." : undefined}>
                 {/* NAS 모드: 서버 계정에는 활성/비활성만 존재 — 만료·대기 선택지를 주면
                     isActive=false로 축약 저장되어 지점 로그인이 잠기는 함정이 됨 */}
                 <select className="admin-input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                   {(NAS_MODE ? statusOptions.filter(o => o.value === 'active' || o.value === 'cancelled') : statusOptions)
                     .map(o => <option key={o.value} value={o.value}>{NAS_MODE && o.value === 'cancelled' ? '해지 (로그인 차단)' : o.label}</option>)}
                 </select>
-                {NAS_MODE && (
-                  <p className="text-xs text-slate-400 mt-1">중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다.</p>
-                )}
               </Field>
               {NAS_MODE && (
                 <div className="px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
@@ -304,11 +301,8 @@ export default function Subscriptions() {
               <Field label="월 금액 (원)">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
               </Field>
-              <Field label={NAS_MODE ? '사용기간 만료일 (비우면 무제한)' : '만료일'}>
+              <Field label={NAS_MODE ? '사용기간 만료일 (비우면 무제한)' : '만료일'} hint={NAS_MODE ? '만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.' : undefined}>
                 <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
-                {NAS_MODE && (
-                  <p className="text-xs text-slate-400 mt-1">만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.</p>
-                )}
               </Field>
               <Field label="메모">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="특이사항 입력" />
@@ -332,12 +326,16 @@ export default function Subscriptions() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
     // label로 감싸 안의 입력이 이름(implicit label)을 갖게 — 어드민 게이트가 지점 추가 창의 select-name 위반을 잡았다 (2026-11-19 53)
-    <label className="block">
-      <span className="block text-xs font-medium text-slate-400 mb-1.5">{label}</span>
-      {children}
-    </label>
+    // 도움말(hint)은 label 밖에 — 안에 두면 문장 전체가 입력의 이름으로 읽힌다 (리뷰 54)
+    <div>
+      <label className="block">
+        <span className="block text-xs font-medium text-slate-400 mb-1.5">{label}</span>
+        {children}
+      </label>
+      {hint && <p className="text-xs text-slate-400 mt-1">{hint}</p>}
+    </div>
   );
 }
