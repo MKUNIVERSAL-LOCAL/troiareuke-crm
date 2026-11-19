@@ -69,6 +69,35 @@ export interface ExportSheet {
 }
 
 const SENSITIVE_NOTICE = '⚠ 민감정보 포함 — 외부 공유 금지';
+/** 금액 열 — 엑셀에서 50000이 아니라 50,000으로 보이게 서식(#,##0)을 건다 (산출물 감사 2026-11-20) */
+const AMOUNT_HEADER = /금액|결제액|판매가|원가|가격|비용|할인액|단가|합계|잔여금액추정|누적결제/;
+/** 세무·정산용 시트는 맨 아래에 합계 행 */
+const TOTAL_SHEETS = new Set(['payments', 'expenses', 'sales_by_method', 'product_sales']);
+function withTotalsRow(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  if (rows.length === 0) return rows;
+  const keys = Object.keys(rows[0]);
+  const totals: Record<string, unknown> = {};
+  let any = false;
+  keys.forEach((k, idx) => {
+    const numeric = rows.every(r => typeof r[k] === 'number' || r[k] === '' || r[k] == null) && rows.some(r => typeof r[k] === 'number');
+    if (numeric && AMOUNT_HEADER.test(k)) { totals[k] = rows.reduce((sum, r) => sum + (typeof r[k] === 'number' ? (r[k] as number) : 0), 0); any = true; }
+    else totals[k] = idx === 0 ? '합계' : '';
+  });
+  return any ? [...rows, totals] : rows;
+}
+type XlsxModule = Awaited<ReturnType<typeof loadXlsx>>;
+function applyAmountFormats(XLSX: XlsxModule, ws: WorkSheet, headerRowIndex: number): void {
+  const ref = ws['!ref']; if (!ref) return;
+  const range = XLSX.utils.decode_range(ref);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const head = ws[XLSX.utils.encode_cell({ r: headerRowIndex, c })];
+    if (!head || typeof head.v !== 'string' || !AMOUNT_HEADER.test(head.v)) continue;
+    for (let r = headerRowIndex + 1; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === 'number') cell.z = '#,##0';
+    }
+  }
+}
 
 // 비컨 측정 9개 지표는 분석하기 쉽게 각각 별도 컬럼으로 전개한다
 const METRIC_COLUMNS: [keyof BeaconMetrics, string][] = [
@@ -338,16 +367,20 @@ export async function exportDatasetsToXlsx(keys: string[]): Promise<ExportResult
     counts[dataset.label] = sheet.rows.length;
 
     const rows = sheet.rows.length > 0
-      ? sheet.rows
+      ? (TOTAL_SHEETS.has(key) ? withTotalsRow(sheet.rows) : sheet.rows)
       : [{ 안내: '해당 데이터가 없습니다.' }];
     let worksheet: WorkSheet;
-    if (sensitiveKeys.has(key) && sheet.rows.length > 0) {
-      // 민감정보 경고행을 1행(최상단)에 두고, 데이터(헤더 포함)는 2행부터
+    const sensitive = sensitiveKeys.has(key) && sheet.rows.length > 0;
+    if (sensitive) {
+      // 민감정보 경고행을 1행(최상단)에 두고, 데이터(헤더 포함)는 2행부터 — 자동 필터는 머리글(2행)에 건다
       worksheet = XLSX.utils.aoa_to_sheet([[SENSITIVE_NOTICE]]);
       XLSX.utils.sheet_add_json(worksheet, rows, { origin: 'A2' });
+      const ref = worksheet['!ref'];
+      if (ref) { const rg = XLSX.utils.decode_range(ref); worksheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: rg.e.r, c: rg.e.c } }) }; }
     } else {
       worksheet = XLSX.utils.json_to_sheet(rows);
     }
+    if (sheet.rows.length > 0) applyAmountFormats(XLSX, worksheet, sensitive ? 1 : 0);
     XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.slice(0, 31));
   });
 

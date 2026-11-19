@@ -69,11 +69,12 @@ export async function exportDatasetsToPdf(keys: string[]): Promise<ExportResult>
     }
 
     const columns = Object.keys(sheet.rows[0]);
+    const wide = columns.length > 10; // 고객(16열)·상담(19열)은 A4 가로에서도 열이 좁다 — 여백을 줄여 글자 크기를 지킨다 (산출물 감사 2026-11-20)
     autoTable(doc, {
       startY: sensitiveKeys.has(key) ? 84 : 72,
       head: [columns],
-      body: sheet.rows.map(row => columns.map(col => String(row[col] ?? ''))),
-      styles: { font: 'NanumGothic', fontStyle: 'normal', fontSize: 7, cellPadding: 3, overflow: 'linebreak' },
+      body: sheet.rows.map(row => columns.map(col => typeof row[col] === 'number' ? (row[col] as number).toLocaleString() : String(row[col] ?? ''))),
+      styles: { font: 'NanumGothic', fontStyle: 'normal', fontSize: wide ? 7 : 8, cellPadding: wide ? 2 : 3, overflow: 'linebreak' },
       // autotable의 머리글 기본은 bold — NanumGothic은 normal만 등록돼 있어 명시하지 않으면 times로 폴백해 한글이 깨진다 (산출물 감사 2026-11-20)
       headStyles: { font: 'NanumGothic', fontStyle: 'normal', fillColor: [26, 58, 143], textColor: 255, fontSize: 7.5 },
       alternateRowStyles: { fillColor: [246, 248, 252] },

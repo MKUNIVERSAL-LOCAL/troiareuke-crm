@@ -1169,7 +1169,10 @@ export default function Customers() {
         const data = new Uint8Array(ev.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+        // 우리 내보내기 파일은 1행이 한 칸짜리 민감정보 안내문이고 머리글이 2행 — 값이 2칸 이상인 첫 행을 머리글로 삼는다 (산출물 감사 2026-11-20)
+        const grid = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, blankrows: false });
+        const headerRow = Math.max(0, grid.findIndex(r => r.filter(v => v !== '' && v != null).length >= 2));
+        const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '', range: headerRow });
         if (rows.length === 0) { notify('시트에 데이터가 없습니다.'); return; }
 
         const pick = (r: Record<string, any>, keys: string[]) => {
