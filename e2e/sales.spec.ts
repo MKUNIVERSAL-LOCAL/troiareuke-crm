@@ -39,9 +39,21 @@ test('결제 → 지출 → 손익계산서 → 환불이 숫자로 맞게 반�
   // ── 손익계산서: 매출 50,000 − 매출원가 20,000 = 영업이익 30,000 (60%) ──
   await page.getByRole('button', { name: '손익계산서' }).click();
   await expect(page.getByTestId('pnl-cogs')).toHaveText('−20,000원');
-  await expect(page.getByText('매출총이익', { exact: true }).first().locator('..')).toContainText('30,000원');
+  await expect(page.getByTestId('pnl-gross')).toHaveText('30,000원');
   await expect(page.getByTestId('pnl-operating')).toHaveText('30,000원');
   await expect(page.getByText('영업이익률', { exact: true }).first().locator('..')).toContainText('60%');
+
+  // ── 지출 분류 변경(제품 매입 → 임대료): 매출원가 0 → 판관비 20,000, 매출총이익 50,000, 영업이익은 그대로 30,000 ──
+  await page.getByRole('button', { name: /지출 내역 \(1\)/ }).click();
+  await page.getByRole('button', { name: '지출 수정' }).first().click();
+  const editExpense = page.getByRole('dialog', { name: '지출 수정' });
+  await editExpense.getByRole('button', { name: '임대료', exact: true }).click();
+  await editExpense.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(editExpense).toHaveCount(0);
+  await page.getByRole('button', { name: '손익계산서' }).click();
+  await expect(page.getByTestId('pnl-cogs')).toHaveText('−0원');
+  await expect(page.getByTestId('pnl-gross')).toHaveText('50,000원');
+  await expect(page.getByTestId('pnl-operating')).toHaveText('30,000원');
 
   // ── 환불: 결제 상태를 환불로 바꾸면 매출에서 빠진다 (건수는 남음) ──
   await page.getByRole('button', { name: /결제 내역 \(1\)/ }).click();

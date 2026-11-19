@@ -922,7 +922,7 @@ export default function Sales() {
                 ))}
                 <div className="flex justify-between py-2 font-bold text-gray-900 bg-gray-50 -mx-2 px-2 rounded-lg my-1">
                   <span>매출총이익</span>
-                  <span className={pnl.cur.grossProfit >= 0 ? 'text-gray-900' : 'text-red-600'}>{formatPrice(pnl.cur.grossProfit)}</span>
+                  <span className={pnl.cur.grossProfit >= 0 ? 'text-gray-900' : 'text-red-600'} data-testid="pnl-gross">{formatPrice(pnl.cur.grossProfit)}</span>
                 </div>
                 {/* 판관비 */}
                 <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100">

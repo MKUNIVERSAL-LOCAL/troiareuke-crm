@@ -77,4 +77,15 @@ test('회차권 판매 → 시술 차감 → 잔여 회차, 제품 판매 → �
   await expect(page.getByTestId('sales-treatment-amount')).toHaveText('300,000원');
   await expect(page.getByTestId('sales-product-amount')).toHaveText('48,000원');
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible();
+
+  // ── 판매 취소 → 재고 12개로 복구, 제품 결제도 사라져 총 매출 300,000·결제 1건 ──
+  await page.goto('/products');
+  await page.getByRole('button', { name: /^판매 기록/ }).click(); // 판매가 있으면 '판매 기록 (1)'
+  await page.getByRole('button', { name: '판매 취소' }).first().click(); // confirm 수락
+  await page.getByRole('button', { name: '재고 현황', exact: true }).click();
+  await expect(page.locator('tr').filter({ hasText: '수분 세럼' }).first()).toContainText('12개');
+  await page.goto('/sales');
+  await expect(page.getByTestId('sales-total-amount')).toHaveText('300,000원');
+  await expect(page.getByTestId('sales-product-amount')).toHaveText('0원');
+  await expect(page.getByText(/결제 내역 \(1\)/)).toBeVisible();
 });

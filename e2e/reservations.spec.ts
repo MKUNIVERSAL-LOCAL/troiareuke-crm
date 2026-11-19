@@ -31,7 +31,8 @@ test('예약 완료·노쇼·취소가 대시보드·직원 실적·고객 노�
   test.slow();
   const now = new Date();
   test.skip(now.getHours() === 23 && now.getMinutes() >= 50, '자정 경계 — 예약을 만든 날과 대시보드의 오늘이 달라진다');
-  page.on('dialog', d => d.accept());
+  // 겹침(이중예약) 경고만 거절하고 나머지 confirm(휴무일·노쇼·취소)은 수락
+  page.on('dialog', d => (d.message().includes('이미 예약이 있습니다') ? d.dismiss() : d.accept()));
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
 
@@ -41,10 +42,23 @@ test('예약 완료·노쇼·취소가 대시보드·직원 실적·고객 노�
   await addReservation(page, '14:00');
   await expect(page.getByTestId('reservation-block')).toHaveCount(3);
 
-  // ── 10시 완료처리 (결제 등록 창은 등록 없이 닫기) → 상세는 자동으로 닫힌다 ──
+  // ── 이중예약 차단: 같은 담당자 10:00에 다시 잡으면 겹침 confirm → 거절 → 등록되지 않는다 ──
+  await page.getByRole('button', { name: '예약 추가' }).first().click();
+  const dupDialog = page.getByRole('dialog', { name: '예약 추가' });
+  await pickCustomer(page, acc.customer, dupDialog);
+  await dupDialog.getByLabel('담당 직원').selectOption({ index: 1 });
+  await dupDialog.getByLabel('시술', { exact: true }).selectOption({ index: 1 });
+  await dupDialog.getByLabel('시작 시간').selectOption('10:00');
+  await dupDialog.getByRole('button', { name: '예약 저장' }).click(); // 겹침 confirm은 핸들러가 거절
+  await expect(dupDialog).toBeVisible(); // 거절했으니 창이 그대로 남는다
+  await page.keyboard.press('Escape');
+  await expect(dupDialog).toHaveCount(0);
+  await expect(page.getByTestId('reservation-block')).toHaveCount(3);
+
+  // ── 10시 완료처리 → 결제 등록 창에서 바로 결제 등록(50,000) → 상세는 자동으로 닫힌다 ──
   let detail = await openDetail(page, '10:00');
   await detail.getByRole('button', { name: '완료처리' }).click();
-  await page.getByRole('button', { name: '결제 등록 없이 닫기' }).click();
+  await page.getByRole('button', { name: '결제 등록', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // ── 12시 노쇼 (confirm 수락) ──
@@ -73,4 +87,9 @@ test('예약 완료·노쇼·취소가 대시보드·직원 실적·고객 노�
   await page.goto('/customers');
   await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
   await expect(page.getByTestId('noshow-badge').first()).toContainText('노쇼 1회');
+
+  // ── 완료처리 때 등록한 결제가 매출에 50,000원으로 잡힌다 ──
+  await page.goto('/sales');
+  await expect(page.getByTestId('sales-total-amount')).toHaveText('50,000원');
+  await expect(page.getByText(/결제 내역 \(1\)/)).toBeVisible();
 });
