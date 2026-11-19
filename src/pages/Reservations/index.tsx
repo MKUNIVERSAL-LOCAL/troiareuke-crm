@@ -384,6 +384,9 @@ export default function Reservations() {
             {mobileFilteredReservations.map(r => (
               <button
                 key={r.id}
+                type="button"
+                data-testid="reservation-card"
+                data-start={r.startTime}
                 onClick={() => setSelectedReservation(r)}
                 className="w-full bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-left min-h-[60px]"
               >

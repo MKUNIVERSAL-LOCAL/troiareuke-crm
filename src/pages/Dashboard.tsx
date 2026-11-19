@@ -181,10 +181,10 @@ export default function Dashboard() {
             </button>
           )}
           {reservationsOn && (
-            <button type="button" onClick={() => navigate('/reservations')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
+            <button type="button" onClick={() => navigate('/reservations')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">오늘 예약</p>
-              <p className="text-lg font-bold text-gray-900 mt-1">{todayActiveReservations.length}건</p>
-              <p className="text-xs text-gray-400 mt-0.5">{todaySummary}</p>
+              <p className="text-lg font-bold text-gray-900 mt-1" data-testid="stat-value">{todayActiveReservations.length}건</p>
+              <p className="text-xs text-gray-400 mt-0.5" data-testid="stat-subtitle">{todaySummary}</p>
             </button>
           )}
           {customersOn && (

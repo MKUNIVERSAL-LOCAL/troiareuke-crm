@@ -1510,7 +1510,7 @@ export default function Customers() {
                   {selectedNoShows > 0 && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">노쇼</span>
-                      <span className="text-xs font-medium text-rose-600">{selectedNoShows}회</span>
+                      <span className="text-xs font-medium text-rose-600" data-testid="noshow-count">{selectedNoShows}회</span>
                     </div>
                   )}
                   {dupHint}
