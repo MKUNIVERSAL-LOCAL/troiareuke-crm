@@ -3,6 +3,7 @@ import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, 
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
+import { smsBytes, SMS_BYTE_LIMIT } from '../src/lib/smsBytes';
 
 // 저장소·DOM 의존이 없는 순수 helper를 브라우저 없이 직접 검증 (95, 2026-11-20 — 커버리지 감사 B).
 // 날짜 입력은 로컬 Date로 만들어 러너 시간대와 무관하게 같은 답이 나오게 한다.
@@ -53,4 +54,14 @@ test('배경색 위 글자색 — 대비 높은 쪽', () => {
   expect(readableTextOn('#8B5CF6')).toBe('#000000');
   expect(readableTextOn('#1e293b')).toBe('#ffffff');
   expect(readableTextOn('nope')).toBe('#ffffff'); // 형식이 틀리면 대비가 둘 다 1 → 동률은 흰색
+});
+
+test('문자 바이트 — 한글 2바이트, 영문 1바이트, 90바이트 넘으면 LMS', () => {
+  expect(smsBytes('abc 123')).toBe(7);
+  expect(smsBytes('가'.repeat(45))).toBe(90);
+  expect(smsBytes('가'.repeat(45)) > SMS_BYTE_LIMIT).toBe(false);
+  expect(smsBytes('가'.repeat(46))).toBe(92);
+  expect(smsBytes('가'.repeat(46)) > SMS_BYTE_LIMIT).toBe(true);
+  expect(smsBytes('[샵] 홍길동님, 11/20 10:00 예약입니다.')).toBe(38); // 한글 10자(20) + 영숫자·기호 18자
+  expect(smsBytes('')).toBe(0);
 });

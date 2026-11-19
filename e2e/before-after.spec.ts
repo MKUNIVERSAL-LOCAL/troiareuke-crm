@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, solidPng, countPhotoEntries, pickCustomer } from './helpers';
 
 /**
@@ -119,6 +120,9 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   const pdf = await pdfDownload;
   if (process.env.PDF_OUT) await pdf.saveAs(process.env.PDF_OUT); // 시각 QA용: 결과지 PDF를 밖에 저장
   expect(pdf.suggestedFilename()).toMatch(/_상담결과지_\d{4}-\d{2}-\d{2}\.pdf$/);
+  const pdfBytes = readFileSync((await pdf.path())!);
+  expect(pdfBytes.subarray(0, 5).toString('latin1')).toBe('%PDF-'); // 진짜 PDF
+  expect(pdfBytes.length).toBeGreaterThan(50_000); // 한글 글꼴(NanumGothic)이 내장돼 있다 — 없으면 한글이 깨진다 (96)
   await expect(page.getByText('상담 결과지 PDF를 내려받았습니다.').first()).toBeVisible();
 
   // ── D4 (2026-11-17): 사진 캐시는 IndexedDB에 있고 localStorage에는 사진 키가 남지 않는다 ──

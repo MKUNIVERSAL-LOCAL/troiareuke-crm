@@ -279,6 +279,9 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   await page.keyboard.press('Escape');
   await expect(detail).toHaveCount(0);
   await completeReservation(page, '10:00', false);
+  // 결제 없이 완료 → 예약액 50,000·실결제 0원 (92의 실결제액 열)
+  await expectStaffPerformance(page, '박신입', '1건', '50,000원', '0원');
+  await page.goto('/reservations');
   detail = await openReservationDetail(page, '10:00');
   await expect(detail.getByRole('button', { name: '완료처리' })).toHaveCount(0);
   await expect(detail.getByText('완료 처리됐지만 결제가 아직 등록되지 않은 예약입니다.')).toBeVisible();
@@ -288,8 +291,8 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expectReservationDetail(page, '10:00', '완료', { '결제 등록하기': 0, '완료처리': 0 });
 
-  // 직원 실적: 박신입 완료 1건 · 50,000원
-  await expectStaffPerformance(page, '박신입', '1건', '50,000원');
+  // 직원 실적: 박신입 완료 1건 · 예약액 50,000원 · 실결제 50,000원(연결된 결제가 들어왔다)
+  await expectStaffPerformance(page, '박신입', '1건', '50,000원', '50,000원');
   const perf = page.getByTestId('staff-performance');
   const rowOf = (n: string) => perf.locator('tbody tr').filter({ hasText: n }).first();
 

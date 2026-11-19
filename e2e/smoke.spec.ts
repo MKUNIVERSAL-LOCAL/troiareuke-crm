@@ -521,6 +521,13 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.goto('/settings');
   await page.getByRole('button', { name: '백업·보안', exact: true }).filter({ visible: true }).first().click();
   const backupCard = page.getByTestId('backup-restore-card');
+  // 비밀값(AI 키·문자 게이트웨이 키·로컬 계정·설정의 smsApiKey)을 심어 두고 백업 파일에 들어가지 않는지 본다 (96)
+  await page.evaluate(() => {
+    localStorage.setItem('ai_key_openai', 'sk-SECRET-TEST');
+    localStorage.setItem('crm_sms_gateway_key', 'gw-SECRET-TEST');
+    const sKey = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k));
+    if (sKey) { const st = JSON.parse(localStorage.getItem(sKey) || '{}'); st.smsApiKey = 'sms-SECRET-TEST'; localStorage.setItem(sKey, JSON.stringify(st)); }
+  });
   const backupDownload = page.waitForEvent('download');
   await backupCard.getByRole('button', { name: '백업 파일 저장' }).click();
   const backupFile = await backupDownload;
@@ -528,6 +535,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const backupPath = await backupFile.path();
   const backupJson = JSON.parse(readFileSync(backupPath!, 'utf8'));
   expect(backupJson.format).toBe('troiareuke-crm-backup');
+  const backupText = readFileSync(backupPath!, 'utf8');
+  expect(backupText).not.toContain('SECRET-TEST'); // AI 키·게이트웨이 키·smsApiKey 어느 것도 파일에 없다
+  expect(backupText).not.toContain('troiareuke_local_users');
   expect((backupJson.tables.customers as { name: string }[]).some(c => c.name === acc.customer)).toBe(true);
   // 손상 흉내: 고객 테이블을 비운다
   await page.evaluate(() => {

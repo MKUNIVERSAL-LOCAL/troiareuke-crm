@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { notify } from '../../lib/notify';
+import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
 import { formatDateTime } from '../../lib/format';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
@@ -28,14 +29,6 @@ const SEGMENT_LABELS: Record<string, string> = {
   novisit: '미방문 60일+',
   revisit: '재방문 권장', // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
 };
-/** 문자 길이 규격: SMS 90바이트 — 한글·전각(비ASCII)은 2바이트, 영문·숫자·기호는 1바이트 (EUC-KR 기준, UX 점검 2026-11-19) */
-const SMS_BYTE_LIMIT = 90;
-const LMS_BYTE_LIMIT = 2000;
-function smsBytes(text: string): number {
-  let n = 0;
-  for (const ch of text) n += ch.charCodeAt(0) > 0x7f ? 2 : 1;
-  return n;
-}
 
 function segmentLabel(seg: Segment): string {
   return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);

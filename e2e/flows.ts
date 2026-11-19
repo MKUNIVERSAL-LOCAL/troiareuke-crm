@@ -340,11 +340,12 @@ export async function expectTodayCard(page: Page, value: string, subtitle: strin
 }
 
 /** 직원 월 실적 표의 한 줄 — 완료 건수·완료 예약액 */
-export async function expectStaffPerformance(page: Page, staffName: string, completed: string, amount: string) {
+export async function expectStaffPerformance(page: Page, staffName: string, completed: string, amount: string, paid?: string) {
   await page.goto('/staff');
   const row = page.getByTestId('staff-performance').locator('tbody tr').filter({ hasText: staffName }).first();
   await expect(row.getByTestId('perf-completed')).toHaveText(completed);
   await expect(row.getByTestId('perf-amount')).toHaveText(amount);
+  if (paid !== undefined) await expect(row.getByTestId('perf-paid')).toHaveText(paid); // 그 예약에 연결된 완료 결제 합(92)
 }
 
 /** 고객 상세의 노쇼 횟수 — PC 배지 "노쇼 N회 — …", 모바일 "N회". 둘 다 0회면 렌더되지 않으므로 0 버그는 어느 쪽에서든 실패한다 */
