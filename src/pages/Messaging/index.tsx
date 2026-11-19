@@ -25,6 +25,15 @@ const SEGMENT_LABELS: Record<string, string> = {
   birthday: '이번달 생일',
   novisit: '미방문 60일+',
 };
+/** 문자 길이 규격: SMS 90바이트 — 한글·전각(비ASCII)은 2바이트, 영문·숫자·기호는 1바이트 (EUC-KR 기준, UX 점검 2026-11-19) */
+const SMS_BYTE_LIMIT = 90;
+const LMS_BYTE_LIMIT = 2000;
+function smsBytes(text: string): number {
+  let n = 0;
+  for (const ch of text) n += ch.charCodeAt(0) > 0x7f ? 2 : 1;
+  return n;
+}
+
 function segmentLabel(seg: Segment): string {
   return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);
 }
@@ -529,7 +538,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">변수 (쉼표로 구분)</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">변수 (쉼표로 구분 — 발송 전 바꿔 넣을 자리 표시, {'{'}고객명{'}'}은 개별 발송에서 자동 치환)</label>
           <input
             type="text"
             value={variablesStr}
@@ -771,7 +780,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [resultMessage, setResultMessage] = useState('');
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
   const [scheduleAt, setScheduleAt] = useState('');
-  const charLimit = msgType === 'sms' ? 90 : 1000;
+  const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
+  const contentBytes = smsBytes(content);
 
   const customers = useMemo(() => CustomerStore.getAll().filter(c => c.isActive !== false), []);
   // 개별 고객 발송 — 고객 상세에서 열었을 때. [대상 바꾸기]로 세그먼트 발송으로 되돌릴 수 있다.
@@ -809,21 +819,30 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     .map(c => c.phone)
     .filter((p): p is string => Boolean(p && p.trim()));
 
-  const estimatedCost = msgType === 'sms' ? recipientPhones.length * 11 : msgType === 'lms' ? recipientPhones.length * 25 : recipientPhones.length * 5;
+  // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
+  const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;
+  const estimatedCost = effectiveType === 'sms' ? recipientPhones.length * 11 : effectiveType === 'lms' ? recipientPhones.length * 25 : recipientPhones.length * 5;
+  const excludedCount = recipientCount - recipientPhones.length;
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
     if (recipientPhones.length === 0) { notify('전화번호가 있는 수신 대상이 없습니다. 고객 정보의 전화번호를 확인해주세요.'); return; }
+    // 개별 발송(고객 상세에서 열었을 때)은 {고객명}을 그 고객 이름으로 바꾼다 — 단체 발송은 수신자별 치환이 없으므로 그대로 두지 않고 막는다 (UX 점검 2026-11-19)
+    const finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
     // 치환 안 된 변수({고객명} 등)가 그대로 나가는 사고 방지 — 예약/즉시 발송 공통
-    if (/\{[^}]+\}/.test(content)) {
-      notify('메시지에 치환되지 않은 변수({고객명} 등)가 있습니다. 실제 값으로 바꾼 뒤 발송해주세요.');
+    if (/\{[^}]+\}/.test(finalContent)) {
+      notify(onlyCustomer
+        ? '메시지에 바꿀 수 없는 변수가 있습니다. {고객명} 외의 변수는 실제 값으로 바꾼 뒤 발송해주세요.'
+        : '메시지에 치환되지 않은 변수({고객명} 등)가 있습니다. 단체 발송은 이름을 자동으로 넣지 못하므로 실제 값으로 바꾸거나 변수를 빼고 발송해주세요.');
       return;
     }
+    // 발송은 되돌릴 수 없다 — 대상·인원을 한 번 더 확인 (전체 고객이 기본 대상이라 특히) (UX 점검 2026-11-19)
+    const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode)} ${recipientPhones.length}명`;
+    const action = scheduleMode === 'later' && isScheduleAvailable ? '예약 발송을 등록' : '지금 발송';
+    if (!window.confirm(`${target}에게 ${effectiveType === 'sms' ? 'SMS' : effectiveType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(전화번호 없는 ${excludedCount}명 제외)` : ''}`)) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
-    // "90자 초과 시 자동 LMS 전환" 안내대로 실제 전환 (기존엔 문구만 있고 미구현)
-    const effectiveType: MessageType = msgType === 'sms' && content.trim().length > 90 ? 'lms' : msgType;
 
     // 예약 발송: 서버 큐에 등록하고 종료 (시각 도달 시 서버가 발송)
     if (scheduleMode === 'later' && isScheduleAvailable) {
@@ -833,7 +852,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           sendAt: new Date(scheduleAt).toISOString(),
           type: effectiveType,
           title: title || undefined,
-          content: content.trim(),
+          content: finalContent,
           phones: recipientPhones,
         });
         setSending(false);
@@ -851,7 +870,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
     const result = await sendMessages({
       type: effectiveType,
-      content: content.trim(),
+      content: finalContent,
       title: title || undefined,
       recipients: recipientCount,
       phones: recipientPhones,
@@ -864,7 +883,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(),
+        content: finalContent,
         recipients: recipientCount,
         successCount: 0,
         failCount: recipientCount,
@@ -883,7 +902,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(),
+        content: finalContent,
         recipients: recipientCount,
         successCount: result.sent,
         failCount: result.failed,
@@ -907,7 +926,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(),
+        content: finalContent,
         recipients: recipientCount,
         successCount: 0,
         failCount: recipientCount,
@@ -1037,10 +1056,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             </select>
           </div>
 
-          {/* Title (Kakao only) */}
-          {msgType.startsWith('kakao') && (
+          {/* 제목 — LMS·카카오 (템플릿 폼과 같은 기준) */}
+          {msgType !== 'sms' && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">메시지 제목</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">메시지 제목 (LMS·카카오)</label>
               <input
                 type="text"
                 value={title}
@@ -1057,9 +1076,9 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               <label className="text-xs font-medium text-gray-600">메시지 내용 *</label>
               <span className={clsx(
                 'text-xs font-medium',
-                content.length > charLimit ? 'text-red-600' : 'text-gray-400'
+                contentBytes > byteLimit ? 'text-red-600' : 'text-gray-400'
               )}>
-                {content.length}/{charLimit}자
+                {contentBytes}/{byteLimit}바이트{msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? ' · LMS로 발송' : ''}
               </span>
             </div>
             <textarea
@@ -1067,10 +1086,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               value={content}
               onChange={e => setContent(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
-              placeholder={'발송할 메시지 내용을 입력하세요\n{고객명}, {날짜} 등의 변수를 사용할 수 있습니다'}
+              placeholder={'발송할 메시지 내용을 입력하세요\n{고객명}은 고객 상세에서 연 개별 발송에서만 자동으로 바뀝니다 — 단체 발송은 실제 값으로 바꿔 넣으세요'}
             />
             {msgType === 'sms' && (
-              <p className="text-xs text-gray-400 mt-1">90자 초과 시 자동으로 LMS로 전환됩니다</p>
+              <p className="text-xs text-gray-400 mt-1">SMS는 90바이트(한글 약 45자)까지 — 넘으면 자동으로 LMS로 발송됩니다</p>
             )}
           </div>
 
@@ -1124,8 +1143,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           {/* Cost estimate */}
           <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-500">예상 수신자</p>
-              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientCount}명</p>
+              <p className="text-xs text-gray-500">발송 대상 (전화번호 있는 고객)</p>
+              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientPhones.length}명{excludedCount > 0 && <span className="ml-1.5 text-xs font-normal text-amber-700">전화번호 없는 {excludedCount}명 제외</span>}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">예상 발송 비용</p>
