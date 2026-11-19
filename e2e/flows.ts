@@ -121,6 +121,17 @@ export async function sellProgramToCustomer(page: Page, acc: E2EAccount, optionL
   await expect(d).toHaveCount(0);
 }
 
+/** 고객 상세 헤더의 등급 칩 → 메뉴에서 등급 변경 (PC·모바일 같은 칩). 변경 뒤 칩 글자와 토스트를 확인 */
+export async function changeGrade(page: Page, from: string, to: string) {
+  await visibleButton(page, `${from} 등급 변경`).click();
+  const menu = page.getByRole('menu', { name: '등급 선택' });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitem', { name: to }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(visibleButton(page, `${to} 등급 변경`)).toBeVisible();
+  await expect(toast(page, `${to} 등급으로 변경했습니다.`)).toBeVisible();
+}
+
 /** 보이는 프로그램 카드 (PC 상세 패널 / 모바일 오버레이 모두 data-testid program-card). 카드가 없으면 count-0 단언이 헛되이 통과하므로 먼저 보이는지 확인한다 */
 export async function programCard(page: Page, name: string): Promise<Locator> {
   const card = page.getByTestId('program-card').filter({ hasText: name }).filter({ visible: true }).first();

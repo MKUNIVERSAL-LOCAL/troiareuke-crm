@@ -3,7 +3,7 @@ import { pickCustomer, visibleButton, type E2EAccount } from './helpers';
 import {
   dialog,
   registerPayment, registerExpense, expectPnl, expectSales, changeFirstExpenseCategory, refundFirstPayment,
-  addProgram, sellProgramToCustomer, expectProgramSessions, logTreatment, openCustomer, programCard,
+  addProgram, changeGrade, sellProgramToCustomer, expectProgramSessions, logTreatment, openCustomer, programCard,
   addProduct, expectStock, sellProduct, cancelFirstSale,
   addReservation, reservationItems, openReservationDetail, completeReservation, setReservationStatus, expectReservationDetail,
   expectTodayCard, expectStaffPerformance, expectCustomerNoShows,
@@ -132,6 +132,8 @@ export async function programExpiryScenario(page: Page, acc: E2EAccount) {
 
   // 관리 → +30일 → 저장: 만료일 = 오늘+30, 배지 사라짐, 변경 기록에 사유
   await openCustomer(page, acc);
+  // 등급 칩 → 메뉴 (PC·모바일 같은 동작, UX 점검 M8)
+  await changeGrade(page, '신규', '골드');
   let manage = await openProgramManage(page, name);
   await expect(manage.getByLabel('만료일')).toHaveValue('2025-06-30');
   await manage.getByRole('button', { name: '+30일' }).click();

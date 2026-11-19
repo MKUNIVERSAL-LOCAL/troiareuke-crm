@@ -419,6 +419,7 @@ export default function Customers() {
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
     setShowGradeMenu(false);
+    notify.success(`${grade} 등급으로 변경했습니다.`);
   }
 
   // 프로그램 등록 모달
@@ -1054,6 +1055,44 @@ export default function Customers() {
   useFocusTrap(showGradeMenu, gradeMenuRef); // 현재 등급 항목(data-autofocus)에 포커스, 닫히면 등급 버튼으로
   useMenuKeys(showGradeMenu, gradeMenuRef);
 
+  // 등급 칩 + 변경 메뉴 — PC 상세 헤더와 모바일 상세 헤더에서 같은 동작. 두 헤더는 isMobileLayout으로 배타 렌더라 ref·상태를 공유해도 안전하다.
+  // 모바일(large)은 손가락 크기에 맞춰 항목을 키운다 (UX 점검 M8, 2026-11-19)
+  const gradeChip = (sel: Customer, large: boolean) => (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setShowGradeMenu(v => !v)}
+        className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5 hover:ring-2 hover:ring-offset-1 hover:ring-blue-300 transition ${GRADE_COLORS[sel.grade]}`}
+        aria-label={`${sel.grade} 등급 변경`}
+        aria-haspopup="menu"
+        aria-expanded={showGradeMenu}
+      >
+        {sel.grade}
+        <ChevronDown size={11} />
+      </button>
+      {showGradeMenu && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setShowGradeMenu(false)} />
+          <div ref={gradeMenuRef} role="menu" aria-label="등급 선택" className={`absolute left-0 mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 ${large ? 'min-w-[120px]' : 'min-w-[90px]'}`}>
+            {GRADES.map(g => (
+              <button
+                key={g}
+                type="button"
+                role="menuitem"
+                data-autofocus={g === sel.grade ? '' : undefined}
+                onClick={() => changeGrade(g)}
+                className={`w-full text-left px-3 hover:bg-gray-50 flex items-center gap-1.5 ${large ? 'py-2.5 text-sm' : 'py-1.5 text-xs'} ${g === sel.grade ? 'font-bold text-blue-700' : 'text-gray-600'}`}
+              >
+                {g === sel.grade && <CheckCircle size={11} className="text-blue-600" />}
+                <span className={g === sel.grade ? '' : 'ml-[18px]'}>{g}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   // 업로드 양식 엑셀 다운로드 (헤더 + 예시 2행)
   async function downloadImportTemplate() {
     const XLSX = await loadXlsx();
@@ -1479,9 +1518,7 @@ export default function Customers() {
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-base font-bold text-gray-900">{selected.name}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${GRADE_COLORS[selected.grade]}`}>
-                    {selected.grade}
-                  </span>
+                  {gradeChip(selected, true)}
                 </div>
               </div>
             </div>
@@ -1923,38 +1960,7 @@ export default function Customers() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <h2 className="text-xl font-bold text-gray-900 whitespace-nowrap">{selected.name}</h2>
-                      <div className="relative">
-                        <button
-                          onClick={() => setShowGradeMenu(v => !v)}
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5 hover:ring-2 hover:ring-offset-1 hover:ring-blue-300 transition ${GRADE_COLORS[selected.grade]}`}
-                          aria-label={`${selected.grade} 등급 변경`}
-                          aria-haspopup="menu"
-                          aria-expanded={showGradeMenu}
-                        >
-                          {selected.grade}
-                          <ChevronDown size={11} />
-                        </button>
-                        {showGradeMenu && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setShowGradeMenu(false)} />
-                            <div ref={gradeMenuRef} role="menu" aria-label="등급 선택" className="absolute left-0 mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 min-w-[90px]">
-                              {GRADES.map(g => (
-                                <button
-                                  key={g}
-                                  type="button"
-                                  role="menuitem"
-                                  data-autofocus={g === selected.grade ? '' : undefined}
-                                  onClick={() => changeGrade(g)}
-                                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-1.5 ${g === selected.grade ? 'font-bold text-blue-700' : 'text-gray-600'}`}
-                                >
-                                  {g === selected.grade && <CheckCircle size={11} className="text-blue-600" />}
-                                  <span className={g === selected.grade ? '' : 'ml-[18px]'}>{g}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      {gradeChip(selected, false)}
                     </div>
                     <p className="text-sm text-gray-500"><PhoneLink phone={selected.phone} role={user?.role ?? 'staff'} /></p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}

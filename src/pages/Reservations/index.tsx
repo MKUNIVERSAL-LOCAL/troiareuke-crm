@@ -1231,7 +1231,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   };
 
   const handleDelete = () => {
-    if (window.confirm('이 예약을 삭제할까요?')) {
+    if (window.confirm(`이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다. 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.${logsWarn}`)) {
       ReservationStore.delete(r.id);
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();
@@ -1356,17 +1356,22 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
               결제 등록하기
             </button>
           ) : null}
-          <button
-            onClick={handleDelete}
-            className="py-2.5 px-3 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors flex items-center gap-1"
-          >
-            <Trash2 size={14} /> 삭제
-          </button>
           <button onClick={onEdit} className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e] transition-colors">수정</button>
         </div>
         {r.status === 'completed' && r.totalPrice > 0 && paidForThis.length === 0 && (
           <p id="unpaid-completed-hint" className="text-xs text-amber-700">완료 처리됐지만 결제가 아직 등록되지 않은 예약입니다.</p>
         )}
+        {/* 삭제는 되돌릴 수 없는 보조 동작 — 주 동작 행과 떨어진 작은 글자 버튼으로. 고객이 취소한 예약은 [취소처리]가 맞다 (UX 점검 L5, 2026-11-19) */}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleDelete}
+            title="예약을 기록에서 완전히 지웁니다 — 고객이 취소한 예약은 [취소처리]를 써주세요"
+            className="text-xs text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 px-1.5 py-1 rounded"
+          >
+            <Trash2 size={12} /> 이 예약 삭제
+          </button>
+        </div>
       </div>
       {showPayModal && (() => {
         // 시술 기록은 예약일(r.date)로 프리필되므로 회차권 사용 가능 여부도 같은 날짜 기준으로 판단한다 (리뷰 2026-11-19)
