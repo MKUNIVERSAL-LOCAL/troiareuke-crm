@@ -34,7 +34,6 @@ export default function DateQuickChips({ value, onChange, options = DEFAULT_OPTI
             key={o.label}
             type="button"
             aria-pressed={active}
-            aria-label={`${o.label}로 설정`}
             onClick={() => onChange(iso)}
             className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${active ? 'bg-primary-50 border-primary-200 text-primary-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
           >

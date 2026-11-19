@@ -493,7 +493,7 @@ export default function AdminUsers() {
                   <button
                     onClick={handleReject}
                     disabled={reviewBusy || !rejectReason.trim()}
-                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-red-600 hover:bg-red-500 text-white disabled:opacity-50"
+                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                   >
                     <XCircle size={14} />
                     {reviewBusy ? '처리 중…' : '거부 확정'}

@@ -37,7 +37,7 @@ export default function BirthdayCard({ compact = false, refreshKey = 0 }: { comp
                   {a.daysUntil === 0 ? '오늘' : `D-${a.daysUntil}`}
                 </span>
               </p>
-              <p className="text-xs text-gray-400 truncate">생일 {a.dateLabel}{a.customer.grade ? ` · ${a.customer.grade}` : ''}</p>
+              <p className="text-xs text-slate-600 truncate">생일 {a.dateLabel}{a.customer.grade ? ` · ${a.customer.grade}` : ''}</p>
             </button>
             <button
               type="button"

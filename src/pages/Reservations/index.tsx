@@ -24,6 +24,7 @@ import {
   deleteCalendarEvent,
 } from '../../lib/googleCalendar';
 import { registeredPaymentsFor } from '../../lib/pendingCompletion';
+import { readableTextOn } from '../../lib/color';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
 import { todayISO } from '../../lib/format';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
@@ -44,7 +45,7 @@ function ProgramBalance({ customerId }: { customerId: string }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1" aria-label="회차권 잔여">
       {active.map(cp => (
-        <span key={cp.id} className={`text-xs px-2 py-0.5 rounded-full border ${isProgramExpired(cp) ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+        <span key={cp.id} className={`text-xs px-2 py-0.5 rounded-full border ${isProgramExpired(cp) ? 'bg-red-50 text-red-700 border-red-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
           {cp.programName}{cp.totalSessions != null ? ` · 잔여 ${Math.max(0, cp.totalSessions - (cp.usedSessions || 0))}회` : ' · 기간제'}{isProgramExpired(cp) ? ' · 만료' : ''}
         </span>
       ))}
@@ -284,7 +285,7 @@ export default function Reservations() {
     pending: 'bg-amber-100 text-amber-700',
     completed: 'bg-emerald-100 text-emerald-700',
     cancelled: 'bg-slate-100 text-slate-500',
-    noshow: 'bg-red-100 text-red-600',
+    noshow: 'bg-red-100 text-red-700',
   };
   const STATUS_LABELS: Record<string, string> = {
     confirmed: '예약확정', pending: '대기', completed: '완료', cancelled: '취소', noshow: '노쇼', // StatusBadge와 같은 문구
@@ -675,13 +676,13 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                             data-testid="reservation-block"
                             data-start={r.startTime}
                             onClick={() => onSelect(r)}
-                            className="absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
-                            style={{ backgroundColor: staff?.color || '#8B5CF6', ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
+                            className="absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
+                            style={{ backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6'), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
                             title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
                           >
                             <p className="font-bold truncate">{r.customerName}</p>
-                            <p className="opacity-80 truncate">{r.services[0]?.serviceName}</p>
-                            {tall && <p className="opacity-70 truncate">{r.startTime}~{r.endTime}</p>}
+                            <p className="font-normal truncate">{r.services[0]?.serviceName}</p>
+                            {tall && <p className="font-normal truncate">{r.startTime}~{r.endTime}</p>}
                           </button>
                         );
                       }
@@ -775,13 +776,13 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                       <button
                         key={r.id}
                         onClick={() => onSelect(r)}
-                        className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
-                        style={{ backgroundColor: staff?.color || '#8B5CF6', ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
+                        className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
+                        style={{ backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6'), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
                         title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
                       >
                         <p className="truncate">
                           <span className="font-bold">{r.customerName}</span>
-                          <span className="text-white/80 text-xs ml-2">{r.services.map(s => s.serviceName).join(', ')}</span>
+                          <span className="text-xs ml-2 font-normal">{r.services.map(s => s.serviceName).join(', ')}</span>
                           <span className="text-white/70 text-xs ml-2">{r.staffName}</span>
                         </p>
                         {tall && <p className="text-white/70 text-xs mt-0.5">{r.startTime}~{r.endTime}</p>}
@@ -1310,7 +1311,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           {canNoShow && (
             <button
               onClick={handleNoShow}
-              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-rose-600 bg-rose-50 rounded-xl hover:bg-rose-100 transition-colors"
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-rose-700 bg-rose-50 rounded-xl hover:bg-rose-100 transition-colors"
               title="고객이 오지 않은 예약 — 노쇼 횟수에 반영"
             >
               노쇼
@@ -1330,7 +1331,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
             (!isClosed || r.date <= todayISO()) && (
               <button
                 onClick={handleComplete}
-                className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
+                className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-700 rounded-xl hover:bg-green-800 transition-colors"
               >
                 완료처리
               </button>
@@ -1339,14 +1340,14 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
             <button
               onClick={() => setShowPayModal(true)}
               aria-describedby="unpaid-completed-hint"
-              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-700 rounded-xl hover:bg-green-800 transition-colors"
             >
               결제 등록하기
             </button>
           ) : null}
           <button
             onClick={handleDelete}
-            className="py-2.5 px-3 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors flex items-center gap-1"
+            className="py-2.5 px-3 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors flex items-center gap-1"
           >
             <Trash2 size={14} /> 삭제
           </button>
@@ -1471,7 +1472,7 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
           <button type="button" onClick={onDone} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
             결제 등록 없이 닫기
           </button>
-          <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium hover:bg-green-600">
+          <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium hover:bg-green-800">
             결제 등록
           </button>
         </div>

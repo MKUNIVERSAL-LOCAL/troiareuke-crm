@@ -598,7 +598,7 @@ export default function Settings() {
 
       {/* Save feedback toast */}
       {saved && (
-        <div className="fixed top-6 right-6 z-50 px-5 py-3 bg-green-500 text-white text-sm font-medium rounded-xl shadow-lg animate-fade-in">
+        <div className="fixed top-6 right-6 z-50 px-5 py-3 bg-green-700 text-white text-sm font-medium rounded-xl shadow-lg animate-fade-in">
           {saved}
         </div>
       )}
@@ -709,6 +709,7 @@ export default function Settings() {
                         <div className="flex items-center gap-2 w-full sm:w-auto pl-10 sm:pl-0">
                           <input
                             type="time"
+                            aria-label={`${day}요일 시작 시간`}
                             value={hours.open}
                             onChange={e => updateHours(day, 'open', e.target.value)}
                             disabled={hours.isOff}
@@ -717,6 +718,7 @@ export default function Settings() {
                           <span className="text-gray-400 text-sm">~</span>
                           <input
                             type="time"
+                            aria-label={`${day}요일 종료 시간`}
                             value={hours.close}
                             onChange={e => updateHours(day, 'close', e.target.value)}
                             disabled={hours.isOff}
@@ -781,6 +783,7 @@ export default function Settings() {
                         onClick={() => { const next = !beaconOn; setBeaconConsultationEnabled(next); setBeaconOn(next); }}
                         role="switch"
                         aria-checked={beaconOn}
+                        aria-label="상담 화면에 비컨 점수·AI 피부 분석 표시"
                         className={clsx(
                           'relative w-12 h-7 rounded-full transition-colors duration-200 flex-shrink-0',
                           beaconOn ? 'bg-indigo-500' : 'bg-gray-300'
@@ -1098,6 +1101,7 @@ export default function Settings() {
                         <input
                           type="checkbox"
                           className="sr-only peer"
+                          aria-label={`${n.label} 자동 발송 (준비 중)`}
                           disabled
                           readOnly
                           checked={settings.notificationSettings[n.key]}
@@ -1241,8 +1245,8 @@ export default function Settings() {
                           <div className="flex items-start gap-3">
                             <div className={clsx(
                               'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
-                              plan.id === 'trial' ? 'bg-gray-100 text-gray-500' :
-                              plan.id === 'starter' ? 'bg-blue-100 text-blue-600' :
+                              plan.id === 'trial' ? 'bg-gray-100 text-gray-600' :
+                              plan.id === 'starter' ? 'bg-blue-100 text-blue-700' :
                               'bg-primary-600 text-white'
                             )}>
                               {plan.id === 'pro' ? <Crown size={20} /> :
@@ -1262,7 +1266,7 @@ export default function Settings() {
                               <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {plan.features.map(f => (
-                                  <span key={f} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{f}</span>
+                                  <span key={f} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{f}</span>
                                 ))}
                               </div>
                             </div>

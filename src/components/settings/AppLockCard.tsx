@@ -41,7 +41,7 @@ export default function AppLockCard() {
       <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
         <Lock size={15} className="text-[#1a3a8f]" />
         <h3 className="text-sm font-bold text-gray-900">앱 잠금 (PIN)</h3>
-        <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${cfg ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+        <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${cfg ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
           {cfg ? `사용 중 · ${LOCK_TIMEOUTS.find(t => t.value === cfg.timeoutMin)?.label ?? `${cfg.timeoutMin}분`}` : '사용 안 함'}
         </span>
       </div>

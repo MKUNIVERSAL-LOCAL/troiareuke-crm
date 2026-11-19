@@ -14,9 +14,12 @@ import { makeAccount, signupAndOnboard, createCustomer, BRANCH_ROUTES } from './
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 type ViolationNode = { target: string; html: string; detail: string };
-type Row = { route: string; id: string; impact: string; help: string; nodes: ViolationNode[] };
+export type Row = { route: string; id: string; impact: string; help: string; nodes: ViolationNode[] };
 
-async function scan(page: import('@playwright/test').Page, route: string, out: Row[]) {
+/** 현재 화면을 axe로 분석해 위반을 out에 쌓는다 — 라우트 게이트(a11y.spec)와 모달 게이트(a11y-modals.spec)가 같은 기준을 쓴다 */
+export async function scan(page: import('@playwright/test').Page, route: string, out: Row[]) {
+  // 모달 열림 애니메이션(opacity 전환) 중엔 글자색이 배경과 섞여 측정돼 대비 위반이 오탐된다 — 끝날 때까지 기다린 뒤 분석
+  await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished.catch(() => undefined))));
   const r = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   for (const v of r.violations) {
     out.push({
@@ -50,9 +53,14 @@ export function defineA11yGate(title: string, accountPrefix: string) {
       await scan(page, route, rows);
     }
 
-    if (process.env.A11Y_OUT) writeFileSync(process.env.A11Y_OUT, JSON.stringify(rows, null, 2));
-    const blocking = rows.filter(r => r.impact === 'serious' || r.impact === 'critical');
-    const summary = blocking.map(r => `${r.route} [${r.impact}] ${r.id}: ${r.help}\n    ${r.nodes.map(n => `${n.target} — ${n.detail}`).join('\n    ')}`).join('\n');
-    expect(blocking, `serious/critical 위반 ${blocking.length}건:\n${summary}`).toEqual([]);
+    assertNoBlocking(rows);
   });
+}
+
+/** A11Y_OUT이 있으면 전체 위반을 JSON으로 남기고, serious·critical이 하나라도 있으면 실패 */
+export function assertNoBlocking(rows: Row[]) {
+  if (process.env.A11Y_OUT) writeFileSync(process.env.A11Y_OUT, JSON.stringify(rows, null, 2));
+  const blocking = rows.filter(r => r.impact === 'serious' || r.impact === 'critical');
+  const summary = blocking.map(r => `${r.route} [${r.impact}] ${r.id}: ${r.help}\n    ${r.nodes.map(n => `${n.target} — ${n.detail}`).join('\n    ')}`).join('\n');
+  expect(blocking, `serious/critical 위반 ${blocking.length}건:\n${summary}`).toEqual([]);
 }

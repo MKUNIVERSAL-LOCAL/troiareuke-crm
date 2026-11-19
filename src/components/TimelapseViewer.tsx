@@ -116,7 +116,7 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
                   key={a.id}
                   onClick={() => setAngleFilter(a.id)}
                   className={clsx('text-xs px-2 py-1 rounded-lg font-medium transition-colors',
-                    effectiveFilter === a.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200')}
+                    effectiveFilter === a.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
                 >
                   {a.label}
                 </button>
@@ -165,7 +165,7 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
 
           <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
             <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className={clsx('px-2 py-1 rounded-lg font-semibold', days > 0 ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-500')}>
+              <span className={clsx('px-2 py-1 rounded-lg font-semibold', days > 0 ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-600')}>
                 D+{days}
               </span>
               <span>

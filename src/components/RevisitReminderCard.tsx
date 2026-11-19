@@ -84,7 +84,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
               </div>
               <button
                 onClick={() => { setDraftFor(d); setCopied(false); }}
-                className="text-xs px-2.5 py-1.5 bg-rose-50 text-rose-600 rounded-lg font-medium hover:bg-rose-100 transition-colors flex-shrink-0"
+                className="text-xs px-2.5 py-1.5 bg-rose-50 text-rose-700 rounded-lg font-medium hover:bg-rose-100 transition-colors flex-shrink-0"
               >
                 초안
               </button>
@@ -125,7 +125,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
                 {canShareText && (
                   <button
                     onClick={() => shareText(buildReminderMessage(draftFor.customer), '재방문 안내')}
-                    className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-green-600"
+                    className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-green-800"
                     title="카카오톡·문자 앱으로 바로 보내기"
                   >
                     <Share2 size={14} />보내기

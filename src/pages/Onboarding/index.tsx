@@ -356,7 +356,7 @@ export default function Onboarding() {
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center">
               <div className={`flex flex-col items-center gap-1 transition-all ${i <= step ? 'opacity-100' : 'opacity-40'}`}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-500 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
                 <p className={`text-xs font-medium hidden sm:block ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400'}`}>{s.label}</p>
@@ -490,7 +490,7 @@ export default function Onboarding() {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                                    <p className="text-xs text-gray-400 truncate">{p.desc}</p>
+                                    <p className="text-xs text-slate-600 truncate">{p.desc}</p>
                                   </div>
                                   <div className="text-right flex-shrink-0">
                                     <p className="text-sm font-bold text-[#1a3a8f]">{p.price.toLocaleString()}원</p>
@@ -600,7 +600,7 @@ export default function Onboarding() {
                   <div key={plan.id} className="w-full text-left p-4 rounded-xl border-2 border-gray-100 opacity-50">
                     <div className="flex items-start gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        plan.id === 'starter' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
+                        plan.id === 'starter' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-600'
                       }`}>
                         {planIcons[plan.id]}
                       </div>

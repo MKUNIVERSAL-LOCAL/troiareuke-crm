@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
+import { readableTextOn } from '../../lib/color';
 import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -123,7 +124,7 @@ export default function StaffPage() {
                   >
                     {staff.name[0]}
                   </div>
-                  <h3 className="text-base font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-1.5 align-middle text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">퇴사</span>}</h3>
+                  <h3 className="text-base font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-1.5 align-middle text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">퇴사</span>}</h3>
                   <p className="text-xs text-gray-400 mt-0.5">{staff.role}</p>
                 </div>
 
@@ -215,8 +216,8 @@ export default function StaffPage() {
                       todayRes.map(r => (
                         <div
                           key={r.id}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
-                          style={{ backgroundColor: staff.color }}
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium"
+                          style={{ backgroundColor: staff.color, color: readableTextOn(staff.color) }}
                         >
                           <span>{r.startTime}</span>
                           <span>{r.customerName}</span>
@@ -344,6 +345,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">이메일</label>
           <input
             type="email"
+            aria-label="이메일"
             value={email}
             onChange={e => setEmail(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -353,6 +355,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">입사일</label>
           <input
             type="date"
+            aria-label="입사일"
             value={hireDate}
             onChange={e => setHireDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -392,6 +395,8 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
               <button
                 key={c}
                 type="button"
+                aria-label={`색상 ${c}`}
+                aria-pressed={color === c}
                 onClick={() => setColor(c)}
                 className={`w-8 h-8 rounded-full border-2 transition-all ${
                   color === c ? 'border-gray-800 scale-110' : 'border-transparent'
@@ -549,6 +554,7 @@ function StaffDetailModal({
             <label className="block text-xs font-medium text-gray-600 mb-1.5">이메일</label>
             <input
               type="email"
+              aria-label="이메일"
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -558,6 +564,7 @@ function StaffDetailModal({
             <label className="block text-xs font-medium text-gray-600 mb-1.5">입사일</label>
             <input
               type="date"
+              aria-label="입사일"
               value={hireDate}
               onChange={e => setHireDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -595,6 +602,8 @@ function StaffDetailModal({
                 <button
                   key={c}
                   type="button"
+                  aria-label={`색상 ${c}`}
+                  aria-pressed={color === c}
                   onClick={() => setColor(c)}
                   className={`w-8 h-8 rounded-full border-2 transition-all ${
                     color === c ? 'border-gray-800 scale-110' : 'border-transparent'
@@ -624,7 +633,7 @@ function StaffDetailModal({
           >
             {staff.name[0]}
           </div>
-          <h3 className="text-lg font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-2 align-middle text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">퇴사</span>}</h3>
+          <h3 className="text-lg font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-2 align-middle text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">퇴사</span>}</h3>
           <p className="text-sm text-gray-400">{staff.role}</p>
         </div>
 
@@ -640,7 +649,7 @@ function StaffDetailModal({
           </div>
           <div className="bg-blue-50 rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-blue-700">{staff.hireDate.split('-')[0]}</p>
-            <p className="text-xs text-blue-400 mt-0.5">입사년도</p>
+            <p className="text-xs text-blue-700 mt-0.5">입사년도</p>
           </div>
         </div>
 
@@ -668,7 +677,7 @@ function StaffDetailModal({
           </button>
           <button
             onClick={handleDelete}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-red-700 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
           >
             <Trash2 size={14} />
             삭제

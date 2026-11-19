@@ -368,7 +368,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
                   <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', MSG_TYPE_COLORS[t.type])}>
                     {MSG_TYPE_LABELS[t.type]}
                   </span>
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">{t.category}</span>
+                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{t.category}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -555,12 +555,12 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
 }
 
 const SCHEDULE_STATUS_LABELS: Record<ScheduledMessage['status'], { label: string; color: string }> = {
-  pending: { label: '대기', color: 'bg-blue-100 text-blue-600' },
+  pending: { label: '대기', color: 'bg-blue-100 text-blue-700' },
   processing: { label: '발송 중', color: 'bg-primary-100 text-primary-600' },
   sent: { label: '발송 완료', color: 'bg-green-100 text-green-700' },
   partial: { label: '일부 실패', color: 'bg-amber-100 text-amber-800' },
-  failed: { label: '실패', color: 'bg-red-100 text-red-600' },
-  canceled: { label: '취소됨', color: 'bg-gray-100 text-gray-500' },
+  failed: { label: '실패', color: 'bg-red-100 text-red-700' },
+  canceled: { label: '취소됨', color: 'bg-gray-100 text-gray-600' },
 };
 
 function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
@@ -978,7 +978,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">수신 대상</label>
             {blockedCustomer ? (
-              <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2" data-testid="recipient-blocked">
+              <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2" data-testid="recipient-blocked">
                 이 고객은 발송 대상이 아닙니다(익명화됐거나 삭제됨). 창을 닫고 다른 고객을 선택해주세요.
               </p>
             ) : onlyCustomer ? (
@@ -1018,6 +1018,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">템플릿 선택 (선택사항)</label>
             <select
+              aria-label="템플릿 선택"
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               value={selectedTemplateId || ''}
               onChange={e => {
@@ -1140,7 +1141,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                 type="button"
                 onClick={() => shareText(content, '고객 안내')}
                 disabled={!content.trim()}
-                className="flex-1 py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                className="flex-1 py-2.5 text-sm font-medium text-white bg-green-700 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
                 title="카카오톡·문자 앱으로 문구 보내기"
               >
                 <Share2 size={14} />앱으로 보내기

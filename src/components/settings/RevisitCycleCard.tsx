@@ -37,6 +37,7 @@ export default function RevisitCycleCard() {
         <div className="flex items-center gap-2">
           <input
             type="number"
+            aria-label="재방문 주기(일)"
             min={MIN_CYCLE_DAYS}
             max={MAX_CYCLE_DAYS}
             value={draft}

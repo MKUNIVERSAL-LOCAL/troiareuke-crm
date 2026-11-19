@@ -666,12 +666,12 @@ export default function Sales() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">
                           {customerLink(p, '—')}
-                          {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full font-medium">환불</span>}
+                          {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">환불</span>}
                           {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
                         </p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                           <span>{formatDate(p.paymentDate)}</span>
-                          <span className={`px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{p.typeLabel}</span>
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-700'}`}>{p.typeLabel}</span>
                           <span>{p.paymentMethod}</span>
                           {p.discountAmount > 0 && <span className="text-orange-700">-{formatPrice(p.discountAmount)}</span>}
                         </p>
@@ -702,11 +702,11 @@ export default function Sales() {
                       <span className="col-span-2 font-medium text-gray-800">
                         {customerLink(p, '—')}
                         {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-700">-{formatPrice(p.discountAmount)}</span>}
-                        {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded-full font-medium">환불</span>}
+                        {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">환불</span>}
                         {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
                       </span>
                       <span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-700'}`}>
                           {p.typeLabel}
                         </span>
                       </span>
@@ -764,7 +764,7 @@ export default function Sales() {
             <div className="p-3 border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar pr-6">
               <button
                 onClick={() => setExpenseCategoryFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === 'all' ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === 'all' ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
                 전체
               </button>
@@ -772,7 +772,7 @@ export default function Sales() {
                 <button
                   key={c}
                   onClick={() => setExpenseCategoryFilter(c)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === c ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === c ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                 >
                   {c}
                 </button>
@@ -934,7 +934,7 @@ export default function Sales() {
                   </div>
                 ))}
                 {/* 영업이익 */}
-                <div className={`flex justify-between py-3 font-bold text-base -mx-2 px-2 rounded-lg mt-1 ${pnl.cur.operatingProfit >= 0 ? 'bg-blue-50 text-[#1a3a8f]' : 'bg-red-50 text-red-600'}`}>
+                <div className={`flex justify-between py-3 font-bold text-base -mx-2 px-2 rounded-lg mt-1 ${pnl.cur.operatingProfit >= 0 ? 'bg-blue-50 text-[#1a3a8f]' : 'bg-red-50 text-red-700'}`}>
                   <span>영업이익</span><span data-testid="pnl-operating">{formatPrice(pnl.cur.operatingProfit)}</span>
                 </div>
                 <div className="flex justify-between pt-2 text-xs text-gray-400">
@@ -1042,7 +1042,7 @@ export default function Sales() {
                 <div className="flex gap-2 mt-1.5">
                   {[50000, 80000, 100000, 120000].map(n => (
                     <button type="button" key={n} onClick={() => setForm(f => ({ ...f, amount: n.toString() }))}
-                      className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200">
+                      className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">
                       {(n / 10000)}만
                     </button>
                   ))}
@@ -1084,7 +1084,7 @@ export default function Sales() {
                       onClick={() => setForm(f => ({ ...f, status: v }))}
                       className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
                         form.status === v
-                          ? v === 'refunded' ? 'border-red-400 bg-red-50 text-red-600' : 'border-blue-500 bg-blue-50 text-blue-700'
+                          ? v === 'refunded' ? 'border-red-400 bg-red-50 text-red-700' : 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-gray-200 text-gray-600'
                       }`}
                     >

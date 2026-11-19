@@ -144,7 +144,7 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
               className={`px-3 py-2.5 text-sm cursor-pointer flex items-center justify-between gap-2 ${i === hi ? 'bg-primary-50 text-primary-800' : 'text-gray-700'}`}
             >
               <span className="font-medium truncate">{c.name}</span>
-              <span className="text-xs text-gray-400 flex-shrink-0">{maskPhone(c.phone, maskRole)}{c.grade ? ` · ${c.grade}` : ''}</span>
+              <span className="text-xs text-slate-600 flex-shrink-0">{maskPhone(c.phone, maskRole)}{c.grade ? ` · ${c.grade}` : ''}</span>
             </li>
           ))}
           {customers.length > MAX_ROWS && matches.length === MAX_ROWS && (

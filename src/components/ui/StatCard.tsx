@@ -13,7 +13,7 @@ interface StatCardProps {
 // 플랫 연한 타일 — 대시보드 2열 타일과 같은 어법(그라데이션·색 그림자 없음, UI 품질 기준 2026-11-18)
 const accents = {
   primary: 'bg-primary-50 text-primary-600',
-  pink: 'bg-rose-50 text-rose-600',
+  pink: 'bg-rose-50 text-rose-700',
   green: 'bg-emerald-50 text-emerald-700',
   blue: 'bg-blue-50 text-blue-600',
   orange: 'bg-amber-50 text-amber-700',

@@ -228,7 +228,7 @@ export default function Products() {
                             <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
                               <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{p.category}</span>
                               <span className={clsx('font-bold', isLow ? 'text-red-600' : 'text-gray-700')}>재고 {p.stock}{p.unit}</span>
-                              {isLow && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 rounded-full text-xs font-medium"><AlertTriangle size={10} /> 부족</span>}
+                              {isLow && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium"><AlertTriangle size={10} /> 부족</span>}
                               <span className={clsx('font-semibold', margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600')}>마진 {margin}%</span>
                             </p>
                           </div>
@@ -300,7 +300,7 @@ export default function Products() {
                           </td>
                           <td className="px-4 py-4 text-center">
                             {isLow ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-600 rounded-full text-xs font-medium">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
                                 <AlertTriangle size={10} /> 부족
                               </span>
                             ) : (
@@ -563,6 +563,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">카테고리</label>
             <select
+              aria-label="카테고리"
               value={form.category}
               onChange={e => set('category', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
@@ -754,7 +755,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
               <span className="text-xs text-gray-400">·</span>
               <span className="text-xs font-medium text-[#1a3a8f]">정가 {product.price.toLocaleString()}원</span>
               <span className="text-xs text-gray-400">·</span>
-              <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-600' : 'text-gray-500')}>
+              <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-700' : 'text-gray-600')}>
                 재고 {product.stock}{product.unit}
               </span>
             </div>
@@ -765,6 +766,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 선택 (선택)</label>
           <select
+            aria-label="고객 선택"
             value={form.customerId}
             onChange={e => set('customerId', e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
@@ -832,6 +834,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             <label className="block text-xs font-medium text-gray-600 mb-1.5">판매일</label>
             <input
               type="date"
+              aria-label="판매일"
               value={form.saleDate}
               onChange={e => set('saleDate', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"

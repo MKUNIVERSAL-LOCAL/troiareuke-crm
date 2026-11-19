@@ -404,7 +404,7 @@ function AiChatInner() {
           <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border ${
             status.color === 'green' ? 'bg-green-50 text-green-700 border-green-200' :
             status.color === 'yellow' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-            'bg-red-50 text-red-600 border-red-200'
+            'bg-red-50 text-red-700 border-red-200'
           }`}>
             <Zap size={12} className={
               status.color === 'green' ? 'text-green-700' :
@@ -521,7 +521,7 @@ function AiChatInner() {
                       <span className={`text-2xs px-1.5 py-0.5 rounded-full font-medium ${
                         msg.usedProvider === 'claude' ? 'bg-violet-100 text-violet-600' :
                         msg.usedProvider === 'openai' ? 'bg-emerald-100 text-emerald-700' :
-                        'bg-blue-100 text-blue-600'
+                        'bg-blue-100 text-blue-700'
                       }`}>
                         {msg.usedProvider === 'claude' ? 'Claude' : msg.usedProvider === 'openai' ? 'GPT' : msg.usedProvider === 'server' ? '본사 AI' : 'Gemini'}
                       </span>

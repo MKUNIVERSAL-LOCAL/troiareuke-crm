@@ -547,6 +547,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원</label>
             <select
+              aria-label="담당 직원"
               value={staffName}
               onChange={e => setStaffName(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -642,6 +643,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <label className="block text-xs font-medium text-gray-600 mb-1.5">다음 방문 권장일</label>
           <input
             type="date"
+            aria-label="다음 방문 권장일"
             value={nextAppointment}
             onChange={e => setNextAppointment(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -908,7 +910,7 @@ function TreatmentDetailModal({
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-red-700 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
             >
               <Trash2 size={14} />
               삭제
@@ -916,7 +918,7 @@ function TreatmentDetailModal({
           ) : (
             <button
               onClick={() => onDelete(t.id)}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors"
             >
               <Trash2 size={14} />
               정말 삭제

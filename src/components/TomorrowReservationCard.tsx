@@ -39,7 +39,7 @@ export default function TomorrowReservationCard({ compact = false, refreshKey = 
         <div className="flex items-center gap-2 min-w-0">
           <CalendarClock size={compact ? 16 : 18} className="text-[#1a3a8f]" />
           <p className="text-sm font-bold text-gray-900 truncate">내일 예약 안내</p>
-          <span className="text-xs text-gray-400 flex-shrink-0">{tomorrowISO().slice(5).replace('-', '/')} · {list.length}건</span>
+          <span className="text-xs text-slate-600 flex-shrink-0">{tomorrowISO().slice(5).replace('-', '/')} · {list.length}건</span>
         </div>
         <button
           type="button"
@@ -61,7 +61,7 @@ export default function TomorrowReservationCard({ compact = false, refreshKey = 
               aria-label={`${r.customerName} 예약 보기`}
             >
               <p className="text-sm font-medium text-gray-800 truncate">{r.customerName}</p>
-              <p className="text-xs text-gray-400 truncate">
+              <p className="text-xs text-slate-600 truncate">
                 {r.services.map(s => s.serviceName).join(', ') || '시술 미지정'}{r.staffName ? ` · ${r.staffName}` : ''} · {maskPhone(r.customerPhone, user?.role ?? 'staff')}
               </p>
             </button>

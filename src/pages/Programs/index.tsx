@@ -248,7 +248,7 @@ export default function Programs() {
                       {normalizeCategory(program.category)}
                     </span>
                     {!program.isActive && (
-                      <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full">비활성</span>
+                      <span className="text-xs text-red-700 bg-red-50 px-2 py-0.5 rounded-full">비활성</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
@@ -318,7 +318,7 @@ export default function Programs() {
             </p>
             <div className="flex gap-2">
               <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">취소</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600">삭제</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700">삭제</button>
             </div>
           </div>
         </div>

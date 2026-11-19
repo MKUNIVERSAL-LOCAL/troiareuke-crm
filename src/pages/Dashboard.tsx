@@ -230,7 +230,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{r.customerName}</p>
-                    <p className="text-xs text-gray-400 truncate">{r.services.map(s => s.serviceName).join(', ')} · {r.staffName}</p>
+                    <p className="text-xs text-slate-600 truncate">{r.services.map(s => s.serviceName).join(', ')} · {r.staffName}</p>
                   </div>
                   <StatusBadge status={r.status} />
                 </button>

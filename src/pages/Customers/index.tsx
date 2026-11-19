@@ -121,15 +121,15 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
   const sel = 'px-2 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-300 hover:border-indigo-300 transition cursor-pointer';
   return (
     <div className="grid grid-cols-3 gap-1.5">
-      <select className={sel} value={y} onChange={e => { setY(e.target.value); emit(e.target.value, mo, d); }}>
+      <select className={sel} aria-label="생년" value={y} onChange={e => { setY(e.target.value); emit(e.target.value, mo, d); }}>
         <option value="">연도</option>
         {years.map(yr => <option key={yr} value={yr}>{yr}년</option>)}
       </select>
-      <select className={sel} value={mo} onChange={e => { setMo(e.target.value); emit(y, e.target.value, d); }}>
+      <select className={sel} aria-label="생월" value={mo} onChange={e => { setMo(e.target.value); emit(y, e.target.value, d); }}>
         <option value="">월</option>
         {months.map(m => <option key={m} value={m}>{Number(m)}월</option>)}
       </select>
-      <select className={sel} value={d} onChange={e => { setD(e.target.value); emit(y, mo, e.target.value); }}>
+      <select className={sel} aria-label="생일" value={d} onChange={e => { setD(e.target.value); emit(y, mo, e.target.value); }}>
         <option value="">일</option>
         {days.map(dy => <option key={dy} value={dy}>{Number(dy)}일</option>)}
       </select>
@@ -229,10 +229,10 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
                   <p className="text-xs font-medium text-gray-800 truncate">
                     {p.typeLabel}
                     {p.status !== 'completed' && (
-                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-2xs ${p.status === 'refunded' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-700'}`}>{PAYMENT_STATUS_LABEL[p.status] ?? p.status}</span>
+                      <span className={`ml-1.5 px-1.5 py-0.5 rounded text-2xs ${p.status === 'refunded' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>{PAYMENT_STATUS_LABEL[p.status] ?? p.status}</span>
                     )}
                   </p>
-                  <p className="text-xs text-gray-400 truncate">{formatDate(p.paymentDate)} · {p.paymentMethod}{p.memo ? ` · ${p.memo}` : ''}</p>
+                  <p className="text-xs text-slate-600 truncate">{formatDate(p.paymentDate)} · {p.paymentMethod}{p.memo ? ` · ${p.memo}` : ''}</p>
                 </div>
                 <span className={`text-sm font-semibold whitespace-nowrap ${p.status === 'refunded' ? 'text-rose-500 line-through' : 'text-gray-900'}`}>{formatPrice(p.amount)}</span>
               </div>
@@ -1610,7 +1610,7 @@ export default function Customers() {
                           <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
                           <span className="flex items-center gap-1.5">
                             <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                              cp.isCompleted ? 'bg-slate-200 text-slate-600' : isProgramExpired(cp) ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'
+                              cp.isCompleted ? 'bg-slate-200 text-slate-600' : isProgramExpired(cp) ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
                             }`}>{cp.isCompleted ? '완료' : isProgramExpired(cp) ? '만료' : '진행중'}</span>
                             <button type="button" onClick={() => setManageProgram(cp)} aria-label={`${cp.programName} 관리`}
                               className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
@@ -1719,7 +1719,7 @@ export default function Customers() {
                   </button>
                 )}
                 <button type="button" onClick={handleDeleteCustomer} aria-label="고객 삭제"
-                  className="flex-1 py-2.5 bg-red-50 text-red-600 rounded-xl text-xs font-medium flex items-center justify-center gap-1">
+                  className="flex-1 py-2.5 bg-red-50 text-red-700 rounded-xl text-xs font-medium flex items-center justify-center gap-1">
                   <Trash2 size={14} />고객 삭제
                 </button>
               </div>
@@ -1857,10 +1857,10 @@ export default function Customers() {
                           {customer.grade}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400 truncate">{maskPhone(customer.phone, user?.role ?? 'staff')}</p>
+                      <p className="text-xs text-slate-600 truncate">{maskPhone(customer.phone, user?.role ?? 'staff')}</p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-gray-400 pl-10">
+                  <div className="flex items-center justify-between text-xs text-slate-600 pl-10">
                     <span>방문 {customer.totalVisits}회</span>
                     {activeProgs > 0 && (
                       <span className="text-primary-600 font-medium">활성 {activeProgs}개</span>
@@ -1898,7 +1898,7 @@ export default function Customers() {
                         <button
                           onClick={() => setShowGradeMenu(v => !v)}
                           className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-0.5 hover:ring-2 hover:ring-offset-1 hover:ring-blue-300 transition ${GRADE_COLORS[selected.grade]}`}
-                          aria-label="등급 변경"
+                          aria-label={`${selected.grade} 등급 변경`}
                           aria-haspopup="menu"
                           aria-expanded={showGradeMenu}
                         >
@@ -2213,9 +2213,9 @@ export default function Customers() {
                         <div className="flex items-start justify-between mb-2">
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 font-medium">{cp.category}</span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">{cp.category}</span>
                               {cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">완료</span>}
-                              {isExpired && !cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-600">만료</span>}
+                              {isExpired && !cp.isCompleted && <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">만료</span>}
                             </div>
                             <p className="font-semibold text-sm text-gray-900 mt-1">{cp.programName}</p>
                           </div>
@@ -2305,7 +2305,7 @@ export default function Customers() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <p className="text-sm font-semibold text-gray-800 truncate">{log.programName || log.treatmentDetails || '시술 내역 없음'}</p>
-                            <span className="text-xs text-gray-400 flex-shrink-0 ml-2">{formatDate(log.treatmentDate)}</span>
+                            <span className="text-xs text-slate-600 flex-shrink-0 ml-2">{formatDate(log.treatmentDate)}</span>
                           </div>
                           {log.staffName && <p className="text-xs text-gray-400">담당: {log.staffName}</p>}
                           {log.treatmentDetails && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{log.treatmentDetails}</p>}
@@ -2749,7 +2749,7 @@ export default function Customers() {
 
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowTreatmentModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
-                <button type="submit" className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
+                <button type="submit" className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
                   <Scissors size={14} />시술 기록 저장
                 </button>
               </div>

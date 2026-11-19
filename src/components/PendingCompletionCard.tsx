@@ -77,7 +77,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
             <button type="button" onClick={() => settleOneAndPay(r)} aria-label={`${r.customerName} ${formatDate(r.date)} 완료`}
               className="px-2 py-1 rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
             <button type="button" onClick={() => settle([r.id], 'noshow')} aria-label={`${r.customerName} ${formatDate(r.date)} 노쇼`}
-              className="px-2 py-1 rounded-lg text-xs font-medium bg-rose-50 text-rose-600 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
+              className="px-2 py-1 rounded-lg text-xs font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
           </li>
         ))}
       </ul>

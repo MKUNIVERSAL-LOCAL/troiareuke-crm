@@ -47,7 +47,7 @@ export default function ProgramAlertCard({ compact = false, refreshKey = 0 }: { 
                   {a.reason === 'expiring' && a.daysToExpiry !== null ? `만료 D-${a.daysToExpiry}` : REASON_LABEL[a.reason]}
                 </span>
               </p>
-              <p className="text-xs text-gray-400 truncate">
+              <p className="text-xs text-slate-600 truncate">
                 {a.program.programName}{a.remaining !== null ? ` · 잔여 ${a.remaining}회` : ''}{a.program.expiryDate ? ` · 만료 ${a.program.expiryDate}` : ''}
               </p>
             </button>
