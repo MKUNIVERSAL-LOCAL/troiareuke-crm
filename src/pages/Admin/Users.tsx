@@ -338,10 +338,12 @@ export default function AdminUsers() {
           description={
             <>
               <p><b className="text-white">{deleteTarget.name || deleteTarget.email}</b> 계정을 서버에서 완전히 삭제합니다. 로그인 세션·재설정 토큰이 함께 삭제되고, 로그인 기록의 이메일은 마스킹됩니다.</p>
-              <p className="mt-2 text-xs text-slate-400">
-                이 계정이 속한 지점 <b className="text-slate-200">{deleteTarget.branch_name || '(지점 없음)'}</b>에는 이 계정을 포함해 {sameBranchCount}개 계정이 있습니다.
-                {sameBranchCount > 1 ? ' 다른 계정이 남아 있어 지점 데이터(고객·예약 등)는 유지됩니다.' : ' 마지막 계정입니다 — 아래 옵션을 켜면 지점 데이터도 함께 삭제됩니다.'}
-              </p>
+              {deleteTarget.branch_name && (
+                <p className="mt-2 text-xs text-slate-400">
+                  이 계정이 속한 지점 <b className="text-slate-200">{deleteTarget.branch_name || '(지점 없음)'}</b>에는 이 계정을 포함해 {sameBranchCount}개 계정이 있습니다.
+                  {sameBranchCount > 1 ? ' 다른 계정이 남아 있어 지점 데이터(고객·예약 등)는 유지됩니다.' : ' 마지막 계정입니다 — 아래 옵션을 켜면 지점 데이터도 함께 삭제됩니다.'}
+                </p>
+                )}
             </>
           }
           extra={sameBranchCount <= 1 && deleteTarget.branch_name ? (
@@ -670,7 +672,7 @@ export default function AdminUsers() {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="이름, 이메일, 역할, 지점 검색"
+          placeholder="이름, 이메일, 역할, 지점, 사업자번호 검색"
           className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-400 outline-none focus:border-blue-500"
           aria-label="관리자 사용자 검색"
         />

@@ -194,7 +194,7 @@ export default function Branches() {
             if (periodChanged) updates.serviceEndsAt = nextEndsAt;
             if (Object.keys(updates).length > 0) await adminUpdateUser(u.id, updates);
           }
-          if (form.name.trim() !== editTarget.name) {
+          if (false) { // 지점명 입력은 NAS 수정 모드에서 비활성 — 바뀔 수 없다 (4차 UX 점검 2026-11-19)
             setAdminNotice('지점명·주소·전화는 해당 지점 관리자가 CRM 설정에서 직접 변경해야 합니다. (플랜·사용기간 변경은 반영됨)');
             isPending = true;
           }
@@ -514,13 +514,13 @@ export default function Branches() {
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                   <Info size={13} className="text-amber-500 mt-0.5 shrink-0" />
                   <p className="text-xs text-amber-600 leading-relaxed">
-                    NAS 모드에서는 지점명 외 정보(주소·전화·샵 유형)는 본사 서버에서 관리됩니다. 이 화면에서는 플랜·사용기간 변경만 저장됩니다.
+                    NAS 모드에서는 지점명·주소·전화·샵 유형을 해당 지점 관리자가 CRM 설정에서 직접 바꿉니다. 이 화면에서는 플랜·사용기간 변경만 저장됩니다.
                   </p>
                 </div>
               )}
 
               <Field label="지점명 *">
-                <input className="admin-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="강남점" />
+                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="강남점" />
               </Field>
               <Field label="주소">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="서울시 강남구..." />

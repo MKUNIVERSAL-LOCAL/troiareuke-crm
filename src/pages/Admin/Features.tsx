@@ -54,6 +54,7 @@ export default function AdminFeatures() {
   }, [selected, scopes]);
 
   function selectScope(scope: string) {
+    if (scope !== selected && dirty && !window.confirm('저장하지 않은 변경이 있습니다. 버리고 다른 범위로 이동할까요?')) return; // (4차 UX 점검 2026-11-19)
     setSelected(scope);
     setSavedAt(null);
   }

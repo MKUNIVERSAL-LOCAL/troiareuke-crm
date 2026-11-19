@@ -192,7 +192,7 @@ export default function DataBrowser() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">전체 데이터 조회</h1>
-          <p className="text-slate-400 text-sm mt-1">모든 지점의 CRM 데이터를 실시간으로 확인합니다 (읽기 전용)</p>
+          <p className="text-slate-400 text-sm mt-1">모든 지점의 CRM 데이터를 실시간으로 확인합니다 — 조회는 읽기 전용, 백업·복원 탭만 데이터를 바꿉니다</p>
         </div>
         <button
           onClick={() => { loadOverview(); if (selectedBranch) loadRows(selectedBranch, tab, offset, query); }}

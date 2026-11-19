@@ -75,7 +75,7 @@ export default function LoginLogs() {
           <h1 className="text-2xl font-bold text-white">로그인 기록</h1>
           <p className="text-slate-400 text-sm mt-1">
             {isAuthApiConfigured
-              ? '전체 지점의 로그인 이력 (중앙 서버 기록 — 성공·실패 사유·프로그램 버전)'
+              ? '전체 지점의 로그인 이력 (중앙 서버 기록 — 성공·실패 사유, 최근 500건)'
               : '이 기기에서 기록된 로그인 이력'}
           </p>
         </div>
@@ -96,7 +96,7 @@ export default function LoginLogs() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-slate-900 border border-slate-700/50 rounded-xl px-5 py-4">
           <p className="text-2xl font-bold text-white">{filtered.length.toLocaleString()}</p>
-          <p className="text-xs text-slate-400 mt-1">전체 기록</p>
+          <p className="text-xs text-slate-400 mt-1">조건 일치 기록 (최근 500건 중)</p>
         </div>
         <div className="bg-slate-900 border border-slate-700/50 rounded-xl px-5 py-4">
           <p className="text-2xl font-bold text-emerald-400">{successCount.toLocaleString()}</p>

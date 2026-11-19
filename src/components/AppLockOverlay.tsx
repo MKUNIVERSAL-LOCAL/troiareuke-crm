@@ -8,6 +8,7 @@ import { IS_MOBILE_APP } from '../lib/platform';
 import { resetFeatureFlags } from '../lib/featureFlags';
 import { setAppLocked } from '../lib/overlayStack';
 import { clearLocalPhotoCacheForLogout } from '../lib/photoStore';
+import { notify } from '../lib/notify';
 
 const MAX_FAILS = 5;
 const COOLDOWN_MS = 30_000;
@@ -116,13 +117,16 @@ export default function AppLockOverlay() {
   if (!locked) return null;
 
   const handleLogout = async () => {
-    // 로그아웃하면 서버 모드의 localStorage 정리로 잠금도 함께 해제된다 — 다시 로그인한 뒤 PIN을 다시 설정
-    disableAppLock();
-    setLocked(false);
-    if (isAuthApiConfigured) {
+    // 로그아웃이 '끝난 뒤'에만 잠금을 푼다 — 먼저 풀면 오프라인·서버 장애로 logout이 실패했을 때 로그인 상태 그대로 고객 화면이 열린다 (4차 UX 점검 2026-11-19)
+    if (!isAuthApiConfigured) { disableAppLock(); setLocked(false); return; }
+    try {
       resetFeatureFlags();
       clearLocalPhotoCacheForLogout();
       await logout();
+      disableAppLock(); // 다시 로그인한 뒤 PIN을 다시 설정
+      setLocked(false);
+    } catch {
+      notify('로그아웃에 실패했습니다(네트워크 확인). 잠금은 그대로 유지됩니다 — 연결 뒤 다시 시도해주세요.');
     }
   };
 

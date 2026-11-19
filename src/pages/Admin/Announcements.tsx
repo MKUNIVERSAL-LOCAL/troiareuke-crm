@@ -98,7 +98,8 @@ export default function Announcements() {
 
   async function handleDelete(id: string) {
     if (!BACKEND_READY) return;
-    if (!window.confirm('이 공지를 삭제할까요?')) return;
+    const target = list.find(a => a.id === id);
+    if (!window.confirm(`${target ? `'${target.title}' 공지` : '이 공지'}를 삭제할까요?\n지점 화면에서도 바로 사라집니다.`)) return;
     if (NAS_MODE) {
       try {
         await adminDeleteAnnouncement(id);
@@ -128,7 +129,7 @@ export default function Announcements() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">공지사항 관리</h1>
-          <p className="text-slate-400 text-sm mt-1">전체 샵에 공지 및 업데이트 내용을 발송하세요</p>
+          <p className="text-slate-400 text-sm mt-1">전체 지점의 설정 &gt; 공지사항 탭에 게시됩니다 (문자·푸시 발송이 아닙니다)</p>
         </div>
         <button
           onClick={openAdd}
@@ -279,7 +280,7 @@ export default function Announcements() {
                   <input type="checkbox" className="sr-only peer" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} />
                   <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
-                <span className="text-xs text-slate-400">즉시 게시</span>
+                <span className="text-xs text-slate-400">{editTarget ? '게시 중' : '즉시 게시'}</span>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">

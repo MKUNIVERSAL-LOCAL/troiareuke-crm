@@ -223,6 +223,7 @@ export default function Settings() {
     }
     const result = await electronAPI.backup.exportNow(snapshot);
     setBackupStatus(result.success ? 'done' : 'error');
+    if (!result.success) notify(`백업 실패: ${result.error || '알 수 없는 오류'} — 백업 폴더 권한·경로를 확인해주세요.`); // 버튼 글자 3초만으로는 이유를 알 수 없다 (4차 UX 점검 2026-11-19)
     setTimeout(() => setBackupStatus('idle'), 3000);
   };
 
@@ -464,6 +465,13 @@ export default function Settings() {
   };
 
   const handleHoursSave = () => {
+    // 종료<시작(오후 8시를 08:00으로 오타)·빈 값이 그대로 저장되면 이후 모든 예약에 "영업시간 밖" 경고가 뜬다 (4차 UX 점검 2026-11-19)
+    for (const day of dayLabels) {
+      const h = settings.businessHours[day];
+      if (!h || h.isOff) continue;
+      if (!h.open || !h.close) { notify(`${day}요일 영업시간을 모두 입력해주세요. 쉬는 날이면 체크를 풀어주세요.`); return; }
+      if (h.open >= h.close) { notify(`${day}요일 종료 시간(${h.close})이 시작 시간(${h.open})보다 늦어야 합니다. 오후는 13:00~23:59로 적어주세요.`); return; }
+    }
     SettingsStore.save({ businessHours: settings.businessHours, holidays: settings.holidays || [] });
     flash();
   };

@@ -79,9 +79,16 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
+    <div className="min-h-screen bg-slate-950 lg:flex">
+      {/* 폰 폭(lg 미만): 사이드바·4열 카드가 고정 폭이라 글자가 세로로 쪼개진다 — 숨기지 말고 이유를 말한다 (4차 UX 점검 2026-11-19) */}
+      <div className="lg:hidden min-h-screen flex items-center justify-center p-6 text-center">
+        <div className="max-w-xs">
+          <p className="text-lg font-bold text-white mb-2">관리자 콘솔은 PC 화면에서 이용하세요</p>
+          <p className="text-sm text-slate-300 leading-relaxed">가로 1024px 이상(PC·태블릿 가로) 화면에 맞춰져 있습니다. 폰에서는 지점용 CRM 앱만 지원합니다.</p>
+        </div>
+      </div>
       {/* Admin Sidebar */}
-      <aside className="w-64 h-screen bg-slate-900 flex flex-col fixed left-0 top-0 z-30 border-r border-slate-700/50">
+      <aside className="hidden lg:flex w-64 h-screen bg-slate-900 flex-col fixed left-0 top-0 z-30 border-r border-slate-700/50">
         {/* Logo */}
         <div className="px-5 py-5 border-b border-slate-700/50">
           <div className="flex items-center gap-3">
@@ -146,7 +153,7 @@ export default function AdminLayout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 ml-64 min-h-screen overflow-x-hidden bg-slate-950">
+      <main className="hidden lg:block flex-1 ml-64 min-h-screen overflow-x-hidden bg-slate-950">
         <ToastHost />
         <ErrorBoundary resetKey={location.pathname + location.search}>
           <Outlet />

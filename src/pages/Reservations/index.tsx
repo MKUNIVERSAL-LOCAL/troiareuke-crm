@@ -1,7 +1,7 @@
-﻿import { useState, useCallback, useEffect, useMemo, type CSSProperties } from 'react';
+﻿import { useState, useCallback, useEffect, useMemo, type CSSProperties, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { notify } from '../../lib/notify';
-import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
@@ -168,6 +168,7 @@ export default function Reservations() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [staffFilter, setStaffFilter] = useState('all');
   const googleConnected = isGoogleCalendarConnected();
+  const googleLoadErrorNotified = useRef(false); // Google 일정 로드 실패 알림은 1회만
 
   const reloadReservations = useCallback(() => {
     setReservations(ReservationStore.getAll());
@@ -195,6 +196,8 @@ export default function Reservations() {
       setGoogleEvents(asReservationLike);
     } catch {
       setGoogleEvents([]);
+      // 조용히 비우면 "구글 일정이 왜 안 보이지"만 남는다 — 한 번만 알린다 (4차 UX 점검 2026-11-19)
+      if (!googleLoadErrorNotified.current) { googleLoadErrorNotified.current = true; notify('Google 캘린더 일정을 불러오지 못했습니다. 설정 > 연동 설정에서 다시 연결해주세요.'); }
     }
   }, [googleConnected, currentDate, viewMode, mobileTab, mobileMonthOffset]);
 
@@ -429,20 +432,25 @@ export default function Reservations() {
         {/* Controls */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
+            {viewMode !== 'list' && (<>
             <button type="button" onClick={() => navigate('prev')} aria-label="이전" className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
               <ChevronLeft size={18} className="text-gray-600" />
             </button>
             <button onClick={() => setCurrentDate(new Date())} className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2">
-              <RefreshCw size={14} /> 오늘
+              <Calendar size={14} /> 오늘
             </button>
             <button type="button" onClick={() => navigate('next')} aria-label="다음" className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
               <ChevronRight size={18} className="text-gray-600" />
             </button>
             <span className="hidden xl:inline ml-2 text-xs text-gray-400" title="키보드 단축키">← → 이동 · T 오늘 · N 새 예약</span>
+            </>)}
+            {/* 목록 뷰는 날짜와 무관한 전체 목록 — 날짜 머리글·‹ ›·오늘을 보여 주면 "오늘 목록"으로 오해한다 (4차 UX 점검 2026-11-19) */}
             <h3 className="text-base font-bold text-gray-900">
-              {viewMode === 'week'
-                ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
-                : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
+              {viewMode === 'list'
+                ? `전체 예약 ${filteredReservations.length}건 · 날짜순`
+                : viewMode === 'week'
+                  ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
+                  : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
               }
             </h3>
           </div>

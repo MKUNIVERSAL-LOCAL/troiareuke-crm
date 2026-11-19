@@ -53,8 +53,10 @@ export default function Subscriptions() {
 
   useEffect(() => { loadSubs(); }, []);
 
+  const [loadError, setLoadError] = useState('');
   async function loadSubs() {
     setLoading(true);
+    setLoadError('');
     if (NAS_MODE) {
       try {
         const users = await adminListUsers();
@@ -81,6 +83,7 @@ export default function Subscriptions() {
       } catch (e: any) {
         console.warn('[Subscriptions] NAS 계정 목록 로드 실패:', e?.message);
         setSubs([]);
+        setLoadError(e?.message || '중앙 서버에서 목록을 불러오지 못했습니다'); // 빈 상태로 위장하지 않는다 (4차 UX 점검 2026-11-19)
       }
     }
     setLoading(false);
@@ -220,8 +223,9 @@ export default function Subscriptions() {
         ) : filtered.length === 0 ? (
           <div className="p-16 text-center">
             <CreditCard size={32} className="text-slate-400 mx-auto mb-3" />
-            <p className="text-slate-400">구독 데이터가 없습니다</p>
-            <p className="text-slate-400 text-sm mt-1">지점 추가 시 자동으로 구독이 생성됩니다</p>
+            <p className="text-slate-400">{loadError ? '구독 목록을 불러오지 못했습니다' : NAS_MODE ? '구독 데이터가 없습니다' : '중앙 서버(NAS) 연동 후 구독 현황이 표시됩니다'}</p>
+            <p className="text-slate-400 text-sm mt-1">{loadError ? loadError : NAS_MODE ? '지점 계정이 생기면 여기에 나타납니다' : '미연동 상태에서는 표시할 데이터가 없습니다'}</p>
+            {loadError && <button type="button" onClick={() => void loadSubs()} className="mt-3 px-4 py-2 text-sm font-medium rounded-xl bg-slate-800 text-white hover:bg-slate-700">다시 시도</button>}
           </div>
         ) : (
           <div className="overflow-auto max-h-[70vh]">
