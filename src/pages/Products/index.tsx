@@ -7,7 +7,9 @@ import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import { ProductStore, ProductSaleStore, CustomerStore, StaffStore } from '../../lib/store';
-import { todayISO } from '../../lib/format';
+import { todayISO, formatDate } from '../../lib/format';
+import { getLastPaymentMethod } from '../../lib/lastUsed';
+import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import type { Product, ProductSale } from '../../types';
 import type { PaymentMethod } from '../../types';
 import clsx from 'clsx';
@@ -54,7 +56,7 @@ export default function Products() {
   };
 
   const handleDeleteSale = (sale: ProductSale) => {
-    if (!window.confirm(`${sale.saleDate} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고와 연결된 결제 금액도 함께 복구됩니다.`)) return;
+    if (!window.confirm(`${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제 기록은 삭제됩니다(고객 누적 결제액도 차감).`)) return;
     ProductSaleStore.delete(sale.id);
     refresh();
   };
@@ -84,6 +86,7 @@ export default function Products() {
   const visibleSalesRevenue = recentSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
 
   const handleSell = (product: Product) => {
+    if (!product.isActive) { notify('판매 중지된 제품입니다. [수정]에서 \'판매 활성\'을 켜면 다시 팔 수 있습니다.'); return; }
     setSaleProduct(product);
     setShowSaleModal(true);
   };
@@ -134,9 +137,9 @@ export default function Products() {
             <p className="text-2xl font-bold text-gray-900">{sales.length}<span className="text-sm font-medium ml-1">건</span></p>
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출</p>
+            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간)</p>
             <p className="text-2xl font-bold text-[#1a3a8f]">
-              {Math.round(totalSalesRevenue / 10000)}<span className="text-sm font-medium">만원</span>
+              {totalSalesRevenue.toLocaleString()}<span className="text-sm font-medium">원</span>
             </p>
           </div>
         </div>
@@ -235,7 +238,7 @@ export default function Products() {
                           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                             <span className="text-sm font-bold text-gray-900">{p.price.toLocaleString()}원</span>
                             <span className="flex items-center gap-1">
-                              <button onClick={() => handleSell(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg"><ShoppingCart size={11} />판매</button>
+                              <button onClick={() => handleSell(p)} disabled={!p.isActive} title={p.isActive ? undefined : '판매 중지 제품 — [수정]에서 판매 활성을 켜세요'} className="inline-flex items-center gap-1 px-3 py-2 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed"><ShoppingCart size={11} />판매</button>
                               <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
                               <button onClick={() => setEditProduct(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={16} /></button>
                               <button onClick={() => handleDeleteProduct(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="제품 삭제"><Trash2 size={16} /></button>
@@ -319,7 +322,9 @@ export default function Products() {
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => handleSell(p)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg hover:bg-[#152d6e] transition-colors"
+                                disabled={!p.isActive}
+                                title={p.isActive ? undefined : '판매 중지 제품 — [수정]에서 판매 활성을 켜세요'}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg hover:bg-[#152d6e] transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed disabled:hover:bg-gray-300"
                               >
                                 <ShoppingCart size={11} />
                                 판매
@@ -368,7 +373,7 @@ export default function Products() {
                 <input
                   value={salesSearch}
                   onChange={e => setSalesSearch(e.target.value)}
-                  placeholder="제품명, 고객명, 결제수단, 판매일 검색"
+                  placeholder="제품명, 고객명, 결제 수단, 판매일 검색"
                   className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
                   aria-label="제품 판매 기록 검색"
                 />
@@ -390,7 +395,7 @@ export default function Products() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{sale.productName}</p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-                          <span>{sale.saleDate}</span>
+                          <span>{formatDate(sale.saleDate)}</span>
                           <span>{sale.customerName || '—'}</span>
                           <span>{sale.quantity}개 × {sale.unitPrice.toLocaleString()}원</span>
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{sale.paymentMethod}</span>
@@ -418,14 +423,14 @@ export default function Products() {
                     <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500">수량</th>
                     <th className="text-right px-4 py-3.5 text-xs font-semibold text-gray-500">단가</th>
                     <th className="text-right px-4 py-3.5 text-xs font-semibold text-gray-500">합계</th>
-                    <th className="text-center px-6 py-3.5 text-xs font-semibold text-gray-500">결제수단</th>
+                    <th className="text-center px-6 py-3.5 text-xs font-semibold text-gray-500">결제 수단</th>
                     <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {recentSales.map(sale => (
                     <tr key={sale.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-3.5 text-sm text-gray-500">{sale.saleDate}</td>
+                      <td className="px-6 py-3.5 text-sm text-gray-500">{formatDate(sale.saleDate)}</td>
                       <td className="px-4 py-3.5">
                         <p className="text-sm font-medium text-gray-900">{sale.productName}</p>
                       </td>
@@ -624,8 +629,11 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
               placeholder="0"
               value={form.stock}
               onChange={e => set('stock', e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+              disabled={isEdit}
+              title={isEdit ? '재고는 목록의 [입고]·조정으로 바꿉니다 (매입 지출·사유가 함께 남도록)' : undefined}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30 disabled:bg-gray-50 disabled:text-gray-500"
             />
+            {isEdit && <p className="text-2xs text-gray-500 mt-1">재고는 [입고]·조정으로 바꿉니다</p>}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">최소 재고</label>
@@ -694,7 +702,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
     customerId: '',
     quantity: '1',
     unitPrice: String(product.price),
-    paymentMethod: '카드' as PaymentMethod,
+    paymentMethod: (getLastPaymentMethod() ?? '카드') as PaymentMethod, // 결제 등록과 같은 기본값 (UX 점검 2026-11-19)
     saleDate: todayISO(),
     staffName: '',
     notes: '',
@@ -712,6 +720,10 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
   const handleSubmit = () => {
     if (!form.unitPrice || !form.quantity) {
       notify('수량과 단가를 입력해주세요.');
+      return;
+    }
+    if (!(parseInt(form.unitPrice, 10) > 0)) {
+      notify('단가는 1원 이상이어야 합니다. 무상 제공이면 메모에 남기고 단가는 실제 가격으로 적어주세요.');
       return;
     }
     const rawQty = parseInt(form.quantity, 10);
@@ -765,17 +777,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
         {/* Customer */}
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 선택 (선택)</label>
-          <select
-            aria-label="고객 선택"
-            value={form.customerId}
-            onChange={e => set('customerId', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
-          >
-            <option value="">고객 선택 안함</option>
-            {customers.map(c => (
-              <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>
-            ))}
-          </select>
+          <CustomerCombobox customers={customers} value={form.customerId} onChange={id => set('customerId', id)} maskRole={authUser?.role ?? 'staff'} ariaLabel="고객 선택" placeholder="이름·전화번호 검색 (비우면 고객 없이 기록)" />
         </div>
 
         {/* Quantity & Unit Price */}
@@ -821,7 +823,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
 
         {/* Payment Method */}
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">결제수단</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">결제 수단</label>
           <PaymentMethodPicker
             value={form.paymentMethod}
             onChange={m => setForm(prev => ({ ...prev, paymentMethod: m }))}

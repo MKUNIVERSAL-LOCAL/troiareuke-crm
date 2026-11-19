@@ -7,7 +7,7 @@ import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import StaffPerformanceCard from '../../components/StaffPerformanceCard';
 import { StaffStore, ReservationStore, TreatmentLogStore } from '../../lib/store';
-import { todayISO, thisYearMonthISO, formatPhoneInput } from '../../lib/format';
+import { todayISO, thisYearMonthISO, formatPhoneInput, formatPrice } from '../../lib/format';
 import type { Staff } from '../../types';
 
 const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '왁싱', '각질관리'];
@@ -136,7 +136,7 @@ export default function StaffPage() {
                     <p className="text-xs text-gray-400">오늘 예약</p>
                   </div>
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center" title="완료·예정 포함, 취소·노쇼 제외">
-                    <p className="text-base font-bold text-gray-800">{(monthlyRevenue / 10000).toFixed(0)}만</p>
+                    <p className="text-base font-bold text-gray-800">{formatPrice(monthlyRevenue)}</p>
                     <p className="text-xs text-gray-400 whitespace-nowrap">월 예약액</p>
                     <p className="text-2xs text-gray-500 whitespace-nowrap">예정 포함</p>
                   </div>
@@ -645,7 +645,7 @@ function StaffDetailModal({
             <p className="text-xs text-purple-700 mt-0.5">총 예약</p>
           </div>
           <div className="bg-pink-50 rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-pink-700">{(monthRevenue / 10000).toFixed(0)}만</p>
+            <p className="text-xl font-bold text-pink-700">{formatPrice(monthRevenue)}</p>
             <p className="text-xs text-pink-700 mt-0.5">이번달 예약액(예정 포함)</p>
             <p className="text-2xs text-pink-700">(완료·예정 포함, 취소·노쇼 제외)</p>
           </div>
@@ -659,7 +659,7 @@ function StaffDetailModal({
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">전문 분야</p>
           <div className="flex flex-wrap gap-2">
             {staff.specialty.map(s => (
-              <span key={s} className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-sm font-medium">{s}</span>
+              <span key={s} className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-sm font-medium">{normalizeSpecialty(s)}</span>
             ))}
           </div>
         </div>

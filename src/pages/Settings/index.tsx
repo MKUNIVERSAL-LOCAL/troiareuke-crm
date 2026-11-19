@@ -405,7 +405,7 @@ export default function Settings() {
   const doShopSave = async () => {
     const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
     if (!shopName) {
-      flash('샵 이름을 입력해주세요');
+      notify('샵 이름을 입력해주세요');
       return;
     }
 
@@ -448,9 +448,8 @@ export default function Settings() {
       }
     } catch { /* 세션 갱신 실패는 샵 설정 저장을 막지 않음 */ }
 
-    flash(remoteFailed
-      ? `${shopName} 저장 완료 (서버 반영 실패 — 네트워크 확인 후 다시 저장해주세요)`
-      : `${shopName} CRM으로 설정했습니다`);
+    flash(`${shopName} CRM으로 설정했습니다`);
+    if (remoteFailed) notify('서버 반영 실패 — 이 PC에는 저장됐지만 네트워크 확인 후 다시 저장해주세요.'); // 실패는 성공 토스트에 섞지 않는다 (UX 점검 2026-11-19)
   };
 
   // ─── Business Hours ───────────────────────────────────────
@@ -529,7 +528,7 @@ export default function Settings() {
       localStorage.setItem('ai_key_gemini', aiKeys.gemini.trim());
       flash('AI 분석 키를 저장했습니다');
     } catch {
-      flash('키 저장 실패 — 브라우저 저장소를 확인해주세요');
+      notify('키 저장 실패 — 브라우저 저장소를 확인해주세요');
     }
   };
 
@@ -554,7 +553,7 @@ export default function Settings() {
   };
 
   const handleServiceSubmit = () => {
-    if (!serviceForm.name || !serviceForm.category) return;
+    if (!serviceForm.name || !serviceForm.category) { notify('시술명과 카테고리를 입력해주세요.'); return; }
     if (editingService) {
       ServiceStore.update(editingService.id, {
         name: serviceForm.name,
@@ -579,7 +578,8 @@ export default function Settings() {
   };
 
   const handleDeleteService = (id: string) => {
-    if (!confirm('이 시술을 삭제하시겠습니까?')) return;
+    const svc = services.find(sv => sv.id === id);
+    if (!confirm(`'${svc?.name ?? '이'}' 시술을 삭제할까요?\n예약·시술 기록에 남은 시술명은 그대로 유지됩니다.`)) return;
     ServiceStore.delete(id);
     setServices(ServiceStore.getAll());
     flash('삭제 완료');
@@ -1104,7 +1104,7 @@ export default function Settings() {
                           aria-label={`${n.label} 자동 발송 (준비 중)`}
                           disabled
                           readOnly
-                          checked={settings.notificationSettings[n.key]}
+                          checked={false} // 준비 중 — 켜진 모양이면 자동 발송이 되는 줄 안다 (UX 점검 2026-11-19)
                         />
                         <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
                       </label>
@@ -1490,7 +1490,7 @@ export default function Settings() {
               {editingService ? '시술 수정' : '시술 추가'}
             </h3>
             <form onSubmit={e => { e.preventDefault(); handleServiceSubmit(); }} className="space-y-4">
-              <FormRow label="시술명">
+              <FormRow label="시술명 *">
                 <input
                   type="text"
                   aria-label="시술명"
@@ -1500,7 +1500,7 @@ export default function Settings() {
                   placeholder="예: 수분관리"
                 />
               </FormRow>
-              <FormRow label="카테고리">
+              <FormRow label="카테고리 *">
                 <input
                   type="text"
                   aria-label="카테고리"
@@ -1508,14 +1508,19 @@ export default function Settings() {
                   onChange={e => setServiceForm(prev => ({ ...prev, category: e.target.value }))}
                   className="form-input"
                   placeholder="예: 피부관리"
+                  list="service-category-options"
                 />
+                {/* 자유 입력이라 오타로 그룹이 갈라지지 않게 기존 카테고리를 제안한다 */}
+                <datalist id="service-category-options">
+                  {[...new Set(services.map(sv => sv.category).filter(Boolean))].map(c => <option key={c} value={c} />)}
+                </datalist>
               </FormRow>
               <FormRow label="소요시간">
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     aria-label="소요시간(분)"
-                    value={serviceForm.duration}
+                    value={serviceForm.duration || ''}
                     onChange={e => setServiceForm(prev => ({ ...prev, duration: Number(e.target.value) }))}
                     className="form-input w-24"
                   />
@@ -1527,7 +1532,7 @@ export default function Settings() {
                   <input
                     type="number"
                     aria-label="가격(원)"
-                    value={serviceForm.price}
+                    value={serviceForm.price || ''}
                     onChange={e => setServiceForm(prev => ({ ...prev, price: Number(e.target.value) }))}
                     className="form-input w-32"
                   />

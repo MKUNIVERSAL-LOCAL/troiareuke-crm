@@ -126,11 +126,16 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
             )}
           </div>
         )}
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">메모{mode === 'set' ? ' (조정 이유: 폐기·분실·오기록 등)' : ''}</label>
-          <input value={memo} onChange={e => setMemo(e.target.value)} aria-label="메모" placeholder={mode === 'set' ? '예: 유통기한 경과 폐기 2개' : '예: 11월 정기 발주'}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl" />
-        </div>
+        {/* 메모는 지출 기록(ExpenseStore)에만 저장된다 — 저장되지 않는 상황(조정·지출 기록 OFF)에서는 입력란 대신 그 사실을 알린다 (UX 점검 2026-11-19) */}
+        {mode === 'in' && logExpense ? (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">메모 (지출 기록에 남음)</label>
+            <input value={memo} onChange={e => setMemo(e.target.value)} aria-label="메모" placeholder="예: 11월 정기 발주"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl" />
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500">{mode === 'set' ? '조정 이유는 따로 저장되지 않습니다 — 폐기·분실로 비용이 생기면 매출·손익 > [지출 등록]에 남겨주세요.' : '지출 기록을 끄면 메모도 남지 않습니다.'}</p>
+        )}
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
           <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-[#1a3a8f] hover:bg-[#15306e] text-white rounded-xl text-sm font-semibold">
