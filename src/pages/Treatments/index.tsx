@@ -11,7 +11,7 @@ import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, PaymentStore, ReservationStore } from '../../lib/store';
+import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, ReservationStore } from '../../lib/store';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,6 +20,7 @@ import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import CameraOverlay, { isCameraPreviewSupported } from '../../components/CameraOverlay';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
+import { hasPaymentFor } from '../../lib/pendingCompletion';
 
 export default function Treatments() {
   const [search, setSearch] = useState('');
@@ -295,7 +296,7 @@ export default function Treatments() {
               if (r && (r.status === 'confirmed' || r.status === 'pending') && (!savedDate || r.date === savedDate)) ReservationStore.updateStatus(reservationId, 'completed');
             }
             // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
-            const paidByReservation = !!reservationId && PaymentStore.getAll().some(p => p.referenceId === reservationId);
+            const paidByReservation = !!reservationId && hasPaymentFor(reservationId); // 환불된 결제는 '등록됨'으로 치지 않는다 — 예약 상세와 같은 기준
             if (result && !paidByReservation && window.confirm(`시술 기록을 저장했습니다.\n${result.customerName} 고객의 결제(${result.amount.toLocaleString()}원)도 바로 등록할까요?`)) {
               const q = new URLSearchParams({ new: '1', customer: result.customerId, amount: String(result.amount), memo: result.details });
               navigate(`/sales?${q.toString()}`);

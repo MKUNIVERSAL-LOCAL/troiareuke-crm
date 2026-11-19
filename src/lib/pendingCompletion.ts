@@ -29,9 +29,17 @@ export function bulkCompletableIds(list: Reservation[]): string[] {
   return list.filter(r => r.status === 'confirmed').map(r => r.id);
 }
 
-/** 이 예약에 연결된 결제(referenceId)가 이미 있는지 — 예약 화면의 완료→결제 브리지와 같은 기준 */
+/**
+ * 이 예약에 연결된(referenceId) 결제 중 '등록된' 것 — 완료·대기. 환불된 결제는 고객이 다시 결제할 수 있으므로 제외한다.
+ * 예약 상세([결제 등록하기]·취소 경고)·완료→결제 브리지·시술 기록 저장 후 결제 안내·완료 누락 카드가 전부 이 하나를 쓴다 (리뷰 2026-11-19).
+ */
+export function registeredPaymentsFor(reservationId: string) {
+  return PaymentStore.getAll().filter(p => p.referenceId === reservationId && p.status !== 'refunded');
+}
+
+/** 이 예약에 등록된 결제가 있는지 — registeredPaymentsFor와 같은 기준 */
 export function hasPaymentFor(reservationId: string): boolean {
-  return PaymentStore.getAll().some(p => p.referenceId === reservationId);
+  return registeredPaymentsFor(reservationId).length > 0;
 }
 
 /** 상태 일괄 변경 — 한 건씩 updateStatus를 거쳐 방문 통계가 맞게 반영된다. @returns 바뀐 건수 */

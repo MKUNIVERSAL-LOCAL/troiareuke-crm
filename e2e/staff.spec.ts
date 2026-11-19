@@ -49,12 +49,17 @@ test('직원 추가 → 예약 담당 → 실적 → 이름 변경 → 퇴사·�
   await expect(page.getByRole('dialog')).toHaveCount(0);
   // 결제 없이 완료한 예약을 다시 열면 '완료처리' 대신 '결제 등록하기'가 있고, 거기서 결제를 등록하면 사라진다
   await page.locator('[data-testid="reservation-block"][data-start="10:00"]').click();
+  await expect(detail).toBeVisible();
   await expect(detail.getByRole('button', { name: '완료처리' })).toHaveCount(0);
+  await expect(detail.getByText('완료 처리됐지만 결제가 아직 등록되지 않은 예약입니다.')).toBeVisible();
   await detail.getByRole('button', { name: '결제 등록하기' }).click();
+  await expect(page.getByText('완료 처리된 예약입니다. 아직 등록되지 않은 결제')).toBeVisible();
   await page.getByRole('button', { name: '결제 등록', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.locator('[data-testid="reservation-block"][data-start="10:00"]').click();
+  await expect(detail).toBeVisible();
   await expect(detail.getByRole('button', { name: '결제 등록하기' })).toHaveCount(0);
+  await expect(detail.getByRole('button', { name: '완료처리' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(detail).toHaveCount(0);
 

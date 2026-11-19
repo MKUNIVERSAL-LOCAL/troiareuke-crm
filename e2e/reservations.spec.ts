@@ -65,7 +65,7 @@ test('예약 완료·노쇼·취소가 대시보드·직원 실적·고객 노�
   detail = await openDetail(page, '10:00');
   await expect(detail.getByRole('button', { name: '완료처리' })).toHaveCount(0);
   await expect(detail.getByRole('button', { name: '결제 등록하기' })).toHaveCount(0);
-  await expect(detail.getByText('완료', { exact: true })).toBeVisible();
+  await expect(detail.getByTestId('reservation-status')).toHaveText('완료');
   await page.keyboard.press('Escape');
   await expect(detail).toHaveCount(0);
 
@@ -73,17 +73,30 @@ test('예약 완료·노쇼·취소가 대시보드·직원 실적·고객 노�
   detail = await openDetail(page, '12:00');
   await detail.getByRole('button', { name: '노쇼', exact: true }).click();
   await expect(detail).toHaveCount(0);
+  // 노쇼 예약을 다시 열면 노쇼·취소처리는 없고(노쇼 횟수가 조용히 사라지지 않게) [예약 복구]와, 지난 시간이라 완료처리만 남는다
+  detail = await openDetail(page, '12:00');
+  await expect(detail.getByTestId('reservation-status')).toHaveText('노쇼');
+  await expect(detail.getByRole('button', { name: '노쇼', exact: true })).toHaveCount(0);
+  await expect(detail.getByRole('button', { name: '취소처리' })).toHaveCount(0);
+  await expect(detail.getByRole('button', { name: '예약 복구' })).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(detail).toHaveCount(0);
 
   // ── 14시 취소처리 (confirm 수락) ──
   detail = await openDetail(page, '14:00');
   await detail.getByRole('button', { name: '취소처리' }).click();
   await expect(detail).toHaveCount(0);
-  // 취소된 예약을 다시 열면 '취소처리'·'노쇼'는 없다 (완료처리는 잘못 취소한 예약을 되살리는 길로 남긴다)
+  // 취소된 예약을 다시 열면 '취소처리'·'노쇼'는 없고 [예약 복구]로 되돌릴 수 있다 → 복구하면 다시 예약확정(취소처리 복귀) → 다시 취소
   detail = await openDetail(page, '14:00');
+  await expect(detail.getByTestId('reservation-status')).toHaveText('취소');
   await expect(detail.getByRole('button', { name: '취소처리' })).toHaveCount(0);
   await expect(detail.getByRole('button', { name: '노쇼', exact: true })).toHaveCount(0);
-  await expect(detail.getByRole('button', { name: '완료처리' })).toHaveCount(1);
-  await page.keyboard.press('Escape');
+  await detail.getByRole('button', { name: '예약 복구' }).click(); // confirm 수락
+  await expect(detail).toHaveCount(0);
+  detail = await openDetail(page, '14:00');
+  await expect(detail.getByTestId('reservation-status')).toHaveText('예약확정');
+  await expect(detail.getByRole('button', { name: '예약 복구' })).toHaveCount(0);
+  await detail.getByRole('button', { name: '취소처리' }).click();
   await expect(detail).toHaveCount(0);
 
   // ── 대시보드: 오늘 예약은 노쇼·취소를 뺀 활성 1건, 부제 "완료 1건 · 남은 0건 · 노쇼 1건" ──
