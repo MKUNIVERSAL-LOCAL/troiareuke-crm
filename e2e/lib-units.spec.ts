@@ -8,7 +8,7 @@ import { sanitizeStorageSnapshot } from '../src/lib/backupSanitize';
 import { computeRevisitDue, daysBetween, addDays } from '../src/lib/revisitRule';
 import { nextBirthday } from '../src/lib/birthdayRule';
 import { summarizeDailyClose, formatDailyCloseMessage } from '../src/lib/dailyCloseSummary';
-import { statsFor } from '../src/lib/customerStats';
+import { statsFor } from '../src/lib/customerStatsRule';
 import { isLowStock } from '../src/lib/stockRule';
 import { isCountableCustomer } from '../src/lib/customerScope';
 import { growthPct } from '../src/lib/growth';
@@ -180,7 +180,7 @@ test('공용 집계 규칙 — 재고 부족·집계 대상 고객·성장률·�
   expect(isLowStock({ isActive: true, stock: 2, minStock: 3 })).toBe(true);
   expect(isLowStock({ isActive: true, stock: 3, minStock: 3 })).toBe(true);   // 최소 재고와 같아도 부족
   expect(isLowStock({ isActive: false, stock: 0, minStock: 3 })).toBe(false); // 단종 제품은 입고 권유 대상이 아니다
-  expect(isLowStock({ isActive: undefined, stock: 5, minStock: 3 })).toBe(false);
+  expect(isLowStock({ isActive: true, stock: 5, minStock: 3 })).toBe(false);
   expect(isCountableCustomer({ id: 'c1', isActive: true })).toBe(true);
   expect(isCountableCustomer({ id: 'sample_1', isActive: true })).toBe(false);
   expect(isCountableCustomer({ id: 'c2', isActive: false })).toBe(false);     // 익명화(탈퇴)

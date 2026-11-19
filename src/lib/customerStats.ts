@@ -1,5 +1,7 @@
 import { CustomerStore, PaymentStore, ReservationStore, TreatmentLogStore, initializeStores } from './store';
 import type { Customer } from '../types';
+import { buildStatsIndex, type CustomerStats, type CustomerStatsIndex } from './customerStatsRule';
+export { statsFor, type CustomerStats, type CustomerStatsIndex } from './customerStatsRule';
 
 /**
  * 고객 누적값(누적 결제액·방문 횟수·마지막 방문일)의 재계산 (정합성 감사 2026-11-19).
@@ -11,7 +13,6 @@ import type { Customer } from '../types';
  * 방문 횟수는 의도된 정의 변경이다: 코어는 예약 완료 +1, 시술 기록 저장 +1로 같은 날 방문을 두 번 세지만(코어 전용 결함, 로드맵 P1),
  * 여기서는 "다녀간 날 수"로 센다. 목록·상세가 어긋나 보이지 않게 기록을 저장한 직후(예약 완료·시술 기록)와 상세를 열 때 바로 맞춘다 (리뷰 2026-11-19).
  */
-export interface CustomerStats { totalSpent: number; totalVisits: number; lastVisitDate: string | null }
 
 export function computeCustomerStats(customerId: string): CustomerStats {
   const totalSpent = PaymentStore.getAll()
@@ -25,47 +26,9 @@ export function computeCustomerStats(customerId: string): CustomerStats {
   return { totalSpent, totalVisits: dates.size, lastVisitDate };
 }
 
-/** 전 고객 재계산을 한 번의 버킷으로 — 목록·정렬·엑셀·리마인더용 (고객 N × 기록 M 훑기 대신 O(N+M)) (10차 숫자 점검 2026-11-20) */
-export interface CustomerStatsIndex {
-  byId: Map<string, CustomerStats>;
-  noPayments: boolean;      // 결제 컬렉션이 통째로 비어 있으면(로드 실패·하이드레이션 전) 저장값을 0으로 보이지 않는다 — heal 과 같은 가드
-  noVisitRecords: boolean;
-}
+/** 전 고객 재계산을 한 번의 버킷으로 — 목록·정렬·엑셀·리마인더용. 규칙은 customerStatsRule(순수) (10차 숫자 점검 2026-11-20) */
 export function buildCustomerStatsIndex(): CustomerStatsIndex {
-  const payments = PaymentStore.getAll();
-  const reservations = ReservationStore.getAll();
-  const logs = TreatmentLogStore.getAll();
-  const spent = new Map<string, number>();
-  for (const p of payments) if (p.customerId && p.status === 'completed') spent.set(p.customerId, (spent.get(p.customerId) || 0) + (p.amount || 0));
-  const days = new Map<string, Set<string>>();
-  const add = (id: string, d: string) => { let set = days.get(id); if (!set) { set = new Set(); days.set(id, set); } set.add(d); };
-  for (const r of reservations) if (r.customerId && r.status === 'completed' && r.date) add(r.customerId, r.date);
-  for (const t of logs) if (t.customerId && t.treatmentDate) add(t.customerId, t.treatmentDate);
-  const byId = new Map<string, CustomerStats>();
-  const ids = new Set<string>([...spent.keys(), ...days.keys()]);
-  for (const id of ids) {
-    const set = days.get(id);
-    let lastVisitDate: string | null = null;
-    if (set) for (const d of set) if (!lastVisitDate || d > lastVisitDate) lastVisitDate = d;
-    byId.set(id, { totalSpent: spent.get(id) || 0, totalVisits: set?.size || 0, lastVisitDate });
-  }
-  return { byId, noPayments: payments.length === 0, noVisitRecords: reservations.length === 0 && logs.length === 0 };
-}
-
-/**
- * 화면·엑셀에 보일 값 — 기록이 있으면 기록 재계산값, 없으면 저장값. 저장 증분값은 서버 자동 기록·복원·다기기에서 어긋나고,
- * 코어 incrementVisit 은 과거 날짜 시술을 적어도 마지막 방문일을 "오늘"로 찍어 목록 "N일 전 방문"·휴면 고객·리마인더가 늦게 잡혔다 (10차 숫자 점검 #H1).
- * 마지막 방문일: 기록이 하나라도 있으면 기록의 가장 늦은 날(저장값이 더 늦어도 기록을 믿는다), 기록이 없으면 손으로 적은 저장값 유지.
- */
-export function statsFor(c: Pick<Customer, 'id' | 'totalSpent' | 'totalVisits' | 'lastVisitDate'>, idx: CustomerStatsIndex): CustomerStats {
-  const s = idx.byId.get(c.id);
-  const stored = { totalSpent: c.totalSpent || 0, totalVisits: c.totalVisits || 0, lastVisitDate: c.lastVisitDate || null };
-  if (!s) return (idx.noPayments || idx.noVisitRecords) ? stored : { totalSpent: 0, totalVisits: 0, lastVisitDate: stored.lastVisitDate };
-  return {
-    totalSpent: idx.noPayments && stored.totalSpent > 0 ? stored.totalSpent : s.totalSpent,
-    totalVisits: idx.noVisitRecords && stored.totalVisits > 0 ? stored.totalVisits : s.totalVisits,
-    lastVisitDate: s.lastVisitDate ?? stored.lastVisitDate,
-  };
+  return buildStatsIndex({ payments: PaymentStore.getAll(), reservations: ReservationStore.getAll(), treatmentLogs: TreatmentLogStore.getAll() });
 }
 
 /**
