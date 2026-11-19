@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
+import { isAuthApiConfigured } from '../../lib/authApi';
 import {
   ConsultationStore, loadConsultations, deriveSkinType, buildSolutionDraft
 } from '../../lib/consultationStore';
@@ -3107,16 +3108,19 @@ export default function Customers() {
 
               <div className="flex gap-2">
                 <button type="button" onClick={() => { setShowConsultModal(false); setSavedConsultId(null); }} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
-                <button
-                  type="button"
-                  onClick={handleSaveAndSendKakao}
-                  disabled={kakaoSending}
-                  className="flex-1 py-2.5 bg-yellow-400 text-yellow-900 rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-yellow-500 disabled:opacity-50"
-                  title="상담을 저장하고 상담 결과를 고객에게 카카오로 전송합니다"
-                >
-                  {kakaoSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  저장 + 카톡 전송
-                </button>
+                {/* 게이트웨이(중앙 서버) 없이는 보내지지 않고 '실패' 이력만 남으므로 서버 모드에서만 (3차 UX 점검 2026-11-19) */}
+                {isAuthApiConfigured && (
+                  <button
+                    type="button"
+                    onClick={handleSaveAndSendKakao}
+                    disabled={kakaoSending}
+                    className="flex-1 py-2.5 bg-yellow-400 text-yellow-900 rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-yellow-500 disabled:opacity-50"
+                    title="상담을 저장하고 상담 결과를 고객에게 카카오로 전송합니다"
+                  >
+                    {kakaoSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    저장 + 카톡 전송
+                  </button>
+                  )}
                 <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
                   <CheckCircle size={14} />상담 저장
                 </button>

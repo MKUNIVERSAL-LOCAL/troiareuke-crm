@@ -124,7 +124,7 @@ export default function Signup() {
               <h2 className="text-xl font-bold text-gray-900 mb-1">계정 정보 입력</h2>
               <p className="text-sm text-gray-400 mb-6">14일 무료 체험 · 신용카드 불필요</p>
               {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>}
-              <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.businessNumber || !form.password) { setError('모든 항목을 입력해주세요.'); return; } if (!isValidBusinessNumber) { setError('사업자등록번호 10자리를 확인해주세요. (예: 123-45-67890)'); return; } if (isAuthApiConfigured && !licenseImage) { setError('사업자등록증 사진을 첨부해주세요. (본사 승인 시 확인용, jpg·png, 5MB 이하)'); return; } setError(''); setStep(2); }} className="space-y-4">
+              <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.businessNumber || !form.password) { setError('모든 항목을 입력해주세요.'); return; } if (!/^01[016789]-\d{3,4}-\d{4}$/.test(form.phone)) { setError('휴대폰 번호를 010-0000-0000 형식으로 입력해주세요.'); return; } if (form.password.length < 8) { setError('비밀번호는 8자 이상이어야 합니다.'); return; } if (form.password !== form.confirm) { setError('비밀번호가 일치하지 않습니다.'); return; } if (!isValidBusinessNumber) { setError('사업자등록번호 10자리를 확인해주세요. (예: 123-45-67890)'); return; } if (isAuthApiConfigured && !licenseImage) { setError('사업자등록증 사진을 첨부해주세요. (본사 승인 시 확인용, jpg·png, 5MB 이하)'); return; } setError(''); setStep(2); }} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">샵명 *</label>
                   <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="auth-input" placeholder="예: 아르케스파 강남점" required />
@@ -178,7 +178,7 @@ export default function Signup() {
 
           {step === 2 && (
             <>
-              <h2 className="text-xl font-bold text-gray-900 mb-6">플랜 선택 및 약관 동의</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-6">약관 동의 — 14일 무료 체험으로 시작합니다</h2>
               <div className="space-y-3 mb-6">
                 {plans.map(p => (
                   <div key={p.key} className={`p-4 rounded-2xl border-2 transition-all ${p.highlight ? 'border-[#1a3a8f] bg-blue-50' : 'border-gray-100'} ${p.disabled ? 'border-dashed border-gray-200 bg-gray-50' : ''}`}>

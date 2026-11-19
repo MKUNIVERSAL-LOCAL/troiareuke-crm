@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { notify } from '../../lib/notify';
 import { useSearchParams } from 'react-router-dom';
+import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../../lib/mobileBridge';
 import Header from '../../components/layout/Header';
@@ -16,7 +17,7 @@ import { isAuthApiConfigured } from '../../lib/authApi';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | `tag:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18)
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | `tag:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
 const SEGMENT_LABELS: Record<string, string> = {
@@ -24,6 +25,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   vip: 'VIP',
   birthday: '이번달 생일',
   novisit: '미방문 60일+',
+  revisit: '재방문 권장', // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
 };
 /** 문자 길이 규격: SMS 90바이트 — 한글·전각(비ASCII)은 2바이트, 영문·숫자·기호는 1바이트 (EUC-KR 기준, UX 점검 2026-11-19) */
 const SMS_BYTE_LIMIT = 90;
@@ -40,6 +42,7 @@ function segmentLabel(seg: Segment): string {
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 function segmentFilter(seg: Segment): (c: Customer) => boolean {
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
+  if (seg === 'revisit') { const ids = new Set(getRevisitDueCustomers().map(d => d.customer.id)); return c => ids.has(c.id); }
   return SEGMENT_FILTERS[seg] ?? (() => false); // 모르는 세그먼트는 '아무에게도' — 전체 발송 사고 방지
 }
 
@@ -87,6 +90,14 @@ export default function Messaging() {
   const [sendCustomerId, setSendCustomerId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
+    // 대시보드 재방문 리마인더 [단체 발송](?segment=revisit) → 그 대상이 걸린 발송 모달 (3차 UX 점검 2026-11-19)
+    if (searchParams.get('segment') === 'revisit') {
+      setSendCustomerId(null);
+      setSendSegment('revisit');
+      setShowSendModal(true);
+      setSearchParams({}, { replace: true });
+      return;
+    }
     const id = searchParams.get('customer');
     if (!id) return;
     setSendCustomerId(id);

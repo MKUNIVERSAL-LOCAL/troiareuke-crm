@@ -51,7 +51,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
           )}
         </h3>
         {due.length > 0 && (
-          <button onClick={() => navigate('/messaging')} className="text-xs text-[#1a3a8f] font-medium hover:underline flex items-center gap-1">
+          <button onClick={() => navigate('/messaging?segment=revisit')} className="text-xs text-[#1a3a8f] font-medium hover:underline flex items-center gap-1" title="문자/카카오 발송 화면에서 '재방문 권장' 대상에게 보냅니다">
             <MessageSquare size={12} />단체 발송
           </button>
         )}
@@ -112,8 +112,8 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
                 rows={6}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 resize-none focus:outline-none"
               />
-              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-                ⚠️ 자동 발송은 문자/카카오 게이트웨이(회사 NAS 서버) 연동 후 지원됩니다. 현재는 초안을 복사해 직접 발송해주세요.
+              <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                자동 발송은 지원하지 않습니다. 여러 명에게는 카드의 [단체 발송](문자/카카오 발송 화면)으로, 이 고객에게는 아래에서 초안을 복사하거나 공유해 보내세요.
               </p>
               <div className="flex gap-2">
                 {canShareText && (

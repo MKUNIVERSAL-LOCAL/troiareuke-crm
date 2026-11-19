@@ -13,7 +13,7 @@ const steps = [
   { icon: <Users size={20} />, label: '직원 설정', desc: '직원 등록' },
   { icon: <Scissors size={20} />, label: '시술 항목', desc: '시술 항목 등록' },
   { icon: <Link2 size={20} />, label: '연동 설정', desc: '외부 서비스 연결' },
-  { icon: <CreditCard size={20} />, label: '플랜 선택', desc: '요금제 선택' },
+  { icon: <CreditCard size={20} />, label: '무료 체험', desc: '14일 체험 시작' },
   { icon: <CheckCircle size={20} />, label: '완료', desc: '시작 준비' },
 ];
 
@@ -562,7 +562,7 @@ export default function Onboarding() {
 
           {/* Step 4: 플랜 선택 (현재 무료 체험만 가능) */}
           {step === 4 && (
-            <StepWrapper title="요금제 선택" subtitle="14일 무료 체험으로 시작합니다">
+            <StepWrapper title="무료 체험 시작" subtitle="지금은 고를 것이 없어요 — 14일 무료 체험으로 시작하고, 유료 플랜은 체험 뒤 설정에서 바꿉니다">
               <div className="space-y-3">
                 {/* 무료 체험 - 선택됨 */}
                 <div className="w-full text-left p-4 rounded-xl border-2 border-[#1a3a8f] bg-blue-50">

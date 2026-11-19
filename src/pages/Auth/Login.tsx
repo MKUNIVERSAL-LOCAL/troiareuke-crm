@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, Phone, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured } from '../../lib/authApi';
+import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 import { useFocusTrap, useOverlayClose } from '../../lib/overlayStack';
 
 const features = [
@@ -161,11 +162,14 @@ export default function Login() {
               </p>
             </div>
 
-            <div className="mt-4 text-center">
-              <Link to="/admin/login" className="text-xs text-gray-400 hover:text-primary-600 transition-colors">
-                관리자 로그인 →
-              </Link>
-            </div>
+            {/* 지점 원장(앱 안 '관리자' 배지)이 누르던 막다른 입구 — 본사용임을 밝히고, 지점 exe에서는 아예 숨긴다 (3차 UX 점검 2026-11-19) */}
+            {!BLOCK_ADMIN_UI && (
+              <div className="mt-4 text-center">
+                <Link to="/admin/login" className="text-xs text-gray-400 hover:text-primary-600 transition-colors">
+                  본사(트로이아르케) 관리자 로그인 →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -201,6 +205,7 @@ export default function Login() {
                   비밀번호를 잊으셨다면 <span className="font-semibold text-gray-700">본사 관리자에게 연락</span>해주세요.
                   본인 확인 후 임시 비밀번호를 발급해드리며, 로그인하신 뒤 설정에서 새 비밀번호로 변경하시면 됩니다.
                 </p>
+                <p className="mt-2 text-sm text-gray-500">문의: <a href="mailto:mkclub21@gmail.com" className="text-blue-600 underline">mkclub21@gmail.com</a></p>
                 <button
                   type="button"
                   onClick={() => setResetOpen(false)}

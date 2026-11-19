@@ -418,8 +418,9 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   };
   const handleCameraCapture = (dataUrl: string, reference: { angle?: PhotoAngle } | null) => {
     photosTouchedRef.current = true;
-    // 가이드로 쓴 직전 사진의 각도를 그대로 물려받아 같은 각도끼리 비교되게 한다
-    setPhotoList(prev => [...prev, { id: makePhotoId(), dataUrl, takenAt: new Date().toISOString(), label: prev.length === 0 ? 'before' : 'after', angle: reference?.angle }]);
+    // 가이드로 쓴 직전 사진의 각도를 그대로 물려받아 같은 각도끼리 비교되게 한다.
+    // 라벨: 같은 각도의 '전'이 이미 있으면 '후', 없으면 '전' — 관리 전 정면·측면 2장을 찍을 때 두 번째가 '후'로 잘못 붙던 것 (3차 UX 점검 2026-11-19)
+    setPhotoList(prev => [...prev, { id: makePhotoId(), dataUrl, takenAt: new Date().toISOString(), label: prev.some(p => p.label === 'before' && (p.angle ?? null) === (reference?.angle ?? null)) ? 'after' : 'before', angle: reference?.angle }]);
     setShowCamera(false);
     notify('사진 1장을 추가했습니다.');
   };

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar, ClipboardList,
-  MoreHorizontal, TrendingUp, Settings, LogOut, X, Tag, Package, UserCog, MessageSquare,
+  MoreHorizontal, TrendingUp, Settings, LogOut, X, Tag, Package, UserCog, MessageSquare, Bot, Link2,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -34,12 +34,14 @@ export default function MobileTabBar() {
     return !def || isFeatureEnabled(def.id);
   });
   const salesEnabled = isFeatureEnabled('module.sales');
-  // 서랍(햄버거) 없이 더보기에서 바로 — 어드민이 끈 모듈은 서랍과 같은 기준으로 제외
+  // 더보기 = 상단 서랍(Sidebar)과 같은 메뉴 — 어드민이 끈 모듈은 같은 기준으로 제외. 서랍에만 있던 AI 챗봇·API 가이드를 추가 (3차 UX 점검 2026-11-19)
   const MORE_LINKS = [
     { to: '/programs', label: '시술 프로그램', icon: Tag, bg: 'bg-blue-50', fg: 'text-blue-600' },
     { to: '/products', label: '제품/재고', icon: Package, bg: 'bg-amber-50', fg: 'text-amber-700' },
     { to: '/staff', label: '직원 관리', icon: UserCog, bg: 'bg-teal-50', fg: 'text-teal-600' },
     { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, bg: 'bg-emerald-50', fg: 'text-emerald-700' },
+    { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, bg: 'bg-violet-50', fg: 'text-violet-700' },
+    { to: '/api-guide', label: 'API 연동 가이드', icon: Link2, bg: 'bg-slate-100', fg: 'text-slate-700' },
   ].filter(l => { const def = featureForPath(l.to); return !def || isFeatureEnabled(def.id); });
 
   const handleLogout = () => {

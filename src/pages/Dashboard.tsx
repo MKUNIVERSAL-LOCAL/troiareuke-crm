@@ -223,7 +223,7 @@ export default function Dashboard() {
                 <button onClick={() => navigate('/reservations?new=1')} className="block mx-auto mt-2 text-xs font-medium text-[#1a3a8f]">예약 추가하기</button>
               </div>
             ) : (
-              todayReservations.slice(0, 5).map(r => (
+              <>{todayReservations.slice(0, 5).map(r => (
                 <button key={r.id} onClick={() => navigate(`/reservations?open=${r.id}`)} className="w-full text-left flex items-center gap-3 px-4 py-3 min-h-[52px] active:bg-gray-50">
                   <div className="text-center w-12 flex-shrink-0">
                     <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
@@ -234,7 +234,13 @@ export default function Dashboard() {
                   </div>
                   <StatusBadge status={r.status} />
                 </button>
-              ))
+              ))}
+              {/* 바쁜 날 오후 예약이 조용히 잘리지 않게 — 5건 넘으면 남은 수와 전체보기 (3차 UX 점검 2026-11-19) */}
+              {todayReservations.length > 5 && (
+                <button type="button" onClick={() => navigate('/reservations')} className="w-full px-4 py-2.5 text-xs font-medium text-[#1a3a8f] text-center hover:bg-blue-50">
+                  외 {todayReservations.length - 5}건 · 전체보기
+                </button>
+              )}</>
             )}
           </div>
         </div>
