@@ -25,6 +25,7 @@ import {
 } from '../../lib/googleCalendar';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
 import { todayISO } from '../../lib/format';
+import { isProgramExpired, getUsablePrograms } from '../../lib/customerPrograms';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -42,8 +43,8 @@ function ProgramBalance({ customerId }: { customerId: string }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1" aria-label="회차권 잔여">
       {active.map(cp => (
-        <span key={cp.id} className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-          {cp.programName}{cp.totalSessions != null ? ` · 잔여 ${Math.max(0, cp.totalSessions - (cp.usedSessions || 0))}회` : ' · 기간제'}
+        <span key={cp.id} className={`text-xs px-2 py-0.5 rounded-full border ${isProgramExpired(cp) ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+          {cp.programName}{cp.totalSessions != null ? ` · 잔여 ${Math.max(0, cp.totalSessions - (cp.usedSessions || 0))}회` : ' · 기간제'}{isProgramExpired(cp) ? ' · 만료' : ''}
         </span>
       ))}
     </div>
@@ -1308,7 +1309,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
         </div>
       </div>
       {showPayModal && (
-        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={CustomerProgramStore.getActive(r.customerId).length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined} />
+        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={getUsablePrograms(r.customerId).length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined} />
       )}
     </Modal>
   );

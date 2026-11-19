@@ -28,6 +28,7 @@ import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbo
 import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import ProgramManageModal from '../../components/ProgramManageModal';
+import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../lib/customerMerge';
 import { parseTags, topTags } from '../../lib/customerTags';
 import { exportConsultationPdf } from '../../lib/consultReport';
@@ -1599,13 +1600,13 @@ export default function Customers() {
                   <p className="text-xs font-semibold text-gray-500 uppercase mb-3">등록 프로그램</p>
                   <div className="space-y-2">
                     {customerPrograms.map(cp => (
-                      <div key={cp.id} className="p-3 bg-slate-50 rounded-lg">
+                      <div key={cp.id} data-testid="program-card" className="p-3 bg-slate-50 rounded-lg">
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
                           <span className="flex items-center gap-1.5">
                             <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                              cp.isCompleted ? 'bg-slate-200 text-slate-600' : (cp.expiryDate && cp.expiryDate < today()) ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'
-                            }`}>{cp.isCompleted ? '완료' : (cp.expiryDate && cp.expiryDate < today()) ? '만료' : '진행중'}</span>
+                              cp.isCompleted ? 'bg-slate-200 text-slate-600' : isProgramExpired(cp) ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'
+                            }`}>{cp.isCompleted ? '완료' : isProgramExpired(cp) ? '만료' : '진행중'}</span>
                             <button type="button" onClick={() => setManageProgram(cp)} aria-label={`${cp.programName} 관리`}
                               className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-600">관리</button>
                           </span>
@@ -2197,10 +2198,11 @@ export default function Customers() {
                   {customerPrograms.map(cp => {
                     const remaining = cp.totalSessions !== null ? cp.totalSessions - cp.usedSessions : null;
                     const progress = cp.totalSessions ? (cp.usedSessions / cp.totalSessions) * 100 : 0;
-                    const isExpired = cp.expiryDate && cp.expiryDate < today();
+                    const isExpired = isProgramExpired(cp);
                     return (
                       <div
                         key={cp.id}
+                        data-testid="program-card"
                         className={`border rounded-xl p-4 ${cp.isCompleted || isExpired ? 'border-gray-100 opacity-60' : 'border-blue-100 bg-blue-50/30'}`}
                       >
                         <div className="flex items-start justify-between mb-2">
@@ -2676,12 +2678,17 @@ export default function Customers() {
                 <select aria-label="차감할 프로그램" value={treatForm.customerProgramId} onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">선택 없음 (단순 기록)</option>
-                  {CustomerProgramStore.getActive(selected.id).map(cp => (
+                  {getUsablePrograms(selected.id).map(cp => (
                     <option key={cp.id} value={cp.id}>
                       {cp.programName} — 잔여 {cp.totalSessions !== null ? cp.totalSessions - cp.usedSessions : '∞'}회
                     </option>
                   ))}
                 </select>
+                {getExpiredPrograms(selected.id).length > 0 && (
+                  <p data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    {expiredProgramsHint(getExpiredPrograms(selected.id))}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

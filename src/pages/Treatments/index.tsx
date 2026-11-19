@@ -19,6 +19,7 @@ import { getPhotos, getPhotosAsync, getPhotoCount, setPhotos as savePhotos, clea
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import CameraOverlay, { isCameraPreviewSupported } from '../../components/CameraOverlay';
 import { isAuthApiConfigured } from '../../lib/authApi';
+import { getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 
 export default function Treatments() {
   const [search, setSearch] = useState('');
@@ -360,8 +361,8 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const services = ServiceStore.getAll().filter(s => s.isActive || editedNames.has(s.name));
 
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
-  // 활성 회차권이 하나뿐이면 미리 연결 — 안 그러면 '단건'으로 저장돼 회차가 차감되지 않는 실수가 잦다 (입력 속도 감사 2026-11-18)
-  const onlyActiveProgram = (cid: string) => { const a = cid ? CustomerProgramStore.getActive(cid) : []; return a.length === 1 ? a[0].id : ''; };
+  // 쓸 수 있는 회차권(미완료·미만료)이 하나뿐이면 미리 연결 — 안 그러면 '단건'으로 저장돼 회차가 차감되지 않는 실수가 잦다 (입력 속도 감사 2026-11-18)
+  const onlyActiveProgram = (cid: string) => { const a = cid ? getUsablePrograms(cid) : []; return a.length === 1 ? a[0].id : ''; };
   const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? onlyActiveProgram(prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
   const [staffName, setStaffName] = useState(editing?.staffName ?? (prefill?.staffName && staff.some(s => s.name === prefill.staffName) ? prefill.staffName : ''));
   const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? prefill?.treatmentDate ?? todayISO());
@@ -411,8 +412,12 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
     notify('사진 1장을 추가했습니다.');
   };
 
-  // Get active programs for the selected customer
-  const activePrograms = customerId ? CustomerProgramStore.getActive(customerId) : [];
+  // 차감 가능한 프로그램(미완료·미만료). 만료된 회차권은 선택지에서 빼고 안내만 — 연장은 고객 상세 [관리]에서 (2026-11-19)
+  const usablePrograms = customerId ? getUsablePrograms(customerId) : [];
+  const expiredPrograms = customerId ? getExpiredPrograms(customerId) : [];
+  // 수정 중인 기록이 이미 연결한 프로그램은 그 사이 만료·완료됐어도 그대로 보여준다 — 안 그러면 '미연결'로 보이는데 저장하면 연결이 남는 모순
+  const editingLinked = editing?.customerProgramId && editing.customerId === customerId ? CustomerProgramStore.getById(editing.customerProgramId) : undefined;
+  const activePrograms = editingLinked && !usablePrograms.some(cp => cp.id === editingLinked.id) ? [...usablePrograms, editingLinked] : usablePrograms;
 
   const toggleService = (name: string) => {
     setSelectedServices(prev =>
@@ -572,6 +577,11 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               ))}
             </select>
           </div>
+        )}
+        {customerId && expiredPrograms.length > 0 && (
+          <p data-testid="expired-program-hint" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            {expiredProgramsHint(expiredPrograms)}
+          </p>
         )}
 
         <div>
