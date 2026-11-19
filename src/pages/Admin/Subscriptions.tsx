@@ -24,6 +24,8 @@ interface Subscription {
   service_ends_at?: string | null;
   amount: number;
   notes: string | null;
+  /** NAS 모드: 이 지점에 속한 계정 id 전부 — 플랜·활성 변경은 지점 계정 모두에 적용 (4차 UX 점검 2026-11-19) */
+  userIds?: string[];
 }
 
 const planOptions = [
@@ -61,25 +63,32 @@ export default function Subscriptions() {
       try {
         const users = await adminListUsers();
         const priceOf = (plan: string) => planOptions.find(p => p.value === plan)?.price ?? 0;
-        setSubs(users
-          .filter(u => u.role !== 'superadmin')
-          .map(u => {
-            const serviceEndsAt = u.serviceEndsAt || null;
-            const isExpired = Boolean(serviceEndsAt && new Date(serviceEndsAt).getTime() < Date.now());
-            return {
-              id: u.id,
-              branch_id: u.branchId || u.id,
-              branch_name: u.branchName || u.shopName || u.email,
-              plan: u.plan,
-              status: u.isActive === false ? 'cancelled' : isExpired ? 'expired' : 'active',
-              started_at: u.createdAt,
-              // 표시 우선순위: 어드민 설정 사용기간 > (trial이면) 체험 만료일
-              expires_at: serviceEndsAt || (u.plan === 'trial' ? u.trialEndsAt : null),
-              service_ends_at: serviceEndsAt,
-              amount: priceOf(u.plan),
-              notes: u.email,
-            };
-          }));
+        // 지점당 한 행 — 계정마다 행을 만들면 같은 지점 요금이 계정 수만큼 더해져 "월 예상 매출"이 부풀고 "전체 구독"도 계정 수가 된다 (4차 UX 점검 2026-11-19)
+        const byBranch = new Map<string, typeof users>();
+        for (const u of users.filter(u => u.role !== 'superadmin')) {
+          const key = u.branchId || u.id;
+          byBranch.set(key, [...(byBranch.get(key) || []), u]);
+        }
+        setSubs([...byBranch.entries()].map(([branchId, accounts]) => {
+          const rep = accounts.find(u => u.role === 'admin') || accounts[0];
+          const serviceEndsAt = rep.serviceEndsAt || null;
+          const isExpired = Boolean(serviceEndsAt && new Date(serviceEndsAt).getTime() < Date.now());
+          const allInactive = accounts.every(u => u.isActive === false);
+          return {
+            id: rep.id,
+            branch_id: branchId,
+            branch_name: rep.branchName || rep.shopName || rep.email,
+            plan: rep.plan,
+            status: allInactive ? 'cancelled' : isExpired ? 'expired' : 'active',
+            started_at: rep.createdAt,
+            // 표시 우선순위: 어드민 설정 사용기간 > (trial이면) 체험 만료일
+            expires_at: serviceEndsAt || (rep.plan === 'trial' ? rep.trialEndsAt : null),
+            service_ends_at: serviceEndsAt,
+            amount: priceOf(rep.plan),
+            notes: accounts.length > 1 ? `${rep.email} 외 ${accounts.length - 1}개 계정` : rep.email,
+            userIds: accounts.map(u => u.id),
+          };
+        }));
       } catch (e: any) {
         console.warn('[Subscriptions] NAS 계정 목록 로드 실패:', e?.message);
         setSubs([]);
@@ -125,11 +134,14 @@ export default function Subscriptions() {
         return;
       }
       try {
-        await adminUpdateUser(editTarget.id, {
-          plan: form.plan,
-          isActive: form.status === 'active',
-          serviceEndsAt: nextEndsAt,
-        });
+        // 지점 관리 화면의 플랜 수정과 같은 범위 — 지점 계정 전부 (한 계정만 바꾸면 지점 안에서 계정마다 기능이 달라진다)
+        for (const id of editTarget.userIds ?? [editTarget.id]) {
+          await adminUpdateUser(id, {
+            plan: form.plan,
+            isActive: form.status === 'active',
+            serviceEndsAt: nextEndsAt,
+          });
+        }
       } catch (e: any) {
         setSaving(false);
         notify.error(`플랜 변경 실패: ${e?.message || '서버 오류'}`);
@@ -160,7 +172,7 @@ export default function Subscriptions() {
   const stats = {
     total: subs.length,
     active: subs.filter(s => s.status === 'active').length,
-    expired: subs.filter(s => s.status === 'expired').length,
+    expired: subs.filter(s => s.status === 'expired' || s.status === 'cancelled').length,
     mrr: subs.filter(s => s.status === 'active').reduce((sum, s) => sum + s.amount, 0),
   };
 
@@ -201,7 +213,7 @@ export default function Subscriptions() {
 
       {/* 필터 */}
       <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar">
-        {['all', 'active', 'expired', 'pending', 'cancelled'].map(s => (
+        {['all', 'active', 'expired', 'pending', 'cancelled'].filter(s => !(NAS_MODE && s === 'pending')).map(s => ( // NAS 파생 상태엔 '대기'가 없다
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
@@ -280,6 +292,9 @@ export default function Subscriptions() {
         <AdminDialog title={`${editTarget.branch_name} — 구독 수정`} onClose={() => setShowModal(false)} escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">{editTarget.branch_name} — 구독 수정</h2>
+              {NAS_MODE && (editTarget.userIds?.length ?? 1) > 1 && (
+                <p className="text-xs text-slate-400 mt-1">이 지점 계정 {editTarget.userIds!.length}개에 함께 적용됩니다</p>
+              )}
             </div>
             <div className="px-6 py-5 space-y-4">
               <Field label="플랜">

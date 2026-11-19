@@ -110,10 +110,13 @@ export default function AdminDashboard() {
         const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
         const todayCount = logs.filter(l => l.status === 'success' && new Date(l.logged_in_at) >= dayStart).length;
 
+        // 사용자 관리·지점 관리(로컬 분기)와 같은 저장소를 센다 — 0 고정은 그 화면들과 모순이었다 (4차 UX 점검 2026-11-19)
+        const localBranches: { is_active?: boolean }[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
+        const localUsers: unknown[] = JSON.parse(localStorage.getItem('troiareuke_local_users') || '[]');
         setStats({
-          totalBranches: 0,
-          activeBranches: 0,
-          totalUsers: 0,
+          totalBranches: localBranches.length,
+          activeBranches: localBranches.filter(b => b.is_active !== false).length,
+          totalUsers: localUsers.length,
           todayLogins: todayCount,
           recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
         });
@@ -168,7 +171,7 @@ export default function AdminDashboard() {
   const statCards = [
     { label: '전체 지점', value: stats.totalBranches, sub: `운영 중 ${stats.activeBranches}개`, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },
     { label: '등록 사용자', value: stats.totalUsers, sub: '전체 지점 합계', icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    { label: '오늘 로그인', value: stats.todayLogins, sub: '성공 기준', icon: LogIn, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+    { label: '오늘 로그인', value: stats.todayLogins, sub: logsFromServer ? '최근 200건 중 성공' : '이 기기 기록 · 성공', icon: LogIn, color: 'text-purple-400', bg: 'bg-purple-500/10' },
     { label: '성공률', value: stats.recentLogs.length > 0 ? Math.round((stats.recentLogs.filter(l => l.status === 'success').length / stats.recentLogs.length) * 100) + '%' : '-', sub: '최근 20건 기준', icon: TrendingUp, color: 'text-amber-700', bg: 'bg-amber-500/10' },
   ];
 

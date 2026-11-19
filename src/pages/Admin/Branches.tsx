@@ -274,11 +274,14 @@ export default function Branches() {
       if (users.length === 0) return;
       const nextActive = !b.is_active;
       if (!window.confirm(`${b.name} 지점의 계정 ${users.length}개를 ${nextActive ? '활성화' : '비활성화'}할까요?`)) return;
-      try {
-        for (const u of users) await adminUpdateUser(u.id, { isActive: nextActive });
-      } catch (e: any) {
-        notify.error(`변경 실패: ${e?.message || '서버 오류'}`);
+      // 계정별 순차 호출 — 중간에 실패하면 몇 개가 바뀌었는지 알려 준다(목록은 '일부 활성'이면 운영 중으로 보여 실패를 숨긴다) (4차 UX 점검 2026-11-19)
+      const failed: string[] = [];
+      for (const u of users) {
+        try { await adminUpdateUser(u.id, { isActive: nextActive }); }
+        catch { failed.push(u.email); }
       }
+      if (failed.length > 0) notify.error(`${users.length}개 중 ${users.length - failed.length}개 변경, ${failed.length}개 실패: ${failed.join(', ')} — 다시 눌러 재시도하세요`);
+      else notify.success(`${b.name} 지점 계정 ${users.length}개를 ${nextActive ? '활성화' : '비활성화'}했습니다.`);
       loadBranches();
       return;
     }
@@ -522,12 +525,17 @@ export default function Branches() {
               <Field label="지점명 *">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="강남점" />
               </Field>
+              {NAS_MODE && !editTarget && (
+                <p className="text-xs text-slate-400">주소·전화·샵 유형은 지점 관리자가 CRM 설정 &gt; 샵 정보에서 직접 입력합니다. (여기서 받아도 서버에 저장되지 않아 입력란을 두지 않습니다)</p>
+              )}
+              {!(NAS_MODE && !editTarget) && (<>
               <Field label="주소">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="서울시 강남구..." />
               </Field>
               <Field label="전화번호">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="02-0000-0000" />
               </Field>
+              </>)}
               <Field label="샵 유형">
                 <select className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.shop_type} onChange={e => setForm(f => ({ ...f, shop_type: e.target.value }))}>
                   {shopTypes.map(t => <option key={t} value={t}>{t}</option>)}
