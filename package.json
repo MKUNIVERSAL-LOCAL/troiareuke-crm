@@ -29,7 +29,7 @@
     "test:updater": "node scripts/test-updater-helpers.mjs",
     "check:distribution": "node scripts/check-distribution-invariants.mjs",
     "electron:build:release": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis portable",
-    "build:e2e": "vite build --mode e2e --outDir dist-e2e",
+    "build:e2e": "vite build --mode e2e --outDir dist-e2e && vite build --mode e2e-nas --outDir dist-e2e-nas",
     "test:e2e": "playwright test",
     "build:mobile": "cross-env BUILD_TARGET=capacitor vite build",
     "mobile:sync": "node scripts/sync-mobile-version.mjs && npx cap sync",
