@@ -96,7 +96,7 @@ export default function LoginLogs() {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-slate-900 border border-slate-700/50 rounded-xl px-5 py-4">
           <p className="text-2xl font-bold text-white">{filtered.length.toLocaleString()}</p>
-          <p className="text-xs text-slate-400 mt-1">조건 일치 기록 (최근 500건 중)</p>
+          <p className="text-xs text-slate-400 mt-1">조건 일치 기록 ({loadError ? '이 기기 기록 중' : '최근 500건 중'})</p>
         </div>
         <div className="bg-slate-900 border border-slate-700/50 rounded-xl px-5 py-4">
           <p className="text-2xl font-bold text-emerald-400">{successCount.toLocaleString()}</p>

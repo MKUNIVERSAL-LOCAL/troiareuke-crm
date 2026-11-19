@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle, DatabaseBackup, Copy, MonitorDown, AlertTriangle } from 'lucide-react';
 import { isAuthApiConfigured, adminListUsers, apiRequest, type AuthApiUser } from '../../lib/authApi';
 import {
-  INSTALL_SITE_URL, INSTALL_GUIDE_MESSAGE, fetchLatestChannelVersion, isOutdated, appModeLabel, type ChannelManifest,
+  INSTALL_SITE_URL, INSTALL_GUIDE_MESSAGE, CHANNEL_MANIFEST_URL, fetchLatestChannelVersion, isOutdated, appModeLabel, type ChannelManifest,
 } from '../../lib/updateChannel';
 import { adminListLoginLogs } from '../../lib/adminApi';
 import { approvedBranchUsers, branchKey, groupByBranch, branchVersionInfo } from '../../lib/adminBranches';
@@ -70,6 +70,7 @@ export default function AdminDashboard() {
       if (isAuthApiConfigured) {
         // NAS 중앙 서버 모드: 계정 목록에서 지점/사용자 집계 (로그인 로그는 이 기기 기준)
         let totalBranches = 0, activeBranches = 0, totalUsers = 0;
+        fetchLatestChannelVersion().then(setLatest); // 계정 목록 실패와 무관하게 — 안에 있으면 패널이 "확인 중…"에 영원히 머문다 (리뷰 2026-11-20)
         try {
           const users = await adminListUsers();
           const nonAdmin = approvedBranchUsers(users); // 승인 대기·거부 신청자는 지점이 아니다 (8차 점검 2026-11-20)
@@ -82,7 +83,6 @@ export default function AdminDashboard() {
           totalBranches = byBranch.size;
           activeBranches = [...byBranch.values()].filter(Boolean).length;
           setBranchUsers(nonAdmin);
-          fetchLatestChannelVersion().then(setLatest);
         } catch (e: any) {
           console.warn('[AdminDashboard] NAS 계정 집계 실패:', e?.message);
           setLoadError(`지점/사용자 집계를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
@@ -156,6 +156,19 @@ export default function AdminDashboard() {
     const info = branchVersionInfo(us); // 지점 관리 화면과 같은 규칙 — 가장 낮은 버전, 가장 최근 접속 (8차 점검 2026-11-20)
     return { bid, name: primary.branchName || primary.shopName || primary.email, version: info?.version ?? null, mode: info?.mode ?? '', lastSeenAt: info?.lastSeenAt ?? null };
   });
+  /** [다시 확인] — fetchLatestChannelVersion 은 실패도 5분 캐시해 바로 누르면 네트워크 없이 null 을 돌려준다(코어 잠금이라 force 옵션 불가).
+   *  매니페스트를 직접 한 번 읽어 결과를 반영한다 (리뷰 2026-11-20) */
+  async function recheckLatest() {
+    setLatest(undefined);
+    try {
+      const r = await fetch(`${CHANNEL_MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      const m = await r.json();
+      setLatest(typeof m?.version === 'string' ? { version: m.version, releaseDate: m.releaseDate, notes: typeof m.notes === 'string' ? m.notes : undefined } : null);
+    } catch {
+      setLatest(null);
+    }
+  }
   const latestVersion = latest?.version || null;
   const outdatedBranches = versionByBranch.filter(b => b.version && isOutdated(b.version, latestVersion));
   const unknownBranches = versionByBranch.filter(b => !b.version);
@@ -238,7 +251,7 @@ export default function AdminDashboard() {
                     // 최신 버전을 모르면 구버전 판정 자체가 불가 — "모두 최신"이라고 안심시키면 안 된다 (8차 점검 2026-11-20)
                     <p className="flex items-center gap-2 text-amber-300 text-xs font-medium">
                       <AlertTriangle size={14} /> 최신 버전을 확인할 수 없어 구버전 판정을 보류했습니다 (배포 서버 응답 없음)
-                      <button type="button" onClick={() => { setLatest(undefined); fetchLatestChannelVersion().then(setLatest); }} className="ml-1 underline text-amber-200 hover:text-white">다시 확인</button>
+                      <button type="button" onClick={recheckLatest} className="ml-1 underline text-amber-200 hover:text-white">다시 확인</button>
                     </p>
                   ) : outdatedBranches.length === 0 ? (
                     <p className="flex items-center gap-2 text-emerald-400 text-xs font-medium">

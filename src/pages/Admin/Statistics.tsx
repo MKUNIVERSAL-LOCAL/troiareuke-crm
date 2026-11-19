@@ -239,7 +239,11 @@ function NasAnalytics() {
                       <tr
                         key={b.branchId}
                         onClick={() => setSelected(b.branchId)}
-                        className="border-b border-slate-800/50 hover:bg-slate-800/40 cursor-pointer transition-colors"
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(b.branchId); } }}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${b.branchName || b.branchId.slice(0, 8)} 지점 통계 보기`}
+                        className="border-b border-slate-800/50 hover:bg-slate-800/40 focus-visible:bg-slate-800/40 focus-visible:outline-none cursor-pointer transition-colors"
                       >
                         <td className="px-6 py-3 text-white font-semibold">{b.branchName || b.branchId.slice(0, 8)}</td>
                         <td className="px-4 py-3 text-right text-slate-300">{b.customers.total.toLocaleString()}</td>

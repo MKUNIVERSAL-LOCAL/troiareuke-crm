@@ -1,7 +1,7 @@
 import { isImeKey } from '../../lib/ime';
 import { useState, useEffect, useCallback } from 'react';
-import { todayISO } from '../../lib/format';
-import { format, parseISO } from 'date-fns';
+import { todayISO, formatDateTime } from '../../lib/format';
+import { maskPhone } from '../../lib/masking';
 import {
   Building2, Database, Search, ChevronLeft, ChevronRight, RefreshCw,
   MessageSquare, Image as ImageIcon, X, AlertTriangle,
@@ -40,7 +40,7 @@ const COLLECTION_ORDER = [
 ];
 
 /** data JSONB에서 사람이 읽을 만한 요약 필드를 추출 */
-function summarizeRow(data: Record<string, unknown>): string {
+function summarizeRow(data: Record<string, unknown>, showRaw: boolean): string {
   const candidates = [
     'name', 'customer_name', 'customerName', 'title', 'program_name', 'programName',
     'product_name', 'productName', 'shop_name', 'phone', 'email', 'content', 'details',
@@ -48,7 +48,7 @@ function summarizeRow(data: Record<string, unknown>): string {
   const parts: string[] = [];
   for (const key of candidates) {
     const v = data[key];
-    if (typeof v === 'string' && v.trim() && parts.length < 3) parts.push(v.trim().slice(0, 40));
+    if (typeof v === 'string' && v.trim() && parts.length < 3) parts.push(maskPii(key, v.trim(), showRaw).slice(0, 40));
   }
   const amount = data['amount'] ?? data['price'] ?? data['total_price'] ?? data['totalPrice'];
   if (typeof amount === 'number') parts.push(`${amount.toLocaleString()}원`);
@@ -57,9 +57,19 @@ function summarizeRow(data: Record<string, unknown>): string {
   return parts.join(' · ') || '(요약 필드 없음)';
 }
 
-function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  try { return format(parseISO(iso), 'yyyy-MM-dd HH:mm'); } catch { return iso; }
+/** 발송 로그 유형·상태 — 영문 원문 대신 (8차 점검 2026-11-20) */
+const MESSAGE_TYPE_LABEL: Record<string, string> = { sms: '문자', lms: '장문 문자', mms: '사진 문자', kakao: '카카오', 'kakao-channel': '카카오 채널', 'kakao-openchat': '카카오 오픈채팅' };
+const MESSAGE_STATUS_LABEL: Record<string, string> = { sent: '발송됨', failed: '실패', pending: '대기', scheduled: '예약', cancelled: '취소', sending: '발송 중' };
+
+/** 본사 콘솔은 전 지점 최종 고객의 개인정보를 다룬다 — 기본은 가리고 [원문 보기]로만 푼다 (8차 점검 2026-11-20) */
+const PII_KEY_RE = /^(phone|mobile|tel|customer_phone|customerPhone|shop_phone|email|customer_email)$/i;
+function maskEmail(v: string): string {
+  const at = v.indexOf('@');
+  return at > 0 ? `${v.slice(0, 1)}***${v.slice(at)}` : '***';
+}
+function maskPii(key: string, v: string, showRaw: boolean): string {
+  if (showRaw || !PII_KEY_RE.test(key)) return v;
+  return /email/i.test(key) ? maskEmail(v) : maskPhone(v, 'staff');
 }
 
 const PAGE_SIZE = 50;
@@ -87,6 +97,7 @@ export default function DataBrowser() {
   const [exporting, setExporting] = useState(false);
 
   const [detailRow, setDetailRow] = useState<AdminDataRow | null>(null);
+  const [showRaw, setShowRaw] = useState(false); // 전화·이메일 원문 보기 — 기본은 가림 (8차 점검 2026-11-20)
 
   async function handleExport(branch: AdminBranchOverview) {
     setExporting(true);
@@ -161,7 +172,7 @@ export default function DataBrowser() {
 
   const changeTab = (t: string) => {
     setTab(t);
-    setRows([]); setTotal(0); // 새 탭 로드가 실패하면 이전 탭의 행이 새 탭 라벨 아래 그대로 남았다 (8차 점검 2026-11-20)
+    setRows([]); setTotal(0); setSendLog([]); setScheduled([]); setPhotoEntities([]); setBackups([]); // 새 탭 로드가 실패하면 이전 탭의 목록이 새 탭 라벨 아래 그대로 남았다 (8차 점검 2026-11-20, 리뷰 L3)
     setOffset(0);
     setQuery('');
     setSearchInput('');
@@ -319,7 +330,7 @@ export default function DataBrowser() {
                   <div className="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : tab === '__messages' ? (
-                <MessagesView sendLog={sendLog} scheduled={scheduled} />
+                <MessagesView sendLog={sendLog} scheduled={scheduled} showRaw={showRaw} />
               ) : tab === '__photos' ? (
                 <PhotosView entities={photoEntities} />
               ) : tab === '__backups' ? (
@@ -355,7 +366,13 @@ export default function DataBrowser() {
 
                   {rows.length === 0 ? (
                     <div className="p-10 text-center text-sm text-slate-400">데이터가 없습니다.</div>
-                  ) : (
+                  ) : (<>
+                    <div className="flex justify-end px-4 py-2 border-b border-slate-800/60">
+                      <button type="button" onClick={() => setShowRaw(v => !v)} aria-pressed={showRaw}
+                        className={clsx('text-xs px-2.5 py-1 rounded-lg transition-colors', showRaw ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800 text-slate-400 hover:text-white')}>
+                        {showRaw ? '개인정보 가리기' : '개인정보 원문 보기'}
+                      </button>
+                    </div>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
@@ -369,16 +386,20 @@ export default function DataBrowser() {
                           <tr
                             key={r.id}
                             onClick={() => setDetailRow(r)}
-                            className="border-b border-slate-800/60 hover:bg-slate-800/40 cursor-pointer transition-colors"
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailRow(r); } }}
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`${r.id} 상세 보기`}
+                            className="border-b border-slate-800/60 hover:bg-slate-800/40 focus-visible:bg-slate-800/40 focus-visible:outline-none cursor-pointer transition-colors"
                           >
                             <td className="px-4 py-2.5 text-slate-400 font-mono text-xs truncate max-w-[10rem]">{r.id}</td>
-                            <td className="px-4 py-2.5 text-slate-300 truncate max-w-md">{summarizeRow(r.data)}</td>
+                            <td className="px-4 py-2.5 text-slate-300 truncate max-w-md">{summarizeRow(r.data, showRaw)}</td>
                             <td className="px-4 py-2.5 text-slate-400 text-xs">{formatDateTime(r.updatedAt)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  )}
+                  </>)}
 
                   {/* 페이지네이션 */}
                   {total > PAGE_SIZE && (
@@ -388,6 +409,7 @@ export default function DataBrowser() {
                         <button
                           disabled={offset === 0}
                           onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                          aria-label="이전 페이지"
                           className="p-1.5 rounded-lg bg-slate-800 text-slate-400 disabled:opacity-30 hover:text-white transition-colors"
                         >
                           <ChevronLeft size={14} />
@@ -395,6 +417,7 @@ export default function DataBrowser() {
                         <button
                           disabled={offset + PAGE_SIZE >= total}
                           onClick={() => setOffset(offset + PAGE_SIZE)}
+                          aria-label="다음 페이지"
                           className="p-1.5 rounded-lg bg-slate-800 text-slate-400 disabled:opacity-30 hover:text-white transition-colors"
                         >
                           <ChevronRight size={14} />
@@ -410,15 +433,16 @@ export default function DataBrowser() {
 
         {/* 상세 패널 */}
         {detailRow && (
-          <div className="w-96 flex-shrink-0">
-            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden sticky top-6">
+          // 오른쪽 고정 드로어 — 본문 옆에 끼우면 1280px에서 사이드바+지점 목록+상세로 데이터 영역이 240px로 압착됐다 (8차 점검 2026-11-20)
+          <div className="fixed top-6 right-6 bottom-6 w-96 z-30">
+            <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden shadow-2xl h-full flex flex-col" role="dialog" aria-label="상세 보기">
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
                 <span className="text-sm font-bold text-white">상세 보기</span>
-                <button onClick={() => setDetailRow(null)} className="text-slate-400 hover:text-white transition-colors">
+                <button onClick={() => setDetailRow(null)} aria-label="상세 닫기" className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
                   <X size={15} />
                 </button>
               </div>
-              <div className="p-4 max-h-[70vh] overflow-y-auto space-y-2">
+              <div className="p-4 flex-1 overflow-y-auto space-y-2">
                 <DetailField label="ID" value={detailRow.id} mono />
                 <DetailField label="수정일" value={formatDateTime(detailRow.updatedAt)} />
                 <div className="border-t border-slate-800 my-2" />
@@ -429,7 +453,7 @@ export default function DataBrowser() {
                     value={
                       v === null || v === undefined ? '—'
                         : typeof v === 'object' ? JSON.stringify(v, null, 1)
-                        : String(v)
+                        : maskPii(k, String(v), showRaw)
                     }
                     mono={typeof v === 'object'}
                   />
@@ -454,7 +478,7 @@ function DetailField({ label, value, mono }: { label: string; value: string; mon
   );
 }
 
-function MessagesView({ sendLog, scheduled }: { sendLog: AdminMessageLogRow[]; scheduled: AdminScheduledRow[] }) {
+function MessagesView({ sendLog, scheduled, showRaw }: { sendLog: AdminMessageLogRow[]; scheduled: AdminScheduledRow[]; showRaw: boolean }) {
   return (
     <div className="space-y-4">
       <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
@@ -476,8 +500,8 @@ function MessagesView({ sendLog, scheduled }: { sendLog: AdminMessageLogRow[]; s
               {sendLog.map(m => (
                 <tr key={m.id} className="border-b border-slate-800/60">
                   <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(m.createdAt)}</td>
-                  <td className="px-4 py-2 text-xs text-slate-400">{m.type}</td>
-                  <td className="px-4 py-2 text-xs text-slate-400 font-mono">{m.phone || '—'}</td>
+                  <td className="px-4 py-2 text-xs text-slate-400">{MESSAGE_TYPE_LABEL[m.type] || m.type}</td>
+                  <td className="px-4 py-2 text-xs text-slate-400 font-mono">{m.phone ? maskPii('phone', m.phone, showRaw) : '—'}</td>
                   <td className="px-4 py-2 text-slate-300 truncate max-w-xs">{m.title || m.content || '—'}</td>
                   <td className="px-4 py-2">
                     <span className={clsx(
@@ -486,7 +510,7 @@ function MessagesView({ sendLog, scheduled }: { sendLog: AdminMessageLogRow[]; s
                         : m.status === 'failed' ? 'bg-red-500/10 text-red-400'
                         : 'bg-slate-700/50 text-slate-400'
                     )}>
-                      {m.status}{m.reason ? ` (${m.reason})` : ''}
+                      {MESSAGE_STATUS_LABEL[m.status] || m.status}{m.reason ? ` (${m.reason})` : ''}
                     </span>
                   </td>
                 </tr>
@@ -516,7 +540,7 @@ function MessagesView({ sendLog, scheduled }: { sendLog: AdminMessageLogRow[]; s
                   <td className="px-4 py-2 text-xs text-slate-400">{formatDateTime(s.sendAt)}</td>
                   <td className="px-4 py-2 text-slate-300 truncate max-w-xs">{s.title || s.content || '—'}</td>
                   <td className="px-4 py-2 text-xs text-slate-400">{s.phones?.length ?? 0}명</td>
-                  <td className="px-4 py-2 text-xs text-slate-400">{s.status}</td>
+                  <td className="px-4 py-2 text-xs text-slate-400">{MESSAGE_STATUS_LABEL[s.status] || s.status}</td>
                 </tr>
               ))}
             </tbody>

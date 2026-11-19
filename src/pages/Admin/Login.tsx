@@ -66,8 +66,12 @@ export default function AdminLogin() {
       await login(email, password);
       navigate('/admin/dashboard');
     } catch (err) {
-      // 서버가 보내는 사유(승인 대기·비활성·사용기간 만료·시간 초과)를 그대로 — 전부 "인증 실패"로 뭉개면 서버 다운과 비밀번호 오류를 구분 못 한다 (8차 점검 2026-11-20)
-      setError(err instanceof Error && err.message ? err.message : '인증에 실패했습니다. 관리자 계정 정보를 확인해주세요.');
+      // 서버가 보내는 사유(승인 대기·비활성·사용기간 만료)는 그대로, 브라우저 네트워크 오류는 지점 로그인과 같은 한국어로 (8차 점검·리뷰 2026-11-20)
+      const e = err as { name?: string; message?: string } | null;
+      const msg = e?.message || '';
+      if (e?.name === 'AbortError' || /aborted/i.test(msg)) setError('서버 응답이 없습니다(시간 초과). 네트워크를 확인하고 잠시 후 다시 시도해주세요.');
+      else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) setError('계정 서버에 연결할 수 없습니다. NAS 상태와 네트워크를 확인해주세요.');
+      else setError(msg || '인증에 실패했습니다. 관리자 계정 정보를 확인해주세요.');
     } finally { setLoading(false); }
   };
 
@@ -124,7 +128,7 @@ export default function AdminLogin() {
 
         {/* Bottom */}
         <div className="relative">
-          <p className="text-xs text-slate-400">DERMASOLUTION Platform v1.0 — Superadmin Access</p>
+          <p className="text-xs text-slate-400">DERMASOLUTION Platform v{__APP_VERSION__} — Superadmin Access</p>
         </div>
       </div>
 

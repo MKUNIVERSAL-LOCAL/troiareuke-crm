@@ -182,7 +182,8 @@ export default function Branches() {
           for (const u of users) {
             const updates: { plan?: string; serviceEndsAt?: string | null } = {};
             if (u.plan !== form.plan) updates.plan = form.plan;
-            if (periodChanged) updates.serviceEndsAt = nextEndsAt;
+            const curEndsAt = u.serviceEndsAt ? u.serviceEndsAt.slice(0, 10) : null; // 계정별 비교 — 대표 계정만 보면 실패한 직원 계정의 사용기간이 재시도에서 빠진다 (리뷰 2026-11-20)
+            if (curEndsAt !== nextEndsAt) updates.serviceEndsAt = nextEndsAt;
             if (Object.keys(updates).length === 0) continue;
             try { await adminUpdateUser(u.id, updates); } catch { failed.push(u.email); }
           }
@@ -439,6 +440,7 @@ export default function Branches() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEdit(b)}
+                          aria-label={`${b.name} 지점 정보 수정`}
                           className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
                         >
                           <Pencil size={13} />

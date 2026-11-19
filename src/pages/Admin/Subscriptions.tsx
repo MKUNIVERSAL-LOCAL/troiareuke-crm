@@ -70,13 +70,15 @@ export default function Subscriptions() {
           const rep = accounts.find(u => u.role === 'admin') || accounts[0];
           const serviceEndsAt = rep.serviceEndsAt || null;
           const isExpired = Boolean(serviceEndsAt && new Date(serviceEndsAt).getTime() < Date.now());
+          // 체험(trial) 지점은 체험 만료일도 만료 판정에 넣는다 — 전에는 "활성 · 만료일(과거)" 조합이 나왔다 (8차 점검 2026-11-20)
+          const trialExpired = rep.plan === 'trial' && !serviceEndsAt && Boolean(rep.trialEndsAt && new Date(rep.trialEndsAt).getTime() < Date.now());
           const allInactive = accounts.every(u => u.isActive === false);
           return {
             id: rep.id,
             branch_id: branchId,
             branch_name: rep.branchName || rep.shopName || rep.email,
             plan: rep.plan,
-            status: allInactive ? 'cancelled' : isExpired ? 'expired' : 'active',
+            status: allInactive ? 'cancelled' : (isExpired || trialExpired) ? 'expired' : 'active',
             started_at: rep.createdAt,
             // 표시 우선순위: 어드민 설정 사용기간 > (trial이면) 체험 만료일
             expires_at: serviceEndsAt || (rep.plan === 'trial' ? rep.trialEndsAt : null),
@@ -102,9 +104,7 @@ export default function Subscriptions() {
       status: s.status === 'expired' ? 'active' : s.status,
       // NAS 모드: 어드민이 실제 설정한 사용기간만 프리필 — trial 파생 만료일을 그대로 저장해
       // 의도치 않게 체험 만료가 강제 차단으로 굳는 것을 방지
-      expires_at: NAS_MODE
-        ? (s.service_ends_at ? s.service_ends_at.split('T')[0] : '')
-        : (s.expires_at ? s.expires_at.split('T')[0] : ''),
+      expires_at: s.service_ends_at ? s.service_ends_at.split('T')[0] : '', // 서버 모드에서만 열리는 모달 — 비NAS는 구독 목록이 비어 도달 불가 (8차 점검 2026-11-20)
       amount: String(s.amount),
       notes: s.notes || '',
     });
@@ -272,6 +272,7 @@ export default function Subscriptions() {
                     <td className="px-6 py-4">
                       <button
                         onClick={() => openEdit(s)}
+                        aria-label={`${s.branch_name} 구독 수정`}
                         className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
                       >
                         <Pencil size={13} />
@@ -305,25 +306,23 @@ export default function Subscriptions() {
                 {/* NAS 모드: 서버 계정에는 활성/비활성만 존재 — 만료·대기 선택지를 주면
                     isActive=false로 축약 저장되어 지점 로그인이 잠기는 함정이 됨 */}
                 <select className="admin-input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                  {(NAS_MODE ? statusOptions.filter(o => o.value === 'active' || o.value === 'cancelled') : statusOptions)
-                    .map(o => <option key={o.value} value={o.value}>{NAS_MODE && o.value === 'cancelled' ? '해지 (로그인 차단)' : o.label}</option>)}
+                  {statusOptions.filter(o => o.value === 'active' || o.value === 'cancelled')
+                    .map(o => <option key={o.value} value={o.value}>{o.value === 'cancelled' ? '해지 (로그인 차단)' : o.label}</option>)}
                 </select>
               </Field>
-              {NAS_MODE && (
-                <div className="px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                  <p className="text-xs text-amber-600 leading-relaxed">
-                    중앙 서버 모드에서는 플랜·상태·사용기간이 저장됩니다. 월 금액·메모는 자동 파생되어 수정할 수 없습니다.
-                  </p>
-                </div>
-              )}
+              <div className="px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <p className="text-xs text-amber-600 leading-relaxed">
+                  플랜·상태·사용기간이 저장됩니다. 월 금액은 플랜에서, 메모(계정 목록)는 계정에서 자동으로 정해져 여기서는 보기만 합니다.
+                </p>
+              </div>
               <Field label="월 금액 (원)">
-                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+                <p className="px-3 py-2 text-sm text-slate-300">{Number(form.amount || 0).toLocaleString()}원 — 플랜 기준 자동</p>
               </Field>
               <Field label={NAS_MODE ? '사용기간 만료일 (비우면 무제한)' : '만료일'} hint={NAS_MODE ? '만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.' : undefined}>
                 <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
               </Field>
-              <Field label="메모">
-                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="특이사항 입력" />
+              <Field label="계정">
+                <p className="px-3 py-2 text-sm text-slate-300">{form.notes || '—'}</p>
               </Field>
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">

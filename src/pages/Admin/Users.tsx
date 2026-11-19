@@ -18,6 +18,7 @@ interface UserRow {
   email: string;
   name: string | null;
   role: string;
+  branch_id: string | null; // 지점명이 같은 두 지점을 구분 — 마지막 계정 판정·지점 필터는 id로 (8차 점검 2026-11-20)
   branch_name: string | null;
   is_onboarded: boolean;
   is_active: boolean;
@@ -57,13 +58,13 @@ export default function AdminUsers() {
   // 신청/승인 흐름 (2026-09-18) — 탭: 전체 vs 승인 대기
   const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all');
   const [reviewTarget, setReviewTarget] = useState<AdminApplicationDetail | null>(null);
-  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewLoading, setReviewLoading] = useState<string | null>(null); // 로딩 중인 신청 id — 한 건을 열 때 다른 행의 [검토]까지 "로딩…"으로 바뀌지 않게 (8차 점검 2026-11-20)
   const [reviewBusy, setReviewBusy] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
 
   async function openReview(userId: string) {
-    setReviewLoading(true);
+    setReviewLoading(userId);
     setRejectReason('');
     setShowRejectInput(false);
     try {
@@ -72,7 +73,7 @@ export default function AdminUsers() {
     } catch (e: any) {
       notify.error(`신청 상세를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
     } finally {
-      setReviewLoading(false);
+      setReviewLoading(null);
     }
   }
 
@@ -124,6 +125,7 @@ export default function AdminUsers() {
           email: u.email,
           name: u.name,
           role: u.role,
+          branch_id: u.branchId || null,
           branch_name: u.branchName || null,
           is_onboarded: u.isOnboarded,
           is_active: u.isActive !== false,
@@ -137,9 +139,10 @@ export default function AdminUsers() {
           business_number: u.businessNumber || null,
         })));
         fetchLatestChannelVersion().then(m => setLatestVersion(m?.version || null));
-        // 지점 필터는 계정에 등록된 지점명으로 구성
-        const branchNames = [...new Set(list.map(u => u.branchName).filter(Boolean))] as string[];
-        setBranches(branchNames.map(name => ({ id: name, name } as Branch)));
+        // 지점 필터는 계정의 지점 id 기준(이름은 표시용) — 같은 이름의 두 지점이 한 칩으로 합쳐지지 않게
+        const byId = new Map<string, string>();
+        for (const u of list) if (u.branchId && !byId.has(u.branchId)) byId.set(u.branchId, u.branchName || u.shopName || u.branchId);
+        setBranches([...byId.entries()].map(([id, name]) => ({ id, name } as Branch)));
       } else {
         // 로컬 폴백
         const localUsers = readJson<any[]>('troiareuke_local_users', []);
@@ -150,6 +153,7 @@ export default function AdminUsers() {
           email: u.email,
           name: u.user.name,
           role: u.user.role,
+          branch_id: u.user.branchId || null,
           branch_name: u.user.branchName || null,
           is_onboarded: u.user.isOnboarded,
           is_active: true,
@@ -173,7 +177,7 @@ export default function AdminUsers() {
   const [purgeBranchData, setPurgeBranchData] = useState(false);
   const [deleteNotice, setDeleteNotice] = useState('');
   const sameBranchCount = deleteTarget
-    ? users.filter(x => x.branch_name && x.branch_name === deleteTarget.branch_name && x.role !== 'superadmin').length
+    ? users.filter(x => x.role !== 'superadmin' && (deleteTarget.branch_id ? x.branch_id === deleteTarget.branch_id : (!x.branch_id && x.branch_name === deleteTarget.branch_name))).length
     : 0;
 
   async function runDeleteUser() {
@@ -299,7 +303,8 @@ export default function AdminUsers() {
     const endDate = u.service_ends_at.slice(0, 10);
     const today = todayISO();
     if (endDate < today) return { label: `${endDate.replace(/-/g, '.')} 만료됨`, className: 'text-red-400 font-semibold' };
-    const daysLeft = Math.ceil((new Date(u.service_ends_at).getTime() - Date.now()) / 86400000);
+    const endOfDay = parseISODate(endDate).getTime() + 86_400_000 - 1; // 로컬 그날 23:59:59.999 — UTC 파싱은 KST에서 D-값이 하루 빨랐다 (8차 점검 2026-11-20)
+    const daysLeft = Math.ceil((endOfDay - Date.now()) / 86_400_000);
     if (daysLeft <= 14) return { label: `~${endDate.replace(/-/g, '.')} (D-${daysLeft})`, className: 'text-amber-400' };
     return { label: `~${endDate.replace(/-/g, '.')}`, className: 'text-slate-300' };
   }
@@ -307,7 +312,7 @@ export default function AdminUsers() {
   const normalizedSearch = search.trim().toLowerCase();
   const pendingCount = users.filter(u => u.status === 'pending').length;
   const filtered = users.filter(user => {
-    const branchMatches = branchFilter === 'all' || user.branch_name === branchFilter;
+    const branchMatches = branchFilter === 'all' || user.branch_id === branchFilter;
     const searchMatches = !normalizedSearch || [
       user.name || '',
       user.email,
@@ -592,7 +597,7 @@ export default function AdminUsers() {
             onClick={() => setActiveTab('all')}
             className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${activeTab === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white'}`}
           >
-            전체 계정
+            승인된 계정
           </button>
           <button
             onClick={() => setActiveTab('pending')}
@@ -691,8 +696,8 @@ export default function AdminUsers() {
         {branches.map(b => (
           <button
             key={b.id}
-            onClick={() => setBranchFilter(b.name)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${branchFilter === b.name ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            onClick={() => setBranchFilter(b.id)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${branchFilter === b.id ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
           >
             {b.name}
           </button>
@@ -728,10 +733,10 @@ export default function AdminUsers() {
                 </div>
                 <button
                   onClick={() => openReview(u.id)}
-                  disabled={reviewLoading}
+                  disabled={reviewLoading !== null}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
                 >
-                  {reviewLoading ? '로딩…' : '검토'}
+                  {reviewLoading === u.id ? '로딩…' : '검토'}
                 </button>
               </div>
             ))}

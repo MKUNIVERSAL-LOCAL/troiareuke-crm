@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, RotateCcw, CheckCircle, Camera } from 'lucide-react';
 import AdminDialog from './AdminDialog';
 import type { AdminBranchOverview, AdminBackupEntry } from '../../lib/adminApi';
+import { formatDateTime } from '../../lib/format';
 
 /**
  * 어드민 > 전체 데이터 > 백업·복원 탭
@@ -63,7 +64,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
     }
   }
 
-  const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('ko-KR') : '');
+  const fmt = (iso: string | null) => (iso ? formatDateTime(iso) : ''); // 지점 앱·다른 어드민 화면과 같은 표기 (8차 점검 2026-11-20)
 
   return (
     <div className="space-y-4">

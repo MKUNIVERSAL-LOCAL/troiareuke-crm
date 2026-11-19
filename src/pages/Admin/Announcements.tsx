@@ -79,10 +79,12 @@ export default function Announcements() {
 
   async function handleSave() {
     if (!BACKEND_READY) return;
+    const title = form.title.trim(), content = form.content.trim();
+    if (!title || !content) { notify.error('제목과 내용을 입력하세요 — 공백만으로는 저장할 수 없습니다.'); return; } // (8차 점검 2026-11-20)
     setSaving(true);
     if (NAS_MODE) {
       try {
-        const payload = { title: form.title, content: form.content, type: form.type, isActive: form.is_active };
+        const payload = { title, content, type: form.type, isActive: form.is_active };
         if (editTarget) await adminUpdateAnnouncement(editTarget.id, payload);
         else await adminCreateAnnouncement(payload);
       } catch (e: any) {
@@ -135,7 +137,8 @@ export default function Announcements() {
         </div>
         <button
           onClick={openAdd}
-          disabled={!BACKEND_READY}
+          disabled={!BACKEND_READY || !!loadError}
+          title={loadError ? '목록을 불러온 뒤 작성할 수 있습니다' : undefined}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={16} />
@@ -222,12 +225,14 @@ export default function Announcements() {
                     </button>
                     <button
                       onClick={() => openEdit(a)}
+                      aria-label={`'${a.title}' 공지 수정`}
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
                     >
                       <Pencil size={13} />
                     </button>
                     <button
                       onClick={() => handleDelete(a.id)}
+                      aria-label={`'${a.title}' 공지 삭제`}
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
                     >
                       <Trash2 size={13} />
@@ -287,7 +292,7 @@ export default function Announcements() {
                   <input type="checkbox" className="sr-only peer" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} />
                   <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
-                <span className="text-xs text-slate-400">{editTarget ? '게시 중' : '즉시 게시'}</span>
+                <span className="text-xs text-slate-400">{form.is_active ? (editTarget ? '게시' : '즉시 게시') : '숨김'}</span>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
