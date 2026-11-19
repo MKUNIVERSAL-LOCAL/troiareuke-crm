@@ -363,9 +363,19 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
   // 쓸 수 있는 회차권(미완료·미만료)이 하나뿐이면 미리 연결 — 안 그러면 '단건'으로 저장돼 회차가 차감되지 않는 실수가 잦다 (입력 속도 감사 2026-11-18)
   const onlyActiveProgram = (cid: string, asOf: string) => { const a = cid ? getUsablePrograms(cid, asOf) : []; return a.length === 1 ? a[0].id : ''; };
-  const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? onlyActiveProgram(prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : '', prefill?.treatmentDate ?? todayISO()));
+  const [customerProgramId, setCustomerProgramId] = useState(() => editing?.customerProgramId ?? onlyActiveProgram(prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : '', prefill?.treatmentDate ?? todayISO()));
   const [staffName, setStaffName] = useState(editing?.staffName ?? (prefill?.staffName && staff.some(s => s.name === prefill.staffName) ? prefill.staffName : ''));
   const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? prefill?.treatmentDate ?? todayISO());
+  // 시술일을 바꾸면 연결도 그 날짜 기준으로 맞춘다 — 만료돼 빠지면 비우고, 쓸 수 있는 회차권이 하나뿐이면 다시 연결(수정 중인 기록의 원래 연결은 유지)
+  const changeTreatmentDate = (v: string) => {
+    setTreatmentDate(v);
+    setCustomerProgramId(prev => {
+      if (prev && editing?.customerProgramId === prev) return prev;
+      const usable = customerId ? getUsablePrograms(customerId, v) : [];
+      if (prev && usable.some(cp => cp.id === prev)) return prev;
+      return usable.length === 1 ? usable[0].id : '';
+    });
+  };
   // 수정 모드: 기존 시술 내용에서 시술 메뉴명과 일치하는 항목을 체크 상태로 복원. 예약 프리필도 같은 규칙(존재하는 메뉴만)
   const [selectedServices, setSelectedServices] = useState<string[]>(() => {
     const names = new Set(services.map(s => s.name));
@@ -418,10 +428,6 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const usablePrograms = customerId ? getUsablePrograms(customerId, treatmentDate) : [];
   const expiredPrograms = (customerId ? getExpiredPrograms(customerId, treatmentDate) : []).filter(cp => cp.id !== editingLinked?.id);
   const activePrograms = editingLinked && !usablePrograms.some(cp => cp.id === editingLinked.id) ? [...usablePrograms, editingLinked] : usablePrograms;
-  // 시술일을 바꿔 연결해 둔 회차권이 선택지에서 빠지면 상태도 비운다 — 화면은 '미연결'인데 저장하면 차감되는 모순 방지
-  useEffect(() => {
-    if (customerProgramId && !activePrograms.some(cp => cp.id === customerProgramId)) setCustomerProgramId('');
-  });
 
   const toggleService = (name: string) => {
     setSelectedServices(prev =>
@@ -558,10 +564,10 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             type="date"
             aria-label="시술일"
             value={treatmentDate}
-            onChange={e => setTreatmentDate(e.target.value)}
+            onChange={e => changeTreatmentDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
-          <DateQuickChips value={treatmentDate} onChange={setTreatmentDate} options={[{ label: '오늘', days: 0 }, { label: '어제', days: -1 }]} />
+          <DateQuickChips value={treatmentDate} onChange={changeTreatmentDate} options={[{ label: '오늘', days: 0 }, { label: '어제', days: -1 }]} />
         </div>
 
         {/* 프로그램 연결 (회차 차감) */}

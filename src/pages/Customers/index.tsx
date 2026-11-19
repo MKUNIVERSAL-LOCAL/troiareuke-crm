@@ -945,8 +945,9 @@ export default function Customers() {
   }, [qParam, filtered]);
   // 빠른 시술 기록: 쓸 수 있는(미완료·미만료) 프로그램이 하나뿐이면 미리 연결해 둔다(회차 차감 누락 방지). 만료 회차권은 자동 연결하지 않는다 (리뷰 2026-11-19)
   const openTreatmentModal = () => {
-    const active = selected ? getUsablePrograms(selected.id, treatForm.treatmentDate) : [];
-    setTreatForm(f => ({ ...f, customerProgramId: active.length === 1 ? active[0].id : '' })); // 이전 고객의 프로그램 id가 남아 엉뚱한 회차권이 차감되지 않게 항상 새로 (리뷰 2026-11-18)
+    const active = selected ? getUsablePrograms(selected.id) : [];
+    // 이전 고객의 프로그램 id·지난번 창의 시술일이 남아 엉뚱한 회차권이 차감되지 않게 항상 새로 (리뷰 2026-11-18, 11-19)
+    setTreatForm(f => ({ ...f, treatmentDate: today(), customerProgramId: active.length === 1 ? active[0].id : '' }));
     setShowTreatmentModal(true);
   };
   const tagOptions = useMemo(() => topTags(customers, 12), [customers]);
@@ -2680,19 +2681,19 @@ export default function Customers() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">차감할 프로그램</label>
                 <select aria-label="차감할 프로그램" aria-describedby={treatExpired.length > 0 ? 'expired-program-hint' : undefined}
-                  value={treatUsable.some(cp => cp.id === treatForm.customerProgramId) ? treatForm.customerProgramId : ''}
+                  value={treatForm.customerProgramId}
                   onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">선택 없음 (단순 기록)</option>
                   {treatUsable.map(cp => (
                     <option key={cp.id} value={cp.id}>
-                      {cp.programName} — {cp.totalSessions !== null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'}
+                      {cp.programName} — {cp.totalSessions !== null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : `기간제 · ${cp.usedSessions}회 이용`}
                     </option>
                   ))}
                 </select>
                 {treatExpired.length > 0 && (
                   <p id="expired-program-hint" data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    {expiredProgramsHint(treatExpired, '아래 프로그램 카드의 [관리]')}
+                    {expiredProgramsHint(treatExpired, '이 창을 닫고 프로그램 카드의 [관리]')}
                   </p>
                 )}
               </div>
@@ -2700,7 +2701,12 @@ export default function Customers() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">시술일 *</label>
-                  <input aria-label="시술일" required type="date" value={treatForm.treatmentDate} onChange={e => setTreatForm(f => ({ ...f, treatmentDate: e.target.value }))}
+                  <input aria-label="시술일" required type="date" value={treatForm.treatmentDate} onChange={e => {
+                    // 시술일이 바뀌면 연결도 그 날짜 기준으로 — 만료돼 빠지면 비우고, 쓸 수 있는 회차권이 하나뿐이면 다시 연결 (리뷰 2026-11-19)
+                    const v = e.target.value;
+                    const usable = selected ? getUsablePrograms(selected.id, v) : [];
+                    setTreatForm(f => ({ ...f, treatmentDate: v, customerProgramId: f.customerProgramId && usable.some(cp => cp.id === f.customerProgramId) ? f.customerProgramId : usable.length === 1 ? usable[0].id : '' }));
+                  }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
                 <div>

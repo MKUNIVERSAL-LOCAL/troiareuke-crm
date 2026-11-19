@@ -80,8 +80,8 @@ test('예약 완료·노쇼·취소가 대시보드·직원 실적·고객 노�
   // ── 직원 월 실적: 완료 건수 1건 · 완료 예약액 50,000원 (노쇼·취소 제외) ──
   await page.goto('/staff');
   const perfRow = page.getByTestId('staff-performance').locator('tbody tr').filter({ hasText: '김테스트' }).first();
-  await expect(perfRow.getByRole('cell').nth(1)).toHaveText('1건');
-  await expect(perfRow.getByRole('cell').nth(2)).toHaveText('50,000원');
+  await expect(perfRow.getByTestId('perf-completed')).toHaveText('1건');
+  await expect(perfRow.getByTestId('perf-amount')).toHaveText('50,000원');
 
   // ── 고객 상세: 노쇼 1회 ──
   await page.goto('/customers');

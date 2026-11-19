@@ -1308,10 +1308,15 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           <button onClick={onEdit} className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e] transition-colors">수정</button>
         </div>
       </div>
-      {showPayModal && (
-        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={getUsablePrograms(r.customerId).length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined}
-          expiredNote={getUsablePrograms(r.customerId).length === 0 && getExpiredPrograms(r.customerId).length > 0 ? expiredProgramsHint(getExpiredPrograms(r.customerId)) : undefined} />
-      )}
+      {showPayModal && (() => {
+        // 시술 기록은 예약일(r.date)로 프리필되므로 회차권 사용 가능 여부도 같은 날짜 기준으로 판단한다 (리뷰 2026-11-19)
+        const usable = getUsablePrograms(r.customerId, r.date);
+        const expired = getExpiredPrograms(r.customerId, r.date);
+        return (
+          <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={usable.length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined}
+            expiredNote={usable.length === 0 && expired.length > 0 ? expiredProgramsHint(expired, '고객 상세의 [관리]', '') : undefined} />
+        );
+      })()}
     </Modal>
   );
 }

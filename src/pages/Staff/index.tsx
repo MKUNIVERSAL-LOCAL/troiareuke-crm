@@ -474,6 +474,11 @@ function StaffDetailModal({
   // 퇴사 처리/복직 — 삭제 대신 isActive만 바꿔 과거 예약·시술·실적의 담당자 연결을 유지한다 (2026-11-18)
   const handleToggleActive = () => {
     const leaving = staff.isActive;
+    // 복직도 추가·수정과 같은 규칙 — 같은 이름의 재직자가 둘이면 이름으로 잇는 시술·판매 기록이 구분되지 않는다 (리뷰 2026-11-19)
+    if (!leaving && StaffStore.getAll().some(s => s.id !== staff.id && s.isActive && s.name.trim() === staff.name.trim())) {
+      notify('같은 이름의 재직 직원이 이미 있어 복직할 수 없습니다. 먼저 이름을 바꿔주세요.');
+      return;
+    }
     if (!window.confirm(leaving
       ? `"${staff.name}" 직원을 퇴사 처리할까요?\n새 예약·시술의 담당자 목록에서 빠지고, 과거 기록과 실적은 그대로 남습니다. 언제든 복직할 수 있습니다.`
       : `"${staff.name}" 직원을 복직 처리할까요?`)) return;
@@ -533,6 +538,8 @@ function StaffDetailModal({
             <label className="block text-xs font-medium text-gray-600 mb-1.5">전화번호 *</label>
             <input
               type="tel"
+              aria-label="전화번호"
+              placeholder="010-0000-0000"
               value={phone}
               onChange={e => setPhone(formatPhoneInput(e.target.value))}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"

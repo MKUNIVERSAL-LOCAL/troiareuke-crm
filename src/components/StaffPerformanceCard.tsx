@@ -60,8 +60,8 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
                     <span className={`font-medium ${r.isActive ? 'text-gray-800' : 'text-gray-400'}`}>{r.name}{!r.isActive && ' (퇴사)'}</span>
                   </span>
                 </td>
-                <td className={td}>{r.completedReservations}건</td>
-                <td className={`${td} font-semibold text-gray-900`}>{formatPrice(r.reservationAmount)}</td>
+                <td className={td} data-testid="perf-completed">{r.completedReservations}건</td>
+                <td className={`${td} font-semibold text-gray-900`} data-testid="perf-amount">{formatPrice(r.reservationAmount)}</td>
                 <td className={td}>{r.treatments}건</td>
                 <td className={td}>{formatPrice(r.productAmount)}</td>
                 <td className={td}>{r.customers}명</td>

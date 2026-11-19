@@ -34,9 +34,9 @@ test('기간제 프로그램은 횟수 제한 없이 기록되고 만료일·완
   await progDialog.getByLabel('유효기간 (일)').fill('90');
   await progDialog.getByRole('button', { name: '프로그램 추가' }).click();
   await expect(progDialog).toHaveCount(0);
-  await expect(page.getByText('피부진정 기간제').filter({ visible: true }).first()).toBeVisible();
-  await expect(page.getByText('기간제', { exact: true }).filter({ visible: true }).first()).toBeVisible();
-  await expect(page.getByText('90일 유효').filter({ visible: true }).first()).toBeVisible();
+  const progItem = page.getByTestId('program-item').filter({ hasText: '피부진정 기간제' });
+  await expect(progItem.getByText('기간제', { exact: true })).toBeVisible();
+  await expect(progItem.getByText('90일 유효')).toBeVisible();
 
   // ── 고객에게 판매: 결제 200,000 · 만료일 = 오늘+90 · 횟수 표시 없음 ──
   await openCustomer();

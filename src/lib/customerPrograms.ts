@@ -31,9 +31,13 @@ export function getExpiredPrograms(customerId: string, asOf?: string): CustomerP
   return CustomerProgramStore.getActive(customerId).filter(cp => isProgramExpired(cp, day));
 }
 
-/** 시술 기록 창의 만료 안내 문구. where = 연장하는 곳(화면에 따라 다르게) */
-export function expiredProgramsHint(expired: CustomerProgram[], where = '고객 상세의 [관리]'): string {
-  return `시술일 기준으로 만료된 회차권(${expired.map(cp => cp.programName).join(', ')})은 차감할 수 없습니다. ${where}에서 만료일을 연장하면 다시 선택할 수 있습니다.`;
+/**
+ * 만료 안내 문구. where = 연장하는 곳(화면에 따라 다르게), basis = 판단 기준 머리말(시술일 입력이 있는 창에서만 "시술일 기준으로").
+ * 명사는 전부 회차권이면 '회차권', 기간제가 섞이면 '프로그램'.
+ */
+export function expiredProgramsHint(expired: CustomerProgram[], where = '고객 상세의 [관리]', basis = '시술일 기준으로 '): string {
+  const noun = expired.every(cp => cp.totalSessions != null) ? '회차권' : '프로그램';
+  return `${basis}만료된 ${noun}(${expired.map(cp => cp.programName).join(', ')})은 차감할 수 없습니다. ${where}에서 만료일을 연장하면 다시 선택할 수 있습니다.`;
 }
 
 /** 저장 직전 방어 — 선택지에 없는 프로그램 id가 상태에 남아 있으면(시술일 변경·만료) 조용히 차감하지 않는다 */

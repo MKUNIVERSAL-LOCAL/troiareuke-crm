@@ -52,26 +52,26 @@ test('직원 추가 → 예약 담당 → 실적 → 이름 변경 → 퇴사·�
   await page.goto('/staff');
   const perf = page.getByTestId('staff-performance');
   const rowOf = (name: string) => perf.locator('tbody tr').filter({ hasText: name }).first();
-  await expect(rowOf('박신입').getByRole('cell').nth(1)).toHaveText('1건');
-  await expect(rowOf('박신입').getByRole('cell').nth(2)).toHaveText('50,000원');
+  await expect(rowOf('박신입').getByTestId('perf-completed')).toHaveText('1건');
+  await expect(rowOf('박신입').getByTestId('perf-amount')).toHaveText('50,000원');
 
   // ── 이름 변경(박신입 → 박선임): 예약은 staffId로 연결돼 실적이 그대로 따라온다 ──
-  await page.getByText('박신입', { exact: true }).filter({ visible: true }).first().click();
+  await page.getByRole('heading', { name: /^박신입/ }).first().click(); // 직원 카드 제목 — 아래 '오늘 직원별 예약 현황'의 이름과 구분
   const staffDetail = page.getByRole('dialog', { name: '직원 상세' });
   await staffDetail.getByRole('button', { name: '수정' }).click();
   const editDialog = page.getByRole('dialog', { name: '직원 수정' });
   await editDialog.getByLabel('이름').fill('박선임');
   await editDialog.getByRole('button', { name: '저장', exact: true }).click();
   await expect(editDialog).toHaveCount(0);
-  await expect(rowOf('박선임').getByRole('cell').nth(1)).toHaveText('1건');
+  await expect(rowOf('박선임').getByTestId('perf-completed')).toHaveText('1건');
   await expect(perf.locator('tbody tr').filter({ hasText: '박신입' })).toHaveCount(0);
 
   // ── 퇴사 처리: 새 예약 담당 목록에서 빠지고, 실적 표에는 "(퇴사)"로 남는다 ──
-  await page.getByText('박선임', { exact: true }).filter({ visible: true }).first().click();
+  await page.getByRole('heading', { name: /^박선임/ }).first().click();
   await staffDetail.getByRole('button', { name: '퇴사 처리' }).click(); // confirm 수락
   await expect(page.locator('[aria-live="polite"]').getByText('퇴사 처리했습니다.')).toBeVisible();
   await expect(rowOf('박선임')).toContainText('박선임 (퇴사)');
-  await expect(rowOf('박선임').getByRole('cell').nth(1)).toHaveText('1건');
+  await expect(rowOf('박선임').getByTestId('perf-completed')).toHaveText('1건');
   await page.goto('/reservations');
   await page.getByRole('button', { name: '예약 추가' }).first().click();
   await expect(dialog.getByLabel('담당 직원').locator('option', { hasText: '박선임' })).toHaveCount(0);
@@ -80,7 +80,30 @@ test('직원 추가 → 예약 담당 → 실적 → 이름 변경 → 퇴사·�
   // ── 복직: 담당 목록에 돌아온다 ──
   await page.goto('/staff');
   await page.getByRole('button', { name: '퇴사·비활성' }).click();
-  await page.getByRole('heading', { name: /^박선임/ }).first().click(); // 카드 제목에 '퇴사' 배지가 붙어 정확 일치 텍스트로는 아래 '오늘 직원별 예약 현황'의 이름이 잡힌다
+  // 복직 전에 같은 이름의 재직자를 만들면 거절된다 — 이름으로 잇는 기록이 섞이지 않게
+  await page.getByRole('button', { name: '재직' }).click();
+  await page.getByRole('heading', { name: /^김테스트/ }).first().click();
+  await staffDetail.getByRole('button', { name: '수정' }).click();
+  await editDialog.getByLabel('이름').fill('박선임');
+  await editDialog.getByLabel('전화번호').fill('010-1111-2222'); // 온보딩으로 만든 직원은 전화번호가 비어 있어 수정 저장에 필요
+  await editDialog.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(editDialog).toHaveCount(0);
+  await page.getByRole('button', { name: '퇴사·비활성' }).click();
+  await page.getByRole('heading', { name: /^박선임/ }).first().click(); // 카드 제목에 '퇴사' 배지가 붙어 정확 일치 텍스트로는 잡히지 않는다
+  await staffDetail.getByRole('button', { name: '복직' }).click();
+  await expect(page.locator('[aria-live="polite"]').getByText('같은 이름의 재직 직원이 이미 있어 복직할 수 없습니다. 먼저 이름을 바꿔주세요.')).toBeVisible();
+  await expect(staffDetail).toBeVisible(); // 거절이라 창은 그대로
+  await page.keyboard.press('Escape');
+  await expect(staffDetail).toHaveCount(0);
+  // 재직자 이름을 되돌린 뒤 복직
+  await page.getByRole('button', { name: '재직' }).click();
+  await page.getByRole('heading', { name: /^박선임/ }).first().click();
+  await staffDetail.getByRole('button', { name: '수정' }).click();
+  await editDialog.getByLabel('이름').fill('김테스트');
+  await editDialog.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(editDialog).toHaveCount(0);
+  await page.getByRole('button', { name: '퇴사·비활성' }).click();
+  await page.getByRole('heading', { name: /^박선임/ }).first().click();
   await staffDetail.getByRole('button', { name: '복직' }).click();
   await expect(page.locator('[aria-live="polite"]').getByText('복직 처리했습니다.')).toBeVisible();
   await page.goto('/reservations');

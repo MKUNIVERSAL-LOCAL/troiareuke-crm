@@ -238,6 +238,7 @@ export default function Programs() {
             return (
               <div
                 key={program.id}
+                data-testid="program-item"
                 className={`bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md transition-shadow ${!program.isActive ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-start justify-between mb-3">
