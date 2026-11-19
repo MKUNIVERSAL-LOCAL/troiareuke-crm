@@ -44,6 +44,9 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
   - `store.ts` CustomerProgramStore.useSession — 사람이 직접 완료 처리한 회차권(isCompleted=true, used<total)에 연결된 시술 기록을 수정해 회차 delta가 생기면 `isCompleted = used >= total`로 다시 계산돼 '진행중'으로 되살아난다. 수동 완료 플래그를 따로 두거나 useSession이 isCompleted를 낮추지 않게.
   - `store.ts` PaymentStore.save — 같은 referenceId(예약) 결제 중복 가드가 없다(지금은 예약 상세·완료 브리지·시술 기록·완료 누락 카드의 `registeredPaymentsFor` UI 가드뿐). 저장 계층에서 거부하거나 경고.
   - 제품 판매 기록의 고객 이름 익명화·직원 이름 변경 반영(코어 API 없음) — P4·직원 항목에 이미 기록.
+  - (정합성 감사 2026-11-19 추가) `customerMerge.ts`·`retentionPolicy.ts`가 ProductSale.customerId/customerName을 옮기거나 지우지 못함 — `ProductSaleStore.update` 부재.
+  - (정합성 감사 2026-11-19 추가) `store.ts` CustomerStore.incrementVisit이 lastVisitDate를 UTC 오늘(`toISOString().split('T')[0]`)로 기록 — KST 0~9시·과거 날짜 기록에 어긋남. 비코어 완화: 시술 저장 뒤 시술일이 더 나중이면 올림(69), 고객 상세를 열 때 재계산(70).
+  - (정합성 감사 2026-11-19 추가) `store.ts` TreatmentLogStore.save는 같은 날 기록 2건에 각각 +1, delete는 다른 기록이 있으면 −0 → totalVisits 비대칭. 70의 재계산(서로 다른 날 수)이 상세 열 때 흡수.
 
 ### P2. 킬러 기능 ② Before/After 완성 (코드만으로 가능) — 1차 구현 2026-11-17
 - [x] 사진 태그: 시술 전/후(`label`, 첫 사진 '전' 기본) + 촬영 각도(`angle`: 정면·좌·우·기타). 시술 기록 폼 썸네일 아래 선택, 상세·타임랩스 배지. 서버 `crm_photos`는 JSONB 통짜라 필드 추가만으로 저장(`PUT /api/photos` 검증은 id·dataUrl만).
