@@ -32,7 +32,7 @@ function contrastRatio(a: string, b: string): number {
 const DARK_TEXT = '#000000';
 const LIGHT_TEXT = '#ffffff';
 
-/** 배경 hex 위에 올릴 글자색 — 흰색·검정 중 대비가 높은 쪽 (형식이 틀리면 둘 다 1이라 검정) */
+/** 배경 hex 위에 올릴 글자색 — 흰색·검정 중 대비가 높은 쪽 (형식이 틀리면 대비가 둘 다 1 — 동률은 흰색) */
 export function readableTextOn(bgHex: string): string {
   return contrastRatio(LIGHT_TEXT, bgHex) >= contrastRatio(DARK_TEXT, bgHex) ? LIGHT_TEXT : DARK_TEXT;
 }

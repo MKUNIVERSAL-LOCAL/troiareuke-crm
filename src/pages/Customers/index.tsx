@@ -46,7 +46,7 @@ import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, Payment
 import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, localISODate } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, localISODate, formatLocalDate } from '../../lib/format';
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -1539,10 +1539,7 @@ export default function Customers() {
               return (
                 <button
                   key={customer.id}
-                  onClick={() => {
-                    setSelected(customer);
-                    setCustomerPrograms(CustomerProgramStore.getByCustomer(customer.id));
-                  }}
+                  onClick={() => openCustomer(customer)} // 목록에서 열 때도 누적값 재계산(70·71)을 거친다 — E2E customer-stats가 잡은 누락 (95, 2026-11-20)
                   className="w-full bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-left min-h-[72px]"
                 >
                   <div className="flex items-center gap-3">
@@ -1981,10 +1978,7 @@ export default function Customers() {
               return (
                 <button
                   key={customer.id}
-                  onClick={() => {
-                    setSelected(customer);
-                    setCustomerPrograms(CustomerProgramStore.getByCustomer(customer.id));
-                  }}
+                  onClick={() => openCustomer(customer)} // 목록에서 열 때도 누적값 재계산(70·71)을 거친다 — E2E customer-stats가 잡은 누락 (95, 2026-11-20)
                   className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-50 ${selected?.id === customer.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''}`}
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -2166,7 +2160,7 @@ export default function Customers() {
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">등록일</p>
-                  <p className="text-sm font-semibold text-gray-700">{formatDate(selected.registeredAt)}</p>
+                  <p className="text-sm font-semibold text-gray-700">{formatLocalDate(selected.registeredAt)}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">다음 방문 권장</p>
