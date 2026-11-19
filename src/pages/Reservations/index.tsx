@@ -1064,7 +1064,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
         deleteCalendarEvent(oldEventId).catch(() => { /* best-effort */ });
         createCalendarEvent({ ...reservation, id: editing.id } as Reservation)
           .then(ev => rememberGcalEvent(editing.id, ev.id))
-          .catch(() => { /* Google 동기화 실패해도 CRM 예약은 저장됨 */ });
+          .catch(() => notify('예약은 저장했지만 Google 캘린더 일정은 만들지 못했습니다. 캘린더에서 직접 추가해주세요.')); // 조용히 어긋나지 않게 (6차 UX 감사 2026-11-20)
       }
     } else {
       const saved = ReservationStore.save(reservation);
@@ -1072,9 +1072,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       if (addToGoogle && googleAvailable && saved) {
         createCalendarEvent({ ...reservation, id: saved.id })
           .then(ev => rememberGcalEvent(saved.id, ev.id))
-          .catch(() => {
-            // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
-          });
+          .catch(() => notify('예약은 저장했지만 Google 캘린더 일정은 만들지 못했습니다. 캘린더에서 직접 추가해주세요.'));
       }
     }
     onSave();

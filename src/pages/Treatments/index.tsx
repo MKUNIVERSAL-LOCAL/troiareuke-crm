@@ -302,7 +302,8 @@ export default function Treatments() {
             }
             // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
             const paidByReservation = !!reservationId && hasPaymentFor(reservationId); // 환불된 결제는 '등록됨'으로 치지 않는다 — 예약 상세와 같은 기준
-            if (result && !paidByReservation && window.confirm(`시술 기록을 저장했습니다.\n${result.customerName} 고객의 결제(${result.amount.toLocaleString()}원)도 바로 등록할까요?`)) {
+            if (result) notify.success('시술 기록을 저장했습니다.'); // 성공 안내와 결제 질문을 분리 — confirm의 [취소]가 저장 취소로 읽히지 않게 (6차 UX 감사 2026-11-20)
+            if (result && !paidByReservation && window.confirm(`${result.customerName} 고객의 결제 ${result.amount.toLocaleString()}원을 지금 매출에 등록할까요?\n(나중에 매출 화면에서도 등록할 수 있습니다)`)) {
               const q = new URLSearchParams({ new: '1', customer: result.customerId, amount: String(result.amount), memo: result.details });
               // 예약에서 온 기록이면 결제를 그 예약에 연결(referenceId) — 안 넘기면 예약 상세가 "결제 미등록"으로 보여 2중 등록된다 (정합성 감사 2026-11-19)
               if (reservationId && (!savedDate || ReservationStore.getAll().find(x => x.id === reservationId)?.date === savedDate)) q.set('reference', reservationId);
@@ -450,14 +451,16 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
     setUploading(true);
     try {
       const added: PhotoEntry[] = [];
+      let failed = 0;
       for (const file of files) {
         try {
           const dataUrl = await resizeImageFile(file);
           added.push({ id: makePhotoId(), dataUrl, takenAt: new Date().toISOString() });
         } catch {
-          // 개별 파일 실패는 건너뜀
+          failed += 1; // 개별 파일 실패는 건너뛰되 몇 장인지 알린다 (6차 UX 감사 2026-11-20)
         }
       }
+      if (failed > 0) notify(`사진 ${failed}장은 읽지 못해 추가하지 않았습니다 (손상된 파일이거나 지원하지 않는 형식).`);
       // 기본 태그: 기록의 첫 사진은 '시술 전', 이후는 '시술 후' (썸네일 아래에서 수정 가능) — 전·후 한 장씩 올리는 Before/After 흐름이 기본(E2E 계약).
       // 각도 정보가 없는 업로드에 "전이 있으면 후" 규칙을 쓰면 전·후 2장을 한 번에 올릴 때 둘 다 '전'이 된다 — 각도 규칙은 카메라 촬영에만 (리뷰 63 검토).
       // 리사이즈 중 목록이 바뀔 수 있어 커밋 시점의 prev 길이로 판정한다.

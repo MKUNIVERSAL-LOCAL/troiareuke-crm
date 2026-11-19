@@ -596,7 +596,7 @@ export default function Sales() {
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <h3 className="font-bold text-gray-900 mb-4">결제 수단</h3>
               {methodData.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-6">데이터 없음</p>
+                <p className="text-sm text-gray-500 text-center py-6">이 기간 결제가 없어요</p>
               ) : (
                 <div className="space-y-3">
                   {methodData.map(({ name, value }) => {

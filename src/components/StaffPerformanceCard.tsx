@@ -50,7 +50,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
           </thead>
           <tbody>
             {report.rows.length === 0 && (
-              <tr><td colSpan={7} className="px-6 py-6 text-center text-xs text-gray-400">직원이 없어요</td></tr>
+              <tr><td colSpan={7} className="px-6 py-6 text-center text-xs text-gray-400">직원이 없어요 — 직원 관리에서 등록하면 실적이 여기에 모입니다</td></tr>
             )}
             {report.rows.map(r => (
               <tr key={r.staffId} className="border-b border-gray-50 last:border-0">

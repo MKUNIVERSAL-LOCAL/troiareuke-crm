@@ -208,7 +208,10 @@ export default function Products() {
                       <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">제품 추가</button>
                     </>
                   ) : (
-                    <p className="text-sm text-gray-400">해당하는 제품이 없습니다</p>
+                    <>
+                      <p className="text-sm text-gray-400">조건에 맞는 제품이 없어요</p>
+                      <button type="button" onClick={() => { setSearch(''); setCategory('전체'); setLowStockOnly(false); }} className="mt-3 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-200">필터 초기화</button>
+                    </>
                   )}
                 </div>
               ) : (

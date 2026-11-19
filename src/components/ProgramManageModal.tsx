@@ -139,6 +139,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
             className={`py-2.5 px-4 rounded-xl text-sm font-medium border disabled:opacity-40 ${cp.isCompleted ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-600 bg-white'}`}>
             {cp.isCompleted ? '진행중으로 되돌리기' : '완료 처리'}
           </button>
+          {dirty && <p className="w-full text-xs text-amber-700">변경 내용을 먼저 [저장]하세요 — 저장 뒤에 완료 처리할 수 있습니다</p>}
           {cancelable && (
             <button type="button" onClick={cancelRegistration} title="잘못 등록한 회차권 — 한 번도 쓰지 않았을 때만. 연결된 결제도 함께 삭제"
               className="py-2.5 px-4 rounded-xl text-sm font-medium border border-red-200 text-red-700 bg-red-50 hover:bg-red-100">

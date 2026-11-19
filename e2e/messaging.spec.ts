@@ -41,7 +41,7 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
 
   // ── 발송 이력에 남는다 ──
   await page.getByRole('button', { name: '발송 이력' }).click();
-  await expect(page.getByText('발송 이력이 없습니다')).toHaveCount(0);
+  await expect(page.getByText('발송 이력이 없어요')).toHaveCount(0); // 빈 상태 문구(85)가 사라졌는지 — 이력이 실제로 생겼다는 뜻
   await expect(page.getByText(/미연동/).first()).toBeVisible();
   await expect(page.getByText(/내일 방문 예정입니다/).first()).toBeVisible();
 });

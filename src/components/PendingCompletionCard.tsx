@@ -34,7 +34,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
   const settleOneAndPay = (r: Reservation) => {
     settle([r.id], 'completed');
     if (r.totalPrice > 0 && !hasPaymentFor(r.id)) {
-      if (window.confirm(`완료 처리했습니다. 이 예약의 결제 ${r.totalPrice.toLocaleString()}원을 지금 매출에 등록할까요?`)) {
+      if (window.confirm(`${r.customerName} 고객의 결제 ${r.totalPrice.toLocaleString()}원을 지금 매출에 등록할까요?\n(나중에 매출 화면에서도 등록할 수 있습니다)`)) { // 완료 안내는 settle의 토스트가 한다
         navigate(`/sales?new=1&customer=${encodeURIComponent(r.customerId)}&amount=${r.totalPrice}&memo=${encodeURIComponent('예약 완료 처리(대시보드)')}&reference=${encodeURIComponent(r.id)}`);
       }
     }

@@ -603,7 +603,7 @@ export default function Customers() {
   // 상담 기록 삭제 — PC·모바일 카드 공용
   function handleConsultDelete(c: Consultation) {
     if (!selected) return;
-    if (!window.confirm('이 상담 기록을 삭제할까요?')) return;
+    if (!window.confirm('이 상담 기록을 삭제할까요?\n상담 사진·비교 이미지도 함께 삭제되며 되돌릴 수 없습니다.')) return; // 사진도 지워진다는 결과를 고지 (6차 UX 감사 2026-11-20)
     ConsultationStore.delete(c.id);
     clearPhotos(`consult:${c.id}`);
     setConsultations(ConsultationStore.getByCustomer(selected.id));
@@ -853,13 +853,13 @@ export default function Customers() {
       recipients: 1,
       successCount: result.pending ? 0 : result.sent,
       failCount: result.pending ? 1 : result.failed,
-      sentAt: new Date().toLocaleString(),
+      sentAt: new Date().toISOString(), // 발송 화면과 같은 ISO — toLocaleString 행이 새로 생기지 않게 (6차 UX 감사 2026-11-20)
       status: !result.pending && result.sent > 0 ? 'sent' : 'failed',
       cost: !result.pending && result.sent > 0 ? 5 : 0,
     });
     setKakaoSending(false);
     if (result.pending) {
-      setKakaoMsg('상담은 저장됐어요. 단, 카카오 발송 게이트웨이가 아직 연동되지 않아 실제 전송은 되지 않았습니다 (설정>연동에서 준비 예정). 발송 이력에는 남기지 않았습니다.');
+      setKakaoMsg('상담은 저장했습니다. 카카오 발송은 본사 서버에 발송사가 연동되면 되므로 지금은 실제로 전송되지 않았습니다. 발송 이력에는 남기지 않았습니다.');
     } else if (result.sent > 0) {
       setKakaoMsg(`상담 저장 완료 · ${selected.name}님에게 카카오로 상담 결과를 전송했습니다.`);
     } else {

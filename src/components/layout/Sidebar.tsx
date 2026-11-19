@@ -51,16 +51,13 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
     .filter((item): item is typeof navItems[number] & { badge: string | null } => item !== null);
 
   // 올림 기준 — 가입 당일 "14일"로 표시 (내림이면 13일로 보이는 off-by-one)
-  const trialDaysLeft = user?.trialEndsAt
-    ? Math.ceil((parseISO(user.trialEndsAt).getTime() - Date.now()) / 86400000)
-    : null;
+  const daysUntil = (iso: string) => { const d = Math.ceil((parseISO(iso).getTime() - Date.now()) / 86400000); return Number.isFinite(d) ? d : null; }; // 깨진 날짜면 "NaN일" 대신 숨김 (6차 UX 감사 2026-11-20)
+  const trialDaysLeft = user?.trialEndsAt ? daysUntil(user.trialEndsAt) : null;
 
   // 어드민이 설정한 사용기간(serviceEndsAt) — NAS 서버 응답에 실려 오는 필드로,
   // 코어(AuthContext) 타입에는 없어 런타임 값으로만 읽는다. 만료 14일 전부터 안내.
   const serviceEndsAt = (user as { serviceEndsAt?: string | null } | null)?.serviceEndsAt || null;
-  const serviceDaysLeft = serviceEndsAt
-    ? Math.ceil((parseISO(serviceEndsAt).getTime() - Date.now()) / 86400000)
-    : null;
+  const serviceDaysLeft = serviceEndsAt ? daysUntil(serviceEndsAt) : null;
 
   const handleNavClick = () => {
     // 모바일에서 메뉴 클릭 시 사이드바 닫기

@@ -168,7 +168,7 @@ export default function Messaging() {
 
         {tab === 'send' && <SendPanel onSend={openSendModal} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
-        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} />}
+        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} />}
       </div>
 
       {showSendModal && (
@@ -324,7 +324,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
 
   const handleDelete = (id: string) => {
     const target = templates.find(t => t.id === id);
-    if (!window.confirm(`'${target?.name ?? '이 템플릿'}' 템플릿을 삭제하시겠습니까?`)) return;
+    if (!window.confirm(`'${target?.name ?? '이 템플릿'}' 템플릿을 삭제할까요?\n이미 보낸 발송 이력은 남습니다.`)) return;
     MessageTemplateStore.delete(id);
     setTemplates(MessageTemplateStore.getAll());
     onReload();
@@ -649,7 +649,7 @@ function formatSentAt(value: string): string {
   return isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
-function HistoryPanel({ reloadKey }: { reloadKey: number }) {
+function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => void }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>('all');
@@ -681,8 +681,9 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
           </div>
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
             <Clock size={40} className="mb-3 text-gray-300" />
-            <p className="text-sm font-medium">발송 이력이 없습니다</p>
+            <p className="text-sm font-medium">발송 이력이 없어요</p>
             <p className="text-xs mt-1">메시지를 발송하면 이곳에 이력이 표시됩니다</p>
+            <button type="button" onClick={onSend} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">메시지 보내기</button>
           </div>
         </div>
       </div>

@@ -494,7 +494,7 @@ export default function Settings() {
     setHolidayInput('');
     notify(`${d} 휴일을 추가했습니다.`);
   };
-  const removeHoliday = (d: string) => saveHolidays((settings.holidays || []).filter(x => x !== d));
+  const removeHoliday = (d: string) => { saveHolidays((settings.holidays || []).filter(x => x !== d)); notify(`${d} 휴일을 삭제했습니다.`); }; // 추가와 같은 피드백 (6차 UX 감사 2026-11-20)
 
   // ─── Integrations ─────────────────────────────────────────
   const handleNaverSave = () => {
@@ -852,7 +852,7 @@ export default function Settings() {
                     </div>
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>네이버 예약 API 연동은 NAS 서버 구축 후 지원됩니다. 아래 플레이스 ID를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
+                      <span>네이버 예약 연동은 본사 제휴가 열리면 지원됩니다. 아래 플레이스 ID를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
                     </div>
                     <FormRow label="네이버 플레이스 ID">
                       <input
@@ -926,7 +926,7 @@ export default function Settings() {
 
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>카카오 채널·오픈채팅 API 연동은 NAS 서버 구축 후 지원됩니다. 아래 ID/URL을 미리 입력해두면 연동 시 자동 적용됩니다.</span>
+                      <span>카카오 채널·오픈채팅 연동은 준비 중입니다. 아래 ID/URL을 미리 입력해두면 연동이 열릴 때 자동 적용됩니다.</span>
                     </div>
 
                     <FormRow label="카카오 채널 ID">
