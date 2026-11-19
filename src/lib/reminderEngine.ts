@@ -148,9 +148,9 @@ export function buildReminderMessage(customer: Customer): string {
   const shopName = SettingsStore.get().name || '저희 샵';
   const name = customer.name || '고객';
   return (
-    `[${shopName}] ${name}님, 안녕하세요 😊\n` +
+    `[${shopName}] ${name}님, 안녕하세요.\n` + // 이모지는 SMS를 유니코드(LMS 요금)로 만들고 일부 발송사가 지운다 (산출물 감사 2026-11-20)
     `피부 관리 주기가 다가왔어요. 그동안 관리하신 피부 컨디션을 이어가시려면 ` +
     `이번 주 방문을 추천드려요!\n` +
-    `예약 문의는 편하게 답장 주세요. 감사합니다.`
+    `예약 문의는 편하게 답장 주세요.${SettingsStore.get().phone ? ` (${SettingsStore.get().phone})` : ''} 감사합니다.`
   );
 }

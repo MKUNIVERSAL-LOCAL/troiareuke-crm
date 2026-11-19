@@ -46,7 +46,7 @@ import type { Customer, CustomerGrade, Gender, Program, CustomerProgram, Payment
 import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, formatLocalDate } from '../../lib/format';
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -182,7 +182,7 @@ function ConsultPhotoStrip({ consultId, consultDate, customerName, tick, onOpen 
             onClick={() => onOpen({
               dataUrl: p.dataUrl,
               caption: `${formatDate(consultDate)} 상담 · ${isCompare ? 'Before/After 비교' : '상담 사진'}`,
-              fileName: isCompare ? comparisonFileName(customerName).replace(/\.png$/, '.jpg') : `${customerName}_상담사진_${consultDate}.jpg`, // 기록용 비교 이미지는 JPEG로 압축 저장됨
+              fileName: isCompare ? comparisonFileName(customerName).replace(/\.png$/, '.jpg') : `${customerName.replace(/[\\/:*?"<>|]/g, '')}_상담사진_${consultDate}.jpg`, // 기록용 비교 이미지는 JPEG로 압축 저장됨
             })}
             aria-label="상담 사진 크게 보기"
             className={`rounded-lg border border-indigo-100 overflow-hidden bg-white ${isCompare ? 'w-24 h-14' : 'w-14 h-14'}`}
@@ -819,12 +819,12 @@ export default function Customers() {
   function buildConsultationMessage(): string {
     const shopName = SettingsStore.get()?.name || '더마솔루션';
     const lines = [`[${shopName}] ${selected?.name}님 피부 상담 결과`, ''];
-    lines.push(`· 상담일: ${consultForm.consultDate}`);
+    lines.push(`· 상담일: ${formatDate(consultForm.consultDate)}`);
     if (consultForm.skinTypeResult) lines.push(`· 피부 타입: ${consultForm.skinTypeResult}`);
     if (consultForm.concerns.length) lines.push(`· 주요 고민: ${consultForm.concerns.join(', ')}`);
     if (consultForm.recommendedSolution) lines.push('', `▷ 추천 솔루션\n${consultForm.recommendedSolution}`);
     if (consultForm.recommendedProducts) lines.push('', `▷ 추천 제품\n${consultForm.recommendedProducts}`);
-    if (consultForm.nextConsultDate) lines.push('', `· 다음 상담 예정일: ${consultForm.nextConsultDate}`);
+    if (consultForm.nextConsultDate) lines.push('', `· 다음 상담 예정일: ${formatDate(consultForm.nextConsultDate)}`);
     lines.push('', '※ 본 상담은 의료 진단·처방·치료가 아닌 피부 관리 소견입니다.');
     return lines.join('\n');
   }
@@ -1062,25 +1062,29 @@ export default function Customers() {
       '주소': role !== 'staff' ? (c.address || '') : '',
       '성별': c.gender,
       '등급': c.grade,
-      '생년월일': c.birthDate || '',
+      '생년월일': role !== 'staff' ? (c.birthDate || '') : '',
       '피부유형': c.skinType || '',
+      '알레르기': c.allergies || '',
       '총방문(회)': c.totalVisits ?? 0,
       '누적결제(원)': c.totalSpent ?? 0,
       '마지막방문': c.lastVisitDate || '',
-      '등록일': c.registeredAt ? String(c.registeredAt).split('T')[0] : '',
+      '등록일': c.registeredAt ? formatLocalDate(String(c.registeredAt)) : '', // UTC 앞 10자는 새벽 등록을 전날로 (산출물 감사 2026-11-20)
       '유입경로': c.referralSource || '',
       '태그': (c.tags || []).join(', '),
-      '메모': c.memo || '',
+      '메모': role !== 'staff' ? (c.memo || '') : '', // 직원 계정은 메모·생년월일 제외(설정 내보내기와 같은 규칙)
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
+    // 설정 > 데이터 내보내기와 같은 민감정보 안내행을 1행에 — 외부 공유 금지가 파일에 남게
+    const ws = XLSX.utils.aoa_to_sheet([['⚠ 민감정보 포함 — 외부 공유 금지']]);
+    XLSX.utils.sheet_add_json(ws, rows, { origin: 'A2' });
     ws['!cols'] = [
       { wch: 10 }, { wch: 15 }, { wch: 22 }, { wch: 20 }, { wch: 6 },
-      { wch: 6 }, { wch: 12 }, { wch: 9 }, { wch: 9 }, { wch: 12 },
+      { wch: 6 }, { wch: 12 }, { wch: 9 }, { wch: 12 }, { wch: 9 }, { wch: 12 },
       { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 24 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '고객목록');
-    writeWorkbook(wb, `고객목록_${today()}.xlsx`).then(r => { if (r === 'cancelled') notify('공유를 취소했습니다 — 엑셀 파일은 저장되지 않았습니다.'); }, e => notify(e instanceof Error ? e.message : '엑셀 파일을 내보내지 못했습니다.'));
+    const shopPrefix = (SettingsStore.get().name || 'CRM').replace(/[\\/:*?"<>|]/g, '');
+    writeWorkbook(wb, `${shopPrefix}_고객목록_${today()}.xlsx`).then(r => { if (r === 'cancelled') notify('공유를 취소했습니다 — 엑셀 파일은 저장되지 않았습니다.'); }, e => notify(e instanceof Error ? e.message : '엑셀 파일을 내보내지 못했습니다.'));
   }
 
   // 업로드 가이드 모달 — 양식을 모르면 쓸 수 없는 기능이라 안내+양식 다운로드를 먼저 보여줌

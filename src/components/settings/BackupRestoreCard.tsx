@@ -3,6 +3,7 @@ import { Download, Upload, AlertTriangle } from 'lucide-react';
 import { buildBackup, summarizeBackup, saveBackupFile, parseBackup, restoreBackup, RESTORE_ALLOWED, type BackupFile } from '../../lib/fullBackup';
 import { SettingsStore } from '../../lib/store';
 import { notify } from '../../lib/notify';
+import { formatDateTime } from '../../lib/format';
 
 /**
  * 설정 > 백업·보안 — 전체 백업 파일 저장·복원 (2026-11-18)
@@ -69,7 +70,7 @@ export default function BackupRestoreCard() {
       <div className="px-6 py-5 space-y-4">
         <p className="text-sm text-gray-500">
           고객·예약·시술·결제·프로그램·설정 등 이 매장의 모든 데이터를 JSON 파일 하나로 저장합니다. PC 교체·포맷 전, 그리고 주 1회 저장을 권장합니다.
-          사진과 문자 발송 API 키는 포함되지 않습니다. 새 기기에서는 먼저 가입·로그인한 뒤 복원하세요.
+          사진과 문자 발송 인증 정보는 포함되지 않습니다. 고객 개인정보가 담긴 파일이므로 외부 공유를 금지하고 안전한 곳에 보관하세요. 새 기기에서는 먼저 가입·로그인한 뒤 복원하세요.
         </p>
         {restoreError && (
           <div role="alert" className="flex flex-wrap items-center gap-2 px-3 py-2.5 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-700">
@@ -102,7 +103,7 @@ export default function BackupRestoreCard() {
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2" data-testid="restore-preview" role="status" aria-live="polite">
             <p className="text-sm font-semibold text-amber-900 flex items-center gap-1.5"><AlertTriangle size={14} />복원 미리보기 — {pending.name}</p>
             <p className="text-xs text-amber-800">
-              만든 날짜 {pending.file.createdAt.slice(0, 10)} · 앱 v{pending.file.appVersion}{pending.file.shopName ? ` · ${pending.file.shopName}` : ''}
+              만든 시각 {formatDateTime(pending.file.createdAt)} · 앱 v{pending.file.appVersion}{pending.file.shopName ? ` · ${pending.file.shopName}` : ''}
             </p>
             <p className="text-xs text-amber-800">{pendingSummary.map(s => `${s.label} ${s.count}`).join(' · ') || '테이블 없음'}</p>
             <p className="text-xs text-amber-700">지금 이 기기의 매장 데이터는 전부 이 파일로 바뀝니다. 먼저 위 [백업 파일 저장]으로 현재 상태를 남겨 두세요. 구글 캘린더를 연동했다면 복원 뒤 기존 일정이 한 번 더 만들어질 수 있습니다.</p>

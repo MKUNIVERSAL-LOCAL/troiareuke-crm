@@ -7,7 +7,19 @@
  * 마이그레이션(마스터+이력 전체) 관점을 반영했다.
  */
 import { IS_MOBILE_APP } from './platform';
-import { todayISO, formatDateTime } from './format';
+import { todayISO, formatDateTime, formatLocalDate } from './format';
+import { maskPhone } from './masking';
+
+/** 영문 코드 열을 한글로 — 시트·PDF를 보는 원장은 코드를 모른다 (산출물 감사 2026-11-20) */
+const SOURCE_LABELS: Record<string, string> = { manual: '직접 등록', naver: '네이버', kakao: '카카오', phone: '전화', 'walk-in': '방문', app: '앱' };
+const MESSAGE_TYPE_LABELS: Record<string, string> = { sms: '문자', lms: '장문 문자', mms: '사진 문자', 'kakao-channel': '카카오 채널', 'kakao-openchat': '카카오 오픈채팅' };
+const MESSAGE_STATUS_LABELS: Record<string, string> = { sent: '발송 완료', failed: '실패', sending: '발송 중', draft: '초안' };
+/** 직원 계정이 내보낼 때는 전화번호를 가리고 메모·생년월일을 비운다 — 고객 목록 화면의 역할 규칙과 동일 */
+type ExportRole = 'owner' | 'staff';
+let exportRole: ExportRole = 'owner';
+export function setExportRole(role: ExportRole): void { exportRole = role; }
+const phoneFor = (phone?: string) => (exportRole === 'staff' ? maskPhone(phone || '', 'staff') : (phone || ''));
+const privateFor = (v?: string) => (exportRole === 'staff' ? '' : (v || ''));
 import { saveOrShareFile } from './mobileBridge';
 import type { WorkBook, WorkSheet } from 'xlsx';
 import {
@@ -79,12 +91,12 @@ function buildSheet(key: string): ExportSheet | null {
       return {
         name: '고객',
         rows: CustomerStore.getAll().filter(c => !c.id.startsWith('sample_')).map(c => ({
-          이름: c.name, 전화번호: c.phone, 이메일: c.email || '', 주소: c.address || '',
-          성별: c.gender, 생년월일: c.birthDate || '', 등급: c.grade,
+          이름: c.name, 전화번호: phoneFor(c.phone), 이메일: privateFor(c.email), 주소: privateFor(c.address),
+          성별: c.gender, 생년월일: privateFor(c.birthDate), 등급: c.grade,
           피부타입: c.skinType || '', 알레르기: c.allergies || '',
           방문횟수: c.totalVisits, 누적결제액: c.totalSpent,
-          최근방문일: c.lastVisitDate || '', 등록일: c.registeredAt,
-          유입경로: c.referralSource || '', 태그: (c.tags || []).join(', '), 메모: c.memo || '',
+          최근방문일: c.lastVisitDate || '', 등록일: formatLocalDate(c.registeredAt), // ISO(UTC)를 그대로 쓰면 새벽 등록이 전날로 (산출물 감사 2026-11-20)
+          유입경로: c.referralSource || '', 태그: (c.tags || []).join(', '), 메모: privateFor(c.memo),
         })),
       };
     case 'consultations':
@@ -159,7 +171,7 @@ function buildSheet(key: string): ExportSheet | null {
           return {
             고객명: cp.customerName, 프로그램명: cp.programName, 카테고리: cp.category,
             구매일: cp.purchaseDate, 결제금액: cp.pricePaid, 결제수단: cp.paymentMethod,
-            총회차: total ?? '무제한', 사용회차: cp.usedSessions, 잔여회차: remaining,
+            구분: total === null ? '기간제(무제한)' : '회차권', 총회차: total ?? '', 사용회차: cp.usedSessions, 잔여회차: remaining, // 숫자 열에 '무제한' 글자를 섞지 않는다(SUM 깨짐)
             잔여금액추정: remainingValue, 만료일: cp.expiryDate || '',
             상태: cp.isCompleted ? '소진완료' : '이용중', 비고: cp.notes || '',
           };
@@ -188,11 +200,11 @@ function buildSheet(key: string): ExportSheet | null {
         name: '예약이력',
         rows: ReservationStore.getAll().map(r => ({
           날짜: r.date, 시작: r.startTime, 종료: r.endTime,
-          고객명: r.customerName, 전화번호: r.customerPhone, 담당: r.staffName,
+          고객명: r.customerName, 전화번호: phoneFor(r.customerPhone), 담당: r.staffName,
           시술: (r.services || []).map(s => s.serviceName).join(', '),
           금액: r.totalPrice,
           상태: ({ confirmed: '확정', pending: '대기', completed: '완료', cancelled: '취소', noshow: '노쇼' } as Record<string, string>)[r.status] || r.status,
-          예약경로: r.source, 메모: r.memo || '',
+          예약경로: SOURCE_LABELS[r.source] || r.source, 메모: r.memo || '',
         })),
       };
     case 'treatment_logs':
@@ -236,9 +248,10 @@ function buildSheet(key: string): ExportSheet | null {
       return {
         name: '메시지발송이력',
         rows: MessageHistoryStore.getAll().map(h => ({
-          발송일: formatDateTime(h.sentAt), 유형: h.type, // ISO·옛 toLocaleString 행이 섞여 있어 한 표기로 (리뷰 2026-11-20) 템플릿: h.templateName || '직접 작성',
+          // 발송일은 ISO·옛 toLocaleString 행이 섞여 있어 한 표기로(87); 87에서 이 줄 주석이 '템플릿' 열을 먹었던 회귀를 복구(88)
+          발송일: formatDateTime(h.sentAt), 유형: MESSAGE_TYPE_LABELS[h.type] || h.type, 템플릿: h.templateName || '직접 작성',
           제목: h.title || '', 대상수: h.recipients, 성공: h.successCount, 실패: h.failCount,
-          상태: h.status, 비용: h.cost ?? '',
+          상태: MESSAGE_STATUS_LABELS[h.status] || h.status, 비용: h.cost ?? '',
         })),
       };
     case 'dormant_customers': {
@@ -254,7 +267,7 @@ function buildSheet(key: string): ExportSheet | null {
           .filter(({ days }) => days >= 60)
           .sort((a, b) => b.days - a.days)
           .map(({ customer: c, days }) => ({
-            고객명: c.name, 전화번호: c.phone, 최근방문일: c.lastVisitDate || '',
+            고객명: c.name, 전화번호: phoneFor(c.phone), 최근방문일: c.lastVisitDate || '',
             경과일수: days, 등급: c.grade, 누적결제액: c.totalSpent,
             피부타입: c.skinType || '',
           })),
@@ -264,7 +277,7 @@ function buildSheet(key: string): ExportSheet | null {
       return {
         name: '로그인기록',
         rows: getLocalLogs().map(log => ({
-          일시: log.logged_in_at, 이메일: log.email, 지점: log.branch_name || '',
+          일시: formatDateTime(log.logged_in_at), 이메일: log.email, 지점: log.branch_name || '',
           결과: log.status === 'success' ? '성공' : '실패',
           실패사유: log.fail_reason || '', 기기정보: log.device_info || '',
         })),

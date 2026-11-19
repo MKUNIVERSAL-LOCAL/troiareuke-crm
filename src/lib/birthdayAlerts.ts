@@ -51,7 +51,7 @@ export function buildBirthdayMessage(a: BirthdayAlert): string {
   const shop = SettingsStore.get().name || '저희 샵';
   const when = a.daysUntil === 0 ? '오늘' : `${a.dateLabel}`;
   return [
-    `${a.customer.name}님, ${when} 생일을 진심으로 축하드려요 🎂`,
+    `${a.customer.name}님, ${when} 생일을 진심으로 축하드려요`, // 이모지는 SMS를 유니코드(LMS 요금)로 만들고 일부 발송사가 지운다 (산출물 감사 2026-11-20)
     `${shop}에서 생일 주간 특별 케어를 준비했어요. 방문하시면 (혜택 내용)을 드립니다.`,
     '편한 시간을 알려주시면 예약을 잡아드릴게요. 행복한 하루 보내세요 :)',
   ].join('\n');

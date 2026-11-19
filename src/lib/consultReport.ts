@@ -9,6 +9,7 @@
 import { SettingsStore } from './store';
 import { getPhotos } from './photoStore';
 import { IS_MOBILE_APP } from './platform';
+import { formatDate } from './format';
 import { saveOrShareFile } from './mobileBridge';
 import type { Consultation, Customer, BeaconMetrics } from '../types';
 
@@ -40,7 +41,9 @@ export async function exportConsultationPdf(c: Consultation, customer: Customer)
   doc.addFont('NanumGothic.ttf', 'NanumGothic', 'normal');
   doc.setFont('NanumGothic');
 
-  const shop = SettingsStore.get().name || '';
+  const settings = SettingsStore.get();
+  const shop = settings.name || '';
+  const contact = [settings.phone, settings.address].filter(Boolean).join(' · '); // 고객이 받는 결과지에 예약·문의 연락처 (산출물 감사 2026-11-20)
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 48;
@@ -72,7 +75,7 @@ export async function exportConsultationPdf(c: Consultation, customer: Customer)
   doc.text('피부 상담 결과지', M, y + 20);
   doc.setFontSize(10);
   doc.setTextColor(107, 114, 128);
-  doc.text(`${shop}${shop ? ' · ' : ''}${c.consultDate}${c.staffName ? ` · 담당 ${c.staffName}` : ''}`, M, y + 38);
+  doc.text(`${shop}${shop ? ' · ' : ''}${formatDate(c.consultDate)}${c.staffName ? ` · 담당 ${c.staffName}` : ''}${contact ? `\n${contact}` : ''}`, M, y + 38);
   y += 50;
   doc.setDrawColor(229, 231, 235);
   doc.setLineWidth(0.8);
@@ -82,7 +85,7 @@ export async function exportConsultationPdf(c: Consultation, customer: Customer)
   // 고객
   text(`${customer.name} 고객님${c.skinTypeResult ? `  ·  피부 타입: ${c.skinTypeResult}` : ''}`, 12, [17, 24, 39], 6);
 
-  if (c.concerns.length) { section('피부 고민'); text(c.concerns.join(' · '), 10.5); }
+  if ((c.concerns ?? []).length) { section('피부 고민'); text((c.concerns ?? []).join(' · '), 10.5); } // 옛 기록은 배열이 없을 수 있다 (산출물 감사 2026-11-20)
 
   const metrics = METRIC_LABELS.map(m => ({ label: m.label, v: c.beaconMetrics?.[m.key] })).filter(m => typeof m.v === 'number');
   if (metrics.length) {
@@ -100,9 +103,9 @@ export async function exportConsultationPdf(c: Consultation, customer: Customer)
   }
 
   if (c.recommendedSolution) { section('1:1 맞춤 솔루션'); text(c.recommendedSolution, 10.5); }
-  if (c.recommendedProducts.length) { section('추천 제품 · 프로그램'); text(c.recommendedProducts.join(', '), 10.5); }
+  if ((c.recommendedProducts ?? []).length) { section('추천 제품 · 프로그램'); text((c.recommendedProducts ?? []).join(', '), 10.5); }
   if (c.managerNote) { section('관리사 소견'); text(c.managerNote, 10.5); }
-  if (c.nextConsultDate) { section('다음 상담 권장일'); text(c.nextConsultDate, 10.5); }
+  if (c.nextConsultDate) { section('다음 상담 권장일'); text(formatDate(c.nextConsultDate), 10.5); }
 
   // 사진
   const photos = getPhotos(`consult:${c.id}`);

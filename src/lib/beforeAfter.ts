@@ -4,7 +4,7 @@
 import { TreatmentLogStore, SettingsStore } from './store';
 import { getPhotos, PHOTO_ANGLES, type PhotoEntry, type PhotoAngle } from './photoStore';
 import { IS_MOBILE_APP } from './platform';
-import { todayISO } from './format';
+import { todayISO, formatDate } from './format';
 
 export interface DatedPhoto extends PhotoEntry {
   date: string;  // 시술일 (YYYY-MM-DD)
@@ -28,7 +28,7 @@ export function angleLabel(angle?: PhotoAngle | string): string {
 
 /** 사진 캡션 "시술일 · 각도" — 뷰어·합성 이미지가 같은 형식을 쓴다 */
 export function photoCaption(p: DatedPhoto): string {
-  return `${p.date}${p.angle ? ` · ${angleLabel(p.angle)}` : ''}`;
+  return `${formatDate(p.date)}${p.angle ? ` · ${angleLabel(p.angle)}` : ''}`; // 앱의 날짜 표기(2026.11.20)와 같게 (산출물 감사 2026-11-20)
 }
 
 /** 촬영 가이드 — 같은 고객의 직전 시술 사진을 각도별 최신 1장씩 (편집 중인 기록은 제외, 최대 4장) */
@@ -83,7 +83,7 @@ function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: numb
   ctx.restore();
 }
 
-const FONT = 'Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+const FONT = '"Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", sans-serif'; // 번들 글꼴의 등록 이름은 "Pretendard Variable"(index.css)
 
 function drawTag(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, bg: string) {
   ctx.font = `bold 18px ${FONT}`;
@@ -113,6 +113,7 @@ export async function renderComparison({ before, after, customerName }: Comparis
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('캔버스를 생성할 수 없습니다.');
   const [imgB, imgA] = await Promise.all([loadImage(before.dataUrl), loadImage(after.dataUrl)]);
+  try { await document.fonts?.ready; } catch { /* 글꼴 API 없는 환경 — 시스템 글꼴로 그린다 */ }
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, W, H);
@@ -127,7 +128,7 @@ export async function renderComparison({ before, after, customerName }: Comparis
   ctx.font = `20px ${FONT}`;
   const sub = [
     customerName ? `${customerName} 고객` : '',
-    `${before.date} → ${after.date}`,
+    `${formatDate(before.date)} → ${formatDate(after.date)}`,
     `D+${daysBetween(before.date, after.date)}`,
   ].filter(Boolean).join('   ·   ');
   ctx.fillText(sub, PAD, 80);
@@ -151,7 +152,7 @@ export async function renderComparison({ before, after, customerName }: Comparis
   ctx.font = `17px ${FONT}`;
   ctx.fillStyle = '#9ca3af';
   ctx.textAlign = 'left';
-  ctx.fillText('고객 본인 확인용 · 무단 공유 금지', PAD, H - 38);
+  ctx.fillText('피부 관리 참고용 · 의료 진단이 아닙니다 · 고객 본인 확인용 · 무단 공유 금지', PAD, H - 38); // 결과지·카톡 문구와 같은 고지 (산출물 감사 2026-11-20)
   ctx.textAlign = 'right';
   ctx.fillText(SettingsStore.get().name || 'CRM', W - PAD, H - 38);
 

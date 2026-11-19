@@ -73,8 +73,9 @@ export async function exportDatasetsToPdf(keys: string[]): Promise<ExportResult>
       startY: sensitiveKeys.has(key) ? 84 : 72,
       head: [columns],
       body: sheet.rows.map(row => columns.map(col => String(row[col] ?? ''))),
-      styles: { font: 'NanumGothic', fontSize: 7, cellPadding: 3, overflow: 'linebreak' },
-      headStyles: { font: 'NanumGothic', fillColor: [26, 58, 143], textColor: 255, fontSize: 7.5 },
+      styles: { font: 'NanumGothic', fontStyle: 'normal', fontSize: 7, cellPadding: 3, overflow: 'linebreak' },
+      // autotable의 머리글 기본은 bold — NanumGothic은 normal만 등록돼 있어 명시하지 않으면 times로 폴백해 한글이 깨진다 (산출물 감사 2026-11-20)
+      headStyles: { font: 'NanumGothic', fontStyle: 'normal', fillColor: [26, 58, 143], textColor: 255, fontSize: 7.5 },
       alternateRowStyles: { fillColor: [246, 248, 252] },
       margin: { left: 40, right: 40, top: 84 },
     });

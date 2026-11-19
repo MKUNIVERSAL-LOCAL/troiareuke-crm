@@ -22,7 +22,11 @@ export default function MessageDraftPanel({ title, text, shareTitle, hint, onClo
       setTimeout(() => setCopied(false), 1500);
     } else notify('복사하지 못했습니다. 문구를 직접 선택해 복사하세요.');
   };
-  const share = async () => { if (!(await shareText(text, shareTitle))) notify('공유 창을 열 수 없습니다 — [복사]로 문구를 옮겨 보내주세요.'); };
+  const placeholderLeft = /\((혜택 내용|[^()]{1,12} 내용)\)/.test(text); // 초안의 괄호 자리표시를 그대로 보내면 고객이 템플릿을 받는다 (산출물 감사 2026-11-20)
+  const share = async () => {
+    if (placeholderLeft) { notify('괄호 자리(혜택 내용)를 지점 혜택으로 바꾼 뒤 보내주세요 — [복사]해서 고쳐 쓰면 됩니다.'); return; }
+    if (!(await shareText(text, shareTitle))) notify('공유 창을 열 수 없습니다 — [복사]로 문구를 옮겨 보내주세요.');
+  };
   return (
     <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
       <div className="flex items-center justify-between mb-2">

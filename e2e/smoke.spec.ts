@@ -305,7 +305,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   // ── 7-1. 고객 목록 엑셀 다운로드 (2026-11-17: 공통 저장 경로 회귀) ──
   const xlsxDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: '다운로드', exact: true }).filter({ visible: true }).first().click();
-  expect((await xlsxDownload).suggestedFilename()).toMatch(/^고객목록_\d{4}-\d{2}-\d{2}\.xlsx$/);
+  expect((await xlsxDownload).suggestedFilename()).toMatch(/^.+_고객목록_\d{4}-\d{2}-\d{2}\.xlsx$/); // 매장명 접두(88) — 설정 내보내기와 같은 파일명 규칙
 
   // ── 8. 고객 상세 결제 내역 — 시술 연계로 등록한 50,000원이 보이고, [결제 등록]은 고객 프리필로 매출 화면을 연다 (2026-11-17) ──
   const desk = page.getByTestId('customers-desktop');

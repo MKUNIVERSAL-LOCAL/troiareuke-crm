@@ -8,6 +8,7 @@ import { dirtyPhotoCount, rejectedPhotoCount, retryDirtyPhotos, keepRejectedPhot
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { exportFile } from '../../lib/mobileBridge';
 import { notify } from '../../lib/notify';
+import { todayISO } from '../../lib/format';
 
 // 이 키의 기록(쓰기)은 코어 store.ts가 자체 복제본으로 직접 수행한다 — 여기서는 읽기만.
 const LAST_SYNC_KEY = 'crm_last_sync_at';
@@ -123,8 +124,9 @@ export default function OfflineBanner() {
     const download = async () => {
       try {
         const blob = new Blob([JSON.stringify(rejected, null, 2)], { type: 'application/json' });
-        const r = await exportFile(`서버거부_저장분_${new Date().toISOString().slice(0, 10)}.json`, blob);
+        const r = await exportFile(`서버거부_저장분_${todayISO()}.json`, blob);
         if (r === 'cancelled') notify.info('공유를 취소했습니다 — 파일은 저장되지 않았습니다.');
+        else notify.success(r === 'shared' ? '거부된 저장분 파일을 공유 시트로 전달했습니다.' : '거부된 저장분 파일을 내려받았습니다.');
       } catch (e) {
         notify(e instanceof Error ? e.message : '파일을 저장하지 못했습니다.');
       }
