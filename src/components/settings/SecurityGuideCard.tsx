@@ -3,7 +3,7 @@ import { ShieldCheck, ExternalLink, Copy, CheckCircle } from 'lucide-react';
 import { notify } from '../../lib/notify';
 
 /**
- * 백신·보안 예외 등록 안내 카드 (설정 > 데이터 백업 탭, Electron 전용)
+ * 백신·보안 예외 등록 안내 카드 (설정 > 백업·보안 탭, Electron 전용)
  *
  * 배포 불변 원칙: 미서명 exe가 백신에 오탐·검역되면 재설치가 필요해진다.
  * 프로그램이 보안 설정을 대신 바꾸지는 않는다. 대신
@@ -89,7 +89,7 @@ export default function SecurityGuideCard() {
 
         {targets && (
           <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3">
-            <p className="text-xs font-bold text-gray-700 mb-1.5">예외로 등록할 폴더 {targets?.paths.length ?? 2}개</p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">예외로 등록할 폴더 {targets.paths.length}개</p>
             <ul className="space-y-1 font-mono text-xs text-gray-700 break-all">
               {targets.paths.map(p => <li key={p}>📁 {p}</li>)}
             </ul>

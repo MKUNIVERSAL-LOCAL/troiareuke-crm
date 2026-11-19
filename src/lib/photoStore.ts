@@ -315,6 +315,18 @@ export function clearLocalPhotoCacheForLogout(): void {
 const DIRTY_KEY = 'troiareuke_photos_dirty';
 // 용량 초과로 비워진 캐시 표식 — "삭제됨"과 구분해 dirty 재전송 때 빈 배열을 서버에 올리지 않게 한다
 const EVICTED_KEY = 'crm_photo_evicted';
+// 서버가 거부해 "이 기기에만 보관"하기로 한 엔티티 — 동기화가 서버본으로 덮어쓰거나 다시 올리지 않는다. 그 기록을 다시 저장(setPhotos/clearPhotos)하면 해제 (리뷰 2026-11-19)
+const KEEP_LOCAL_KEY = 'crm_photo_keep_local';
+function getKeepLocalKeys(): string[] {
+  try { const parsed = JSON.parse(localStorage.getItem(KEEP_LOCAL_KEY) || '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+}
+function setKeepLocal(entityKey: string, keep: boolean): void {
+  try {
+    const keys = new Set(getKeepLocalKeys());
+    if (keep) keys.add(entityKey); else keys.delete(entityKey);
+    if (keys.size === 0) localStorage.removeItem(KEEP_LOCAL_KEY); else localStorage.setItem(KEEP_LOCAL_KEY, JSON.stringify([...keys]));
+  } catch { /* noop */ }
+}
 // 서버 전송이 끝나지 않은 엔티티 — 이 캐시를 비우면 실패 시 재전송할 원본이 사라진다
 const PENDING_PUSH = new Set<string>();
 
@@ -366,7 +378,7 @@ export function rejectedPhotoCount(): number { return REJECTED_PUSH.size; }
 /** 서버가 거부한 사진을 이 기기에만 두기로 함 — 전송 대기(dirty)·거부 표식을 지워 배너가 영구히 빨갛지 않게. 기록의 사진을 줄여 다시 저장하면 그때 다시 올라간다 (UX 점검 2026-11-19) */
 export function keepRejectedPhotosLocal(): number {
   const keys = [...REJECTED_PUSH.keys()];
-  for (const key of keys) { setDirty(key, false); REJECTED_PUSH.delete(key); }
+  for (const key of keys) { setKeepLocal(key, true); setDirty(key, false); REJECTED_PUSH.delete(key); }
   if (keys.length > 0) emitSync();
   return keys.length;
 }
@@ -377,6 +389,7 @@ export function lastPhotoSyncFailed(): boolean { return lastSyncFetchFailed; }
 export async function retryDirtyPhotos(includeRejected = false): Promise<void> {
   if (!isAuthApiConfigured) return;
   await photoCacheReady;
+  if (includeRejected) for (const key of getKeepLocalKeys()) { setKeepLocal(key, false); setDirty(key, true); } // 배너 [다시 시도]는 이 기기 보관분도 다시 올려 본다
   for (const key of getDirtyKeys()) {
     if (PENDING_PUSH.has(key)) continue;
     if (REJECTED_PUSH.has(key)) { if (!includeRejected) continue; REJECTED_PUSH.delete(key); }
@@ -419,6 +432,7 @@ function setTombstone(entityKey: string, pending: boolean): void {
 function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
   if (!isAuthApiConfigured) return;
   if (REJECTED_PUSH.has(entityKey)) return; // 이 세션에서 서버가 거부한 키 — 배너의 [다시 시도]로만
+  if (getKeepLocalKeys().includes(entityKey)) return; // 이 기기에만 보관하기로 한 키
   PENDING_PUSH.add(entityKey);
   apiRequest(`/api/photos/${encodeURIComponent(entityKey)}`, {
     method: 'PUT',
@@ -451,6 +465,7 @@ function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
  */
 export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> {
   if (!isAuthApiConfigured) return false;
+  lastSyncFetchFailed = false; // 이른 return들보다 앞에 — 기록 없는 고객을 열어도 지난 실패가 남지 않게 (리뷰 2026-11-19)
   await photoCacheReady; // 이관 전에 빈 로컬을 정본으로 올리지 않도록
 
   // 삭제 tombstone 재전송 — 삭제된 엔티티는 entityKeys에 없으므로 여기서 재시도
@@ -462,7 +477,7 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
   const dirty = new Set(getDirtyKeys());
   const evicted = new Set(getEvictedKeys());
   for (const key of entityKeys) {
-    if (!dirty.has(key)) continue;
+    if (!dirty.has(key)) continue; // 이 기기 보관 키는 keepRejectedPhotosLocal이 dirty를 지웠으므로 여기서도 건너뛴다
     const local = await peekCache(key);
     if (local === null) continue; // 로컬을 읽지 못했으면 빈 배열을 올리지 않는다 (서버본 보호)
     if (local.length === 0 && evicted.has(key)) {
@@ -473,8 +488,8 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
     }
     pushToNas(key, local);
   }
-  const cleanKeys = entityKeys.filter(k => !dirty.has(k));
-  lastSyncFetchFailed = false;
+  const keepLocal = new Set(getKeepLocalKeys());
+  const cleanKeys = entityKeys.filter(k => !dirty.has(k) && !keepLocal.has(k)); // 이 기기에만 보관하는 키는 서버본으로 덮어쓰지 않는다
   if (cleanKeys.length === 0) return false;
 
   let changed = false;
@@ -548,6 +563,7 @@ function evictPhotoCache(keepEntityKey?: string): number {
 
 /** 사진 목록 저장(덮어쓰기) — NAS 설정 시 서버에도 백업 */
 export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
+  setKeepLocal(entityKey, false); // 기록을 다시 저장하면(사진을 줄였을 수 있음) 다시 서버에 올려 본다
   try {
     writeCache(entityKey, photos);
   } catch (e) {
@@ -570,6 +586,7 @@ export function setPhotos(entityKey: string, photos: PhotoEntry[]): void {
 
 /** 엔티티의 모든 사진 삭제 (레코드 삭제 시 정리용) — NAS에서도 삭제 */
 export function clearPhotos(entityKey: string): void {
+  setKeepLocal(entityKey, false);
   try { writeCache(entityKey, []); } catch { /* noop */ }
   if (!isAuthApiConfigured) return;
   // 즉시 push가 실패해도 sync 때 재전송되도록 먼저 tombstone 목록에 등재

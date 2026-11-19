@@ -3,6 +3,7 @@ import { CheckCircle2, Circle, ExternalLink, ChevronDown, ChevronUp, AlertCircle
 import Header from '../../components/layout/Header';
 import clsx from 'clsx';
 import { getPreference, setPreference, migrateLegacyPreference } from '../../lib/shopPreferences';
+import { isAuthApiConfigured } from '../../lib/authApi';
 
 type Status = 'connected' | 'pending' | 'not-started';
 
@@ -359,7 +360,7 @@ export default function ApiGuide() {
           <AlertCircle size={16} className="text-blue-700 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-blue-800">
             <strong>발급받은 값은 설정 &gt; 연동 설정에 입력합니다.</strong> 문자·알림톡 발송사, 결제(PG), 네이버 예약 연동은 본사 계약이 열리면
-            이 화면의 상태를 바꿔 두고 본사에 알려주세요. 체크 상태는 이 지점의 모든 기기에 함께 저장됩니다.
+            이 화면의 상태를 바꿔 두고 본사에 알려주세요.{isAuthApiConfigured ? ' 체크 상태는 이 지점의 모든 기기에 함께 저장됩니다.' : ' 체크 상태는 이 기기에 저장됩니다.'}
           </div>
         </div>
 

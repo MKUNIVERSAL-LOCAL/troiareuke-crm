@@ -49,10 +49,12 @@ export const RESTORE_ALLOWED = !isAuthApiConfigured;
  * Electron '지금 백업'(localStorage 전체 스냅샷)에서 비밀값을 뺀다 — AI 키(ai_key_*)와 설정의 문자 API 키.
  * 백업 파일(buildBackup)과 같은 기준: 백업 폴더는 매장 PC·NAS에 그대로 놓이는 파일이다 (UX 점검 2026-11-19)
  */
+/** 백업 파일에 들어가면 안 되는 키 — 로컬 계정(평문 비밀번호)·세션 토큰·캘린더 토큰·문자 게이트웨이 키·앱 잠금 PIN. 복원 소비자가 없어 빼도 잃는 것이 없다 (리뷰 2026-11-19) */
+const SNAPSHOT_SECRET_KEYS = new Set(['troiareuke_local_users', 'troiareuke_auth_token', 'troiareuke_auth_user', 'google_calendar_token', 'google_calendar_token_expiry', 'crm_sms_gateway_key', 'crm_app_lock']);
 export function sanitizeStorageSnapshot(snapshot: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, raw] of Object.entries(snapshot)) {
-    if (key.startsWith('ai_key_')) continue;
+    if (key.startsWith('ai_key_') || SNAPSHOT_SECRET_KEYS.has(key)) continue;
     if (key.endsWith('_settings')) {
       try {
         const v: unknown = JSON.parse(raw);

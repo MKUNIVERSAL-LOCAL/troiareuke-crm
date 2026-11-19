@@ -94,7 +94,7 @@ export default function Messaging() {
   useEffect(() => {
     // 대시보드 재방문 리마인더 [단체 발송](?segment=revisit)·생일 카드(?segment=birthday) → 그 대상이 걸린 발송 모달 (3차·5차 UX 점검 2026-11-19)
     const seg = searchParams.get('segment');
-    if (seg && (seg === 'revisit' || seg in SEGMENT_FILTERS)) {
+    if (seg && (seg === 'revisit' || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
       setSendCustomerId(null);
       setSendSegment(seg as Segment);
       setShowSendModal(true);

@@ -4,7 +4,7 @@ import { getAppLock, enableAppLock, disableAppLock, verifyPin, isValidPin, LOCK_
 import { notify } from '../../lib/notify';
 
 /**
- * 설정 > 데이터 백업(보안) > 앱 잠금 (2026-11-18)
+ * 설정 > 백업·보안 > 앱 잠금 (2026-11-18)
  * 이 기기에서 화면을 떠났다가 돌아오면 PIN을 묻는다. 기기별 설정(서버 미동기), 기본 OFF.
  */
 export default function AppLockCard() {

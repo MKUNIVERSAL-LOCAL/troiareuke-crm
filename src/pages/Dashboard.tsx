@@ -487,7 +487,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 todayReservations.map(r => (
-                  <div key={r.id} role="button" tabIndex={0} onClick={() => navigate(`/reservations?open=${r.id}`)} onKeyDown={e => { if (e.key === 'Enter') navigate(`/reservations?open=${r.id}`); }} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/50 transition-colors cursor-pointer">
+                  <button type="button" key={r.id} onClick={() => navigate(`/reservations?open=${r.id}`)} className="w-full text-left flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/50 transition-colors cursor-pointer">
                     <div className="text-center w-14 flex-shrink-0">
                       <p className="text-sm font-bold text-[#1a3a8f]">{r.startTime}</p>
                       <p className="text-xs text-gray-400">{r.endTime}</p>
@@ -506,7 +506,7 @@ export default function Dashboard() {
                       <p className="text-sm font-bold text-gray-800">{r.totalPrice.toLocaleString()}원</p>
                       <StatusBadge status={r.status} />
                     </div>
-                  </div>
+                  </button>
                 ))
               )}
             </div>

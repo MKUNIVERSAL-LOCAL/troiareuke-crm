@@ -5,7 +5,7 @@ import { SettingsStore } from '../../lib/store';
 import { notify } from '../../lib/notify';
 
 /**
- * 설정 > 데이터 백업 — 전체 백업 파일 저장·복원 (2026-11-18)
+ * 설정 > 백업·보안 — 전체 백업 파일 저장·복원 (2026-11-18)
  * PC(다운로드)·모바일(공유 시트) 공용. 복원은 로컬 모드 전용, 미리보기 → confirm → 덮어쓰기 → 새로고침(성공 시 자동, 실패(롤백)는 이유를 보여 주고 [새로고침] 버튼 — 스토어 캐시를 남기지 않기 위해).
  */
 export default function BackupRestoreCard() {

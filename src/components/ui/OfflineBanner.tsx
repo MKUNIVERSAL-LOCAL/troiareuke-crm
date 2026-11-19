@@ -158,7 +158,7 @@ export default function OfflineBanner() {
     return (
       <div role="alert" className={`${base} bg-rose-50 border-rose-200 text-rose-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
-        <span>이 기기 저장 공간이 부족해 대기열 없이 바로 보냈는데 전송에 실패했습니다 — 방금 저장한 내용이 서버에 없을 수 있습니다. 설정 &gt; 데이터 백업으로 백업한 뒤 다시 저장해주세요.</span>
+        <span>이 기기 저장 공간이 부족해 대기열 없이 바로 보냈는데 전송에 실패했습니다 — 방금 저장한 내용이 서버에 없을 수 있습니다. 설정 &gt; 백업·보안으로 백업한 뒤 다시 저장해주세요.</span>
         <button type="button" onClick={() => setQuotaFallback('none')} className={`${linkBtn} ml-auto text-rose-500 hover:text-rose-700`}>닫기</button>
       </div>
     );
@@ -196,7 +196,7 @@ export default function OfflineBanner() {
         <span className="ml-auto flex items-center gap-1">
           <button type="button" onClick={() => { void retryDirtyPhotos(true); }} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>
           {/* 같은 413이 반복되면 [다시 시도]만으로는 영원히 빨간 띠 — 이 기기에만 두는 선택을 준다 (UX 점검 2026-11-19) */}
-          <button type="button" onClick={() => { if (window.confirm(`거부된 사진 ${photoRejected}건을 이 기기에만 보관할까요?\n서버에는 올라가지 않아 다른 기기에서는 보이지 않습니다. 나중에 그 기록의 사진을 줄여 다시 저장하면 올라갑니다.`)) { const n = keepRejectedPhotosLocal(); setPhotoRejected(0); notify.info(`사진 ${n}건을 이 기기에만 보관합니다.`); } }} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>이 기기에만 보관</button>
+          <button type="button" onClick={() => { if (window.confirm(`거부된 사진 ${photoRejected}건을 이 기기에만 보관할까요?\n서버에는 올라가지 않아 다른 기기에서는 보이지 않습니다. 나중에 그 기록의 사진을 줄여 다시 저장하면 올라갑니다.`)) { const n = keepRejectedPhotosLocal(); notify.info(`사진 ${n}건을 이 기기에만 보관합니다.`); } }} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>이 기기에만 보관</button>
         </span>
       </div>
     );
@@ -215,7 +215,7 @@ export default function OfflineBanner() {
     return (
       <div role="status" aria-live="polite" className={`${base} bg-amber-50 border-amber-200 text-amber-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
-        <span>이 기기 저장 공간이 부족해 대기열 없이 바로 전송했습니다 — 실패하면 유실될 수 있으니 설정 &gt; 데이터 백업으로 공간을 확보해주세요.</span>
+        <span>이 기기 저장 공간이 부족해 대기열 없이 바로 전송했습니다 — 실패하면 유실될 수 있으니 설정 &gt; 백업·보안으로 공간을 확보해주세요.</span>
         <button type="button" onClick={() => setQuotaFallback('none')} className={`${linkBtn} ml-auto text-amber-700 hover:text-amber-800`}>닫기</button>
       </div>
     );
