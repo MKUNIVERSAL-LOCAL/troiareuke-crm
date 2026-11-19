@@ -114,7 +114,7 @@ ${lowStock.length === 0 ? '없음' : lowStock.map(p => `- ${p.name}: 현재 ${p.
 ${reservations.slice(0, 10).map((r: any) => `- ${r.date} ${r.startTime} | ${r.customerName} | ${Array.isArray(r.services) ? r.services.map((s: any) => s.serviceName).join('+') : '-'} | ${r.staffName} | ${r.status}`).join('\n')}
 
 【시술 기록】
-${treatmentLogs.map((t: any) => `- ${t.date} | ${t.customerName} | ${Array.isArray(t.services) ? t.services.map((s: any) => s.serviceName).join('+') : '-'} | ${t.totalAmount?.toLocaleString() || 0}원 | 담당:${t.staffName}`).join('\n')}
+${treatmentLogs.map((t: any) => `- ${t.treatmentDate} | ${t.customerName} | ${t.programName || t.treatmentDetails || '-'} | ${t.customerProgramId ? `회차 차감 ${t.sessionsUsed ?? 1}회` : '단건'} | 담당:${t.staffName || '-'}`).join('\n')}
 `.trim();
 }
 
@@ -226,7 +226,7 @@ function AiChatInner() {
     {
       id: '0',
       role: 'assistant',
-      content: '안녕하세요! 더마솔루션 AI 어시스턴트입니다.\n\nClaude (Anthropic) AI를 기반으로 CRM 데이터를 분석하여 고객 현황, 매출, 이탈 고객, 재고 등 다양한 질문에 답변해드립니다.\n\nAPI 키를 설정하고 질문해주세요!',
+      content: '안녕하세요! 더마솔루션 AI 어시스턴트입니다.\n\nClaude (Anthropic) AI를 기반으로 CRM 데이터를 분석하여 고객 현황, 매출, 이탈 고객, 재고 등 다양한 질문에 답변해드립니다.\n\n연결 상태는 위 배지에서 확인할 수 있습니다. 궁금한 것을 입력해주세요!',
       timestamp: new Date(),
     },
   ]);
@@ -339,7 +339,9 @@ function AiChatInner() {
       const isCorsBlocked = rawMsg.includes('CLAUDE_CORS_BLOCKED') || rawMsg.includes('Failed to fetch');
       const displayMsg = isCorsBlocked && !IS_ELECTRON
         ? 'Claude는 브라우저에서 CORS 정책으로 사용 불가합니다.\nOpenAI 또는 Gemini API 키를 설정해서 시도해보세요.\n데스크탑 앱에서는 Claude를 정상 사용할 수 있습니다.'
-        : `오류: ${rawMsg}\n\nAPI 키 설정을 확인해주세요.`;
+        : proxyEnabled
+          ? `오류: ${rawMsg}\n\n본사 AI 연결에 문제가 있습니다. 잠시 후 다시 시도하고, 계속되면 본사에 알려주세요.` // 지점은 키가 없다 — "API 키를 확인하라"는 말이 맞지 않음 (UX 점검 2026-11-19)
+          : `오류: ${rawMsg}\n\nAPI 키 설정을 확인해주세요.`;
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -363,6 +365,7 @@ function AiChatInner() {
 
   // 설정된 AI 상태 표시
   const aiStatus = () => {
+    if (proxyEnabled) return { label: claudeKey || openaiKey || geminiKey ? '본사 AI 연결됨 (내 키 우선 아님)' : '본사 AI 연결됨', color: 'green' }; // 본사 중계가 켜져 있으면 지점 키 없이도 동작한다 (UX 점검 2026-11-19)
     if (claudeKey && openaiKey && geminiKey) return { label: 'Claude (기본) + GPT + Gemini', color: 'green' };
     if (claudeKey && openaiKey) return { label: 'Claude (기본) + GPT', color: 'green' };
     if (claudeKey && geminiKey) return { label: 'Claude (기본) + Gemini', color: 'green' };
@@ -379,8 +382,8 @@ function AiChatInner() {
       <Header title="AI 분석 챗봇" subtitle="Claude AI 기반 CRM 데이터 실시간 분석" />
 
       <div className="flex-1 flex flex-col p-6 gap-4 max-w-4xl mx-auto w-full">
-        {/* 웹 환경 안내 배너 */}
-        {!IS_ELECTRON && (
+        {/* 웹 환경 안내 배너 — 본사 AI 중계가 켜져 있으면 지점 키와 CORS가 무관하므로 숨긴다 */}
+        {!IS_ELECTRON && !proxyEnabled && (
           <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
             <AlertTriangle size={18} className="text-amber-700 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -521,6 +524,7 @@ function AiChatInner() {
                       <span className={`text-2xs px-1.5 py-0.5 rounded-full font-medium ${
                         msg.usedProvider === 'claude' ? 'bg-violet-100 text-violet-600' :
                         msg.usedProvider === 'openai' ? 'bg-emerald-100 text-emerald-700' :
+                        msg.usedProvider === 'server' ? 'bg-slate-100 text-slate-700' :
                         'bg-blue-100 text-blue-700'
                       }`}>
                         {msg.usedProvider === 'claude' ? 'Claude' : msg.usedProvider === 'openai' ? 'GPT' : msg.usedProvider === 'server' ? '본사 AI' : 'Gemini'}

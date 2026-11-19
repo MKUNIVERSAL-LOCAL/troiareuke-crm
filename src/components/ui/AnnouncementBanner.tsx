@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { fetchAnnouncements } from '../../lib/adminApi';
 import { X, Megaphone, AlertTriangle, RefreshCw, Gift } from 'lucide-react';
+import { readJson } from '../../lib/safeJson';
+
+const DISMISSED_KEY = 'troiareuke_announcements_dismissed'; // 닫은 공지 id — 새로고침마다 다시 뜨지 않게 기기에 기억 (UX 점검 2026-11-19)
 
 interface Announcement {
   id: string;
@@ -20,7 +23,16 @@ const typeStyles: Record<string, { bg: string; icon: React.ElementType; iconColo
 export default function AnnouncementBanner() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [current, setCurrent] = useState(0);
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(() => new Set(readJson<string[]>(DISMISSED_KEY, [])));
+  const [expanded, setExpanded] = useState(false);
+  const dismiss = (id: string) => {
+    setDismissed(d => {
+      const next = new Set([...d, id]);
+      try { localStorage.setItem(DISMISSED_KEY, JSON.stringify([...next].slice(-50))); } catch { /* 기억만 건너뜀 */ }
+      return next;
+    });
+    setExpanded(false);
+  };
 
   useEffect(() => {
     if (!isAuthApiConfigured) return;
@@ -52,21 +64,32 @@ export default function AnnouncementBanner() {
   return (
     <div className={`w-full ${style.bg} text-white px-4 py-2.5 flex items-center gap-3 shadow-sm`}>
       <Icon size={15} className={`shrink-0 ${style.iconColor}`} />
-      <div className="flex-1 min-w-0">
-        <span className="text-xs font-bold mr-2">{ann.title}</span>
-        <span className="text-xs text-white/80 truncate">{ann.content}</span>
-      </div>
+      {/* 인라인 span의 truncate는 줄임 없이 한 줄로 밀려 폰 폭을 넘쳤다 — block으로 줄이고, 눌러서 전문을 펼친다 */}
+      <button
+        type="button"
+        onClick={() => setExpanded(e => !e)}
+        aria-expanded={expanded}
+        className={`flex-1 min-w-0 text-left text-xs ${expanded ? 'whitespace-pre-wrap break-words' : 'truncate'}`}
+        title={expanded ? '접기' : '전체 보기'}
+      >
+        <span className="font-bold mr-2">{ann.title}</span>
+        <span className="text-white/80">{ann.content}</span>
+      </button>
       {visible.length > 1 && (
         <button
-          onClick={() => setCurrent(c => (c + 1) % visible.length)}
+          type="button"
+          onClick={() => { setCurrent(c => (c + 1) % visible.length); setExpanded(false); }}
+          aria-label={`다음 공지 (${current % visible.length + 1}/${visible.length})`}
           className="text-xs text-white/70 hover:text-white shrink-0 px-2"
         >
           {current % visible.length + 1}/{visible.length}
         </button>
       )}
       <button
-        onClick={() => setDismissed(d => new Set([...d, ann.id]))}
-        className="text-white/70 hover:text-white shrink-0"
+        type="button"
+        onClick={() => dismiss(ann.id)}
+        aria-label="이 공지 닫기"
+        className="text-white/70 hover:text-white shrink-0 p-1"
       >
         <X size={14} />
       </button>

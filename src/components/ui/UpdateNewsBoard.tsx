@@ -15,16 +15,21 @@ export default function UpdateNewsBoard() {
   const [entries, setEntries] = useState<ReleaseEntry[] | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [fromBundle, setFromBundle] = useState(false); // 서버 대신 설치 버전에 내장된 소식을 보이는 중 (UX 점검 2026-11-19)
 
   const load = () => {
     setLoading(true);
     setError(false);
+    setFromBundle(false);
     fetch(`${HISTORY_URL}?t=${Date.now()}`)
       .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then(list => setEntries(Array.isArray(list) && list.length > 0 ? list : bundledHistory))
+      .then(list => {
+        if (Array.isArray(list) && list.length > 0) setEntries(list);
+        else { setEntries(bundledHistory); setFromBundle(true); }
+      })
       .catch(() => {
         // 오프라인/차단 환경 — 앱에 내장된 릴리스 로그로 대체 (설치 버전 기준)
-        if (bundledHistory.length > 0) setEntries(bundledHistory);
+        if (bundledHistory.length > 0) { setEntries(bundledHistory); setFromBundle(true); }
         else setError(true);
       })
       .finally(() => setLoading(false));
@@ -56,6 +61,11 @@ export default function UpdateNewsBoard() {
         <div className="text-center py-10 text-sm text-gray-400">아직 등록된 소식이 없습니다.</div>
       ) : (
         <div className="space-y-3">
+          {fromBundle && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              소식 서버에 연결하지 못해 설치된 버전에 내장된 소식을 보여 줍니다. 인터넷 연결 뒤 [새로고침]하면 최신 소식을 받습니다.
+            </p>
+          )}
           {entries.map(e => (
             <div key={e.version} className="border border-gray-100 rounded-2xl p-4 bg-white">
               <div className="flex items-center gap-2 mb-2">

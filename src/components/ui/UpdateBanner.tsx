@@ -57,6 +57,8 @@ export default function UpdateBanner() {
 
     api.onUpdateError(() => {
       // 릴리스 채널이 실제로 게시되는 지금(v1.0.48+ 무인 업데이트)은 확인 실패를 알려야 구버전 지점이 생기지 않는다 (실패 경로 감사 2026-11-18)
+      // 단, 인터넷이 끊긴 상태의 실패는 오프라인 배너가 이미 설명한다 — 겹쳐 "관리자에게 알려주세요"를 띄우지 않는다 (UX 점검 2026-11-19)
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
       setState('error');
     });
 

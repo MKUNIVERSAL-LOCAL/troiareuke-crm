@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react';
-import { CheckCircle2, Circle, ExternalLink, ChevronDown, ChevronUp, AlertCircle, CreditCard } from 'lucide-react';
+import { CheckCircle2, Circle, ExternalLink, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import clsx from 'clsx';
 import { getPreference, setPreference, migrateLegacyPreference } from '../../lib/shopPreferences';
@@ -70,7 +70,7 @@ const apis: ApiItem[] = [
     name: '엔포+ SMS (NHN Cloud)',
     category: '메시지',
     priority: 'must',
-    status: 'pending',
+    status: 'not-started', // 아무 일도 하지 않았는데 "진행중"으로 시작하지 않는다 (UX 점검 2026-11-19)
     description: 'SMS·LMS 문자 메시지를 발송합니다. 카카오 미사용 고객 대상.',
     purpose: '예약 확인 문자, 이벤트 공지, 장문 안내 (LMS), 사진 포함 (MMS)',
     steps: [
@@ -207,7 +207,7 @@ const apis: ApiItem[] = [
       'Google Cloud Console 프로젝트 생성',
       'Calendar API 활성화',
       'OAuth 2.0 클라이언트 ID 생성',
-      'Google Calendar API 연동 개발',
+      '설정 > 연동 설정 > Google 캘린더에 클라이언트 ID를 넣고 [연결] (프로그램에 이미 구현되어 있음)',
     ],
     docs: 'https://developers.google.com/calendar',
     cost: '무료 (할당량 이내)',
@@ -354,58 +354,12 @@ export default function ApiGuide() {
           })}
         </div>
 
-        {/* Payment SaaS Section */}
-        <div className="mt-8 bg-gradient-to-br from-[#1a3a8f] to-[#0d2260] rounded-2xl p-6 text-white">
-          <div className="flex items-center gap-3 mb-4">
-            <CreditCard size={22} />
-            <h3 className="text-base font-bold">💳 SaaS 구독 결제 — 이용료를 받으려면</h3>
-          </div>
-          <p className="text-blue-200 text-sm mb-5">고객(샵 원장님)에게 월 이용료를 받는 구독 결제 시스템 구축 가이드</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-            {[
-              { plan: 'Starter', price: '29,000원/월', features: '1개 샵, 직원 3명, SMS 100건' },
-              { plan: 'Pro', price: '59,000원/월', features: '2개 샵, 직원 무제한, SMS 300건', highlight: true },
-              { plan: 'Enterprise', price: '협의', features: '무제한 샵, 전담 지원, 커스터마이징' },
-            ].map(p => (
-              <div key={p.plan} className={clsx('rounded-xl p-4', p.highlight ? 'bg-white/20 border-2 border-white/40' : 'bg-white/10')}>
-                <p className="font-bold text-sm">{p.plan}</p>
-                <p className="text-lg font-bold mt-1">{p.price}</p>
-                <p className="text-blue-200 text-xs mt-1">{p.features}</p>
-              </div>
-            ))}
-          </div>
-          <div className="bg-white/10 rounded-xl p-4 space-y-2">
-            <p className="text-sm font-bold mb-2">구축 순서</p>
-            {[
-              '토스페이먼츠 가입 → 정기결제(빌링) 기능 신청',
-              '회원가입 시 카드 등록 플로우 개발 (빌링키 발급)',
-              '매월 자동 결제 스케줄러 개발',
-              '결제 실패 시 재시도·이메일 알림 개발',
-              '관리자 대시보드: 구독 현황·매출 통계 개발',
-            ].map((s, i) => (
-              <div key={i} className="flex items-start gap-2.5 text-sm text-blue-100">
-                <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
-                {s}
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 flex gap-3">
-            <a href="https://docs.tosspayments.com/guides/billing" target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 bg-white text-[#1a3a8f] text-sm font-bold rounded-xl hover:bg-blue-50 transition-colors">
-              <ExternalLink size={13} /> 토스페이먼츠 정기결제 문서
-            </a>
-            <a href="https://developers.portone.io/" target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 bg-white/20 text-white text-sm font-medium rounded-xl hover:bg-white/30 transition-colors">
-              포트원 대안 보기
-            </a>
-          </div>
-        </div>
-
-        {/* Alert */}
-        <div className="mt-4 flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-          <AlertCircle size={16} className="text-amber-700 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-700">
-            <strong>백엔드 서버가 필요합니다.</strong> 위 API들은 실제 서버(Node.js, Python 등)와 데이터베이스(PostgreSQL 등)가 있어야 연동됩니다. 현재는 프론트엔드 프로토타입 단계입니다. 상용화를 위해서는 백엔드 개발이 필요합니다.
+        {/* 연동값 입력 위치와 본사 계약 안내 — 서버(NAS API)는 이미 운영 중이므로 "프로토타입" 경고는 사실이 아니다 (UX 점검 2026-11-19) */}
+        <div className="mt-6 flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+          <AlertCircle size={16} className="text-blue-700 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <strong>발급받은 값은 설정 &gt; 연동 설정에 입력합니다.</strong> 문자·알림톡 발송사, 결제(PG), 네이버 예약 연동은 본사 계약이 열리면
+            이 화면의 상태를 바꿔 두고 본사에 알려주세요. 체크 상태는 이 지점의 모든 기기에 함께 저장됩니다.
           </div>
         </div>
 

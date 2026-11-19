@@ -3,6 +3,7 @@ import { Smartphone, X } from 'lucide-react';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import { openExternal } from '../../lib/mobileBridge';
 import { checkMobileUpdate, type MobileUpdateState } from '../../lib/mobileUpdate';
+import { INSTALL_SITE_URL } from '../../lib/updateChannel'; // 읽기 전용 import — 코어 잠금 파일 수정 없음
 
 const DISMISS_KEY = 'troiareuke_mobile_update_dismissed';
 
@@ -58,15 +59,14 @@ export default function MobileUpdateBanner() {
             ? `현재 ${state.current}은 더 이상 지원되지 않아 일부 기능이 동작하지 않을 수 있습니다.`
             : `현재 ${state.current}. 스토어에서 업데이트하면 최신 기능이 적용됩니다.`}
         </p>
-        {state.url && (
-          <button
-            type="button"
-            onClick={() => void openExternal(state.url)}
-            className="mt-2 inline-flex items-center rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-[#1a3a8f]"
-          >
-            업데이트 받기
-          </button>
-        )}
+        {/* 스토어 주소가 없으면 배포 안내 페이지로 — 필수 업데이트에서 할 일이 없는 막다른 길을 남기지 않는다 (UX 점검 2026-11-19) */}
+        <button
+          type="button"
+          onClick={() => void openExternal(state.url || INSTALL_SITE_URL)}
+          className="mt-2 inline-flex items-center rounded-lg bg-white/95 px-3 py-1.5 text-xs font-semibold text-[#1a3a8f]"
+        >
+          {state.url ? '업데이트 받기' : '업데이트 안내 페이지 열기'}
+        </button>
       </div>
       {!required && (
         <button type="button" onClick={dismiss} aria-label="닫기" className="p-1 rounded hover:bg-white/15">
