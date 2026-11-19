@@ -11,6 +11,7 @@ import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
 import { formatDate, formatWon } from '../lib/format';
+import { countPaymentUnits } from '../lib/paymentCount';
 import RevisitReminderCard from '../components/RevisitReminderCard';
 import RetentionNoticeCard from '../components/RetentionNoticeCard';
 import ProgramAlertCard from '../components/ProgramAlertCard';
@@ -53,7 +54,9 @@ function getDashboardData() {
 
   // This month summary
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-  const thisMonth = PaymentStore.summarize(monthStart, todayStr);
+  const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd'); // 매출 화면과 같은 '이달 전체' — 미리 입력한 결제도 같은 숫자로 (금액 감사 2026-11-20)
+  const thisMonth = PaymentStore.summarize(monthStart, monthEnd);
+  const thisMonthCount = countPaymentUnits(PaymentStore.getByDateRange(monthStart, monthEnd).filter(p => p.status === 'completed')); // 분할 결제 2행 = 1건
 
   // Last month summary
   const lastMonthDate = subMonths(new Date(), 1);
@@ -102,7 +105,7 @@ function getDashboardData() {
     .slice(0, 5);
 
   return {
-    thisMonth, lastMonth, revenueGrowth,
+    thisMonth, thisMonthCount, lastMonth, revenueGrowth,
     weeklyData,
     totalCustomers, newThisMonth, vipCount, totalPercent,
     lowStockProducts,
@@ -152,7 +155,7 @@ export default function Dashboard() {
     todayReservations,
     todayActiveReservations,
     todaySummary,
-    recentPayments,
+    recentPayments, thisMonthCount,
   } = data;
 
   return (
@@ -376,7 +379,7 @@ export default function Dashboard() {
             </div>
             <div>
               <p className="text-xs text-gray-500">결제 건수 (이번 달)</p>
-              <p className="text-xl font-bold text-gray-900">{thisMonth.paymentCount}건</p>
+              <p className="text-xl font-bold text-gray-900">{thisMonthCount}건</p>
             </div>
           </button>
         </div>

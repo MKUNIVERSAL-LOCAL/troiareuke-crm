@@ -9,6 +9,7 @@
 import { IS_MOBILE_APP } from './platform';
 import { todayISO, formatDateTime, localISODate } from './format';
 import { maskPhone } from './masking';
+import { isProgramExpired } from './customerPrograms';
 
 import { saveOrShareFile } from './mobileBridge';
 import type { WorkBook, WorkSheet } from 'xlsx';
@@ -199,16 +200,19 @@ function buildSheet(key: string): ExportSheet | null {
         name: '정액권잔여원장',
         rows: CustomerProgramStore.getAll().map(cp => {
           const total = cp.totalSessions;
-          const remaining = total === null ? '' : Math.max(0, total - cp.usedSessions);
+          // 완료(소진·수동 완료·환불로 종료)·만료된 회차권은 선수금이 남지 않는다 — 잔여를 0으로 (금액 감사 2026-11-20)
+          const closed = cp.isCompleted || isProgramExpired(cp);
+          const refunded = PaymentStore.getAll().some(p => p.type === 'program' && p.referenceId === cp.id && p.status === 'refunded');
+          const remaining = total === null ? '' : (closed ? 0 : Math.max(0, total - cp.usedSessions));
           const remainingValue = total && total > 0
-            ? Math.round((cp.pricePaid / total) * Math.max(0, total - cp.usedSessions))
+            ? (closed ? 0 : Math.round((cp.pricePaid / total) * Math.max(0, total - cp.usedSessions)))
             : '';
           return {
             고객명: cp.customerName, 프로그램명: cp.programName, 카테고리: cp.category,
             구매일: cp.purchaseDate, 결제금액: cp.pricePaid, 결제수단: cp.paymentMethod,
             구분: total === null ? '기간제(무제한)' : '회차권', 총회차: total ?? '', 사용회차: cp.usedSessions, 잔여회차: remaining, // 숫자 열에 '무제한' 글자를 섞지 않는다(SUM 깨짐)
             잔여금액추정: remainingValue, 만료일: cp.expiryDate || '',
-            상태: cp.isCompleted ? '소진완료' : '이용중', 비고: cp.notes || '',
+            상태: refunded ? '환불' : cp.isCompleted ? '완료' : isProgramExpired(cp) ? '만료' : '이용중', 비고: cp.notes || '',
           };
         }),
       };

@@ -8,7 +8,7 @@
 // 직원 이름을 바꾸면 시술 기록은 Staff 화면이 함께 고치지만(TreatmentLogStore.update), 제품 판매는 코어에 수정 API가 없어 옛 이름으로 남는다.
 // ═══════════════════════════════════════════════════════════════
 
-import { StaffStore, ReservationStore, TreatmentLogStore, ProductSaleStore } from './store';
+import { StaffStore, ReservationStore, TreatmentLogStore, ProductSaleStore, PaymentStore } from './store';
 import { thisYearMonthISO, todayISO, formatPrice } from './format';
 
 export interface StaffMonthStat {
@@ -20,6 +20,8 @@ export interface StaffMonthStat {
   completedReservations: number;
   /** 완료 처리된 예약의 예약액 합 */
   reservationAmount: number;
+  /** 완료 예약에 연결된(referenceId) 완료 결제의 합 — 회차권 차감·할인·환불이 반영된 실제 입금 (금액 감사 2026-11-20) */
+  paidAmount: number;
   /** 아직 오지 않은 예약(확정·대기, 오늘 포함) — 남은 일정 */
   upcomingReservations: number;
   /** 날짜는 지났는데 완료 처리가 안 된 예약 — 완료 처리해야 예약액에 반영된다 */
@@ -87,7 +89,7 @@ export function getStaffMonthReport(yearMonth = thisYearMonthISO()): StaffMonthR
     let s = stats.get(id);
     if (!s) {
       const st = byId.get(id)!;
-      s = { staffId: id, name: st.name, color: st.color, isActive: st.isActive, completedReservations: 0, reservationAmount: 0, upcomingReservations: 0, pendingCompletion: 0, treatments: 0, productAmount: 0, customers: 0 };
+      s = { staffId: id, name: st.name, color: st.color, isActive: st.isActive, completedReservations: 0, reservationAmount: 0, paidAmount: 0, upcomingReservations: 0, pendingCompletion: 0, treatments: 0, productAmount: 0, customers: 0 };
       stats.set(id, s);
       served.set(id, new Set());
     }
@@ -95,6 +97,12 @@ export function getStaffMonthReport(yearMonth = thisYearMonthISO()): StaffMonthR
   };
   const unassigned = { deletedStaffReservations: 0, nameMismatch: 0, ambiguous: 0 };
 
+  // 예약 id → 그 예약에 연결된 완료 결제 합 (예약 완료 처리·시술 기록의 결제 등록이 referenceId로 묶인다)
+  const paidByReservation = new Map<string, number>();
+  for (const p of PaymentStore.getAll()) {
+    if (p.status !== 'completed' || !p.referenceId) continue;
+    paidByReservation.set(p.referenceId, (paidByReservation.get(p.referenceId) || 0) + p.amount);
+  }
   for (const r of ReservationStore.getAll()) {
     if (!inMonth(r.date) || r.status === 'cancelled' || r.status === 'noshow') continue;
     if (!byId.has(r.staffId)) { unassigned.deletedStaffReservations++; continue; }
@@ -102,6 +110,7 @@ export function getStaffMonthReport(yearMonth = thisYearMonthISO()): StaffMonthR
     if (r.status === 'completed') {
       s.completedReservations++;
       s.reservationAmount += r.totalPrice || 0;
+      s.paidAmount += paidByReservation.get(r.id) || 0;
       if (r.customerId) served.get(r.staffId)!.add(r.customerId);
     } else if (r.date >= today) {
       s.upcomingReservations++;
@@ -154,9 +163,9 @@ export function buildStaffReportMessage(report: StaffMonthReport): string {
   const [y, m] = report.yearMonth.split('-');
   const lines = [`[${y}년 ${Number(m)}월 직원별 실적]`];
   for (const r of report.rows) {
-    lines.push(`• ${r.name}${r.isActive ? '' : '(퇴사)'}: 완료 예약 ${r.completedReservations}건(${formatPrice(r.reservationAmount)}) · 시술 ${r.treatments}건 · 제품 ${formatPrice(r.productAmount)} · 고객 ${r.customers}명`);
+    lines.push(`• ${r.name}${r.isActive ? '' : '(퇴사)'}: 완료 예약 ${r.completedReservations}건(예약액 ${formatPrice(r.reservationAmount)} · 실결제 ${formatPrice(r.paidAmount)}) · 시술 ${r.treatments}건 · 제품 ${formatPrice(r.productAmount)} · 고객 ${r.customers}명`);
   }
   for (const c of staffReportCaveats(report)) lines.push(`• ${c}`);
-  lines.push('※ 완료 처리된 예약의 예약액·제품 판매액 기준(실입금·할인·회차권 차감 미반영), 취소·노쇼 제외');
+  lines.push('※ 예약액은 완료 처리된 예약의 정가(회차권 차감·할인 미반영), 실결제는 그 예약에 연결된 완료 결제 합(환불 제외) · 취소·노쇼 제외');
   return lines.join('\n');
 }

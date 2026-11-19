@@ -20,7 +20,8 @@ import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
 import type { Payment, PaymentMethod, Expense, ExpenseCategory, CustomerProgram } from '../../types';
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
-import { formatPrice, formatDate, todayISO as today } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, parseISODate } from '../../lib/format';
+import { countPaymentUnits } from '../../lib/paymentCount';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import PaymentLinkModal from '../../components/PaymentLinkModal';
 import { isPaymentLinkAvailable } from '../../lib/paymentLinks';
@@ -173,7 +174,7 @@ export default function Sales() {
     product: monthPayments.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0),
     other: monthPayments.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0),
     total: monthPayments.reduce((s, p) => s + p.amount, 0),
-    count: monthPayments.length,
+    count: countPaymentUnits(monthPayments), // 분할 결제 2행 = 1건 — 마감 요약·대시보드와 같은 정의 (금액 감사 2026-11-20)
   }), [monthPayments]);
 
   const listPayments = useMemo(() => {
@@ -201,7 +202,7 @@ export default function Sales() {
 
   // 지난 달 집계
   const lastSummary = useMemo(() => {
-    const d = new Date(viewMonth + '-01');
+    const d = parseISODate(viewMonth + '-01'); // new Date('YYYY-MM-01')은 UTC 자정 — 서쪽 시간대에서 한 달이 어긋난다 (금액 감사 2026-11-20)
     d.setMonth(d.getMonth() - 1);
     const lastMonth = getYearMonth(d);
     const lastPayments = payments.filter(p => p.paymentDate.startsWith(lastMonth) && p.status === 'completed');
@@ -306,7 +307,7 @@ export default function Sales() {
   // 월 이동 — 손익 탭에서는 선택한 기간 단위(분기/연도)만큼 이동
   function changeMonth(delta: number) {
     const step = tab === 'pnl' ? (pnlMode === 'quarter' ? 3 : pnlMode === 'year' ? 12 : 1) : 1;
-    const d = new Date(viewMonth + '-01');
+    const d = parseISODate(viewMonth + '-01'); // new Date('YYYY-MM-01')은 UTC 자정 — 서쪽 시간대에서 한 달이 어긋난다 (금액 감사 2026-11-20)
     d.setMonth(d.getMonth() + delta * step);
     setViewMonth(getYearMonth(d));
   }

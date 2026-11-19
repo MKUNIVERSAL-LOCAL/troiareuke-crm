@@ -8,6 +8,7 @@
 import { PaymentStore, CustomerStore, TreatmentLogStore, ReservationStore, SettingsStore } from './store';
 import { ExpenseStore } from './expenseStore';
 import { todayISO } from './format';
+import { countPaymentUnits } from './paymentCount';
 
 export interface DailyClose {
   date: string;
@@ -38,7 +39,7 @@ export function getDailyClose(date = todayISO()): DailyClose {
   return {
     date,
     revenue: sum(completed),
-    paymentCount: new Set(completed.map(p => p.referenceId ?? p.id)).size, // 분할(복합) 결제 2행 = 1건
+    paymentCount: countPaymentUnits(completed), // 분할(복합) 결제 2행 = 1건 — 매출·대시보드와 같은 정의
     byMethod: [...methodMap.entries()].map(([method, amount]) => ({ method, amount })).sort((a, b) => b.amount - a.amount),
     byType: {
       treatment: sum(completed.filter(p => p.type === 'program' || p.type === 'single_treatment')),

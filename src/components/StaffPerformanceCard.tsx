@@ -42,6 +42,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
               <th scope="col" className="sticky left-0 bg-white text-left font-medium px-4 sm:px-6 py-2">직원</th>
               <th scope="col" className={th}>완료 건수</th>
               <th scope="col" className={th}>완료 예약액</th>
+              <th scope="col" className={th} title="그 예약에 연결된 완료 결제의 합 — 회차권 차감·할인·환불이 반영된 실제 입금">실결제액</th>
               <th scope="col" className={th}>시술</th>
               <th scope="col" className={th}>제품 판매</th>
               <th scope="col" className={th}>응대 고객</th>
@@ -50,7 +51,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
           </thead>
           <tbody>
             {report.rows.length === 0 && (
-              <tr><td colSpan={7} className="px-6 py-6 text-center text-xs text-gray-400">직원이 없어요 — 직원 관리에서 등록하면 실적이 여기에 모입니다</td></tr>
+              <tr><td colSpan={8} className="px-6 py-6 text-center text-xs text-gray-400">직원이 없어요 — 직원 관리에서 등록하면 실적이 여기에 모입니다</td></tr>
             )}
             {report.rows.map(r => (
               <tr key={r.staffId} className="border-b border-gray-50 last:border-0">
@@ -62,6 +63,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
                 </td>
                 <td className={td} data-testid="perf-completed">{r.completedReservations}건</td>
                 <td className={`${td} font-semibold text-gray-900`} data-testid="perf-amount">{formatPrice(r.reservationAmount)}</td>
+                <td className={td} data-testid="perf-paid">{formatPrice(r.paidAmount)}</td>
                 <td className={td}>{r.treatments}건</td>
                 <td className={td}>{formatPrice(r.productAmount)}</td>
                 <td className={td}>{r.customers}명</td>
