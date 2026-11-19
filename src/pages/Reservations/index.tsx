@@ -27,7 +27,7 @@ import {
 import { registeredPaymentsFor } from '../../lib/pendingCompletion';
 import { readableTextOn } from '../../lib/color';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
-import { todayISO } from '../../lib/format';
+import { todayISO, formatDate } from '../../lib/format';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -1027,7 +1027,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     ];
     if (warnings.length > 0) {
       // 확인창은 하나로 — 모바일에서 네이티브 confirm 두 번은 답답하다
-      const proceed = window.confirm(`${warnings.join('\n')}\n그래도 ${isEdit ? '저장' : '등록'}하시겠습니까?`);
+      const proceed = window.confirm(`${warnings.join('\n')}\n그래도 ${isEdit ? '저장' : '등록'}할까요?`);
       if (!proceed) return;
     }
 
@@ -1246,7 +1246,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     onUpdate();
   };
   const handleNoShow = () => {
-    if (!window.confirm(`${r.customerName} 고객이 ${r.date} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`)) return;
+    if (!window.confirm(`${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`)) return;
     ReservationStore.updateStatus(r.id, 'noshow');
     cleanupGcalEvent(r.id);
     notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
@@ -1312,7 +1312,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <InfoItem label="날짜" value={r.date} />
+          <InfoItem label="날짜" value={formatDate(r.date)} />
           <InfoItem label="시간" value={`${r.startTime} ~ ${r.endTime}`} />
           <InfoItem label="담당자" value={r.staffName} />
           <InfoItem label="금액" value={`${r.totalPrice.toLocaleString()}원`} />

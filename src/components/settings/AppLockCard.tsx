@@ -69,7 +69,7 @@ export default function AppLockCard() {
           기기마다 따로 설정되며 서버에는 저장되지 않습니다. PIN은 아래에서 바꿀 수 있고, 잊으면 잠금 화면에서 로그아웃해 해제할 수 있으며, 로그아웃하면 잠금도 함께 해제되므로 다시 로그인한 뒤 PIN을 다시 켜세요.
         </p>
         {!APP_LOCK_AVAILABLE ? (
-          <p className="text-xs text-gray-400">중앙 서버(NAS) 연동 계정에서만 사용할 수 있습니다. (로컬 모드에는 PIN을 잊었을 때 되돌릴 로그인이 없습니다)</p>
+          <p className="text-xs text-gray-400">중앙 서버 연동 계정에서만 사용할 수 있습니다. (로컬 모드에는 PIN을 잊었을 때 되돌릴 로그인이 없습니다)</p>
         ) : cfg ? (
           <form className="flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); if (newPin) void handleChange(); else void handleDisable(); }}>
             <div>

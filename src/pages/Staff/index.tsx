@@ -503,7 +503,7 @@ function StaffDetailModal({
     const detail = linkedRes + linkedLogs > 0
       ? `\n연결된 예약 ${linkedRes}건·시술 기록 ${linkedLogs}건은 남지만 담당자 연결이 끊겨 직원 실적·필터에서 빠집니다. 퇴사한 직원이라면 [퇴사 처리]를 권장합니다.`
       : '';
-    if (!window.confirm(`"${staff.name}" 직원을 삭제하시겠습니까?${detail}\n복구할 수 없습니다.`)) return;
+    if (!window.confirm(`"${staff.name}" 직원을 삭제할까요?${detail}\n복구할 수 없습니다.`)) return;
     StaffStore.delete(staff.id);
     onDelete();
   };

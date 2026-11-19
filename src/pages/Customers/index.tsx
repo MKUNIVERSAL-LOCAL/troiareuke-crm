@@ -1687,7 +1687,7 @@ export default function Customers() {
                     {(showAllMobileConsults ? consultations : consultations.slice(0, 5)).map(c => (
                       <div key={c.id} className="p-3 bg-slate-50 rounded-lg">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-gray-800">{c.consultDate}{c.staffName ? <span className="font-normal text-gray-400"> · {c.staffName}</span> : null}</p>
+                          <p className="text-xs font-semibold text-gray-800">{formatDate(c.consultDate)}{c.staffName ? <span className="font-normal text-gray-400"> · {c.staffName}</span> : null}</p>
                           <span className="flex items-center gap-1.5">
                             {c.skinTypeResult && <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
                             <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-2.5 -m-2 text-gray-300 active:text-red-600"><X size={16} /></button>
@@ -1824,7 +1824,7 @@ export default function Customers() {
                   onClick={() => setShowProgramModal(true)}
                   className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
                 >
-                  <Plus size={14} />프로그램 등록
+                  <Plus size={14} />회차권 등록
                 </button>
               </div>
               <button
@@ -2074,7 +2074,7 @@ export default function Customers() {
                     onClick={() => setShowProgramModal(true)}
                     className="flex items-center gap-1.5 px-3 py-2 whitespace-nowrap bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors"
                   >
-                    <Plus size={12} />프로그램 등록
+                    <Plus size={12} />회차권 등록
                   </button>
                   {!isAnonymized(selected) && (
                     <>
@@ -2293,9 +2293,9 @@ export default function Customers() {
               {customerPrograms.length === 0 ? (
                 <div className="text-center py-6">
                   <Tag size={28} className="text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400">등록된 프로그램이 없어요</p>
+                  <p className="text-sm text-gray-400">등록된 회차권이 없어요</p>
                   <button onClick={() => setShowProgramModal(true)} className="mt-2 text-xs text-primary-600 hover:underline">
-                    프로그램 등록하기
+                    회차권 등록하기
                   </button>
                 </div>
               ) : (
@@ -2654,10 +2654,10 @@ export default function Customers() {
       {/* ───── 프로그램 등록 모달 ───── */}
       {showProgramModal && selected && createPortal(
         <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-[60] p-4 overflow-y-auto">
-          <div ref={programModalRef} role="dialog" aria-modal="true" aria-label="프로그램 등록" className="modal-card my-auto bg-white rounded-2xl w-full max-w-md">
+          <div ref={programModalRef} role="dialog" aria-modal="true" aria-label="회차권 등록" className="modal-card my-auto bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
-                <h2 className="font-bold text-gray-900">프로그램 등록</h2>
+                <h2 className="font-bold text-gray-900">회차권 등록</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{selected.name} 고객</p>
               </div>
               <button onClick={() => setShowProgramModal(false)} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
@@ -2713,8 +2713,8 @@ export default function Customers() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">결제 방법</label>
-                  <select aria-label="결제 방법" value={progForm.paymentMethod} onChange={e => setProgForm(f => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))}
+                  <label className="block text-xs font-medium text-gray-600 mb-1">결제 수단</label>
+                  <select aria-label="결제 수단" value={progForm.paymentMethod} onChange={e => setProgForm(f => ({ ...f, paymentMethod: e.target.value as PaymentMethod }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     {getAllPaymentMethods().map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
@@ -2735,7 +2735,7 @@ export default function Customers() {
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowProgramModal(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
-                  <CheckCircle size={14} />프로그램 등록
+                  <CheckCircle size={14} />회차권 등록
                 </button>
               </div>
             </form>
@@ -2798,8 +2798,8 @@ export default function Customers() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">담당자</label>
-                <select aria-label="담당자" value={treatForm.staffName} onChange={e => setTreatForm(f => ({ ...f, staffName: e.target.value }))}
+                <label className="block text-xs font-medium text-gray-600 mb-1">담당 직원</label>
+                <select aria-label="담당 직원" value={treatForm.staffName} onChange={e => setTreatForm(f => ({ ...f, staffName: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">선택</option>
                   {StaffStore.getAll().filter(s => s.isActive).map(s => (
@@ -2864,8 +2864,8 @@ export default function Customers() {
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">담당자</label>
-                  <select aria-label="담당자" value={consultForm.staffName} onChange={e => setConsultForm(f => ({ ...f, staffName: e.target.value }))}
+                  <label className="block text-xs font-medium text-gray-600 mb-1">담당 직원</label>
+                  <select aria-label="담당 직원" value={consultForm.staffName} onChange={e => setConsultForm(f => ({ ...f, staffName: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                     <option value="">선택</option>
                     {StaffStore.getAll().filter(s => s.isActive).map(s => (

@@ -386,7 +386,7 @@ export default function Products() {
               <div className="py-16 text-center">
                 <TrendingUp size={32} className="mx-auto mb-3 text-gray-300" />
                 <p className="text-sm text-gray-400 mb-1">판매 기록이 없습니다</p>
-                <p className="text-xs text-gray-500">제품 목록에서 "판매" 버튼을 눌러 기록하세요</p>
+                <p className="text-xs text-gray-500">제품 목록에서 [판매]를 눌러 기록하세요</p>
               </div>
             ) : (
               <>
@@ -847,7 +847,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">담당자</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원</label>
             <select
               value={form.staffName}
               onChange={e => set('staffName', e.target.value)}

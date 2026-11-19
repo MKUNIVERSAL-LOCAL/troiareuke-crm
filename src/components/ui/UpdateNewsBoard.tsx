@@ -58,7 +58,7 @@ export default function UpdateNewsBoard() {
           공지 서버에 연결할 수 없습니다. 인터넷 연결을 확인한 뒤 새로고침해주세요.
         </div>
       ) : !entries || entries.length === 0 ? (
-        <div className="text-center py-10 text-sm text-gray-400">아직 등록된 소식이 없습니다.</div>
+        <div className="text-center py-10 text-sm text-gray-400">아직 등록된 소식이 없어요</div>
       ) : (
         <div className="space-y-3">
           {fromBundle && (

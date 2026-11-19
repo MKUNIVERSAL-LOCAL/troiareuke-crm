@@ -45,7 +45,7 @@ test('전역 검색·예약표 단축키·모달 포커스 트랩·Ctrl+Enter �
   await globalSearch.fill(acc.customer);
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/customers\?q=/);
-  await expect(page.getByTestId('customers-desktop').getByRole('button', { name: '프로그램 등록' }).first()).toBeVisible(); // 1명 일치 → 상세 자동 열림
+  await expect(page.getByTestId('customers-desktop').getByRole('button', { name: '회차권 등록' }).first()).toBeVisible(); // 1명 일치 → 상세 자동 열림
 
   // ── 예약표 단축키: → 다음 주, T 오늘, N 새 예약; 모달이 열려 있으면 무시 ──
   await page.goto('/reservations');

@@ -4,7 +4,7 @@ import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y
 
 /**
  * 모달·상세 패널 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉜) — 라우트 게이트(a11y.spec)는 첫 화면만 보므로
- * 실제 입력이 일어나는 창(고객 추가·프로그램 등록·시술 기록·예약 추가·예약 상세·결제·지출·제품·직원·메시지·설정 탭)을 열어 놓고 분석한다.
+ * 실제 입력이 일어나는 창(고객 추가·회차권 등록·시술 기록·예약 추가·예약 상세·결제·지출·제품·직원·메시지·설정 탭)을 열어 놓고 분석한다.
  * 창을 열지 못하면 그 자체를 위반(critical open-failed)으로 기록해 조용히 건너뛰지 않는다.
  */
 
@@ -40,7 +40,7 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
   await dialog('프로그램 추가').getByRole('button', { name: '프로그램 추가' }).click();
   await expect(dialog('프로그램 추가')).toHaveCount(0);
 
-  // ── 고객: 추가 창, 상세 패널, 프로그램 등록 창, 빠른 시술 기록 창, 프로그램 관리 창 ──
+  // ── 고객: 추가 창, 상세 패널, 회차권 등록 창, 빠른 시술 기록 창, 프로그램 관리 창 ──
   await page.goto('/customers');
   await step('/customers 고객 추가', async () => {
     await page.getByRole('button', { name: '고객 추가' }).click();
@@ -49,16 +49,16 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
   await closeDialog('고객 추가');
   await step('/customers 상세 패널', async () => {
     await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
-    await expect(desk.getByRole('button', { name: '프로그램 등록' }).first()).toBeVisible();
+    await expect(desk.getByRole('button', { name: '회차권 등록' }).first()).toBeVisible();
   });
-  await step('/customers 프로그램 등록', async () => {
-    await desk.getByRole('button', { name: '프로그램 등록' }).first().click();
-    await expect(dialog('프로그램 등록')).toBeVisible();
-    await dialog('프로그램 등록').getByLabel('프로그램 선택').selectOption({ label: '접근성 10회권 — 100,000원' });
-    await dialog('프로그램 등록').getByLabel('구매 날짜').fill('2025-01-01'); // 만료 상태로 — 아래 빠른 기록 창에 [만료일 연장]이 뜬다
+  await step('/customers 회차권 등록', async () => {
+    await desk.getByRole('button', { name: '회차권 등록' }).first().click();
+    await expect(dialog('회차권 등록')).toBeVisible();
+    await dialog('회차권 등록').getByLabel('프로그램 선택').selectOption({ label: '접근성 10회권 — 100,000원' });
+    await dialog('회차권 등록').getByLabel('구매 날짜').fill('2025-01-01'); // 만료 상태로 — 아래 빠른 기록 창에 [만료일 연장]이 뜬다
   });
-  await dialog('프로그램 등록').getByRole('button', { name: '프로그램 등록' }).click();
-  await expect(dialog('프로그램 등록')).toHaveCount(0);
+  await dialog('회차권 등록').getByRole('button', { name: '회차권 등록' }).click();
+  await expect(dialog('회차권 등록')).toHaveCount(0);
   await step('/customers 시술 기록(빠른 기록)', async () => {
     await desk.getByRole('button', { name: '시술 기록', exact: true }).first().click();
     await expect(dialog('시술 기록 추가')).toBeVisible();

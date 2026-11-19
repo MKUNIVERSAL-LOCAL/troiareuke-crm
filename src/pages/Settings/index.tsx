@@ -1,6 +1,6 @@
 import { HIDE_ON_MOBILE, IS_MOBILE_APP } from '../../lib/platform';
 import { sanitizeStorageSnapshot } from '../../lib/fullBackup';
-import { formatPhoneInput, todayISO } from '../../lib/format';
+import { formatPhoneInput, todayISO, formatDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
@@ -521,7 +521,7 @@ export default function Settings() {
     if (!window.confirm(
       `이 컴퓨터에 저장된 기존 계정 데이터(고객 ${candidate.customerCount}명 포함)를\n` +
       `현재 계정으로 가져올까요?\n\n` +
-      `가져온 데이터는 중앙 서버(NAS)에 자동 저장됩니다.\n` +
+      `가져온 데이터는 중앙 서버에 자동 저장됩니다.\n` +
       `현재 계정에 이미 있는 항목은 덮어쓰지 않습니다.`
     )) return;
     const copied = importLegacyShopData(candidate.shopId, current);
@@ -766,7 +766,7 @@ export default function Settings() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-xs text-gray-500">지정 휴일 없음</p>
+                      <p className="text-xs text-gray-500">지정한 휴일이 없어요</p>
                     )}
                     {(settings.holidays || []).some(d => d < todayISO()) && (
                       <button type="button" onClick={() => saveHolidays((settings.holidays || []).filter(d => d >= todayISO()))} className="text-xs text-gray-500 underline hover:text-gray-700">
@@ -975,7 +975,7 @@ export default function Settings() {
                         <Calendar size={20} />
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">Google Calendar</p>
+                        <p className="text-sm font-bold text-gray-900">Google 캘린더</p>
                         {googleConnected ? (
                           <p className="text-xs text-blue-600 mt-0.5">연결됨 - 예약이 캘린더에 표시됩니다</p>
                         ) : (
@@ -1008,7 +1008,7 @@ export default function Settings() {
                     </div>
                     {googleConnected && (
                       <p className="text-xs text-gray-400">
-                        예약 페이지에서 Google Calendar 이벤트가 함께 표시됩니다. 새 예약 생성 시 캘린더에도 자동 추가할 수 있습니다.
+                        예약 화면에서 Google 캘린더 일정이 함께 표시됩니다. 새 예약을 만들 때 캘린더에도 자동 추가할 수 있습니다.
                       </p>
                     )}
                   </div>
@@ -1019,7 +1019,7 @@ export default function Settings() {
                   <div className="space-y-4">
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>문자 발송은 본사 계약 발송사를 통해 이뤄지며 발송사 API 키는 본사 서버에만 보관됩니다. 여기서는 이 지점의 발신번호만 입력합니다(발송사 등록 번호와 같아야 합니다).</span>
+                      <span>문자 발송은 본사 계약 발송사를 통해 이뤄지며 발송사 인증 정보는 본사 서버에만 보관됩니다. 여기서는 이 지점의 발신번호만 입력합니다(발송사 등록 번호와 같아야 합니다).</span>
                     </div>
                     <FormRow label="발신번호">
                       <input
@@ -1142,7 +1142,7 @@ export default function Settings() {
                 </button>
                 <div className="space-y-2">
                   {Object.keys(servicesByCategory).length === 0 && (
-                    <p className="text-sm text-gray-400 py-4 text-center">등록된 시술이 없습니다.</p>
+                    <p className="text-sm text-gray-400 py-4 text-center">등록된 시술이 없어요</p>
                   )}
                   {Object.entries(servicesByCategory).map(([cat, svcs]) => (
                     <div key={cat}>
@@ -1200,7 +1200,7 @@ export default function Settings() {
                           </h3>
                           <p className="text-xs text-gray-500 mt-0.5">
                             {currentSubscription?.plan === 'trial'
-                              ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? new Date(currentSubscription.expiresAt).toLocaleDateString('ko-KR') : '알 수 없음'})`
+                              ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? formatDate(String(currentSubscription.expiresAt).slice(0, 10)) : '알 수 없음'})`
                               : currentSubscription?.amount
                                 ? `${currentSubscription.amount.toLocaleString()}원/월`
                                 : '활성 상태'}
@@ -1217,13 +1217,13 @@ export default function Settings() {
                           <div className="p-3 bg-gray-50 rounded-xl">
                             <p className="text-xs text-gray-400">시작일</p>
                             <p className="font-medium text-gray-700">
-                              {currentSubscription.startedAt ? new Date(currentSubscription.startedAt).toLocaleDateString('ko-KR') : '-'}
+                              {currentSubscription.startedAt ? formatDate(String(currentSubscription.startedAt).slice(0, 10)) : '-'}
                             </p>
                           </div>
                           <div className="p-3 bg-gray-50 rounded-xl">
                             <p className="text-xs text-gray-400">만료일</p>
                             <p className="font-medium text-gray-700">
-                              {currentSubscription.expiresAt ? new Date(currentSubscription.expiresAt).toLocaleDateString('ko-KR') : '-'}
+                              {currentSubscription.expiresAt ? formatDate(String(currentSubscription.expiresAt).slice(0, 10)) : '-'}
                             </p>
                           </div>
                           {currentSubscription.paymentMethod && (
@@ -1340,7 +1340,7 @@ export default function Settings() {
                         <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
                         <span>
                           이 컴퓨터에 이전 계정으로 사용하던 데이터가 남아 있습니다. 아래 버튼을
-                          누르면 현재 계정으로 가져오고, 중앙 서버(NAS)에 자동 저장되어 다른
+                          누르면 현재 계정으로 가져오고, 중앙 서버에 자동 저장되어 다른
                           기기에서도 볼 수 있게 됩니다.
                         </span>
                       </div>
@@ -1472,7 +1472,7 @@ export default function Settings() {
                       </div>
                       <p className="text-xs text-gray-400">
                         백업 파일 위치: 앱 데이터 폴더 / backups / troiareuke-YYYYMMDD-HHmmss.json
-                        <br />사진은 이 JSON에 들어가지 않습니다 — 중앙 서버(NAS) 연동 시 서버에 보관되고, 이 기기에는 대용량 저장소(IndexedDB)에 캐시됩니다.
+                        <br />사진은 이 백업 파일에 들어가지 않습니다 — 중앙 서버 연동 시 서버에 보관되고, 이 기기에는 대용량 저장소(IndexedDB)에 캐시됩니다.
                       </p>
                     </div>
                   ) : (

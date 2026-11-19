@@ -25,7 +25,7 @@ function getMinutesSinceSync(): number | null {
 // /api/data/<collection>[/id] → 사람이 읽는 기록 종류
 const COLLECTION_LABELS: Record<string, string> = {
   customers: '고객', reservations: '예약', treatment_logs: '시술 기록', consultations: '상담 기록', payments: '결제',
-  expenses: '지출', customer_programs: '고객 프로그램', programs: '프로그램', products: '제품', product_sales: '제품 판매',
+  expenses: '지출', customer_programs: '고객 회차권', programs: '프로그램', products: '제품', product_sales: '제품 판매',
   staff: '직원', services: '시술 항목', settings: '설정', message_templates: '메시지 템플릿', message_history: '발송 기록',
 };
 function describeRejected(items: { path: string }[]): string {

@@ -108,7 +108,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   // ── 5. 결제 등록 → 매출 반영 ──
   await page.goto('/sales');
   await page.getByRole('button', { name: '결제 등록' }).first().click();
-  const form = page.locator('form').filter({ hasText: '결제 구분' });
+  const form = page.locator('form').filter({ hasText: '구분 (매출/환불)' });
   await pickCustomer(page, acc.customer, form); // 결제 등록 창의 고객 선택 — 검색형 콤보박스
   await form.getByPlaceholder('0').first().fill('50000');
   await form.getByRole('button', { name: '결제 등록' }).click();
@@ -121,7 +121,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByText('테스트관리', { exact: true }).filter({ visible: true }).first().click(); // 시술 항목 체크
   await page.getByRole('button', { name: '저장', exact: true }).click(); // confirm 은 page.on('dialog')가 수락
   await expect(page).toHaveURL(/\/sales/, { timeout: 10_000 }); // 프리필 파라미터는 캡처 후 URL에서 제거됨
-  const payForm2 = page.locator('form').filter({ hasText: '결제 구분' });
+  const payForm2 = page.locator('form').filter({ hasText: '구분 (매출/환불)' });
   await expect(payForm2.getByPlaceholder('0').first()).toHaveValue('50,000');
   await payForm2.getByRole('button', { name: '결제 등록' }).click();
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
@@ -151,11 +151,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
 
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
-  await page.getByRole('button', { name: '프로그램 등록', exact: true }).first().click();
+  await page.getByRole('button', { name: '회차권 등록', exact: true }).first().click();
   const progSelect = page.locator('select').filter({ hasText: '프로그램을 선택하세요' });
   await progSelect.selectOption(await progSelect.locator('option', { hasText: '회차권10' }).getAttribute('value') as string);
   await page.locator('input[placeholder="0"]').filter({ visible: true }).first().fill('300000'); // 실제 결제 금액
-  await page.getByRole('button', { name: '프로그램 등록', exact: true }).last().click();
+  await page.getByRole('button', { name: '회차권 등록', exact: true }).last().click();
   await expect(page.getByText('잔여 10회').filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
   await page.getByRole('button', { name: '시술 기록', exact: true }).first().click();
@@ -271,7 +271,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(pendingCard.getByTestId('pending-completion-count')).toHaveText('1건');
   await pendingCard.getByRole('button', { name: /완료$/ }).first().click(); // 완료 → 결제 미등록이라 confirm(수락) → 매출 등록 모달로
   await expect(page).toHaveURL(/\/sales/);
-  const pendingPayForm = page.locator('form').filter({ hasText: '결제 구분' });
+  const pendingPayForm = page.locator('form').filter({ hasText: '구분 (매출/환불)' });
   await expect(pendingPayForm.getByPlaceholder('0').first()).toHaveValue('30,000');
   await pendingPayForm.getByRole('button', { name: '결제 등록' }).click();
   const pendingAfter = await page.evaluate(id => {
@@ -313,7 +313,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(desk.getByTestId('customer-payments').getByText(/50,000/).first()).toBeVisible();
   await desk.getByRole('button', { name: '결제 등록' }).click();
   await expect(page).toHaveURL(/\/sales/);
-  const payForm3 = page.locator('form').filter({ hasText: '결제 구분' });
+  const payForm3 = page.locator('form').filter({ hasText: '구분 (매출/환불)' });
   await expect(payForm3).toBeVisible();
   await expect(payForm3.getByRole('combobox', { name: '고객' })).toHaveValue(new RegExp(acc.customer));
 

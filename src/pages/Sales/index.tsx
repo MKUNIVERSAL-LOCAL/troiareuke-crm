@@ -353,7 +353,7 @@ export default function Sales() {
         : '회차권 결제는 여기서 지우면 회차권만 남아 계속 차감됩니다. 고객 상세의 해당 프로그램 [관리] > [등록 취소]로 결제와 회차권을 함께 지워주세요.');
       return;
     }
-    if (!window.confirm(`${p.paymentDate} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
+    if (!window.confirm(`${formatDate(p.paymentDate)} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
     PaymentStore.delete(p.id);
     loadPayments();
   }
@@ -822,7 +822,7 @@ export default function Sales() {
                 <p className="text-gray-400">
                   {expenseCategoryFilter === 'all' ? '이번 달 지출 내역이 없어요' : '해당 분류의 지출이 없어요'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">제품 매입, 임대료, 인건비 등을 기록하면 손익계산서가 자동 작성돼요</p>
+                <p className="text-xs text-gray-500 mt-1">제품 매입, 임대료, 인건비 등을 기록하면 손익계산서가 자동 작성됩니다</p>
                 <button onClick={() => setShowExpenseModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
                   지출 등록하기
                 </button>
@@ -1029,7 +1029,7 @@ export default function Sales() {
             <form onSubmit={handleSave} className="p-5 space-y-4">
               {/* 구분 */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">결제 구분</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">구분 (매출/환불)</label>
                 <div className={`grid gap-2 ${editingPayment?.type === 'program' || editingPayment?.type === 'product' ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {[
                     { v: 'single_treatment', label: '단건 시술', icon: Scissors },
@@ -1219,7 +1219,7 @@ export default function Sales() {
                   ))}
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  제품·소모품 매입은 손익계산서에서 매출원가로, 나머지는 판매비·관리비로 집계돼요
+                  제품·소모품 매입은 손익계산서에서 매출원가로, 나머지는 판매비·관리비로 집계됩니다
                 </p>
               </div>
 

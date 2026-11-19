@@ -24,6 +24,15 @@ export function formatDate(d?: string): string {
  * 전화번호 입력 자동 하이픈 — 숫자만 받아 010-1234-5678 / 02-123-4567 형태로. 국제번호(+)는 손대지 않는다.
  * 고객·직원·가입·샵 전화 입력에 공통 적용 (2026-11-17).
  */
+/** 날짜+시각 — "2026.11.20 15:00". ISO·Date 문자열을 받고, 못 읽으면 원문 (6차 UX 감사 2026-11-20: 화면마다 toLocaleString 꼴이 달랐음) */
+export function formatDateTime(value?: string | null): string {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}.${two(d.getMonth() + 1)}.${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+
 export function formatPhoneInput(value: string): string {
   if (!value || value.trim().startsWith('+')) return value;
   const d = value.replace(/\D/g, '').slice(0, 11);

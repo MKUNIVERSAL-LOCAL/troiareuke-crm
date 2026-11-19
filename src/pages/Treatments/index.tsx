@@ -110,9 +110,9 @@ export default function Treatments() {
         </button>
       ))}
       {staffNames.length > 0 && (
-        <select value={staffFilter} onChange={e => setStaffFilter(e.target.value)} aria-label="담당자 필터"
+        <select value={staffFilter} onChange={e => setStaffFilter(e.target.value)} aria-label="담당 직원 필터"
           className="flex-shrink-0 ml-1 max-w-[9rem] truncate text-xs border border-gray-200 rounded-full px-2 py-1 bg-white text-gray-600">
-          <option value="">담당자 전체</option>
+          <option value="">담당 직원 전체</option>
           {staffNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
       )}
@@ -784,7 +784,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           </button>
           <p className="text-xs text-gray-400 mt-1">
             {isAuthApiConfigured
-              ? '사진은 기기에 저장되고 중앙 서버(NAS)와 동기화되어 다른 기기에서도 볼 수 있습니다.'
+              ? '사진은 기기에 저장되고 중앙 서버와 동기화되어 다른 기기에서도 볼 수 있습니다.'
               : '사진은 이 기기에만 저장됩니다. (다른 기기 동기화는 중앙 서버 연동 후 지원)'}
           </p>
           {showCamera && (

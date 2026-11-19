@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { notify } from '../../lib/notify';
+import { formatDateTime } from '../../lib/format';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -622,7 +623,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', badge.color)}>{badge.label}</span>
-                  <span className="text-xs text-gray-500">{new Date(item.send_at).toLocaleString()}</span>
+                  <span className="text-xs text-gray-500">{formatDateTime(item.send_at)}</span>
                   <span className="text-xs text-gray-400">{item.phones.length}명</span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1 truncate">{item.title ? `[${item.title}] ` : ''}{item.content}</p>
@@ -646,7 +647,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
 // 신규 이력은 ISO 저장, 기존 이력은 toLocaleString 문자열이라 파싱 실패 시 원문 유지
 function formatSentAt(value: string): string {
   const d = new Date(value);
-  return isNaN(d.getTime()) ? value : d.toLocaleString();
+  return isNaN(d.getTime()) ? value : formatDateTime(value);
 }
 
 function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => void }) {
@@ -875,7 +876,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         });
         setSending(false);
         setSendResult('success');
-        setResultMessage(`${new Date(scheduleAt).toLocaleString()} 발송 예약 완료`);
+        setResultMessage(`${formatDateTime(scheduleAt)} 발송 예약 완료`);
         onSent();
         setTimeout(() => { onClose(); }, 1500);
       } catch (e: any) {

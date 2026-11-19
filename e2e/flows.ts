@@ -126,23 +126,23 @@ export async function expectProgramEditValidity(page: Page, name: string, value:
   await expect(d).toHaveCount(0);
 }
 
-/** 고객 상세를 연다 — PC는 오른쪽 패널, 모바일은 전체 화면 오버레이. 둘 다 [프로그램 등록] 버튼이 보이면 열린 것 */
+/** 고객 상세를 연다 — PC는 오른쪽 패널, 모바일은 전체 화면 오버레이. 둘 다 [회차권 등록] 버튼이 보이면 열린 것 */
 export async function openCustomer(page: Page, acc: E2EAccount) {
   await page.goto('/customers');
   await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
-  await expect(visibleButton(page, '프로그램 등록')).toBeVisible();
+  await expect(visibleButton(page, '회차권 등록')).toBeVisible();
 }
 
 /** 고객 상세에서 프로그램을 판매(결제). purchaseDate를 주면 구매 날짜를 바꾼다(만료 시나리오) */
 export async function sellProgramToCustomer(page: Page, acc: E2EAccount, optionLabel: string, opts: { purchaseDate?: string; expectPrice?: RegExp } = {}) {
   await openCustomer(page, acc);
-  await visibleButton(page, '프로그램 등록').click();
-  const d = dialog(page, '프로그램 등록');
+  await visibleButton(page, '회차권 등록').click();
+  const d = dialog(page, '회차권 등록');
   await expect(d).toBeVisible();
   await d.getByLabel('프로그램 선택').selectOption({ label: optionLabel });
   if (opts.expectPrice) await expect(d.getByLabel('실제 결제 금액')).toHaveValue(opts.expectPrice);
   if (opts.purchaseDate) await d.getByLabel('구매 날짜').fill(opts.purchaseDate);
-  await d.getByRole('button', { name: '프로그램 등록' }).click();
+  await d.getByRole('button', { name: '회차권 등록' }).click();
   await expect(d).toHaveCount(0);
 }
 

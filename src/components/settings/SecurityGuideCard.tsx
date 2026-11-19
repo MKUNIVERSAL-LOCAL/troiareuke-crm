@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ShieldCheck, ExternalLink, Copy, CheckCircle } from 'lucide-react';
 import { notify } from '../../lib/notify';
+import { formatDateTime } from '../../lib/format';
 
 /**
  * 백신·보안 예외 등록 안내 카드 (설정 > 백업·보안 탭, Electron 전용)
@@ -144,7 +145,7 @@ export default function SecurityGuideCard() {
           <a href={GUIDE_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-[#1a3a8f] underline underline-offset-2">
             안내 페이지 열기 <ExternalLink size={12} />
           </a>
-          {doneAt && <span className="text-xs text-gray-400">완료 표시 {new Date(doneAt).toLocaleString('ko-KR')}</span>}
+          {doneAt && <span className="text-xs text-gray-400">완료 표시 {formatDateTime(doneAt)}</span>}
         </div>
       </div>
     </div>

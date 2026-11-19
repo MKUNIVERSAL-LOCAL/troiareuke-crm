@@ -114,7 +114,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
 
   async function sendLinkSms(url: string) {
     if (!selectedCustomer?.phone) {
-      notify('고객을 선택하면 문자로 바로 보낼 수 있어요.');
+      notify('고객을 선택하면 문자로 바로 보낼 수 있습니다.');
       return;
     }
     setBusy(true);
@@ -122,7 +122,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
     const result = await sendMessages({ type: 'sms', content, recipients: 1, phones: [selectedCustomer.phone] });
     setBusy(false);
     if (result.pending) setSmsResult(`문자 발송 대기: ${result.reason || '발송사 미설정'}`);
-    else if (result.sent > 0) setSmsResult(`✓ ${selectedCustomer.name}님(${selectedCustomer.phone})에게 문자를 보냈어요`);
+    else if (result.sent > 0) setSmsResult(`✓ ${selectedCustomer.name}님(${selectedCustomer.phone})에게 문자를 보냈습니다`);
     else setSmsResult(`문자 발송 실패: ${result.reason || '알 수 없는 오류'}`);
   }
 
@@ -158,7 +158,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               <p className="text-xs text-amber-700 font-medium">온라인 결제 준비 중입니다</p>
               <p className="text-xs text-amber-700 mt-1 leading-relaxed">
                 본사에서 토스페이먼츠 가맹 계약을 완료하면 자동으로 활성화됩니다.
-                활성화되면 여기서 만든 링크로 고객이 카드·무통장입금 결제를 할 수 있어요.
+                활성화되면 여기서 만든 링크로 고객이 카드·무통장입금 결제를 할 수 있습니다.
               </p>
             </div>
           )}
@@ -237,7 +237,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
           {/* 생성 결과 */}
           {createdUrl && (
             <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-              <p className="text-xs font-bold text-blue-700">✓ 결제 링크가 생성되었어요</p>
+              <p className="text-xs font-bold text-blue-700">✓ 결제 링크를 만들었습니다</p>
               <div className="flex gap-2">
                 <input
                   readOnly
@@ -264,7 +264,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               </div>
               {smsResult && <p className="text-xs text-primary-600">{smsResult}</p>}
               <p className="text-xs text-blue-400">
-                카톡·문자로 링크를 보내면 고객이 휴대폰에서 바로 결제할 수 있어요. 결제 완료 시 매출에 자동 기록됩니다.
+                카톡·문자로 링크를 보내면 고객이 휴대폰에서 바로 결제할 수 있습니다. 결제 완료 시 매출에 자동 기록됩니다.
               </p>
             </div>
           )}
@@ -313,7 +313,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               </div>
             )}
             <p className="text-2xs text-gray-500 mt-2">
-              결제 완료된 건은 매출 관리에 자동 기록돼요 (프로그램 재시작 또는 다음 동기화 때 목록에 반영). 오늘 날짜 기준: {todayISO()}
+              결제 완료된 건은 매출 관리에 자동 기록됩니다 (프로그램 재시작 또는 다음 동기화 때 목록에 반영). 오늘 날짜 기준: {todayISO()}
             </p>
           </div>
         </div>

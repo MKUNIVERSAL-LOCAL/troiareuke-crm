@@ -86,7 +86,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
 
   await page.goto('/sales');
   await page.getByRole('button', { name: '결제 등록' }).filter({ visible: true }).first().click();
-  const payForm = page.locator('form').filter({ hasText: '결제 구분' });
+  const payForm = page.locator('form').filter({ hasText: '구분 (매출/환불)' });
   await pickCustomer(page, acc.customer, payForm); // 결제 등록 창 고객 선택 — 검색형 콤보박스
   await payForm.getByPlaceholder('0').first().fill('120000');
   await payForm.getByRole('button', { name: '결제 등록' }).click();

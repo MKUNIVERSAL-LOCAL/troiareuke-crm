@@ -106,7 +106,7 @@ ${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${alias(p.customerId)} | 
 【직원 현황】
 ${staff.map((s: any) => `- ${s.name} (${s.role}) | 전문: ${Array.isArray(s.specialty) ? s.specialty.join(', ') : s.specialty || '-'}`).join('\n')}
 
-【시술 메뉴】
+【시술 항목】
 ${services.map((s: any) => `- ${s.name} | ${s.category} | ${s.duration}분 | ${s.price.toLocaleString()}원`).join('\n')}
 
 【제품/재고 현황】

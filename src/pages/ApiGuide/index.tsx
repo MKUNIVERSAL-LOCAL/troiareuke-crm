@@ -202,7 +202,7 @@ const apis: ApiItem[] = [
     category: '연동',
     priority: 'optional',
     status: 'not-started',
-    description: '예약을 구글 캘린더와 양방향 동기화합니다.',
+    description: '예약을 Google 캘린더와 양방향 동기화합니다.',
     purpose: '직원 개인 캘린더에서 예약 확인, 모바일 알림 수신',
     steps: [
       'Google Cloud Console 프로젝트 생성',
