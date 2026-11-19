@@ -5,12 +5,10 @@ import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './h
  * 회차권·제품 흐름 E2E (로컬 모드) — 에스테틱 CRM의 핵심 비즈니스 로직을 숫자로 고정 (2026-11-19).
  * 회차권: 프로그램(10회 300,000) 등록 → 고객에게 판매(결제) → 시술 기록에서 회차 차감 → 잔여 9회, 매출 300,000(시술 기록은 결제 없음).
  * 제품: 제품(48,000·재고 12) 등록 → 판매 1개 → 재고 11, 제품 매출 48,000. 합계 총 매출 348,000.
+ * 입력은 라벨(aria-label)로, 금액은 정확 일치(toHaveText)로 — 리뷰 반영.
  */
 
 const acc = makeAccount('PP');
-
-const card = (page: import('@playwright/test').Page, label: string) =>
-  page.getByText(label, { exact: true }).first().locator('xpath=ancestor::div[contains(@class,"rounded-2xl")][1]');
 
 test('회차권 판매 → 시술 차감 → 잔여 회차, 제품 판매 → 재고·매출이 맞다', async ({ page }) => {
   test.slow();
@@ -24,13 +22,13 @@ test('회차권 판매 → 시술 차감 → 잔여 회차, 제품 판매 → �
   await page.getByRole('button', { name: '프로그램 추가' }).first().click();
   const progDialog = page.getByRole('dialog', { name: '프로그램 추가' });
   await progDialog.getByLabel('프로그램명').fill('수분관리 10회권');
-  await progDialog.locator('input[type="number"]').first().fill('10'); // 총 회차(회차권이 기본)
+  await progDialog.getByLabel('총 회차').fill('10');
   await progDialog.getByLabel('판매가').fill('300000');
   await progDialog.getByRole('button', { name: '프로그램 추가' }).click();
   await expect(progDialog).toHaveCount(0);
   await expect(page.getByText('수분관리 10회권').first()).toBeVisible();
 
-  // ── 고객에게 회차권 판매(결제 300,000) → 상세에 0/10회 ──
+  // ── 고객에게 회차권 판매(결제 300,000) → 상세에 사용 0회 / 총 10회 ──
   await page.goto('/customers');
   await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
   await desk.getByRole('button', { name: '프로그램 등록' }).first().click();
@@ -42,13 +40,15 @@ test('회차권 판매 → 시술 차감 → 잔여 회차, 제품 판매 → �
   await expect(desk.getByText('사용 0회 / 총 10회')).toBeVisible();
   await expect(desk.getByText('잔여 10회')).toBeVisible();
 
-  // ── 시술 기록에 회차권 연결 → 1/10회 · 잔여 9회, 결제 창은 뜨지 않는다 ──
+  // ── 시술 기록에 회차권 연결 → 저장 뒤 시술 목록에 남고(결제 화면으로 가지 않음) 사용 1회 / 잔여 9회 ──
   await page.goto('/treatments?new=1');
   await pickCustomer(page, acc.customer);
-  await page.locator('select').filter({ hasText: '프로그램 미연결' }).selectOption({ label: '수분관리 10회권 (0/10회)' });
+  await page.getByLabel('프로그램 연결').selectOption({ label: '수분관리 10회권 (0/10회)' });
   await page.getByText('테스트관리', { exact: true }).filter({ visible: true }).first().click();
   await page.getByRole('button', { name: '저장', exact: true }).click();
-  await expect(page).not.toHaveURL(/\/sales/); // 회차 차감이라 결제 등록으로 넘어가지 않는다
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('수분관리 10회권').filter({ visible: true }).first()).toBeVisible(); // 시술 목록의 프로그램 배지
+  await expect(page).toHaveURL(/\/treatments/);
   await page.goto('/customers');
   await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
   await expect(desk.getByText('사용 1회 / 총 10회')).toBeVisible();
@@ -58,22 +58,23 @@ test('회차권 판매 → 시술 차감 → 잔여 회차, 제품 판매 → �
   await page.goto('/products');
   await page.getByRole('button', { name: '제품 추가' }).first().click();
   await page.getByPlaceholder('제품명 입력').fill('수분 세럼');
-  await page.getByPlaceholder('0').nth(0).fill('48000'); // 판매가
-  await page.getByPlaceholder('0').nth(2).fill('12');    // 재고
+  await page.getByLabel('판매가').fill('48000');
+  await page.getByLabel('재고', { exact: true }).fill('12');
   await page.getByRole('button', { name: '저장', exact: true }).click();
   const row = page.locator('tr').filter({ hasText: '수분 세럼' }).first();
   await expect(row).toBeVisible({ timeout: 10_000 });
   await expect(row).toContainText('12개');
   await row.getByRole('button', { name: '판매', exact: true }).click();
   const saleDialog = page.getByRole('dialog', { name: '제품 판매 기록' });
-  await expect(saleDialog.locator('input[type="number"]').first()).toHaveValue('1'); // 수량 기본 1
+  await expect(saleDialog.getByLabel('수량')).toHaveValue('1');
   await saleDialog.getByRole('button', { name: '판매 기록' }).click();
   await expect(saleDialog).toHaveCount(0);
   await expect(row).toContainText('11개');
 
   // ── 매출: 회차권 300,000(시술) + 제품 48,000 = 348,000 ──
   await page.goto('/sales');
-  await expect(card(page, '총 매출')).toContainText('348,000원');
-  await expect(card(page, '제품 매출')).toContainText('48,000원');
+  await expect(page.getByTestId('sales-total-amount')).toHaveText('348,000원');
+  await expect(page.getByTestId('sales-treatment-amount')).toHaveText('300,000원');
+  await expect(page.getByTestId('sales-product-amount')).toHaveText('48,000원');
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible();
 });

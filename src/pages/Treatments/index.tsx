@@ -559,6 +559,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">프로그램 연결 (회차 차감)</label>
             <select
+              aria-label="프로그램 연결"
               value={customerProgramId}
               onChange={e => setCustomerProgramId(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"

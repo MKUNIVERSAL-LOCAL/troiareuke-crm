@@ -21,12 +21,12 @@ const accents = {
 
 export default function StatCard({ title, value, subtitle, icon, trend, accent = 'primary' }: StatCardProps) {
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:border-gray-200 transition-colors">
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:border-gray-200 transition-colors" data-testid="stat-card">
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-xs font-medium text-gray-500 mb-1">{title}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+          <p className="text-2xl font-bold text-gray-900" data-testid="stat-value">{value}</p>
+          {subtitle && <p className="text-xs text-gray-400 mt-0.5" data-testid="stat-subtitle">{subtitle}</p>}
           {trend && (
             <div className={clsx(
               'flex items-center gap-1 mt-2 text-xs font-medium',

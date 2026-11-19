@@ -588,6 +588,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             <label className="block text-xs font-medium text-gray-600 mb-1.5">판매가 (원) *</label>
             <input
               type="number"
+              aria-label="판매가"
               placeholder="0"
               value={form.price}
               onChange={e => set('price', e.target.value)}
@@ -598,6 +599,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             <label className="block text-xs font-medium text-gray-600 mb-1.5">원가 (원)</label>
             <input
               type="number"
+              aria-label="원가"
               placeholder="0"
               value={form.cost}
               onChange={e => set('cost', e.target.value)}
@@ -617,6 +619,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             <label className="block text-xs font-medium text-gray-600 mb-1.5">재고 *</label>
             <input
               type="number"
+              aria-label="재고"
               placeholder="0"
               value={form.stock}
               onChange={e => set('stock', e.target.value)}
@@ -627,6 +630,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             <label className="block text-xs font-medium text-gray-600 mb-1.5">최소 재고</label>
             <input
               type="number"
+              aria-label="최소 재고"
               placeholder="5"
               value={form.minStock}
               onChange={e => set('minStock', e.target.value)}
@@ -783,6 +787,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
               >-</button>
               <input
                 type="number"
+                aria-label="수량"
                 min="1"
                 value={form.quantity}
                 onChange={e => set('quantity', e.target.value)}
@@ -798,6 +803,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             <label className="block text-xs font-medium text-gray-600 mb-1.5">단가 (원)</label>
             <input
               type="number"
+              aria-label="단가"
               value={form.unitPrice}
               onChange={e => set('unitPrice', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"

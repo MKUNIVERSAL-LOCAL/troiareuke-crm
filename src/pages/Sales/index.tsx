@@ -520,7 +520,7 @@ export default function Sales() {
                   </span>
                 )}
               </div>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.total)}</p>
+              <p className="text-2xl font-bold text-gray-900" data-testid="sales-total-amount">{formatPrice(thisSummary.total)}</p>
               <p className="text-xs text-gray-500 mt-1">
                 지난달 {formatPrice(lastSummary.total)}
                 {thisSummary.other > 0 && <span className="ml-1.5 text-gray-400">· 기타 {formatPrice(thisSummary.other)} 포함</span>}
@@ -528,14 +528,14 @@ export default function Sales() {
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">시술 매출</p>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.treatment)}</p>
+              <p className="text-2xl font-bold text-gray-900" data-testid="sales-treatment-amount">{formatPrice(thisSummary.treatment)}</p>
               <p className="text-xs text-gray-500 mt-1">
                 {thisSummary.total > 0 ? Math.round((thisSummary.treatment / thisSummary.total) * 100) : 0}% 비중
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">제품 매출</p>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.product)}</p>
+              <p className="text-2xl font-bold text-gray-900" data-testid="sales-product-amount">{formatPrice(thisSummary.product)}</p>
               <p className="text-xs text-gray-500 mt-1">
                 {thisSummary.total > 0 ? Math.round((thisSummary.product / thisSummary.total) * 100) : 0}% 비중
               </p>
@@ -913,7 +913,7 @@ export default function Sales() {
                 )}
                 {/* 매출원가 */}
                 <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100 mt-1">
-                  <span>매출원가 (매입)</span><span className="text-orange-700">−{formatPrice(pnl.cur.cogs)}</span>
+                  <span>매출원가 (매입)</span><span className="text-orange-700" data-testid="pnl-cogs">−{formatPrice(pnl.cur.cogs)}</span>
                 </div>
                 {COGS_CATEGORIES.map(c => (pnl.cur.byCategory[c] || 0) > 0 && (
                   <div key={c} className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
@@ -935,7 +935,7 @@ export default function Sales() {
                 ))}
                 {/* 영업이익 */}
                 <div className={`flex justify-between py-3 font-bold text-base -mx-2 px-2 rounded-lg mt-1 ${pnl.cur.operatingProfit >= 0 ? 'bg-blue-50 text-[#1a3a8f]' : 'bg-red-50 text-red-600'}`}>
-                  <span>영업이익</span><span>{formatPrice(pnl.cur.operatingProfit)}</span>
+                  <span>영업이익</span><span data-testid="pnl-operating">{formatPrice(pnl.cur.operatingProfit)}</span>
                 </div>
                 <div className="flex justify-between pt-2 text-xs text-gray-400">
                   <span>영업이익률</span>

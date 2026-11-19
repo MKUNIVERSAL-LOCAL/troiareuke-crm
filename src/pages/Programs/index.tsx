@@ -396,6 +396,7 @@ export default function Programs() {
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
+                      aria-label="총 회차"
                       value={form.totalSessions}
                       onChange={e => setForm(f => ({ ...f, totalSessions: e.target.value }))}
                       min="1"
@@ -413,6 +414,7 @@ export default function Programs() {
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
+                    aria-label="유효기간 (일)"
                     value={form.validityDays}
                     onChange={e => setForm(f => ({ ...f, validityDays: e.target.value }))}
                     placeholder="180"

@@ -669,6 +669,9 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                         return (
                           <button
                             key={r.id}
+                            type="button"
+                            data-testid="reservation-block"
+                            data-start={r.startTime}
                             onClick={() => onSelect(r)}
                             className="absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
                             style={{ backgroundColor: staff?.color || '#8B5CF6', ...eventBlockStyle(ev, slotStartMin, ROW_H) }}

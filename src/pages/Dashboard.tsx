@@ -86,6 +86,10 @@ function getDashboardData() {
   // Today's reservations (목록엔 전부 표시, 건수 집계는 취소/노쇼 제외)
   const todayReservations = ReservationStore.getByDate(todayStr);
   const todayActiveReservations = todayReservations.filter(r => r.status !== 'cancelled' && r.status !== 'noshow');
+  // 부제: 완료 · 남은(활성 중 미완료) · 노쇼 — 새 예약은 '예약확정'이라 '대기'만 세던 부제는 늘 0건이었다 (리뷰 2026-11-19)
+  const todayDone = todayReservations.filter(r => r.status === 'completed').length;
+  const todayNoShow = todayReservations.filter(r => r.status === 'noshow').length;
+  const todaySummary = `완료 ${todayDone}건 · 남은 ${todayActiveReservations.length - todayDone}건 · 노쇼 ${todayNoShow}건`;
 
   // Recent payments (last 5)
   const recentPayments = PaymentStore.getByDateRange(
@@ -103,6 +107,7 @@ function getDashboardData() {
     lowStockProducts,
     todayReservations,
     todayActiveReservations,
+    todaySummary,
     recentPayments,
   };
 }
@@ -145,6 +150,7 @@ export default function Dashboard() {
     lowStockProducts,
     todayReservations,
     todayActiveReservations,
+    todaySummary,
     recentPayments,
   } = data;
 
@@ -178,7 +184,7 @@ export default function Dashboard() {
             <button type="button" onClick={() => navigate('/reservations')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">오늘 예약</p>
               <p className="text-lg font-bold text-gray-900 mt-1">{todayActiveReservations.length}건</p>
-              <p className="text-xs text-gray-400 mt-0.5">완료 {todayReservations.filter(r => r.status === 'completed').length}건 · 대기 {todayReservations.filter(r => r.status === 'pending').length}건</p>
+              <p className="text-xs text-gray-400 mt-0.5">{todaySummary}</p>
             </button>
           )}
           {customersOn && (
@@ -306,7 +312,7 @@ export default function Dashboard() {
             <StatCard
               title="오늘 예약"
               value={`${todayActiveReservations.length}건`}
-              subtitle={`완료 ${todayReservations.filter(r => r.status === 'completed').length}건 · 대기 ${todayReservations.filter(r => r.status === 'pending').length}건`}
+              subtitle={todaySummary}
               icon={<Calendar size={20} />}
               accent="pink"
             />
