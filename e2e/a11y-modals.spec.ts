@@ -1,6 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
-import { scan, assertNoBlocking, type Row } from './a11y-shared';
+import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
 
 /**
  * 모달·상세 패널 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉜) — 라우트 게이트(a11y.spec)는 첫 화면만 보므로
@@ -14,15 +14,7 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
   test.slow();
   page.on('dialog', d => d.accept());
   const rows: Row[] = [];
-  const step = async (label: string, open: (p: Page) => Promise<void>) => {
-    try {
-      await open(page);
-    } catch (e) {
-      rows.push({ route: label, id: 'open-failed', impact: 'critical', help: `창을 열지 못함: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`, nodes: [] });
-      return;
-    }
-    await scan(page, label, rows); // axe 자체가 실패하면 그대로 던져 '창을 열지 못함'과 섞이지 않게
-  };
+  const step = makeStep(page, rows);
   const dialog = (name: string) => page.getByRole('dialog', { name });
   // 입력 폼 창은 Esc를 일부러 받지 않는다(입력 유실 방지, overlayStack escape:false) — [닫기] 버튼이 있으면 그걸로, 없으면 Esc
   const closeDialog = async (name: string) => {
@@ -167,18 +159,10 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
 
   // ── 설정: 탭 전부 + 시술 추가 창 ──
   await page.goto('/settings');
-  // 탭마다 그 탭에만 있는 요소가 보일 때 스캔 — 늦게 그려지는 탭을 반쯤 올라온 상태로 스캔하지 않게
-  const TAB_READY: Record<string, () => import('@playwright/test').Locator> = {
-    '영업시간': () => page.getByTestId('holidays-editor'),
-    '연동 설정': () => page.getByRole('switch', { name: '상담 화면에 비컨 점수·AI 피부 분석 표시' }),
-    '알림 설정': () => page.getByTestId('retention-policy-card'),
-    '시술 관리': () => page.getByRole('button', { name: '시술 추가' }).first(),
-    '데이터 백업': () => page.getByTestId('backup-restore-card'),
-  };
-  for (const tab of Object.keys(TAB_READY)) {
+  for (const tab of Object.keys(SETTINGS_TAB_READY)) {
     await step(`/settings ${tab}`, async () => {
       await page.getByRole('button', { name: tab, exact: true }).filter({ visible: true }).first().click();
-      await expect(TAB_READY[tab]()).toBeVisible();
+      await expect(SETTINGS_TAB_READY[tab](page)).toBeVisible();
     });
   }
   await step('/settings 시술 추가', async () => {

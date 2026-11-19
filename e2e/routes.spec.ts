@@ -35,6 +35,10 @@ test('지점 화면 전부가 예외·콘솔 오류·빈 화면 없이 열린다
     consoleErrors.push(`${page.url()} :: ${text}`);
   });
 
+  // lazy 청크가 늦게 오면 networkidle 직후 루트가 잠깐 비어 있을 수 있다 — 1회 읽기 대신 재시도(expect 기본 타임아웃) (6워커 부하에서 어드민 로그인 기록 화면 오탐, 2026-11-19)
+  const expectRendered = (route: string) =>
+    expect.poll(async () => (await page.locator('#root').innerText()).trim().length, { message: `${route}: 화면이 비어 있음` }).toBeGreaterThan(0);
+
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
 
@@ -42,8 +46,7 @@ test('지점 화면 전부가 예외·콘솔 오류·빈 화면 없이 열린다
     await page.goto(route);
     await page.waitForLoadState('networkidle');
     // 화면이 실제로 렌더됐는지 — 루트에 보이는 텍스트가 있어야 한다
-    // lazy 청크가 늦게 오면 networkidle 직후 루트가 잠깐 비어 있을 수 있다 — 1회 읽기 대신 최대 10초 재시도 (6워커 부하에서 어드민 로그인 기록 화면 오탐, 2026-11-19)
-    await expect.poll(async () => (await page.locator('#root').innerText()).trim().length, { message: `${route}: 화면이 비어 있음`, timeout: 10_000 }).toBeGreaterThan(0);
+    await expectRendered(route);
   }
 
   // 어드민 콘솔도 같은 기준으로
@@ -51,8 +54,7 @@ test('지점 화면 전부가 예외·콘솔 오류·빈 화면 없이 열린다
   for (const route of ADMIN_ROUTES) {
     await page.goto(route);
     await page.waitForLoadState('networkidle');
-    // lazy 청크가 늦게 오면 networkidle 직후 루트가 잠깐 비어 있을 수 있다 — 1회 읽기 대신 최대 10초 재시도 (6워커 부하에서 어드민 로그인 기록 화면 오탐, 2026-11-19)
-    await expect.poll(async () => (await page.locator('#root').innerText()).trim().length, { message: `${route}: 화면이 비어 있음`, timeout: 10_000 }).toBeGreaterThan(0);
+    await expectRendered(route);
     expect(page.url(), `${route}: 어드민 화면으로 진입하지 못함`).toContain('/admin/');
   }
 

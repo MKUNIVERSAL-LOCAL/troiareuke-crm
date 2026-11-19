@@ -1,6 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
-import { scan, assertNoBlocking, type Row } from './a11y-shared';
+import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
 
 /**
  * 모바일 폭 모달·상세 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉞) — PC 모달 게이트(a11y-modals.spec)와 같은 창을
@@ -14,18 +14,16 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
   test.slow();
   page.on('dialog', d => d.accept());
   const rows: Row[] = [];
-  const step = async (label: string, open: (p: Page) => Promise<void>) => {
-    try {
-      await open(page);
-    } catch (e) {
-      rows.push({ route: label, id: 'open-failed', impact: 'critical', help: `창을 열지 못함: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`, nodes: [] });
-      return;
-    }
-    await scan(page, label, rows);
-  };
+  const step = makeStep(page, rows);
   const dialog = (name: string) => page.getByRole('dialog', { name });
   const vis = (name: string) => page.getByRole('button', { name, exact: true }).filter({ visible: true }).first();
-  const cancel = async () => { await vis('취소').click(); };
+  // 맨 위 창의 [취소]만 — 아래 오버레이의 같은 이름 버튼을 잡지 않게, 닫힌 것까지 확인
+  const cancel = async () => {
+    const top = page.getByRole('dialog').last();
+    const before = await page.getByRole('dialog').count();
+    await top.getByRole('button', { name: '취소', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(before - 1);
+  };
 
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
@@ -37,7 +35,6 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     await expect(dialog('고객 추가')).toBeVisible();
   });
   await cancel();
-  await expect(dialog('고객 추가')).toHaveCount(0);
   await step('m/customers 상세 오버레이', async () => {
     await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
     await expect(page.getByText('기본 정보').filter({ visible: true }).first()).toBeVisible();
@@ -69,7 +66,7 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
   await dialog('예약 추가').getByRole('button', { name: '예약 저장' }).click();
   await expect(dialog('예약 추가')).toHaveCount(0);
   await step('m/reservations 예약 상세', async () => {
-    await page.getByText(acc.customer).filter({ visible: true }).first().click();
+    await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
     await expect(dialog('예약 상세')).toBeVisible();
   });
   await step('m/reservations 완료 → 결제 창', async () => {
@@ -136,17 +133,10 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
 
   // ── 설정 탭 ──
   await page.goto('/settings');
-  const TAB_READY: Record<string, () => import('@playwright/test').Locator> = {
-    '영업시간': () => page.getByTestId('holidays-editor'),
-    '연동 설정': () => page.getByRole('switch', { name: '상담 화면에 비컨 점수·AI 피부 분석 표시' }),
-    '알림 설정': () => page.getByTestId('retention-policy-card'),
-    '시술 관리': () => page.getByRole('button', { name: '시술 추가' }).first(),
-    '데이터 백업': () => page.getByTestId('backup-restore-card'),
-  };
-  for (const tab of Object.keys(TAB_READY)) {
+  for (const tab of Object.keys(SETTINGS_TAB_READY)) {
     await step(`m/settings ${tab}`, async () => {
       await vis(tab).click();
-      await expect(TAB_READY[tab]()).toBeVisible();
+      await expect(SETTINGS_TAB_READY[tab](page)).toBeVisible();
     });
   }
 

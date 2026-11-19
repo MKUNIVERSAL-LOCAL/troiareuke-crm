@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { writeFileSync } from 'node:fs';
 import { makeAccount, signupAndOnboard, createCustomer, BRANCH_ROUTES } from './helpers';
@@ -70,3 +70,28 @@ export function assertNoBlocking(rows: Row[]) {
   const summary = blocking.map(r => `${r.route} [${r.impact}] ${r.id}: ${r.help}\n    ${r.nodes.map(n => `${n.target} — ${n.detail}`).join('\n    ')}`).join('\n');
   expect(blocking, `serious/critical 위반 ${blocking.length}건:\n${summary}`).toEqual([]);
 }
+
+/**
+ * 창을 여는 단계 — 못 열면 critical open-failed 행으로 남기고(조용히 건너뛰지 않음) 열렸으면 axe 분석.
+ * axe 자체 실패는 그대로 던져 "창을 열지 못함"과 섞이지 않는다. PC·모바일 모달 게이트가 같은 함수를 쓴다.
+ */
+export function makeStep(page: Page, rows: Row[]) {
+  return async (label: string, open: () => Promise<void>) => {
+    try {
+      await open();
+    } catch (e) {
+      rows.push({ route: label, id: 'open-failed', impact: 'critical', help: `창을 열지 못함: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`, nodes: [] });
+      return;
+    }
+    await scan(page, label, rows);
+  };
+}
+
+/** 설정 탭마다 그 탭에만 있는 요소 — 늦게 그려지는 탭을 반쯤 올라온 상태로 스캔하지 않게 (PC·모바일 공용) */
+export const SETTINGS_TAB_READY: Record<string, (page: Page) => Locator> = {
+  '영업시간': page => page.getByTestId('holidays-editor'),
+  '연동 설정': page => page.getByRole('switch', { name: '상담 화면에 비컨 점수·AI 피부 분석 표시' }),
+  '알림 설정': page => page.getByTestId('retention-policy-card'),
+  '시술 관리': page => page.getByRole('button', { name: '시술 추가' }).first(),
+  '데이터 백업': page => page.getByTestId('backup-restore-card'),
+};

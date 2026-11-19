@@ -8,6 +8,8 @@ import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './h
  */
 
 const acc = makeAccount('KB');
+/** 포커스를 비운다 — 사이드바(fixed) 위를 클릭하는 대신 blur (리뷰 2026-11-19) */
+const blur = (page: import('@playwright/test').Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 const activeInfo = (page: import('@playwright/test').Page) => page.evaluate(() => {
   const el = document.activeElement as HTMLElement | null;
   return {
@@ -27,11 +29,10 @@ test('전역 검색·예약표 단축키·모달 포커스 트랩·Ctrl+Enter �
   // ── 전역 고객 검색: '/'로 포커스, 입력 중에는 무시, Ctrl+K는 입력 중에도 동작, Enter로 고객 관리 이동 ──
   await page.goto('/reservations');
   const globalSearch = page.getByPlaceholder('고객 검색 (/ 또는 Ctrl+K)');
-  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await blur(page);
   await page.keyboard.press('/');
   await expect(globalSearch).toBeFocused();
-  await page.keyboard.press('Escape');
-  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await blur(page);
   // 다른 입력칸 안에서 '/'는 글자로 들어가야 한다 — 예약 추가 창을 열지 않고 페이지의 검색칸을 쓴다
   const pageSearch = page.getByPlaceholder('고객명, 전화번호, 담당 직원, 시술 검색').filter({ visible: true }).first();
   await pageSearch.click();
@@ -48,7 +49,7 @@ test('전역 검색·예약표 단축키·모달 포커스 트랩·Ctrl+Enter �
 
   // ── 예약표 단축키: → 다음 주, T 오늘, N 새 예약; 모달이 열려 있으면 무시 ──
   await page.goto('/reservations');
-  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await blur(page);
   const weekLabel = page.getByRole('heading', { level: 3 }).filter({ hasText: /\d{4}년 \d{1,2}월/ }).first();
   const thisWeek = await weekLabel.innerText();
   await page.keyboard.press('ArrowRight');
@@ -58,29 +59,32 @@ test('전역 검색·예약표 단축키·모달 포커스 트랩·Ctrl+Enter �
   await page.keyboard.press('n');
   const addDialog = page.getByRole('dialog', { name: '예약 추가' });
   await expect(addDialog).toBeVisible();
-  await page.keyboard.press('ArrowRight'); // 모달 안(포커스는 첫 입력) — 주 이동 금지
+  // 모달이 열려 있으면 단축키 무시 — 입력칸이 아닌 버튼에 포커스를 두고 눌러야 aria-modal 가드 자체를 검증한다 (리뷰 2026-11-19)
+  await addDialog.getByRole('button', { name: '취소', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('t');
+  await page.keyboard.press('n');
   await expect(weekLabel).toHaveText(thisWeek);
+  await expect(page.getByRole('dialog')).toHaveCount(1);
 
-  // ── 포커스 트랩: 첫 입력에 포커스, Shift+Tab은 마지막 요소로, 40번 Tab을 눌러도 창 밖으로 나가지 않는다 ──
-  expect((await activeInfo(page)).dialog).toBe('예약 추가');
-  const first = await activeInfo(page);
+  // ── 포커스 트랩: 첫 입력에 포커스, 맨 앞(닫기)에서 Shift+Tab은 맨 뒤(예약 저장)로, 맨 뒤에서 Tab은 맨 앞으로, 40번 Tab을 눌러도 창 안 ──
+  await expect.poll(async () => (await activeInfo(page)).dialog).toBe('예약 추가');
+  await addDialog.getByRole('button', { name: '닫기', exact: true }).focus();
   await page.keyboard.press('Shift+Tab');
-  const last = await activeInfo(page);
-  expect(last.dialog).toBe('예약 추가');
-  expect(last.text || last.label).not.toBe(first.text || first.label);
+  await expect.poll(async () => (await activeInfo(page)).text).toBe('예약 저장');
   await page.keyboard.press('Tab');
-  expect(await activeInfo(page)).toEqual(first);
+  await expect.poll(async () => (await activeInfo(page)).label).toBe('닫기');
   for (let i = 0; i < 40; i++) await page.keyboard.press('Tab');
   expect((await activeInfo(page)).dialog).toBe('예약 추가');
 
   // ── Esc로 닫히고(공용 Modal) 포커스는 연 버튼으로 돌아온다 ──
   await page.keyboard.press('Escape');
   await expect(addDialog).toHaveCount(0);
-  await page.getByRole('button', { name: '예약 추가' }).first().click();
+  await page.getByRole('button', { name: '예약 추가', exact: true }).click();
   await expect(addDialog).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(addDialog).toHaveCount(0);
-  expect((await activeInfo(page)).text).toContain('예약 추가');
+  await expect.poll(async () => (await activeInfo(page)).text).toContain('예약 추가'); // 포커스 복원은 effect cleanup에서 — 재시도형
 
   // ── Ctrl+Enter로 폼 제출: 필수값을 채우고 Ctrl+Enter → 저장되어 10:00 블록이 생긴다 ──
   await page.keyboard.press('n');
@@ -105,7 +109,7 @@ test('전역 검색·예약표 단축키·모달 포커스 트랩·Ctrl+Enter �
   await expect(page.getByPlaceholder('홍길동')).toHaveValue('키보드고객');
   await custDialog.getByRole('button', { name: '닫기', exact: true }).click();
   await expect(custDialog).toHaveCount(0);
-  expect((await activeInfo(page)).text).toContain('고객 추가');
+  await expect.poll(async () => (await activeInfo(page)).text).toContain('고객 추가');
 
   // ── 사이드바 링크: 포커스 후 Enter로 이동 ──
   await page.getByRole('link', { name: /예약 관리/ }).first().focus();
