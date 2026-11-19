@@ -41,4 +41,4 @@ export function expiredProgramsHint(expired: CustomerProgram[], where = '고객 
 }
 
 /** 저장 직전 방어 — 선택지에 없는 프로그램 id가 상태에 남아 있으면(시술일 변경·만료) 조용히 차감하지 않는다 */
-export const EXPIRED_LINK_BLOCKED = '선택한 회차권은 시술일 기준으로 만료됐거나 완료돼 차감할 수 없습니다. 시술일을 확인하거나 [관리]에서 만료일을 연장해주세요.';
+export const EXPIRED_LINK_BLOCKED = '선택한 프로그램은 시술일 기준으로 만료됐거나 완료돼 차감할 수 없습니다. 시술일을 확인하거나, 고객 상세의 [관리]에서 만료일을 연장한 뒤 다시 저장해주세요.';

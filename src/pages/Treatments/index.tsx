@@ -575,7 +575,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         {/* 프로그램 연결 (회차 차감) */}
         {customerId && activePrograms.length > 0 && (
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">프로그램 연결 (회차 차감)</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">차감할 회차권·프로그램</label>
             <select
               aria-label="프로그램 연결"
               aria-describedby={expiredPrograms.length > 0 ? 'expired-program-hint' : undefined}
@@ -583,19 +583,22 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               onChange={e => setCustomerProgramId(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
-              <option value="">프로그램 미연결 (단건 시술)</option>
+              <option value="">연결 안 함 (단건 시술)</option>
               {activePrograms.map(cp => (
                 <option key={cp.id} value={cp.id}>
-                  {cp.totalSessions != null ? `${cp.programName} (${cp.usedSessions}/${cp.totalSessions}회)` : `${cp.programName} (기간제 · ${cp.usedSessions}회 이용)`}
+                  {cp.totalSessions != null ? `${cp.programName} · 잔여 ${cp.totalSessions - cp.usedSessions}회 (${cp.usedSessions}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${cp.usedSessions}회 이용)`}
                 </option>
               ))}
             </select>
           </div>
         )}
         {customerId && expiredPrograms.length > 0 && (
-          <p id="expired-program-hint" data-testid="expired-program-hint" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            {expiredProgramsHint(expiredPrograms)}
-          </p>
+          <div id="expired-program-hint" data-testid="expired-program-hint" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2">
+            <span className="flex-1 min-w-0">{expiredProgramsHint(expiredPrograms)}</span>
+            {/* 이 창에서는 [관리]가 다른 화면 — 바로 가는 길을 주되, 입력 중인 내용이 저장되지 않음을 알린다 (UX 점검 2026-11-19) */}
+            <button type="button" onClick={() => { if (window.confirm('고객 상세로 이동할까요? 지금 입력 중인 시술 기록은 저장되지 않습니다.')) { onClose(); goTo(`/customers?q=${encodeURIComponent((customers.find(x => x.id === customerId)?.name ?? ''))}`); } }}
+              className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-medium text-amber-800 hover:bg-amber-100">고객 상세 열기</button>
+          </div>
         )}
 
         <div>

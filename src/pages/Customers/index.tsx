@@ -267,7 +267,7 @@ function ProgramUsageList({ cp, customerId }: { cp: CustomerProgram; customerId:
         </div>
       ))}
       {deductions.length > 10 && (
-        <p className="text-xs text-gray-500">외 {deductions.length - 10}건 — 전체는 최근 시술 기록 참조</p>
+        <p className="text-xs text-gray-500">외 {deductions.length - 10}건은 아래 최근 시술 기록에서 볼 수 있어요</p>
       )}
     </div>
   );
@@ -1632,7 +1632,7 @@ export default function Customers() {
                   <p className="text-xs font-semibold text-gray-500 uppercase mb-3">등록 프로그램</p>
                   <div className="space-y-2">
                     {customerPrograms.map(cp => (
-                      <div key={cp.id} data-testid="program-card" className="p-3 bg-slate-50 rounded-lg">
+                      <div key={cp.id} data-testid="program-card" className={`p-3 bg-slate-50 rounded-lg ${cp.isCompleted || isProgramExpired(cp) ? 'opacity-60' : ''}`}>
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-xs font-semibold text-gray-800">{cp.programName}</p>
                           <span className="flex items-center gap-1.5">
@@ -1647,7 +1647,7 @@ export default function Customers() {
                         {cp.totalSessions != null && (
                           <>
                             <p className="text-xs text-gray-500">
-                              {cp.usedSessions || 0}/{cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
+                              사용 {cp.usedSessions || 0}회 / 총 {cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
                             </p>
                             <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1" aria-hidden="true">
                               <div className={`h-1.5 rounded-full ${(cp.usedSessions || 0) / cp.totalSessions >= 0.8 ? 'bg-orange-400' : 'bg-blue-400'}`}
@@ -2679,29 +2679,32 @@ export default function Customers() {
           <div ref={treatmentModalRef} role="dialog" aria-modal="true" aria-label="시술 기록 추가" className="modal-card my-auto bg-white rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
-                <h2 className="font-bold text-gray-900">시술 기록</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{selected.name} — 회차 차감</p>
+                <h2 className="font-bold text-gray-900">시술 기록 추가</h2>
+                <p className="text-xs text-gray-400 mt-0.5">{treatUsable.length > 0 ? `${selected.name} — 회차 차감` : selected.name}</p>
               </div>
               <button onClick={() => setShowTreatmentModal(false)} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleTreatment} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">차감할 프로그램</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">차감할 회차권·프로그램</label>
                 <select aria-label="차감할 프로그램" aria-describedby={treatExpired.length > 0 ? 'expired-program-hint' : undefined}
                   value={treatForm.customerProgramId}
                   onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
-                  <option value="">선택 없음 (단순 기록)</option>
+                  <option value="">연결 안 함 (단건 시술)</option>
                   {treatUsable.map(cp => (
                     <option key={cp.id} value={cp.id}>
-                      {cp.programName} — {cp.totalSessions !== null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : `기간제 · ${cp.usedSessions}회 이용`}
+                      {cp.totalSessions !== null ? `${cp.programName} · 잔여 ${cp.totalSessions - cp.usedSessions}회 (${cp.usedSessions}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${cp.usedSessions}회 이용)`}
                     </option>
                   ))}
                 </select>
                 {treatExpired.length > 0 && (
-                  <p id="expired-program-hint" data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    {expiredProgramsHint(treatExpired, '이 창을 닫고 프로그램 카드의 [관리]')}
-                  </p>
+                  <div id="expired-program-hint" data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2">
+                    <span className="flex-1 min-w-0">{expiredProgramsHint(treatExpired, '[만료일 연장]')}</span>
+                    {/* 관리 창은 body 포털이라 이 창 위에 겹쳐 뜬다 — 연장을 저장하면 선택지가 바로 다시 계산된다 (UX 점검 2026-11-19) */}
+                    <button type="button" onClick={() => setManageProgram(treatExpired[0])}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-medium text-amber-800 hover:bg-amber-100">만료일 연장</button>
+                  </div>
                 )}
               </div>
 

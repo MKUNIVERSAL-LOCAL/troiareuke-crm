@@ -49,7 +49,7 @@ export async function programsProductsScenario(page: Page, acc: E2EAccount) {
   await expectProgramSessions(page, '수분관리 10회권', 0, 10);
 
   // 쓸 수 있는 회차권이 1개라 자동 연결 → 저장 뒤 시술 목록에 남고(결제 화면으로 가지 않음) 사용 1회 / 잔여 9회
-  await logTreatment(page, acc, '수분관리 10회권 (0/10회)');
+  await logTreatment(page, acc, '수분관리 10회권 · 잔여 10회 (0/10)');
   await expect(page.getByText('수분관리 10회권').filter({ visible: true }).first()).toBeVisible(); // 시술 목록의 프로그램 배지
   await expect(page).toHaveURL(/\/treatments/);
   await openCustomer(page, acc);
@@ -149,7 +149,7 @@ export async function programExpiryScenario(page: Page, acc: E2EAccount) {
 
   // 선택지에 돌아오고 안내는 사라진다 → 자동 연결로 저장하면 사용 1회 / 잔여 9회
   await expectTreatmentLinkState(page, acc, { select: true, hint: null });
-  await logTreatment(page, acc, `${name} (0/10회)`);
+  await logTreatment(page, acc, `${name} · 잔여 10회 (0/10)`);
   await openCustomer(page, acc);
   await expectProgramSessions(page, name, 1, 10);
 
@@ -193,8 +193,8 @@ export async function periodProgramScenario(page: Page, acc: E2EAccount) {
   await expectProgramBadge(page, name, '만료', false);
 
   // 시술 기록 2건 연결 — 횟수제가 아니라 몇 번을 써도 완료되지 않는다
-  await logTreatment(page, acc, `${name} (기간제 · 0회 이용)`);
-  await logTreatment(page, acc, `${name} (기간제 · 1회 이용)`);
+  await logTreatment(page, acc, `${name} · 기간제 (0회 이용)`);
+  await logTreatment(page, acc, `${name} · 기간제 (1회 이용)`);
   await openCustomer(page, acc);
   card = await programCard(page, name);
   await expectProgramBadge(page, name, '완료', false);
@@ -274,7 +274,7 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   // 퇴사 처리: 새 예약 담당 목록에서 빠지고 실적 표엔 "(퇴사)"
   await page.getByRole('heading', { name: /^박선임/ }).first().click();
   await staffDetail.getByRole('button', { name: '퇴사 처리' }).click(); // confirm 수락
-  await expect(toast(page, '퇴사 처리했습니다.')).toBeVisible();
+  await expect(toast(page, '퇴사 처리했습니다.')).toBeVisible(); // info 톤도 role=status
   await expect(rowOf('박선임')).toContainText('박선임 (퇴사)');
   await expect(rowOf('박선임').getByTestId('perf-completed')).toHaveText('1건');
   const staffOptions = async () => {
@@ -293,7 +293,7 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   await visibleButton(page, '퇴사·비활성').click();
   await page.getByRole('heading', { name: /^박선임/ }).first().click(); // 카드 제목에 '퇴사' 배지가 붙어 정확 일치 텍스트로는 못 잡는다
   await staffDetail.getByRole('button', { name: '복직' }).click();
-  await expect(toast(page, '같은 이름의 재직 직원이 이미 있어 복직할 수 없습니다. 먼저 이름을 바꿔주세요.', 'alert')).toBeVisible();
+  await expect(toast(page, /같은 이름의 재직 직원이 이미 있어 복직할 수 없습니다/, 'alert')).toBeVisible();
   await expect(staffDetail).toBeVisible(); // 거절이라 창은 그대로
   await page.keyboard.press('Escape');
   await expect(staffDetail).toHaveCount(0);

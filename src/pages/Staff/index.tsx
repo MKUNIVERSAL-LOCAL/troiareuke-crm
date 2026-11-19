@@ -483,14 +483,14 @@ function StaffDetailModal({
     const leaving = staff.isActive;
     // 복직도 추가·수정과 같은 규칙 — 같은 이름의 재직자가 둘이면 이름으로 잇는 시술·판매 기록이 구분되지 않는다 (리뷰 2026-11-19)
     if (!leaving && StaffStore.getAll().some(s => s.id !== staff.id && s.isActive && s.name.trim() === staff.name.trim())) {
-      notify('같은 이름의 재직 직원이 이미 있어 복직할 수 없습니다. 먼저 이름을 바꿔주세요.');
+      notify('같은 이름의 재직 직원이 이미 있어 복직할 수 없습니다. 이 직원의 [수정]에서 이름을 구분되게(예: 김수아B) 바꾼 뒤 복직해주세요.');
       return;
     }
     if (!window.confirm(leaving
       ? `"${staff.name}" 직원을 퇴사 처리할까요?\n새 예약·시술의 담당자 목록에서 빠지고, 과거 기록과 실적은 그대로 남습니다. 언제든 복직할 수 있습니다.`
       : `"${staff.name}" 직원을 복직 처리할까요?`)) return;
     StaffStore.update(staff.id, { isActive: !leaving });
-    notify(leaving ? '퇴사 처리했습니다.' : '복직 처리했습니다.');
+    if (leaving) notify.info('퇴사 처리했습니다.'); else notify.success('복직 처리했습니다.');
     onUpdate();
   };
   const handleDelete = () => {

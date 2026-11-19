@@ -136,7 +136,7 @@ export async function expectProgramSessions(page: Page, name: string, used: numb
     await expect(card.getByText(`사용 ${used}회 / 총 ${total}회`, { exact: true })).toBeVisible();
     await expect(card.getByText(`잔여 ${left}회`, { exact: true })).toBeVisible();
   } else {
-    await expect(card.getByText(`${used}/${total}회 · 잔여 ${left}회`, { exact: true })).toBeVisible();
+    await expect(card.getByText(`사용 ${used}회 / 총 ${total}회 · 잔여 ${left}회`, { exact: true })).toBeVisible();
   }
 }
 

@@ -62,10 +62,10 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
         }
       }
     }
-    if (changes.length === 0) { notify('바뀐 내용이 없습니다.'); return; }
+    if (changes.length === 0) { notify.info('바뀐 내용이 없습니다.'); return; }
     updates.notes = appendNote(cp.notes, changes.join(', '));
     if (!CustomerProgramStore.update(cp.id, updates)) { notify('프로그램을 찾을 수 없습니다.'); return; }
-    notify(`${cp.programName}: ${changes.join(', ')}`);
+    notify.success(`${cp.programName} 저장: ${changes.join(', ')}`);
     onDone();
   }
 
@@ -103,7 +103,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
             <button type="button" onClick={() => shift(90)} className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-100 text-gray-700 hover:bg-slate-200">+90일</button>
             {expiryDate && <button type="button" onClick={() => setExpiryDate('')} className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white border border-gray-200 text-gray-500">만료 없음</button>}
           </div>
-          <p className="text-xs text-gray-400 mt-1">+30/+90일은 만료일과 오늘 중 늦은 날부터 더합니다.</p>
+          <p className="text-xs text-gray-400 mt-1">+30/+90일 — 이미 지난 만료일이면 오늘부터, 아직 남았으면 만료일부터 더합니다.</p>
         </div>
         {isSessionBased && (
           <div>

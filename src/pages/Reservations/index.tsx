@@ -13,7 +13,7 @@ import PhoneLink from '../../components/ui/PhoneLink';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore } from '../../lib/store';
+import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore, TreatmentLogStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
 import type { Reservation, Staff } from '../../types';
@@ -27,7 +27,7 @@ import { registeredPaymentsFor } from '../../lib/pendingCompletion';
 import { readableTextOn } from '../../lib/color';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
 import { todayISO } from '../../lib/format';
-import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
+import { isProgramExpired, getUsablePrograms, getExpiredPrograms } from '../../lib/customerPrograms';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -1171,12 +1171,18 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   // 이 예약에 등록된 결제(완료·대기, 환불 제외 — pendingCompletion과 같은 기준). 상세가 열려 있는 동안 결제가 바뀌는 길은 결제 창뿐이고 그 뒤 상세가 닫히므로 예약 id로만 메모 (2026-11-19)
   const paidForThis = useMemo(() => registeredPaymentsFor(r.id), [r.id]);
   const paidAmount = paidForThis.reduce((s, p) => s + p.amount, 0);
+  // 이 예약 날짜에 작성된 이 고객의 시술 기록 — 시술 기록은 예약 id를 들고 있지 않아 코어 updateStatus와 같은 기준(고객+날짜)으로 센다.
+  // 취소·복구해도 시술 기록과 회차 차감은 그대로 남으므로 confirm에 알린다 (UX 점검 2026-11-19)
+  const logsOnDate = useMemo(() => TreatmentLogStore.getByCustomer(r.customerId).filter(t => t.treatmentDate === r.date), [r.customerId, r.date]);
+  const logsWarn = logsOnDate.length > 0
+    ? `\n\n이 날짜에 작성한 시술 기록 ${logsOnDate.length}건(회차 차감 포함)은 그대로 남습니다. 잘못 쓴 기록이면 시술 기록 화면에서 삭제해주세요.`
+    : '';
   const handleCancel = () => {
     // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행. 결제가 붙은 완료 예약은 취소해도 결제가 남는다는 걸 분명히 한다
     const warn = r.status === 'completed' && paidForThis.length > 0
       ? `\n\n이 예약은 완료 처리됐고 등록된 결제 ${paidAmount.toLocaleString('ko-KR')}원은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.`
       : '';
-    if (!window.confirm(`이 예약을 취소 처리하시겠습니까?${warn}`)) return;
+    if (!window.confirm(`이 예약을 취소 처리할까요?${warn}${logsWarn}`)) return;
     ReservationStore.updateStatus(r.id, 'cancelled');
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     onUpdate();
@@ -1188,21 +1194,21 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const isClosed = r.status === 'cancelled' || r.status === 'noshow';
   const handleRestore = () => {
     const google = isGoogleCalendarConnected();
-    if (!window.confirm(`이 예약을 다시 '예약확정'으로 되돌릴까요?${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}`)) return;
+    if (!window.confirm(`이 예약을 다시 '예약확정'으로 되돌릴까요?\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}`)) return;
     ReservationStore.updateStatus(r.id, 'confirmed');
     if (google) {
       createCalendarEvent({ ...r, status: 'confirmed' })
         .then(ev => rememberGcalEvent(r.id, ev.id))
         .catch(() => notify('예약은 되돌렸지만 Google 캘린더 일정은 다시 만들지 못했습니다. 캘린더에서 직접 추가해주세요.'));
     }
-    notify('예약을 예약확정으로 되돌렸습니다.');
+    notify.success('예약확정 상태로 되돌렸습니다. 시술 기록·결제는 바뀌지 않았습니다.');
     onUpdate();
   };
   const handleNoShow = () => {
     if (!window.confirm(`${r.customerName} 고객이 ${r.date} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`)) return;
     ReservationStore.updateStatus(r.id, 'noshow');
     cleanupGcalEvent(r.id);
-    notify('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
+    notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
     onUpdate();
   };
 
@@ -1214,7 +1220,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (r.totalPrice > 0) {
       const alreadyPaid = paidForThis.length > 0;
       if (alreadyPaid) {
-        notify('완료 처리했습니다. (이 예약의 결제는 이미 등록돼 있어 중복 등록을 건너뜀)');
+        notify.success('완료 처리했습니다. 결제는 이미 등록돼 있어 다시 묻지 않았습니다.');
       } else {
         // 결제수단 선택 모달로 — 단일/복합(분할) 결제와 커스텀 수단 지원
         setShowPayModal(true);
@@ -1225,7 +1231,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   };
 
   const handleDelete = () => {
-    if (window.confirm('이 예약을 삭제하시겠습니까?')) {
+    if (window.confirm('이 예약을 삭제할까요?')) {
       ReservationStore.delete(r.id);
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();
@@ -1323,6 +1329,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           {isClosed && (
             <button
               onClick={handleRestore}
+              title="잘못 취소·노쇼 처리한 경우 — 예약확정으로 되돌립니다"
               className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-[#1a3a8f] bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors"
             >
               예약 복구
@@ -1334,6 +1341,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
             (!isClosed || r.date <= todayISO()) && (
               <button
                 onClick={handleComplete}
+                title={isClosed ? '고객이 실제로 방문했던 경우 — 바로 완료로 기록합니다' : undefined}
                 className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-700 rounded-xl hover:bg-green-800 transition-colors"
               >
                 완료처리
@@ -1366,7 +1374,9 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
         const expired = getExpiredPrograms(r.customerId, r.date);
         return (
           <CompletePaymentModal reservation={r} late={r.status === 'completed'} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={usable.length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined}
-            expiredNote={usable.length === 0 && expired.length > 0 ? expiredProgramsHint(expired, '고객 상세의 [관리]', '') : undefined} />
+            expiredNote={usable.length === 0 && expired.length > 0
+              ? `이 고객의 프로그램(${expired.map(cp => cp.programName).join(', ')})은 만료돼 차감할 수 없습니다. 연장해서 차감할 거면 [결제 등록 없이 닫기] → 고객 상세 [관리]에서 만료일을 연장한 뒤 시술 기록을 작성하세요. 단건으로 받았다면 아래에서 결제를 등록하세요.`
+              : undefined} />
         );
       })()}
     </Modal>
@@ -1464,7 +1474,7 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
 
         {onTreatmentLog && (
           <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-2 flex-wrap text-xs text-blue-800">
-            <span className="flex-1 min-w-0">회차권이 있는 고객입니다. 회차권으로 받은 시술이면 결제 대신 시술 기록을 작성해 회차를 차감하세요.</span>
+            <span className="flex-1 min-w-0">회차권·프로그램이 있는 고객입니다. 그 프로그램으로 받은 시술이면 결제 대신 시술 기록을 작성해 차감하세요.</span>
             <button type="button" onClick={onTreatmentLog} className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 font-medium text-[#1a3a8f] hover:bg-blue-100">시술 기록 작성 (회차 차감)</button>
           </div>
         )}
