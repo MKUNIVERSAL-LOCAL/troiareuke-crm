@@ -4,10 +4,10 @@ import { Link } from 'react-router-dom';
 import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle, DatabaseBackup, Copy, MonitorDown, AlertTriangle } from 'lucide-react';
 import { isAuthApiConfigured, adminListUsers, apiRequest, type AuthApiUser } from '../../lib/authApi';
 import {
-  INSTALL_SITE_URL, INSTALL_GUIDE_MESSAGE, CHANNEL_MANIFEST_URL, fetchLatestChannelVersion, isOutdated, appModeLabel, type ChannelManifest,
+  INSTALL_SITE_URL, INSTALL_GUIDE_MESSAGE, fetchLatestChannelVersion, isOutdated, appModeLabel, type ChannelManifest,
 } from '../../lib/updateChannel';
 import { adminListLoginLogs } from '../../lib/adminApi';
-import { approvedBranchUsers, branchKey, groupByBranch, branchVersionInfo } from '../../lib/adminBranches';
+import { approvedBranchUsers, branchKey, groupByBranch, branchVersionInfo, fetchManifestDirect } from '../../lib/adminBranches';
 import { getLocalLogs } from '../../lib/loginLog';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -160,14 +160,7 @@ export default function AdminDashboard() {
    *  매니페스트를 직접 한 번 읽어 결과를 반영한다 (리뷰 2026-11-20) */
   async function recheckLatest() {
     setLatest(undefined);
-    try {
-      const r = await fetch(`${CHANNEL_MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' });
-      if (!r.ok) throw new Error(String(r.status));
-      const m = await r.json();
-      setLatest(typeof m?.version === 'string' ? { version: m.version, releaseDate: m.releaseDate, notes: typeof m.notes === 'string' ? m.notes : undefined } : null);
-    } catch {
-      setLatest(null);
-    }
+    setLatest(await fetchManifestDirect());
   }
   const latestVersion = latest?.version || null;
   const outdatedBranches = versionByBranch.filter(b => b.version && isOutdated(b.version, latestVersion));

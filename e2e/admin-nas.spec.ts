@@ -135,7 +135,7 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
 
   // 실제 NAS 로 새어 나간 요청 없음 — 포괄 라우트가 받은(흉내 내지 않은) 경로는 기록만 남고 404 로 끝났다
   // 포괄 라우트가 받은(흉내 내지 않은) 경로는 지점 데이터 동기화(/api/data/*)뿐이어야 한다 — 어드민 화면이 새 서버 경로를 쓰기 시작하면 여기서 드러난다
-  // /api/ai/status 는 로그인 직후 AI 프록시 상태 확인(aiProxy) — 어드민 화면과 무관, 404 면 '사용 불가'로 처리된다
+  // /api/ai/status 는 aiProxy.refreshAiProxyStatus — 로그인 뒤 '/' 가 잠깐 지점 홈(고객 화면 마운트)을 거치며 호출된다. 어드민 화면과 무관, 404 면 '사용 불가'로 조용히 처리
   const unexpected = [...new Set(unmocked)].filter(p => !p.startsWith('/api/data/') && p !== '/api/ai/status');
   expect(unexpected, '흉내 내지 않은 서버 경로').toEqual([]);
 });

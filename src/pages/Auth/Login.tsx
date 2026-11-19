@@ -47,8 +47,6 @@ export default function Login() {
         setError('서버에 연결할 수 없습니다. 인터넷 연결 또는 관리자에게 문의해주세요.');
       } else if (/올바르지 않|Invalid|invalid_credentials/i.test(msg)) {
         setError('이메일 또는 비밀번호가 올바르지 않습니다.');
-      } else if (/Email not confirmed/i.test(msg)) {
-        setError('이메일 인증이 필요합니다. 가입 시 받은 메일에서 확인 링크를 클릭해주세요.');
       } else if (msg) {
         setError(`로그인 실패: ${msg}`);
       } else {
@@ -111,8 +109,9 @@ export default function Login() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">이메일</label>
+                <label htmlFor="login-email" className="block text-xs font-medium text-gray-600 mb-1.5">이메일</label>
                 <input
+                  id="login-email"
                   type="email" value={email} onChange={e => setEmail(e.target.value)}
                   inputMode="email"
                   autoComplete="email"
@@ -121,9 +120,10 @@ export default function Login() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호</label>
+                <label htmlFor="login-password" className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호</label>
                 <div className="relative">
                   <input
+                    id="login-password"
                     type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                     autoComplete="current-password"
                     className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent transition-all pr-11"

@@ -1,6 +1,6 @@
 import { notify } from '../../lib/notify';
 import { readJson } from '../../lib/safeJson';
-import { todayISO } from '../../lib/format';
+import { todayISO, formatPhoneInput } from '../../lib/format';
 import { useState, useRef, useEffect } from 'react';
 import { readDraft, writeDraft, clearDraft } from '../../lib/formDraft';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
@@ -397,7 +397,7 @@ export default function Onboarding() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="ob-label">대표 전화</label>
-                    <input value={shopPhone} onChange={e => setShopPhone(e.target.value)} className="ob-input" placeholder="02-0000-0000" />
+                    <input value={shopPhone} onChange={e => setShopPhone(formatPhoneInput(e.target.value))} inputMode="tel" className="ob-input" placeholder="02-0000-0000" />
                   </div>
                   <div>
                     <label className="ob-label">주소</label>
@@ -643,11 +643,6 @@ export default function Onboarding() {
                   ? '14일 무료 체험이 시작됩니다'
                   : `${PLANS.find(p => p.id === selectedPlan)?.name || ''} 플랜이 활성화되었습니다`}
               </p>
-              {selectedPlan !== 'trial' && (
-                <p className="text-xs text-green-700 mb-6 font-medium flex items-center justify-center gap-1">
-                  <CheckCircle size={12} /> 결제가 성공적으로 완료되었습니다
-                </p>
-              )}
               <div className="grid grid-cols-2 gap-3 mb-8 text-sm">
                 {['고객 관리 시작', '예약 등록', '시술 기록·사진 비교', '매출·손익 관리'].map(f => (
                   <div key={f} className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl text-[#1a3a8f] font-medium">
@@ -665,7 +660,7 @@ export default function Onboarding() {
 
       <style>{`
         .ob-label { display: block; font-size: 0.75rem; font-weight: 500; color: #4b5563; margin-bottom: 0.375rem; }
-        .ob-input { width: 100%; padding: 0.625rem 0.75rem; font-size: 0.875rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; outline: none; transition: all 0.15s; }
+        .ob-input { width: 100%; padding: 0.625rem 0.75rem; font-size: 1rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; outline: none; transition: all 0.15s; }
         .ob-input:focus { box-shadow: 0 0 0 2px rgba(26,58,143,0.25); border-color: transparent; }
       `}</style>
     </div>

@@ -11,6 +11,9 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Link2, Copy, CheckCircle, MessageSquare, RefreshCw, Ban } from 'lucide-react';
 import type { Customer } from '../types';
 import { formatPrice, todayISO } from '../lib/format';
+import { copyText } from '../lib/clipboard';
+import { maskPhone } from '../lib/masking';
+import { useAuth } from '../contexts/AuthContext';
 import {
   fetchPgConfig, createPaymentRequest, listPaymentRequests, cancelPaymentRequest,
   PAYMENT_STATUS_LABELS, type PaymentRequestRow,
@@ -24,6 +27,7 @@ interface Props {
 }
 
 export default function PaymentLinkModal({ open, onClose, customers }: Props) {
+  const { user } = useAuth();
   const [pgEnabled, setPgEnabled] = useState<boolean | null>(null);
   const [loadFailed, setLoadFailed] = useState(false); // 서버 연결 실패 — "준비 중(PG 미계약)"과 구분 (실패 경로 감사 2026-11-18)
   const [requests, setRequests] = useState<PaymentRequestRow[]>([]);
@@ -103,13 +107,10 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
   }
 
   async function copyLink(url: string, id: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      prompt('아래 링크를 직접 복사해주세요.', url);
-    }
+    // Electron 은 window.prompt 를 지원하지 않아 예전 폴백은 아무 창도 띄우지 않았다 (9차 점검 #17)
+    if (!(await copyText(url))) { notify('복사하지 못했습니다. 링크 칸을 길게 눌러 직접 복사하세요.'); return; }
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   }
 
   async function sendLinkSms(url: string) {
@@ -174,7 +175,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
               >
                 <option value="">고객 선택 — 선택하면 문자 발송 가능</option>
                 {customers.filter(c => c.isActive !== false).map(c => ( /* 익명화(탈퇴) 고객 제외 */
-                  <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+                  <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, user?.role ?? 'staff')})</option>
                 ))}
               </select>
             </div>
@@ -227,7 +228,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
             </div>
             <button
               type="submit"
-              disabled={busy || pgEnabled === false || loadFailed}
+              disabled={busy || pgEnabled !== true}
               className="w-full py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <Link2 size={14} />{pgEnabled === false ? '결제 링크 생성 (준비 중)' : busy ? '생성 중...' : '결제 링크 만들기'}
@@ -262,7 +263,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   </button>
                 )}
               </div>
-              {smsResult && <p className="text-xs text-primary-600">{smsResult}</p>}
+              {smsResult && <p className={`text-xs ${smsResult.startsWith('문자 발송 실패') ? 'text-rose-700' : 'text-primary-600'}`}>{smsResult}</p>}
               <p className="text-xs text-blue-400">
                 카톡·문자로 링크를 보내면 고객이 휴대폰에서 바로 결제할 수 있습니다. 결제 완료 시 매출에 자동 기록됩니다.
               </p>

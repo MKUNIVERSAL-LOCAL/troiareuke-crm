@@ -2,6 +2,7 @@ import { isImeKey } from '../../lib/ime';
 import { useState, useEffect, useCallback } from 'react';
 import { todayISO, formatDateTime } from '../../lib/format';
 import { maskPhone } from '../../lib/masking';
+import { useOverlayClose } from '../../lib/overlayStack';
 import {
   Building2, Database, Search, ChevronLeft, ChevronRight, RefreshCw,
   MessageSquare, Image as ImageIcon, X, AlertTriangle,
@@ -129,12 +130,7 @@ export default function DataBrowser() {
   }, []);
 
   useEffect(() => { loadOverview(); }, [loadOverview]);
-  useEffect(() => {
-    if (!detailRow) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDetailRow(null); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [detailRow]);
+  useOverlayClose(!!detailRow, () => setDetailRow(null)); // Esc·Android 뒤로가기 — IME 조합 Esc 무시·중첩 창 순서는 공용 스택이 맡는다 (리뷰 2026-11-20)
 
   const loadRows = useCallback(async (branch: AdminBranchOverview, collection: string, off: number, q: string) => {
     setLoadingRows(true);
@@ -281,12 +277,6 @@ export default function DataBrowser() {
             <>
               {/* 컬렉션 탭 + 개인정보 원문 토글(사진·백업 탭 제외 — 발송 로그 수신번호에도 적용, 리뷰 2026-11-20) */}
               <div className="flex flex-wrap items-center gap-1.5 mb-4">
-                {tab !== '__photos' && tab !== '__backups' && (
-                  <button type="button" onClick={() => setShowRaw(v => !v)} aria-pressed={showRaw}
-                    className={clsx('order-last ml-auto text-xs px-2.5 py-1.5 rounded-lg transition-colors', showRaw ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800 text-slate-400 hover:text-white')}>
-                    {showRaw ? '개인정보 가리기' : '개인정보 원문 보기'}
-                  </button>
-                )}
                 {COLLECTION_ORDER.map(c => {
                   const count = selectedBranch.recordCounts[c] ?? 0;
                   return (
@@ -338,6 +328,12 @@ export default function DataBrowser() {
                 >
                   {exporting ? '반출 중…' : '데이터 반출(JSON)'}
                 </button>
+                {tab !== '__photos' && tab !== '__backups' && (
+                  <button type="button" onClick={() => setShowRaw(v => !v)} aria-pressed={showRaw}
+                    className={clsx('ml-auto text-xs px-2.5 py-1.5 rounded-lg transition-colors', showRaw ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800 text-slate-400 hover:text-white')}>
+                    {showRaw ? '개인정보 가리기' : '개인정보 원문 보기'}
+                  </button>
+                )}
               </div>
 
               {loadingRows ? (
@@ -381,7 +377,7 @@ export default function DataBrowser() {
 
                   {rows.length === 0 ? (
                     <div className="p-10 text-center text-sm text-slate-400">데이터가 없습니다.</div>
-                  ) : (<>
+                  ) : (
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
@@ -407,7 +403,7 @@ export default function DataBrowser() {
                         ))}
                       </tbody>
                     </table>
-                  </>)}
+                  )}
 
                   {/* 페이지네이션 */}
                   {total > PAGE_SIZE && (

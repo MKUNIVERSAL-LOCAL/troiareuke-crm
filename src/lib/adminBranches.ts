@@ -7,7 +7,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import type { AuthApiUser } from './authApi';
-import { compareVersions } from './updateChannel';
+import { compareVersions, CHANNEL_MANIFEST_URL, type ChannelManifest } from './updateChannel';
 
 /** 승인된 지점 계정만 — 본사(superadmin)·승인 대기·거부 제외. status 가 없는 옛 서버 행은 승인으로 본다 */
 export function approvedBranchUsers<T extends Pick<AuthApiUser, 'role' | 'status'>>(users: T[]): T[] {
@@ -42,4 +42,17 @@ export function branchVersionInfo(users: Pick<AuthApiUser, 'lastAppVersion' | 'l
   const latestSeen = seen.reduce((acc, u) => ((u.lastSeenAt || '') > (acc.lastSeenAt || '') ? u : acc), seen[0]);
   const lowest = seen.reduce((acc, u) => (compareVersions(u.lastAppVersion, acc.lastAppVersion) < 0 ? u : acc), seen[0]);
   return { version: lowest.lastAppVersion!, mode: lowest.lastAppMode || '', lastSeenAt: latestSeen.lastSeenAt || null };
+}
+
+/** [다시 확인] — 코어 fetchLatestChannelVersion 은 실패도 5분 캐시해 바로 다시 누르면 네트워크 없이 null 을 돌려준다(코어 잠금이라 force 옵션 불가).
+ *  매니페스트를 직접 한 번 읽는다. 실패하면 null (리뷰 2026-11-20) */
+export async function fetchManifestDirect(): Promise<ChannelManifest | null> {
+  try {
+    const r = await fetch(`${CHANNEL_MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(String(r.status));
+    const m = await r.json();
+    return typeof m?.version === 'string' ? { version: m.version, releaseDate: m.releaseDate, notes: typeof m.notes === 'string' ? m.notes : undefined } : null;
+  } catch {
+    return null;
+  }
 }

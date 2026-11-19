@@ -7,12 +7,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured, applyForAccount } from '../../lib/authApi';
 import { TroiareukeLogo } from './Login';
 
-const plans = [
-  { key: 'trial', label: '14일 무료 체험', price: '무료', desc: '모든 기능 체험 가능', highlight: true, disabled: false },
-  { key: 'starter', label: 'Starter', price: '29,000원/월', desc: '1개 샵 · 직원 3명', highlight: false, disabled: true },
-  { key: 'pro', label: 'Pro', price: '59,000원/월', desc: '2개 샵 · 직원 무제한', highlight: false, disabled: true },
-];
-
 /** 새로고침에도 남겨 두는 가입 입력 — 비밀번호·사업자등록증 사진은 담지 않는다. 단계는 늘 1부터(비밀번호를 다시 받아야 하므로) (3차 UX 점검 후속 2026-11-19) */
 const SIGNUP_DRAFT = 'signup-draft';
 interface SignupDraft { name: string; email: string; phone: string; businessNumber: string; agreeTerms: boolean; agreePrivacy: boolean; agreeMarketing: boolean }
@@ -99,8 +93,6 @@ export default function Signup() {
       const status = e?.status;
       if (/already registered|user already exists|duplicate|이미 가입/i.test(msg)) {
         setError('이미 가입된 이메일입니다. 로그인 페이지에서 시도해주세요.');
-      } else if (/Email not confirmed/i.test(msg)) {
-        setError('가입 완료! 이메일 인증 메일을 확인해주세요.');
       } else if (e?.name === 'AbortError' || /aborted/i.test(msg)) {
         setError('서버 응답이 없습니다(시간 초과). 인터넷 연결을 확인하고 잠시 후 다시 시도해주세요.');
       } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
@@ -141,20 +133,20 @@ export default function Signup() {
               {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>}
               <form onSubmit={e => { e.preventDefault(); if (!form.name || !form.email || !form.phone || !form.businessNumber || !form.password) { setError('모든 항목을 입력해주세요.'); return; } if (!/^01[016789]-\d{3,4}-\d{4}$/.test(form.phone)) { setError('휴대폰 번호를 010-0000-0000 형식으로 입력해주세요.'); return; } if (form.password.length < 8) { setError('비밀번호는 8자 이상이어야 합니다.'); return; } if (form.password !== form.confirm) { setError('비밀번호가 일치하지 않습니다.'); return; } if (!isValidBusinessNumber) { setError('사업자등록번호 10자리를 확인해주세요. (예: 123-45-67890)'); return; } if (isAuthApiConfigured && !licenseImage) { setError('사업자등록증 사진을 첨부해주세요. (본사 승인 시 확인용, jpg·png, 5MB 이하)'); return; } setError(''); setStep(2); }} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">샵명 *</label>
-                  <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="auth-input" placeholder="예: 아르케스파 강남점" required />
+                  <label htmlFor="signup-name" className="block text-xs font-medium text-gray-600 mb-1.5">샵명 *</label>
+                  <input id="signup-name" type="text" value={form.name} onChange={e => set('name', e.target.value)} className="auth-input" placeholder="예: 아르케스파 강남점" required />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">이메일 *</label>
-                  <input type="email" value={form.email} onChange={e => set('email', e.target.value)} className="auth-input" placeholder="example@email.com" required />
+                  <label htmlFor="signup-email" className="block text-xs font-medium text-gray-600 mb-1.5">이메일 *</label>
+                  <input id="signup-email" type="email" value={form.email} onChange={e => set('email', e.target.value)} className="auth-input" placeholder="example@email.com" required />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">휴대폰 번호 *</label>
-                  <input type="tel" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} className="auth-input" placeholder="010-0000-0000" required />
+                  <label htmlFor="signup-phone" className="block text-xs font-medium text-gray-600 mb-1.5">휴대폰 번호 *</label>
+                  <input id="signup-phone" type="tel" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} className="auth-input" placeholder="010-0000-0000" required />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록번호 *</label>
-                  <input type="text" inputMode="numeric" value={form.businessNumber} onChange={e => set('businessNumber', formatBusinessNumber(e.target.value))} className="auth-input" placeholder="123-45-67890" required />
+                  <label htmlFor="signup-bizno" className="block text-xs font-medium text-gray-600 mb-1.5">사업자등록번호 *</label>
+                  <input id="signup-bizno" type="text" inputMode="numeric" value={form.businessNumber} onChange={e => set('businessNumber', formatBusinessNumber(e.target.value))} className="auth-input" placeholder="123-45-67890" required />
                 </div>
                 {/* 사업자등록증 첨부는 중앙 서버(NAS) 가입에서만 저장됨 — 로컬 모드는
                     저장처가 없어 조용히 유실되므로 필드 자체를 숨긴다 */}
@@ -176,15 +168,15 @@ export default function Signup() {
                 </div>
                 )}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 * (8자 이상)</label>
+                  <label htmlFor="signup-password" className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 * (8자 이상)</label>
                   <div className="relative">
-                    <input type={showPw ? 'text' : 'password'} value={form.password} onChange={e => set('password', e.target.value)} className="auth-input pr-11" placeholder="비밀번호 (8자 이상)" required />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showPw ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                    <input id="signup-password" type={showPw ? 'text' : 'password'} value={form.password} onChange={e => set('password', e.target.value)} className="auth-input pr-11" placeholder="비밀번호 (8자 이상)" required />
+                    <button type="button" onClick={() => setShowPw(!showPw)} aria-label={showPw ? '비밀번호 숨기기' : '비밀번호 보기'} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{showPw ? <EyeOff size={16} /> : <Eye size={16} />}</button>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 확인 *</label>
-                  <input type="password" value={form.confirm} onChange={e => set('confirm', e.target.value)} className="auth-input" placeholder="비밀번호 재입력" required />
+                  <label htmlFor="signup-confirm" className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호 확인 *</label>
+                  <input id="signup-confirm" type="password" value={form.confirm} onChange={e => set('confirm', e.target.value)} className="auth-input" placeholder="비밀번호 재입력" required />
                 </div>
                 <button type="submit" className="w-full py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all mt-2">다음 단계</button>
               </form>
@@ -195,24 +187,6 @@ export default function Signup() {
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">약관 동의</h2>
               <p className="text-sm text-gray-400 mb-6">14일 무료 체험으로 시작합니다 · 플랜은 체험 뒤 설정에서 고릅니다</p>
-              <div className="space-y-3 mb-6">
-                {plans.map(p => (
-                  <div key={p.key} className={`p-4 rounded-2xl border-2 transition-all ${p.highlight ? 'border-[#1a3a8f] bg-blue-50' : 'border-gray-100'} ${p.disabled ? 'border-dashed border-gray-200 bg-gray-50' : ''}`}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-gray-900">{p.label}</p>
-                          {p.highlight && <span className="px-2 py-0.5 bg-[#1a3a8f] text-white rounded-full text-xs font-bold">선택됨</span>}
-                          {p.disabled && <span className="px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full text-xs font-bold">준비 중</span>}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-0.5">{p.desc}</p>
-                      </div>
-                      <p className={`text-sm font-bold ${p.disabled ? 'text-gray-400' : 'text-[#1a3a8f]'}`}>{p.price}</p>
-                    </div>
-                  </div>
-                ))}
-                <p className="text-xs text-gray-400 text-center">14일 무료 체험 후 유료 플랜으로 전환할 수 있습니다</p>
-              </div>
               <div className="space-y-3 mb-6">
                 {([
                   { key: 'agreeTerms', label: '이용약관에 동의합니다 (필수)' },
@@ -257,8 +231,8 @@ export default function Signup() {
               <h2 className="text-xl font-bold text-gray-900 mb-2">가입 신청이 접수되었습니다</h2>
               <p className="text-sm text-gray-500 leading-relaxed mb-6">
                 본사에서 사업자 등록 정보와 서류를 확인한 뒤 승인해드립니다.<br />
-                <span className="text-gray-700 font-medium">평일 기준 24시간 이내</span>에 처리되며, 승인 완료 후 <br />
-                입력하신 이메일로 로그인하실 수 있습니다.
+                확인이 끝나면 <span className="text-gray-700 font-medium">입력하신 이메일로 안내</span>드리며, 승인 뒤 <br />
+                그 이메일로 로그인하실 수 있습니다.
               </p>
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-6 text-left">
                 <p className="text-xs text-gray-400 mb-1">신청 이메일</p>
@@ -281,7 +255,7 @@ export default function Signup() {
         </p>
       </div>
 
-      <style>{`.auth-input { width: 100%; padding: 0.75rem 1rem; font-size: 0.875rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; outline: none; transition: all 0.15s; } .auth-input:focus { box-shadow: 0 0 0 2px rgba(26,58,143,0.3); border-color: transparent; }`}</style>
+      <style>{`.auth-input { width: 100%; padding: 0.75rem 1rem; font-size: 1rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; outline: none; transition: all 0.15s; } .auth-input:focus { box-shadow: 0 0 0 2px rgba(26,58,143,0.3); border-color: transparent; }`}</style>
     </div>
   );
 }

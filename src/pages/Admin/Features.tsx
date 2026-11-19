@@ -26,12 +26,13 @@ export default function AdminFeatures() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [loadError, setLoadError] = useState('');
+  const [loadError, setLoadError] = useState(''); // 로드 실패 뒤 저장하면 그 스코프의 서버 플래그 전체가 초안(한두 키)으로 덮인다 — 그동안 저장을 막는다 (8차 점검 2026-11-20)
   const [chipQuery, setChipQuery] = useState(''); // 지점 수십 곳이면 칩이 벽처럼 쌓인다 — 이름 검색·오버라이드 있는 지점만 (8차 점검 #19)
   const [onlyOverridden, setOnlyOverridden] = useState(false);
-  const visibleBranches = branches.filter(b =>
-    (!onlyOverridden || Object.keys(scopes[b.id] || {}).length > 0 || selected === b.id)
-    && (!chipQuery.trim() || b.name.toLowerCase().includes(chipQuery.trim().toLowerCase()))); // 로드 실패 뒤 저장하면 그 스코프의 서버 플래그 전체가 초안(한두 키)으로 덮인다 — 그동안 저장을 막는다 (8차 점검 2026-11-20)
+  // 선택 중인 지점 칩은 검색·필터와 무관하게 늘 보인다 — 편집 중인 플래그의 주인이 사라지면 안 된다
+  const visibleBranches = branches.filter(b => selected === b.id
+    || ((!onlyOverridden || Object.keys(scopes[b.id] || {}).length > 0)
+      && (!chipQuery.trim() || b.name.toLowerCase().includes(chipQuery.trim().toLowerCase()))));
 
   useEffect(() => { load(); }, []);
 

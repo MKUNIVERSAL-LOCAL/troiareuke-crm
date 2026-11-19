@@ -8,7 +8,7 @@ import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
 import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
 import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
-import { groupByBranch, branchVersionInfo as branchVersionOf } from '../../lib/adminBranches';
+import { groupByBranch, branchVersionInfo as branchVersionOf, fetchManifestDirect } from '../../lib/adminBranches';
 
 // NAS 모드에서는 지점의 진실이 서버 계정(auth_users)의 branch_id/branch_name이다.
 // 기존처럼 localStorage를 읽으면 기기마다 목록이 달라지는 문제가 있어 서버에서 파생한다.
@@ -359,6 +359,13 @@ export default function Branches() {
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : statusFilter === 'outdated' && latestVersion === null ? (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-10 text-center">
+          <p className="text-amber-200 font-medium">최신 버전을 확인하지 못해 구버전 판정을 보류했습니다</p>
+          <p className="text-amber-200/80 text-sm mt-1">배포 서버 응답이 없습니다 — 판정 없이 "없음"으로 보이면 구버전 지점을 놓칩니다 (배포 정책 §8)</p>
+          <button type="button" onClick={async () => setLatestVersion((await fetchManifestDirect())?.version || null)}
+            className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl transition-colors">다시 확인</button>
         </div>
       ) : filteredBranches.length === 0 ? (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">

@@ -100,7 +100,7 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   if (!t.skinType && source.skinType) updates.skinType = source.skinType;
   if (!t.allergies && source.allergies) updates.allergies = source.allergies;
   if (!t.referralSource && source.referralSource) updates.referralSource = source.referralSource;
-  if (source.memo) updates.memo = t.memo ? `${t.memo}\n[병합: ${source.name} ${source.phone}] ${source.memo}` : `[병합: ${source.name} ${source.phone}] ${source.memo}`;
+  if (source.memo) updates.memo = t.memo ? `${t.memo}\n[병합: ${source.name}] ${source.memo}` : `[병합: ${source.name}] ${source.memo}`;
   if (!t.privacyConsent && source.privacyConsent) { updates.privacyConsent = true; updates.privacyConsentAt = source.privacyConsentAt; }
   CustomerStore.update(targetId, updates);
   CustomerStore.delete(sourceId);
