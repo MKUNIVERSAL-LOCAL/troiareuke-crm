@@ -14,19 +14,27 @@ export function isProgramExpired(cp: CustomerProgram, today = todayISO()): boole
   return !!cp.expiryDate && cp.expiryDate < today;
 }
 
-/** 회차 차감에 쓸 수 있는 프로그램 — 미완료이고 만료일이 지나지 않은 것 */
-export function getUsablePrograms(customerId: string): CustomerProgram[] {
-  const today = todayISO();
-  return CustomerProgramStore.getActive(customerId).filter(cp => !isProgramExpired(cp, today));
+/** 기준일 — 시술일(YYYY-MM-DD)이 온전하면 그 날, 아니면 오늘. 만료 다음 날 어제 방문을 뒤늦게 적는 정상 업무를 막지 않기 위해 시술일 기준으로 판단한다 (리뷰 2026-11-19) */
+function asOfDate(asOf?: string): string {
+  return asOf && /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? asOf : todayISO();
 }
 
-/** 미완료인데 만료일이 지난 프로그램 — "연장 후 사용" 안내용 */
-export function getExpiredPrograms(customerId: string): CustomerProgram[] {
-  const today = todayISO();
-  return CustomerProgramStore.getActive(customerId).filter(cp => isProgramExpired(cp, today));
+/** 회차 차감에 쓸 수 있는 프로그램 — 미완료이고 기준일(시술일) 현재 만료되지 않은 것 */
+export function getUsablePrograms(customerId: string, asOf?: string): CustomerProgram[] {
+  const day = asOfDate(asOf);
+  return CustomerProgramStore.getActive(customerId).filter(cp => !isProgramExpired(cp, day));
 }
 
-/** 시술 기록 창의 만료 안내 문구 */
-export function expiredProgramsHint(expired: CustomerProgram[]): string {
-  return `만료된 회차권(${expired.map(cp => cp.programName).join(', ')})은 차감할 수 없습니다. 고객 상세의 [관리]에서 만료일을 연장하면 다시 선택할 수 있습니다.`;
+/** 미완료인데 기준일(시술일) 현재 만료된 프로그램 — "연장 후 사용" 안내용 */
+export function getExpiredPrograms(customerId: string, asOf?: string): CustomerProgram[] {
+  const day = asOfDate(asOf);
+  return CustomerProgramStore.getActive(customerId).filter(cp => isProgramExpired(cp, day));
 }
+
+/** 시술 기록 창의 만료 안내 문구. where = 연장하는 곳(화면에 따라 다르게) */
+export function expiredProgramsHint(expired: CustomerProgram[], where = '고객 상세의 [관리]'): string {
+  return `시술일 기준으로 만료된 회차권(${expired.map(cp => cp.programName).join(', ')})은 차감할 수 없습니다. ${where}에서 만료일을 연장하면 다시 선택할 수 있습니다.`;
+}
+
+/** 저장 직전 방어 — 선택지에 없는 프로그램 id가 상태에 남아 있으면(시술일 변경·만료) 조용히 차감하지 않는다 */
+export const EXPIRED_LINK_BLOCKED = '선택한 회차권은 시술일 기준으로 만료됐거나 완료돼 차감할 수 없습니다. 시술일을 확인하거나 [관리]에서 만료일을 연장해주세요.';

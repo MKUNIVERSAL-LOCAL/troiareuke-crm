@@ -28,7 +28,7 @@ import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbo
 import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import ProgramManageModal from '../../components/ProgramManageModal';
-import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
+import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
 import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../lib/customerMerge';
 import { parseTags, topTags } from '../../lib/customerTags';
 import { exportConsultationPdf } from '../../lib/consultReport';
@@ -943,9 +943,9 @@ export default function Customers() {
   useEffect(() => {
     if (qParam && qHandled.current !== qParam && filtered.length === 1) { qHandled.current = qParam; openCustomer(filtered[0]); }
   }, [qParam, filtered]);
-  // 빠른 시술 기록: 활성 프로그램이 하나뿐이면 미리 연결해 둔다(회차 차감 누락 방지)
+  // 빠른 시술 기록: 쓸 수 있는(미완료·미만료) 프로그램이 하나뿐이면 미리 연결해 둔다(회차 차감 누락 방지). 만료 회차권은 자동 연결하지 않는다 (리뷰 2026-11-19)
   const openTreatmentModal = () => {
-    const active = customerPrograms.filter(cp => !cp.isCompleted);
+    const active = selected ? getUsablePrograms(selected.id, treatForm.treatmentDate) : [];
     setTreatForm(f => ({ ...f, customerProgramId: active.length === 1 ? active[0].id : '' })); // 이전 고객의 프로그램 id가 남아 엉뚱한 회차권이 차감되지 않게 항상 새로 (리뷰 2026-11-18)
     setShowTreatmentModal(true);
   };
@@ -1275,14 +1275,15 @@ export default function Customers() {
   function handleTreatment(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
+    // 선택지에 없는 id(시술일 변경으로 만료·완료)가 남아 있으면 조용히 차감하지 않는다
+    const linked = treatForm.customerProgramId ? getUsablePrograms(selected.id, treatForm.treatmentDate).find(cp => cp.id === treatForm.customerProgramId) : undefined;
+    if (treatForm.customerProgramId && !linked) { notify(EXPIRED_LINK_BLOCKED); return; }
 
     TreatmentLogStore.save({
       customerId: selected.id,
       customerName: selected.name,
-      customerProgramId: treatForm.customerProgramId || undefined,
-      programName: treatForm.customerProgramId
-        ? customerPrograms.find(cp => cp.id === treatForm.customerProgramId)?.programName
-        : undefined,
+      customerProgramId: linked?.id,
+      programName: linked?.programName,
       staffName: treatForm.staffName || undefined,
       treatmentDate: treatForm.treatmentDate,
       treatmentTime: treatForm.treatmentTime || undefined,
@@ -1302,6 +1303,9 @@ export default function Customers() {
   }
 
   const selectedProgForForm = programs.find(p => p.id === progForm.programId);
+  // 빠른 시술 기록 창의 차감 선택지·만료 안내 — 시술일 기준 (렌더마다 세 번 훑지 않게 한 번만)
+  const treatUsable = selected && showTreatmentModal ? getUsablePrograms(selected.id, treatForm.treatmentDate) : [];
+  const treatExpired = selected && showTreatmentModal ? getExpiredPrograms(selected.id, treatForm.treatmentDate) : [];
 
   return (
     <div className="flex flex-col h-full">
@@ -2253,14 +2257,14 @@ export default function Customers() {
                           if (deductions.length === 0) return null;
                           return (
                             <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                              <p className="text-xs font-medium text-gray-400">차감 내역 ({deductions.length}건)</p>
+                              <p className="text-xs font-medium text-gray-400">{cp.totalSessions !== null ? '차감 내역' : '이용 내역'} ({deductions.length}건)</p>
                               {deductions.slice(0, 10).map(t => (
                                 <div key={t.id} className="flex items-center justify-between text-xs text-gray-500">
                                   <span className="truncate mr-2">
                                     {formatDate(t.treatmentDate)} · {t.treatmentDetails || t.programName || '관리'}
                                     {t.staffName ? ` (${t.staffName})` : ''}
                                   </span>
-                                  <span className="font-semibold text-orange-700 whitespace-nowrap">-{t.sessionsUsed}회</span>
+                                  {cp.totalSessions !== null && <span className="font-semibold text-orange-700 whitespace-nowrap">-{t.sessionsUsed}회</span>}
                                 </div>
                               ))}
                               {deductions.length > 10 && (
@@ -2675,18 +2679,20 @@ export default function Customers() {
             <form onSubmit={handleTreatment} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">차감할 프로그램</label>
-                <select aria-label="차감할 프로그램" value={treatForm.customerProgramId} onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
+                <select aria-label="차감할 프로그램" aria-describedby={treatExpired.length > 0 ? 'expired-program-hint' : undefined}
+                  value={treatUsable.some(cp => cp.id === treatForm.customerProgramId) ? treatForm.customerProgramId : ''}
+                  onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">선택 없음 (단순 기록)</option>
-                  {getUsablePrograms(selected.id).map(cp => (
+                  {treatUsable.map(cp => (
                     <option key={cp.id} value={cp.id}>
-                      {cp.programName} — 잔여 {cp.totalSessions !== null ? cp.totalSessions - cp.usedSessions : '∞'}회
+                      {cp.programName} — {cp.totalSessions !== null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'}
                     </option>
                   ))}
                 </select>
-                {getExpiredPrograms(selected.id).length > 0 && (
-                  <p data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    {expiredProgramsHint(getExpiredPrograms(selected.id))}
+                {treatExpired.length > 0 && (
+                  <p id="expired-program-hint" data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    {expiredProgramsHint(treatExpired, '아래 프로그램 카드의 [관리]')}
                   </p>
                 )}
               </div>

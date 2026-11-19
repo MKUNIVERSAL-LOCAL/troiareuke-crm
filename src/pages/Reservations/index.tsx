@@ -25,7 +25,7 @@ import {
 } from '../../lib/googleCalendar';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
 import { todayISO } from '../../lib/format';
-import { isProgramExpired, getUsablePrograms } from '../../lib/customerPrograms';
+import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -1309,14 +1309,15 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
         </div>
       </div>
       {showPayModal && (
-        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={getUsablePrograms(r.customerId).length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined} />
+        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={getUsablePrograms(r.customerId).length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined}
+          expiredNote={getUsablePrograms(r.customerId).length === 0 && getExpiredPrograms(r.customerId).length > 0 ? expiredProgramsHint(getExpiredPrograms(r.customerId)) : undefined} />
       )}
     </Modal>
   );
 }
 
 // 완료처리 결제 등록 모달 — 단일 결제 + 복합(2가지 수단 분할) + 커스텀 결제수단
-function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog }: { reservation: Reservation; onDone: () => void; onTreatmentLog?: () => void }) {
+function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredNote }: { reservation: Reservation; onDone: () => void; onTreatmentLog?: () => void; expiredNote?: string }) {
   const [mode, setMode] = useState<'single' | 'split'>('single');
   const [method, setMethod] = useState(getLastPaymentMethod() ?? '카드'); // 지난번 결제수단 (입력 속도 감사 2026-11-18)
   const [methodA, setMethodA] = useState('카드');
@@ -1409,6 +1410,9 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog }: { rese
             <span className="flex-1 min-w-0">회차권이 있는 고객입니다. 회차권으로 받은 시술이면 결제 대신 시술 기록을 작성해 회차를 차감하세요.</span>
             <button type="button" onClick={onTreatmentLog} className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 font-medium text-[#1a3a8f] hover:bg-blue-100">시술 기록 작성 (회차 차감)</button>
           </div>
+        )}
+        {expiredNote && (
+          <p className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">{expiredNote}</p>
         )}
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onDone} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">

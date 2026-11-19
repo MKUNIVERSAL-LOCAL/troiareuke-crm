@@ -46,7 +46,21 @@ test('만료된 회차권은 차감할 수 없고, 연장하면 다시 쓸 수 �
   await expect(card.getByText('만료', { exact: true })).toBeVisible();
   await expect(card.getByText('만료일: 2025.06.30')).toBeVisible();
 
-  // ── 시술 기록: 만료 회차권은 선택지에 없고 연장 안내만 ──
+  // ── 고객 상세의 [시술 기록] 창: 자동 연결 안 되고 선택지는 '선택 없음'뿐, 연장 안내 ──
+  await desk.getByRole('button', { name: '시술 기록', exact: true }).first().click();
+  const quick = page.getByLabel('차감할 프로그램');
+  await expect(quick.locator('option')).toHaveCount(1);
+  await expect(quick).toHaveValue('');
+  await expect(page.getByTestId('expired-program-hint')).toContainText('만료된 회차권(수분관리 10회권)은 차감할 수 없습니다');
+
+  // ── 예약 추가 창의 회차권 잔여 칩에도 '만료'가 보인다 ──
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: '예약 추가' }).first().click();
+  const resDialog = page.getByRole('dialog', { name: '예약 추가' });
+  await pickCustomer(page, acc.customer, resDialog);
+  await expect(resDialog.getByLabel('회차권 잔여')).toContainText('수분관리 10회권 · 잔여 10회 · 만료');
+
+  // ── 시술 기록 화면: 만료 회차권은 선택지에 없고 연장 안내만 ──
   await page.goto('/treatments?new=1');
   await pickCustomer(page, acc.customer);
   await expect(page.getByLabel('프로그램 연결')).toHaveCount(0);
@@ -76,7 +90,7 @@ test('만료된 회차권은 차감할 수 없고, 연장하면 다시 쓸 수 �
   await expect(page.getByTestId('expired-program-hint')).toHaveCount(0);
   await expect(page.getByLabel('프로그램 연결')).toHaveValue(/\S/);
   await expect(page.getByLabel('프로그램 연결').locator('option:checked')).toHaveText('수분관리 10회권 (0/10회)');
-  await page.getByText('테스트관리', { exact: true }).filter({ visible: true }).first().click();
+  await page.getByRole('dialog', { name: '시술 기록 추가' }).getByRole('checkbox', { name: '테스트관리' }).check();
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await openCustomer();

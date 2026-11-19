@@ -19,7 +19,7 @@ import { getPhotos, getPhotosAsync, getPhotoCount, setPhotos as savePhotos, clea
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import CameraOverlay, { isCameraPreviewSupported } from '../../components/CameraOverlay';
 import { isAuthApiConfigured } from '../../lib/authApi';
-import { getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
+import { getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
 
 export default function Treatments() {
   const [search, setSearch] = useState('');
@@ -362,8 +362,8 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
   // 쓸 수 있는 회차권(미완료·미만료)이 하나뿐이면 미리 연결 — 안 그러면 '단건'으로 저장돼 회차가 차감되지 않는 실수가 잦다 (입력 속도 감사 2026-11-18)
-  const onlyActiveProgram = (cid: string) => { const a = cid ? getUsablePrograms(cid) : []; return a.length === 1 ? a[0].id : ''; };
-  const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? onlyActiveProgram(prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : ''));
+  const onlyActiveProgram = (cid: string, asOf: string) => { const a = cid ? getUsablePrograms(cid, asOf) : []; return a.length === 1 ? a[0].id : ''; };
+  const [customerProgramId, setCustomerProgramId] = useState(editing?.customerProgramId ?? onlyActiveProgram(prefill?.customerId && customers.some(c => c.id === prefill.customerId) ? prefill.customerId : '', prefill?.treatmentDate ?? todayISO()));
   const [staffName, setStaffName] = useState(editing?.staffName ?? (prefill?.staffName && staff.some(s => s.name === prefill.staffName) ? prefill.staffName : ''));
   const [treatmentDate, setTreatmentDate] = useState(editing?.treatmentDate ?? prefill?.treatmentDate ?? todayISO());
   // 수정 모드: 기존 시술 내용에서 시술 메뉴명과 일치하는 항목을 체크 상태로 복원. 예약 프리필도 같은 규칙(존재하는 메뉴만)
@@ -412,12 +412,16 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
     notify('사진 1장을 추가했습니다.');
   };
 
-  // 차감 가능한 프로그램(미완료·미만료). 만료된 회차권은 선택지에서 빼고 안내만 — 연장은 고객 상세 [관리]에서 (2026-11-19)
-  const usablePrograms = customerId ? getUsablePrograms(customerId) : [];
-  const expiredPrograms = customerId ? getExpiredPrograms(customerId) : [];
+  // 차감 가능한 프로그램(미완료·시술일 기준 미만료). 만료된 회차권은 선택지에서 빼고 안내만 — 연장은 고객 상세 [관리]에서 (2026-11-19)
   // 수정 중인 기록이 이미 연결한 프로그램은 그 사이 만료·완료됐어도 그대로 보여준다 — 안 그러면 '미연결'로 보이는데 저장하면 연결이 남는 모순
   const editingLinked = editing?.customerProgramId && editing.customerId === customerId ? CustomerProgramStore.getById(editing.customerProgramId) : undefined;
+  const usablePrograms = customerId ? getUsablePrograms(customerId, treatmentDate) : [];
+  const expiredPrograms = (customerId ? getExpiredPrograms(customerId, treatmentDate) : []).filter(cp => cp.id !== editingLinked?.id);
   const activePrograms = editingLinked && !usablePrograms.some(cp => cp.id === editingLinked.id) ? [...usablePrograms, editingLinked] : usablePrograms;
+  // 시술일을 바꿔 연결해 둔 회차권이 선택지에서 빠지면 상태도 비운다 — 화면은 '미연결'인데 저장하면 차감되는 모순 방지
+  useEffect(() => {
+    if (customerProgramId && !activePrograms.some(cp => cp.id === customerProgramId)) setCustomerProgramId('');
+  });
 
   const toggleService = (name: string) => {
     setSelectedServices(prev =>
@@ -476,6 +480,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
       ? treatmentDetails
       : selectedServices.join(', ') || treatmentDetails) || undefined;
     const linkedProgram = customerProgramId ? activePrograms.find(cp => cp.id === customerProgramId) : undefined;
+    if (customerProgramId && !linkedProgram) { notify(EXPIRED_LINK_BLOCKED); return; }
 
     if (isEdit && editing) {
       TreatmentLogStore.update(editing.id, {
@@ -529,7 +534,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
-            <CustomerCombobox customers={customers} value={customerId} onChange={id => { setCustomerId(id); setCustomerProgramId(onlyActiveProgram(id)); }} maskRole={authUser?.role ?? 'staff'} />
+            <CustomerCombobox customers={customers} value={customerId} onChange={id => { setCustomerId(id); setCustomerProgramId(onlyActiveProgram(id, treatmentDate)); }} maskRole={authUser?.role ?? 'staff'} />
             {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
           </div>
           <div>
@@ -565,6 +570,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             <label className="block text-xs font-medium text-gray-600 mb-1.5">프로그램 연결 (회차 차감)</label>
             <select
               aria-label="프로그램 연결"
+              aria-describedby={expiredPrograms.length > 0 ? 'expired-program-hint' : undefined}
               value={customerProgramId}
               onChange={e => setCustomerProgramId(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -572,14 +578,14 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               <option value="">프로그램 미연결 (단건 시술)</option>
               {activePrograms.map(cp => (
                 <option key={cp.id} value={cp.id}>
-                  {cp.programName} ({cp.usedSessions}/{cp.totalSessions ?? '무제한'}회)
+                  {cp.totalSessions != null ? `${cp.programName} (${cp.usedSessions}/${cp.totalSessions}회)` : `${cp.programName} (기간제 · ${cp.usedSessions}회 이용)`}
                 </option>
               ))}
             </select>
           </div>
         )}
         {customerId && expiredPrograms.length > 0 && (
-          <p data-testid="expired-program-hint" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <p id="expired-program-hint" data-testid="expired-program-hint" className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             {expiredProgramsHint(expiredPrograms)}
           </p>
         )}
