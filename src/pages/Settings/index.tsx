@@ -153,7 +153,7 @@ export default function Settings() {
       phones: shopPhone ? [shopPhone] : [],
     });
     if (result.pending) {
-      setSmsTestMessage('SMS 게이트웨이가 아직 연동되지 않았습니다 (준비 중). 실제 발송되지 않습니다.');
+      setSmsTestMessage('본사 서버에 발송사가 아직 연동되지 않아 실제 발송되지 않습니다. 연동되면 자동으로 발송됩니다.');
     } else if (result.reason) {
       setSmsTestMessage(`발송 실패: ${result.reason}`);
     } else {

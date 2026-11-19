@@ -8,7 +8,7 @@ import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { featureForPath } from '../../lib/featureRegistry';
 import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
-import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
+import { clearLocalPhotoCacheForLogout, keepLocalPhotoCount } from '../../lib/photoStore';
 import { useFeatureFlagsTick } from '../../hooks/useFeature';
 import { useFocusTrap, useOverlayClose } from '../../lib/overlayStack';
 
@@ -45,7 +45,8 @@ export default function MobileTabBar() {
   ].filter(l => { const def = featureForPath(l.to); return !def || isFeatureEnabled(def.id); });
 
   const handleLogout = () => {
-    if (!window.confirm('로그아웃할까요?')) return; // 설정 바로 아래라 손가락 미스로 재로그인하던 것 방지 (3차 UX 점검 2026-11-19)
+    const keep = keepLocalPhotoCount(); // 이 기기 보관 사진은 로그아웃하면 사라진다 — 한 확인창에 함께 (리뷰 2026-11-19)
+    if (!window.confirm(keep > 0 ? `로그아웃할까요?\n이 기기에만 보관한 사진이 든 기록 ${keep}건이 사라집니다(서버에는 없음).` : '로그아웃할까요?')) return; // 설정 바로 아래라 손가락 미스로 재로그인하던 것 방지 (3차 UX 점검 2026-11-19)
     setMoreOpen(false);
     resetFeatureFlags(); // 계정 간 플래그 잔류 방지
     clearLocalPhotoCacheForLogout(); // 공용 기기 개인정보 보호 — 서버 모드에서만

@@ -9,6 +9,8 @@
  */
 import { apiRequest, isAuthApiConfigured } from './authApi';
 
+// 제거된 레거시 수동 게이트웨이의 URL·키가 옛 기기 localStorage에 남아 있으면 지운다(비밀값 잔존 방지, 리뷰 2026-11-19)
+try { localStorage.removeItem('crm_sms_gateway_url'); localStorage.removeItem('crm_sms_gateway_key'); } catch { /* noop */ }
 
 export interface SendPayload {
   type: string;

@@ -51,7 +51,7 @@ function deAlias(text: string, aliases: CustomerAliases): string {
   return text.replace(/고객#(\d+)/g, m => aliases.get(m) ?? m);
 }
 
-function buildCrmContext(): { context: string; aliases: CustomerAliases } {
+function buildCrmContext(): { context: string; aliases: CustomerAliases; forwardAlias: (text: string) => string } {
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
   const customers = CustomerStore.getAll();
@@ -65,10 +65,16 @@ function buildCrmContext(): { context: string; aliases: CustomerAliases } {
   const reservations = ReservationStore.getAll();
   const treatmentLogs = TreatmentLogStore.getAll();
   // 개인정보 보호(제3자 제공 최소화): 고객 이름은 고객#번호로 가명화해 보내고 전화번호는 보내지 않는다 — 답변의 고객#번호는 화면에서 이름으로 되돌린다 (보안 감사 2026-11-19)
+  // 가명은 고객 id 기준 — 같은 이름의 두 고객이 한 가명으로 합쳐져 모순된 행을 보내지 않게 (리뷰 2026-11-19)
   const aliases: CustomerAliases = new Map();
-  const aliasByName = new Map<string, string>();
-  customers.forEach((c, i) => { const a = `고객#${i + 1}`; aliases.set(a, c.name); if (!aliasByName.has(c.name)) aliasByName.set(c.name, a); });
-  const alias = (name?: string) => (name ? aliasByName.get(name) ?? '고객(미등록)' : '-');
+  const aliasById = new Map<string, string>();
+  customers.forEach((c, i) => { const a = `고객#${i + 1}`; aliases.set(a, c.name); aliasById.set(c.id, a); });
+  const alias = (customerId?: string) => (customerId ? aliasById.get(customerId) ?? '고객(미등록)' : '-');
+  // 질문·이전 답변에 든 실제 이름도 가명으로 바꿔 보낸다 — 2턴째부터 이름이 그대로 나가고, 이름으로 물으면 "데이터에 없다"고 답하던 것 방지. 긴 이름부터(부분 일치 방지), 동명이인은 먼저 등록된 고객의 가명
+  const nameToAlias = new Map<string, string>();
+  for (const c of customers) if (c.name && c.name.length >= 2 && !nameToAlias.has(c.name)) nameToAlias.set(c.name, aliasById.get(c.id)!);
+  const names = [...nameToAlias.keys()].sort((a, b) => b.length - a.length);
+  const forwardAlias = (text: string) => names.reduce((acc, name) => acc.split(name).join(nameToAlias.get(name)!), text);
 
   const churned = customers.filter(c => {
     if (!c.lastVisitDate) return false;
@@ -94,12 +100,12 @@ function buildCrmContext(): { context: string; aliases: CustomerAliases } {
 - 이탈 위험 고객 (3개월 이상 미방문): ${churned.length}명
 
 【전체 고객 목록】
-${customers.map(c => `- ${alias(c.name)} | 등급:${c.grade} | 피부타입:${c.skinType || '-'} | 총방문:${c.totalVisits}회 | 총결제:${c.totalSpent.toLocaleString()}원 | 마지막방문:${c.lastVisitDate || '없음'} | 가입:${c.registeredAt} | 유입경로:${c.referralSource || '-'}`).join('\n')}
+${customers.map(c => `- ${alias(c.id)} | 등급:${c.grade} | 피부타입:${c.skinType || '-'} | 총방문:${c.totalVisits}회 | 총결제:${c.totalSpent.toLocaleString()}원 | 마지막방문:${c.lastVisitDate || '없음'} | 가입:${c.registeredAt} | 유입경로:${c.referralSource || '-'}`).join('\n')}
 
 【이탈 고객 상세 (3개월 이상 미방문)】
 ${churned.length === 0 ? '해당 없음' : churned.map(c => {
     const days = differenceInDays(today, parseISO(c.lastVisitDate!));
-    return `- ${alias(c.name)} | ${days}일 미방문 | 등급:${c.grade} | 총방문:${c.totalVisits}회 | 마지막방문:${c.lastVisitDate}`;
+    return `- ${alias(c.id)} | ${days}일 미방문 | 등급:${c.grade} | 총방문:${c.totalVisits}회 | 마지막방문:${c.lastVisitDate}`;
   }).join('\n')}
 
 【이번 달 매출】
@@ -107,7 +113,7 @@ ${churned.length === 0 ? '해당 없음' : churned.map(c => {
 - 결제 건수: ${thisMonthPayments.length}건
 
 【전체 결제 내역 (최근 12개월)】
-${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${alias(p.customerName)} | ${p.amount.toLocaleString()}원 | ${p.paymentMethod} | ${p.status}`).join('\n')}
+${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${alias(p.customerId)} | ${p.amount.toLocaleString()}원 | ${p.paymentMethod} | ${p.status}`).join('\n')}
 
 【직원 현황】
 ${staff.map((s: any) => `- ${s.name} (${s.role}) | 전문: ${Array.isArray(s.specialty) ? s.specialty.join(', ') : s.specialty || '-'}`).join('\n')}
@@ -122,12 +128,12 @@ ${products.map(p => `- ${p.name} | 재고:${p.stock}개 | 최소재고:${p.minSt
 ${lowStock.length === 0 ? '없음' : lowStock.map(p => `- ${p.name}: 현재 ${p.stock}개 (최소 ${p.minStock}개)`).join('\n')}
 
 【예약 현황 (최근)】
-${reservations.slice(0, 10).map((r: any) => `- ${r.date} ${r.startTime} | ${alias(r.customerName)} | ${Array.isArray(r.services) ? r.services.map((s: any) => s.serviceName).join('+') : '-'} | ${r.staffName} | ${r.status}`).join('\n')}
+${reservations.slice(0, 10).map((r: any) => `- ${r.date} ${r.startTime} | ${alias(r.customerId)} | ${Array.isArray(r.services) ? r.services.map((s: any) => s.serviceName).join('+') : '-'} | ${r.staffName} | ${r.status}`).join('\n')}
 
 【시술 기록】
-${treatmentLogs.map((t: any) => `- ${t.treatmentDate} | ${alias(t.customerName)} | ${t.programName || t.treatmentDetails || '-'} | ${t.customerProgramId ? `회차 차감 ${t.sessionsUsed ?? 1}회` : '단건'} | 담당:${t.staffName || '-'}`).join('\n')}
+${treatmentLogs.map((t: any) => `- ${t.treatmentDate} | ${alias(t.customerId)} | ${t.programName || t.treatmentDetails || '-'} | ${t.customerProgramId ? `회차 차감 ${t.sessionsUsed ?? 1}회` : '단건'} | 담당:${t.staffName || '-'}`).join('\n')}
 `.trim();
-  return { context, aliases };
+  return { context, aliases, forwardAlias };
 }
 
 async function callClaude(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
@@ -280,10 +286,11 @@ function AiChatInner() {
     setIsLoading(true);
 
     try {
-      const { context: crmContext, aliases } = buildCrmContext();
+      const { context: crmContext, aliases, forwardAlias } = buildCrmContext();
+      // 화면의 메시지는 이름으로 보이지만 모델에는 질문·이전 답변까지 가명으로 — 양방향 (리뷰 2026-11-19)
       const history = [...messages, userMsg]
         .filter(m => m.id !== '0')
-        .map(m => ({ role: m.role, content: m.content }));
+        .map(m => ({ role: m.role, content: forwardAlias(m.content) }));
 
       // 1순위: 본사 AI 중계(지점 키 불필요). 실패하거나 꺼져 있으면 지점 키 경로.
       let proxyText: string | null = null;

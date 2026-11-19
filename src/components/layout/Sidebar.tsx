@@ -10,7 +10,7 @@ import { parseISO } from 'date-fns';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { featureForPath } from '../../lib/featureRegistry';
 import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
-import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
+import { clearLocalPhotoCacheForLogout, confirmLogoutDespiteKeepLocal } from '../../lib/photoStore';
 import { useFeatureFlagsTick } from '../../hooks/useFeature';
 
 const navItems = [
@@ -155,7 +155,7 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
           <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
         </div>
         <button
-          onClick={() => { resetFeatureFlags(); clearLocalPhotoCacheForLogout(); logout(); }}
+          onClick={() => { if (!confirmLogoutDespiteKeepLocal()) return; resetFeatureFlags(); clearLocalPhotoCacheForLogout(); logout(); }} // 이 기기 보관 사진이 있으면 사라진다고 먼저 묻는다 (리뷰 2026-11-19)
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
         >
           <LogOut size={14} />

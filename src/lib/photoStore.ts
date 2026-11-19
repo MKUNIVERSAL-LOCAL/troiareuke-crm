@@ -380,6 +380,11 @@ export function rejectedPhotoCount(): number { return REJECTED_PUSH.size; }
  * 이 사진은 서버에 없으므로 이 기기에서 로그아웃(캐시 비우기)하면 함께 사라진다 — 확인창·로그아웃 경로가 그 사실을 알린다 (리뷰 2026-11-19).
  */
 export function keepLocalPhotoCount(): number { return getKeepLocalKeys().length; }
+/** 로그아웃 전 공용 확인 — 이 기기에만 보관한 사진이 있으면 사라진다고 묻고, 없으면 그냥 true. 모든 지점 로그아웃 경로(사이드바·모바일 더보기·앱 잠금)가 같이 쓴다 (리뷰 2026-11-19) */
+export function confirmLogoutDespiteKeepLocal(): boolean {
+  const n = keepLocalPhotoCount();
+  return n === 0 || window.confirm(`이 기기에만 보관한 사진이 든 기록 ${n}건이 로그아웃하면 사라집니다(서버에는 없음). 계속할까요?`);
+}
 export function keepRejectedPhotosLocal(): number {
   const keys = [...REJECTED_PUSH.keys()];
   for (const key of keys) { setKeepLocal(key, true); setDirty(key, false); REJECTED_PUSH.delete(key); }

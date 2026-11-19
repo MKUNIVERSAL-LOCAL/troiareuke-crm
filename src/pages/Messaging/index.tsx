@@ -971,8 +971,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           <AlertCircle size={48} className="text-amber-400 mb-3" />
           <p className="text-lg font-bold text-gray-900">실제 발송이 되지 않았습니다</p>
           <p className="text-sm text-gray-600 mt-2 leading-relaxed">
-            메시지 발송 게이트웨이가 아직 연동되지 않았습니다.<br />
-            설정 &gt; 연동에서 준비 예정입니다.
+            본사 서버에 문자·알림톡 발송사가 아직 연동되지 않았습니다.<br />
+            연동되면 이 화면 그대로 실제 발송됩니다 — 지점에서 따로 설정할 것은 없습니다.
           </p>
           <p className="text-xs text-gray-400 mt-3 bg-gray-50 rounded-lg px-3 py-2">{resultMessage}</p>
           <p className="text-xs text-gray-400 mt-2">발송 이력에 '미연동' 사유로 기록되었습니다.</p>

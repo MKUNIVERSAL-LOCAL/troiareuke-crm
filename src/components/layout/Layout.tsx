@@ -66,7 +66,7 @@ export default function Layout() {
             프로그램을 사용해주세요.
           </p>
           <button
-            onClick={async () => { clearLocalPhotoCacheForLogout(); await logout(); window.location.hash = '#/admin/login'; window.location.reload(); }}
+            onClick={async () => { clearLocalPhotoCacheForLogout(); await logout(); window.location.hash = '#/admin/login'; window.location.reload(); }} // 어드민 계정은 지점 사진을 보관하지 않으므로 보관 사진 확인은 생략
             className="px-5 py-2.5 bg-[#1a3a8f] hover:bg-[#0d2260] text-white text-sm font-semibold rounded-xl transition-colors"
           >
             관리자 로그인으로 돌아가기
