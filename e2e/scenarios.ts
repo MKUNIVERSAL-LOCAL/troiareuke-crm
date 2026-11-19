@@ -3,7 +3,7 @@ import { pickCustomer, visibleButton, type E2EAccount } from './helpers';
 import {
   dialog,
   registerPayment, registerExpense, expectPnl, expectSales, changeFirstExpenseCategory, refundFirstPayment,
-  addProgram, changeGrade, sellProgramToCustomer, expectProgramSessions, logTreatment, openCustomer, programCard,
+  addProgram, changeGrade, expectProgramEditValidity, sellProgramToCustomer, expectProgramSessions, logTreatment, openCustomer, programCard,
   addProduct, expectStock, sellProduct, cancelFirstSale,
   addReservation, reservationItems, openReservationDetail, completeReservation, setReservationStatus, expectReservationDetail,
   expectTodayCard, expectStaffPerformance, expectCustomerNoShows,
@@ -44,6 +44,10 @@ export async function salesScenario(page: Page, acc: E2EAccount) {
 
 /** 회차권·제품: 10회 300,000 판매 → 차감 1회 → 제품 48,000 재고 12 → 판매 1 → 매출 348,000 → 판매 취소 → 재고 12·매출 300,000 */
 export async function programsProductsScenario(page: Page, acc: E2EAccount) {
+  // 무기한 회차권: 유효기간을 비우면 카드에 '기간 무제한', [수정]을 열어도 빈칸 그대로(열고 저장만 해도 180일이 되던 결함, 57)
+  await addProgram(page, { name: '무기한 5회권', sessions: 5, price: 100000, validityDays: '' });
+  await expect(page.getByTestId('program-item').filter({ hasText: '무기한 5회권' }).getByText('기간 무제한')).toBeVisible();
+  await expectProgramEditValidity(page, '무기한 5회권', '');
   await addProgram(page, { name: '수분관리 10회권', sessions: 10, price: 300000 });
   await sellProgramToCustomer(page, acc, '수분관리 10회권 — 300,000원', { expectPrice: /300,?000/ });
   await expectProgramSessions(page, '수분관리 10회권', 0, 10);

@@ -3,7 +3,7 @@ import { todayISO } from '../../lib/format';
 import { useState, useRef } from 'react';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { StaffStore, ServiceStore, ProgramStore, SettingsStore } from '../../lib/store';
+import { StaffStore, ServiceStore, SettingsStore } from '../../lib/store';
 import { PLANS } from '../../lib/payment';
 import type { ShopSettings, SubscriptionPlan } from '../../types';
 import { loadXlsx } from '../../lib/dataExport';
@@ -231,25 +231,10 @@ export default function Onboarding() {
     // 직원/시술이 중복 생성되지 않도록, 이미 저장된 이름은 건너뛴다.
     const existingStaffNames = new Set(StaffStore.getAll().filter(s => !s.id.startsWith('sample_')).map(s => s.name));
     const existingServiceNames = new Set(ServiceStore.getAll().filter(s => !s.id.startsWith('sample_')).map(s => s.name));
-    const existingProgramNames = new Set(ProgramStore.getAll().filter(p => !p.id.startsWith('sample_')).map(p => p.name));
     const saveServiceOnce = (svc: { name: string; category: string; duration: number; price: number; description?: string }) => {
       if (!existingServiceNames.has(svc.name)) {
         ServiceStore.save({ name: svc.name, category: svc.category, duration: svc.duration, price: svc.price, isActive: true });
         existingServiceNames.add(svc.name);
-      }
-      if (!existingProgramNames.has(svc.name)) {
-        ProgramStore.save({
-          name: svc.name,
-          category: svc.category,
-          totalSessions: null,
-          validityDays: null,
-          price: svc.price,
-          costPrice: 0,
-          description: svc.description,
-          color: '#1a3a8f',
-          isActive: true,
-        });
-        existingProgramNames.add(svc.name);
       }
     };
 

@@ -71,7 +71,7 @@ export default function Programs() {
       category: p.category,
       totalSessions: p.totalSessions?.toString() || '10',
       isTimed: p.totalSessions === null,
-      validityDays: p.validityDays?.toString() || '180',
+      validityDays: p.validityDays?.toString() ?? '', // 무제한(null)은 빈칸 그대로 — '180'을 채우면 저장만 해도 만료 상품이 됐다 (UX 점검 2026-11-19)
       price: p.price.toString(),
       costPrice: p.costPrice.toString(),
       description: p.description || '',
@@ -86,6 +86,10 @@ export default function Programs() {
     const sessions = form.isTimed ? null : parseInt(form.totalSessions);
     if (sessions !== null && (Number.isNaN(sessions) || sessions < 1)) {
       notify('회차는 1 이상이어야 합니다');
+      return;
+    }
+    if (form.isTimed && !form.validityDays) {
+      notify('기간제 프로그램은 유효기간(일)이 필요합니다. 횟수도 기간도 없는 상품은 만들 수 없습니다.');
       return;
     }
     const data: Omit<Program, 'id' | 'shopId' | 'createdAt'> = {
@@ -278,12 +282,10 @@ export default function Programs() {
                       <span>기간제</span>
                     </div>
                   )}
-                  {program.validityDays && (
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <Calendar size={12} />
-                      <span>{program.validityDays}일 유효</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <Calendar size={12} />
+                    <span>{program.validityDays ? `${program.validityDays}일 유효` : '기간 무제한'}</span>
+                  </div>
                 </div>
 
                 <div className="border-t border-gray-50 pt-3 flex items-end justify-between">
@@ -297,9 +299,13 @@ export default function Programs() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400">마진율</p>
-                    <p className={`text-sm font-bold ${margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600'}`}>
-                      {margin}%
-                    </p>
+                    {program.costPrice > 0 ? (
+                      <p className={`text-sm font-bold ${margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600'}`}>
+                        {margin}%
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-500">원가 미입력</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -314,7 +320,7 @@ export default function Programs() {
           <div ref={deleteModalRef} role="dialog" aria-modal="true" aria-label="프로그램 삭제" className="modal-card bg-white rounded-2xl p-6 w-full max-w-sm">
             <h3 className="font-bold text-gray-900 mb-2">프로그램 삭제</h3>
             <p className="text-sm text-gray-500 mb-5">
-              이 프로그램을 삭제하면 복구할 수 없습니다. 고객에게 등록된 기존 회차권에는 영향이 없습니다.
+              이 프로그램을 삭제하면 복구할 수 없습니다. 고객에게 등록된 기존 회차권에는 영향이 없습니다. 판매만 멈추려면 삭제 대신 [수정]에서 '프로그램 활성화'를 끄세요.
             </p>
             <div className="flex gap-2">
               <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">취소</button>
@@ -422,7 +428,7 @@ export default function Programs() {
                     min="1"
                     className="w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
-                  <span className="text-sm text-gray-400">일 (비워두면 무제한)</span>
+                  <span className="text-sm text-gray-400">일 (회차권은 비워두면 무제한, 기간제는 필수)</span>
                 </div>
                 <div className="flex gap-2 mt-2">
                   {[90, 180, 365].map(d => (

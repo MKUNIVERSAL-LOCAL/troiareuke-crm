@@ -98,7 +98,6 @@ function writeRejected(list: RejectedNasMutation[]): boolean {
     return true;
   } catch (e) { console.error('[NAS] 거부 목록 저장 실패:', e); return false; }
 }
-export function rejectedNasOutboxCount(): number { return readRejected().length; }
 export function listRejectedNasOutbox(): RejectedNasMutation[] { return readRejected(); }
 export function clearRejectedNasOutbox(): void { writeRejected([]); }
 /** 거부분을 대기열 맨 뒤에 다시 넣는다 — 서버를 업데이트한 뒤 쓰는 수동 재시도 */

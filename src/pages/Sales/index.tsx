@@ -337,10 +337,10 @@ export default function Sales() {
     setShowModal(true);
   }
 
-  // 결제 삭제 — 제품 결제는 차단 (PaymentStore.delete는 재고·판매기록을 복구하지 않아
-  // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생)
+  // 결제 삭제 — 판매 기록과 연결된 제품 결제(referenceId)는 차단 (PaymentStore.delete는 재고·판매기록을 복구하지 않아
+  // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생). 연결 없는 옛 제품 결제는 일반 결제처럼 지운다 (UX 점검 2026-11-19)
   function handleDelete(p: Payment) {
-    if (p.type === 'product') {
+    if (p.type === 'product' && p.referenceId) {
       notify('제품 결제는 여기서 삭제하면 재고·판매기록과 어긋납니다. 제품/재고 페이지의 판매 취소를 사용해주세요.');
       return;
     }
@@ -378,12 +378,18 @@ export default function Sales() {
 
     // 제품 결제를 '환불'로 저장하면 매출에선 빠지지만 재고·판매기록은 안 돌아오는
     // 크로스 모듈 불일치(QA⑤) — 신규·수정 모두 차단, 판매 기록 삭제(재고 자동 복구)로 유도
-    const effectiveType = editingId ? editingPayment?.type : form.type;
-    if (form.status === 'refunded' && effectiveType === 'product') {
+    if (form.status === 'refunded' && editingId && editingPayment?.type === 'product' && editingPayment.referenceId) {
       notify(
         '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 해당 판매를 삭제해주세요.\n' +
         '판매 기록을 삭제하면 재고 복구와 결제 취소가 함께 처리됩니다.'
       );
+      return;
+    }
+
+    // 제품 판매와 연결된 결제의 금액·날짜·고객을 여기서 바꾸면 판매 기록·재고 집계와 어긋난다 — 메모·결제 수단만 (UX 점검 2026-11-19)
+    if (editingId && editingPayment?.type === 'product' && editingPayment.referenceId
+      && (amount !== editingPayment.amount || form.paymentDate !== editingPayment.paymentDate || (form.customerId || '') !== (editingPayment.customerId || ''))) {
+      notify('제품 판매와 연결된 결제는 금액·날짜·고객을 여기서 바꿀 수 없습니다. [제품/재고 > 판매 기록]에서 취소한 뒤 다시 기록해주세요. (메모·결제 수단은 수정 가능)');
       return;
     }
 
@@ -481,11 +487,11 @@ export default function Sales() {
 
       {/* 월 선택 */}
       <div className="flex items-center gap-3 mb-6 bg-white border border-gray-100 rounded-2xl p-3 w-fit">
-        <button onClick={() => changeMonth(-1)} aria-label="이전 달" className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => changeMonth(-1)} aria-label={tab === 'pnl' && pnlMode !== 'month' ? '이전 기간' : '이전 달'} className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
         <span className="text-sm font-bold text-gray-900 min-w-[100px] text-center">{monthLabel}</span>
-        <button onClick={() => changeMonth(1)} aria-label="다음 달" className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => changeMonth(1)} aria-label={tab === 'pnl' && pnlMode !== 'month' ? '다음 기간' : '다음 달'} className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronRight size={16} className="text-gray-400" />
         </button>
       </div>
@@ -618,7 +624,7 @@ export default function Sales() {
               <input
                 value={listSearch}
                 onChange={e => setListSearch(e.target.value)}
-                placeholder="고객명, 구분, 결제수단, 메모 검색"
+                placeholder="고객명, 구분, 결제 수단, 메모 검색"
                 className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
                 aria-label="결제 내역 검색"
               />
@@ -642,7 +648,7 @@ export default function Sales() {
                 className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
                 aria-label="결제 수단 필터"
               >
-                <option value="all">전체 결제수단</option>
+                <option value="all">전체 결제 수단</option>
                 {getAllPaymentMethods().map(method => <option key={method} value={method}>{method}</option>)}
               </select>
             </div>
@@ -675,6 +681,7 @@ export default function Sales() {
                           <span>{p.paymentMethod}</span>
                           {p.discountAmount > 0 && <span className="text-orange-700">-{formatPrice(p.discountAmount)}</span>}
                         </p>
+                        {p.memo && <p className="mt-0.5 text-xs text-gray-500 truncate">{p.memo}</p>}
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
@@ -693,7 +700,7 @@ export default function Sales() {
                     <span>날짜</span>
                     <span className="col-span-2">고객</span>
                     <span>구분</span>
-                    <span>결제 방법</span>
+                    <span>결제 수단</span>
                     <span className="text-right">금액</span>
                   </div>
                   {listPayments.map(p => (
@@ -704,6 +711,7 @@ export default function Sales() {
                         {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-700">-{formatPrice(p.discountAmount)}</span>}
                         {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">환불</span>}
                         {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
+                        {p.memo && <span className="block text-xs text-gray-500 font-normal truncate" title={p.memo}>{p.memo}</span>}
                       </span>
                       <span>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-700'}`}>
@@ -801,7 +809,7 @@ export default function Sales() {
                             {x.vendor && <span className="ml-1.5 text-xs font-normal text-gray-400">· {x.vendor}</span>}
                           </p>
                           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-                            <span>{x.expenseDate}</span>
+                            <span>{formatDate(x.expenseDate)}</span>
                             <span className={`px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-800' : 'bg-rose-50 text-rose-700'}`}>{x.category}</span>
                             <span>{x.paymentMethod}</span>
                           </p>
@@ -823,12 +831,12 @@ export default function Sales() {
                       <span>날짜</span>
                       <span>분류</span>
                       <span className="col-span-2">내용 / 거래처</span>
-                      <span>결제 수단</span>
+                      <span>지불 수단</span>
                       <span className="text-right">금액</span>
                     </div>
                     {expenseList.map(x => (
                       <div key={x.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
-                        <span className="text-gray-500 text-xs">{x.expenseDate}</span>
+                        <span className="text-gray-500 text-xs">{formatDate(x.expenseDate)}</span>
                         <span>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-800' : 'bg-rose-50 text-rose-700'}`}>
                             {x.category}
@@ -1000,7 +1008,10 @@ export default function Sales() {
                     ...(editingPayment?.type === 'program'
                       ? [{ v: 'program', label: '프로그램', icon: Layers }]
                       : []),
-                    { v: 'product', label: '제품 판매', icon: ShoppingBag },
+                    // 제품 결제는 제품/재고 > [판매]에서 재고와 함께 생성 — 여기서 만들면 판매 기록 없는 막다른 결제가 된다(삭제·환불 불가). 편집 때만 타입 유지 (UX 점검 2026-11-19)
+                    ...(editingPayment?.type === 'product'
+                      ? [{ v: 'product', label: '제품 판매', icon: ShoppingBag }]
+                      : []),
                     { v: 'other', label: '기타', icon: DollarSign },
                   ].map(({ v, label, icon: Icon }) => (
                     <button
@@ -1017,6 +1028,9 @@ export default function Sales() {
                     </button>
                   ))}
                 </div>
+                {editingPayment?.type === 'product' && editingPayment.referenceId && (
+                  <p className="text-xs text-amber-700 mt-2">제품 판매와 연결된 결제입니다 — 금액·날짜·고객은 [제품/재고 &gt; 판매 기록]에서 취소한 뒤 다시 기록하세요. 여기서는 메모·결제 수단만 바꿀 수 있습니다.</p>
+                )}
               </div>
 
               {/* 고객 선택 */}
@@ -1051,7 +1065,7 @@ export default function Sales() {
 
               {/* 할인 금액 */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">할인 금액</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">할인 금액 (참고 기록)</label>
                 <div className="relative">
                   <input aria-label="할인 금액"
                     type="text"
@@ -1064,7 +1078,7 @@ export default function Sales() {
                 </div>
                 {form.amount && parseInt(form.discountAmount || '0') > 0 && (
                   <p className="text-xs text-gray-400 mt-1">
-                    결제 금액(할인 반영 후): <strong className="text-gray-600">{formatPrice((parseInt(form.amount.replace(/,/g, '')) || 0))}</strong> — 위 결제 금액란에 할인을 뺀 실수령액을 입력하세요
+                    정가 {formatPrice((parseInt(form.amount.replace(/,/g, ''), 10) || 0) + (parseInt(form.discountAmount.replace(/,/g, ''), 10) || 0))} − 할인 {formatPrice(parseInt(form.discountAmount.replace(/,/g, ''), 10) || 0)} = 결제 <strong className="text-gray-600">{formatPrice(parseInt(form.amount.replace(/,/g, ''), 10) || 0)}</strong> · 할인은 참고 기록이라 결제 금액에서 자동으로 빼지 않습니다
                   </p>
                 )}
               </div>
@@ -1095,12 +1109,15 @@ export default function Sales() {
                 {form.status === 'refunded' && (
                   <p className="text-xs text-red-600 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
                 )}
+                {form.status === 'pending' && (
+                  <p className="text-xs text-amber-700 mt-1">입금 확인 전 기록 — 매출·고객 누적 결제액에 포함되지 않습니다. 입금이 확인되면 '완료'로 바꿔주세요.</p>
+                )}
               </div>
 
-              {/* 결제 방법 & 날짜 */}
+              {/* 결제 수단 & 날짜 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">결제 방법</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">결제 수단</label>
                   <PaymentMethodPicker
                     value={form.paymentMethod}
                     onChange={m => setForm(f => ({ ...f, paymentMethod: m }))}

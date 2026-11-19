@@ -81,7 +81,7 @@ export async function refundFirstPayment(page: Page) {
  * 프로그램 추가 — 회차권(sessions) 또는 기간제(timed). 유효기간을 안 주면 기본값 180일인지 확인하고, 기간제면 총 회차 입력이 없는지도 확인.
  * 끝나면 목록 카드(program-item)가 보여야 한다.
  */
-export async function addProgram(page: Page, p: { name: string; price: number; sessions?: number; timed?: boolean; validityDays?: number }) {
+export async function addProgram(page: Page, p: { name: string; price: number; sessions?: number; timed?: boolean; validityDays?: number | '' }) {
   await page.goto('/programs');
   await visibleButton(page, '프로그램 추가').click();
   const d = dialog(page, '프로그램 추가');
@@ -99,6 +99,17 @@ export async function addProgram(page: Page, p: { name: string; price: number; s
   await d.getByRole('button', { name: '프로그램 추가' }).click();
   await expect(d).toHaveCount(0);
   await expect(page.getByTestId('program-item').filter({ hasText: p.name })).toBeVisible();
+}
+
+/** 프로그램 목록 카드의 [수정] 창을 열어 유효기간 칸 값을 확인하고 닫는다 — 무제한(빈칸)이 '180'으로 채워지던 결함(57) 회귀 */
+export async function expectProgramEditValidity(page: Page, name: string, value: string) {
+  await page.goto('/programs');
+  await page.getByRole('button', { name: `${name} 수정` }).click();
+  const d = dialog(page, '프로그램 수정');
+  await expect(d).toBeVisible();
+  await expect(d.getByLabel('유효기간 (일)')).toHaveValue(value);
+  await d.getByRole('button', { name: '취소', exact: true }).click();
+  await expect(d).toHaveCount(0);
 }
 
 /** 고객 상세를 연다 — PC는 오른쪽 패널, 모바일은 전체 화면 오버레이. 둘 다 [프로그램 등록] 버튼이 보이면 열린 것 */
