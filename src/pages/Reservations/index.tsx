@@ -1163,9 +1163,15 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     r.services.map(s => s.serviceName).filter(Boolean).forEach(n => q.append('services', n)); // 반복 키 — 쉼표가 든 메뉴명도 안전
     goTo(`/treatments?${q.toString()}`);
   };
+  // 이 예약으로 등록된 결제(완료 상태) — 완료 예약의 '결제 등록하기' 노출과 취소 경고에 쓴다 (2026-11-19)
+  const paidForThis = PaymentStore.getAll().filter(p => p.referenceId === r.id && p.status === 'completed');
+  const paidAmount = paidForThis.reduce((s, p) => s + p.amount, 0);
   const handleCancel = () => {
-    // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행
-    if (!window.confirm('이 예약을 취소 처리하시겠습니까?')) return;
+    // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행. 결제가 붙은 완료 예약은 취소해도 결제가 남는다는 걸 분명히 한다
+    const warn = r.status === 'completed' && paidForThis.length > 0
+      ? `\n이 예약은 완료 처리됐고 결제 ${paidAmount.toLocaleString('ko-KR')}원이 등록돼 있습니다. 취소해도 결제는 남습니다 — 환불은 매출 화면에서 처리하세요.`
+      : '';
+    if (!window.confirm(`이 예약을 취소 처리하시겠습니까?${warn}`)) return;
     ReservationStore.updateStatus(r.id, 'cancelled');
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     onUpdate();
@@ -1278,12 +1284,14 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           </button>
         )}
         <div className="flex flex-wrap gap-2 pt-2">
-          <button
-            onClick={handleCancel}
-            className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
-          >
-            취소처리
-          </button>
+          {r.status !== 'cancelled' && (
+            <button
+              onClick={handleCancel}
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            >
+              취소처리
+            </button>
+          )}
           {canNoShow && (
             <button
               onClick={handleNoShow}
@@ -1293,12 +1301,23 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
               노쇼
             </button>
           )}
-          <button
-            onClick={handleComplete}
-            className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
-          >
-            완료처리
-          </button>
+          {/* 이미 완료된 예약엔 '완료처리'를 다시 보이지 않는다(상태 배지가 완료를 보여줌). 결제가 아직 없으면 그 자리에 '결제 등록하기' */}
+          {r.status !== 'completed' ? (
+            <button
+              onClick={handleComplete}
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
+            >
+              완료처리
+            </button>
+          ) : r.totalPrice > 0 && paidForThis.length === 0 ? (
+            <button
+              onClick={() => setShowPayModal(true)}
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
+              title="완료 처리는 됐지만 결제가 등록되지 않은 예약입니다"
+            >
+              결제 등록하기
+            </button>
+          ) : null}
           <button
             onClick={handleDelete}
             className="py-2.5 px-3 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors flex items-center gap-1"
