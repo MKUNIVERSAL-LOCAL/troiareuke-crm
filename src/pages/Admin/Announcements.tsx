@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
+import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import {
   adminListAnnouncements, adminCreateAnnouncement,
@@ -9,10 +10,9 @@ import {
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
-// NAS 중앙 서버 모드에서는 announcements 테이블(NAS Postgres)이 진실.
-// Supabase 경로는 NAS 미설정 구빌드 폴백으로만 유지한다.
+// 공지는 NAS 중앙 서버(announcements 테이블)에만 저장된다. 로컬 모드는 열람 전용(빈 목록).
 const NAS_MODE = isAuthApiConfigured;
-const BACKEND_READY = NAS_MODE || isSupabaseConfigured;
+const BACKEND_READY = NAS_MODE;
 
 interface Announcement {
   id: string;
@@ -35,6 +35,7 @@ const emptyForm = { title: '', content: '', type: 'info', is_active: true };
 export default function Announcements() {
   const [list, setList] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(''); // 로드 실패를 "공지 없음"으로 보이게 하면 장애 중 중복 작성을 유도한다 (8차 점검 2026-11-20)
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Announcement | null>(null);
   const [form, setForm] = useState<typeof emptyForm>(emptyForm);
@@ -44,6 +45,7 @@ export default function Announcements() {
 
   async function load() {
     setLoading(true);
+    setLoadError('');
     if (NAS_MODE) {
       try {
         const { announcements } = await adminListAnnouncements();
@@ -53,16 +55,13 @@ export default function Announcements() {
         })));
       } catch (e: any) {
         console.warn('[Announcements] NAS 로드 실패:', e?.message);
-        alert(`공지 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+        setLoadError(`공지 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
         setList([]);
       }
       setLoading(false);
       return;
     }
-    if (!isSupabaseConfigured) { setList([]); setLoading(false); return; }
-    const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-    if (error) console.warn('[Announcements] 로드 실패:', error.message);
-    setList(data || []);
+    setList([]);
     setLoading(false);
   }
 
@@ -80,15 +79,17 @@ export default function Announcements() {
 
   async function handleSave() {
     if (!BACKEND_READY) return;
+    const title = form.title.trim(), content = form.content.trim();
+    if (!title || !content) { notify.error('제목과 내용을 입력하세요 — 공백만으로는 저장할 수 없습니다.'); return; } // (8차 점검 2026-11-20)
     setSaving(true);
     if (NAS_MODE) {
       try {
-        const payload = { title: form.title, content: form.content, type: form.type, isActive: form.is_active };
+        const payload = { title, content, type: form.type, isActive: form.is_active };
         if (editTarget) await adminUpdateAnnouncement(editTarget.id, payload);
         else await adminCreateAnnouncement(payload);
       } catch (e: any) {
         setSaving(false);
-        alert(`공지 저장에 실패했습니다: ${e?.message || '서버 오류'}`);
+        notify.error(`공지 저장에 실패했습니다: ${e?.message || '서버 오류'}`);
         return; // 저장 실패 시 모달을 닫지 않아 내용이 유실되지 않게 함
       }
       setSaving(false);
@@ -96,33 +97,22 @@ export default function Announcements() {
       load();
       return;
     }
-    const { error } = editTarget
-      ? await supabase.from('announcements').update(form).eq('id', editTarget.id)
-      : await supabase.from('announcements').insert(form);
     setSaving(false);
-    if (error) {
-      alert(`공지 저장에 실패했습니다: ${error.message}`);
-      return; // 저장 실패 시 모달을 닫지 않아 내용이 유실되지 않게 함
-    }
-    setShowModal(false);
-    load();
   }
 
   async function handleDelete(id: string) {
     if (!BACKEND_READY) return;
-    if (!window.confirm('이 공지를 삭제할까요?')) return;
+    const target = list.find(a => a.id === id);
+    if (!window.confirm(`${target ? `'${target.title}' 공지` : '이 공지'}를 삭제할까요?\n지점 화면에서도 바로 사라집니다.`)) return;
     if (NAS_MODE) {
       try {
         await adminDeleteAnnouncement(id);
       } catch (e: any) {
-        alert(`삭제 실패: ${e?.message || '서버 오류'}`);
+        notify.error(`삭제 실패: ${e?.message || '서버 오류'}`);
       }
       load();
       return;
     }
-    const { error } = await supabase.from('announcements').delete().eq('id', id);
-    if (error) alert(`삭제 실패: ${error.message}`);
-    load();
   }
 
   async function handleToggle(a: Announcement) {
@@ -131,14 +121,11 @@ export default function Announcements() {
       try {
         await adminUpdateAnnouncement(a.id, { isActive: !a.is_active });
       } catch (e: any) {
-        alert(`변경 실패: ${e?.message || '서버 오류'}`);
+        notify.error(`변경 실패: ${e?.message || '서버 오류'}`);
       }
       load();
       return;
     }
-    const { error } = await supabase.from('announcements').update({ is_active: !a.is_active }).eq('id', a.id);
-    if (error) alert(`변경 실패: ${error.message}`);
-    load();
   }
 
   return (
@@ -146,11 +133,12 @@ export default function Announcements() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">공지사항 관리</h1>
-          <p className="text-slate-400 text-sm mt-1">전체 샵에 공지 및 업데이트 내용을 발송하세요</p>
+          <p className="text-slate-400 text-sm mt-1">전체 지점의 설정 &gt; 공지사항 탭에 게시됩니다 (문자·푸시 발송이 아닙니다)</p>
         </div>
         <button
           onClick={openAdd}
-          disabled={!BACKEND_READY}
+          disabled={!BACKEND_READY || !!loadError}
+          title={loadError ? '목록을 불러온 뒤 작성할 수 있습니다' : undefined}
           className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={16} />
@@ -175,7 +163,7 @@ export default function Announcements() {
           <p className="text-xs text-slate-400 mt-1">게시 중</p>
         </div>
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl px-5 py-4">
-          <p className="text-2xl font-bold text-slate-500">{list.filter(a => !a.is_active).length}</p>
+          <p className="text-2xl font-bold text-slate-400">{list.filter(a => !a.is_active).length}</p>
           <p className="text-xs text-slate-400 mt-1">숨김</p>
         </div>
       </div>
@@ -186,33 +174,38 @@ export default function Announcements() {
           <div className="flex items-center justify-center h-64">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : loadError ? (
+          <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-300 flex items-center justify-between gap-3">
+            <span>{loadError}</span>
+            <button type="button" onClick={load} className="text-xs underline text-red-200 hover:text-white shrink-0">다시 시도</button>
+          </div>
         ) : list.length === 0 ? (
           <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">
-            <Megaphone size={32} className="text-slate-600 mx-auto mb-3" />
+            <Megaphone size={32} className="text-slate-400 mx-auto mb-3" />
             <p className="text-slate-400">등록된 공지사항이 없습니다</p>
-            <p className="text-slate-600 text-sm mt-1">"공지 작성" 버튼으로 첫 공지를 작성하세요</p>
+            <p className="text-slate-400 text-sm mt-1">"공지 작성" 버튼으로 첫 공지를 작성하세요</p>
           </div>
         ) : (
           list.map(a => {
             const type = typeOptions.find(t => t.value === a.type) || typeOptions[0];
             return (
-              <div key={a.id} className={`bg-slate-900 border rounded-2xl p-5 transition-all ${a.is_active ? 'border-slate-700/50' : 'border-slate-800/30 opacity-50'}`}>
+              <div key={a.id} className={`bg-slate-900 border rounded-2xl p-5 transition-all ${a.is_active ? 'border-slate-700/50' : 'border-dashed border-slate-700'}`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${type.color}`}>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${type.color}`}>
                         {type.label}
                       </span>
                       {a.is_active ? (
-                        <span className="flex items-center gap-1 text-[11px] text-emerald-400">
+                        <span className="flex items-center gap-1 text-xs text-emerald-400">
                           <CheckCircle size={11} /> 게시 중
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                        <span className="flex items-center gap-1 text-xs text-slate-400">
                           <XCircle size={11} /> 숨김
                         </span>
                       )}
-                      <span className="text-[11px] text-slate-600 ml-auto">
+                      <span className="text-xs text-slate-400 ml-auto">
                         {format(parseISO(a.created_at), 'yyyy.MM.dd HH:mm', { locale: ko })}
                       </span>
                     </div>
@@ -232,12 +225,14 @@ export default function Announcements() {
                     </button>
                     <button
                       onClick={() => openEdit(a)}
+                      aria-label={`'${a.title}' 공지 수정`}
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
                     >
                       <Pencil size={13} />
                     </button>
                     <button
                       onClick={() => handleDelete(a.id)}
+                      aria-label={`'${a.title}' 공지 삭제`}
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
                     >
                       <Trash2 size={13} />
@@ -252,8 +247,7 @@ export default function Announcements() {
 
       {/* 작성/수정 모달 */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
+        <AdminDialog title={editTarget ? '공지 수정' : '새 공지 작성'} onClose={() => setShowModal(false)} size="lg" escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">{editTarget ? '공지 수정' : '새 공지 작성'}</h2>
             </div>
@@ -275,8 +269,8 @@ export default function Announcements() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">제목 *</label>
-                <input
+                <label htmlFor="ann-title" className="block text-xs font-medium text-slate-400 mb-1.5">제목 *</label>
+                <input id="ann-title"
                   className="admin-input"
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -284,8 +278,8 @@ export default function Announcements() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">내용 *</label>
-                <textarea
+                <label htmlFor="ann-content" className="block text-xs font-medium text-slate-400 mb-1.5">내용 *</label>
+                <textarea id="ann-content"
                   className="admin-input resize-none"
                   rows={5}
                   value={form.content}
@@ -298,7 +292,7 @@ export default function Announcements() {
                   <input type="checkbox" className="sr-only peer" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} />
                   <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
-                <span className="text-xs text-slate-400">즉시 게시</span>
+                <span className="text-xs text-slate-400">{form.is_active ? (editTarget ? '게시' : '즉시 게시') : '숨김'}</span>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
@@ -307,8 +301,7 @@ export default function Announcements() {
                 {saving ? '저장 중...' : '저장하기'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       <style>{`

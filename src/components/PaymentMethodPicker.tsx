@@ -1,5 +1,6 @@
+import { isImeKey } from '../lib/ime';
 import { notify } from '../lib/notify';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { getAllPaymentMethods, getCustomPaymentMethods, addCustomPaymentMethod, removeCustomPaymentMethod } from '../lib/paymentMethods';
 
@@ -54,7 +55,7 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
                   setMethods(getAllPaymentMethods());
                   if (value === m) onChange('카드');
                 }}
-                className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${value === m ? 'text-white/70 hover:text-white' : 'text-gray-300 hover:text-red-400'}`}
+                className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${value === m ? 'text-white/70 hover:text-white' : 'text-gray-300 hover:text-red-600'}`}
               >
                 <X size={12} />
               </button>
@@ -77,9 +78,9 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
             autoFocus
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
+            onKeyDown={e => { if (e.key === 'Enter' && !isImeKey(e)) { e.preventDefault(); handleAdd(); } }} // 한글 조합 중 Enter로 반쪽 이름이 추가되지 않게
             placeholder="결제수단 이름 (예: 상품권, 제로페이)"
-            className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
           <button type="button" onClick={handleAdd} className="px-3 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm">추가</button>
           <button type="button" onClick={() => { setAdding(false); setNewName(''); }} className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-500">취소</button>

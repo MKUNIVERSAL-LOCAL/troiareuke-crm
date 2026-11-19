@@ -9,12 +9,12 @@
 - **새 데드코드를 만들지 않는다**: 미사용 export·import·파일·주석처리 블록을 남기지 말 것. 기능을 빼면 관련 코드도 같이 삭제.
 - **작업 중 발견한 데드코드는 그 자리에서 정리**한다 (단, 코어 내부는 기록만).
 - 장식 UI 금지: onClick 없는 버튼, 저장 안 되는 입력, 상태와 무관한 배지 등 "동작하는 척"하는 요소를 만들지 않는다.
-- 가짜 성공 금지: supabase 호출은 반드시 `{ error }` 확인, 실패를 사용자에게 알린다.
+- 가짜 성공 금지: 서버(NAS API) 호출은 반드시 실패를 확인하고 사용자에게 알린다.
 - 폐기된 문서는 삭제 대신 `docs/archive/`로 이동 (기록 보존).
 
 ## 3. 검증 없이 완료 보고 금지
 - 수정 후: `npx tsc --noEmit` 0 에러 + `npm run build` 통과 확인.
-- 사용자에게 "테스트해보세요" 전에: 백엔드 생존 확인(NAS `/health`, Supabase) + 가능하면 E2E/스모크.
+- 사용자에게 "테스트해보세요" 전에: 백엔드 생존 확인(NAS `/health`) + 가능하면 E2E/스모크. (Supabase 폴백 프로젝트는 2026-11-17 소멸 확인 — 제거 계획 `docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md` P1)
 - 회귀 점검: 변경 함수의 호출자 전수 추적 (상위 CLAUDE.md 원칙 4).
 
 ## 4. 기록
@@ -23,7 +23,7 @@
 
 ## 5. 릴리스·빌드 함정 (2026-07-24 실사고 기록)
 - **빌드 전 `.env.local` 삭제 필수** — QA용 오버라이드가 남으면 서버 연결이 빠진 오염 exe가 배포된다(v1.0.34 실사고). vite.config.ts가 빌드 시 존재하면 throw하는 가드 있음.
-- **ENV 마커 검증은 `release/win-unpacked/resources/app.asar`에서** — 포터블 exe는 7z 압축이라 Select-String이 항상 False(오탐). 검사 패턴: `hmgxhrtqfbffqrleorxf`(Supabase)와 `crm-api.mkcorp.familyds.com`(NAS).
+- **ENV 마커 검증은 `release/win-unpacked/resources/app.asar`에서** — 포터블 exe는 7z 압축이라 Select-String이 항상 False(오탐). 검사 패턴: `crm-api.mkcorp.familyds.com`(NAS). (Supabase 마커 `hmgxhrtqfbffqrleorxf`는 2026-11-17부터 빌드에서 제외 — 있으면 오히려 구 .env 오염.)
 - **버전 범프·한글 파일 수정은 Edit 도구로만** — PowerShell `-replace | Set-Content`는 CP949로 한글을 파손시킨다.
 - **exe는 빌드 후 CDP 런타임 검증**(scratchpad verify-build.mjs 패턴): `--remote-debugging-port` + `window.electronAPI.isAdminBuild` 확인 (일반=false, 어드민=true).
 - **logout()의 localStorage wipe는 서버 모드 전용** — 로컬 모드에서 wipe하면 유일한 저장소가 지워져 데이터 영구 소실(QA⑤ 치명 버그로 수정됨). 로그아웃 관련 변경 시 로컬/NAS/Supabase 3모드 모두 검토.

@@ -1,5 +1,7 @@
 import { notify } from '../../lib/notify';
-import { useState, useEffect } from 'react';
+import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
+import Header from '../../components/layout/Header';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Package, Edit2, Trash2, CheckCircle, XCircle, Tag, Clock, Calendar, Search } from 'lucide-react';
 import { ProgramStore } from '../../lib/store';
 import type { Program } from '../../types';
@@ -43,6 +45,12 @@ export default function Programs() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  useOverlayClose(showModal, () => setShowModal(false), { escape: false }); // Android 뒤로가기 — 폼은 Esc 제외
+  useOverlayClose(!!deleteConfirm, () => setDeleteConfirm(null));
+  const formModalRef = useRef<HTMLDivElement>(null);
+  const deleteModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showModal, formModalRef); // 첫 입력란 포커스·Tab 순환·닫힐 때 복원
+  useFocusTrap(!!deleteConfirm, deleteModalRef);
 
   useEffect(() => { loadPrograms(); }, []);
 
@@ -63,7 +71,7 @@ export default function Programs() {
       category: p.category,
       totalSessions: p.totalSessions?.toString() || '10',
       isTimed: p.totalSessions === null,
-      validityDays: p.validityDays?.toString() || '180',
+      validityDays: p.validityDays?.toString() ?? '', // 무제한(null)은 빈칸 그대로 — '180'을 채우면 저장만 해도 만료 상품이 됐다 (UX 점검 2026-11-19)
       price: p.price.toString(),
       costPrice: p.costPrice.toString(),
       description: p.description || '',
@@ -80,11 +88,20 @@ export default function Programs() {
       notify('회차는 1 이상이어야 합니다');
       return;
     }
+    const validityDays = parseInt(form.validityDays, 10);
+    if (form.validityDays.trim() !== '' && !(validityDays >= 1)) {
+      notify('유효기간은 1일 이상이어야 합니다. 회차권을 무제한으로 두려면 칸을 비워주세요.');
+      return;
+    }
+    if (form.isTimed && !(validityDays >= 1)) {
+      notify('기간제 프로그램은 유효기간(일)이 필요합니다. 횟수도 기간도 없는 상품은 만들 수 없습니다.');
+      return;
+    }
     const data: Omit<Program, 'id' | 'shopId' | 'createdAt'> = {
       name: form.name,
       category: form.category,
       totalSessions: sessions,
-      validityDays: form.validityDays ? parseInt(form.validityDays) : null,
+      validityDays: validityDays >= 1 ? validityDays : null,
       price: parseInt(form.price.replace(/,/g, '')) || 0,
       costPrice: parseInt(form.costPrice.replace(/,/g, '')) || 0,
       description: form.description,
@@ -122,21 +139,11 @@ export default function Programs() {
   const activeCount = programs.filter(p => p.isActive).length;
 
   return (
+    <>
+      <Header title="시술 프로그램 관리" subtitle="회차권·패키지처럼 여러 번 관리하는 프로그램을 등록하고 관리하세요" actions={<button type="button" onClick={openCreate} className="flex items-center gap-2 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors">
+          <Plus size={16} />프로그램 추가
+        </button>} />
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      {/* 헤더 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">시술 프로그램 관리</h1>
-          <p className="text-sm text-gray-400 mt-0.5">회원권, 패키지, 회차권 등 프로그램을 등록하고 관리하세요</p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors shadow-md shadow-blue-200"
-        >
-          <Plus size={16} />
-          프로그램 추가
-        </button>
-      </div>
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
@@ -146,7 +153,7 @@ export default function Programs() {
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <p className="text-xs text-gray-400 mb-1">활성 프로그램</p>
-          <p className="text-2xl font-bold text-green-600">{activeCount}개</p>
+          <p className="text-2xl font-bold text-green-700">{activeCount}개</p>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <p className="text-xs text-gray-400 mb-1">최저가</p>
@@ -174,7 +181,7 @@ export default function Programs() {
             aria-label="프로그램 검색"
           />
         </label>
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto no-scrollbar">
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto no-scrollbar pr-6">
           {([
             ['all', '전체 상태'],
             ['active', '활성'],
@@ -183,22 +190,22 @@ export default function Programs() {
             <button
               key={value}
               onClick={() => setStatusFilter(value)}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${statusFilter === value ? 'bg-white text-[#1a3a8f] shadow-sm' : 'text-gray-500'}`}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${statusFilter === value ? 'bg-white text-[#1a3a8f] shadow-sm' : 'text-gray-600'}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <span className="text-xs text-gray-400 whitespace-nowrap">{filtered.length}개 표시</span>
+        <span className="text-xs text-gray-600 whitespace-nowrap">{filtered.length}개 표시</span>
       </div>
 
       {/* 카테고리 필터 */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar sm:flex-wrap">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar pr-6 sm:flex-wrap">
         {['전체', ...CATEGORIES].map(cat => (
           <button
             key={cat}
             onClick={() => setFilterCategory(cat)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               filterCategory === cat
                 ? 'bg-[#1a3a8f] text-white'
                 : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -206,7 +213,7 @@ export default function Programs() {
           >
             {cat}
             {cat !== '전체' && (
-              <span className="ml-1 text-xs opacity-70">
+              <span className="ml-1 text-xs font-normal">
                 ({programs.filter(p => normalizeCategory(p.category) === cat).length})
               </span>
             )}
@@ -218,8 +225,18 @@ export default function Programs() {
       {filtered.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
           <Package size={40} className="text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">조건에 맞는 프로그램이 없어요</p>
-          <p className="text-sm text-gray-300 mt-1">검색어나 필터를 바꾸거나 새 프로그램을 추가하세요</p>
+          {programs.length === 0 ? (
+            <>
+              <p className="text-gray-400 font-medium">아직 프로그램이 없습니다</p>
+              <p className="text-sm text-gray-400 mt-1">10회권·패키지처럼 여러 번에 걸쳐 관리하는 상품입니다. 1회 시술 항목은 설정 &gt; 시술 관리에서 등록하세요.</p>
+              <button type="button" onClick={openCreate} className="mt-4 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75]">프로그램 추가</button>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-400 font-medium">조건에 맞는 프로그램이 없어요</p>
+              <p className="text-sm text-gray-500 mt-1">검색어나 필터를 바꾸거나 새 프로그램을 추가하세요</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -230,24 +247,25 @@ export default function Programs() {
             return (
               <div
                 key={program.id}
-                className={`bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md transition-shadow ${!program.isActive ? 'opacity-60' : ''}`}
+                data-testid="program-item"
+                className={`rounded-2xl border p-5 hover:shadow-md transition-shadow ${!program.isActive ? 'border-dashed border-gray-300 bg-slate-50' : 'border-gray-100 bg-white'}`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: program.color }} />
-                    <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
                       {normalizeCategory(program.category)}
                     </span>
                     {!program.isActive && (
-                      <span className="text-xs text-red-400 bg-red-50 px-2 py-0.5 rounded-full">비활성</span>
+                      <span className="text-xs text-red-700 bg-red-50 px-2 py-0.5 rounded-full">비활성</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => openEdit(program)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
-                      <Edit2 size={13} />
+                    <button onClick={() => openEdit(program)} aria-label={`${program.name} 수정`} className="p-2.5 text-gray-400 hover:text-primary-600 hover:bg-blue-50 rounded-lg transition-colors">
+                      <Edit2 size={16} />
                     </button>
-                    <button onClick={() => setDeleteConfirm(program.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                      <Trash2 size={13} />
+                    <button onClick={() => setDeleteConfirm(program.id)} aria-label={`${program.name} 삭제`} className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
@@ -269,12 +287,10 @@ export default function Programs() {
                       <span>기간제</span>
                     </div>
                   )}
-                  {program.validityDays && (
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <Calendar size={12} />
-                      <span>{program.validityDays}일 유효</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <Calendar size={12} />
+                    <span>{program.validityDays ? `${program.validityDays}일 유효` : '기간 무제한'}</span>
+                  </div>
                 </div>
 
                 <div className="border-t border-gray-50 pt-3 flex items-end justify-between">
@@ -288,9 +304,13 @@ export default function Programs() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400">마진율</p>
-                    <p className={`text-sm font-bold ${margin >= 50 ? 'text-green-500' : margin >= 30 ? 'text-yellow-500' : 'text-red-400'}`}>
-                      {margin}%
-                    </p>
+                    {program.costPrice > 0 ? (
+                      <p className={`text-sm font-bold ${margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600'}`}>
+                        {margin}%
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-500">원가 미입력</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -301,27 +321,27 @@ export default function Programs() {
 
       {/* 삭제 확인 */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div ref={deleteModalRef} role="dialog" aria-modal="true" aria-label="프로그램 삭제" className="modal-card bg-white rounded-2xl p-6 w-full max-w-sm">
             <h3 className="font-bold text-gray-900 mb-2">프로그램 삭제</h3>
             <p className="text-sm text-gray-500 mb-5">
-              이 프로그램을 삭제하면 복구할 수 없습니다. 고객에게 등록된 기존 회권에는 영향이 없습니다.
+              이 프로그램을 삭제하면 복구할 수 없습니다. 고객에게 등록된 기존 회차권에는 영향이 없습니다. 판매만 멈추려면 삭제 대신 [수정]에서 '프로그램 활성화'를 끄세요.
             </p>
             <div className="flex gap-2">
               <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">취소</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600">삭제</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700">삭제</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 프로그램 추가/수정 모달 */}
+      {/* 프로그램 추가/수정 모달 — 모바일에서 모달이 화면보다 길면 items-center가 위를 잘라낸다 → 카드 my-auto로 중앙 정렬+스크롤 (2026-11-17) */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-lg my-4">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
+          <div ref={formModalRef} role="dialog" aria-modal="true" aria-label={editTarget ? '프로그램 수정' : '프로그램 추가'} className="modal-card bg-white rounded-2xl w-full max-w-lg my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editTarget ? '프로그램 수정' : '프로그램 추가'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowModal(false)} aria-label="닫기" className="text-gray-400 hover:text-gray-600">
                 <XCircle size={20} />
               </button>
             </div>
@@ -330,13 +350,13 @@ export default function Programs() {
               {/* 프로그램명 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">프로그램명 *</label>
-                <input
+                <input aria-label="프로그램명"
                   type="text"
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder="예: 기본 피부관리 10회권"
                   required
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
               </div>
 
@@ -372,7 +392,7 @@ export default function Programs() {
                       !form.isTimed ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
                     }`}
                   >
-                    회차권 (N회)
+                    회차권 (횟수제)
                   </button>
                   <button
                     type="button"
@@ -388,11 +408,12 @@ export default function Programs() {
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
+                      aria-label="총 회차"
                       value={form.totalSessions}
                       onChange={e => setForm(f => ({ ...f, totalSessions: e.target.value }))}
                       min="1"
                       max="100"
-                      className="w-24 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-24 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                     <span className="text-sm text-gray-500">회</span>
                   </div>
@@ -405,13 +426,14 @@ export default function Programs() {
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
+                    aria-label="유효기간 (일)"
                     value={form.validityDays}
                     onChange={e => setForm(f => ({ ...f, validityDays: e.target.value }))}
                     placeholder="180"
                     min="1"
-                    className="w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
-                  <span className="text-sm text-gray-400">일 (비워두면 무제한)</span>
+                  <span className="text-sm text-gray-400">일 (회차권은 비워두면 무제한, 기간제는 필수)</span>
                 </div>
                 <div className="flex gap-2 mt-2">
                   {[90, 180, 365].map(d => (
@@ -432,13 +454,13 @@ export default function Programs() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">판매가 *</label>
                   <div className="relative">
-                    <input
+                    <input aria-label="판매가"
                       type="text"
                       value={form.price}
                       onChange={e => setForm(f => ({ ...f, price: e.target.value.replace(/[^0-9]/g, '') }))}
                       placeholder="0"
                       required
-                      className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                     <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
                   </div>
@@ -446,12 +468,12 @@ export default function Programs() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">원가 (선택)</label>
                   <div className="relative">
-                    <input
+                    <input aria-label="원가 (선택)"
                       type="text"
                       value={form.costPrice}
                       onChange={e => setForm(f => ({ ...f, costPrice: e.target.value.replace(/[^0-9]/g, '') }))}
                       placeholder="0"
-                      className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     />
                     <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
                   </div>
@@ -462,22 +484,24 @@ export default function Programs() {
               {parseInt(form.price) > 0 && form.costPrice !== '' && (
                 <div className="bg-gray-50 rounded-xl p-3 text-sm flex items-center justify-between">
                   <span className="text-gray-500">예상 마진</span>
-                  <span className="font-bold text-green-600">
+                  {(() => { const m = Math.round(((parseInt(form.price) - (parseInt(form.costPrice) || 0)) / parseInt(form.price)) * 100); return (
+                  <span className={`font-bold ${m >= 50 ? 'text-green-700' : m >= 30 ? 'text-amber-700' : 'text-red-600'}`}>{/* 목록 카드와 같은 기준 */}
                     {formatPrice(parseInt(form.price) - (parseInt(form.costPrice) || 0))}
-                    {' '}({Math.round(((parseInt(form.price) - (parseInt(form.costPrice) || 0)) / parseInt(form.price)) * 100)}%)
+                    {' '}({m}%)
                   </span>
+                  ); })()}
                 </div>
               )}
 
               {/* 설명 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">설명 (선택)</label>
-                <textarea
+                <textarea aria-label="설명 (선택)"
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="프로그램에 대한 간단한 설명을 입력하세요"
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
                 />
               </div>
 
@@ -505,7 +529,7 @@ export default function Programs() {
                   id="isActive"
                   checked={form.isActive}
                   onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
-                  className="w-4 h-4 rounded text-blue-600"
+                  className="w-4 h-4"
                 />
                 <label htmlFor="isActive" className="text-sm text-gray-700">프로그램 활성화 (고객에게 판매 가능)</label>
               </div>
@@ -524,7 +548,7 @@ export default function Programs() {
                   className="flex-1 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] flex items-center justify-center gap-2"
                 >
                   <CheckCircle size={14} />
-                  {editTarget ? '수정 완료' : '프로그램 추가'}
+                  {editTarget ? '저장' : '프로그램 추가'}
                 </button>
               </div>
             </form>
@@ -532,5 +556,6 @@ export default function Programs() {
         </div>
       )}
     </div>
+    </>
   );
 }

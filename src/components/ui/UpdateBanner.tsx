@@ -56,9 +56,10 @@ export default function UpdateBanner() {
     });
 
     api.onUpdateError(() => {
-      // 수동 복사 배포(GitHub 릴리스 미게시) 모델에서는 업데이트 확인 실패가 정상 동작.
-      // 사용자에게 불필요한 오류 배너를 띄우지 않고 조용히 무시한다.
-      // (실제 릴리스 게시를 시작하면 setState('error')로 되돌릴 것)
+      // 릴리스 채널이 실제로 게시되는 지금(v1.0.48+ 무인 업데이트)은 확인 실패를 알려야 구버전 지점이 생기지 않는다 (실패 경로 감사 2026-11-18)
+      // 단, 인터넷이 끊긴 상태의 실패는 오프라인 배너가 이미 설명한다 — 겹쳐 "관리자에게 알려주세요"를 띄우지 않는다 (UX 점검 2026-11-19)
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      setState('error');
     });
 
     return () => {
@@ -157,17 +158,16 @@ export default function UpdateBanner() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => api.downloadUpdate?.()}
-              className="bg-white text-[#1a3a8f] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
-            >
-              지금 업데이트
-            </button>
+            {/* 다운로드는 자동 시작·종료 시 자동 적용 — [지금 업데이트]/[나중에]는 사람 손을 타는 흐름처럼 보여 무인 정책(v1.0.48)과 어긋났다 (9차 점검 #27) */}
             <button
               onClick={() => setDismissed(true)}
-              className="text-white/70 hover:text-white transition-colors text-xs"
+              className="text-white/70 hover:text-white transition-colors"
+              aria-label="닫기"
             >
-              나중에
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
         </div>
@@ -192,7 +192,7 @@ export default function UpdateBanner() {
             <line x1="12" y1="9" x2="12" y2="13" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-          <span>업데이트 확인 중 문제가 발생했습니다</span>
+          <span>업데이트 확인에 실패했습니다 — 다음 실행 때 다시 확인합니다. 계속되면 관리자에게 알려주세요</span>
         </div>
         <button
           onClick={() => setDismissed(true)}

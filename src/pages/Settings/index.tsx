@@ -1,21 +1,28 @@
-import { HIDE_ON_MOBILE } from '../../lib/platform';
+import { HIDE_ON_MOBILE, IS_MOBILE_APP } from '../../lib/platform';
+import { sanitizeStorageSnapshot } from '../../lib/backupSanitize';
+import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
-import { useState, useEffect, useCallback } from 'react';
+import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
+import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
+import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore, getShopId } from '../../lib/store';
 import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { isAuthApiConfigured, updateAuthProfile } from '../../lib/authApi';
 import { requestPayment, PLANS, type PlanInfo } from '../../lib/payment';
 import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFlagsChanged, PAYMENT_ENABLED } from '../../lib/featureFlags';
 import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
+import AppLockCard from '../../components/settings/AppLockCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
+import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
 import clsx from 'clsx';
 
 const GOOGLE_OAUTH_READY = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim());
@@ -88,7 +95,7 @@ const allTabs = [
   { key: 'notifications' as SettingTab, label: '알림 설정', icon: <Bell size={16} /> },
   { key: 'services' as SettingTab, label: '시술 관리', icon: <Palette size={16} /> },
   { key: 'subscription' as SettingTab, label: '구독/플랜', icon: <CreditCard size={16} /> },
-  { key: 'backup' as SettingTab, label: '데이터 백업', icon: <HardDrive size={16} /> },
+  { key: 'backup' as SettingTab, label: '백업·보안', icon: <HardDrive size={16} /> }, // 앱 잠금·백신 예외 카드도 이 탭에 있다 (UX 점검 2026-11-19)
   { key: 'notice' as SettingTab, label: '공지사항', icon: <Bell size={16} /> },
 ];
 // 모바일 앱(스토어 빌드)에서는 결제 유도 화면을 노출하지 않는다 — Apple 3.1.1 / Google Play 결제 정책 (src/lib/platform.ts)
@@ -102,7 +109,19 @@ const emptyServiceForm = { name: '', category: '', duration: 60, price: 0, descr
 
 export default function Settings() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<SettingTab>('shop');
+  // ?tab=services 같은 딥링크(예약·시술 안내, 첫 설정 체크리스트에서 진입) — 1회 캡처 후 URL 정리 (첫 실행 감사 2026-11-18)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<SettingTab>(() => {
+    const q = searchParams.get('tab');
+    return q && tabs.some(t => t.key === q) ? (q as SettingTab) : 'shop'; // 모바일 앱에서 숨긴 탭(구독)은 받지 않는다
+  });
+  // 모바일 탭 칩 8개는 가로 스크롤 — 딥링크(?tab=services)로 들어오면 활성 탭이 화면 밖일 수 있어 가운데로 끌어온다 (7차 UX 점검 2026-11-20)
+  const tabStripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!window.matchMedia('(max-width: 1023px)').matches) return;
+    tabStripRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [tab]);
+  useEffect(() => { if (searchParams.has('tab')) setSearchParams({}, { replace: true }); }, []);
   const [settings, setSettings] = useState<ShopSettings>(() => {
     const current = SettingsStore.get();
     if (current.name === '내 에스테틱 샵' && user?.shopName) {
@@ -140,7 +159,7 @@ export default function Settings() {
       phones: shopPhone ? [shopPhone] : [],
     });
     if (result.pending) {
-      setSmsTestMessage('SMS 게이트웨이가 아직 연동되지 않았습니다 (NAS 서버 연동 후 지원). 실제 발송되지 않습니다.');
+      setSmsTestMessage('본사 서버에 발송사가 아직 연동되지 않아 실제 발송되지 않습니다. 연동되면 자동으로 발송됩니다.');
     } else if (result.reason) {
       setSmsTestMessage(`발송 실패: ${result.reason}`);
     } else {
@@ -172,16 +191,24 @@ export default function Settings() {
     setExportMessage(null);
     try {
       const keys = EXPORT_DATASETS.filter(d => exportSelection.has(d.key)).map(d => d.key);
+      const exportRole = isAdmin ? 'owner' : 'staff'; // 직원 계정은 전화번호 가림·메모·생년월일 제외 — 고객 목록 화면과 같은 규칙 (산출물 감사 2026-11-20)
       // 지출 원장은 매출 페이지에 들른 적이 있어야 캐시에 있다. 다른 기기에서 로그인 직후
       // 바로 내보내면 0건으로 조용히 빠지므로 서버에서 먼저 채운다 (실패 시 로컬 캐시 사용).
+      let expenseNote = '';
       if (keys.includes('expenses')) {
-        await (await import('../../lib/expenseStore')).loadExpenses().catch(() => {});
+        const ok = await (await import('../../lib/expenseStore')).loadExpenses().catch(() => false);
+        if (!ok) expenseNote = ' (지출: 서버 미응답 — 이 기기 캐시 기준)'; // loadExpenses는 실패해도 reject하지 않고 false를 돌려준다
       }
       const result = exportFormat === 'pdf'
-        ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys)
-        : await exportDatasetsToXlsx(keys);
+        ? await (await import('../../lib/pdfExport')).exportDatasetsToPdf(keys, exportRole)
+        : await exportDatasetsToXlsx(keys, exportRole);
       const total = Object.values(result.counts).reduce((a, b) => a + b, 0);
-      setExportMessage(`다운로드 완료: ${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행`);
+      const detail = `${result.fileName} — ${Object.keys(result.counts).length}개 항목, 총 ${total.toLocaleString()}행${expenseNote}`;
+      setExportMessage(
+        result.delivery === 'cancelled' ? '공유를 취소했습니다 — 파일은 저장되지 않았습니다. 다시 내보내 보낼 앱을 고르세요.'
+          : result.delivery === 'shared' ? `공유 시트로 전달: ${detail}`
+            : `다운로드 완료: ${detail}`,
+      );
     } catch (e: any) {
       setExportMessage(e?.message || '내보내기에 실패했습니다.');
     } finally {
@@ -202,8 +229,10 @@ export default function Settings() {
       const k = localStorage.key(i);
       if (k) snapshot[k] = localStorage.getItem(k) ?? '';
     }
-    const result = await electronAPI.backup.exportNow(snapshot);
+    const result = await electronAPI.backup.exportNow(sanitizeStorageSnapshot(snapshot)); // AI 키·문자 API 키는 백업 파일에 넣지 않는다 (UX 점검 2026-11-19)
     setBackupStatus(result.success ? 'done' : 'error');
+    if (result.success) notify.success(result.filePath ? `백업을 저장했습니다: ${result.filePath}` : '백업을 저장했습니다. [백업 폴더 열기]에서 확인하세요.'); // 어디에 저장됐는지 버튼 글자만으로는 모른다
+    if (!result.success) notify(`백업 실패: ${result.error || '알 수 없는 오류'} — 백업 폴더 권한·경로를 확인해주세요.`); // 버튼 글자 3초만으로는 이유를 알 수 없다 (4차 UX 점검 2026-11-19)
     setTimeout(() => setBackupStatus('idle'), 3000);
   };
 
@@ -217,36 +246,18 @@ export default function Settings() {
     try {
       let fetchedFromRemote = false;
 
-      if (isSupabaseConfigured && user?.branchId) {
-        const { data } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('branch_id', user.branchId)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
-
-        if (data) {
-          fetchedFromRemote = true;
-          setCurrentSubscription({
-            id: data.id,
-            branchId: data.branch_id,
-            plan: data.plan,
-            status: data.status,
-            startedAt: data.started_at,
-            expiresAt: data.expires_at,
-            paymentMethod: data.payment_method,
-            amount: data.amount,
-            currency: data.currency,
-            impUid: data.imp_uid,
-            merchantUid: data.merchant_uid,
-            customerUid: data.customer_uid,
-            notes: data.notes,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-          });
-        }
+      // NAS 모드: 플랜은 본사 계정(auth_users.plan)이 정본 — 세션 프로필을 그대로 보여준다
+      if (isAuthApiConfigured && user) {
+        fetchedFromRemote = true;
+        setCurrentSubscription({
+          id: 'nas',
+          branchId: user.branchId || user.id,
+          plan: user.plan,
+          status: 'active',
+          startedAt: user.createdAt,
+          expiresAt: user.trialEndsAt,
+          notes: '본사 계정 플랜',
+        });
       }
 
       // 로컬 스토리지 폴백 — fetchedFromRemote 플래그로 stale closure 방지
@@ -284,6 +295,12 @@ export default function Settings() {
     if (plan.id === 'enterprise') return; // Enterprise는 문의 필요
     setPlanChangeError(null);
 
+    if (isAuthApiConfigured) {
+      // NAS 모드: 플랜은 본사가 계정 단위로 관리(어드민 콘솔 > 구독/지점) — 지점에서 바꾸면 서버와 어긋난 가짜 성공이 된다
+      setPlanChangeError('플랜 변경은 본사 관리자가 처리합니다. 본사에 문의해주세요.');
+      return;
+    }
+
     if (plan.id === 'trial') {
       // 유료 → 무료로의 다운그레이드
       setPlanChangeLoading(true);
@@ -302,22 +319,6 @@ export default function Settings() {
           currency: 'KRW',
           notes: '무료 체험 전환',
         };
-
-        if (isSupabaseConfigured && user?.branchId) {
-          // 기존 구독 만료 처리
-          if (currentSubscription?.id) {
-            const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
-            if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
-          }
-          // 라이브 subscriptions 테이블에는 currency 컬럼이 없음(PGRST204) — 제외하고 저장
-          const { currency: _currency, ...dbRow } = subData;
-          const { error: insertError } = await supabase.from('subscriptions').insert(dbRow);
-          if (insertError) {
-            setPlanChangeError(`서버에 구독 저장 실패: ${insertError.message}`);
-            setPlanChangeLoading(false);
-            return;
-          }
-        }
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
         await loadSubscription();
@@ -364,20 +365,6 @@ export default function Settings() {
           notes: `${plan.name} 플랜 결제`,
         };
 
-        if (isSupabaseConfigured && user?.branchId) {
-          if (currentSubscription?.id) {
-            const { error: cancelError } = await supabase.from('subscriptions').update({ status: 'cancelled' }).eq('id', currentSubscription.id);
-            if (cancelError) console.warn('[Settings] 기존 구독 만료 처리 실패:', cancelError.message);
-          }
-          const { currency: _currency, ...dbRow } = subData;
-          const { error: insertError } = await supabase.from('subscriptions').insert(dbRow);
-          if (insertError) {
-            setPlanChangeError(`결제는 완료됐지만 서버 기록에 실패했습니다: ${insertError.message}`);
-            setPlanChangeLoading(false);
-            return;
-          }
-        }
-
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
         await loadSubscription();
         flash('플랜이 변경되었습니다');
@@ -405,6 +392,9 @@ export default function Settings() {
 
   // Service modal
   const [showServiceModal, setShowServiceModal] = useState(false);
+  useOverlayClose(showServiceModal, () => setShowServiceModal(false), { escape: false }); // Android 뒤로가기 — 메뉴 폼은 Esc 제외
+  const serviceModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showServiceModal, serviceModalRef); // 첫 입력란 포커스·Tab 순환·닫힐 때 복원
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceForm, setServiceForm] = useState(emptyServiceForm);
 
@@ -415,10 +405,17 @@ export default function Settings() {
   };
 
   // ─── Shop Info ────────────────────────────────────────────
+  // 서버 프로필 갱신(await)이 끝나기 전 연타로 두 번 저장되는 것 방지 (2026-11-18)
+  const [shopSaving, setShopSaving] = useState(false);
   const handleShopSave = async () => {
+    if (shopSaving) return;
+    setShopSaving(true);
+    try { await doShopSave(); } finally { setShopSaving(false); }
+  };
+  const doShopSave = async () => {
     const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
     if (!shopName) {
-      flash('샵 이름을 입력해주세요');
+      notify('샵 이름을 입력해주세요');
       return;
     }
 
@@ -429,20 +426,22 @@ export default function Settings() {
       type: settings.type as ShopSettings['type'],
       phone: settings.phone,
       address: settings.address,
-      pointRate: settings.pointRate,
     });
 
     // 다음 로그인에서도 같은 샵명이 보이도록 지점·로컬 세션을 함께 갱신한다.
     let remoteFailed = false;
-    if (isSupabaseConfigured && user?.branchId) {
-      const { error } = await supabase.from('branches').update({
-        name: shopName,
-        phone: settings.phone || null,
-        address: settings.address || null,
-      }).eq('id', user.branchId);
-      if (error) {
+    if (isAuthApiConfigured) {
+      // NAS 모드: 다른 PC가 로그인 시 받는 branchName은 서버 프로필이 정본 — 함께 갱신한다
+      try {
+        await updateAuthProfile({
+          shopName,
+          shopType: settings.type,
+          shopPhone: settings.phone || undefined,
+          shopAddress: settings.address || undefined,
+        });
+      } catch (e: any) {
         remoteFailed = true;
-        console.warn('[Settings] 지점 정보 서버 반영 실패:', error.message);
+        console.warn('[Settings] 지점 정보 서버 반영 실패:', e?.message);
       }
     }
 
@@ -459,13 +458,14 @@ export default function Settings() {
       }
     } catch { /* 세션 갱신 실패는 샵 설정 저장을 막지 않음 */ }
 
-    flash(remoteFailed
-      ? `${shopName} 저장 완료 (서버 반영 실패 — 네트워크 확인 후 다시 저장해주세요)`
-      : `${shopName} CRM으로 설정했습니다`);
+    flash(`${shopName} CRM으로 설정했습니다`);
+    if (remoteFailed) notify('서버 반영 실패 — 이 PC에는 저장됐지만 네트워크 확인 후 다시 저장해주세요.'); // 실패는 성공 토스트에 섞지 않는다 (UX 점검 2026-11-19)
   };
 
   // ─── Business Hours ───────────────────────────────────────
+  const [hoursDirty, setHoursDirty] = useState(false); // 영업시간은 버튼 저장, 지정 휴일은 즉시 저장 — 미저장 이탈을 막는다 (4차 UX 점검 2026-11-19)
   const updateHours = (day: string, field: string, value: string | boolean) => {
+    setHoursDirty(true);
     setSettings(prev => ({
       ...prev,
       businessHours: {
@@ -476,9 +476,32 @@ export default function Settings() {
   };
 
   const handleHoursSave = () => {
-    SettingsStore.save({ businessHours: settings.businessHours });
+    // 종료<시작(오후 8시를 08:00으로 오타)·빈 값이 그대로 저장되면 이후 모든 예약에 "영업시간 밖" 경고가 뜬다 (4차 UX 점검 2026-11-19)
+    for (const day of dayLabels) {
+      const h = settings.businessHours[day];
+      if (!h || h.isOff) continue;
+      if (!h.open || !h.close) { notify(`${day}요일 영업시간을 모두 입력해주세요. 쉬는 날이면 체크를 풀어주세요.`); return; }
+      if (h.open >= h.close) { notify(`${day}요일 종료 시간(${h.close})이 시작 시간(${h.open})보다 늦어야 합니다. 오후는 13:00~23:59로 적어주세요.`); return; }
+    }
+    SettingsStore.save({ businessHours: settings.businessHours, holidays: settings.holidays || [] });
+    setHoursDirty(false);
     flash();
   };
+
+  // 지정 휴일(명절·임시 휴무) — 예약 저장 전 경고에 쓰인다. 날짜 추가/삭제 후 [저장하기] (2026-11-18)
+  const [holidayInput, setHolidayInput] = useState('');
+  const saveHolidays = (holidays: string[]) => {
+    setSettings(prev => ({ ...prev, holidays }));
+    SettingsStore.save({ holidays }); // 즉시 저장 — 영업시간 [저장하기]와 무관하게 유지(다른 탭 저장 버튼이 휴일을 안 담는 혼선 방지)
+  };
+  const addHoliday = () => {
+    const d = holidayInput;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { notify('날짜를 선택해주세요.'); return; }
+    saveHolidays([...new Set([...(settings.holidays || []), d])].sort());
+    setHolidayInput('');
+    notify(`${d} 휴일을 추가했습니다.`);
+  };
+  const removeHoliday = (d: string) => { saveHolidays((settings.holidays || []).filter(x => x !== d)); notify(`${d} 휴일을 삭제했습니다.`); }; // 추가와 같은 피드백 (6차 UX 감사 2026-11-20)
 
   // ─── Integrations ─────────────────────────────────────────
   const handleNaverSave = () => {
@@ -492,7 +515,7 @@ export default function Settings() {
   };
 
   const handleSmsSave = () => {
-    SettingsStore.save({ smsApiKey: settings.smsApiKey, smsCallerId: settings.smsCallerId });
+    SettingsStore.save({ smsCallerId: settings.smsCallerId }); // 발송사 API 키는 본사 서버에만 — 지점 입력란 제거 (보안 감사 2026-11-19)
     flash();
   };
 
@@ -505,7 +528,7 @@ export default function Settings() {
     if (!window.confirm(
       `이 컴퓨터에 저장된 기존 계정 데이터(고객 ${candidate.customerCount}명 포함)를\n` +
       `현재 계정으로 가져올까요?\n\n` +
-      `가져온 데이터는 중앙 서버(NAS)에 자동 저장됩니다.\n` +
+      `가져온 데이터는 중앙 서버에 자동 저장됩니다.\n` +
       `현재 계정에 이미 있는 항목은 덮어쓰지 않습니다.`
     )) return;
     const copied = importLegacyShopData(candidate.shopId, current);
@@ -525,24 +548,11 @@ export default function Settings() {
       localStorage.setItem('ai_key_gemini', aiKeys.gemini.trim());
       flash('AI 분석 키를 저장했습니다');
     } catch {
-      flash('키 저장 실패 — 브라우저 저장소를 확인해주세요');
+      notify('키 저장 실패 — 브라우저 저장소를 확인해주세요');
     }
   };
 
   // ─── Notifications ────────────────────────────────────────
-  const toggleNotification = (key: keyof ShopSettings['notificationSettings']) => {
-    const updated = {
-      ...settings.notificationSettings,
-      [key]: !settings.notificationSettings[key],
-    };
-    setSettings(prev => ({ ...prev, notificationSettings: updated }));
-  };
-
-  const handleNotificationsSave = () => {
-    SettingsStore.save({ notificationSettings: settings.notificationSettings });
-    flash();
-  };
-
   // ─── Services ─────────────────────────────────────────────
   const openAddService = () => {
     setEditingService(null);
@@ -563,7 +573,7 @@ export default function Settings() {
   };
 
   const handleServiceSubmit = () => {
-    if (!serviceForm.name || !serviceForm.category) return;
+    if (!serviceForm.name || !serviceForm.category) { notify('시술명과 카테고리를 입력해주세요.'); return; }
     if (editingService) {
       ServiceStore.update(editingService.id, {
         name: serviceForm.name,
@@ -588,7 +598,8 @@ export default function Settings() {
   };
 
   const handleDeleteService = (id: string) => {
-    if (!confirm('이 시술을 삭제하시겠습니까?')) return;
+    const svc = services.find(sv => sv.id === id);
+    if (!confirm(`${svc ? `'${svc.name}' 시술` : '이 시술'}을 삭제할까요?\n예약·시술 기록에 남은 시술명은 그대로 유지됩니다.`)) return;
     ServiceStore.delete(id);
     setServices(ServiceStore.getAll());
     flash('삭제 완료');
@@ -607,28 +618,37 @@ export default function Settings() {
 
       {/* Save feedback toast */}
       {saved && (
-        <div className="fixed top-6 right-6 z-50 px-5 py-3 bg-green-500 text-white text-sm font-medium rounded-xl shadow-lg animate-fade-in">
+        <div className="fixed top-6 right-6 z-50 px-5 py-3 bg-green-700 text-white text-sm font-medium rounded-xl shadow-lg animate-fade-in">
           {saved}
         </div>
       )}
 
-      <div className="p-8 flex-1">
-        <div className="flex gap-6">
+      <div className="p-4 lg:p-8 flex-1">
+        {/* 모바일(lg 미만): 탭을 가로 스크롤 칩으로 쌓고 본문은 전체 폭 — 2단 고정 폭은 412px에서 입력란이 화면 밖으로 밀렸다 (2026-11-17) */}
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
           {/* Sidebar tabs */}
-          <div className="w-48 flex-shrink-0">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 space-y-0.5">
+          <div className="w-full lg:w-48 flex-shrink-0">
+            <div ref={tabStripRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 flex lg:block gap-1 overflow-x-auto no-scrollbar pr-6 lg:space-y-0.5">
               {tabs.map(t => (
                 <button
                   key={t.key}
-                  onClick={() => setTab(t.key)}
+                  aria-current={tab === t.key ? 'true' : undefined}
+                  onClick={() => {
+                    if (tab === 'hours' && t.key !== 'hours' && hoursDirty) {
+                      if (!window.confirm('영업시간 변경을 저장하지 않았습니다. 버리고 이동할까요?')) return;
+                      setSettings(prev => ({ ...prev, businessHours: SettingsStore.get().businessHours })); // 메모리의 수정본을 저장본으로 되돌린다 (리뷰 67)
+                      setHoursDirty(false);
+                    }
+                    setTab(t.key);
+                  }}
                   className={clsx(
-                    'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left',
+                    'flex-shrink-0 lg:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap',
                     tab === t.key
-                      ? 'bg-purple-50 text-purple-700'
+                      ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-600 hover:bg-gray-50'
                   )}
                 >
-                  <span className={tab === t.key ? 'text-purple-500' : 'text-gray-400'}>{t.icon}</span>
+                  <span className={tab === t.key ? 'text-primary-600' : 'text-gray-400'}>{t.icon}</span>
                   {t.label}
                 </button>
               ))}
@@ -636,7 +656,7 @@ export default function Settings() {
           </div>
 
           {/* Content */}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             {tab === 'shop' && (
               <SettingCard title="샵 기본 정보">
                 <div className="space-y-4">
@@ -644,6 +664,7 @@ export default function Settings() {
                     <div className="space-y-2">
                       <input
                         type="text"
+                        aria-label="샵 이름"
                         value={settings.name}
                         onChange={e => setSettings(prev => ({ ...prev, name: e.target.value }))}
                         className="form-input"
@@ -668,7 +689,7 @@ export default function Settings() {
                     <input
                       type="tel"
                       value={settings.phone}
-                      onChange={e => setSettings(prev => ({ ...prev, phone: e.target.value }))}
+                      onChange={e => setSettings(prev => ({ ...prev, phone: formatPhoneInput(e.target.value) }))}
                       className="form-input"
                     />
                   </FormRow>
@@ -680,23 +701,14 @@ export default function Settings() {
                       className="form-input"
                     />
                   </FormRow>
-                  <FormRow label="포인트 적립률">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        value={settings.pointRate}
-                        onChange={e => setSettings(prev => ({ ...prev, pointRate: Number(e.target.value) }))}
-                        className="form-input w-24"
-                      />
-                      <span className="text-sm text-gray-500">% (결제금액의 N%)</span>
-                    </div>
-                  </FormRow>
                   <div className="pt-4">
                     <button
+                      type="button"
                       onClick={handleShopSave}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                      disabled={shopSaving}
+                      className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors disabled:opacity-60"
                     >
-                      저장하기
+                      {shopSaving ? '저장 중...' : '저장하기'}
                     </button>
                   </div>
                 </div>
@@ -710,40 +722,70 @@ export default function Settings() {
                     const hours = settings.businessHours[day];
                     if (!hours) return null;
                     return (
-                      <div key={day} className="flex items-center gap-4">
+                      <div key={day} className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                         <span className="text-sm font-medium text-gray-700 w-6">{day}</span>
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={!hours.isOff}
                             onChange={e => updateHours(day, 'isOff', !e.target.checked)}
-                            className="rounded text-purple-500"
+                            className="rounded"
                           />
                           <span className="text-xs text-gray-500">영업</span>
                         </label>
-                        <input
-                          type="time"
-                          value={hours.open}
-                          onChange={e => updateHours(day, 'open', e.target.value)}
-                          disabled={hours.isOff}
-                          className="form-input text-sm w-28 disabled:opacity-40"
-                        />
-                        <span className="text-gray-400 text-sm">~</span>
-                        <input
-                          type="time"
-                          value={hours.close}
-                          onChange={e => updateHours(day, 'close', e.target.value)}
-                          disabled={hours.isOff}
-                          className="form-input text-sm w-28 disabled:opacity-40"
-                        />
-                        {hours.isOff && <span className="text-xs text-red-400 font-medium">휴무</span>}
+                        {/* 모바일(412px)에서는 시간 범위를 다음 줄로 내려 잘리지 않게 (2026-11-17) */}
+                        <div className="flex items-center gap-2 w-full sm:w-auto pl-10 sm:pl-0">
+                          <input
+                            type="time"
+                            aria-label={`${day}요일 시작 시간`}
+                            value={hours.open}
+                            onChange={e => updateHours(day, 'open', e.target.value)}
+                            disabled={hours.isOff}
+                            className="form-input text-sm w-28 min-w-0 disabled:opacity-40"
+                          />
+                          <span className="text-gray-400 text-sm">~</span>
+                          <input
+                            type="time"
+                            aria-label={`${day}요일 종료 시간`}
+                            value={hours.close}
+                            onChange={e => updateHours(day, 'close', e.target.value)}
+                            disabled={hours.isOff}
+                            className="form-input text-sm w-28 min-w-0 disabled:opacity-40"
+                          />
+                          {hours.isOff && <span className="text-xs text-red-600 font-medium whitespace-nowrap">휴무</span>}
+                        </div>
                       </div>
                     );
                   })}
+                  <div className="pt-4 border-t border-gray-100 space-y-2" data-testid="holidays-editor">
+                    <p className="text-sm font-medium text-gray-700">지정 휴일</p>
+                    <p className="text-xs text-gray-400">명절·임시 휴무 날짜. 이 날에 예약을 잡으면 저장 전에 확인창이 뜹니다. 추가·삭제 즉시 저장됩니다.</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input type="date" value={holidayInput} onChange={e => setHolidayInput(e.target.value)} aria-label="휴일 날짜" className="form-input text-sm !w-44 min-w-0" />
+                      <button type="button" onClick={addHoliday} className="px-3 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200">휴일 추가</button>
+                    </div>
+                    {(settings.holidays || []).length > 0 ? (
+                      <ul className="flex flex-wrap gap-2">
+                        {(settings.holidays || []).map(d => (
+                          <li key={d} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${d < todayISO() ? 'bg-gray-100 text-gray-500 border border-dashed border-gray-300' : 'bg-rose-50 text-rose-700'}`} title={d < todayISO() ? '지난 휴일' : undefined}>
+                            {d}
+                            <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="p-1.5 -m-1 rounded text-rose-400 hover:text-rose-600"><X size={14} /></button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-gray-500">지정한 휴일이 없어요</p>
+                    )}
+                    {(settings.holidays || []).some(d => d < todayISO()) && (
+                      <button type="button" onClick={() => saveHolidays((settings.holidays || []).filter(d => d >= todayISO()))} className="text-xs text-gray-500 underline hover:text-gray-700">
+                        지난 휴일 {(settings.holidays || []).filter(d => d < todayISO()).length}개 정리
+                      </button>
+                    )}
+                  </div>
                   <div className="pt-4">
                     <button
                       onClick={handleHoursSave}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                      className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors"
                     >
                       저장하기
                     </button>
@@ -774,6 +816,7 @@ export default function Settings() {
                         onClick={() => { const next = !beaconOn; setBeaconConsultationEnabled(next); setBeaconOn(next); }}
                         role="switch"
                         aria-checked={beaconOn}
+                        aria-label="상담 화면에 비컨 점수·AI 피부 분석 표시"
                         className={clsx(
                           'relative w-12 h-7 rounded-full transition-colors duration-200 flex-shrink-0',
                           beaconOn ? 'bg-indigo-500' : 'bg-gray-300'
@@ -805,19 +848,12 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
+                        <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
-                      <button
-                        disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="NAS 서버 연동 후 활성화됩니다"
-                      >
-                        연동하기
-                      </button>
                     </div>
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>네이버 예약 API 연동은 NAS 서버 구축 후 지원됩니다. 아래 플레이스 ID를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
+                      <span>네이버 예약 연동은 본사 제휴가 열리면 지원됩니다. 아래 플레이스 ID를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
                     </div>
                     <FormRow label="네이버 플레이스 ID">
                       <input
@@ -834,7 +870,7 @@ export default function Settings() {
                     <div className="pt-2">
                       <button
                         onClick={handleNaverSave}
-                        className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                        className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
                       >
                         저장하기
                       </button>
@@ -856,15 +892,8 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
+                        <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
-                      <button
-                        disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="NAS 서버 연동 후 활성화됩니다"
-                      >
-                        연동하기
-                      </button>
                     </div>
 
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
@@ -878,20 +907,13 @@ export default function Settings() {
                             <AlertCircle size={11} /> 준비 중
                           </span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">NAS 서버 연동 후 지원 예정</p>
+                        <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
-                      <button
-                        disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="NAS 서버 연동 후 활성화됩니다"
-                      >
-                        연동하기
-                      </button>
                     </div>
 
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>카카오 채널·오픈채팅 API 연동은 NAS 서버 구축 후 지원됩니다. 아래 ID/URL을 미리 입력해두면 연동 시 자동 적용됩니다.</span>
+                      <span>카카오 채널·오픈채팅 연동은 준비 중입니다. 아래 ID/URL을 미리 입력해두면 연동이 열릴 때 자동 적용됩니다.</span>
                     </div>
 
                     <FormRow label="카카오 채널 ID">
@@ -921,7 +943,7 @@ export default function Settings() {
                     <div className="pt-2">
                       <button
                         onClick={handleKakaoSave}
-                        className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                        className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
                       >
                         저장하기
                       </button>
@@ -940,7 +962,7 @@ export default function Settings() {
                         <Calendar size={20} />
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-900">Google Calendar</p>
+                        <p className="text-sm font-bold text-gray-900">Google 캘린더</p>
                         {googleConnected ? (
                           <p className="text-xs text-blue-600 mt-0.5">연결됨 - 예약이 캘린더에 표시됩니다</p>
                         ) : (
@@ -967,13 +989,13 @@ export default function Settings() {
                           className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
                           title="Google OAuth 클라이언트가 설정되지 않은 빌드입니다"
                         >
-                          준비 중
+                          이 빌드에서는 연결 불가
                         </button>
                       )}
                     </div>
                     {googleConnected && (
                       <p className="text-xs text-gray-400">
-                        예약 페이지에서 Google Calendar 이벤트가 함께 표시됩니다. 새 예약 생성 시 캘린더에도 자동 추가할 수 있습니다.
+                        예약 화면에서 Google 캘린더 일정이 함께 표시됩니다. 새 예약을 만들 때 캘린더에도 자동 추가할 수 있습니다.
                       </p>
                     )}
                   </div>
@@ -984,17 +1006,8 @@ export default function Settings() {
                   <div className="space-y-4">
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>엔포+ SMS 게이트웨이는 NAS 서버 연동 후 실제 발송이 지원됩니다. API Key와 발신번호를 미리 입력해두면 연동 시 자동 적용됩니다.</span>
+                      <span>문자 발송은 본사 계약 발송사를 통해 이뤄지며 발송사 인증 정보는 본사 서버에만 보관됩니다. 여기서는 이 지점의 발신번호만 입력합니다(발송사 등록 번호와 같아야 합니다).</span>
                     </div>
-                    <FormRow label="API Key">
-                      <input
-                        type="password"
-                        value={settings.smsApiKey || ''}
-                        onChange={e => setSettings(prev => ({ ...prev, smsApiKey: e.target.value }))}
-                        className="form-input"
-                        placeholder="엔포+ API Key (미리 입력 가능)"
-                      />
-                    </FormRow>
                     <FormRow label="발신번호">
                       <input
                         type="tel"
@@ -1020,7 +1033,7 @@ export default function Settings() {
                       </button>
                       <button
                         onClick={handleSmsSave}
-                        className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                        className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
                       >
                         저장하기
                       </button>
@@ -1059,7 +1072,7 @@ export default function Settings() {
                     </FormRow>
                     <button
                       onClick={handleAiKeysSave}
-                      className="px-6 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
+                      className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
                     >
                       저장하기
                     </button>
@@ -1071,6 +1084,7 @@ export default function Settings() {
             {tab === 'notifications' && (
               <div className="space-y-6">
               <RevisitCycleCard />
+              <RetentionPolicyCard />
 
               <SettingCard title="자동 알림 설정">
                 <div className="space-y-4">
@@ -1084,28 +1098,10 @@ export default function Settings() {
                       <div>
                         <p className="text-sm font-semibold text-gray-900">{n.label}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{n.desc}</p>
-                        <p className="text-xs text-amber-600 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
+                        <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
                       </div>
-                      <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
-                        <input
-                          type="checkbox"
-                          className="sr-only peer"
-                          disabled
-                          checked={settings.notificationSettings[n.key]}
-                          onChange={() => toggleNotification(n.key)}
-                        />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
-                      </label>
                     </div>
                   ))}
-                  <div className="pt-2">
-                    <button
-                      onClick={handleNotificationsSave}
-                      className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-medium rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600 transition-all"
-                    >
-                      저장하기
-                    </button>
-                  </div>
                 </div>
               </SettingCard>
               </div>
@@ -1113,16 +1109,16 @@ export default function Settings() {
 
             {tab === 'services' && (
               <SettingCard title="시술 항목 관리">
-                <p className="text-sm text-gray-500 mb-4">시술 항목을 추가, 수정, 삭제할 수 있습니다.</p>
+                <p className="text-sm text-gray-500 mb-4">시술 항목을 추가·수정·삭제할 수 있습니다.</p>
                 <button
                   onClick={openAddService}
-                  className="mb-4 px-4 py-2 text-sm font-medium bg-purple-50 text-purple-700 rounded-xl border border-purple-200 hover:bg-purple-100 flex items-center gap-1.5"
+                  className="mb-4 px-4 py-2 text-sm font-medium bg-primary-50 text-primary-700 rounded-xl border border-primary-100 hover:bg-primary-100 flex items-center gap-1.5"
                 >
                   <Plus size={14} /> 시술 추가
                 </button>
                 <div className="space-y-2">
                   {Object.keys(servicesByCategory).length === 0 && (
-                    <p className="text-sm text-gray-400 py-4 text-center">등록된 시술이 없습니다.</p>
+                    <p className="text-sm text-gray-400 py-4 text-center">등록된 시술이 없어요</p>
                   )}
                   {Object.entries(servicesByCategory).map(([cat, svcs]) => (
                     <div key={cat}>
@@ -1136,13 +1132,15 @@ export default function Settings() {
                               <span className="font-semibold text-gray-800">{svc.price.toLocaleString()}원</span>
                               <button
                                 onClick={() => openEditService(svc)}
-                                className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-0.5"
+                                aria-label={`${svc.name} 수정`}
+                                className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-primary-50"
                               >
                                 <Pencil size={12} /> 수정
                               </button>
                               <button
                                 onClick={() => handleDeleteService(svc.id)}
-                                className="text-xs text-red-500 hover:text-red-700 flex items-center gap-0.5"
+                                aria-label={`${svc.name} 삭제`}
+                                className="text-xs text-red-600 hover:text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
                               >
                                 <Trash2 size={12} /> 삭제
                               </button>
@@ -1162,12 +1160,12 @@ export default function Settings() {
                 <SettingCard title="현재 구독 플랜">
                   {subscriptionLoading ? (
                     <div className="flex items-center justify-center py-8">
-                      <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100">
-                        <div className="w-12 h-12 rounded-xl bg-purple-500 text-white flex items-center justify-center">
+                      <div className="flex items-center gap-4 p-4 bg-primary-50 rounded-xl border border-primary-100">
+                        <div className="w-12 h-12 rounded-xl bg-primary-600 text-white flex items-center justify-center">
                           {currentSubscription?.plan === 'pro' ? <Crown size={24} /> :
                            currentSubscription?.plan === 'starter' ? <Zap size={24} /> :
                            <Star size={24} />}
@@ -1178,7 +1176,7 @@ export default function Settings() {
                           </h3>
                           <p className="text-xs text-gray-500 mt-0.5">
                             {currentSubscription?.plan === 'trial'
-                              ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? new Date(currentSubscription.expiresAt).toLocaleDateString('ko-KR') : '알 수 없음'})`
+                              ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? formatLocalDate(String(currentSubscription.expiresAt)) : '알 수 없음'})`
                               : currentSubscription?.amount
                                 ? `${currentSubscription.amount.toLocaleString()}원/월`
                                 : '활성 상태'}
@@ -1195,13 +1193,13 @@ export default function Settings() {
                           <div className="p-3 bg-gray-50 rounded-xl">
                             <p className="text-xs text-gray-400">시작일</p>
                             <p className="font-medium text-gray-700">
-                              {currentSubscription.startedAt ? new Date(currentSubscription.startedAt).toLocaleDateString('ko-KR') : '-'}
+                              {currentSubscription.startedAt ? formatLocalDate(String(currentSubscription.startedAt)) : '-'}
                             </p>
                           </div>
                           <div className="p-3 bg-gray-50 rounded-xl">
                             <p className="text-xs text-gray-400">만료일</p>
                             <p className="font-medium text-gray-700">
-                              {currentSubscription.expiresAt ? new Date(currentSubscription.expiresAt).toLocaleDateString('ko-KR') : '-'}
+                              {currentSubscription.expiresAt ? formatLocalDate(String(currentSubscription.expiresAt)) : '-'}
                             </p>
                           </div>
                           {currentSubscription.paymentMethod && (
@@ -1233,15 +1231,15 @@ export default function Settings() {
                           key={plan.id}
                           className={clsx(
                             'p-4 rounded-xl border-2 transition-all',
-                            isCurrent ? 'border-purple-300 bg-purple-50' : 'border-gray-100 hover:border-gray-200'
+                            isCurrent ? 'border-primary-300 bg-primary-50' : 'border-gray-100 hover:border-gray-200'
                           )}
                         >
                           <div className="flex items-start gap-3">
                             <div className={clsx(
                               'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
-                              plan.id === 'trial' ? 'bg-gray-100 text-gray-500' :
-                              plan.id === 'starter' ? 'bg-blue-100 text-blue-600' :
-                              'bg-purple-100 text-purple-600'
+                              plan.id === 'trial' ? 'bg-gray-100 text-gray-600' :
+                              plan.id === 'starter' ? 'bg-blue-100 text-blue-700' :
+                              'bg-primary-600 text-white'
                             )}>
                               {plan.id === 'pro' ? <Crown size={20} /> :
                                plan.id === 'starter' ? <Zap size={20} /> :
@@ -1251,20 +1249,23 @@ export default function Settings() {
                               <div className="flex items-center justify-between">
                                 <h4 className="text-sm font-bold text-gray-900">
                                   {plan.name}
-                                  {isCurrent && <span className="ml-2 text-xs font-medium text-purple-600">(현재 플랜)</span>}
+                                  {isCurrent && <span className="ml-2 text-xs font-medium text-primary-600">(현재 플랜)</span>}
                                 </h4>
-                                <p className="text-sm font-bold text-purple-700">
+                                <p className="text-sm font-bold text-primary-700">
                                   {plan.price === 0 ? '무료' : `${plan.price.toLocaleString()}원/월`}
                                 </p>
                               </div>
-                              <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
+                              <p className="text-xs text-slate-600 mt-0.5">{plan.description}</p>
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {plan.features.map(f => (
-                                  <span key={f} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{f}</span>
+                                  <span key={f} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{f}</span>
                                 ))}
                               </div>
                             </div>
-                            {!isCurrent && (plan.price > 0 && !PAYMENT_ENABLED ? (
+                            {!isCurrent && (isAuthApiConfigured ? (
+                              // NAS 모드: 플랜은 본사가 계정 단위로 관리 — 누르면 실패하는 버튼을 보여주지 않는다
+                              <span className="flex-shrink-0 text-xs text-gray-400">본사에서 변경</span>
+                            ) : plan.price > 0 && !PAYMENT_ENABLED ? (
                               <button
                                 disabled
                                 className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-gray-100 text-gray-400 rounded-xl cursor-not-allowed"
@@ -1276,7 +1277,7 @@ export default function Settings() {
                               <button
                                 onClick={() => handlePlanChange(plan)}
                                 disabled={planChangeLoading}
-                                className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                className="flex-shrink-0 px-4 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                               >
                                 {planChangeLoading ? '처리 중...' : plan.price > 0 ? '결제하기' : '변경하기'}
                               </button>
@@ -1315,7 +1316,7 @@ export default function Settings() {
                         <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
                         <span>
                           이 컴퓨터에 이전 계정으로 사용하던 데이터가 남아 있습니다. 아래 버튼을
-                          누르면 현재 계정으로 가져오고, 중앙 서버(NAS)에 자동 저장되어 다른
+                          누르면 현재 계정으로 가져오고, 중앙 서버에 자동 저장되어 다른
                           기기에서도 볼 수 있게 됩니다.
                         </span>
                       </div>
@@ -1323,7 +1324,7 @@ export default function Settings() {
                         <div key={c.shopId} className="flex items-center justify-between gap-3 p-3 border border-gray-200 rounded-xl">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-gray-800">고객 {c.customerCount}명 · 데이터 {c.keyCount}종</p>
-                            <p className="text-[11px] text-gray-400 font-mono truncate">이전 지점 ID: {c.shopId}</p>
+                            <p className="text-xs text-gray-400 font-mono truncate">이전 지점 ID: {c.shopId}</p>
                           </div>
                           <button
                             onClick={() => handleLegacyImport(c)}
@@ -1337,11 +1338,10 @@ export default function Settings() {
                   </SettingCard>
                 )}
 
-                <SettingCard title="데이터 내보내기 (엑셀 다운로드)">
+                <SettingCard title="데이터 내보내기">
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">
-                      로그인한 계정의 샵 데이터만 내보내집니다. 선택한 항목이 시트별로 담긴
-                      엑셀(.xlsx) 파일 하나로 다운로드됩니다.
+                      로그인한 계정의 샵 데이터만 내보내집니다. 선택한 항목이 {exportFormat === 'pdf' ? 'PDF 파일 하나로' : '시트별로 담긴 엑셀(.xlsx) 파일 하나로'} {IS_MOBILE_APP ? '만들어져 공유 시트로 전달됩니다' : '다운로드됩니다'}.
                     </p>
                     <div className="flex gap-2">
                       <button
@@ -1362,19 +1362,19 @@ export default function Settings() {
                         <label
                           key={d.key}
                           className={`flex items-start gap-2.5 px-3 py-2.5 border rounded-xl cursor-pointer transition-colors ${
-                            exportSelection.has(d.key) ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200 hover:bg-gray-50'
+                            exportSelection.has(d.key) ? 'border-primary-300 bg-primary-50/60' : 'border-gray-200 hover:bg-gray-50'
                           }`}
                         >
                           <input
                             type="checkbox"
                             checked={exportSelection.has(d.key)}
                             onChange={() => toggleExport(d.key)}
-                            className="mt-0.5 rounded text-blue-500"
+                            className="mt-0.5 rounded"
                           />
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-gray-800">
                               {d.label}
-                              {d.sensitive && <span className="ml-1.5 text-[10px] font-bold text-amber-600">민감정보</span>}
+                              {d.sensitive && <span className="ml-1.5 text-2xs font-bold text-amber-700">민감정보</span>}
                             </span>
                             <span className="block text-xs text-gray-400 mt-0.5">{d.description}</span>
                           </span>
@@ -1382,11 +1382,11 @@ export default function Settings() {
                       ))}
                     </div>
                     <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-                      <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                      <AlertCircle size={14} className="text-amber-700 mt-0.5 shrink-0" />
                       <p className="text-xs text-amber-700 leading-relaxed">
                         고객 연락처·피부상담 내역은 개인정보(민감정보)입니다. 다운로드한 파일은
                         외부 공유를 금지하고, 사용 후 안전하게 삭제해주세요. 시술 사진은 용량 문제로
-                        엑셀에 포함되지 않으며 NAS 백업(CRM-BACKUP)에서 파일로 제공됩니다.
+                        엑셀에 포함되지 않습니다{isAuthApiConfigured ? ' — 서버에 올라간 사진은 본사에 요청해 파일로 받을 수 있습니다' : ''}.
                       </p>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
@@ -1417,6 +1417,8 @@ export default function Settings() {
                   </div>
                 </SettingCard>
 
+                {/* 앱 잠금(PIN) — 기기별, 기본 OFF (2026-11-18) */}
+                <AppLockCard />
                 {/* 백신 예외 등록 안내 — Electron에서만 렌더(electronAPI.securityGuide 없으면 카드가 스스로 null) */}
                 <SecurityGuideCard />
 
@@ -1446,14 +1448,17 @@ export default function Settings() {
                       </div>
                       <p className="text-xs text-gray-400">
                         백업 파일 위치: 앱 데이터 폴더 / backups / troiareuke-YYYYMMDD-HHmmss.json
+                        <br />사진은 이 백업 파일에 들어가지 않습니다 — 중앙 서버 연동 시 서버에 보관되고, 이 기기에는 대용량 저장소(IndexedDB)에 캐시됩니다.
                       </p>
                     </div>
                   ) : (
                     <p className="text-sm text-gray-400">
-                      데이터 백업 기능은 데스크탑(Electron) 앱에서만 사용 가능합니다.
+                      자동 백업(6시간마다·7일 보관)은 데스크탑 앱 전용입니다. 아래 [백업 파일 저장]으로 직접 보관하세요.
                     </p>
                   )}
                 </SettingCard>
+                {/* 전체 백업 파일 저장·복원 — 로컬 모드 데이터 소실 방지, PC·모바일 공용 (2026-11-18) */}
+                <BackupRestoreCard />
               </div>
             )}
           </div>
@@ -1462,41 +1467,51 @@ export default function Settings() {
 
       {/* Service Add/Edit Modal */}
       {showServiceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div ref={serviceModalRef} role="dialog" aria-modal="true" aria-label={editingService ? '시술 수정' : '시술 추가'} className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-md p-6 relative">
             <button
+              type="button"
               onClick={() => setShowServiceModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              aria-label="닫기"
+              className="absolute top-2 right-2 w-11 h-11 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100"
             >
               <X size={18} />
             </button>
             <h3 className="text-base font-bold text-gray-900 mb-5">
               {editingService ? '시술 수정' : '시술 추가'}
             </h3>
-            <div className="space-y-4">
-              <FormRow label="시술명">
+            <form onSubmit={e => { e.preventDefault(); handleServiceSubmit(); }} className="space-y-4">
+              <FormRow label="시술명 *">
                 <input
                   type="text"
+                  aria-label="시술명"
                   value={serviceForm.name}
                   onChange={e => setServiceForm(prev => ({ ...prev, name: e.target.value }))}
                   className="form-input"
                   placeholder="예: 수분관리"
                 />
               </FormRow>
-              <FormRow label="카테고리">
+              <FormRow label="카테고리 *">
                 <input
                   type="text"
+                  aria-label="카테고리"
                   value={serviceForm.category}
                   onChange={e => setServiceForm(prev => ({ ...prev, category: e.target.value }))}
                   className="form-input"
                   placeholder="예: 피부관리"
+                  list="service-category-options"
                 />
+                {/* 자유 입력이라 오타로 그룹이 갈라지지 않게 기존 카테고리를 제안한다 */}
+                <datalist id="service-category-options">
+                  {[...new Set(services.map(sv => sv.category).filter(Boolean))].map(c => <option key={c} value={c} />)}
+                </datalist>
               </FormRow>
               <FormRow label="소요시간">
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    value={serviceForm.duration}
+                    aria-label="소요시간(분)"
+                    value={serviceForm.duration || ''}
                     onChange={e => setServiceForm(prev => ({ ...prev, duration: Number(e.target.value) }))}
                     className="form-input w-24"
                   />
@@ -1507,7 +1522,8 @@ export default function Settings() {
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    value={serviceForm.price}
+                    aria-label="가격(원)"
+                    value={serviceForm.price || ''}
                     onChange={e => setServiceForm(prev => ({ ...prev, price: Number(e.target.value) }))}
                     className="form-input w-32"
                   />
@@ -1517,6 +1533,7 @@ export default function Settings() {
               <FormRow label="설명">
                 <input
                   type="text"
+                  aria-label="설명"
                   value={serviceForm.description}
                   onChange={e => setServiceForm(prev => ({ ...prev, description: e.target.value }))}
                   className="form-input"
@@ -1525,19 +1542,20 @@ export default function Settings() {
               </FormRow>
               <div className="flex gap-3 pt-4">
                 <button
+                  type="button"
                   onClick={() => setShowServiceModal(false)}
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200"
                 >
                   취소
                 </button>
                 <button
-                  onClick={handleServiceSubmit}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md hover:from-purple-600 hover:to-pink-600"
+                  type="submit"
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e]"
                 >
-                  {editingService ? '수정하기' : '추가하기'}
+                  {editingService ? '저장' : '시술 추가'}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
@@ -1574,10 +1592,17 @@ function SettingCard({ title, children }: { title: string; children: React.React
 }
 
 function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  // 자식이 input/select/textarea 하나뿐이면 id를 붙이고 라벨 htmlFor로 연결 — 접근성 이름 + 라벨 클릭으로 포커스 (axe "label" 위반 해소, 2026-11-18)
+  const generated = useId();
+  const only = Children.count(children) === 1 && isValidElement(children) ? children : null;
+  const props = (only?.props ?? {}) as Record<string, unknown>;
+  const native = !!only && typeof only.type === 'string' && ['input', 'select', 'textarea'].includes(only.type);
+  const controlId = native ? ((props.id as string | undefined) ?? generated) : undefined;
+  const content = native && controlId ? cloneElement(only, { id: controlId } as Record<string, unknown>) : children;
   return (
-    <div className="flex items-center gap-4">
-      <label className="text-sm font-medium text-gray-600 w-32 flex-shrink-0">{label}</label>
-      <div className="flex-1">{children}</div>
+    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
+      <label htmlFor={controlId} className="text-sm font-medium text-gray-600 sm:w-32 flex-shrink-0">{label}</label>
+      <div className="flex-1 min-w-0">{content}</div>
     </div>
   );
 }

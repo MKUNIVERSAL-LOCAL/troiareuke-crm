@@ -39,7 +39,7 @@ export default function AdminLogin() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
         <div className="max-w-md text-center space-y-4">
           <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto">
-            <span className="text-white text-xl font-black">T</span>
+            <span className="text-white text-xl font-bold">T</span>
           </div>
           <h1 className="text-xl font-bold text-white">관리자 로그인은 어드민 프로그램에서</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
@@ -65,8 +65,13 @@ export default function AdminLogin() {
     try {
       await login(email, password);
       navigate('/admin/dashboard');
-    } catch {
-      setError('인증에 실패했습니다. 관리자 계정 정보를 확인해주세요.');
+    } catch (err) {
+      // 서버가 보내는 사유(승인 대기·비활성·사용기간 만료)는 그대로, 브라우저 네트워크 오류는 지점 로그인과 같은 한국어로 (8차 점검·리뷰 2026-11-20)
+      const e = err as { name?: string; message?: string } | null;
+      const msg = e?.message || '';
+      if (e?.name === 'AbortError' || /aborted/i.test(msg)) setError('서버 응답이 없습니다(시간 초과). 네트워크를 확인하고 잠시 후 다시 시도해주세요.');
+      else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) setError('계정 서버에 연결할 수 없습니다. NAS 상태와 네트워크를 확인해주세요.');
+      else setError(msg || '인증에 실패했습니다. 관리자 계정 정보를 확인해주세요.');
     } finally { setLoading(false); }
   };
 
@@ -89,10 +94,10 @@ export default function AdminLogin() {
         <div className="relative">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <span className="text-white text-base font-black">D</span>
+              <span className="text-white text-base font-bold">D</span>
             </div>
             <div>
-              <p className="text-sm font-black tracking-widest text-white">DERMASOLUTION</p>
+              <p className="text-sm font-bold tracking-widest text-white">DERMASOLUTION</p>
               <p className="text-xs text-blue-400 font-medium tracking-wider">ADMIN CONSOLE</p>
             </div>
           </div>
@@ -102,13 +107,13 @@ export default function AdminLogin() {
         <div className="relative space-y-6">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full">
             <Shield size={12} className="text-blue-400" />
-            <span className="text-[11px] text-blue-400 font-medium tracking-wide">AUTHORIZED ACCESS ONLY</span>
+            <span className="text-xs text-blue-400 font-medium tracking-wide">AUTHORIZED ACCESS ONLY</span>
           </div>
           <h2 className="text-3xl font-bold text-white leading-tight">
             시스템 관리<br />
             <span className="text-slate-400">콘솔</span>
           </h2>
-          <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
+          <p className="text-sm text-slate-400 leading-relaxed max-w-sm">
             더마솔루션 플랫폼의 지점, 사용자, 구독, 통계를 관리합니다.
           </p>
 
@@ -123,7 +128,7 @@ export default function AdminLogin() {
 
         {/* Bottom */}
         <div className="relative">
-          <p className="text-[11px] text-slate-600">DERMASOLUTION Platform v1.0 — Superadmin Access</p>
+          <p className="text-xs text-slate-400">DERMASOLUTION Platform v{__APP_VERSION__} — Superadmin Access</p>
         </div>
       </div>
 
@@ -134,10 +139,10 @@ export default function AdminLogin() {
           <div className="lg:hidden mb-8 flex justify-center">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-                <span className="text-white text-base font-black">D</span>
+                <span className="text-white text-base font-bold">D</span>
               </div>
               <div>
-                <p className="text-sm font-black tracking-widest text-white">DERMASOLUTION</p>
+                <p className="text-sm font-bold tracking-widest text-white">DERMASOLUTION</p>
                 <p className="text-xs text-blue-400 font-medium">ADMIN CONSOLE</p>
               </div>
             </div>
@@ -151,7 +156,7 @@ export default function AdminLogin() {
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white">관리자 인증</h1>
-                <p className="text-[11px] text-slate-500">Superadmin Authentication</p>
+                <p className="text-xs text-slate-400">Superadmin Authentication</p>
               </div>
             </div>
 
@@ -164,22 +169,22 @@ export default function AdminLogin() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-[11px] font-medium text-slate-400 mb-1.5 uppercase tracking-wider">이메일</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">이메일</label>
                 <input
                   type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all"
+                  className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-300/40 focus:border-blue-500/40 transition-all"
                   placeholder="admin@troiareuke.com"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-medium text-slate-400 mb-1.5 uppercase tracking-wider">비밀번호</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wider">비밀번호</label>
                 <div className="relative">
                   <input
                     type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
-                    className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all pr-11"
+                    className="w-full px-4 py-3 text-sm bg-slate-900/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-primary-300/40 focus:border-blue-500/40 transition-all pr-11"
                     placeholder="••••••••••"
                   />
-                  <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                  <button type="button" aria-label={showPw ? '비밀번호 숨기기' : '비밀번호 표시'} onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors">
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
@@ -213,13 +218,13 @@ export default function AdminLogin() {
                   <button
                     type="button"
                     onClick={() => { setResetMode(true); setResetEmail(email); setResetMessage(''); }}
-                    className="w-full text-center text-xs text-slate-500 hover:text-blue-400 transition-colors"
+                    className="w-full text-center text-xs text-slate-400 hover:text-blue-400 transition-colors"
                   >
                     비밀번호를 잊으셨나요? 이메일로 재설정
                   </button>
                 ) : (
                   <form onSubmit={handleReset} className="space-y-2.5">
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                    <p className="text-xs text-slate-400 leading-relaxed">
                       관리자 이메일을 입력하면 재설정 링크를 보내드립니다. (30분 내 1회 사용)
                     </p>
                     <div className="flex gap-2">
@@ -235,8 +240,8 @@ export default function AdminLogin() {
                         {resetSending ? '전송 중...' : '메일 발송'}
                       </button>
                     </div>
-                    {resetMessage && <p className="text-[11px] text-blue-300">{resetMessage}</p>}
-                    <button type="button" onClick={() => setResetMode(false)} className="text-[11px] text-slate-500 hover:text-slate-300">
+                    {resetMessage && <p className="text-xs text-blue-300">{resetMessage}</p>}
+                    <button type="button" onClick={() => setResetMode(false)} className="text-xs text-slate-400 hover:text-slate-300">
                       ← 로그인으로 돌아가기
                     </button>
                   </form>
@@ -245,14 +250,14 @@ export default function AdminLogin() {
             )}
 
             <div className="mt-4 pt-4 border-t border-slate-700/50 text-center">
-              <Link to="/login" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+              <Link to="/login" className="text-xs text-slate-400 hover:text-slate-300 transition-colors">
                 일반 사용자 로그인으로 돌아가기
               </Link>
             </div>
           </div>
 
           {/* Security notice */}
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-600">
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-400">
             <Lock size={10} />
             <span>이 페이지는 권한이 부여된 관리자만 접근 가능합니다</span>
           </div>

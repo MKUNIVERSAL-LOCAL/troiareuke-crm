@@ -1,12 +1,13 @@
 ﻿import { useState, useEffect } from 'react';
+import { readJson } from '../../lib/safeJson';
 import { Link } from 'react-router-dom';
 import { Building2, Users, LogIn, TrendingUp, CheckCircle, XCircle, DatabaseBackup, Copy, MonitorDown, AlertTriangle } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, apiRequest, type AuthApiUser } from '../../lib/authApi';
 import {
   INSTALL_SITE_URL, INSTALL_GUIDE_MESSAGE, fetchLatestChannelVersion, isOutdated, appModeLabel, type ChannelManifest,
 } from '../../lib/updateChannel';
 import { adminListLoginLogs } from '../../lib/adminApi';
+import { approvedBranchUsers, branchKey, groupByBranch, branchVersionInfo, fetchManifestDirect } from '../../lib/adminBranches';
 import { getLocalLogs } from '../../lib/loginLog';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -17,6 +18,7 @@ interface Stats {
   totalUsers: number;
   todayLogins: number;
   recentLogs: RecentLog[];
+  logCount: number;
 }
 
 interface RecentLog {
@@ -33,8 +35,7 @@ export default function AdminDashboard() {
     activeBranches: 0,
     totalUsers: 0,
     todayLogins: 0,
-    recentLogs: [],
-  });
+    recentLogs: [], logCount: 0, });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   // 배포 불변 원칙 패널: 지점별 실행 버전 vs 채널 최신 버전, 설치 안내 링크 복사
@@ -69,19 +70,19 @@ export default function AdminDashboard() {
       if (isAuthApiConfigured) {
         // NAS 중앙 서버 모드: 계정 목록에서 지점/사용자 집계 (로그인 로그는 이 기기 기준)
         let totalBranches = 0, activeBranches = 0, totalUsers = 0;
+        fetchLatestChannelVersion().then(setLatest); // 계정 목록 실패와 무관하게 — 안에 있으면 패널이 "확인 중…"에 영원히 머문다 (리뷰 2026-11-20)
         try {
           const users = await adminListUsers();
-          const nonAdmin = users.filter(u => u.role !== 'superadmin');
+          const nonAdmin = approvedBranchUsers(users); // 승인 대기·거부 신청자는 지점이 아니다 (8차 점검 2026-11-20)
           totalUsers = nonAdmin.length;
           const byBranch = new Map<string, boolean>();
           for (const u of nonAdmin) {
-            const bid = u.branchId || u.id;
+            const bid = branchKey(u);
             byBranch.set(bid, (byBranch.get(bid) ?? false) || u.isActive !== false);
           }
           totalBranches = byBranch.size;
           activeBranches = [...byBranch.values()].filter(Boolean).length;
           setBranchUsers(nonAdmin);
-          fetchLatestChannelVersion().then(setLatest);
         } catch (e: any) {
           console.warn('[AdminDashboard] NAS 계정 집계 실패:', e?.message);
           setLoadError(`지점/사용자 집계를 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
@@ -89,7 +90,7 @@ export default function AdminDashboard() {
         // 로그인 기록: 서버 정본(auth_login_log) 우선, 구버전 서버면 이 기기 로컬 기록으로 폴백
         let logs: RecentLog[] = getLocalLogs();
         try {
-          const serverLogs = await adminListLoginLogs(200);
+          const serverLogs = await adminListLoginLogs(500); // 지점 수십 곳이면 하루 로그인이 200건을 넘어 "오늘 로그인"이 깎였다 (8차 점검 2026-11-20)
           logs = serverLogs;
           setLogsFromServer(true);
         } catch {
@@ -103,36 +104,25 @@ export default function AdminDashboard() {
           totalUsers,
           todayLogins: logs.filter(l => l.status === 'success' && new Date(l.logged_in_at).toDateString() === todayLocal).length,
           recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
-        });
-      } else if (isSupabaseConfigured) {
-        // Supabase 단독 모드(레거시): 지점·사용자 집계만 Supabase, 로그인 기록은 이 기기 로컬
-        // (login_logs 테이블 기록은 2026-09-07 서버 정본 도입으로 제거됨)
-        const [branches, users] = await Promise.all([
-          supabase.from('branches').select('id, is_active'),
-          supabase.from('user_profiles').select('id'),
-        ]);
-        const logs = getLocalLogs();
-        const todayLocal = new Date().toDateString();
-
-        setStats({
-          totalBranches: branches.data?.length || 0,
-          activeBranches: branches.data?.filter(b => b.is_active).length || 0,
-          totalUsers: users.data?.length || 0,
-          todayLogins: logs.filter(l => l.status === 'success' && new Date(l.logged_in_at).toDateString() === todayLocal).length,
-          recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
+          logCount: logs.length,
         });
       } else {
         // 로컬 데이터 폴백
         const logs = getLocalLogs();
-        const today = new Date().toISOString().split('T')[0];
-        const todayCount = logs.filter(l => l.status === 'success' && l.logged_in_at.startsWith(today)).length;
+        // logged_in_at은 ISO(UTC) 문자열 — 오늘(로컬) 범위로 비교
+        const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+        const todayCount = logs.filter(l => l.status === 'success' && new Date(l.logged_in_at) >= dayStart).length;
 
+        // 사용자 관리·지점 관리(로컬 분기)와 같은 저장소를 센다 — 0 고정은 그 화면들과 모순이었다 (4차 UX 점검 2026-11-19)
+        const localBranches = readJson<{ is_active?: boolean }[]>('troiareuke_branches', []);
+        const localUsers = readJson<unknown[]>('troiareuke_local_users', []);
         setStats({
-          totalBranches: 0,
-          activeBranches: 0,
-          totalUsers: 0,
+          totalBranches: localBranches.length,
+          activeBranches: localBranches.filter(b => b.is_active !== false).length,
+          totalUsers: localUsers.length,
           todayLogins: todayCount,
           recentLogs: logs.slice(0, 20).map(l => ({ ...l, branch_name: l.branch_name })),
+          logCount: logs.length,
         });
       }
     } finally {
@@ -161,22 +151,17 @@ export default function AdminDashboard() {
   }
 
   // 지점별 프로그램 버전 — 지점 안에 여러 PC/계정이 있으면 가장 낮은 버전을 대표값으로(경고 대상)
-  const versionByBranch = (() => {
-    const map = new Map<string, { name: string; version: string | null; mode: string; lastSeenAt: string | null }>();
-    for (const u of branchUsers) {
-      const bid = u.branchId || u.id;
-      const name = u.branchName || u.shopName || u.email;
-      const cur = map.get(bid);
-      if (!u.lastAppVersion) {
-        if (!cur) map.set(bid, { name, version: null, mode: '', lastSeenAt: null });
-        continue;
-      }
-      if (!cur || cur.version === null || isOutdated(u.lastAppVersion, cur.version)) {
-        map.set(bid, { name, version: u.lastAppVersion, mode: u.lastAppMode || '', lastSeenAt: u.lastSeenAt || null });
-      }
-    }
-    return [...map.values()];
-  })();
+  const versionByBranch = [...groupByBranch(branchUsers).entries()].map(([bid, us]) => {
+    const primary = us.find(u => u.role === 'admin') || us[0];
+    const info = branchVersionInfo(us); // 지점 관리 화면과 같은 규칙 — 가장 낮은 버전, 가장 최근 접속 (8차 점검 2026-11-20)
+    return { bid, name: primary.branchName || primary.shopName || primary.email, version: info?.version ?? null, mode: info?.mode ?? '', lastSeenAt: info?.lastSeenAt ?? null };
+  });
+  /** [다시 확인] — fetchLatestChannelVersion 은 실패도 5분 캐시해 바로 누르면 네트워크 없이 null 을 돌려준다(코어 잠금이라 force 옵션 불가).
+   *  매니페스트를 직접 한 번 읽어 결과를 반영한다 (리뷰 2026-11-20) */
+  async function recheckLatest() {
+    setLatest(undefined);
+    setLatest(await fetchManifestDirect());
+  }
   const latestVersion = latest?.version || null;
   const outdatedBranches = versionByBranch.filter(b => b.version && isOutdated(b.version, latestVersion));
   const unknownBranches = versionByBranch.filter(b => !b.version);
@@ -185,7 +170,7 @@ export default function AdminDashboard() {
   const statCards = [
     { label: '전체 지점', value: stats.totalBranches, sub: `운영 중 ${stats.activeBranches}개`, icon: Building2, color: 'text-blue-400', bg: 'bg-blue-500/10' },
     { label: '등록 사용자', value: stats.totalUsers, sub: '전체 지점 합계', icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    { label: '오늘 로그인', value: stats.todayLogins, sub: '성공 기준', icon: LogIn, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+    { label: '오늘 로그인', value: stats.todayLogins, sub: logsFromServer ? (stats.logCount >= 500 ? '최근 500건 중 성공 — 그 이상일 수 있음' : '성공 기준') : '이 기기 기록 · 성공', icon: LogIn, color: 'text-purple-400', bg: 'bg-purple-500/10' },
     { label: '성공률', value: stats.recentLogs.length > 0 ? Math.round((stats.recentLogs.filter(l => l.status === 'success').length / stats.recentLogs.length) * 100) + '%' : '-', sub: '최근 20건 기준', icon: TrendingUp, color: 'text-amber-700', bg: 'bg-amber-500/10' },
   ];
 
@@ -208,7 +193,7 @@ export default function AdminDashboard() {
               {backupState === 'running' ? '백업 중...' : '지금 서버 백업'}
             </button>
             {backupMessage && (
-              <p className={`text-[11px] mt-1.5 ${backupState === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{backupMessage}</p>
+              <p className={`text-xs mt-1.5 ${backupState === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{backupMessage}</p>
             )}
           </div>
         )}
@@ -229,7 +214,7 @@ export default function AdminDashboard() {
           {/* Stat Cards */}
           <div className="grid grid-cols-4 gap-4 mb-8">
             {statCards.map(card => (
-              <div key={card.label} className="bg-slate-900 border border-slate-700/50 rounded-2xl p-5">
+              <div key={card.label} data-testid={`admin-stat-${card.label}`} className="bg-slate-900 border border-slate-700/50 rounded-2xl p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className={`w-10 h-10 ${card.bg} rounded-xl flex items-center justify-center`}>
                     <card.icon size={18} className={card.color} />
@@ -237,7 +222,7 @@ export default function AdminDashboard() {
                 </div>
                 <p className="text-2xl font-bold text-white">{card.value}</p>
                 <p className="text-xs font-medium text-slate-300 mt-1">{card.label}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">{card.sub}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{card.sub}</p>
               </div>
             ))}
           </div>
@@ -253,7 +238,15 @@ export default function AdminDashboard() {
                   </span>
                 </div>
                 <div className="px-6 py-4 text-sm">
-                  {outdatedBranches.length === 0 ? (
+                  {latest === undefined ? (
+                    <p className="text-xs text-slate-400">배포 서버에서 최신 버전을 확인하는 중입니다…</p>
+                  ) : latest === null ? (
+                    // 최신 버전을 모르면 구버전 판정 자체가 불가 — "모두 최신"이라고 안심시키면 안 된다 (8차 점검 2026-11-20)
+                    <p className="flex items-center gap-2 text-amber-300 text-xs font-medium">
+                      <AlertTriangle size={14} /> 최신 버전을 확인할 수 없어 구버전 판정을 보류했습니다 (배포 서버 응답 없음)
+                      <button type="button" onClick={recheckLatest} className="ml-1 underline text-amber-200 hover:text-white">다시 확인</button>
+                    </p>
+                  ) : outdatedBranches.length === 0 ? (
                     <p className="flex items-center gap-2 text-emerald-400 text-xs font-medium">
                       <CheckCircle size={14} /> 접속 기록이 있는 지점 {upToDateCount}곳 모두 최신 버전입니다
                     </p>
@@ -264,9 +257,9 @@ export default function AdminDashboard() {
                       </p>
                       <ul className="space-y-1.5">
                         {outdatedBranches.map(b => (
-                          <li key={b.name} className="flex items-center justify-between text-xs">
+                          <li key={b.bid} className="flex items-center justify-between text-xs">
                             <span className="text-slate-200">{b.name}</span>
-                            <span className="text-slate-500">
+                            <span className="text-slate-400">
                               <span className="text-red-400 font-bold">v{b.version}</span>
                               {' · '}{appModeLabel[b.mode] || b.mode}
                               {b.lastSeenAt && ` · ${format(parseISO(b.lastSeenAt), 'MM/dd HH:mm', { locale: ko })}`}
@@ -277,7 +270,7 @@ export default function AdminDashboard() {
                     </>
                   )}
                   {unknownBranches.length > 0 && (
-                    <p className="mt-3 text-[11px] text-slate-500">
+                    <p className="mt-3 text-xs text-slate-400">
                       버전 기록 없음 {unknownBranches.length}곳 ({unknownBranches.map(b => b.name).join(', ')}) — v1.0.48 이상 프로그램이 접속하면 표시됩니다
                     </p>
                   )}
@@ -319,7 +312,7 @@ export default function AdminDashboard() {
             <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
               <h2 className="text-sm font-bold text-white">
                 최근 로그인 기록
-                {!isSupabaseConfigured && !logsFromServer && <span className="ml-2 text-[11px] font-normal text-slate-500">(이 기기에서 기록된 로그인 기준)</span>}
+                {!logsFromServer && <span className="ml-2 text-xs font-normal text-slate-400">(이 기기에서 기록된 로그인 기준)</span>}
               </h2>
               <Link to="/admin/login-logs" className="text-xs text-blue-400 hover:text-blue-300">전체 보기 →</Link>
             </div>
@@ -327,16 +320,16 @@ export default function AdminDashboard() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-700/30">
-                    <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">이메일</th>
-                    <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">지점</th>
-                    <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">상태</th>
-                    <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">시간</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">이메일</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">지점</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">상태</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">시간</th>
                   </tr>
                 </thead>
                 <tbody>
                   {stats.recentLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-slate-500 text-sm">
+                      <td colSpan={4} className="px-6 py-12 text-center text-slate-400 text-sm">
                         아직 로그인 기록이 없습니다
                       </td>
                     </tr>
@@ -356,7 +349,7 @@ export default function AdminDashboard() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-3 text-xs text-slate-500">
+                        <td className="px-6 py-3 text-xs text-slate-400">
                           {format(parseISO(log.logged_in_at), 'MM/dd HH:mm', { locale: ko })}
                         </td>
                       </tr>

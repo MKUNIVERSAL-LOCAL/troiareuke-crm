@@ -1,14 +1,21 @@
-﻿import { useState, useCallback } from 'react';
+﻿import { useState, useCallback, useEffect, useMemo } from 'react';
+import { tagRefund } from '../../lib/refundDate';
+import { thisYearMonthISO } from '../../lib/format';
+import { isLowStock } from '../../lib/stockRule';
+import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
-import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2 } from 'lucide-react';
+import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus } from 'lucide-react';
+import StockAdjustModal from '../../components/StockAdjustModal';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
-import { ProductStore, ProductSaleStore, CustomerStore } from '../../lib/store';
-import type { Product, ProductSale } from '../../types';
+import { ProductStore, ProductSaleStore, CustomerStore, StaffStore, PaymentStore } from '../../lib/store';
+import { todayISO, formatDate } from '../../lib/format';
+import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
+import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import type { Product, ProductSale, Payment } from '../../types';
 import type { PaymentMethod } from '../../types';
 import clsx from 'clsx';
-import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 
 const CATEGORIES = ['전체', '세럼', '크림', '스킨', '선케어', '앰플', '클렌저', '오일', '기타'];
@@ -24,14 +31,26 @@ export default function Products() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [products, setProducts] = useState(() => ProductStore.getAll());
   const [sales, setSales] = useState(() => ProductSaleStore.getAll());
+  const [payments, setPayments] = useState<Payment[]>([]); // 판매 취소(환불) 식별용
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
+  // 대시보드 재고 부족 알림(?stock=<id>) → 입고 모달 바로 열기. 1회 캡처 후 URL 비움(프리필 관례)
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('stock');
+    if (!id) return;
+    const p = ProductStore.getAll().find(x => x.id === id);
+    if (p) setStockProduct(p); else notify('제품을 찾을 수 없습니다. 삭제됐거나 다른 매장의 제품입니다.');
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [saleProduct, setSaleProduct] = useState<Product | null>(null);
 
   const refresh = useCallback(() => {
     setProducts(ProductStore.getAll());
     setSales(ProductSaleStore.getAll());
+    setPayments(PaymentStore.getAll());
   }, []);
 
   const handleDeleteProduct = (product: Product) => {
@@ -40,9 +59,20 @@ export default function Products() {
     refresh();
   };
 
+  // 취소된 판매 = 연결 결제가 환불 상태 (판매 행 자체는 코어에 수정 API 가 없어 결제 쪽 상태로 식별)
+  const canceledSaleIds = useMemo(() => new Set(payments.filter(p => p.status === 'refunded' && p.referenceId).map(p => p.referenceId as string)), [payments]);
+  const isCanceled = (sale: ProductSale) => canceledSaleIds.has(sale.id);
   const handleDeleteSale = (sale: ProductSale) => {
-    if (!window.confirm(`${sale.saleDate} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고와 연결된 결제 금액도 함께 복구됩니다.`)) return;
-    ProductSaleStore.delete(sale.id);
+    if (!window.confirm(`${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.`)) return;
+    const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
+    if (linked.length === 0) {
+      // 연결 결제가 없는 옛 판매 — 예전처럼 행 삭제(코어: 재고 복구 포함)
+      ProductSaleStore.delete(sale.id);
+    } else {
+      // 결제를 지우면 매출이 소급 감소할 뿐 환불 흔적이 어디에도 남지 않았다(세무 대사 불가) — 재고만 복구하고 결제는 환불로 (10차 숫자 점검 #H2)
+      if (sale.productId) ProductStore.adjustStock(sale.productId, -sale.quantity); // 제품이 지워진 옛 판매는 재고 복구 대상이 없다
+      for (const p of linked) PaymentStore.update(p.id, { status: 'refunded', memo: tagRefund(p.memo, todayISO()) });
+    }
     refresh();
   };
 
@@ -50,11 +80,11 @@ export default function Products() {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
       || (p.brand || '').toLowerCase().includes(search.toLowerCase());
     const matchCategory = category === '전체' || p.category === category;
-    const matchLowStock = !lowStockOnly || p.stock <= p.minStock;
+    const matchLowStock = !lowStockOnly || isLowStock(p); // 헤더 "재고부족 N종"과 같은 규칙 — 단종 제품은 제외 (10차 #M6)
     return matchSearch && matchCategory && matchLowStock;
   });
 
-  const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
+  const lowStockCount = products.filter(isLowStock).length;
 
   const normalizedSalesSearch = salesSearch.trim().toLowerCase();
   const recentSales = [...sales]
@@ -67,10 +97,13 @@ export default function Products() {
     .sort((a, b) => b.saleDate.localeCompare(a.saleDate))
     .slice(0, 60);
 
-  const totalSalesRevenue = sales.reduce((sum, sale) => sum + sale.totalPrice, 0);
-  const visibleSalesRevenue = recentSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
+  const liveSales = sales.filter(sale => !isCanceled(sale)); // 취소(환불)된 판매는 매출 화면 '제품 매출'처럼 제외 (10차 #H2·#M5)
+  const totalSalesRevenue = liveSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
+  const monthSalesRevenue = liveSales.filter(sale => sale.saleDate.startsWith(thisYearMonthISO())).reduce((sum, sale) => sum + sale.totalPrice, 0);
+  const visibleSalesRevenue = recentSales.filter(sale => !isCanceled(sale)).reduce((sum, sale) => sum + sale.totalPrice, 0);
 
   const handleSell = (product: Product) => {
+    if (!product.isActive) { notify('판매 중지된 제품입니다. [수정]에서 \'판매 활성\'을 켜면 다시 팔 수 있습니다.'); return; }
     setSaleProduct(product);
     setShowSaleModal(true);
   };
@@ -80,7 +113,7 @@ export default function Products() {
       <Header
         title="제품/재고 관리"
         subtitle={`총 ${products.length}종 · 재고부족 ${lowStockCount}종`}
-        action={{ label: '+ 제품 추가', onClick: () => setShowAddModal(true) }}
+        action={{ label: '제품 추가', onClick: () => setShowAddModal(true) }}
       />
 
       <div className="p-4 sm:p-6 lg:p-8 flex-1">
@@ -94,11 +127,11 @@ export default function Products() {
               lowStockOnly ? 'bg-orange-100 border-orange-300' : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
             )}
           >
-            <AlertTriangle size={16} className="text-orange-500 flex-shrink-0" />
+            <AlertTriangle size={16} className="text-orange-700 flex-shrink-0" />
             <p className="text-sm text-orange-700 font-medium flex-1">
               재고 부족 제품이 <strong>{lowStockCount}종</strong> 있습니다. 빠른 발주가 필요합니다.
             </p>
-            <span className="text-xs font-semibold text-orange-600">
+            <span className="text-xs font-semibold text-orange-700">
               {lowStockOnly ? '전체 보기 ↩' : '재고 부족만 보기 →'}
             </span>
           </button>
@@ -108,23 +141,24 @@ export default function Products() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">전체 제품</p>
-            <p className="text-2xl font-black text-gray-900">{products.length}<span className="text-sm font-medium ml-1">종</span></p>
+            <p className="text-2xl font-bold text-gray-900">{products.length}<span className="text-sm font-medium ml-1">종</span></p>
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">재고 부족</p>
-            <p className={clsx('text-2xl font-black', lowStockCount > 0 ? 'text-red-500' : 'text-gray-900')}>
+            <p className={clsx('text-2xl font-bold', lowStockCount > 0 ? 'text-red-600' : 'text-gray-900')}>
               {lowStockCount}<span className="text-sm font-medium ml-1">종</span>
             </p>
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">총 판매건수</p>
-            <p className="text-2xl font-black text-gray-900">{sales.length}<span className="text-sm font-medium ml-1">건</span></p>
+            <p className="text-2xl font-bold text-gray-900">{sales.length}<span className="text-sm font-medium ml-1">건</span></p>
           </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출</p>
-            <p className="text-2xl font-black text-[#1a3a8f]">
-              {Math.round(totalSalesRevenue / 10000)}<span className="text-sm font-medium ml-1">만원</span>
+            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간 · 취소 제외)</p>
+            <p className="text-2xl font-bold text-[#1a3a8f]">
+              {totalSalesRevenue.toLocaleString()}<span className="text-sm font-medium">원</span>
             </p>
+            <p className="text-xs text-gray-400 mt-1">이달 {monthSalesRevenue.toLocaleString()}원 — 매출 화면 '제품 매출'과 같은 기준</p>
           </div>
         </div>
 
@@ -134,7 +168,7 @@ export default function Products() {
             onClick={() => setTab('inventory')}
             className={clsx(
               'px-4 py-2 text-sm font-medium rounded-lg transition-all',
-              tab === 'inventory' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              tab === 'inventory' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
             )}
           >
             재고 현황
@@ -143,7 +177,7 @@ export default function Products() {
             onClick={() => setTab('sales')}
             className={clsx(
               'px-4 py-2 text-sm font-medium rounded-lg transition-all',
-              tab === 'sales' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              tab === 'sales' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
             )}
           >
             판매 기록 {sales.length > 0 && <span className="ml-1 text-xs text-gray-400">({sales.length})</span>}
@@ -158,7 +192,7 @@ export default function Products() {
                 <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="제품명, 브랜드 검색..."
+                  placeholder="제품명, 브랜드 검색"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
@@ -187,10 +221,56 @@ export default function Products() {
               {filtered.length === 0 ? (
                 <div className="py-16 text-center">
                   <Package size={32} className="mx-auto mb-3 text-gray-300" />
-                  <p className="text-sm text-gray-400">해당하는 제품이 없습니다</p>
+                  {products.length === 0 ? (
+                    <>
+                      <p className="text-sm text-gray-400">아직 제품이 없습니다 — 판매하고 재고를 관리할 홈케어 제품을 등록하세요</p>
+                      <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">제품 추가</button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-400">조건에 맞는 제품이 없어요</p>
+                      <button type="button" onClick={() => { setSearch(''); setCategory('전체'); setLowStockOnly(false); }} className="mt-3 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-200">필터 초기화</button>
+                    </>
+                  )}
                 </div>
               ) : (
-                <div className="overflow-auto max-h-[65vh]">
+                <>
+                {/* 모바일(lg 미만): 카드 목록 — 표는 900px 폭 (2026-11-17) */}
+                <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="products-mobile-list">
+                  {filtered.map(p => {
+                    const isLow = p.stock <= p.minStock;
+                    const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
+                    return (
+                      <li key={p.id} data-testid="product-row" className={clsx('px-4 py-3', isLow && 'bg-orange-50/40')}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900">
+                              {p.name}
+                              {!p.isActive && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full text-2xs font-medium align-middle">비활성</span>}
+                            </p>
+                            {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}
+                            <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{p.category}</span>
+                              <span className={clsx('font-bold', isLow ? 'text-red-600' : 'text-gray-700')}>재고 {p.stock}{p.unit}</span>
+                              {isLow && <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium"><AlertTriangle size={10} /> 부족</span>}
+                              <span className={clsx('font-semibold', margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600')}>마진 {margin}%</span>
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                            <span className="text-sm font-bold text-gray-900">{p.price.toLocaleString()}원</span>
+                            <span className="flex items-center gap-1">
+                              <button onClick={() => handleSell(p)} disabled={!p.isActive} title={p.isActive ? undefined : '판매 중지 제품 — [수정]에서 판매 활성을 켜세요'} className="inline-flex items-center gap-1 px-3 py-2 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed"><ShoppingCart size={11} />판매</button>
+                              <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
+                              <button onClick={() => setEditProduct(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={16} /></button>
+                              <button onClick={() => handleDeleteProduct(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="제품 삭제"><Trash2 size={16} /></button>
+                            </span>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="hidden lg:block overflow-auto max-h-[65vh]">
                 <table className="w-full min-w-[900px]">
                   <thead>
                     <tr className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50">
@@ -210,17 +290,17 @@ export default function Products() {
                       const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
 
                       return (
-                        <tr key={p.id} className={clsx('hover:bg-gray-50/50 transition-colors', isLow && 'bg-orange-50/40')}>
+                        <tr key={p.id} data-testid="product-row" className={clsx('hover:bg-gray-50/50 transition-colors', isLow && 'bg-orange-50/40')}>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center flex-shrink-0">
+                              <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center flex-shrink-0">
                                 <Package size={16} className="text-[#1a3a8f]" />
                               </div>
                               <div>
                                 <p className="text-sm font-semibold text-gray-900">
                                   {p.name}
                                   {!p.isActive && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-400 rounded-full text-[10px] font-medium align-middle">비활성</span>
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full text-2xs font-medium align-middle">비활성</span>
                                   )}
                                 </p>
                                 {p.brand && <p className="text-xs text-gray-400">{p.brand}</p>}
@@ -237,24 +317,24 @@ export default function Products() {
                             {p.cost.toLocaleString()}원
                           </td>
                           <td className="px-4 py-4 text-center">
-                            <p className={clsx('text-sm font-bold', isLow ? 'text-red-500' : 'text-gray-800')}>
+                            <p className={clsx('text-sm font-bold', isLow ? 'text-red-600' : 'text-gray-800')}>
                               {p.stock}{p.unit}
                             </p>
                             <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit}</p>
                           </td>
                           <td className="px-4 py-4 text-center">
                             {isLow ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-600 rounded-full text-[11px] font-medium">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
                                 <AlertTriangle size={10} /> 부족
                               </span>
                             ) : (
-                              <span className="px-2.5 py-1 bg-green-100 text-green-600 rounded-full text-[11px] font-medium">정상</span>
+                              <span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">정상</span>
                             )}
                           </td>
                           <td className="px-4 py-4 text-right">
                             <span className={clsx(
                               'text-sm font-bold',
-                              margin >= 50 ? 'text-green-600' : margin >= 30 ? 'text-blue-600' : 'text-orange-500'
+                              margin >= 50 ? 'text-green-700' : margin >= 30 ? 'text-amber-700' : 'text-red-600'
                             )}>
                               {margin}%
                             </span>
@@ -263,10 +343,21 @@ export default function Products() {
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => handleSell(p)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg hover:bg-[#152d6e] transition-colors"
+                                disabled={!p.isActive}
+                                title={p.isActive ? undefined : '판매 중지 제품 — [수정]에서 판매 활성을 켜세요'}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg hover:bg-[#152d6e] transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed disabled:hover:bg-gray-300"
                               >
                                 <ShoppingCart size={11} />
                                 판매
+                              </button>
+                              <button
+                                onClick={() => setStockProduct(p)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                                aria-label={`${p.name} 입고·조정`}
+                                title="재고 입고 또는 실사 조정"
+                              >
+                                <PackagePlus size={11} />
+                                입고
                               </button>
                               <button
                                 onClick={() => setEditProduct(p)}
@@ -277,7 +368,7 @@ export default function Products() {
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(p)}
-                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                 aria-label="제품 삭제"
                               >
                                 <Trash2 size={14} />
@@ -290,6 +381,7 @@ export default function Products() {
                   </tbody>
                 </table>
                 </div>
+                </>
               )}
             </div>
           </>
@@ -302,7 +394,7 @@ export default function Products() {
                 <input
                   value={salesSearch}
                   onChange={e => setSalesSearch(e.target.value)}
-                  placeholder="제품명, 고객명, 결제수단, 판매일 검색"
+                  placeholder="제품명, 고객명, 결제 수단, 판매일 검색"
                   className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
                   aria-label="제품 판매 기록 검색"
                 />
@@ -313,10 +405,37 @@ export default function Products() {
               <div className="py-16 text-center">
                 <TrendingUp size={32} className="mx-auto mb-3 text-gray-300" />
                 <p className="text-sm text-gray-400 mb-1">판매 기록이 없습니다</p>
-                <p className="text-xs text-gray-300">제품 목록에서 "판매" 버튼을 눌러 기록하세요</p>
+                <p className="text-xs text-gray-500">제품 목록에서 [판매]를 눌러 기록하세요</p>
               </div>
             ) : (
-              <div className="overflow-auto max-h-[65vh]">
+              <>
+              <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="product-sales-mobile-list">
+                {recentSales.map(sale => (
+                  <li key={sale.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{sale.productName}</p>
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                          <span>{formatDate(sale.saleDate)}</span>
+                          <span>{sale.customerName || '—'}</span>
+                          <span>{sale.quantity}개 × {sale.unitPrice.toLocaleString()}원</span>
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{sale.paymentMethod}</span>
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className={`text-sm font-bold ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{sale.totalPrice.toLocaleString()}원</span>
+                        {isCanceled(sale) ? <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
+                        <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>)}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+                <li className="px-4 py-3 bg-gray-50/50 flex items-center justify-between text-xs font-semibold text-gray-500">
+                  <span>표시분 합계(최근 60건)</span>
+                  <span className="text-sm font-bold text-[#1a3a8f]">{visibleSalesRevenue.toLocaleString()}원</span>
+                </li>
+              </ul>
+              <div className="hidden lg:block overflow-auto max-h-[65vh]">
               <table className="w-full min-w-[760px]">
                 <thead>
                   <tr className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50">
@@ -326,33 +445,35 @@ export default function Products() {
                     <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500">수량</th>
                     <th className="text-right px-4 py-3.5 text-xs font-semibold text-gray-500">단가</th>
                     <th className="text-right px-4 py-3.5 text-xs font-semibold text-gray-500">합계</th>
-                    <th className="text-center px-6 py-3.5 text-xs font-semibold text-gray-500">결제수단</th>
+                    <th className="text-center px-6 py-3.5 text-xs font-semibold text-gray-500">결제 수단</th>
                     <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {recentSales.map(sale => (
                     <tr key={sale.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-3.5 text-sm text-gray-500">{sale.saleDate}</td>
+                      <td className="px-6 py-3.5 text-sm text-gray-500">{formatDate(sale.saleDate)}</td>
                       <td className="px-4 py-3.5">
                         <p className="text-sm font-medium text-gray-900">{sale.productName}</p>
                       </td>
                       <td className="px-4 py-3.5 text-sm text-gray-500">{sale.customerName || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-center text-gray-700 font-medium">{sale.quantity}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-500 text-right">{sale.unitPrice.toLocaleString()}원</td>
-                      <td className="px-4 py-3.5 text-sm font-bold text-gray-900 text-right">{sale.totalPrice.toLocaleString()}원</td>
+                      <td className={`px-4 py-3.5 text-sm font-bold text-right ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{sale.totalPrice.toLocaleString()}원</td>
                       <td className="px-6 py-3.5 text-center">
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs">{sale.paymentMethod}</span>
                       </td>
                       <td className="px-4 py-3.5 text-center">
+                        {isCanceled(sale) ? <span className="text-xs px-2 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
                         <button
                           onClick={() => handleDeleteSale(sale)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
                           aria-label="판매 취소"
                           title="판매 취소 및 재고 복구"
                         >
                           <Trash2 size={14} />
                         </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -360,7 +481,7 @@ export default function Products() {
                 <tfoot>
                   <tr className="border-t border-gray-100 bg-gray-50/50">
                     <td colSpan={5} className="px-6 py-3 text-xs font-semibold text-gray-500 text-right">표시분 합계(최근 60건)</td>
-                    <td className="px-4 py-3 text-sm font-black text-[#1a3a8f] text-right">
+                    <td className="px-4 py-3 text-sm font-bold text-[#1a3a8f] text-right">
                       {visibleSalesRevenue.toLocaleString()}원
                     </td>
                     <td colSpan={2} />
@@ -368,6 +489,7 @@ export default function Products() {
                 </tfoot>
               </table>
               </div>
+              </>
             )}
           </div>
         )}
@@ -378,6 +500,9 @@ export default function Products() {
           onClose={() => setShowAddModal(false)}
           onSaved={() => { refresh(); setShowAddModal(false); }}
         />
+      )}
+      {stockProduct && (
+        <StockAdjustModal product={stockProduct} onClose={() => setStockProduct(null)} onDone={() => { setStockProduct(null); refresh(); }} />
       )}
       {editProduct && (
         <AddProductModal
@@ -467,6 +592,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">카테고리</label>
             <select
+              aria-label="카테고리"
               value={form.category}
               onChange={e => set('category', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
@@ -492,6 +618,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             <label className="block text-xs font-medium text-gray-600 mb-1.5">판매가 (원) *</label>
             <input
               type="number"
+              aria-label="판매가"
               placeholder="0"
               value={form.price}
               onChange={e => set('price', e.target.value)}
@@ -502,6 +629,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             <label className="block text-xs font-medium text-gray-600 mb-1.5">원가 (원)</label>
             <input
               type="number"
+              aria-label="원가"
               placeholder="0"
               value={form.cost}
               onChange={e => set('cost', e.target.value)}
@@ -521,16 +649,21 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             <label className="block text-xs font-medium text-gray-600 mb-1.5">재고 *</label>
             <input
               type="number"
+              aria-label="재고"
               placeholder="0"
               value={form.stock}
               onChange={e => set('stock', e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+              disabled={isEdit}
+              title={isEdit ? '재고는 목록의 [입고]·조정으로 바꿉니다 (매입 지출·사유가 함께 남도록)' : undefined}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30 disabled:bg-gray-50 disabled:text-gray-500"
             />
+            {isEdit && <p className="text-2xs text-gray-500 mt-1">재고는 [입고]·조정으로 바꿉니다</p>}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">최소 재고</label>
             <input
               type="number"
+              aria-label="최소 재고"
               placeholder="5"
               value={form.minStock}
               onChange={e => set('minStock', e.target.value)}
@@ -563,7 +696,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
             type="checkbox"
             checked={form.isActive}
             onChange={e => set('isActive', e.target.checked)}
-            className="rounded text-[#1a3a8f]"
+            className="rounded"
           />
           <span className="text-sm text-gray-700">판매 활성</span>
         </label>
@@ -593,8 +726,8 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
     customerId: '',
     quantity: '1',
     unitPrice: String(product.price),
-    paymentMethod: '카드' as PaymentMethod,
-    saleDate: new Date().toISOString().split('T')[0],
+    paymentMethod: (getLastPaymentMethod() ?? '카드') as PaymentMethod, // 결제 등록과 같은 기본값 (UX 점검 2026-11-19)
+    saleDate: todayISO(),
     staffName: '',
     notes: '',
   });
@@ -613,13 +746,18 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       notify('수량과 단가를 입력해주세요.');
       return;
     }
+    if (!(parseInt(form.unitPrice, 10) > 0)) {
+      notify('단가는 1원 이상이어야 합니다. 무상 제공이면 메모에 남기고 단가는 실제 가격으로 적어주세요.');
+      return;
+    }
     const rawQty = parseInt(form.quantity, 10);
     if (Number.isNaN(rawQty) || rawQty < 1) {
       notify('수량은 1 이상이어야 합니다');
       return;
     }
-    if (product.stock < qty) {
-      notify(`재고가 부족합니다. (현재 재고: ${product.stock}${product.unit})`);
+    const fresh = ProductStore.getById(product.id) ?? product; // 모달을 열어 둔 사이 다른 판매가 있었을 수 있다 — 저장 직전 재고로 (정합성 감사 2026-11-19)
+    if (fresh.stock < qty) {
+      notify(`재고가 부족합니다. (현재 재고: ${fresh.stock}${product.unit})`);
       return;
     }
     setSaving(true);
@@ -636,6 +774,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       staffName: form.staffName.trim() || undefined,
       notes: form.notes.trim() || undefined,
     });
+    rememberPaymentMethod(form.paymentMethod); // 다음 판매·결제 등록의 기본값 (리뷰 60)
     onSaved();
   };
 
@@ -654,7 +793,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
               <span className="text-xs text-gray-400">·</span>
               <span className="text-xs font-medium text-[#1a3a8f]">정가 {product.price.toLocaleString()}원</span>
               <span className="text-xs text-gray-400">·</span>
-              <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-500' : 'text-gray-500')}>
+              <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-700' : 'text-gray-600')}>
                 재고 {product.stock}{product.unit}
               </span>
             </div>
@@ -664,16 +803,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
         {/* Customer */}
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 선택 (선택)</label>
-          <select
-            value={form.customerId}
-            onChange={e => set('customerId', e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
-          >
-            <option value="">고객 선택 안함</option>
-            {customers.map(c => (
-              <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>
-            ))}
-          </select>
+          <CustomerCombobox customers={customers} value={form.customerId} onChange={id => set('customerId', id)} maskRole={authUser?.role ?? 'staff'} ariaLabel="고객 선택" placeholder="이름·전화번호 검색 (비우면 고객 없이 기록)" />
         </div>
 
         {/* Quantity & Unit Price */}
@@ -687,6 +817,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
               >-</button>
               <input
                 type="number"
+                aria-label="수량"
                 min="1"
                 value={form.quantity}
                 onChange={e => set('quantity', e.target.value)}
@@ -702,6 +833,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             <label className="block text-xs font-medium text-gray-600 mb-1.5">단가 (원)</label>
             <input
               type="number"
+              aria-label="단가"
               value={form.unitPrice}
               onChange={e => set('unitPrice', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
@@ -712,12 +844,12 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
         {/* Total Price */}
         <div className="px-4 py-3 bg-gray-50 rounded-xl flex items-center justify-between">
           <span className="text-sm text-gray-600">결제 금액</span>
-          <span className="text-xl font-black text-[#1a3a8f]">{totalPrice.toLocaleString()}원</span>
+          <span className="text-xl font-bold text-[#1a3a8f]">{totalPrice.toLocaleString()}원</span>
         </div>
 
         {/* Payment Method */}
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">결제수단</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">결제 수단</label>
           <PaymentMethodPicker
             value={form.paymentMethod}
             onChange={m => setForm(prev => ({ ...prev, paymentMethod: m }))}
@@ -730,20 +862,23 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             <label className="block text-xs font-medium text-gray-600 mb-1.5">판매일</label>
             <input
               type="date"
+              aria-label="판매일"
               value={form.saleDate}
               onChange={e => set('saleDate', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1.5">담당자</label>
-            <input
-              type="text"
-              placeholder="담당 직원(선택)"
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원</label>
+            <select
               value={form.staffName}
               onChange={e => set('staffName', e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
-            />
+              aria-label="담당 직원"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+            >
+              <option value="">담당 직원 없음</option>
+              {StaffStore.getAll().filter(s => s.isActive).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
           </div>
         </div>
 

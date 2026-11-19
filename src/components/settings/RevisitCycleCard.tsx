@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CalendarClock } from 'lucide-react';
+import { isAuthApiConfigured } from '../../lib/authApi';
 import { getRevisitCycleDays, setRevisitCycleDays, DEFAULT_CYCLE_DAYS, MIN_CYCLE_DAYS, MAX_CYCLE_DAYS } from '../../lib/reminderEngine';
 
 /**
@@ -16,11 +17,11 @@ export default function RevisitCycleCard() {
   function save() {
     const value = parseInt(draft, 10);
     if (!setRevisitCycleDays(value)) {
-      setMessage({ tone: 'warn', text: `${MIN_CYCLE_DAYS}~${MAX_CYCLE_DAYS} 사이의 일수를 입력해 주세요.` });
+      setMessage({ tone: 'warn', text: `${MIN_CYCLE_DAYS}~${MAX_CYCLE_DAYS} 사이의 일수를 입력해주세요.` });
       return;
     }
     setDays(value);
-    setMessage({ tone: 'ok', text: `재방문 권장 주기를 ${value}일로 저장했습니다. 이 지점의 모든 PC에 적용됩니다.` });
+    setMessage({ tone: 'ok', text: `재방문 권장 주기를 ${value}일로 저장했습니다.${isAuthApiConfigured ? ' 이 지점의 모든 PC에 적용됩니다.' : ''}` }); // 로컬 모드는 이 기기만 (UX 점검 2026-11-19)
   }
 
   return (
@@ -31,12 +32,13 @@ export default function RevisitCycleCard() {
       </div>
       <div className="px-6 py-5 space-y-3">
         <p className="text-sm text-gray-500 leading-relaxed">
-          시술기록에 다음 방문 권장일을 따로 적지 않은 고객은 마지막 방문일에서 이 주기가 지나면
+          시술 기록에 다음 방문 권장일을 따로 적지 않은 고객은 마지막 방문일에서 이 주기가 지나면
           대시보드의 재방문 리마인더에 표시됩니다. 현재 <b className="text-gray-800">{days}일</b> (기본 {DEFAULT_CYCLE_DAYS}일).
         </p>
         <div className="flex items-center gap-2">
           <input
             type="number"
+            aria-label="재방문 주기(일)"
             min={MIN_CYCLE_DAYS}
             max={MAX_CYCLE_DAYS}
             value={draft}
@@ -51,7 +53,7 @@ export default function RevisitCycleCard() {
             저장
           </button>
         </div>
-        {message && <p className={`text-xs ${message.tone === 'ok' ? 'text-emerald-600' : 'text-amber-700'}`}>{message.text}</p>}
+        {message && <p className={`text-xs ${message.tone === 'ok' ? 'text-emerald-700' : 'text-amber-700'}`}>{message.text}</p>}
       </div>
     </div>
   );

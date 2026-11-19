@@ -1,23 +1,32 @@
 import { notify } from '../../lib/notify';
-import { useState, useEffect, useMemo } from 'react';
+import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
   ShoppingBag, Scissors, ChevronLeft, ChevronRight, Pencil, Trash2, Search, Layers,
   Receipt, FileText, CreditCard
 } from 'lucide-react';
-import {
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Legend
-} from 'recharts';
-import { PaymentStore, CustomerStore } from '../../lib/store';
+import ChartFallback from '../../components/charts/ChartFallback';
+const DailySalesChart = lazy(() => import('../../components/charts/DailySalesChart')); // recharts는 첫 화면 번들에서 분리 (2026-11-18)
+const PnlTrendChart = lazy(() => import('../../components/charts/PnlTrendChart'));
+import { PaymentStore, CustomerStore, CustomerProgramStore } from '../../lib/store';
+import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
+import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import Header from '../../components/layout/Header';
+import DateQuickChips from '../../components/ui/DateQuickChips';
+import { useAuth } from '../../contexts/AuthContext';
 import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
-import type { Payment, PaymentMethod, Expense, ExpenseCategory } from '../../types';
+import type { Payment, PaymentMethod, Expense, ExpenseCategory, CustomerProgram } from '../../types';
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
-import { formatPrice, todayISO as today } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, parseISODate } from '../../lib/format';
+import { countPaymentUnits } from '../../lib/paymentCount';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import PaymentLinkModal from '../../components/PaymentLinkModal';
-import { isPaymentLinkAvailable } from '../../lib/paymentLinks';
+import { isPaymentLinkAvailable, fetchPgConfig } from '../../lib/paymentLinks';
+import { growthPct } from '../../lib/growth';
+import { tagRefund, refundedOn } from '../../lib/refundDate';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -49,6 +58,7 @@ function periodLabel(months: string[], mode: PnlPeriodMode): string {
 
 
 export default function Sales() {
+  const { user: authUser } = useAuth(); // 전화번호 마스킹 기준 역할 (리뷰 2026-11-18)
   const [tab, setTab] = useState<'overview' | 'list' | 'expense' | 'pnl'>('overview');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -61,12 +71,25 @@ export default function Sales() {
   // 지출(매입) 상태
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
+  useOverlayClose(showModal, closeModal, { escape: false }); // Android 뒤로가기 — 결제 등록 폼은 Esc 제외
+  useOverlayClose(showExpenseModal, closeExpenseModal, { escape: false });
+  const payModalRef = useRef<HTMLDivElement>(null);
+  const expenseModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(showModal, payModalRef); // 첫 입력란 포커스·Tab 순환·닫힐 때 복원
+  useFocusTrap(showExpenseModal, expenseModalRef);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<'all' | ExpenseCategory>('all');
   const [pnlMode, setPnlMode] = useState<PnlPeriodMode>('month');
 
   // 결제 요청 링크 (NAS 서버 모드 전용)
   const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
+  // PG 계약 전엔 모달을 열어야 "준비 중"을 알 수 있었다 — 버튼 라벨에 미리 표시 (9차 점검 #19). 조회 실패는 라벨 그대로(모달이 안내)
+  const [pgEnabled, setPgEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!isPaymentLinkAvailable) return;
+    fetchPgConfig().then(c => setPgEnabled(c.enabled)).catch(() => setPgEnabled(null));
+  }, []);
+  const payLinkLabel = pgEnabled === false ? '결제 요청 (준비 중)' : '결제 요청';
 
   const emptyExpenseForm = {
     expenseDate: today(),
@@ -85,14 +108,41 @@ export default function Sales() {
     customerName: '',
     type: 'single_treatment' as Payment['type'],
     amount: '',
-    paymentMethod: '카드' as PaymentMethod,
+    paymentMethod: (getLastPaymentMethod() ?? '카드') as PaymentMethod, // 지난번 결제수단 (입력 속도 감사 2026-11-18)
     paymentDate: today(),
     memo: '',
     discountAmount: '0',
     status: 'completed' as Payment['status'],
+    referenceId: '', // 예약 완료 처리에서 넘어온 결제 → 예약 id (중복 등록 방지·예약 상세의 [결제 등록하기] 노출 판단, pendingCompletion.registeredPaymentsFor)
   });
 
   const customers = useMemo(() => CustomerStore.getAll(), []);
+
+  // 시술 기록 저장 → 결제 연계 / 대시보드 빠른 작업: ?new=1(&customer=&amount=&memo=&reference=) 이면 등록 모달을 프리필해 연다 (2026-11-17, reference 2026-11-18)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  // 결제 행의 고객명 → 고객 상세 (2026-11-18)
+  const customerLink = (p: Payment, fallback: string) => p.customerId ? (
+    <button type="button" onClick={() => navigate(`/customers?open=${encodeURIComponent(p.customerId!)}`)}
+      className="inline max-w-full truncate align-bottom hover:underline text-left" title="고객 상세 열기">{p.customerName || fallback}</button>
+  ) : (p.customerName || fallback);
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    const customerId = searchParams.get('customer') || '';
+    const customer = customerId ? customers.find(c => c.id === customerId) : undefined;
+    const amount = searchParams.get('amount') || '';
+    setForm(prev => ({
+      ...prev,
+      customerId: customer ? customer.id : prev.customerId,
+      customerName: customer ? customer.name : prev.customerName,
+      amount: amount || prev.amount,
+      memo: searchParams.get('memo') || prev.memo,
+      type: 'single_treatment',
+      referenceId: searchParams.get('reference') || '',
+    }));
+    setShowModal(true);
+    setSearchParams({}, { replace: true }); // 1회 캡처 후 URL 정리 — 뒤로가기 때 프리필 모달이 다시 뜨지 않게 (리뷰 2026-11-17)
+  }, [searchParams, setSearchParams, customers]);
 
   // 수정 중인 원본 결제 (환불 가드·프로그램 타입 유지에 사용)
   const editingPayment = useMemo(
@@ -104,7 +154,7 @@ export default function Sales() {
     loadPayments();
     refreshExpenses();
     // NAS 서버에서 지출 원장 최신화 (실패 시 localStorage 캐시 유지)
-    loadExpenses().then(refreshExpenses).catch(() => {});
+    loadExpenses().then(ok => { refreshExpenses(); if (!ok) notify('서버에서 지출 원장을 받지 못해 이 기기에 저장된 기록을 표시합니다.'); }).catch(() => {});
   }, []);
 
   function loadPayments() {
@@ -127,13 +177,16 @@ export default function Sales() {
     [payments, viewMonth]
   );
 
+  // 이달에 환불 "처리"한 금액 — 매출 정의(결제일 기준)와 별개로 보조 표시 (10차 #M1)
+  const monthRefunded = useMemo(() => payments.filter(p => (refundedOn(p) || '').startsWith(viewMonth)).reduce((s, p) => s + p.amount, 0), [payments, viewMonth]);
   // 이번 달 집계 — 기타(other) 포함해야 총매출과 비중 합이 일치
   const thisSummary = useMemo(() => ({
     treatment: monthPayments.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0),
     product: monthPayments.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0),
     other: monthPayments.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0),
     total: monthPayments.reduce((s, p) => s + p.amount, 0),
-    count: monthPayments.length,
+    count: countPaymentUnits(monthPayments), // 분할 결제 2행 = 1건 — 마감 요약·대시보드와 같은 정의 (금액 감사 2026-11-20)
+    paidCount: countPaymentUnits(monthPayments.filter(p => p.amount > 0)), // 0원 회차권(이벤트)은 건당 평균에서 제외 (10차 #M8)
   }), [monthPayments]);
 
   const listPayments = useMemo(() => {
@@ -161,7 +214,7 @@ export default function Sales() {
 
   // 지난 달 집계
   const lastSummary = useMemo(() => {
-    const d = new Date(viewMonth + '-01');
+    const d = parseISODate(viewMonth + '-01'); // new Date('YYYY-MM-01')은 UTC 자정 — 서쪽 시간대에서 한 달이 어긋난다 (금액 감사 2026-11-20)
     d.setMonth(d.getMonth() - 1);
     const lastMonth = getYearMonth(d);
     const lastPayments = payments.filter(p => p.paymentDate.startsWith(lastMonth) && p.status === 'completed');
@@ -266,12 +319,12 @@ export default function Sales() {
   // 월 이동 — 손익 탭에서는 선택한 기간 단위(분기/연도)만큼 이동
   function changeMonth(delta: number) {
     const step = tab === 'pnl' ? (pnlMode === 'quarter' ? 3 : pnlMode === 'year' ? 12 : 1) : 1;
-    const d = new Date(viewMonth + '-01');
+    const d = parseISODate(viewMonth + '-01'); // new Date('YYYY-MM-01')은 UTC 자정 — 서쪽 시간대에서 한 달이 어긋난다 (금액 감사 2026-11-20)
     d.setMonth(d.getMonth() + delta * step);
     setViewMonth(getYearMonth(d));
   }
 
-  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: '카드', paymentDate: today(), memo: '', discountAmount: '0', status: 'completed' });
+  const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: (getLastPaymentMethod() ?? '카드') as PaymentMethod, paymentDate: today(), memo: '', discountAmount: '0', status: 'completed', referenceId: '' });
 
   function closeModal() {
     setShowModal(false);
@@ -291,19 +344,29 @@ export default function Sales() {
       memo: p.memo || '',
       discountAmount: String(p.discountAmount || 0),
       status: p.status,
+      referenceId: p.referenceId || '',
     });
     setEditingId(p.id);
     setShowModal(true);
   }
 
-  // 결제 삭제 — 제품 결제는 차단 (PaymentStore.delete는 재고·판매기록을 복구하지 않아
-  // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생)
+  // 결제 삭제 — 판매 기록과 연결된 제품 결제(referenceId)는 차단 (PaymentStore.delete는 재고·판매기록을 복구하지 않아
+  // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생). 연결 없는 옛 제품 결제는 일반 결제처럼 지운다 (UX 점검 2026-11-19)
   function handleDelete(p: Payment) {
-    if (p.type === 'product') {
+    if (p.type === 'product' && p.referenceId) {
       notify('제품 결제는 여기서 삭제하면 재고·판매기록과 어긋납니다. 제품/재고 페이지의 판매 취소를 사용해주세요.');
       return;
     }
-    if (!window.confirm(`${p.paymentDate} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
+    // 회차권 결제도 같은 이유 — 지우면 회차권만 남아 계속 차감된다. 고객 상세 [관리] > [등록 취소]가 결제와 회차권을 함께 지운다 (정합성 감사 2026-11-19)
+    const linkedProgram = p.type === 'program' && p.referenceId ? CustomerProgramStore.getById(p.referenceId) : undefined;
+    if (linkedProgram) {
+      // [등록 취소]는 한 번도 쓰지 않은 회차권에만 있다 — 쓴 회차권은 환불 경로로 (리뷰 2026-11-19)
+      notify(linkedProgram.usedSessions > 0
+        ? `이미 ${linkedProgram.usedSessions}회 사용한 회차권의 결제는 삭제할 수 없습니다. 고객 상세의 [관리]에서 완료 처리한 뒤 이 결제를 [수정] > 환불로 바꿔주세요.`
+        : '회차권 결제는 여기서 지우면 회차권만 남아 계속 차감됩니다. 고객 상세의 해당 프로그램 [관리] > [등록 취소]로 결제와 회차권을 함께 지워주세요.');
+      return;
+    }
+    if (!window.confirm(`${formatDate(p.paymentDate)} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
     PaymentStore.delete(p.id);
     loadPayments();
   }
@@ -315,7 +378,8 @@ export default function Sales() {
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
 
     const amount = parseInt(form.amount.replace(/,/g, ''), 10);
-    if (Number.isNaN(amount) || amount <= 0) {
+    const zeroAllowed = !!editingId && editingPayment?.amount === 0; // 0원 이벤트 회차권 결제는 메모·수단만 고칠 수 있게 (정합성 감사 2026-11-19)
+    if (Number.isNaN(amount) || amount < 0 || (amount === 0 && !zeroAllowed)) {
       notify('결제 금액을 0보다 큰 숫자로 입력해주세요.');
       return;
     }
@@ -332,24 +396,54 @@ export default function Sales() {
       discountAmount,
       status: form.status,
       memo: form.memo || undefined,
+      referenceId: form.referenceId || undefined,
     };
 
     // 제품 결제를 '환불'로 저장하면 매출에선 빠지지만 재고·판매기록은 안 돌아오는
     // 크로스 모듈 불일치(QA⑤) — 신규·수정 모두 차단, 판매 기록 삭제(재고 자동 복구)로 유도
-    const effectiveType = editingId ? editingPayment?.type : form.type;
-    if (form.status === 'refunded' && effectiveType === 'product') {
+    if (form.status === 'refunded' && editingId && editingPayment?.type === 'product' && editingPayment.referenceId) {
       notify(
-        '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 해당 판매를 삭제해주세요.\n' +
-        '판매 기록을 삭제하면 재고 복구와 결제 취소가 함께 처리됩니다.'
+        '제품 결제의 환불은 [제품/재고 > 판매 기록]에서 [판매 취소]로 처리해주세요.\n' +
+        '재고 복구와 함께 이 결제가 환불로 기록됩니다.'
       );
       return;
     }
+    // 회차권 결제 환불: 회차권이 살아 있으면 함께 종료해야 계속 차감되지 않는다 (정합성 감사 2026-11-19)
+    // 종료는 결제 저장과 같은 자리에서 — 사이에 다른 검사가 끼어 결제는 안 바뀌고 회차권만 닫히는 일이 없게 (리뷰 2026-11-19)
+    let closeProgram: CustomerProgram | null = null;
+    if (form.status === 'refunded' && editingId && editingPayment?.type === 'program' && editingPayment.referenceId && editingPayment.status !== 'refunded') {
+      const cp = CustomerProgramStore.getById(editingPayment.referenceId);
+      if (cp && !cp.isCompleted) {
+        if (cp.usedSessions > 0) {
+          notify(`이미 ${cp.usedSessions}회 사용한 회차권입니다. 부분 환불은 고객 상세의 [관리]에서 먼저 완료 처리한 뒤 이 결제를 환불로 바꿔주세요.`);
+          return;
+        }
+        if (!window.confirm(`환불로 저장하면 ${cp.programName} 회차권(${cp.totalSessions != null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'})을 함께 종료합니다. 계속할까요?`)) return;
+        closeProgram = cp;
+      }
+    }
 
+    // 제품 판매와 연결된 결제의 금액·날짜·고객을 여기서 바꾸면 판매 기록·재고 집계와 어긋난다 — 메모·결제 수단만 (UX 점검 2026-11-19)
+    if (editingId && editingPayment?.type === 'product' && editingPayment.referenceId
+      && (amount !== editingPayment.amount || form.paymentDate !== editingPayment.paymentDate || (form.customerId || '') !== (editingPayment.customerId || '')
+        || form.status !== editingPayment.status || discountAmount !== (editingPayment.discountAmount || 0))) {
+      notify('제품 판매와 연결된 결제는 금액·할인·날짜·고객·상태를 여기서 바꿀 수 없습니다. [제품/재고 > 판매 기록]에서 취소한 뒤 다시 기록해주세요. (메모·결제 수단은 수정 가능)');
+      return;
+    }
+
+    // 환불 처리일 — Payment 에 환불일 필드가 없어 memo 태그로(이달 환불 처리 N원 표시의 근거) (10차 #M1)
+    if (form.status === 'refunded' && editingPayment?.status !== 'refunded') payload.memo = tagRefund(payload.memo, today());
     if (editingId) {
       PaymentStore.update(editingId, payload);
+      if (closeProgram) CustomerProgramStore.update(closeProgram.id, { isCompleted: true, notes: `${closeProgram.notes ? closeProgram.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
+      // 고객 상세 카드는 회차권의 pricePaid·paymentMethod를 보여준다 — 결제 쪽만 고치면 두 숫자가 갈라진다 (정합성 감사 2026-11-19)
+      if (editingPayment?.type === 'program' && editingPayment.referenceId && CustomerProgramStore.getById(editingPayment.referenceId)) {
+        CustomerProgramStore.update(editingPayment.referenceId, { pricePaid: amount, paymentMethod: form.paymentMethod });
+      }
     } else {
       PaymentStore.save(payload);
     }
+    rememberPaymentMethod(form.paymentMethod);
 
     closeModal();
     loadPayments();
@@ -412,68 +506,65 @@ export default function Sales() {
     refreshExpenses();
   }
 
-  const growthRate = lastSummary.total > 0
-    ? Math.round(((thisSummary.total - lastSummary.total) / lastSummary.total) * 100)
-    : 0;
+  const growthRate = growthPct(thisSummary.total, lastSummary.total); // 대시보드와 같은 규칙 — 지난달 0 이면 null(배지 없음), 같으면 0% (10차 #M9)
 
   const [viewDate] = viewMonth.split('-');
   const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
 
   return (
+    <>
+      <Header title="매출·손익 관리" subtitle="매출 · 지출(매입) · 손익계산서 통합 현황" actions={<div className="hidden lg:flex items-center gap-3">
+        {isPaymentLinkAvailable && (
+          <button type="button" onClick={() => setShowPaymentLinkModal(true)} className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+            <CreditCard size={16} />{payLinkLabel}
+          </button>
+        )}
+        <button type="button" onClick={() => setShowExpenseModal(true)} className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+          <Receipt size={16} />지출 등록
+        </button>
+        <button type="button" onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors">
+          <Plus size={16} />결제 등록
+        </button>
+      </div>} />
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      {/* 헤더 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">매출·손익 관리</h1>
-          <p className="text-sm text-gray-400 mt-0.5">매출 · 지출(매입) · 손익계산서 통합 현황</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {isPaymentLinkAvailable && (
-            <button
-              onClick={() => setShowPaymentLinkModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
-            >
-              <CreditCard size={16} />결제 요청
-            </button>
-          )}
-          <button
-            onClick={() => setShowExpenseModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            <Receipt size={16} />지출 등록
+      {/* 모바일: 헤더 액션이 제목 아래로 줄바꿈되며 뒤섞였다 — 본문 첫 줄에 같은 세 버튼 (7차 UX 점검 2026-11-20) */}
+      <div className="lg:hidden flex gap-2 mb-4">
+        <button type="button" onClick={() => setShowModal(true)} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 px-3 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
+          <Plus size={16} />결제 등록
+        </button>
+        <button type="button" onClick={() => setShowExpenseModal(true)} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 px-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
+          <Receipt size={16} />지출 등록
+        </button>
+        {isPaymentLinkAvailable && (
+          <button type="button" onClick={() => setShowPaymentLinkModal(true)} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 px-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
+            <CreditCard size={16} />{payLinkLabel}
           </button>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors shadow-md shadow-blue-200"
-          >
-            <Plus size={16} />결제 등록
-          </button>
-        </div>
+        )}
       </div>
 
       {/* 월 선택 */}
       <div className="flex items-center gap-3 mb-6 bg-white border border-gray-100 rounded-2xl p-3 w-fit">
-        <button onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => changeMonth(-1)} aria-label={tab === 'pnl' && pnlMode !== 'month' ? '이전 기간' : '이전 달'} className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronLeft size={16} className="text-gray-400" />
         </button>
         <span className="text-sm font-bold text-gray-900 min-w-[100px] text-center">{monthLabel}</span>
-        <button onClick={() => changeMonth(1)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+        <button onClick={() => changeMonth(1)} aria-label={tab === 'pnl' && pnlMode !== 'month' ? '다음 기간' : '다음 달'} className="p-2.5 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronRight size={16} className="text-gray-400" />
         </button>
       </div>
 
       {/* 탭 */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto no-scrollbar max-w-full">
-        <button onClick={() => setTab('overview')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'overview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto no-scrollbar pr-6 max-w-full">
+        <button onClick={() => setTab('overview')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'overview' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
           매출 현황
         </button>
-        <button onClick={() => setTab('list')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-          결제 내역 ({monthAllPayments.length})
+        <button onClick={() => setTab('list')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
+          결제 내역 ({countPaymentUnits(monthAllPayments)})
         </button>
-        <button onClick={() => setTab('expense')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setTab('expense')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
           지출 내역 ({monthExpenses.length})
         </button>
-        <button onClick={() => setTab('pnl')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'pnl' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+        <button onClick={() => setTab('pnl')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'pnl' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
           손익계산서
         </button>
       </div>
@@ -485,38 +576,41 @@ export default function Sales() {
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-gray-400">총 매출</p>
-                {growthRate !== 0 && (
-                  <span className={`text-xs font-medium flex items-center gap-0.5 ${growthRate > 0 ? 'text-green-500' : 'text-red-400'}`}>
-                    {growthRate > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                    {Math.abs(growthRate)}%
+                {growthRate !== null && (
+                  <span className={`text-xs font-medium flex items-center gap-0.5 ${growthRate > 0 ? 'text-green-700' : growthRate < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                    {growthRate > 0 ? <TrendingUp size={12} /> : growthRate < 0 ? <TrendingDown size={12} /> : null}
+                    {growthRate === 0 ? '전월과 같음' : `${Math.abs(growthRate)}%`}
                   </span>
                 )}
               </div>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(thisSummary.total)}</p>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="text-2xl font-bold text-gray-900" data-testid="sales-total-amount">{formatPrice(thisSummary.total)}</p>
+              <p className="text-xs text-gray-500 mt-1">
                 지난달 {formatPrice(lastSummary.total)}
                 {thisSummary.other > 0 && <span className="ml-1.5 text-gray-400">· 기타 {formatPrice(thisSummary.other)} 포함</span>}
               </p>
+              {monthRefunded > 0 && (
+                <p className="text-xs text-red-600 mt-1" data-testid="sales-month-refunded">이달 환불 처리 {formatPrice(monthRefunded)} — 원 결제월 매출에서 차감됨</p>
+              )}
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">시술 매출</p>
-              <p className="text-2xl font-bold text-blue-600">{formatPrice(thisSummary.treatment)}</p>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="text-2xl font-bold text-gray-900" data-testid="sales-treatment-amount">{formatPrice(thisSummary.treatment)}</p>
+              <p className="text-xs text-gray-500 mt-1">
                 {thisSummary.total > 0 ? Math.round((thisSummary.treatment / thisSummary.total) * 100) : 0}% 비중
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">제품 매출</p>
-              <p className="text-2xl font-bold text-purple-600">{formatPrice(thisSummary.product)}</p>
-              <p className="text-xs text-gray-300 mt-1">
+              <p className="text-2xl font-bold text-gray-900" data-testid="sales-product-amount">{formatPrice(thisSummary.product)}</p>
+              <p className="text-xs text-gray-500 mt-1">
                 {thisSummary.total > 0 ? Math.round((thisSummary.product / thisSummary.total) * 100) : 0}% 비중
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">결제 건수</p>
               <p className="text-2xl font-bold text-gray-900">{thisSummary.count}건</p>
-              <p className="text-xs text-gray-300 mt-1">
-                건당 {thisSummary.count > 0 ? formatPrice(Math.round(thisSummary.total / thisSummary.count)) : '-'}
+              <p className="text-xs text-gray-500 mt-1">
+                건당 {thisSummary.paidCount > 0 ? formatPrice(Math.round(thisSummary.total / thisSummary.paidCount)) : '-'}{thisSummary.count !== thisSummary.paidCount ? ` · 0원 ${thisSummary.count - thisSummary.paidCount}건 제외` : ''}
               </p>
             </div>
           </div>
@@ -524,22 +618,7 @@ export default function Sales() {
           {/* 일별 매출 차트 */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <h3 className="font-bold text-gray-900 mb-4">일별 매출 현황 (만원)</h3>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={dailyChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#9ca3af' }}
-                  tickFormatter={(v, i) => i % 5 === 0 ? v : ''} />
-                <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <Tooltip
-                  formatter={(v: number, name: string) => [`${v.toFixed(0)}만원`, name]}
-                  contentStyle={{ borderRadius: 12, border: '1px solid #f0f0f0', fontSize: 12 }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="시술" stackId="a" fill="#1a3a8f" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="제품" stackId="a" fill="#7c3aed" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="기타" stackId="a" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<ChartFallback height={220} />}><DailySalesChart data={dailyChartData} /></Suspense>
           </div>
 
           {/* 결제 수단 & 최근 결제 */}
@@ -547,7 +626,7 @@ export default function Sales() {
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <h3 className="font-bold text-gray-900 mb-4">결제 수단</h3>
               {methodData.length === 0 ? (
-                <p className="text-sm text-gray-300 text-center py-6">데이터 없음</p>
+                <p className="text-sm text-gray-500 text-center py-6">이 기간 결제가 없어요</p>
               ) : (
                 <div className="space-y-3">
                   {methodData.map(({ name, value }) => {
@@ -574,18 +653,18 @@ export default function Sales() {
                 <div className="text-center py-6">
                   <DollarSign size={32} className="text-gray-200 mx-auto mb-2" />
                   <p className="text-sm text-gray-400">이번 달 결제 내역이 없어요</p>
-                  <button onClick={() => setShowModal(true)} className="mt-2 text-xs text-blue-500 hover:underline">결제 등록하기</button>
+                  <button onClick={() => setShowModal(true)} className="mt-2 text-xs text-primary-600 hover:underline">결제 등록하기</button>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {[...monthPayments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate)).slice(0, 5).map(p => (
                     <div key={p.id} className="flex items-center gap-3 py-1.5">
                       <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${p.type === 'product' ? 'bg-purple-50' : 'bg-blue-50'}`}>
-                        {p.type === 'product' ? <ShoppingBag size={13} className="text-purple-500" /> : <Scissors size={13} className="text-blue-500" />}
+                        {p.type === 'product' ? <ShoppingBag size={13} className="text-purple-500" /> : <Scissors size={13} className="text-primary-600" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{p.customerName || '고객'}</p>
-                        <p className="text-xs text-gray-400">{p.typeLabel} · {p.paymentDate}</p>
+                        <p className="text-sm font-medium text-gray-800 truncate">{customerLink(p, '고객')}</p>
+                        <p className="text-xs text-gray-400">{p.typeLabel} · {formatDate(p.paymentDate)}</p>
                       </div>
                       <p className="text-sm font-bold text-gray-900 flex-shrink-0">{formatPrice(p.amount)}</p>
                     </div>
@@ -605,12 +684,12 @@ export default function Sales() {
               <input
                 value={listSearch}
                 onChange={e => setListSearch(e.target.value)}
-                placeholder="고객명, 구분, 결제수단, 메모 검색"
+                placeholder="고객명, 구분, 결제 수단, 메모 검색"
                 className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
                 aria-label="결제 내역 검색"
               />
             </label>
-            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pr-6">
               <select
                 value={listType}
                 onChange={e => setListType(e.target.value as 'all' | Payment['type'])}
@@ -629,11 +708,11 @@ export default function Sales() {
                 className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white outline-none"
                 aria-label="결제 수단 필터"
               >
-                <option value="all">전체 결제수단</option>
+                <option value="all">전체 결제 수단</option>
                 {getAllPaymentMethods().map(method => <option key={method} value={method}>{method}</option>)}
               </select>
             </div>
-            <span className="text-xs text-gray-400 whitespace-nowrap">{listPayments.length}건 표시</span>
+            <span className="text-xs text-gray-400 whitespace-nowrap">{countPaymentUnits(listPayments)}건 표시</span>
           </div>
           {listPayments.length === 0 ? (
             <div className="text-center py-12">
@@ -645,36 +724,67 @@ export default function Sales() {
             </div>
           ) : (
             <div>
-              <div className="overflow-auto max-h-[65vh]">
+              {/* 모바일(lg 미만): 카드 목록 — 표는 720px 폭이라 가로 스크롤만 생긴다 (2026-11-17) */}
+              <ul className="lg:hidden divide-y divide-gray-50" data-testid="sales-mobile-list">
+                {listPayments.map(p => (
+                  <li key={p.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {customerLink(p, '—')}
+                          {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">환불</span>}
+                          {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
+                        </p>
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                          <span>{formatDate(p.paymentDate)}</span>
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-700'}`}>{p.typeLabel}</span>
+                          <span>{p.paymentMethod}</span>
+                          {p.discountAmount > 0 && <span className="text-orange-700">-{formatPrice(p.discountAmount)}</span>}
+                        </p>
+                        {p.memo && <p className="mt-0.5 text-xs text-gray-500 truncate">{p.memo}</p>}
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
+                        <span className="flex items-center gap-1">
+                          <button onClick={() => openEdit(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="결제 수정"><Pencil size={16} /></button>
+                          <button onClick={() => handleDelete(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="결제 삭제"><Trash2 size={16} /></button>
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden lg:block overflow-auto max-h-[65vh]">
                 <div className="min-w-[720px]">
                   <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
                     <span>날짜</span>
                     <span className="col-span-2">고객</span>
                     <span>구분</span>
-                    <span>결제 방법</span>
+                    <span>결제 수단</span>
                     <span className="text-right">금액</span>
                   </div>
                   {listPayments.map(p => (
                     <div key={p.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
-                      <span className="text-gray-500 text-xs">{p.paymentDate}</span>
+                      <span className="text-gray-500 text-xs">{formatDate(p.paymentDate)}</span>
                       <span className="col-span-2 font-medium text-gray-800">
-                        {p.customerName || '—'}
-                        {p.discountAmount > 0 && <span className="ml-1.5 text-[11px] text-orange-500">-{formatPrice(p.discountAmount)}</span>}
-                        {p.status === 'refunded' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-red-50 text-red-500 rounded-full font-medium">환불</span>}
-                        {p.status === 'pending' && <span className="ml-1.5 text-[11px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-medium">대기</span>}
+                        {customerLink(p, '—')}
+                        {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-700">-{formatPrice(p.discountAmount)}</span>}
+                        {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">환불</span>}
+                        {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
+                        {p.memo && <span className="block text-xs text-gray-500 font-normal truncate" title={p.memo}>{p.memo}</span>}
                       </span>
                       <span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-700'}`}>
                           {p.typeLabel}
                         </span>
                       </span>
                       <span className="text-gray-500 text-xs">{p.paymentMethod}</span>
                       <span className="flex items-center justify-end gap-1.5">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
-                        <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 수정">
+                        <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">
                           <Pencil size={13} />
                         </button>
-                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="결제 삭제">
+                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
                           <Trash2 size={13} />
                         </button>
                       </span>
@@ -684,7 +794,7 @@ export default function Sales() {
               </div>
               <div className="px-4 py-3 bg-gray-50 rounded-b-2xl flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-600">
-                  표시 {listPayments.length}건 · 완료 합계 (환불/대기 제외)
+                  표시 {countPaymentUnits(listPayments)}건 · 완료 합계 (환불/대기 제외)
                 </span>
                 <span className="text-base font-bold text-gray-900">{formatPrice(listTotal)}</span>
               </div>
@@ -704,12 +814,12 @@ export default function Sales() {
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">매입 (매출원가)</p>
               <p className="text-2xl font-bold text-orange-600">{formatPrice(expenseSummary.cogs)}</p>
-              <p className="text-xs text-gray-300 mt-1">제품·소모품 매입</p>
+              <p className="text-xs text-gray-500 mt-1">제품·소모품 매입</p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">판매비·관리비</p>
               <p className="text-2xl font-bold text-rose-500">{formatPrice(expenseSummary.sga)}</p>
-              <p className="text-xs text-gray-300 mt-1">인건비·임대료 등</p>
+              <p className="text-xs text-gray-500 mt-1">인건비·임대료 등</p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">지출 건수</p>
@@ -719,10 +829,10 @@ export default function Sales() {
 
           {/* 지출 목록 */}
           <div className="bg-white rounded-2xl border border-gray-100">
-            <div className="p-3 border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <div className="p-3 border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar pr-6">
               <button
                 onClick={() => setExpenseCategoryFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === 'all' ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === 'all' ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
                 전체
               </button>
@@ -730,7 +840,7 @@ export default function Sales() {
                 <button
                   key={c}
                   onClick={() => setExpenseCategoryFilter(c)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === c ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === c ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                 >
                   {c}
                 </button>
@@ -742,27 +852,53 @@ export default function Sales() {
                 <p className="text-gray-400">
                   {expenseCategoryFilter === 'all' ? '이번 달 지출 내역이 없어요' : '해당 분류의 지출이 없어요'}
                 </p>
-                <p className="text-xs text-gray-300 mt-1">제품 매입, 임대료, 인건비 등을 기록하면 손익계산서가 자동 작성돼요</p>
+                <p className="text-xs text-gray-500 mt-1">제품 매입, 임대료, 인건비 등을 기록하면 손익계산서가 자동 작성됩니다</p>
                 <button onClick={() => setShowExpenseModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
                   지출 등록하기
                 </button>
               </div>
             ) : (
               <div>
-                <div className="overflow-auto max-h-[65vh]">
+                <ul className="lg:hidden divide-y divide-gray-50" data-testid="expense-mobile-list">
+                  {expenseList.map(x => (
+                    <li key={x.id} className="px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {x.description}
+                            {x.vendor && <span className="ml-1.5 text-xs font-normal text-gray-400">· {x.vendor}</span>}
+                          </p>
+                          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                            <span>{formatDate(x.expenseDate)}</span>
+                            <span className={`px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-800' : 'bg-rose-50 text-rose-700'}`}>{x.category}</span>
+                            <span>{x.paymentMethod}</span>
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
+                          <span className="flex items-center gap-1">
+                            <button onClick={() => openExpenseEdit(x)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="지출 수정"><Pencil size={16} /></button>
+                            <button onClick={() => handleExpenseDelete(x)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="지출 삭제"><Trash2 size={16} /></button>
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="hidden lg:block overflow-auto max-h-[65vh]">
                   <div className="min-w-[720px]">
                     <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
                       <span>날짜</span>
                       <span>분류</span>
                       <span className="col-span-2">내용 / 거래처</span>
-                      <span>결제 수단</span>
+                      <span>지불 수단</span>
                       <span className="text-right">금액</span>
                     </div>
                     {expenseList.map(x => (
                       <div key={x.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
-                        <span className="text-gray-500 text-xs">{x.expenseDate}</span>
+                        <span className="text-gray-500 text-xs">{formatDate(x.expenseDate)}</span>
                         <span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-600' : 'bg-rose-50 text-rose-500'}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COGS_CATEGORIES.includes(x.category) ? 'bg-orange-100 text-orange-800' : 'bg-rose-50 text-rose-700'}`}>
                             {x.category}
                           </span>
                         </span>
@@ -773,10 +909,10 @@ export default function Sales() {
                         <span className="text-gray-500 text-xs">{x.paymentMethod}</span>
                         <span className="flex items-center justify-end gap-1.5">
                           <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
-                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="지출 수정">
+                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 수정">
                             <Pencil size={13} />
                           </button>
-                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded md:opacity-0 md:group-hover:opacity-100 transition" aria-label="지출 삭제">
+                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
                             <Trash2 size={13} />
                           </button>
                         </span>
@@ -809,7 +945,7 @@ export default function Sales() {
                 <button
                   key={v}
                   onClick={() => setPnlMode(v)}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${pnlMode === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${pnlMode === v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}
                 >
                   {label}
                 </button>
@@ -845,7 +981,7 @@ export default function Sales() {
                 )}
                 {/* 매출원가 */}
                 <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100 mt-1">
-                  <span>매출원가 (매입)</span><span className="text-orange-600">−{formatPrice(pnl.cur.cogs)}</span>
+                  <span>매출원가 (매입)</span><span className="text-orange-700" data-testid="pnl-cogs">−{formatPrice(pnl.cur.cogs)}</span>
                 </div>
                 {COGS_CATEGORIES.map(c => (pnl.cur.byCategory[c] || 0) > 0 && (
                   <div key={c} className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
@@ -854,11 +990,11 @@ export default function Sales() {
                 ))}
                 <div className="flex justify-between py-2 font-bold text-gray-900 bg-gray-50 -mx-2 px-2 rounded-lg my-1">
                   <span>매출총이익</span>
-                  <span className={pnl.cur.grossProfit >= 0 ? 'text-gray-900' : 'text-red-500'}>{formatPrice(pnl.cur.grossProfit)}</span>
+                  <span className={pnl.cur.grossProfit >= 0 ? 'text-gray-900' : 'text-red-600'} data-testid="pnl-gross">{formatPrice(pnl.cur.grossProfit)}</span>
                 </div>
                 {/* 판관비 */}
                 <div className="flex justify-between py-2 font-medium text-gray-700 border-b border-gray-100">
-                  <span>판매비와 관리비</span><span className="text-rose-500">−{formatPrice(pnl.cur.sga)}</span>
+                  <span>판매비와 관리비</span><span className="text-rose-700">−{formatPrice(pnl.cur.sga)}</span>
                 </div>
                 {EXPENSE_CATEGORIES.filter(c => !COGS_CATEGORIES.includes(c)).map(c => (pnl.cur.byCategory[c] || 0) > 0 && (
                   <div key={c} className="flex justify-between py-1.5 text-gray-500 text-xs pl-3">
@@ -866,8 +1002,8 @@ export default function Sales() {
                   </div>
                 ))}
                 {/* 영업이익 */}
-                <div className={`flex justify-between py-3 font-bold text-base -mx-2 px-2 rounded-lg mt-1 ${pnl.cur.operatingProfit >= 0 ? 'bg-blue-50 text-[#1a3a8f]' : 'bg-red-50 text-red-600'}`}>
-                  <span>영업이익</span><span>{formatPrice(pnl.cur.operatingProfit)}</span>
+                <div className={`flex justify-between py-3 font-bold text-base -mx-2 px-2 rounded-lg mt-1 ${pnl.cur.operatingProfit >= 0 ? 'bg-blue-50 text-[#1a3a8f]' : 'bg-red-50 text-red-700'}`}>
+                  <span>영업이익</span><span data-testid="pnl-operating">{formatPrice(pnl.cur.operatingProfit)}</span>
                 </div>
                 <div className="flex justify-between pt-2 text-xs text-gray-400">
                   <span>영업이익률</span>
@@ -891,7 +1027,7 @@ export default function Sales() {
                       <div key={label} className="bg-gray-50 rounded-xl p-3">
                         <p className="text-xs text-gray-400 mb-1">{label}</p>
                         <p className="text-sm font-bold text-gray-900">{formatPrice(cur)}</p>
-                        <p className={`text-[11px] mt-1 font-medium ${diff > 0 ? 'text-green-500' : diff < 0 ? 'text-red-400' : 'text-gray-300'}`}>
+                        <p className={`text-xs mt-1 font-medium ${diff > 0 ? 'text-green-700' : diff < 0 ? 'text-red-600' : 'text-gray-500'}`}>
                           {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatPrice(diff)}`}
                         </p>
                       </div>
@@ -905,21 +1041,7 @@ export default function Sales() {
                 <h3 className="font-bold text-gray-900 mb-4">
                   {pnlMode === 'month' ? '최근 6개월 손익 추이 (만원)' : `${pnl.label} 월별 손익 (만원)`}
                 </h3>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={pnlTrend} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                    <Tooltip
-                      formatter={(v: number, name: string) => [`${v.toLocaleString('ko-KR')}만원`, name]}
-                      contentStyle={{ borderRadius: 12, border: '1px solid #f0f0f0', fontSize: 12 }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="매출" fill="#1a3a8f" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="지출" fill="#f97316" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="이익" fill="#10b981" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<ChartFallback height={200} />}><PnlTrendChart data={pnlTrend} /></Suspense>
               </div>
             </div>
           </div>
@@ -928,17 +1050,17 @@ export default function Sales() {
 
       {/* 결제 등록 모달 */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-50 p-4 overflow-y-auto">
+          <div ref={payModalRef} role="dialog" aria-modal="true" aria-label={editingId ? '결제 수정' : '결제 등록'} className="modal-card bg-white rounded-2xl w-full max-w-md my-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editingId ? '결제 수정' : '결제 등록'}</h2>
-              <button onClick={closeModal}><X size={18} className="text-gray-400" /></button>
+              <button onClick={closeModal} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleSave} className="p-5 space-y-4">
               {/* 구분 */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">결제 구분</label>
-                <div className={`grid gap-2 ${editingPayment?.type === 'program' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                <label className="block text-xs font-medium text-gray-600 mb-1">구분 (매출/환불)</label>
+                <div className={`grid gap-2 ${editingPayment?.type === 'program' || editingPayment?.type === 'product' ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {[
                     { v: 'single_treatment', label: '단건 시술', icon: Scissors },
                     // 프로그램 결제는 고객 페이지에서 생성 — 신규 등록엔 미노출,
@@ -946,12 +1068,16 @@ export default function Sales() {
                     ...(editingPayment?.type === 'program'
                       ? [{ v: 'program', label: '프로그램', icon: Layers }]
                       : []),
-                    { v: 'product', label: '제품 판매', icon: ShoppingBag },
+                    // 제품 결제는 제품/재고 > [판매]에서 재고와 함께 생성 — 여기서 만들면 판매 기록 없는 막다른 결제가 된다(삭제·환불 불가). 편집 때만 타입 유지 (UX 점검 2026-11-19)
+                    ...(editingPayment?.type === 'product'
+                      ? [{ v: 'product', label: '제품 판매', icon: ShoppingBag }]
+                      : []),
                     { v: 'other', label: '기타', icon: DollarSign },
                   ].map(({ v, label, icon: Icon }) => (
                     <button
                       type="button"
                       key={v}
+                      aria-pressed={form.type === v}
                       onClick={() => setForm(f => ({ ...f, type: v as Payment['type'] }))}
                       className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-medium transition-colors ${
                         form.type === v ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -962,30 +1088,27 @@ export default function Sales() {
                     </button>
                   ))}
                 </div>
+                {editingPayment?.type === 'product' && editingPayment.referenceId && (
+                  <p className="text-xs text-amber-700 mt-2">제품 판매와 연결된 결제입니다 — 금액·할인·날짜·고객·상태는 [제품/재고 &gt; 판매 기록]에서 취소한 뒤 다시 기록하세요. 여기서는 메모·결제 수단만 바꿀 수 있습니다.</p>
+                )}
               </div>
 
               {/* 고객 선택 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">고객</label>
-                <select value={form.customerId} onChange={e => setForm(f => ({ ...f, customerId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">고객 선택 (선택사항)</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
-                  ))}
-                </select>
+                <CustomerCombobox customers={customers} value={form.customerId} onChange={id => setForm(f => ({ ...f, customerId: id }))} maskRole={authUser?.role ?? 'staff'} placeholder="이름·전화번호 검색 (선택사항)" />
               </div>
 
               {/* 금액 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">결제 금액 *</label>
                 <div className="relative">
-                  <input
+                  <input aria-label="결제 금액"
                     required
                     type="text"
                     value={form.amount && !Number.isNaN(parseInt(form.amount, 10)) ? parseInt(form.amount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setForm(f => ({ ...f, amount: e.target.value.replace(/,/g, '') }))}
-                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
@@ -993,7 +1116,7 @@ export default function Sales() {
                 <div className="flex gap-2 mt-1.5">
                   {[50000, 80000, 100000, 120000].map(n => (
                     <button type="button" key={n} onClick={() => setForm(f => ({ ...f, amount: n.toString() }))}
-                      className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200">
+                      className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">
                       {(n / 10000)}만
                     </button>
                   ))}
@@ -1002,20 +1125,20 @@ export default function Sales() {
 
               {/* 할인 금액 */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">할인 금액</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">할인 금액 (참고 기록)</label>
                 <div className="relative">
-                  <input
+                  <input aria-label="할인 금액"
                     type="text"
                     value={form.discountAmount && form.discountAmount !== '0' && !Number.isNaN(parseInt(form.discountAmount, 10)) ? parseInt(form.discountAmount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value.replace(/,/g, '') || '0' }))}
-                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
                 </div>
                 {form.amount && parseInt(form.discountAmount || '0') > 0 && (
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    결제 금액(할인 반영 후): <strong className="text-gray-600">{formatPrice((parseInt(form.amount.replace(/,/g, '')) || 0))}</strong> — 위 결제 금액란에 할인을 뺀 실수령액을 입력하세요
+                  <p className="text-xs text-gray-400 mt-1">
+                    정가 {formatPrice((parseInt(form.amount.replace(/,/g, ''), 10) || 0) + (parseInt(form.discountAmount.replace(/,/g, ''), 10) || 0))} − 할인 {formatPrice(parseInt(form.discountAmount.replace(/,/g, ''), 10) || 0)} = 결제 <strong className="text-gray-600">{formatPrice(parseInt(form.amount.replace(/,/g, ''), 10) || 0)}</strong> · 할인은 참고 기록이라 결제 금액에서 자동으로 빼지 않습니다
                   </p>
                 )}
               </div>
@@ -1035,7 +1158,7 @@ export default function Sales() {
                       onClick={() => setForm(f => ({ ...f, status: v }))}
                       className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
                         form.status === v
-                          ? v === 'refunded' ? 'border-red-400 bg-red-50 text-red-600' : 'border-blue-500 bg-blue-50 text-blue-700'
+                          ? v === 'refunded' ? 'border-red-400 bg-red-50 text-red-700' : 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-gray-200 text-gray-600'
                       }`}
                     >
@@ -1044,14 +1167,17 @@ export default function Sales() {
                   ))}
                 </div>
                 {form.status === 'refunded' && (
-                  <p className="text-[11px] text-red-400 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
+                  <p className="text-xs text-red-600 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
+                )}
+                {form.status === 'pending' && (
+                  <p className="text-xs text-amber-700 mt-1">입금 확인 전 기록 — 매출·고객 누적 결제액에 포함되지 않습니다. 입금이 확인되면 '완료'로 바꿔주세요.</p>
                 )}
               </div>
 
-              {/* 결제 방법 & 날짜 */}
+              {/* 결제 수단 & 날짜 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">결제 방법</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">결제 수단</label>
                   <PaymentMethodPicker
                     value={form.paymentMethod}
                     onChange={m => setForm(f => ({ ...f, paymentMethod: m }))}
@@ -1059,23 +1185,25 @@ export default function Sales() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제일</label>
-                  <input type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input aria-label="결제일" type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                  <DateQuickChips value={form.paymentDate} onChange={iso => setForm(f => ({ ...f, paymentDate: iso }))} options={[{ label: '오늘', days: 0 }, { label: '어제', days: -1 }]} />
                 </div>
               </div>
 
               {/* 메모 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
-                <input value={form.memo} onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
+                <input aria-label="메모" value={form.memo} onChange={e => setForm(f => ({ ...f, memo: e.target.value }))}
                   placeholder="시술명, 제품명 등"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
               </div>
 
-              <div className="flex gap-2">
+              {/* 저장 행은 바닥에 고정 — 폰에서 키보드가 올라오면 보이지 않았다 (7차 UX 점검 2026-11-20) */}
+              <div className="flex gap-2 sticky bottom-0 bg-white pt-3 -mx-5 px-5 -mb-5 pb-5 border-t border-gray-100 lg:rounded-b-2xl">
                 <button type="button" onClick={closeModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
-                  <CheckCircle size={14} />{editingId ? '수정 저장' : '결제 등록'}
+                  <CheckCircle size={14} />{editingId ? '저장' : '결제 등록'}
                 </button>
               </div>
             </form>
@@ -1092,11 +1220,11 @@ export default function Sales() {
 
       {/* 지출(매입) 등록 모달 */}
       {showExpenseModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="modal-backdrop fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div ref={expenseModalRef} role="dialog" aria-modal="true" aria-label={editingExpenseId ? '지출 수정' : '지출(매입) 등록'} className="modal-card bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">{editingExpenseId ? '지출 수정' : '지출(매입) 등록'}</h2>
-              <button onClick={closeExpenseModal}><X size={18} className="text-gray-400" /></button>
+              <button onClick={closeExpenseModal} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
             <form onSubmit={handleExpenseSave} className="p-5 space-y-4">
               {/* 분류 */}
@@ -1107,11 +1235,12 @@ export default function Sales() {
                     <button
                       type="button"
                       key={c}
+                      aria-pressed={expenseForm.category === c}
                       onClick={() => setExpenseForm(f => ({ ...f, category: c }))}
                       className={`py-2 rounded-xl border text-xs font-medium transition-colors ${
                         expenseForm.category === c
                           ? COGS_CATEGORIES.includes(c)
-                            ? 'border-orange-400 bg-orange-50 text-orange-600'
+                            ? 'border-orange-400 bg-orange-50 text-orange-700'
                             : 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                       }`}
@@ -1120,29 +1249,29 @@ export default function Sales() {
                     </button>
                   ))}
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  제품·소모품 매입은 손익계산서에서 매출원가로, 나머지는 판매비·관리비로 집계돼요
+                <p className="text-xs text-gray-400 mt-1">
+                  제품·소모품 매입은 손익계산서에서 매출원가로, 나머지는 판매비·관리비로 집계됩니다
                 </p>
               </div>
 
               {/* 내용 & 거래처 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">내용 *</label>
-                <input
+                <input aria-label="내용"
                   required
                   value={expenseForm.description}
                   onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))}
                   placeholder="예: 앰플 20개 매입, 8월 임대료"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">거래처</label>
-                <input
+                <input aria-label="거래처"
                   value={expenseForm.vendor}
                   onChange={e => setExpenseForm(f => ({ ...f, vendor: e.target.value }))}
                   placeholder="예: 본사, 건물주 (선택)"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
               </div>
 
@@ -1150,20 +1279,20 @@ export default function Sales() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">금액 *</label>
                 <div className="relative">
-                  <input
+                  <input aria-label="금액"
                     required
                     type="text"
                     value={expenseForm.amount && !Number.isNaN(parseInt(expenseForm.amount, 10)) ? parseInt(expenseForm.amount, 10).toLocaleString('ko-KR') : ''}
                     onChange={e => setExpenseForm(f => ({ ...f, amount: e.target.value.replace(/,/g, '') }))}
-                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
                   />
                   <span className="absolute right-3 top-2.5 text-xs text-gray-400">원</span>
                 </div>
               </div>
 
-              {/* 결제 수단 & 날짜 */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* 결제 수단 & 날짜 — 모바일은 1열(지불 수단 칩이 한 줄씩 끊기지 않게, UX QA 2026-11-17) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">지불 수단</label>
                   <PaymentMethodPicker
@@ -1173,11 +1302,11 @@ export default function Sales() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">지출일</label>
-                  <input
+                  <input aria-label="지출일"
                     type="date"
                     value={expenseForm.expenseDate}
                     onChange={e => setExpenseForm(f => ({ ...f, expenseDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                   />
                 </div>
               </div>
@@ -1185,18 +1314,18 @@ export default function Sales() {
               {/* 메모 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
-                <input
+                <input aria-label="메모"
                   value={expenseForm.memo}
                   onChange={e => setExpenseForm(f => ({ ...f, memo: e.target.value }))}
                   placeholder="세금계산서 발행 여부 등 (선택)"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 />
               </div>
 
               <div className="flex gap-2">
                 <button type="button" onClick={closeExpenseModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
-                  <CheckCircle size={14} />{editingExpenseId ? '수정 저장' : '지출 등록'}
+                  <CheckCircle size={14} />{editingExpenseId ? '저장' : '지출 등록'}
                 </button>
               </div>
             </form>
@@ -1204,5 +1333,6 @@ export default function Sales() {
         </div>
       )}
     </div>
+    </>
   );
 }

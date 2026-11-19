@@ -168,6 +168,10 @@ export interface ShopPreferences {
   deviceFeatures?: Record<string, boolean>;
   /** API 연동 가이드 체크리스트 상태 */
   apiGuideStatus?: Record<string, 'connected' | 'pending' | 'not-started'>;
+  /** 개인정보 처리 기록(익명화·병합) — 파기 대장. 지점 설정에 두어 서버 동기·PC 교체·로그아웃 wipe 와 무관 (9차 점검 #29, 리뷰 2026-11-20) */
+  privacyActions?: { id: string; at: string; type: 'anonymize' | 'merge'; count: number; actor: string; detail?: string }[];
+  /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
+  retentionPolicy?: { enabled: boolean; years: number };
 }
 
 // =============================================
@@ -334,7 +338,7 @@ export interface Consultation {
   recommendedProducts: string[];
   /** 다음 상담/관리 권고일 */
   nextConsultDate?: string;
-  /** 전/후 사진 URL */
+  /** 서버 스키마 호환용 — 실제 상담 사진은 photoStore의 consult:<id> 키에 있고 이 배열은 늘 비어 있다 */
   photos: string[];
   createdAt: string;
 }

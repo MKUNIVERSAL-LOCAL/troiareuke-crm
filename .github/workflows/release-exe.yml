@@ -21,9 +21,6 @@ jobs:
 
       - name: Build single portable executable
         run: npm run electron:build:portable
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Upload portable executable
         uses: actions/upload-artifact@v4

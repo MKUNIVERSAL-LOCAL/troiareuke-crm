@@ -1,7 +1,9 @@
 ﻿import { useState, useEffect } from 'react';
+import { notify } from '../../lib/notify';
 import { CreditCard, Pencil, AlertCircle, CheckCircle, Clock, Search } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
+import { groupByBranch } from '../../lib/adminBranches';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
@@ -23,6 +25,8 @@ interface Subscription {
   service_ends_at?: string | null;
   amount: number;
   notes: string | null;
+  /** NAS 모드: 이 지점에 속한 계정 id 전부 — 플랜·활성 변경은 지점 계정 모두에 적용 (4차 UX 점검 2026-11-19) */
+  userIds?: string[];
 }
 
 const planOptions = [
@@ -52,42 +56,43 @@ export default function Subscriptions() {
 
   useEffect(() => { loadSubs(); }, []);
 
+  const [loadError, setLoadError] = useState('');
   async function loadSubs() {
     setLoading(true);
+    setLoadError('');
     if (NAS_MODE) {
       try {
         const users = await adminListUsers();
         const priceOf = (plan: string) => planOptions.find(p => p.value === plan)?.price ?? 0;
-        setSubs(users
-          .filter(u => u.role !== 'superadmin')
-          .map(u => {
-            const serviceEndsAt = u.serviceEndsAt || null;
-            const isExpired = Boolean(serviceEndsAt && new Date(serviceEndsAt).getTime() < Date.now());
-            return {
-              id: u.id,
-              branch_id: u.branchId || u.id,
-              branch_name: u.branchName || u.shopName || u.email,
-              plan: u.plan,
-              status: u.isActive === false ? 'cancelled' : isExpired ? 'expired' : 'active',
-              started_at: u.createdAt,
-              // 표시 우선순위: 어드민 설정 사용기간 > (trial이면) 체험 만료일
-              expires_at: serviceEndsAt || (u.plan === 'trial' ? u.trialEndsAt : null),
-              service_ends_at: serviceEndsAt,
-              amount: priceOf(u.plan),
-              notes: u.email,
-            };
-          }));
+        // 지점당 한 행 — 계정마다 행을 만들면 같은 지점 요금이 계정 수만큼 더해져 "월 예상 매출"이 부풀고 "전체 구독"도 계정 수가 된다 (4차 UX 점검 2026-11-19)
+        const byBranch = groupByBranch(users); // 승인 대기·거부 신청자는 "활성 구독"이 아니다 (8차 점검 2026-11-20)
+        setSubs([...byBranch.entries()].map(([branchId, accounts]) => {
+          const rep = accounts.find(u => u.role === 'admin') || accounts[0];
+          const serviceEndsAt = rep.serviceEndsAt || null;
+          const isExpired = Boolean(serviceEndsAt && new Date(serviceEndsAt).getTime() < Date.now());
+          // 체험(trial) 지점은 체험 만료일도 만료 판정에 넣는다 — 전에는 "활성 · 만료일(과거)" 조합이 나왔다 (8차 점검 2026-11-20)
+          const trialExpired = rep.plan === 'trial' && !serviceEndsAt && Boolean(rep.trialEndsAt && new Date(rep.trialEndsAt).getTime() < Date.now());
+          const allInactive = accounts.every(u => u.isActive === false);
+          return {
+            id: rep.id,
+            branch_id: branchId,
+            branch_name: rep.branchName || rep.shopName || rep.email,
+            plan: rep.plan,
+            status: allInactive ? 'cancelled' : (isExpired || trialExpired) ? 'expired' : 'active',
+            started_at: rep.createdAt,
+            // 표시 우선순위: 어드민 설정 사용기간 > (trial이면) 체험 만료일
+            expires_at: serviceEndsAt || (rep.plan === 'trial' ? rep.trialEndsAt : null),
+            service_ends_at: serviceEndsAt,
+            amount: priceOf(rep.plan),
+            notes: accounts.length > 1 ? `${rep.email} 외 ${accounts.length - 1}개 계정` : rep.email,
+            userIds: accounts.map(u => u.id),
+          };
+        }));
       } catch (e: any) {
         console.warn('[Subscriptions] NAS 계정 목록 로드 실패:', e?.message);
         setSubs([]);
+        setLoadError(e?.message || '중앙 서버에서 목록을 불러오지 못했습니다'); // 빈 상태로 위장하지 않는다 (4차 UX 점검 2026-11-19)
       }
-    } else if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('*, branches(name)')
-        .order('created_at', { ascending: false });
-      if (error) console.warn('[Subscriptions] 로드 실패:', error.message);
-      setSubs((data || []).map((s: any) => ({ ...s, branch_name: s.branches?.name || '—' })));
     }
     setLoading(false);
   }
@@ -99,9 +104,7 @@ export default function Subscriptions() {
       status: s.status === 'expired' ? 'active' : s.status,
       // NAS 모드: 어드민이 실제 설정한 사용기간만 프리필 — trial 파생 만료일을 그대로 저장해
       // 의도치 않게 체험 만료가 강제 차단으로 굳는 것을 방지
-      expires_at: NAS_MODE
-        ? (s.service_ends_at ? s.service_ends_at.split('T')[0] : '')
-        : (s.expires_at ? s.expires_at.split('T')[0] : ''),
+      expires_at: s.service_ends_at ? s.service_ends_at.split('T')[0] : '', // 서버 모드에서만 열리는 모달 — 비NAS는 구독 목록이 비어 도달 불가 (8차 점검 2026-11-20)
       amount: String(s.amount),
       notes: s.notes || '',
     });
@@ -127,41 +130,29 @@ export default function Subscriptions() {
         setSaving(false);
         return;
       }
-      try {
-        await adminUpdateUser(editTarget.id, {
-          plan: form.plan,
-          isActive: form.status === 'active',
-          serviceEndsAt: nextEndsAt,
-        });
-      } catch (e: any) {
-        setSaving(false);
-        alert(`플랜 변경 실패: ${e?.message || '서버 오류'}`);
-        return;
+      // 지점 관리 화면의 플랜 수정과 같은 범위(지점 계정 전부)·같은 규칙(바뀐 항목만) — isActive를 늘 보내면 개별로 꺼 둔 직원 계정이 되살아난다 (리뷰 67)
+      const statusChanged = (form.status === 'active') !== (editTarget.status !== 'cancelled');
+      const prevEndsAt = editTarget.service_ends_at ? editTarget.service_ends_at.split('T')[0] : null;
+      const endsChanged = nextEndsAt !== prevEndsAt;
+      const ids = editTarget.userIds ?? [editTarget.id];
+      let changed = 0, failed = 0;
+      for (const id of ids) {
+        const updates: { plan?: string; isActive?: boolean; serviceEndsAt?: string | null } = {};
+        if (form.plan !== editTarget.plan) updates.plan = form.plan;
+        if (statusChanged) updates.isActive = form.status === 'active';
+        if (endsChanged) updates.serviceEndsAt = nextEndsAt;
+        if (Object.keys(updates).length === 0) continue;
+        try { await adminUpdateUser(id, updates); changed++; } catch { failed++; }
       }
       setSaving(false);
-      setShowModal(false);
+      // 중간에 실패해도 이미 바뀐 계정은 그대로 — 숨기지 않고 요약, 목록은 항상 다시 읽는다
+      if (failed > 0) notify.error(`${changed + failed}개 계정 중 ${changed}개 변경, ${failed}개 실패 — 다시 저장해 재시도하세요`);
+      else setShowModal(false);
       loadSubs();
       return;
     }
-
-    const { error: subError } = await supabase.from('subscriptions').update({
-      plan: form.plan,
-      status: form.status,
-      expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
-      amount: parseInt(form.amount) || 0,
-      notes: form.notes,
-    }).eq('id', editTarget.id);
-
-    // branches 테이블도 동기화
-    const { error: branchError } = await supabase.from('branches').update({ plan: form.plan }).eq('id', editTarget.branch_id);
-
+    // 로컬 모드: 구독 기록 저장처 없음 (NAS 계정 plan이 정본)
     setSaving(false);
-    if (subError || branchError) {
-      alert(`저장 실패: ${(subError || branchError)!.message}`);
-      return;
-    }
-    setShowModal(false);
-    loadSubs();
   }
 
   const normalizedSearch = search.trim().toLowerCase();
@@ -180,7 +171,7 @@ export default function Subscriptions() {
   const stats = {
     total: subs.length,
     active: subs.filter(s => s.status === 'active').length,
-    expired: subs.filter(s => s.status === 'expired').length,
+    expired: subs.filter(s => s.status === 'expired' || s.status === 'cancelled').length,
     mrr: subs.filter(s => s.status === 'active').reduce((sum, s) => sum + s.amount, 0),
   };
 
@@ -209,19 +200,19 @@ export default function Subscriptions() {
       </div>
 
       <div className="relative mb-4 max-w-xl">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="지점명, 플랜, 메모 검색"
-          className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+          className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-400 outline-none focus:border-blue-500"
           aria-label="구독 검색"
         />
       </div>
 
       {/* 필터 */}
       <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar">
-        {['all', 'active', 'expired', 'pending', 'cancelled'].map(s => (
+        {['all', 'active', 'expired', 'pending', 'cancelled'].filter(s => !(NAS_MODE && s === 'pending')).map(s => ( // NAS 파생 상태엔 '대기'가 없다
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
@@ -242,9 +233,10 @@ export default function Subscriptions() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-16 text-center">
-            <CreditCard size={32} className="text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">구독 데이터가 없습니다</p>
-            <p className="text-slate-600 text-sm mt-1">지점 추가 시 자동으로 구독이 생성됩니다</p>
+            <CreditCard size={32} className="text-slate-400 mx-auto mb-3" />
+            <p className="text-slate-400">{loadError ? '구독 목록을 불러오지 못했습니다' : NAS_MODE ? '구독 데이터가 없습니다' : '중앙 서버(NAS) 연동 후 구독 현황이 표시됩니다'}</p>
+            <p className="text-slate-400 text-sm mt-1">{loadError ? loadError : NAS_MODE ? '지점 계정이 생기면 여기에 나타납니다' : '미연동 상태에서는 표시할 데이터가 없습니다'}</p>
+            {loadError && <button type="button" onClick={() => void loadSubs()} className="mt-3 px-4 py-2 text-sm font-medium rounded-xl bg-slate-800 text-white hover:bg-slate-700">다시 시도</button>}
           </div>
         ) : (
           <div className="overflow-auto max-h-[70vh]">
@@ -252,7 +244,7 @@ export default function Subscriptions() {
             <thead>
               <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
                 {['지점명', '플랜', '상태', '금액', '만료일', '메모', '액션'].map(h => (
-                  <th key={h} className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                  <th key={h} className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -265,7 +257,7 @@ export default function Subscriptions() {
                   <tr key={s.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-white">{s.branch_name}</td>
                     <td className="px-6 py-4">
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${plan.color}`}>{plan.label}</span>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${plan.color}`}>{plan.label}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`flex items-center gap-1.5 text-xs font-medium ${status.color}`}>
@@ -276,10 +268,11 @@ export default function Subscriptions() {
                     <td className="px-6 py-4 text-xs text-slate-400">
                       {s.expires_at ? format(parseISO(s.expires_at), 'yyyy.MM.dd', { locale: ko }) : '—'}
                     </td>
-                    <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">{s.notes || '—'}</td>
+                    <td className="px-6 py-4 text-xs text-slate-400 max-w-xs truncate">{s.notes || '—'}</td>
                     <td className="px-6 py-4">
                       <button
                         onClick={() => openEdit(s)}
+                        aria-label={`${s.branch_name} 구독 수정`}
                         className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
                       >
                         <Pencil size={13} />
@@ -296,10 +289,12 @@ export default function Subscriptions() {
 
       {/* 수정 모달 */}
       {showModal && editTarget && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+        <AdminDialog title={`${editTarget.branch_name} — 구독 수정`} onClose={() => setShowModal(false)} escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">{editTarget.branch_name} — 구독 수정</h2>
+              {NAS_MODE && (editTarget.userIds?.length ?? 1) > 1 && (
+                <p className="text-xs text-slate-400 mt-1">이 지점 계정 {editTarget.userIds!.length}개에 함께 적용됩니다</p>
+              )}
             </div>
             <div className="px-6 py-5 space-y-4">
               <Field label="플랜">
@@ -307,35 +302,27 @@ export default function Subscriptions() {
                   {planOptions.map(p => <option key={p.value} value={p.value}>{p.label} ({p.price.toLocaleString()}원/월)</option>)}
                 </select>
               </Field>
-              <Field label="상태">
+              <Field label="상태" hint="'해지'는 해당 지점 계정의 로그인을 차단합니다.">
                 {/* NAS 모드: 서버 계정에는 활성/비활성만 존재 — 만료·대기 선택지를 주면
                     isActive=false로 축약 저장되어 지점 로그인이 잠기는 함정이 됨 */}
                 <select className="admin-input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                  {(NAS_MODE ? statusOptions.filter(o => o.value === 'active' || o.value === 'cancelled') : statusOptions)
-                    .map(o => <option key={o.value} value={o.value}>{NAS_MODE && o.value === 'cancelled' ? '해지 (로그인 차단)' : o.label}</option>)}
+                  {statusOptions.filter(o => o.value === 'active' || o.value === 'cancelled')
+                    .map(o => <option key={o.value} value={o.value}>{o.value === 'cancelled' ? '해지 (로그인 차단)' : o.label}</option>)}
                 </select>
-                {NAS_MODE && (
-                  <p className="text-[11px] text-slate-500 mt-1">중앙 서버 모드에서 '해지'는 해당 지점 계정의 로그인을 차단합니다.</p>
-                )}
               </Field>
-              {NAS_MODE && (
-                <div className="px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                  <p className="text-xs text-amber-600 leading-relaxed">
-                    중앙 서버 모드에서는 플랜·상태·사용기간이 저장됩니다. 월 금액·메모는 자동 파생되어 수정할 수 없습니다.
-                  </p>
-                </div>
-              )}
+              <div className="px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <p className="text-xs text-amber-600 leading-relaxed">
+                  플랜·상태·사용기간이 저장됩니다. 월 금액은 플랜에서, 메모(계정 목록)는 계정에서 자동으로 정해져 여기서는 보기만 합니다.
+                </p>
+              </div>
               <Field label="월 금액 (원)">
-                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+                <p className="px-3 py-2 text-sm text-slate-300">{Number(form.amount || 0).toLocaleString()}원 — 플랜 기준 자동</p>
               </Field>
-              <Field label={NAS_MODE ? '사용기간 만료일 (비우면 무제한)' : '만료일'}>
+              <Field label="사용기간 만료일 (비우면 무제한)" hint="만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.">
                 <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
-                {NAS_MODE && (
-                  <p className="text-[11px] text-slate-500 mt-1">만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.</p>
-                )}
               </Field>
-              <Field label="메모">
-                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="특이사항 입력" />
+              <Field label="계정">
+                <p className="px-3 py-2 text-sm text-slate-300">{form.notes || '—'}</p>
               </Field>
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
@@ -344,8 +331,7 @@ export default function Subscriptions() {
                 {saving ? '저장 중...' : '저장하기'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       <style>{`
@@ -357,11 +343,16 @@ export default function Subscriptions() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
+    // label로 감싸 안의 입력이 이름(implicit label)을 갖게 — 어드민 게이트가 지점 추가 창의 select-name 위반을 잡았다 (2026-11-19 53)
+    // 도움말(hint)은 label 밖에 — 안에 두면 문장 전체가 입력의 이름으로 읽힌다 (리뷰 54)
     <div>
-      <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
-      {children}
+      <label className="block">
+        <span className="block text-xs font-medium text-slate-400 mb-1.5">{label}</span>
+        {children}
+      </label>
+      {hint && <p className="text-xs text-slate-400 mt-1">{hint}</p>}
     </div>
   );
 }

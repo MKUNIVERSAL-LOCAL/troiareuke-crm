@@ -21,7 +21,7 @@ export default function Badge({ children, variant = 'gray', size = 'sm' }: Badge
     <span className={clsx(
       'inline-flex items-center font-medium rounded-full',
       variants[variant],
-      size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'px-3 py-1 text-xs'
+      size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-xs'
     )}>
       {children}
     </span>
@@ -30,22 +30,24 @@ export default function Badge({ children, variant = 'gray', size = 'sm' }: Badge
 
 export function GradeBadge({ grade }: { grade: string }) {
   const config = {
-    'VIP': { variant: 'purple' as const, label: '👑 VIP' },
-    '골드': { variant: 'yellow' as const, label: '⭐ 골드' },
+    'VIP': { variant: 'purple' as const, label: 'VIP' },
+    '골드': { variant: 'yellow' as const, label: '골드' },
     '일반': { variant: 'blue' as const, label: '일반' },
-    '신규': { variant: 'green' as const, label: '✨ 신규' },
+    '신규': { variant: 'green' as const, label: '신규' },
   };
   const { variant, label } = config[grade as keyof typeof config] || { variant: 'gray' as const, label: grade };
   return <Badge variant={variant}>{label}</Badge>;
 }
 
+/** 예약 상태 배지 — 대시보드·PC 목록·예약 상세·모바일 목록이 전부 이것을 쓴다(화면마다 색이 달랐던 것을 통일, 2026-11-19 52).
+ *  노쇼=빨강(고객 패널티, 상세의 [노쇼] 버튼과 같은 톤), 취소=회색(상세의 [취소처리] 버튼과 같은 톤), 문구는 고객 타임라인(customerTimeline)과 동일 */
 export function StatusBadge({ status }: { status: string }) {
   const config = {
     confirmed: { variant: 'blue' as const, label: '예약확정' },
-    pending: { variant: 'yellow' as const, label: '예약대기' },
+    pending: { variant: 'yellow' as const, label: '대기' },
     completed: { variant: 'green' as const, label: '완료' },
-    cancelled: { variant: 'red' as const, label: '취소' },
-    noshow: { variant: 'gray' as const, label: '노쇼' },
+    cancelled: { variant: 'gray' as const, label: '취소' },
+    noshow: { variant: 'red' as const, label: '노쇼' },
   };
   const { variant, label } = config[status as keyof typeof config] || { variant: 'gray' as const, label: status };
   return <Badge variant={variant}>{label}</Badge>;
