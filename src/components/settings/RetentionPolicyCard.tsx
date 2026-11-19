@@ -13,7 +13,7 @@ import {
  * 값은 지점 환경설정(서버 동기)에 저장된다. 기본 OFF — 보존기간은 지점(오너)이 정한다.
  */
 export default function RetentionPolicyCard() {
-  const actions = listPrivacyActions();
+  const [actions] = useState(() => listPrivacyActions()); // 카드는 설정 탭 진입마다 다시 마운트된다 — 렌더마다 읽지 않는다 (리뷰 2026-11-20)
   const [policy, setPolicy] = useState(() => getRetentionPolicy());
   const [draftYears, setDraftYears] = useState(() => String(getRetentionPolicy().years));
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
@@ -79,10 +79,10 @@ export default function RetentionPolicyCard() {
           )}
         </div>
         {message && <p className={`text-xs ${message.tone === 'ok' ? 'text-emerald-700' : 'text-amber-700'}`}>{message.text}</p>}
-        {/* 개인정보 처리 기록 — 익명화·병합을 누가 언제 몇 명 했는지 (이 PC 기록, 백업 파일에 포함) (9차 점검 #29) */}
+        {/* 개인정보 처리 기록 — 익명화·병합을 누가 언제 몇 명 했는지. 지점 설정에 저장돼 서버 동기·백업 포함 (9차 점검 #29) */}
         {actions.length > 0 && (
           <div className="pt-3 border-t border-gray-100" data-testid="privacy-action-log">
-            <p className="text-xs font-semibold text-gray-700 mb-2">최근 개인정보 처리 기록 <span className="text-gray-400 font-normal">(최근 10건 · 이 PC 기준)</span></p>
+            <p className="text-xs font-semibold text-gray-700 mb-2">최근 개인정보 처리 기록 <span className="text-gray-400 font-normal">(최근 10건 · 지점 설정에 보관)</span></p>
             <ul className="space-y-1">
               {actions.slice(0, 10).map(a => (
                 <li key={a.id} className="text-xs text-gray-600 flex flex-wrap gap-x-2">

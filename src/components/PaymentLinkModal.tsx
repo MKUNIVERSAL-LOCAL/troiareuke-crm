@@ -52,8 +52,8 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
     refresh();
   }, [open]);
 
-  async function refresh() {
-    setLoading(true);
+  async function refresh(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const [config, list] = await Promise.all([fetchPgConfig(), listPaymentRequests()]);
       setPgEnabled(config.enabled);
@@ -64,8 +64,14 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
       setRequests([]);
       setLoadFailed(true);
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
+  // 모달을 열어 둔 채 고객이 결제하면 수동 새로고침 전까지 "결제 대기"였다 — 30초마다 조용히 다시 읽는다 (9차 점검 #22)
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(() => { void refresh(true); }, 30_000);
+    return () => clearInterval(t);
+  }, [open]);
 
   useOverlayClose(open, onClose); // Esc·Android 뒤로가기
   const cardRef = useRef<HTMLDivElement>(null);
@@ -274,7 +280,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-bold text-gray-600">최근 결제 요청</p>
-              <button onClick={refresh} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+              <button onClick={() => { void refresh(); }} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
                 <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />새로고침
               </button>
             </div>

@@ -261,18 +261,18 @@ export default function ApiGuide() {
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="text-sm font-bold text-gray-900">연동 진행률</h3>
-              <p className="text-xs text-gray-400 mt-0.5">{connectedCount} / {apis.length} 확인 완료로 표시 (자기 체크)</p>
+              <p className="text-xs text-gray-400 mt-0.5">{connectedCount} / {visibleApis.length} 확인 완료로 표시 (자기 체크)</p>
             </div>
-            <span className="text-2xl font-bold text-[#1a3a8f]">{Math.round((connectedCount / apis.length) * 100)}%</span>
+            <span className="text-2xl font-bold text-[#1a3a8f]">{Math.round((connectedCount / visibleApis.length) * 100)}%</span>
           </div>
           <div className="bg-gray-100 rounded-full h-2.5">
-            <div className="bg-[#1a3a8f] rounded-full h-2.5 transition-all duration-500" style={{ width: `${(connectedCount / apis.length) * 100}%` }} />
+            <div className="bg-[#1a3a8f] rounded-full h-2.5 transition-all duration-500" style={{ width: `${(connectedCount / visibleApis.length) * 100}%` }} />
           </div>
           <div className="flex gap-4 mt-4 text-xs">
             {(['connected', 'pending', 'not-started'] as Status[]).map(s => (
               <div key={s} className="flex items-center gap-1.5">
                 <span className={statuses[s].color + ' font-medium'}>{statuses[s].label}</span>
-                <span className="text-gray-400">({apis.filter(a => getStatus(a) === s).length}개)</span>
+                <span className="text-gray-400">({visibleApis.filter(a => getStatus(a) === s).length}개)</span>
               </div>
             ))}
           </div>
@@ -314,7 +314,8 @@ export default function ApiGuide() {
                   </button>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <button
-                      onClick={e => { e.stopPropagation(); toggleStatus(api.id, st); }}
+                      type="button"
+                      onClick={() => toggleStatus(api.id, st)}
                       className={clsx('text-xs font-medium', statuses[st].color)}>
                       {statuses[st].label}
                     </button>

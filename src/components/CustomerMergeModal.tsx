@@ -9,7 +9,7 @@ import { isNasDataConfigured } from '../lib/nasData';
 import { matchesSearch, formatPrice } from '../lib/format';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
-import { recordPrivacyAction } from '../lib/privacyLog';
+import { recordPrivacyAction, maskNameForLog } from '../lib/privacyLog';
 import { notify } from '../lib/notify';
 import { useFocusTrap, useOverlayClose } from '../lib/overlayStack';
 import type { Customer } from '../types';
@@ -75,7 +75,7 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
     try {
       const moved = mergeCustomers(target.id, source.id);
       const n = moved.reservations + moved.treatments + moved.programs + moved.payments + moved.consultations;
-      recordPrivacyAction({ type: 'merge', count: 1, actor: user?.name || user?.email || '알 수 없음', detail: `${source.name} → ${target.name} (기록 ${n}건)` }); // 파기 대장 (9차 점검 #29)
+      recordPrivacyAction({ type: 'merge', count: 1, actor: user?.name || user?.email || '알 수 없음', detail: `${maskNameForLog(source.name)} → ${maskNameForLog(target.name)} (기록 ${n}건)` }); // 파기 대장 — 이름은 가려서 (9차 점검 #29, 리뷰)
       notify(`'${source.name}' 고객을 병합했습니다. 기록 ${n}건을 옮겼습니다.`);
       onMerged();
     } catch (e) {
