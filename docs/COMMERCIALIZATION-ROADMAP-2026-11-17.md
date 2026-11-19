@@ -40,6 +40,10 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - 소멸한 백엔드 코드 경로 14파일(코어 4: supabase.ts·AuthContext·store.ts·App 경유)과 루트 SQL 4종, vite CSP/SW 캐시 규칙, `.env` 키 2개, `@supabase/supabase-js` 의존성 제거. 모드는 NAS·로컬 2개로 단순화.
 - 영향: 번들 축소, 모드 분기 테스트 면 축소, CLAUDE.md §3·§5의 Supabase 마커 문구 갱신. 로컬 모드(e2e)는 그대로.
 - 전제: 구버전(Supabase 전용) 지점이 0곳인지 어드민 텔레메트리로 확인.
+- **같은 CORE_EDIT PR에 묶을 코어 전용 결함 메모**(11-19 리뷰에서 드러남, 코어 밖에서는 못 고침 — 지금은 화면 쪽 방어만):
+  - `store.ts` CustomerProgramStore.useSession — 사람이 직접 완료 처리한 회차권(isCompleted=true, used<total)에 연결된 시술 기록을 수정해 회차 delta가 생기면 `isCompleted = used >= total`로 다시 계산돼 '진행중'으로 되살아난다. 수동 완료 플래그를 따로 두거나 useSession이 isCompleted를 낮추지 않게.
+  - `store.ts` PaymentStore.save — 같은 referenceId(예약) 결제 중복 가드가 없다(지금은 예약 상세·완료 브리지·시술 기록·완료 누락 카드의 `registeredPaymentsFor` UI 가드뿐). 저장 계층에서 거부하거나 경고.
+  - 제품 판매 기록의 고객 이름 익명화·직원 이름 변경 반영(코어 API 없음) — P4·직원 항목에 이미 기록.
 
 ### P2. 킬러 기능 ② Before/After 완성 (코드만으로 가능) — 1차 구현 2026-11-17
 - [x] 사진 태그: 시술 전/후(`label`, 첫 사진 '전' 기본) + 촬영 각도(`angle`: 정면·좌·우·기타). 시술 기록 폼 썸네일 아래 선택, 상세·타임랩스 배지. 서버 `crm_photos`는 JSONB 통짜라 필드 추가만으로 저장(`PUT /api/photos` 검증은 id·dataUrl만).
