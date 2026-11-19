@@ -3,6 +3,7 @@ import { notify } from '../../lib/notify';
 import { CreditCard, Pencil, AlertCircle, CheckCircle, Clock, Search } from 'lucide-react';
 import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser } from '../../lib/authApi';
+import { groupByBranch } from '../../lib/adminBranches';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
@@ -64,11 +65,7 @@ export default function Subscriptions() {
         const users = await adminListUsers();
         const priceOf = (plan: string) => planOptions.find(p => p.value === plan)?.price ?? 0;
         // 지점당 한 행 — 계정마다 행을 만들면 같은 지점 요금이 계정 수만큼 더해져 "월 예상 매출"이 부풀고 "전체 구독"도 계정 수가 된다 (4차 UX 점검 2026-11-19)
-        const byBranch = new Map<string, typeof users>();
-        for (const u of users.filter(u => u.role !== 'superadmin')) {
-          const key = u.branchId || u.id;
-          byBranch.set(key, [...(byBranch.get(key) || []), u]);
-        }
+        const byBranch = groupByBranch(users); // 승인 대기·거부 신청자는 "활성 구독"이 아니다 (8차 점검 2026-11-20)
         setSubs([...byBranch.entries()].map(([branchId, accounts]) => {
           const rep = accounts.find(u => u.role === 'admin') || accounts[0];
           const serviceEndsAt = rep.serviceEndsAt || null;

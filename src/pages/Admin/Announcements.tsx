@@ -35,6 +35,7 @@ const emptyForm = { title: '', content: '', type: 'info', is_active: true };
 export default function Announcements() {
   const [list, setList] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(''); // 로드 실패를 "공지 없음"으로 보이게 하면 장애 중 중복 작성을 유도한다 (8차 점검 2026-11-20)
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Announcement | null>(null);
   const [form, setForm] = useState<typeof emptyForm>(emptyForm);
@@ -44,6 +45,7 @@ export default function Announcements() {
 
   async function load() {
     setLoading(true);
+    setLoadError('');
     if (NAS_MODE) {
       try {
         const { announcements } = await adminListAnnouncements();
@@ -53,7 +55,7 @@ export default function Announcements() {
         })));
       } catch (e: any) {
         console.warn('[Announcements] NAS 로드 실패:', e?.message);
-        notify.error(`공지 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+        setLoadError(`공지 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
         setList([]);
       }
       setLoading(false);
@@ -168,6 +170,11 @@ export default function Announcements() {
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : loadError ? (
+          <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-300 flex items-center justify-between gap-3">
+            <span>{loadError}</span>
+            <button type="button" onClick={load} className="text-xs underline text-red-200 hover:text-white shrink-0">다시 시도</button>
           </div>
         ) : list.length === 0 ? (
           <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">

@@ -3,6 +3,7 @@ import { notify } from '../../lib/notify';
 import { SlidersHorizontal, Save, RotateCcw, Globe, Building2 } from 'lucide-react';
 import clsx from 'clsx';
 import { isAuthApiConfigured, adminListUsers } from '../../lib/authApi';
+import { approvedBranchUsers } from '../../lib/adminBranches';
 import { adminGetFeatureFlags, adminSaveFeatureFlags, type FeatureFlagMap } from '../../lib/adminApi';
 import { FEATURES, FEATURE_CATEGORIES, type FeatureDef } from '../../lib/featureRegistry';
 
@@ -25,24 +26,26 @@ export default function AdminFeatures() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState(''); // 로드 실패 뒤 저장하면 그 스코프의 서버 플래그 전체가 초안(한두 키)으로 덮인다 — 그동안 저장을 막는다 (8차 점검 2026-11-20)
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     if (!NAS_MODE) { setLoading(false); return; }
     setLoading(true);
+    setLoadError('');
     try {
       const [flagsRes, users] = await Promise.all([adminGetFeatureFlags(), adminListUsers()]);
       setScopes(flagsRes.scopes || {});
       // 지점 목록: 지점 계정(admin/staff)의 branchId를 중복 제거해 구성
       const map = new Map<string, string>();
-      for (const u of users) {
-        if (u.role === 'superadmin' || !u.branchId) continue;
+      for (const u of approvedBranchUsers(users)) { // 승인 대기·거부 신청자 칩 제외 (8차 점검 2026-11-20)
+        if (!u.branchId) continue;
         if (!map.has(u.branchId)) map.set(u.branchId, u.branchName || u.shopName || u.branchId);
       }
       setBranches([...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ko')));
     } catch (e: any) {
-      notify.error(`기능 설정을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+      setLoadError(`기능 설정을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
     }
     setLoading(false);
   }
@@ -139,7 +142,7 @@ export default function AdminFeatures() {
           </button>
           <button
             onClick={handleSave}
-            disabled={!NAS_MODE || !dirty || saving}
+            disabled={!NAS_MODE || !dirty || saving || !!loadError}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Save size={16} />
@@ -147,6 +150,12 @@ export default function AdminFeatures() {
           </button>
         </div>
       </div>
+      {loadError && (
+        <div className="mb-6 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-300 flex items-center justify-between gap-3">
+          <span>{loadError} — 서버 값을 모르는 상태라 저장이 잠겼습니다.</span>
+          <button type="button" onClick={load} className="text-xs underline text-red-200 hover:text-white shrink-0">다시 시도</button>
+        </div>
+      )}
 
       {!NAS_MODE && (
         <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-4 text-sm text-amber-200">
@@ -246,7 +255,7 @@ export default function AdminFeatures() {
                       <select aria-label={`${def.label} 사용 설정`}
                         value={state}
                         onChange={(e) => setState(def, e.target.value as 'inherit' | 'on' | 'off')}
-                        disabled={!NAS_MODE}
+                        disabled={!NAS_MODE || !!loadError}
                         className="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <option value="inherit">{inheritLabel(def)}</option>

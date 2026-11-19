@@ -7,7 +7,8 @@ import { createBranchAdmin, adminDeleteBranch, type AdminApiResult } from '../..
 import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
 import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
-import { fetchLatestChannelVersion, compareVersions, isOutdated, appModeLabel } from '../../lib/updateChannel';
+import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
+import { groupByBranch, branchVersionInfo as branchVersionOf } from '../../lib/adminBranches';
 
 // NAS 모드에서는 지점의 진실이 서버 계정(auth_users)의 branch_id/branch_name이다.
 // 기존처럼 localStorage를 읽으면 기기마다 목록이 달라지는 문제가 있어 서버에서 파생한다.
@@ -72,15 +73,9 @@ export default function Branches() {
     await loadBranches();
   }
 
-  /** 지점의 실행 버전 = 소속 계정 중 가장 최근 접속 기록의 버전 (없으면 null) */
+  /** 지점의 실행 버전 — 대시보드와 같은 규칙(adminBranches.branchVersionInfo): 가장 낮은 버전이 경고 대상, 접속 시각은 가장 최근 */
   function branchVersionInfo(branchId: string) {
-    const seen = (nasUsersByBranch[branchId] || []).filter(u => u.lastAppVersion);
-    if (seen.length === 0) return null;
-    seen.sort((a, b) => (b.lastSeenAt || '').localeCompare(a.lastSeenAt || ''));
-    const latestSeen = seen[0];
-    // 같은 지점 안에 더 낮은 버전으로 접속한 PC가 있으면 그것을 경고 대상으로 본다
-    const lowest = seen.reduce((acc, u) => (compareVersions(u.lastAppVersion, acc.lastAppVersion) < 0 ? u : acc), latestSeen);
-    return { version: lowest.lastAppVersion!, mode: lowest.lastAppMode || '', lastSeenAt: latestSeen.lastSeenAt || null };
+    return branchVersionOf(nasUsersByBranch[branchId] || []);
   }
 
   async function loadBranches() {
@@ -90,11 +85,7 @@ export default function Branches() {
       // 서버 계정 목록에서 지점 파생 (Users 화면과 같은 소스 → 두 화면 목록 일치)
       try {
         const users = await adminListUsers();
-        const map: Record<string, AuthApiUser[]> = {};
-        for (const u of users.filter(u => u.role !== 'superadmin')) {
-          const bid = u.branchId || u.id;
-          (map[bid] ||= []).push(u);
-        }
+        const map: Record<string, AuthApiUser[]> = Object.fromEntries(groupByBranch(users)); // 승인 대기·거부 신청자는 지점이 아니다 (8차 점검 2026-11-20)
         setNasUsersByBranch(map);
         fetchLatestChannelVersion().then(m => setLatestVersion(m?.version || null));
         setBranches(Object.entries(map).map(([bid, us]) => {
@@ -186,11 +177,20 @@ export default function Branches() {
             setSaving(false);
             return;
           }
+          // 계정별 순차 호출 — 중간에 실패해도 몇 개가 바뀌었는지 알리고 목록은 다시 읽는다(활성/비활성 토글과 같은 패턴, 8차 점검 2026-11-20)
+          const failed: string[] = [];
           for (const u of users) {
             const updates: { plan?: string; serviceEndsAt?: string | null } = {};
             if (u.plan !== form.plan) updates.plan = form.plan;
             if (periodChanged) updates.serviceEndsAt = nextEndsAt;
-            if (Object.keys(updates).length > 0) await adminUpdateUser(u.id, updates);
+            if (Object.keys(updates).length === 0) continue;
+            try { await adminUpdateUser(u.id, updates); } catch { failed.push(u.email); }
+          }
+          if (failed.length > 0) {
+            setError(`계정 ${users.length}개 중 ${users.length - failed.length}개 변경, ${failed.length}개 실패: ${failed.join(', ')} — [저장]을 다시 눌러 재시도하세요`);
+            setSaving(false);
+            loadBranches();
+            return;
           }
         } else {
           // NAS 모드 신규 지점 = 관리자 계정 발급 (계정에 지점 정보가 실림)

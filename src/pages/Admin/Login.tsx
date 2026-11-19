@@ -65,8 +65,9 @@ export default function AdminLogin() {
     try {
       await login(email, password);
       navigate('/admin/dashboard');
-    } catch {
-      setError('인증에 실패했습니다. 관리자 계정 정보를 확인해주세요.');
+    } catch (err) {
+      // 서버가 보내는 사유(승인 대기·비활성·사용기간 만료·시간 초과)를 그대로 — 전부 "인증 실패"로 뭉개면 서버 다운과 비밀번호 오류를 구분 못 한다 (8차 점검 2026-11-20)
+      setError(err instanceof Error && err.message ? err.message : '인증에 실패했습니다. 관리자 계정 정보를 확인해주세요.');
     } finally { setLoading(false); }
   };
 

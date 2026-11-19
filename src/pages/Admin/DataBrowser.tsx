@@ -140,6 +140,7 @@ export default function DataBrowser() {
       }
     } catch (e: any) {
       setError(e?.message || '데이터를 불러오지 못했습니다.');
+      setRows([]); setTotal(0);
     } finally {
       setLoadingRows(false);
     }
@@ -160,6 +161,7 @@ export default function DataBrowser() {
 
   const changeTab = (t: string) => {
     setTab(t);
+    setRows([]); setTotal(0); // 새 탭 로드가 실패하면 이전 탭의 행이 새 탭 라벨 아래 그대로 남았다 (8차 점검 2026-11-20)
     setOffset(0);
     setQuery('');
     setSearchInput('');
