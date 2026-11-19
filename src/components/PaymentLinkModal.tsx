@@ -60,6 +60,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
       setRequests(list.requests);
       setLoadFailed(false);
     } catch {
+      if (silent) return; // 조용한 갱신이 한 번 실패해도 마지막 성공 상태를 유지 — 입력 중인 창이 비워지고 잠기지 않게 (리뷰 2026-11-20)
       setPgEnabled(null);
       setRequests([]);
       setLoadFailed(true);
