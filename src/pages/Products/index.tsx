@@ -8,12 +8,11 @@ import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import { ProductStore, ProductSaleStore, CustomerStore, StaffStore } from '../../lib/store';
 import { todayISO, formatDate } from '../../lib/format';
-import { getLastPaymentMethod } from '../../lib/lastUsed';
+import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import type { Product, ProductSale } from '../../types';
 import type { PaymentMethod } from '../../types';
 import clsx from 'clsx';
-import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 
 const CATEGORIES = ['전체', '세럼', '크림', '스킨', '선케어', '앰플', '클렌저', '오일', '기타'];
@@ -749,6 +748,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       staffName: form.staffName.trim() || undefined,
       notes: form.notes.trim() || undefined,
     });
+    rememberPaymentMethod(form.paymentMethod); // 다음 판매·결제 등록의 기본값 (리뷰 60)
     onSaved();
   };
 

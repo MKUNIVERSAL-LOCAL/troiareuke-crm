@@ -829,6 +829,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     if (recipientPhones.length === 0) { notify('전화번호가 있는 수신 대상이 없습니다. 고객 정보의 전화번호를 확인해주세요.'); return; }
     // 개별 발송(고객 상세에서 열었을 때)은 {고객명}을 그 고객 이름으로 바꾼다 — 단체 발송은 수신자별 치환이 없으므로 그대로 두지 않고 막는다 (UX 점검 2026-11-19)
     const finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
+    // 종류는 실제로 나가는 문자열 기준 — 이름 치환으로 길어지거나 공백 정리로 짧아질 수 있다 (리뷰 60)
+    const sendType: MessageType = msgType === 'sms' && smsBytes(finalContent) > SMS_BYTE_LIMIT ? 'lms' : msgType;
     // 치환 안 된 변수({고객명} 등)가 그대로 나가는 사고 방지 — 예약/즉시 발송 공통
     if (/\{[^}]+\}/.test(finalContent)) {
       notify(onlyCustomer
@@ -839,7 +841,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     // 발송은 되돌릴 수 없다 — 대상·인원을 한 번 더 확인 (전체 고객이 기본 대상이라 특히) (UX 점검 2026-11-19)
     const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode)} ${recipientPhones.length}명`;
     const action = scheduleMode === 'later' && isScheduleAvailable ? '예약 발송을 등록' : '지금 발송';
-    if (!window.confirm(`${target}에게 ${effectiveType === 'sms' ? 'SMS' : effectiveType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(전화번호 없는 ${excludedCount}명 제외)` : ''}`)) return;
+    if (!window.confirm(`${target}에게 ${sendType === 'sms' ? 'SMS' : sendType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(전화번호 없는 ${excludedCount}명 제외)` : ''}`)) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
@@ -850,7 +852,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         if (!scheduleAt) throw new Error('발송 시각을 선택해주세요.');
         await scheduleMessage({
           sendAt: new Date(scheduleAt).toISOString(),
-          type: effectiveType,
+          type: sendType,
           title: title || undefined,
           content: finalContent,
           phones: recipientPhones,
@@ -869,24 +871,24 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     }
 
     const result = await sendMessages({
-      type: effectiveType,
+      type: sendType,
       content: finalContent,
       title: title || undefined,
-      recipients: recipientCount,
+      recipients: recipientPhones.length,
       phones: recipientPhones,
     });
 
     if (result.pending) {
       // 게이트웨이 미연동 — 발송되지 않았음을 명확히 기록
       MessageHistoryStore.save({
-        type: effectiveType,
+        type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
         content: finalContent,
-        recipients: recipientCount,
+        recipients: recipientPhones.length,
         successCount: 0,
-        failCount: recipientCount,
+        failCount: recipientPhones.length,
         sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
@@ -898,12 +900,12 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     } else if (result.sent > 0) {
       // 실제 발송 성공 (일부 실패 포함 — 부분 성공도 sent로 기록해 성공/실패 건수 모두 노출)
       MessageHistoryStore.save({
-        type: effectiveType,
+        type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
         content: finalContent,
-        recipients: recipientCount,
+        recipients: recipientPhones.length,
         successCount: result.sent,
         failCount: result.failed,
         sentAt: new Date().toISOString(),
@@ -922,14 +924,14 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     } else {
       // 발송 실패
       MessageHistoryStore.save({
-        type: effectiveType,
+        type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
         content: finalContent,
-        recipients: recipientCount,
+        recipients: recipientPhones.length,
         successCount: 0,
-        failCount: recipientCount,
+        failCount: recipientPhones.length,
         sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,

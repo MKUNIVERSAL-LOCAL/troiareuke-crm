@@ -233,7 +233,7 @@ export default function Onboarding() {
     const existingServiceNames = new Set(ServiceStore.getAll().filter(s => !s.id.startsWith('sample_')).map(s => s.name));
     const saveServiceOnce = (svc: { name: string; category: string; duration: number; price: number; description?: string }) => {
       if (!existingServiceNames.has(svc.name)) {
-        ServiceStore.save({ name: svc.name, category: svc.category, duration: svc.duration, price: svc.price, isActive: true });
+        ServiceStore.save({ name: svc.name, category: svc.category, duration: svc.duration, price: svc.price, description: svc.description, isActive: true });
         existingServiceNames.add(svc.name);
       }
     };

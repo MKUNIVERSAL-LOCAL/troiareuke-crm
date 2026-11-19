@@ -579,7 +579,7 @@ export default function Settings() {
 
   const handleDeleteService = (id: string) => {
     const svc = services.find(sv => sv.id === id);
-    if (!confirm(`'${svc?.name ?? '이'}' 시술을 삭제할까요?\n예약·시술 기록에 남은 시술명은 그대로 유지됩니다.`)) return;
+    if (!confirm(`${svc ? `'${svc.name}' 시술` : '이 시술'}을 삭제할까요?\n예약·시술 기록에 남은 시술명은 그대로 유지됩니다.`)) return;
     ServiceStore.delete(id);
     setServices(ServiceStore.getAll());
     flash('삭제 완료');

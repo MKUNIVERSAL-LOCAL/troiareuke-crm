@@ -88,7 +88,12 @@ export default function Programs() {
       notify('회차는 1 이상이어야 합니다');
       return;
     }
-    if (form.isTimed && !form.validityDays) {
+    const validityDays = parseInt(form.validityDays, 10);
+    if (form.validityDays.trim() !== '' && !(validityDays >= 1)) {
+      notify('유효기간은 1일 이상이어야 합니다. 회차권을 무제한으로 두려면 칸을 비워주세요.');
+      return;
+    }
+    if (form.isTimed && !(validityDays >= 1)) {
       notify('기간제 프로그램은 유효기간(일)이 필요합니다. 횟수도 기간도 없는 상품은 만들 수 없습니다.');
       return;
     }
@@ -96,7 +101,7 @@ export default function Programs() {
       name: form.name,
       category: form.category,
       totalSessions: sessions,
-      validityDays: form.validityDays ? parseInt(form.validityDays) : null,
+      validityDays: validityDays >= 1 ? validityDays : null,
       price: parseInt(form.price.replace(/,/g, '')) || 0,
       costPrice: parseInt(form.costPrice.replace(/,/g, '')) || 0,
       description: form.description,

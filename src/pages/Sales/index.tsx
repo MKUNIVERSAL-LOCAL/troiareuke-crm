@@ -388,8 +388,9 @@ export default function Sales() {
 
     // 제품 판매와 연결된 결제의 금액·날짜·고객을 여기서 바꾸면 판매 기록·재고 집계와 어긋난다 — 메모·결제 수단만 (UX 점검 2026-11-19)
     if (editingId && editingPayment?.type === 'product' && editingPayment.referenceId
-      && (amount !== editingPayment.amount || form.paymentDate !== editingPayment.paymentDate || (form.customerId || '') !== (editingPayment.customerId || ''))) {
-      notify('제품 판매와 연결된 결제는 금액·날짜·고객을 여기서 바꿀 수 없습니다. [제품/재고 > 판매 기록]에서 취소한 뒤 다시 기록해주세요. (메모·결제 수단은 수정 가능)');
+      && (amount !== editingPayment.amount || form.paymentDate !== editingPayment.paymentDate || (form.customerId || '') !== (editingPayment.customerId || '')
+        || form.status !== editingPayment.status || discountAmount !== (editingPayment.discountAmount || 0))) {
+      notify('제품 판매와 연결된 결제는 금액·할인·날짜·고객·상태를 여기서 바꿀 수 없습니다. [제품/재고 > 판매 기록]에서 취소한 뒤 다시 기록해주세요. (메모·결제 수단은 수정 가능)');
       return;
     }
 
@@ -1000,7 +1001,7 @@ export default function Sales() {
               {/* 구분 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">결제 구분</label>
-                <div className={`grid gap-2 ${editingPayment?.type === 'program' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                <div className={`grid gap-2 ${editingPayment?.type === 'program' || editingPayment?.type === 'product' ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {[
                     { v: 'single_treatment', label: '단건 시술', icon: Scissors },
                     // 프로그램 결제는 고객 페이지에서 생성 — 신규 등록엔 미노출,
@@ -1029,7 +1030,7 @@ export default function Sales() {
                   ))}
                 </div>
                 {editingPayment?.type === 'product' && editingPayment.referenceId && (
-                  <p className="text-xs text-amber-700 mt-2">제품 판매와 연결된 결제입니다 — 금액·날짜·고객은 [제품/재고 &gt; 판매 기록]에서 취소한 뒤 다시 기록하세요. 여기서는 메모·결제 수단만 바꿀 수 있습니다.</p>
+                  <p className="text-xs text-amber-700 mt-2">제품 판매와 연결된 결제입니다 — 금액·할인·날짜·고객·상태는 [제품/재고 &gt; 판매 기록]에서 취소한 뒤 다시 기록하세요. 여기서는 메모·결제 수단만 바꿀 수 있습니다.</p>
                 )}
               </div>
 
