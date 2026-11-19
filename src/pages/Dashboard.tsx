@@ -214,7 +214,7 @@ export default function Dashboard() {
             <p className="text-sm font-bold text-gray-900">오늘 예약 현황</p>
             <button
               onClick={() => navigate('/reservations')}
-              className="text-xs text-[#1a3a8f] font-medium min-h-[44px] px-2 -mx-2 flex items-center"
+              className="text-xs text-[#1a3a8f] font-medium min-h-[44px] -my-3 px-2 -mx-2 flex items-center"
             >
               전체보기 &rsaquo;
             </button>

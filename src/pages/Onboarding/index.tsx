@@ -362,10 +362,10 @@ export default function Onboarding() {
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center">
               <div className="flex flex-col items-center gap-1">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
-                <p className={`text-xs font-medium ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400 hidden sm:block'}`}>{s.label}</p>
+                <p className={`text-xs font-medium whitespace-nowrap ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400 hidden sm:block'}`}>{s.label}</p>
               </div>
               {i < steps.length - 1 && (
                 <div className={`w-4 sm:w-12 h-0.5 mx-0.5 sm:mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />

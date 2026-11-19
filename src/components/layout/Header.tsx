@@ -46,7 +46,7 @@ export default function Header({ title, subtitle, action, actions }: HeaderProps
 
   return (
     // 모바일: 레이아웃 상단(앱명·배너)이 이미 고정이라 페이지 제목은 작게, 부제 없이, 같이 스크롤 — 둘이 겹쳐 첫 화면 120px이 제목이었다 (7차 UX 점검 2026-11-20)
-    <header className="min-h-12 py-2 lg:min-h-16 lg:py-3 bg-white border-b border-gray-100 flex flex-wrap items-center px-4 sm:px-8 gap-x-4 gap-y-2 lg:sticky lg:top-0 z-20">
+    <header className="min-h-12 py-2 lg:min-h-16 lg:py-3 bg-white border-b border-gray-100 flex flex-wrap items-center px-4 sm:px-8 gap-x-4 gap-y-2 lg:sticky lg:top-0 lg:z-20">
       <div className="flex-1 min-w-0">
         <h2 className="text-base lg:text-xl font-bold tracking-tight text-gray-900 truncate">{title}</h2>
         {subtitle && <p className="hidden lg:block text-xs text-gray-500 break-keep">{subtitle}</p>}

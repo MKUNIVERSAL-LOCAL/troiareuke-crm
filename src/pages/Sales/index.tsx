@@ -501,7 +501,7 @@ export default function Sales() {
 
   return (
     <>
-      <Header title="매출·손익 관리" subtitle="매출 · 지출(매입) · 손익계산서 통합 현황" actions={<div className="hidden lg:flex items-center gap-2">
+      <Header title="매출·손익 관리" subtitle="매출 · 지출(매입) · 손익계산서 통합 현황" actions={<div className="hidden lg:flex items-center gap-3">
         {isPaymentLinkAvailable && (
           <button type="button" onClick={() => setShowPaymentLinkModal(true)} className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
             <CreditCard size={16} />결제 요청
@@ -1185,7 +1185,7 @@ export default function Sales() {
               </div>
 
               {/* 저장 행은 바닥에 고정 — 폰에서 키보드가 올라오면 보이지 않았다 (7차 UX 점검 2026-11-20) */}
-              <div className="flex gap-2 sticky bottom-0 bg-white pt-3 -mx-5 px-5 -mb-5 pb-5 border-t border-gray-100">
+              <div className="flex gap-2 sticky bottom-0 bg-white pt-3 -mx-5 px-5 -mb-5 pb-5 border-t border-gray-100 lg:rounded-b-2xl">
                 <button type="button" onClick={closeModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
                   <CheckCircle size={14} />{editingId ? '저장' : '결제 등록'}

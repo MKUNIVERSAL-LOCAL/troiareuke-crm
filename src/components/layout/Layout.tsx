@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import MobileTabBar from './MobileTabBar';
@@ -11,7 +11,6 @@ import AppLockOverlay from '../AppLockOverlay';
 import FeatureRouteGate from '../FeatureGate';
 import ErrorBoundary from '../ui/ErrorBoundary';
 import { usePreloadReload } from '../../hooks/usePreloadReload';
-import { useOverlayClose } from '../../lib/overlayStack';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { BLOCK_STAFF_UI } from '../../lib/buildTarget';
@@ -21,8 +20,18 @@ import { notify } from '../../lib/notify';
 
 export default function Layout() {
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  useOverlayClose(sidebarOpen, () => setSidebarOpen(false)); // 모바일 서랍 메뉴 — Android 뒤로가기·Esc로 닫기
+  // 모바일 상단 덩어리(배너+헤더) 높이를 --mobile-top에 — 페이지 고정 바(.top-mobile-header)·당겨서 새로고침 pill이 그 아래에 붙는다 (7차 UX 점검 2026-11-20)
+  const mobileTopRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = mobileTopRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const apply = () => root.style.setProperty('--mobile-top', `${el.offsetHeight}px`); // lg 이상은 display:none → 0px (쓰는 곳도 모바일 전용)
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.removeProperty('--mobile-top'); };
+  }, []);
   const { user, logout } = useAuth();
   const { programName } = useCrmBrand(user?.shopName);
 
@@ -78,16 +87,8 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* 모바일 오버레이 */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/40 z-[25] lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* 사이드바 */}
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {/* 사이드바 — PC 전용. 폰은 하단 탭바 + 더보기 시트가 같은 메뉴를 맡는다(햄버거 서랍은 중복이라 제거, 7차 UX 점검 2026-11-20) */}
+      <Sidebar />
 
       {/* 메인 콘텐츠 */}
       {/* pb-tabbar-safe lg:pb-0: 모바일 탭바(h-14=56px) + 기기 하단 safe-area / 데스크톱은 0 */}
@@ -103,20 +104,9 @@ export default function Layout() {
         <AppLockOverlay />
         {/* 모바일 상단: 오프라인·전송 대기 배너 + 헤더를 한 덩어리로 고정 — 따로 sticky였을 때 배너(z-30)가 스크롤 중 헤더(z-10) 위를 덮었다.
             상태바 safe-area는 덩어리 맨 위에 한 번만 (7차 UX 점검 2026-11-20) */}
-        <div className="lg:hidden sticky top-0 z-20 pt-safe bg-white shadow-sm">
+        <div ref={mobileTopRef} className="lg:hidden sticky top-0 z-20 pt-safe bg-white shadow-sm">
         <OfflineBanner />
-        <div className="flex items-center gap-3 px-4 pb-3 pt-3 bg-white border-b border-gray-100">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="w-11 h-11 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
-            aria-label="사이드바 열기"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
+        <div className="flex items-center gap-3 px-4 py-2.5 min-h-[48px] bg-white border-b border-gray-100">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-[#1a3a8f] rounded-lg flex items-center justify-center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">

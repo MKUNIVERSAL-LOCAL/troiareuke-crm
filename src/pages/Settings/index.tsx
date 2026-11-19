@@ -119,7 +119,7 @@ export default function Settings() {
   const tabStripRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!window.matchMedia('(max-width: 1023px)').matches) return;
-    tabStripRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    tabStripRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [tab]);
   useEffect(() => { if (searchParams.has('tab')) setSearchParams({}, { replace: true }); }, []);
   const [settings, setSettings] = useState<ShopSettings>(() => {

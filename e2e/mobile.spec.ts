@@ -346,6 +346,8 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   const more = page.getByRole('button', { name: '더보기 메뉴 열기' }).filter({ visible: true }).first();
   await expect(more).toBeVisible();
   await more.click();
-  await expect(page.getByRole('link', { name: /설정/ }).filter({ visible: true }).first()).toBeVisible();
+  // 시트 안의 [설정] 버튼 — 전에는 화면 밖으로 밀려 있던 사이드바 서랍의 '설정' 링크에 맞아 헛되이 통과했다(101에서 서랍 제거로 드러남)
+  await expect(page.getByRole('dialog', { name: '더보기 메뉴' }).getByRole('button', { name: '설정' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '더보기 메뉴' }).getByRole('button', { name: '로그아웃' })).toBeVisible();
   await expectNoHorizontalOverflow(page, '더보기 시트');
 });

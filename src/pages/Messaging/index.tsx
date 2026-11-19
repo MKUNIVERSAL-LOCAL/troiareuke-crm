@@ -145,7 +145,7 @@ export default function Messaging() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full overflow-x-auto no-scrollbar pr-6 mb-6">
+        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full mb-6">
           {tabs.map(t => (
             <button
               key={t.key}
@@ -333,7 +333,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
             aria-label="메시지 템플릿 검색"
           />
         </label>
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar pr-6">
+        <div className="flex flex-wrap gap-2 pb-1">
         {categories.map(c => (
           <button
             key={c}
@@ -1153,7 +1153,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             </div>
           </div>
 
-          <div className="flex gap-3 sticky bottom-0 bg-white pt-3 -mx-6 px-6 -mb-4 pb-4 border-t border-gray-100">
+          <div className="flex gap-3 sticky bottom-0 bg-white pt-3 -mx-6 px-6 -mb-4 pb-4 border-t border-gray-100 lg:rounded-b-2xl">
             <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
             {canShareText && (
               // 모바일: 발송사 미계약이어도 문구를 카카오톡·문자 앱으로 넘겨 직접 보낼 수 있다 (2026-11-17)

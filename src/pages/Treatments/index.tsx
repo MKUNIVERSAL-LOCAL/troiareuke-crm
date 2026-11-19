@@ -799,7 +799,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
         {!customerId && <p className="text-xs text-gray-500 text-center">고객을 선택하면 저장할 수 있습니다</p>}
         {/* 저장 행은 바닥에 고정 — 사진 구역 뒤에 있어 키보드가 올라오면 보이지 않았다. 발송 모달과 같은 패턴 (7차 UX 점검 2026-11-20) */}
-        <div className="flex gap-3 sticky bottom-0 bg-white pt-3 -mx-6 px-6 -mb-4 pb-4 border-t border-gray-100">
+        <div className="flex gap-3 sticky bottom-0 bg-white pt-3 -mx-6 px-6 -mb-4 pb-4 border-t border-gray-100 lg:rounded-b-2xl">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
           <button
             onClick={handleSave}

@@ -1510,7 +1510,7 @@ export default function Customers() {
               value={sortKey}
               onChange={e => setSortKey(e.target.value as SortKey)}
               aria-label="정렬"
-              className="flex-shrink-0 px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 border-0 focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+              className="flex-shrink-0 px-2.5 py-1.5 min-h-[36px] rounded-lg text-sm font-medium bg-gray-100 text-gray-700 border-0 focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
             >
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
@@ -1577,10 +1577,10 @@ export default function Customers() {
                           {customer.grade}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="text-xs text-gray-500 mt-0.5">
                         {maskPhone(customer.phone, user?.role ?? 'staff')}
                       </p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-gray-500">
                         {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {customer.totalVisits}회
                       </p>
                     </div>
@@ -1973,7 +1973,7 @@ export default function Customers() {
               value={sortKey}
               onChange={e => setSortKey(e.target.value as SortKey)}
               aria-label="정렬"
-              className="flex-shrink-0 px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 border-0 focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
+              className="flex-shrink-0 px-2.5 py-1.5 min-h-[36px] rounded-lg text-sm font-medium bg-gray-100 text-gray-700 border-0 focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
             >
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>

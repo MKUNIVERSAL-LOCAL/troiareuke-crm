@@ -2,7 +2,7 @@
 import {
   LayoutDashboard, Users, Calendar, ClipboardList,
   UserCog, Package, TrendingUp, MessageSquare,
-  Settings, ChevronRight, Link2, LogOut, Sparkles, Tag, Bot, X
+  Settings, ChevronRight, Link2, LogOut, Sparkles, Tag, Bot
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,12 +29,7 @@ const navItems = [
   { to: '/settings', label: '설정', icon: Settings },
 ];
 
-interface SidebarProps {
-  open?: boolean;
-  onClose?: () => void;
-}
-
-export default function Sidebar({ open = false, onClose }: SidebarProps) {
+export default function Sidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { shopName, programName } = useCrmBrand(user?.shopName);
@@ -60,19 +55,9 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
   const serviceEndsAt = (user as { serviceEndsAt?: string | null } | null)?.serviceEndsAt || null;
   const serviceDaysLeft = serviceEndsAt ? daysUntil(serviceEndsAt) : null;
 
-  const handleNavClick = () => {
-    // 모바일에서 메뉴 클릭 시 사이드바 닫기
-    if (onClose) onClose();
-  };
-
   return (
-    <aside className={clsx(
-      'w-64 h-screen bg-white border-r border-gray-100 flex flex-col fixed left-0 top-0 z-30 shadow-sm transition-transform duration-300 pt-safe',
-      // 데스크탑: 항상 표시
-      'lg:translate-x-0',
-      // 모바일: open 상태에 따라
-      open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-    )}>
+    // PC 전용 — 폰은 하단 탭바·더보기 시트가 같은 메뉴를 맡는다 (7차 UX 점검 2026-11-20)
+    <aside className="hidden lg:flex w-64 h-screen bg-white border-r border-gray-100 flex-col fixed left-0 top-0 z-30 shadow-sm">
       {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -84,14 +69,6 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
             <p className="text-2xs text-gray-400 font-medium tracking-wide">에스테틱 고객관리</p>
           </div>
         </div>
-        {/* 모바일 닫기 버튼 */}
-        <button
-          onClick={onClose}
-          aria-label="메뉴 닫기"
-          className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
-        >
-          <X size={16} />
-        </button>
       </div>
 
       {/* Navigation */}
@@ -105,7 +82,6 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
               <li key={to}>
                 <NavLink
                   to={to}
-                  onClick={handleNavClick}
                   className={clsx(
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group',
                     isActive
