@@ -1,5 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
-import { BRANCH_ROUTES, solidPng, countPhotoEntries, pickCustomer } from './helpers';
+import { test, expect } from '@playwright/test';
+import { BRANCH_ROUTES, solidPng, countPhotoEntries, pickCustomer, expectNoHorizontalOverflow } from './helpers';
 
 /**
  * 모바일 최적화 게이트 — 스토어 앱과 같은 화면 폭(Pixel 7, 412×915)에서 핵심 화면이
@@ -12,14 +12,6 @@ const RUN = Date.now().toString().slice(-7);
 const SHOP = `M샵${RUN}`;
 const EMAIL = `m-${RUN}@smoke.test`;
 const PASSWORD = 'smoke-pass-1234';
-
-async function expectNoHorizontalOverflow(page: Page, label: string) {
-  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }));
-  expect(scrollWidth, `${label}: 가로 스크롤 발생 (scrollWidth ${scrollWidth} > viewport ${clientWidth})`).toBeLessThanOrEqual(clientWidth + 1);
-}
 
 test.describe.configure({ mode: 'serial' });
 

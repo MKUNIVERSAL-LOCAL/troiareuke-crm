@@ -179,3 +179,21 @@ export function isNearMidnightSeoul(now = new Date()): boolean {
 export function visibleButton(page: Page, name: string | RegExp, exact = true): Locator {
   return page.getByRole('button', typeof name === 'string' ? { name, exact } : { name }).filter({ visible: true }).first();
 }
+
+/**
+ * 가로 넘침 검사 — 문서 전체와, 열려 있는 dialog 카드 안쪽 모두 scrollWidth가 폭을 넘지 않아야 한다.
+ * (모달은 fixed라 문서 scrollWidth에 안 잡히는 경우가 있어 카드 자체도 본다, 2026-11-19 ㊻). 허용 오차 1px(스크롤바 반올림).
+ */
+export async function expectNoHorizontalOverflow(page: Page, label: string) {
+  const r = await page.evaluate(() => {
+    const doc = { scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth };
+    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'))
+      .filter(el => el.offsetParent !== null || getComputedStyle(el).position === 'fixed')
+      .map(el => ({ name: el.getAttribute('aria-label') ?? '', scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }));
+    return { doc, dialogs };
+  });
+  expect(r.doc.scrollWidth, `${label}: 가로 스크롤 발생 (scrollWidth ${r.doc.scrollWidth} > viewport ${r.doc.clientWidth})`).toBeLessThanOrEqual(r.doc.clientWidth + 1);
+  for (const d of r.dialogs) {
+    expect(d.scrollWidth, `${label}: 창 '${d.name}' 안쪽 가로 넘침 (${d.scrollWidth} > ${d.clientWidth})`).toBeLessThanOrEqual(d.clientWidth + 1);
+  }
+}

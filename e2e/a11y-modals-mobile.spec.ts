@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, expectNoHorizontalOverflow } from './helpers';
 import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
 
 /**
@@ -10,11 +10,11 @@ import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y
 
 const acc = makeAccount('AN');
 
-test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접근성 위반이 없다', async ({ page }) => {
+test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접근성 위반과 가로 넘침이 없다', async ({ page }) => {
   test.slow();
   page.on('dialog', d => d.accept());
   const rows: Row[] = [];
-  const step = makeStep(page, rows);
+  const step = makeStep(page, rows, label => expectNoHorizontalOverflow(page, label)); // 창마다 가로 넘침도 (㊻)
   const dialog = (name: string) => page.getByRole('dialog', { name });
   const vis = (name: string) => page.getByRole('button', { name, exact: true }).filter({ visible: true }).first();
   // 맨 위 창의 [취소]만 — 아래 오버레이의 같은 이름 버튼을 잡지 않게, 닫힌 것까지 확인

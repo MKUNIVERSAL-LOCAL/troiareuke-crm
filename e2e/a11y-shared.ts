@@ -1,7 +1,7 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { writeFileSync } from 'node:fs';
-import { makeAccount, signupAndOnboard, createCustomer, BRANCH_ROUTES } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, BRANCH_ROUTES, expectNoHorizontalOverflow } from './helpers';
 
 /**
  * 접근성 자동 점검 (axe-core, WCAG 2.1 A/AA) — 로그인 + 지점 화면 전부.
@@ -40,7 +40,8 @@ export async function scan(page: import('@playwright/test').Page, route: string,
   }
 }
 
-export function defineA11yGate(title: string, accountPrefix: string) {
+/** opts.overflow — 모바일 폭 게이트에서 라우트마다 가로 넘침까지 함께 본다 (2026-11-19 ㊻) */
+export function defineA11yGate(title: string, accountPrefix: string, opts: { overflow?: boolean } = {}) {
   const acc = makeAccount(accountPrefix);
   test(title, async ({ page }) => {
     test.slow(); // 가입·온보딩 + 13회 axe 분석 ≈ 40s — CI 여유
@@ -56,6 +57,7 @@ export function defineA11yGate(title: string, accountPrefix: string) {
     for (const route of BRANCH_ROUTES) {
       await page.goto(route);
       await page.waitForLoadState('networkidle');
+      if (opts.overflow) await expectNoHorizontalOverflow(page, route);
       await scan(page, route, rows);
     }
 
@@ -75,7 +77,7 @@ export function assertNoBlocking(rows: Row[]) {
  * 창을 여는 단계 — 못 열면 critical open-failed 행으로 남기고(조용히 건너뛰지 않음) 열렸으면 axe 분석.
  * axe 자체 실패는 그대로 던져 "창을 열지 못함"과 섞이지 않는다. PC·모바일 모달 게이트가 같은 함수를 쓴다.
  */
-export function makeStep(page: Page, rows: Row[]) {
+export function makeStep(page: Page, rows: Row[], afterOpen?: (label: string) => Promise<void>) {
   return async (label: string, open: () => Promise<void>) => {
     try {
       await open();
@@ -83,6 +85,7 @@ export function makeStep(page: Page, rows: Row[]) {
       rows.push({ route: label, id: 'open-failed', impact: 'critical', help: `창을 열지 못함: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`, nodes: [] });
       return;
     }
+    if (afterOpen) await afterOpen(label); // 예: 모바일 폭 가로 넘침 — 실패하면 그대로 던진다(열지 못한 것과 섞지 않음)
     await scan(page, label, rows);
   };
 }
