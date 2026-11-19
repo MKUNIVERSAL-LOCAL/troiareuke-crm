@@ -1,6 +1,6 @@
 import { HIDE_ON_MOBILE, IS_MOBILE_APP } from '../../lib/platform';
 import { sanitizeStorageSnapshot } from '../../lib/fullBackup';
-import { formatPhoneInput, todayISO, formatDate } from '../../lib/format';
+import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
@@ -1200,7 +1200,7 @@ export default function Settings() {
                           </h3>
                           <p className="text-xs text-gray-500 mt-0.5">
                             {currentSubscription?.plan === 'trial'
-                              ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? formatDate(String(currentSubscription.expiresAt).slice(0, 10)) : '알 수 없음'})`
+                              ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? formatLocalDate(String(currentSubscription.expiresAt)) : '알 수 없음'})`
                               : currentSubscription?.amount
                                 ? `${currentSubscription.amount.toLocaleString()}원/월`
                                 : '활성 상태'}
@@ -1217,13 +1217,13 @@ export default function Settings() {
                           <div className="p-3 bg-gray-50 rounded-xl">
                             <p className="text-xs text-gray-400">시작일</p>
                             <p className="font-medium text-gray-700">
-                              {currentSubscription.startedAt ? formatDate(String(currentSubscription.startedAt).slice(0, 10)) : '-'}
+                              {currentSubscription.startedAt ? formatLocalDate(String(currentSubscription.startedAt)) : '-'}
                             </p>
                           </div>
                           <div className="p-3 bg-gray-50 rounded-xl">
                             <p className="text-xs text-gray-400">만료일</p>
                             <p className="font-medium text-gray-700">
-                              {currentSubscription.expiresAt ? formatDate(String(currentSubscription.expiresAt).slice(0, 10)) : '-'}
+                              {currentSubscription.expiresAt ? formatLocalDate(String(currentSubscription.expiresAt)) : '-'}
                             </p>
                           </div>
                           {currentSubscription.paymentMethod && (

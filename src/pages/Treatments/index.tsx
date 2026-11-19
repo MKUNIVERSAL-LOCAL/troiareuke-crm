@@ -302,7 +302,7 @@ export default function Treatments() {
             }
             // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
             const paidByReservation = !!reservationId && hasPaymentFor(reservationId); // 환불된 결제는 '등록됨'으로 치지 않는다 — 예약 상세와 같은 기준
-            if (result) notify.success('시술 기록을 저장했습니다.'); // 성공 안내와 결제 질문을 분리 — confirm의 [취소]가 저장 취소로 읽히지 않게 (6차 UX 감사 2026-11-20)
+            notify.success('시술 기록을 저장했습니다.'); // 회차권 연결 저장(result 없음)도 같은 안내 — 성공 안내와 결제 질문을 분리 — confirm의 [취소]가 저장 취소로 읽히지 않게 (6차 UX 감사 2026-11-20)
             if (result && !paidByReservation && window.confirm(`${result.customerName} 고객의 결제 ${result.amount.toLocaleString()}원을 지금 매출에 등록할까요?\n(나중에 매출 화면에서도 등록할 수 있습니다)`)) {
               const q = new URLSearchParams({ new: '1', customer: result.customerId, amount: String(result.amount), memo: result.details });
               // 예약에서 온 기록이면 결제를 그 예약에 연결(referenceId) — 안 넘기면 예약 상세가 "결제 미등록"으로 보여 2중 등록된다 (정합성 감사 2026-11-19)

@@ -7,7 +7,7 @@
  * 마이그레이션(마스터+이력 전체) 관점을 반영했다.
  */
 import { IS_MOBILE_APP } from './platform';
-import { todayISO } from './format';
+import { todayISO, formatDateTime } from './format';
 import { saveOrShareFile } from './mobileBridge';
 import type { WorkBook, WorkSheet } from 'xlsx';
 import {
@@ -236,7 +236,7 @@ function buildSheet(key: string): ExportSheet | null {
       return {
         name: '메시지발송이력',
         rows: MessageHistoryStore.getAll().map(h => ({
-          발송일: h.sentAt, 유형: h.type, 템플릿: h.templateName || '직접 작성',
+          발송일: formatDateTime(h.sentAt), 유형: h.type, // ISO·옛 toLocaleString 행이 섞여 있어 한 표기로 (리뷰 2026-11-20) 템플릿: h.templateName || '직접 작성',
           제목: h.title || '', 대상수: h.recipients, 성공: h.successCount, 실패: h.failCount,
           상태: h.status, 비용: h.cost ?? '',
         })),

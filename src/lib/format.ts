@@ -33,6 +33,13 @@ export function formatDateTime(value?: string | null): string {
   return `${d.getFullYear()}.${two(d.getMonth() + 1)}.${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 
+/** ISO 시각(UTC)을 이 기기의 날짜로 — "2026-11-19T18:00:00Z"는 KST에서 11-20. slice(0,10)은 UTC 날짜라 저녁 시각에 하루 어긋난다 (리뷰 2026-11-20) */
+export function formatLocalDate(value?: string | null): string {
+  if (!value) return '-';
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? formatDate(value) : formatDate(toISODate(d));
+}
+
 export function formatPhoneInput(value: string): string {
   if (!value || value.trim().startsWith('+')) return value;
   const d = value.replace(/\D/g, '').slice(0, 11);
