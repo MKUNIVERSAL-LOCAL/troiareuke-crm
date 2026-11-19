@@ -188,7 +188,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
   await tryShot('reservations-list', () => page.getByRole('button', { name: /목록|이번달/ }).filter({ visible: true }).first().click());
   await page.goto('/treatments');
   await tryShot('modal-treatment-edit', async () => { await page.getByText(acc.customer).filter({ visible: true }).first().click(); await page.getByRole('button', { name: '수정', exact: true }).filter({ visible: true }).first().click(); });
-  for (const tab of ['영업시간', '연동 설정', '알림 설정', '시술 관리', '데이터 백업']) {
+  for (const tab of ['영업시간', '연동 설정', '알림 설정', '시술 관리', '백업·보안']) {
     await page.goto('/settings');
     await tryShot(`settings-${tab}`, () => page.getByRole('button', { name: tab, exact: true }).filter({ visible: true }).first().click());
   }

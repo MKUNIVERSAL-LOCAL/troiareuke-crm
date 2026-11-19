@@ -519,7 +519,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
 
   // ── 9-4. 전체 백업 파일 저장·복원 (2026-11-18): JSON에 고객이 들어 있고, 고객 테이블을 비운 뒤 그 파일로 복원하면 돌아온다 ──
   await page.goto('/settings');
-  await page.getByRole('button', { name: '데이터 백업', exact: true }).filter({ visible: true }).first().click();
+  await page.getByRole('button', { name: '백업·보안', exact: true }).filter({ visible: true }).first().click();
   const backupCard = page.getByTestId('backup-restore-card');
   const backupDownload = page.waitForEvent('download');
   await backupCard.getByRole('button', { name: '백업 파일 저장' }).click();

@@ -123,7 +123,7 @@ export default function OfflineBanner() {
       try {
         const blob = new Blob([JSON.stringify(rejected, null, 2)], { type: 'application/json' });
         const r = await exportFile(`서버거부_저장분_${new Date().toISOString().slice(0, 10)}.json`, blob);
-        if (r === 'cancelled') notify('공유를 취소했습니다 — 파일은 저장되지 않았습니다.');
+        if (r === 'cancelled') notify.info('공유를 취소했습니다 — 파일은 저장되지 않았습니다.');
       } catch (e) {
         notify(e instanceof Error ? e.message : '파일을 저장하지 못했습니다.');
       }

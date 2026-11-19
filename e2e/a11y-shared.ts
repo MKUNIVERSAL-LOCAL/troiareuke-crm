@@ -120,5 +120,5 @@ export const SETTINGS_TAB_READY: Record<string, (page: Page) => Locator> = {
   '연동 설정': page => page.getByRole('switch', { name: '상담 화면에 비컨 점수·AI 피부 분석 표시' }),
   '알림 설정': page => page.getByTestId('retention-policy-card'),
   '시술 관리': page => page.getByRole('button', { name: '시술 추가' }).first(),
-  '데이터 백업': page => page.getByTestId('backup-restore-card'),
+  '백업·보안': page => page.getByTestId('backup-restore-card'),
 };

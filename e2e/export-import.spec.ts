@@ -34,9 +34,9 @@ test('고객 양식 다운로드 → 업로드 왕복, 설정 데이터 내보�
   await page.locator('input[type="file"][accept*=".xlsx"]').setInputFiles(templatePath!);
   await expect(page.getByText('고객 업로드 완료: 0명 추가, 2건 건너뜀(이름/전화 누락 또는 중복).')).toBeVisible({ timeout: 15_000 });
 
-  // ── 설정 > 데이터 백업: 전체 선택 → 엑셀 다운로드 ──
+  // ── 설정 > 백업·보안: 전체 선택 → 엑셀 다운로드 ──
   await page.goto('/settings');
-  await page.getByRole('button', { name: '데이터 백업' }).click();
+  await page.getByRole('button', { name: '백업·보안' }).click();
   await page.getByRole('button', { name: '전체 선택' }).click();
   const exportDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: /선택 항목 다운로드/ }).click();

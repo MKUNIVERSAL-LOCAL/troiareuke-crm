@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CalendarClock } from 'lucide-react';
+import { isAuthApiConfigured } from '../../lib/authApi';
 import { getRevisitCycleDays, setRevisitCycleDays, DEFAULT_CYCLE_DAYS, MIN_CYCLE_DAYS, MAX_CYCLE_DAYS } from '../../lib/reminderEngine';
 
 /**
@@ -20,7 +21,7 @@ export default function RevisitCycleCard() {
       return;
     }
     setDays(value);
-    setMessage({ tone: 'ok', text: `재방문 권장 주기를 ${value}일로 저장했습니다. 이 지점의 모든 PC에 적용됩니다.` });
+    setMessage({ tone: 'ok', text: `재방문 권장 주기를 ${value}일로 저장했습니다.${isAuthApiConfigured ? ' 이 지점의 모든 PC에 적용됩니다.' : ''}` }); // 로컬 모드는 이 기기만 (UX 점검 2026-11-19)
   }
 
   return (

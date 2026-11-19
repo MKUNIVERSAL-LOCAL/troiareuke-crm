@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BellRing, Copy, Check, MessageSquare, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../lib/mobileBridge';
+import { copyText } from '../lib/clipboard';
+import { notify } from '../lib/notify';
 import Modal from './ui/Modal';
 import { getRevisitDueCustomers, buildReminderMessage, type DueCustomer } from '../lib/reminderEngine';
 import { maskPhone } from '../lib/masking';
@@ -30,14 +32,15 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
 
   const list = compact ? due.slice(0, 3) : due.slice(0, 8);
 
+  // 복사·공유가 막혔을 때 버튼이 아무 말 없이 끝나지 않게 — 공용 copyText(구형 WebView 폴백 포함) + 실패 안내 (UX 점검 2026-11-19)
   const copyDraft = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* 클립보드 권한 없을 때는 무시 (사용자가 직접 선택 복사) */
-    }
+    } else notify('복사하지 못했습니다. 문구를 직접 선택해 복사하세요.');
+  };
+  const shareDraft = async (text: string) => {
+    if (!(await shareText(text, '재방문 안내'))) notify('공유 창을 열 수 없습니다 — [복사]로 문구를 옮겨 보내주세요.');
   };
 
   return (
@@ -88,7 +91,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
                 초안
               </button>
               <button
-                onClick={() => navigate(`/reservations?new=1&customer=${encodeURIComponent(d.customer.id)}${d.overdueDays < 0 ? `&date=${d.dueDate}` : ''}`)}
+                onClick={() => navigate(`/reservations?new=1&customer=${encodeURIComponent(d.customer.id)}`)}
                 aria-label={`${d.customer.name} 예약 추가`}
                 className="text-xs px-2.5 py-1.5 bg-sky-50 text-sky-700 rounded-lg font-medium hover:bg-sky-100 transition-colors flex-shrink-0"
               >
@@ -118,7 +121,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
               <div className="flex gap-2">
                 {canShareText && (
                   <button
-                    onClick={() => shareText(buildReminderMessage(draftFor.customer), '재방문 안내')}
+                    onClick={() => shareDraft(buildReminderMessage(draftFor.customer))}
                     className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-green-800"
                     title="카카오톡·문자 앱으로 바로 보내기"
                   >

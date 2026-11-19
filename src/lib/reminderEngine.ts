@@ -83,7 +83,8 @@ export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo 
   const lastVisit = later(lastLog?.treatmentDate, customer?.lastVisitDate);
   let dueDate: string;
   let basis: CustomerRevisitInfo['basis'];
-  if (lastLog?.nextAppointment) { dueDate = lastLog.nextAppointment; basis = 'recommended'; }
+  // 권장일(nextAppointment) 뒤에 다시 다녀갔다면(예약 완료만 있고 새 시술 기록이 없는 경우) 그 권장일은 이미 소화된 것 — 마지막 방문 + 주기로 (UX 점검 2026-11-19)
+  if (lastLog?.nextAppointment && !(lastVisit && lastVisit > lastLog.nextAppointment)) { dueDate = lastLog.nextAppointment; basis = 'recommended'; }
   else if (lastVisit) { dueDate = addDays(lastVisit, getRevisitCycleDays()); basis = 'cycle'; }
   else return null;
   const daysLeft = Math.round((new Date(dueDate + 'T00:00:00').getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000);
@@ -119,7 +120,7 @@ export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
     let dueDate: string | null = null;
     let basis: DueCustomer['basis'] = 'cycle';
 
-    if (lastLog?.nextAppointment) {
+    if (lastLog?.nextAppointment && !(lastVisit && lastVisit > lastLog.nextAppointment)) { // 상세(getCustomerRevisitInfo)와 같은 규칙
       dueDate = lastLog.nextAppointment;
       basis = 'recommended';
     } else if (lastVisit) {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ShieldCheck, ExternalLink, Copy, CheckCircle } from 'lucide-react';
+import { notify } from '../../lib/notify';
 
 /**
  * 백신·보안 예외 등록 안내 카드 (설정 > 데이터 백업 탭, Electron 전용)
@@ -46,20 +47,21 @@ export default function SecurityGuideCard() {
 
   if (!api) return null;
 
-  async function handleCopy() {
+  async function handleCopy(): Promise<boolean> {
     const r = await api!.copyPaths();
     if (r.success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    }
+    } else notify('폴더 경로를 복사하지 못했습니다. 아래 경로를 직접 선택해 복사해주세요.'); // 조용히 실패하지 않게 (UX 점검 2026-11-19)
+    return r.success;
   }
 
   async function handleOpenDefender() {
     setOpenMsg('');
-    await handleCopy();
+    const copied = await handleCopy();
     const r = await api!.openDefender();
     setOpenMsg(r.success
-      ? 'Windows 보안 화면을 열었습니다. 맨 아래 "제외" → [제외 추가 또는 제거] → [제외 사항 추가] → [폴더]에서 아래 폴더를 하나씩 추가해주세요. 경로는 이미 복사돼 있습니다.'
+      ? `Windows 보안 화면을 열었습니다. 맨 아래 "제외" → [제외 추가 또는 제거] → [제외 사항 추가] → [폴더]에서 아래 폴더를 하나씩 추가해주세요.${copied ? ' 경로는 이미 복사돼 있습니다.' : ''}`
       : 'Windows 보안 화면을 자동으로 열 수 없습니다. 아래 단계대로 직접 열어 주세요.');
   }
 
@@ -87,7 +89,7 @@ export default function SecurityGuideCard() {
 
         {targets && (
           <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3">
-            <p className="text-xs font-bold text-gray-700 mb-1.5">예외로 등록할 폴더 2개</p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">예외로 등록할 폴더 {targets?.paths.length ?? 2}개</p>
             <ul className="space-y-1 font-mono text-xs text-gray-700 break-all">
               {targets.paths.map(p => <li key={p}>📁 {p}</li>)}
             </ul>

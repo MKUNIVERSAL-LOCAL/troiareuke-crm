@@ -32,7 +32,7 @@ export default function PhotoLightbox({ photo, onClose }: { photo: LightboxPhoto
       const fileName = (photo.fileName || 'photo').replace(/\.(png|jpe?g|webp)$/i, '') + '.' + ext;
       const result = await exportFile(fileName, blob);
       if (result === 'downloaded') notify('사진을 내려받았습니다.');
-      else if (result === 'cancelled') notify('공유를 취소했습니다 — 사진은 저장되지 않았습니다.');
+      else if (result === 'cancelled') notify.info('공유를 취소했습니다 — 사진은 저장되지 않았습니다.'); // 사용자가 취소한 것은 오류가 아니다
     } catch (e) {
       notify(e instanceof Error ? e.message : '사진을 내보내지 못했습니다.');
     }

@@ -45,6 +45,30 @@ const TABLE_LABELS: Record<string, string> = {
 
 export const RESTORE_ALLOWED = !isAuthApiConfigured;
 
+/**
+ * Electron '지금 백업'(localStorage 전체 스냅샷)에서 비밀값을 뺀다 — AI 키(ai_key_*)와 설정의 문자 API 키.
+ * 백업 파일(buildBackup)과 같은 기준: 백업 폴더는 매장 PC·NAS에 그대로 놓이는 파일이다 (UX 점검 2026-11-19)
+ */
+export function sanitizeStorageSnapshot(snapshot: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(snapshot)) {
+    if (key.startsWith('ai_key_')) continue;
+    if (key.endsWith('_settings')) {
+      try {
+        const v: unknown = JSON.parse(raw);
+        if (isRecord(v)) {
+          const copy: Record<string, unknown> = { ...v };
+          for (const f of SETTINGS_SECRET_FIELDS) delete copy[f];
+          out[key] = JSON.stringify(copy);
+          continue;
+        }
+      } catch { /* JSON이 아니면 원문 유지 */ }
+    }
+    out[key] = raw;
+  }
+  return out;
+}
+
 function prefix(): string {
   return `crm_${getShopId()}_`;
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Copy, Check, Share2, X } from 'lucide-react';
 import { canShareText, shareText } from '../../lib/mobileBridge';
+import { copyText } from '../../lib/clipboard';
 import { notify } from '../../lib/notify';
 
 /**
@@ -16,14 +17,12 @@ export default function MessageDraftPanel({ title, text, shareTitle, hint, onClo
 }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) { // 구형 WebView(navigator.clipboard 없음) 폴백 포함 (UX 점검 2026-11-19)
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      notify('복사하지 못했습니다. 문구를 직접 선택해 복사하세요.');
-    }
+    } else notify('복사하지 못했습니다. 문구를 직접 선택해 복사하세요.');
   };
+  const share = async () => { if (!(await shareText(text, shareTitle))) notify('공유 창을 열 수 없습니다 — [복사]로 문구를 옮겨 보내주세요.'); };
   return (
     <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
       <div className="flex items-center justify-between mb-2">
@@ -38,7 +37,7 @@ export default function MessageDraftPanel({ title, text, shareTitle, hint, onClo
           {copied ? <><Check size={12} />복사됨</> : <><Copy size={12} />복사</>}
         </button>
         {canShareText && (
-          <button type="button" onClick={() => shareText(text, shareTitle)}
+          <button type="button" onClick={share}
             className="px-3 py-1.5 rounded-lg bg-[#1a3a8f] text-white text-xs font-medium flex items-center gap-1">
             <Share2 size={12} />보내기
           </button>

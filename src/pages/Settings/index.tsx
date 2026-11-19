@@ -1,4 +1,5 @@
-import { HIDE_ON_MOBILE } from '../../lib/platform';
+import { HIDE_ON_MOBILE, IS_MOBILE_APP } from '../../lib/platform';
+import { sanitizeStorageSnapshot } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
@@ -94,7 +95,7 @@ const allTabs = [
   { key: 'notifications' as SettingTab, label: '알림 설정', icon: <Bell size={16} /> },
   { key: 'services' as SettingTab, label: '시술 관리', icon: <Palette size={16} /> },
   { key: 'subscription' as SettingTab, label: '구독/플랜', icon: <CreditCard size={16} /> },
-  { key: 'backup' as SettingTab, label: '데이터 백업', icon: <HardDrive size={16} /> },
+  { key: 'backup' as SettingTab, label: '백업·보안', icon: <HardDrive size={16} /> }, // 앱 잠금·백신 예외 카드도 이 탭에 있다 (UX 점검 2026-11-19)
   { key: 'notice' as SettingTab, label: '공지사항', icon: <Bell size={16} /> },
 ];
 // 모바일 앱(스토어 빌드)에서는 결제 유도 화면을 노출하지 않는다 — Apple 3.1.1 / Google Play 결제 정책 (src/lib/platform.ts)
@@ -221,8 +222,9 @@ export default function Settings() {
       const k = localStorage.key(i);
       if (k) snapshot[k] = localStorage.getItem(k) ?? '';
     }
-    const result = await electronAPI.backup.exportNow(snapshot);
+    const result = await electronAPI.backup.exportNow(sanitizeStorageSnapshot(snapshot)); // AI 키·문자 API 키는 백업 파일에 넣지 않는다 (UX 점검 2026-11-19)
     setBackupStatus(result.success ? 'done' : 'error');
+    if (result.success) notify.success(result.filePath ? `백업을 저장했습니다: ${result.filePath}` : '백업을 저장했습니다. [백업 폴더 열기]에서 확인하세요.'); // 어디에 저장됐는지 버튼 글자만으로는 모른다
     if (!result.success) notify(`백업 실패: ${result.error || '알 수 없는 오류'} — 백업 폴더 권한·경로를 확인해주세요.`); // 버튼 글자 3초만으로는 이유를 알 수 없다 (4차 UX 점검 2026-11-19)
     setTimeout(() => setBackupStatus('idle'), 3000);
   };
@@ -1369,11 +1371,10 @@ export default function Settings() {
                   </SettingCard>
                 )}
 
-                <SettingCard title="데이터 내보내기 (엑셀 다운로드)">
+                <SettingCard title="데이터 내보내기">
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">
-                      로그인한 계정의 샵 데이터만 내보내집니다. 선택한 항목이 시트별로 담긴
-                      엑셀(.xlsx) 파일 하나로 다운로드됩니다.
+                      로그인한 계정의 샵 데이터만 내보내집니다. 선택한 항목이 {exportFormat === 'pdf' ? 'PDF 파일 하나로' : '시트별로 담긴 엑셀(.xlsx) 파일 하나로'} {IS_MOBILE_APP ? '만들어져 공유 시트로 전달됩니다' : '다운로드됩니다'}.
                     </p>
                     <div className="flex gap-2">
                       <button
@@ -1418,7 +1419,7 @@ export default function Settings() {
                       <p className="text-xs text-amber-700 leading-relaxed">
                         고객 연락처·피부상담 내역은 개인정보(민감정보)입니다. 다운로드한 파일은
                         외부 공유를 금지하고, 사용 후 안전하게 삭제해주세요. 시술 사진은 용량 문제로
-                        엑셀에 포함되지 않으며 NAS 백업(CRM-BACKUP)에서 파일로 제공됩니다.
+                        엑셀에 포함되지 않습니다{isAuthApiConfigured ? ' — 서버에 올라간 사진은 본사에 요청해 파일로 받을 수 있습니다' : ''}.
                       </p>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
