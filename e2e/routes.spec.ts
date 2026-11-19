@@ -37,7 +37,7 @@ test('지점 화면 전부가 예외·콘솔 오류·빈 화면 없이 열린다
 
   // lazy 청크가 늦게 오면 networkidle 직후 루트가 잠깐 비어 있을 수 있다 — 1회 읽기 대신 재시도(expect 기본 타임아웃) (6워커 부하에서 어드민 로그인 기록 화면 오탐, 2026-11-19)
   const expectRendered = (route: string) =>
-    expect.poll(async () => (await page.locator('#root').innerText()).trim().length, { message: `${route}: 화면이 비어 있음` }).toBeGreaterThan(0);
+    expect.poll(async () => (await page.locator('#root').innerText()).trim().length, { message: `${route}: 화면이 비어 있음`, timeout: 15_000 }).toBeGreaterThan(0); // 6워커 부하에서 어드민 공지 화면이 5초 안에 못 그려진 적 있음 (98)
 
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);

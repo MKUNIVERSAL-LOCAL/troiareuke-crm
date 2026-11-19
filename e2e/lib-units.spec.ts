@@ -5,6 +5,9 @@ import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
 import { smsBytes, SMS_BYTE_LIMIT } from '../src/lib/smsBytes';
 import { sanitizeStorageSnapshot } from '../src/lib/backupSanitize';
+import { computeRevisitDue, daysBetween, addDays } from '../src/lib/revisitRule';
+import { nextBirthday } from '../src/lib/birthdayRule';
+import { summarizeDailyClose, formatDailyCloseMessage } from '../src/lib/dailyCloseSummary';
 
 // 저장소·DOM 의존이 없는 순수 helper를 브라우저 없이 직접 검증 (95, 2026-11-20 — 커버리지 감사 B).
 // 날짜 입력은 로컬 Date로 만들어 러너 시간대와 무관하게 같은 답이 나오게 한다.
@@ -82,4 +85,87 @@ test('Electron 백업 스냅샷 — AI 키·토큰·게이트웨이 키·앱 잠
   expect(out.crm_shop1_customers).toBe('[{"name":"홍길동"}]');
   expect(out.crm_shop1_broken_settings).toBe('not-json'); // JSON이 아니면 원문 유지
   expect(JSON.stringify(out)).not.toContain('SECRET'); // 비밀값 9개 어느 것도 남지 않는다
+});
+
+test('재방문 기준일 — 권장일 우선, 권장일 뒤 방문은 소화, 시술일·방문일 중 나중 + 주기, 이력 없으면 없음', () => {
+  // 권장일이 있고 그 뒤에 다녀가지 않았으면 권장일
+  expect(computeRevisitDue({ lastTreatmentDate: '2026-11-01', nextAppointment: '2026-11-29', cycleDays: 28 })).toEqual({ lastVisit: '2026-11-01', dueDate: '2026-11-29', basis: 'recommended' });
+  // 권장일 당일 또는 그 뒤에 예약 완료로 다녀갔으면(시술 기록 없음) 권장일은 소화됨 → 마지막 방문 + 주기
+  expect(computeRevisitDue({ lastTreatmentDate: '2026-11-01', nextAppointment: '2026-11-29', lastVisitDate: '2026-11-29', cycleDays: 28 })).toEqual({ lastVisit: '2026-11-29', dueDate: '2026-12-27', basis: 'cycle' });
+  // 권장일 전에 다녀간 방문은 권장일을 바꾸지 않는다
+  expect(computeRevisitDue({ lastTreatmentDate: '2026-11-01', nextAppointment: '2026-11-29', lastVisitDate: '2026-11-15', cycleDays: 28 })?.dueDate).toBe('2026-11-29');
+  // 권장일 없음 → 시술일·방문일 중 나중 날짜 + 주기(설정값)
+  expect(computeRevisitDue({ lastTreatmentDate: '2026-10-05', lastVisitDate: '2026-10-20', cycleDays: 14 })).toEqual({ lastVisit: '2026-10-20', dueDate: '2026-11-03', basis: 'cycle' });
+  expect(computeRevisitDue({ lastVisitDate: '2026-12-20', cycleDays: 28 })?.dueDate).toBe('2027-01-17'); // 연말을 넘어도 날짜가 맞다
+  // 방문 이력이 전혀 없으면 대상 아님
+  expect(computeRevisitDue({ cycleDays: 28 })).toBeNull();
+  expect(computeRevisitDue({ nextAppointment: '2026-12-01', cycleDays: 28 })?.basis).toBe('recommended'); // 시술 기록의 권장일만 있어도 잡힌다
+  // 날짜 산술은 로컬 자정 기준 — 지난 날이면 양수(지남), 남았으면 음수
+  expect(daysBetween('2026-11-10', '2026-11-20')).toBe(10);
+  expect(daysBetween('2026-11-20', '2026-11-10')).toBe(-10);
+  expect(addDays('2026-02-28', 1)).toBe('2026-03-01');
+  expect(addDays('2028-02-28', 1)).toBe('2028-02-29'); // 윤년
+});
+
+test('생일 임박 — 연말·연초 경계, 2/29 평년 처리, 오늘, 형식 불량·없는 날짜', () => {
+  const dec30 = new Date(2026, 11, 30);
+  expect(nextBirthday('1990-12-30', dec30)).toEqual({ daysUntil: 0, dateLabel: '12/30' });  // 오늘
+  expect(nextBirthday('1990-01-03', dec30)).toEqual({ daysUntil: 4, dateLabel: '1/3' });    // 해를 넘어 4일 뒤
+  expect(nextBirthday('1990-12-29', dec30)?.daysUntil).toBe(364);                           // 어제 지났으면 내년
+  expect(nextBirthday('1988-02-29', new Date(2027, 1, 1))).toEqual({ daysUntil: 27, dateLabel: '2/29' }); // 평년 → 2/28에 축하, 표시는 2/29
+  expect(nextBirthday('1988-02-29', new Date(2028, 1, 1))?.daysUntil).toBe(28);             // 윤년은 2/29 그대로
+  expect(nextBirthday('1988-02-29', new Date(2027, 2, 1))?.daysUntil).toBe(365);            // 평년 3/1: 2/28이 지났으니 내년(윤년) 2/29까지
+  expect(nextBirthday('1990-04-31', dec30)).toBeNull();                                      // 없는 날짜
+  expect(nextBirthday('1990-13-01', dec30)).toBeNull();
+  expect(nextBirthday('19901230', dec30)).toBeNull();                                        // 형식 불량
+  expect(nextBirthday('', dec30)).toBeNull();
+  expect(nextBirthday(undefined, dec30)).toBeNull();
+  expect(nextBirthday('1990-12-30', new Date(2026, 11, 30, 23, 59))?.daysUntil).toBe(0);    // 늦은 밤에도 오늘은 오늘
+});
+
+test('마감 요약 분해 — 완료만 매출, 분할 결제 1건, 수단별 큰 순, 구분별, 환불·지출은 당일분만, 예약 결과', () => {
+  const date = '2026-11-20';
+  const pay = (id: string, amount: number, method: string, type: 'program' | 'product' | 'single_treatment' | 'other', status: 'completed' | 'refunded' | 'pending' = 'completed', referenceId?: string, paymentDate = date) =>
+    ({ id, amount, paymentMethod: method, type, status, referenceId, paymentDate });
+  const c = summarizeDailyClose(date, {
+    payments: [
+      pay('p1', 200000, '카드', 'program', 'completed', 'cp1'),
+      pay('p2', 100000, '현금', 'program', 'completed', 'cp1'),        // p1과 분할(같은 회차권) → 합쳐 1건
+      pay('p3', 30000, '카드', 'product'),
+      pay('p4', 50000, '계좌이체', 'single_treatment', 'refunded'),   // 오늘 결제분 환불 — 매출 제외, 환불에 집계
+      pay('p5', 10000, '카드', 'other', 'pending'),                    // 미완료 — 어디에도 안 들어감
+      pay('p6', 999999, '카드', 'program', 'completed', undefined, '2026-11-19'), // 다른 날
+    ],
+    expenses: [{ expenseDate: date, amount: 15000 }, { expenseDate: '2026-11-19', amount: 70000 }],
+    treatmentLogs: [{ id: 't1', treatmentDate: date }, { id: 'sample_t', treatmentDate: date }, { id: 't2', treatmentDate: '2026-11-19' }],
+    customers: [{ id: 'c1', registeredAt: new Date(2026, 10, 20, 1, 30).toISOString() }, { id: 'c2', registeredAt: new Date(2026, 10, 19, 23, 0).toISOString() }, { id: 'sample_c', registeredAt: new Date(2026, 10, 20).toISOString() }],
+    reservations: [
+      { date, status: 'completed' }, { date, status: 'completed' }, { date, status: 'noshow' }, { date, status: 'cancelled' }, { date, status: 'confirmed' }, { date, status: 'pending' },
+      { date: '2026-11-21', status: 'confirmed' },
+    ],
+  });
+  expect(c.revenue).toBe(330000);
+  expect(c.paymentCount).toBe(2);                                   // p1+p2 = 1건, p3 = 1건
+  expect(c.byMethod).toEqual([{ method: '카드', amount: 230000 }, { method: '현금', amount: 100000 }]); // 환불·미완료 수단은 빠진다
+  expect(c.byType).toEqual({ treatment: 300000, product: 30000, other: 0 });
+  expect(c.refunds).toBe(50000);
+  expect(c.expenses).toBe(15000);
+  expect(c.treatments).toBe(1);
+  expect(c.newCustomers).toBe(1);                                   // 새벽 1:30 등록은 오늘(로컬), 샘플 제외
+  expect(c.reservations).toEqual({ total: 6, completed: 2, noshow: 1, cancelled: 1, pending: 2 });
+
+  const msg = formatDailyCloseMessage(c, '테스트샵');
+  expect(msg.split('\n')).toEqual([
+    '[테스트샵] 11/20(금) 마감 보고',
+    '· 매출 330,000원 (2건)',
+    '  카드 230,000원 / 현금 100,000원',
+    '  시술 300,000원 / 제품 30,000원',
+    '· 환불(오늘 결제분) 50,000원',
+    '· 지출 15,000원',
+    '· 시술 1건 · 신규 고객 1명',
+    '· 예약 6건 (완료 2 / 노쇼 1 / 취소 1 / 미처리 2)',
+  ]);
+  // 아무것도 없는 날: 0원 (0건), 수단·구분·환불·지출 줄은 생략, 미처리 0은 표시하지 않음
+  const empty = summarizeDailyClose(date, { payments: [], expenses: [], treatmentLogs: [], customers: [], reservations: [] });
+  expect(formatDailyCloseMessage(empty, '').split('\n')).toEqual(['[] 11/20(금) 마감 보고', '· 매출 0원 (0건)', '· 시술 0건 · 신규 고객 0명', '· 예약 0건 (완료 0 / 노쇼 0 / 취소 0)']);
 });

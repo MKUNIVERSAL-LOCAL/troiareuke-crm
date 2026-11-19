@@ -3,9 +3,7 @@
 // ───────────────────────────────────────────────────────────────
 // 목적: 재방문 이탈(에스테틱 최대 매출 누수)을 막기 위해, 권장 재방문일이
 //       지난 고객을 자동 산출한다.
-// 산출 규칙(우선순위):
-//   1) 최근 시술기록의 '다음 방문 권장일(nextAppointment)'이 있으면 그 날짜
-//   2) 없으면 마지막 방문일 + 기본 재방문 주기(기본 28일, 설정 가능)
+// 산출 규칙은 revisitRule.computeRevisitDue (순수) — 권장일 → 마지막 방문 + 주기(기본 28일, 설정 가능).
 //   그 날짜가 오늘 이전이고, 아직 예정된(미래) 예약이 없으면 '재방문 대상'.
 // ⚠️ 실제 카카오/문자 자동 발송은 회사 NAS 서버의 게이트웨이 연동 후 지원.
 //    지금은 대상 산출 + 메시지 초안 생성까지(수동 발송/복사 가능).
@@ -14,6 +12,7 @@
 import { CustomerStore, TreatmentLogStore, ReservationStore, SettingsStore } from './store';
 import type { Customer, TreatmentLog } from '../types';
 import { getPreference, setPreference, migrateLegacyPreference } from './shopPreferences';
+import { toISO, daysBetween, computeRevisitDue } from './revisitRule';
 
 const LEGACY_CYCLE_KEY = 'troiareuke_revisit_cycle_days';
 export const DEFAULT_CYCLE_DAYS = 28;
@@ -45,30 +44,12 @@ export interface DueCustomer {
   basis: 'recommended' | 'cycle'; // 권장일 기반인지, 주기 추정인지
 }
 
-// toISOString()은 UTC 기준이라 KST 자정~오전 9시에 전날로 어긋난다.
-// format.ts todayISO와 동일하게 로컬 y/m/d로 조립한다.
-function toISO(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-function addDays(iso: string, days: number): string {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return toISO(d);
-}
-
 export interface CustomerRevisitInfo {
   dueDate: string;                 // 권장 재방문일 (YYYY-MM-DD)
   daysLeft: number;                // 남은 일수 (음수 = 지남)
   basis: 'recommended' | 'cycle';  // 시술기록 권장일 / 주기 추정
   upcomingReservation: string | null; // 이미 잡힌 다음 예약일
 }
-
-/** 둘 다 있으면 나중 날짜 — 시술기록만 보면 예약 완료(방문)로만 다녀간 고객이 '기한 지남'으로 잘못 잡힌다 (정합성 감사 2026-11-19) */
-const later = (a?: string | null, b?: string | null): string | null => (a && b ? (a > b ? a : b) : a || b || null);
 
 /** 고객 상세용 — 다음 방문 권장일과 남은 일수 (방문 이력이 없으면 null). 리마인더 목록과 같은 규칙 (2026-11-17) */
 export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo | null {
@@ -77,18 +58,11 @@ export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo 
     .filter(r => r.customerId === customerId && r.date >= todayStr && r.status !== 'cancelled')
     .map(r => r.date)
     .sort()[0] ?? null;
-  const logs = TreatmentLogStore.getByCustomer(customerId);
-  const lastLog = logs[0];
+  const lastLog = TreatmentLogStore.getByCustomer(customerId)[0];
   const customer = CustomerStore.getAll().find(c => c.id === customerId);
-  const lastVisit = later(lastLog?.treatmentDate, customer?.lastVisitDate);
-  let dueDate: string;
-  let basis: CustomerRevisitInfo['basis'];
-  // 권장일(nextAppointment) 뒤에 다시 다녀갔다면(예약 완료만 있고 새 시술 기록이 없는 경우) 그 권장일은 이미 소화된 것 — 마지막 방문 + 주기로 (UX 점검 2026-11-19)
-  if (lastLog?.nextAppointment && !(lastVisit && lastVisit >= lastLog.nextAppointment)) { dueDate = lastLog.nextAppointment; basis = 'recommended'; }
-  else if (lastVisit) { dueDate = addDays(lastVisit, getRevisitCycleDays()); basis = 'cycle'; }
-  else return null;
-  const daysLeft = Math.round((new Date(dueDate + 'T00:00:00').getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000);
-  return { dueDate, daysLeft, basis, upcomingReservation: upcoming };
+  const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: customer?.lastVisitDate, cycleDays: getRevisitCycleDays() });
+  if (!due) return null;
+  return { dueDate: due.dueDate, daysLeft: daysBetween(todayStr, due.dueDate), basis: due.basis, upcomingReservation: upcoming };
 }
 
 /**
@@ -115,28 +89,12 @@ export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
     if (upcoming.has(customer.id)) continue;
 
     const lastLog = latestLog.get(customer.id);
-    const lastVisit = later(lastLog?.treatmentDate, customer.lastVisitDate);
-
-    let dueDate: string | null = null;
-    let basis: DueCustomer['basis'] = 'cycle';
-
-    if (lastLog?.nextAppointment && !(lastVisit && lastVisit >= lastLog.nextAppointment)) { // 상세(getCustomerRevisitInfo)와 같은 규칙 — 권장일 당일 방문도 소화한 것
-      dueDate = lastLog.nextAppointment;
-      basis = 'recommended';
-    } else if (lastVisit) {
-      dueDate = addDays(lastVisit, cycle);
-      basis = 'cycle';
-    } else {
-      // 방문 이력이 전혀 없는 고객은 리마인더 대상에서 제외
-      continue;
-    }
-
-    const overdueDays = Math.floor(
-      (new Date(todayISO).getTime() - new Date(dueDate).getTime()) / 86400000
-    );
+    const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: customer.lastVisitDate, cycleDays: cycle }); // 상세(getCustomerRevisitInfo)와 같은 규칙
+    if (!due) continue; // 방문 이력이 전혀 없는 고객은 리마인더 대상에서 제외
+    const overdueDays = daysBetween(due.dueDate, todayISO);
     if (overdueDays < minOverdueDays) continue;
 
-    result.push({ customer, lastVisit, dueDate, overdueDays, basis });
+    result.push({ customer, lastVisit: due.lastVisit, dueDate: due.dueDate, overdueDays, basis: due.basis });
   }
 
   // 가장 오래 지난 고객 우선
