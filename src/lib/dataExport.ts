@@ -70,18 +70,24 @@ export interface ExportSheet {
 
 const SENSITIVE_NOTICE = '⚠ 민감정보 포함 — 외부 공유 금지';
 /** 금액 열 — 엑셀에서 50000이 아니라 50,000으로 보이게 서식(#,##0)을 건다 (산출물 감사 2026-11-20) */
-const AMOUNT_HEADER = /금액|결제액|판매가|원가|가격|비용|할인액|단가|합계|잔여금액추정|누적결제/;
+const AMOUNT_HEADER = /금액|결제액|판매가|원가|가격|비용|할인액|단가|합계|잔여금액추정|누적결제|카드|현금|계좌이체|카카오페이|혼합|기타/; // 결제수단별매출의 수단 열도 금액이다 (리뷰 2026-11-20)
+/** 합계 행에서 더하지 않을 금액 열 — 단가 합은 뜻이 없다 */
+const SUM_EXCLUDE = /단가/;
 /** 세무·정산용 시트는 맨 아래에 합계 행 */
 const TOTAL_SHEETS = new Set(['payments', 'expenses', 'sales_by_method', 'product_sales']);
-function withTotalsRow(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+type SheetRow = ExportSheet['rows'][number];
+function withTotalsRow(rows: SheetRow[]): SheetRow[] {
   if (rows.length === 0) return rows;
   const keys = Object.keys(rows[0]);
-  const totals: Record<string, unknown> = {};
+  // 상태 열이 있으면 '완료' 행만 더한다 — 매출(결제) 시트의 환불·대기 행이 합계를 부풀리지 않게 (리뷰 2026-11-20)
+  const hasStatus = keys.includes('상태');
+  const counted = hasStatus ? rows.filter(r => r['상태'] === '완료') : rows;
+  const totals: SheetRow = {};
   let any = false;
   keys.forEach((k, idx) => {
     const numeric = rows.every(r => typeof r[k] === 'number' || r[k] === '' || r[k] == null) && rows.some(r => typeof r[k] === 'number');
-    if (numeric && AMOUNT_HEADER.test(k)) { totals[k] = rows.reduce((sum, r) => sum + (typeof r[k] === 'number' ? (r[k] as number) : 0), 0); any = true; }
-    else totals[k] = idx === 0 ? '합계' : '';
+    if (numeric && AMOUNT_HEADER.test(k) && !SUM_EXCLUDE.test(k)) { totals[k] = counted.reduce((sum, r) => sum + (typeof r[k] === 'number' ? (r[k] as number) : 0), 0); any = true; }
+    else totals[k] = idx === 0 ? (hasStatus ? '합계(완료만)' : '합계') : '';
   });
   return any ? [...rows, totals] : rows;
 }
@@ -317,13 +323,15 @@ function buildSheet(key: string): ExportSheet | null {
 }
 
 /** 선택한 데이터셋들의 시트 데이터 생성 (테스트 가능하도록 분리) */
-export function buildExportSheets(keys: string[], role: ExportRole = 'owner'): ExportSheet[] {
+export function buildExportSheets(keys: string[], role: ExportRole): ExportSheet[] {
   exportRole = role;
   try {
     const sheets: ExportSheet[] = [];
     for (const key of keys) {
       const sheet = buildSheet(key);
-      if (sheet) sheets.push(sheet);
+      if (!sheet) continue;
+      // 세무·정산용 시트의 합계 행은 여기서 붙여 엑셀·PDF가 같은 표를 낸다 (리뷰 2026-11-20)
+      sheets.push(TOTAL_SHEETS.has(key) && sheet.rows.length > 0 ? { ...sheet, rows: withTotalsRow(sheet.rows) } : sheet);
     }
     return sheets;
   } finally { exportRole = 'owner'; }
@@ -354,7 +362,7 @@ export interface ExportResult {
 }
 
 /** 선택 데이터셋을 하나의 xlsx 파일로 다운로드 */
-export async function exportDatasetsToXlsx(keys: string[], role: ExportRole = 'owner'): Promise<ExportResult> {
+export async function exportDatasetsToXlsx(keys: string[], role: ExportRole): Promise<ExportResult> {
   const sheets = buildExportSheets(keys, role);
   if (sheets.length === 0) throw new Error('내보낼 데이터를 선택해주세요.');
   const XLSX = await loadXlsx();
@@ -370,7 +378,7 @@ export async function exportDatasetsToXlsx(keys: string[], role: ExportRole = 'o
     counts[dataset.label] = sheet.rows.length;
 
     const rows = sheet.rows.length > 0
-      ? (TOTAL_SHEETS.has(key) ? withTotalsRow(sheet.rows) : sheet.rows)
+      ? sheet.rows
       : [{ 안내: '해당 데이터가 없습니다.' }];
     let worksheet: WorkSheet;
     const sensitive = sensitiveKeys.has(key) && sheet.rows.length > 0;

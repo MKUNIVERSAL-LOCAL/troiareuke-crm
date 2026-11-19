@@ -13,7 +13,7 @@ import { SettingsStore } from './store';
 
 const SENSITIVE_NOTICE = '민감정보 포함 — 외부 공유 금지';
 
-export async function exportDatasetsToPdf(keys: string[], role: ExportRole = 'owner'): Promise<ExportResult> {
+export async function exportDatasetsToPdf(keys: string[], role: ExportRole): Promise<ExportResult> {
   if (keys.length === 0) throw new Error('내보낼 데이터를 선택해주세요.');
 
   // 무거운 의존성(jspdf ~390KB + 한글 폰트 ~2.7MB base64)은 지연 로드

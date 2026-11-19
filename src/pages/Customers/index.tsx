@@ -1170,8 +1170,10 @@ export default function Customers() {
         const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         // 우리 내보내기 파일은 1행이 한 칸짜리 민감정보 안내문이고 머리글이 2행 — 값이 2칸 이상인 첫 행을 머리글로 삼는다 (산출물 감사 2026-11-20)
-        const grid = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, blankrows: false });
-        const headerRow = Math.max(0, grid.findIndex(r => r.filter(v => v !== '' && v != null).length >= 2));
+        // range는 시트의 절대 행 — 빈 행을 건너뛰지 않고(blankrows) !ref의 시작 행을 더해 번호를 맞춘다(빈 1행·A3부터 시작하는 파일) (리뷰 2026-11-20)
+        const startRow = XLSX.utils.decode_range(ws['!ref'] || 'A1').s.r;
+        const grid = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, blankrows: true });
+        const headerRow = startRow + Math.max(0, grid.findIndex(r => r.filter(v => v !== '' && v != null).length >= 2));
         const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '', range: headerRow });
         if (rows.length === 0) { notify('시트에 데이터가 없습니다.'); return; }
 
@@ -1187,11 +1189,12 @@ export default function Customers() {
 
         // 기존 전화번호로 중복 스킵
         const existingPhones = new Set(CustomerStore.getAll().map(c => c.phone.replace(/[^0-9]/g, '')));
-        let added = 0, skipped = 0;
+        let added = 0, skipped = 0, masked = 0;
         rows.forEach(r => {
           const name = pick(r, ['이름', '고객명', '성함', 'name']);
           let phone = pick(r, ['전화번호', '연락처', '휴대폰', '전화', 'phone']);
           if (!name || !phone) { skipped++; return; }
+          if (/\*/.test(phone)) { skipped++; masked++; return; } // 직원 계정이 내보낸 가린 번호(010-****-5678)는 새 고객으로 만들지 않는다 (리뷰 2026-11-20)
           let digits = phone.replace(/[^0-9]/g, '');
           // 엑셀 숫자 셀 함정: 앞 0이 사라진 번호(10xxxxxxxx) 복원
           if (digits.startsWith('10') && (digits.length === 9 || digits.length === 10)) {
@@ -1224,7 +1227,7 @@ export default function Customers() {
           added++;
         });
         loadAll();
-        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 중복).`);
+        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 중복${masked > 0 ? `, 가린 전화번호 ${masked}건` : ''}).`);
       } catch (err) {
         notify('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
       } finally {
