@@ -45,7 +45,7 @@ test('같은 날 예약 완료 + 시술 기록은 방문 1회, 환불은 누적 
 
   await openCustomer(page, acc);
   const desk = page.getByTestId('customers-desktop');
-  await expect(desk.getByText('방문 1회', { exact: true }).first()).toBeVisible();
+  await expect(desk.getByTestId('customer-total-visits')).toHaveText('1회');
   let c = await readCustomer(page, acc.customer);
   expect(c?.totalVisits).toBe(1); // 코어의 +1(완료) +1(시술)을 재계산이 1로
   expect(c?.totalSpent).toBe(50000);
@@ -55,7 +55,7 @@ test('같은 날 예약 완료 + 시술 기록은 방문 1회, 환불은 누적 
   await refundFirstPayment(page);
   await visibleButton(page, '매출 현황').click();
   await openCustomer(page, acc);
-  await expect(desk.getByText('0원', { exact: true }).first()).toBeVisible();
+  await expect(desk.getByTestId('customer-total-spent')).toHaveText('0원'); // 누적 결제 칸 자체 — 다른 0원(회차권 카드 등)에 가려지지 않게 testid로 (리뷰 97)
   c = await readCustomer(page, acc.customer);
   expect(c?.totalSpent).toBe(0);
   expect(c?.totalVisits).toBe(1);
@@ -64,7 +64,7 @@ test('같은 날 예약 완료 + 시술 기록은 방문 1회, 환불은 누적 
   await patchCustomer(page, acc.customer, { totalVisits: 9, lastVisitDate: '2030-01-01' });
   await page.reload();
   await openCustomer(page, acc);
-  await expect(desk.getByText('방문 1회', { exact: true }).first()).toBeVisible();
+  await expect(desk.getByTestId('customer-total-visits')).toHaveText('1회');
   c = await readCustomer(page, acc.customer);
   expect(c?.totalVisits).toBe(1);
   expect(c?.lastVisitDate).toBe('2030-01-01');

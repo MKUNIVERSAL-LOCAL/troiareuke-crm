@@ -1,5 +1,5 @@
 import { HIDE_ON_MOBILE, IS_MOBILE_APP } from '../../lib/platform';
-import { sanitizeStorageSnapshot } from '../../lib/fullBackup';
+import { sanitizeStorageSnapshot } from '../../lib/backupSanitize';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';

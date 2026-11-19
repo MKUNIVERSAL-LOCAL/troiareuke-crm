@@ -521,7 +521,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.goto('/settings');
   await page.getByRole('button', { name: '백업·보안', exact: true }).filter({ visible: true }).first().click();
   const backupCard = page.getByTestId('backup-restore-card');
-  // 비밀값(AI 키·문자 게이트웨이 키·로컬 계정·설정의 smsApiKey)을 심어 두고 백업 파일에 들어가지 않는지 본다 (96)
+  // 비밀값을 심어 두고 백업 파일에 들어가지 않는지 본다 (96). 백업 파일은 crm_<shop>_<table> 키만 모으므로 AI 키·게이트웨이 키·로컬 계정은
+  // 접두사 걸러내기의 회귀 방지이고, 실제로 규칙이 작동해야 빠지는 것은 settings.smsApiKey다. Electron 스냅샷 경로의 키 목록은 lib-units.spec(backupSanitize)에서 검증 (리뷰 97)
   await page.evaluate(() => {
     localStorage.setItem('ai_key_openai', 'sk-SECRET-TEST');
     localStorage.setItem('crm_sms_gateway_key', 'gw-SECRET-TEST');

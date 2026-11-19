@@ -997,7 +997,11 @@ export default function Customers() {
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
   // 서버 하이드레이션이 끝난 뒤에만 — 캐시로 먼저 그려진 화면에서 비어 있는 결제 목록으로 0을 서버에 쓰지 않게 (리뷰 2026-11-19)
-  const applyHealed = (healed: Customer) => { loadAll(); setSelected(prev => (prev?.id === healed.id ? healed : prev)); };
+  // 고친 고객 한 명만 목록·상세에 반영 — loadAll()은 자동 승급·전체 재조회까지 돌려 상세를 열 때마다 목록이 다시 그려졌다 (리뷰 2026-11-20)
+  const applyHealed = (healed: Customer) => {
+    setCustomers(prev => prev.map(c => (c.id === healed.id ? healed : c)));
+    setSelected(prev => (prev?.id === healed.id ? healed : prev));
+  };
   const openCustomer = (c: Customer) => {
     setSelected(c);
     setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id));
@@ -2148,11 +2152,11 @@ export default function Customers() {
               <div className="grid grid-cols-5 gap-3 mt-4 pt-4 border-t border-gray-50">
                 <div className="text-center">
                   <p className="text-xs text-gray-400">총 방문</p>
-                  <p className="text-lg font-bold text-gray-900">{selected.totalVisits}회</p>
+                  <p className="text-lg font-bold text-gray-900" data-testid="customer-total-visits">{selected.totalVisits}회</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">누적 결제</p>
-                  <p className="text-lg font-bold text-gray-900">{formatPrice(selected.totalSpent)}</p>
+                  <p className="text-lg font-bold text-gray-900" data-testid="customer-total-spent">{formatPrice(selected.totalSpent)}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">마지막 방문</p>

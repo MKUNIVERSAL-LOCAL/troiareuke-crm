@@ -15,14 +15,13 @@ import { isAuthApiConfigured } from './authApi';
 import { exportFile } from './mobileBridge';
 import { todayISO } from './format';
 import { IS_MOBILE_APP } from './platform';
+import { SETTINGS_SECRET_FIELDS, isRecord, stripSettingsSecrets } from './backupSanitize';
 
 export const BACKUP_FORMAT = 'troiareuke-crm-backup';
 export const BACKUP_VERSION = 1;
 /** 모바일 WebView localStorage 한도(대개 5MB) 아래 — 그보다 큰 파일은 쓰다가 터지므로 미리 거른다 */
 const MOBILE_MAX_BYTES = 4.5 * 1024 * 1024;
 const TABLE_NAME_RE = /^[a-z][a-z0-9_]{0,40}$/;
-/** 파일에 넣지 않는 settings 필드 */
-const SETTINGS_SECRET_FIELDS = ['smsApiKey'] as const;
 /** JSON으로 파싱되지 않는 원문 값을 담는 표식 — 복원 때 그대로 되돌린다 */
 const RAW_MARK = '__raw';
 
@@ -45,38 +44,8 @@ const TABLE_LABELS: Record<string, string> = {
 
 export const RESTORE_ALLOWED = !isAuthApiConfigured;
 
-/**
- * Electron '지금 백업'(localStorage 전체 스냅샷)에서 비밀값을 뺀다 — AI 키(ai_key_*)와 설정의 문자 API 키.
- * 백업 파일(buildBackup)과 같은 기준: 백업 폴더는 매장 PC·NAS에 그대로 놓이는 파일이다 (UX 점검 2026-11-19)
- */
-/** 백업 파일에 들어가면 안 되는 키 — 로컬 계정(평문 비밀번호)·세션 토큰·캘린더 토큰·문자 게이트웨이 키·앱 잠금 PIN. 복원 소비자가 없어 빼도 잃는 것이 없다 (리뷰 2026-11-19) */
-const SNAPSHOT_SECRET_KEYS = new Set(['troiareuke_local_users', 'troiareuke_auth_token', 'troiareuke_auth_user', 'google_calendar_token', 'google_calendar_token_expiry', 'crm_sms_gateway_key', 'crm_app_lock']);
-export function sanitizeStorageSnapshot(snapshot: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, raw] of Object.entries(snapshot)) {
-    if (key.startsWith('ai_key_') || SNAPSHOT_SECRET_KEYS.has(key)) continue;
-    if (key.endsWith('_settings')) {
-      try {
-        const v: unknown = JSON.parse(raw);
-        if (isRecord(v)) {
-          const copy: Record<string, unknown> = { ...v };
-          for (const f of SETTINGS_SECRET_FIELDS) delete copy[f];
-          out[key] = JSON.stringify(copy);
-          continue;
-        }
-      } catch { /* JSON이 아니면 원문 유지 */ }
-    }
-    out[key] = raw;
-  }
-  return out;
-}
-
 function prefix(): string {
   return `crm_${getShopId()}_`;
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 /** 현재 매장의 모든 테이블을 모아 백업 객체를 만든다 (비밀값 제외) */
@@ -91,10 +60,7 @@ export function buildBackup(appVersion: string, shopName?: string): BackupFile {
     if (raw === null) continue;
     let value: unknown;
     try { value = JSON.parse(raw); } catch { value = { [RAW_MARK]: raw }; }
-    if (table === 'settings' && isRecord(value)) {
-      value = { ...value };
-      for (const f of SETTINGS_SECRET_FIELDS) delete (value as Record<string, unknown>)[f];
-    }
+    if (table === 'settings' && isRecord(value)) value = stripSettingsSecrets(value);
     tables[table] = value;
   }
   return { format: BACKUP_FORMAT, version: BACKUP_VERSION, appVersion, shopId: getShopId(), shopName, createdAt: new Date().toISOString(), tables };
