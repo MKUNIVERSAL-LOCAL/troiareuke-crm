@@ -43,7 +43,7 @@ export async function exportDatasetsToPdf(keys: string[], role: ExportRole): Pro
     const dataset = EXPORT_DATASETS.find(d => d.key === key)!;
     const sheet = buildExportSheets([key], role)[0];
     if (!sheet) continue;
-    counts[dataset.label] = sheet.rows.length;
+    counts[dataset.label] = sheet.dataRows;
 
     if (!isFirstPage) doc.addPage();
     isFirstPage = false;
@@ -52,7 +52,7 @@ export async function exportDatasetsToPdf(keys: string[], role: ExportRole): Pro
     doc.setFont('NanumGothic');
     doc.setFontSize(15);
     doc.setTextColor(20, 30, 60);
-    doc.text(`${dataset.label} (${sheet.rows.length.toLocaleString()}건)`, 40, 44);
+    doc.text(`${dataset.label} (${sheet.dataRows.toLocaleString()}건)`, 40, 44);
     doc.setFontSize(9);
     doc.setTextColor(130, 130, 130);
     doc.text(`${shopName} · ${date} 기준`, 40, 60);
@@ -78,6 +78,8 @@ export async function exportDatasetsToPdf(keys: string[], role: ExportRole): Pro
       // autotable의 머리글 기본은 bold — NanumGothic은 normal만 등록돼 있어 명시하지 않으면 times로 폴백해 한글이 깨진다 (산출물 감사 2026-11-20)
       headStyles: { font: 'NanumGothic', fontStyle: 'normal', fillColor: [26, 58, 143], textColor: 255, fontSize: 7.5 },
       alternateRowStyles: { fillColor: [246, 248, 252] },
+      // 합계 행(데이터 행 뒤)은 굵게·연한 배경 — 세무용 시트에서 한눈에 (리뷰 2026-11-20). NanumGothic은 normal만 등록돼 굵기 대신 색으로 구분
+      didParseCell: (data) => { if (data.section === 'body' && sheet.rows.length > sheet.dataRows && data.row.index === sheet.rows.length - 1) { data.cell.styles.fillColor = [226, 232, 240]; data.cell.styles.textColor = [17, 24, 39]; } },
       margin: { left: 40, right: 40, top: 84 },
     });
   }

@@ -67,6 +67,8 @@ export const EXPORT_DATASETS: ExportDataset[] = [
 export interface ExportSheet {
   name: string;   // 엑셀 시트명 (31자 이하)
   rows: Record<string, string | number>[];
+  /** 합계 행을 뺀 데이터 행 수 — 건수 표기용 (리뷰 2026-11-20) */
+  dataRows: number;
 }
 
 const SENSITIVE_NOTICE = '⚠ 민감정보 포함 — 외부 공유 금지';
@@ -121,7 +123,7 @@ function metricsToColumns(m?: BeaconMetrics): Record<string, string | number> {
   return columns;
 }
 
-function buildSheet(key: string): ExportSheet | null {
+function buildSheet(key: string): Omit<ExportSheet, 'dataRows'> | null {
   switch (key) {
     case 'customers':
       return {
@@ -198,11 +200,12 @@ function buildSheet(key: string): ExportSheet | null {
     case 'customer_programs':
       return {
         name: '정액권잔여원장',
-        rows: CustomerProgramStore.getAll().map(cp => {
+        rows: (() => { const refundedPrograms = new Set(PaymentStore.getAll().filter(p => p.type === 'program' && p.status === 'refunded' && p.referenceId).map(p => p.referenceId as string)); return CustomerProgramStore.getAll().map(cp => {
           const total = cp.totalSessions;
           // 완료(소진·수동 완료·환불로 종료)·만료된 회차권은 선수금이 남지 않는다 — 잔여를 0으로 (금액 감사 2026-11-20)
-          const closed = cp.isCompleted || isProgramExpired(cp);
-          const refunded = PaymentStore.getAll().some(p => p.type === 'program' && p.referenceId === cp.id && p.status === 'refunded');
+          const expired = isProgramExpired(cp);
+          const closed = cp.isCompleted || expired;
+          const refunded = refundedPrograms.has(cp.id);
           const remaining = total === null ? '' : (closed ? 0 : Math.max(0, total - cp.usedSessions));
           const remainingValue = total && total > 0
             ? (closed ? 0 : Math.round((cp.pricePaid / total) * Math.max(0, total - cp.usedSessions)))
@@ -212,9 +215,9 @@ function buildSheet(key: string): ExportSheet | null {
             구매일: cp.purchaseDate, 결제금액: cp.pricePaid, 결제수단: cp.paymentMethod,
             구분: total === null ? '기간제(무제한)' : '회차권', 총회차: total ?? '', 사용회차: cp.usedSessions, 잔여회차: remaining, // 숫자 열에 '무제한' 글자를 섞지 않는다(SUM 깨짐)
             잔여금액추정: remainingValue, 만료일: cp.expiryDate || '',
-            상태: refunded ? '환불' : cp.isCompleted ? '완료' : isProgramExpired(cp) ? '만료' : '이용중', 비고: cp.notes || '',
+            상태: refunded ? '환불' : cp.isCompleted ? '완료' : expired ? '만료' : '이용중', 비고: cp.notes || '',
           };
-        }),
+        }); })(),
       };
     case 'products':
       return {
@@ -335,7 +338,8 @@ export function buildExportSheets(keys: string[], role: ExportRole): ExportSheet
       const sheet = buildSheet(key);
       if (!sheet) continue;
       // 세무·정산용 시트의 합계 행은 여기서 붙여 엑셀·PDF가 같은 표를 낸다 (리뷰 2026-11-20)
-      sheets.push(TOTAL_SHEETS.has(key) && sheet.rows.length > 0 ? { ...sheet, rows: withTotalsRow(sheet.rows) } : sheet);
+      const rows = TOTAL_SHEETS.has(key) && sheet.rows.length > 0 ? withTotalsRow(sheet.rows) : sheet.rows;
+      sheets.push({ ...sheet, rows, dataRows: sheet.rows.length });
     }
     return sheets;
   } finally { exportRole = 'owner'; }
@@ -377,9 +381,9 @@ export async function exportDatasetsToXlsx(keys: string[], role: ExportRole): Pr
 
   keys.forEach(key => {
     const dataset = EXPORT_DATASETS.find(d => d.key === key);
-    const sheet = buildSheet(key);
+    const sheet = buildExportSheets([key], role)[0]; // buildSheet 직접 호출은 역할 마스킹·합계 행을 건너뛴다 (리뷰 2026-11-20, HIGH)
     if (!dataset || !sheet) return;
-    counts[dataset.label] = sheet.rows.length;
+    counts[dataset.label] = sheet.dataRows;
 
     const rows = sheet.rows.length > 0
       ? sheet.rows
