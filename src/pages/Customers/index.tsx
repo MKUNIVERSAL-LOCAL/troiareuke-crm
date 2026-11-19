@@ -2,6 +2,7 @@ import { isImeKey } from '../../lib/ime';
 ﻿import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
+import { healCustomerStats } from '../../lib/customerStats';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
@@ -988,7 +989,13 @@ export default function Customers() {
   useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey]);
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
-  const openCustomer = (c: Customer) => { setSelected(c); setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id)); };
+  // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
+  const openCustomer = (c: Customer) => {
+    const healed = healCustomerStats(c.id);
+    if (healed) loadAll();
+    setSelected(healed ?? c);
+    setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id));
+  };
   const openFirstMatch = () => { if (filtered.length > 0) openCustomer(filtered[0]); };
   const qHandled = useRef<string | null>(null); // 같은 q로는 1회만 — 검색어를 더 치거나 목록이 갱신될 때 다시 열리지 않게 (리뷰 2026-11-18)
   useEffect(() => {

@@ -178,7 +178,15 @@ export function flushNasOutbox(): Promise<void> {
         const status = (error as AuthApiError).status;
         console.error(`[NAS] ${next.method} ${next.path} 영구 실패(${status}) — 거부 목록으로 이동:`, error);
         // 서버가 거부(400/404 — 구버전 서버가 모르는 컬렉션 등): 화면에선 이미 저장 성공으로 보였으므로 본문째 보존하고 반드시 알린다
-        const kept = writeRejected([...readRejected(), { ...next, status, rejectedAt: new Date().toISOString() }]);
+        // 같은 사용자 동작(±1초)에서 함께 만들어진 뒤 항목(예: 회차권 PUT 뒤의 결제 PUT)은 부모 없이 보내지 않고 같이 보류한다 — 재시도 때 순서대로 다시 간다 (정합성 감사 2026-11-19)
+        const t0 = Date.parse(next.createdAt);
+        const siblings = readOutbox(key).filter(item => item.id !== next.id && Math.abs(Date.parse(item.createdAt) - t0) <= 1000);
+        const rejectedAt = new Date().toISOString();
+        const kept = writeRejected([...readRejected(), { ...next, status, rejectedAt }, ...siblings.map(m => ({ ...m, status, rejectedAt }))]);
+        if (siblings.length > 0) {
+          console.error(`[NAS] 같은 동작의 후속 ${siblings.length}건도 함께 보류:`, siblings.map(m => `${m.method} ${m.path}`));
+          writeOutbox(key, readOutbox(key).filter(item => !siblings.some(m => m.id === item.id)));
+        }
         try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { permanent: true, path: next.path, status, lost: !kept } })); } catch { /* noop */ }
       }
       // 전송 중 새 항목이 추가될 수 있으므로 현재 큐를 다시 읽어 처리된 항목만 제거
