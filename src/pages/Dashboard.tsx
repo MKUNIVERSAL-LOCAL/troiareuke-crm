@@ -12,6 +12,9 @@ import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
 import { formatDate, formatWon } from '../lib/format';
 import { countPaymentUnits } from '../lib/paymentCount';
+import { growthPct } from '../lib/growth';
+import { isCountableCustomer } from '../lib/customerScope';
+import { isLowStock } from '../lib/stockRule';
 import RevisitReminderCard from '../components/RevisitReminderCard';
 import RetentionNoticeCard from '../components/RetentionNoticeCard';
 import ProgramAlertCard from '../components/ProgramAlertCard';
@@ -65,9 +68,7 @@ function getDashboardData() {
   const lastMonth = PaymentStore.summarize(lastMonthStart, lastMonthEnd);
 
   // 지난달 매출 0이면 성장률 계산 불가 — null로 두고 배지 숨김 (0% 오표시 방지)
-  const revenueGrowth: number | null = lastMonth.totalRevenue > 0
-    ? Math.round(((thisMonth.totalRevenue - lastMonth.totalRevenue) / lastMonth.totalRevenue) * 100)
-    : null;
+  const revenueGrowth = growthPct(thisMonth.totalRevenue, lastMonth.totalRevenue); // 매출 화면과 같은 규칙 (10차 #M9)
 
   // Weekly chart data (last 7 days) — 로컬 날짜 기준 자체 집계 (UTC 함정 우회)
   const weeklyRaw = getLocalDailyData(7);
@@ -78,14 +79,15 @@ function getDashboardData() {
   }));
 
   // Customers
-  const totalCustomers = customers.length;
+  const countable = customers.filter(isCountableCustomer); // 샘플·익명화 고객 제외 — 생일·리마인더·마감과 같은 기준 (10차 #M7)
+  const totalCustomers = countable.length;
   // registeredAt는 UTC ISO — 자정~오전 9시(KST) 등록이 전달로 새지 않게 로컬 월로 비교 (정합성 감사 2026-11-19)
-  const newThisMonth = customers.filter(c => { const d = new Date(c.registeredAt); return !Number.isNaN(d.getTime()) && format(d, 'yyyy-MM') === thisMonthStr; }).length;
-  const vipCount = customers.filter(c => c.grade === 'VIP').length;
+  const newThisMonth = countable.filter(c => { const d = new Date(c.registeredAt); return !Number.isNaN(d.getTime()) && format(d, 'yyyy-MM') === thisMonthStr; }).length;
+  const vipCount = countable.filter(c => c.grade === 'VIP').length;
   const totalPercent = totalCustomers > 0 ? Math.round((vipCount / totalCustomers) * 100) : 0;
 
   // Low stock
-  const lowStockProducts = products.filter(p => p.isActive !== false && p.stock <= p.minStock); // 단종(비활성) 제품은 입고 권유 대상이 아니다
+  const lowStockProducts = products.filter(isLowStock); // 제품 화면 헤더·필터와 같은 규칙 (10차 #M6)
 
   // Today's reservations (목록엔 전부 표시, 건수 집계는 취소/노쇼 제외)
   const todayReservations = ReservationStore.getByDate(todayStr);

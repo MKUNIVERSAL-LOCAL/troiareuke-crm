@@ -2,7 +2,8 @@ import { isImeKey } from '../../lib/ime';
 ﻿import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
-import { healCustomerStatsWhenReady } from '../../lib/customerStats';
+import { healCustomerStatsWhenReady, buildCustomerStatsIndex, statsFor } from '../../lib/customerStats';
+import { countPaymentUnits } from '../../lib/paymentCount';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
@@ -227,7 +228,7 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
       ) : (
         <>
           <div className="flex items-baseline justify-between px-3 py-2 bg-gray-50 rounded-lg mb-2">
-            <span className="text-xs text-gray-500">완료 {completed.length}건{payments.length !== completed.length ? ` · 전체 ${payments.length}건` : ''}</span>
+            <span className="text-xs text-gray-500">완료 {countPaymentUnits(completed)}건{payments.length !== completed.length ? ` · 전체 ${countPaymentUnits(payments)}건` : ''}</span> {/* 분할 결제 2행 = 1건 — 매출 화면과 같은 단위 (10차 #M2) */}
             <span className="text-sm font-bold text-gray-900">{formatPrice(total)}</span>
           </div>
           <div className="divide-y divide-gray-50">
@@ -369,14 +370,17 @@ export default function Customers() {
     { value: 'registered', label: '최근 등록순' },
     { value: 'spent', label: '누적 결제순' },
   ];
+  // 목록·정렬·행 표기는 기록 재계산값 — 저장 증분값은 상세를 열어 heal 하기 전까지 어긋나 보였다 (10차 숫자 점검 #H1). customers 가 바뀔 때(loadAll)마다 다시 센다
+  const statsIndex = useMemo(() => buildCustomerStatsIndex(), [customers]);
+  const statsOf = (c: Customer) => statsFor(c, statsIndex);
   const compareCustomers = (a: Customer, b: Customer): number => {
     switch (sortKey) {
       case 'name': return a.name.localeCompare(b.name, 'ko');
       case 'registered': return (b.registeredAt || '').localeCompare(a.registeredAt || '');
-      case 'spent': return (b.totalSpent || 0) - (a.totalSpent || 0) || a.name.localeCompare(b.name, 'ko');
-      default: { // 최근 방문순 — 방문 기록 없는 고객은 등록일로, 그래도 같으면 이름
-        const av = a.lastVisitDate || (a.registeredAt || '').slice(0, 10);
-        const bv = b.lastVisitDate || (b.registeredAt || '').slice(0, 10);
+      case 'spent': return statsOf(b).totalSpent - statsOf(a).totalSpent || a.name.localeCompare(b.name, 'ko');
+      default: { // 최근 방문순 — 방문 기록 없는 고객은 등록일(로컬)로, 그래도 같으면 이름
+        const av = statsOf(a).lastVisitDate || localISODate(a.registeredAt || '');
+        const bv = statsOf(b).lastVisitDate || localISODate(b.registeredAt || '');
         return bv.localeCompare(av) || a.name.localeCompare(b.name, 'ko');
       }
     }
@@ -1562,7 +1566,7 @@ export default function Customers() {
             </div>
           ) : (
             visible.map(customer => {
-              const daysSince = getDaysSince(customer.lastVisitDate);
+              const daysSince = getDaysSince(statsOf(customer).lastVisitDate ?? undefined);
               return (
                 <button
                   key={customer.id}
@@ -1584,7 +1588,7 @@ export default function Customers() {
                         {maskPhone(customer.phone, user?.role ?? 'staff')}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {customer.totalVisits}회
+                        {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {statsOf(customer).totalVisits}회
                       </p>
                     </div>
                     <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
@@ -2018,7 +2022,7 @@ export default function Customers() {
             </div>
           ) : (
             visible.map(customer => {
-              const daysSince = getDaysSince(customer.lastVisitDate);
+              const daysSince = getDaysSince(statsOf(customer).lastVisitDate ?? undefined);
               const isRisk = daysSince !== null && daysSince > 60;
               const activeProgs = activeProgCount.get(customer.id) || 0;
               return (
@@ -2042,7 +2046,7 @@ export default function Customers() {
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-xs text-slate-600 pl-10">
-                    <span>방문 {customer.totalVisits}회</span>
+                    <span>방문 {statsOf(customer).totalVisits}회</span>
                     {activeProgs > 0 && (
                       <span className="text-primary-600 font-medium">활성 {activeProgs}개</span>
                     )}

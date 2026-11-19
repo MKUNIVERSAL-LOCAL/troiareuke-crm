@@ -10,6 +10,7 @@ import { IS_MOBILE_APP } from './platform';
 import { todayISO, formatDateTime, localISODate } from './format';
 import { maskPhone } from './masking';
 import { isProgramExpired } from './customerPrograms';
+import { buildCustomerStatsIndex, statsFor } from './customerStats';
 
 import { saveOrShareFile } from './mobileBridge';
 import type { WorkBook, WorkSheet } from 'xlsx';
@@ -127,10 +128,11 @@ function metricsToColumns(m?: BeaconMetrics): Record<string, string | number> {
 
 function buildSheet(key: string): Omit<ExportSheet, 'dataRows' | 'key'> | null {
   switch (key) {
-    case 'customers':
+    case 'customers': {
+      const idx = buildCustomerStatsIndex(); // 저장 증분값이 아니라 기록 재계산값 — 화면 목록과 같은 숫자 (10차 숫자 점검 #H1)
       return {
         name: '고객',
-        rows: CustomerStore.getAll().filter(c => !c.id.startsWith('sample_')).map(c => ({
+        rows: CustomerStore.getAll().filter(c => !c.id.startsWith('sample_')).map(c => ({ ...c, ...statsFor(c, idx) })).map(c => ({
           이름: c.name, 전화번호: phoneFor(c.phone), 이메일: privateFor(c.email), 주소: privateFor(c.address),
           성별: c.gender, 생년월일: privateFor(c.birthDate), 등급: c.grade,
           피부타입: c.skinType || '', 알레르기: c.allergies || '',
@@ -139,6 +141,7 @@ function buildSheet(key: string): Omit<ExportSheet, 'dataRows' | 'key'> | null {
           유입경로: c.referralSource || '', 태그: (c.tags || []).join(', '), 메모: privateFor(c.memo),
         })),
       };
+    }
     case 'consultations':
       return {
         name: '상담내역',
@@ -305,10 +308,13 @@ function buildSheet(key: string): Omit<ExportSheet, 'dataRows' | 'key'> | null {
       };
     case 'dormant_customers': {
       const today = new Date();
+      const idx = buildCustomerStatsIndex();
       return {
         name: '휴면고객',
         rows: CustomerStore.getAll()
-          .filter(c => !c.id.startsWith('sample_') && c.lastVisitDate)
+          .filter(c => !c.id.startsWith('sample_'))
+          .map(c => ({ ...c, ...statsFor(c, idx) }))
+          .filter(c => c.lastVisitDate)
           .map(c => ({
             customer: c,
             days: Math.floor((today.getTime() - new Date(c.lastVisitDate! + 'T00:00:00').getTime()) / 86400000),

@@ -25,6 +25,7 @@ import { countPaymentUnits } from '../../lib/paymentCount';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import PaymentLinkModal from '../../components/PaymentLinkModal';
 import { isPaymentLinkAvailable, fetchPgConfig } from '../../lib/paymentLinks';
+import { growthPct } from '../../lib/growth';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -182,6 +183,7 @@ export default function Sales() {
     other: monthPayments.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0),
     total: monthPayments.reduce((s, p) => s + p.amount, 0),
     count: countPaymentUnits(monthPayments), // 분할 결제 2행 = 1건 — 마감 요약·대시보드와 같은 정의 (금액 감사 2026-11-20)
+    paidCount: countPaymentUnits(monthPayments.filter(p => p.amount > 0)), // 0원 회차권(이벤트)은 건당 평균에서 제외 (10차 #M8)
   }), [monthPayments]);
 
   const listPayments = useMemo(() => {
@@ -499,9 +501,7 @@ export default function Sales() {
     refreshExpenses();
   }
 
-  const growthRate = lastSummary.total > 0
-    ? Math.round(((thisSummary.total - lastSummary.total) / lastSummary.total) * 100)
-    : 0;
+  const growthRate = growthPct(thisSummary.total, lastSummary.total); // 대시보드와 같은 규칙 — 지난달 0 이면 null(배지 없음), 같으면 0% (10차 #M9)
 
   const [viewDate] = viewMonth.split('-');
   const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
@@ -554,7 +554,7 @@ export default function Sales() {
           매출 현황
         </button>
         <button onClick={() => setTab('list')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
-          결제 내역 ({monthAllPayments.length})
+          결제 내역 ({countPaymentUnits(monthAllPayments)})
         </button>
         <button onClick={() => setTab('expense')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${tab === 'expense' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>
           지출 내역 ({monthExpenses.length})
@@ -571,10 +571,10 @@ export default function Sales() {
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-gray-400">총 매출</p>
-                {growthRate !== 0 && (
-                  <span className={`text-xs font-medium flex items-center gap-0.5 ${growthRate > 0 ? 'text-green-700' : 'text-red-600'}`}>
-                    {growthRate > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                    {Math.abs(growthRate)}%
+                {growthRate !== null && (
+                  <span className={`text-xs font-medium flex items-center gap-0.5 ${growthRate > 0 ? 'text-green-700' : growthRate < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                    {growthRate > 0 ? <TrendingUp size={12} /> : growthRate < 0 ? <TrendingDown size={12} /> : null}
+                    {growthRate === 0 ? '전월과 같음' : `${Math.abs(growthRate)}%`}
                   </span>
                 )}
               </div>
@@ -602,7 +602,7 @@ export default function Sales() {
               <p className="text-xs text-gray-400 mb-2">결제 건수</p>
               <p className="text-2xl font-bold text-gray-900">{thisSummary.count}건</p>
               <p className="text-xs text-gray-500 mt-1">
-                건당 {thisSummary.count > 0 ? formatPrice(Math.round(thisSummary.total / thisSummary.count)) : '-'}
+                건당 {thisSummary.paidCount > 0 ? formatPrice(Math.round(thisSummary.total / thisSummary.paidCount)) : '-'}{thisSummary.count !== thisSummary.paidCount ? ` · 0원 ${thisSummary.count - thisSummary.paidCount}건 제외` : ''}
               </p>
             </div>
           </div>
@@ -704,7 +704,7 @@ export default function Sales() {
                 {getAllPaymentMethods().map(method => <option key={method} value={method}>{method}</option>)}
               </select>
             </div>
-            <span className="text-xs text-gray-400 whitespace-nowrap">{listPayments.length}건 표시</span>
+            <span className="text-xs text-gray-400 whitespace-nowrap">{countPaymentUnits(listPayments)}건 표시</span>
           </div>
           {listPayments.length === 0 ? (
             <div className="text-center py-12">
@@ -786,7 +786,7 @@ export default function Sales() {
               </div>
               <div className="px-4 py-3 bg-gray-50 rounded-b-2xl flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-600">
-                  표시 {listPayments.length}건 · 완료 합계 (환불/대기 제외)
+                  표시 {countPaymentUnits(listPayments)}건 · 완료 합계 (환불/대기 제외)
                 </span>
                 <span className="text-base font-bold text-gray-900">{formatPrice(listTotal)}</span>
               </div>

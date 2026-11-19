@@ -1,4 +1,5 @@
 ﻿import { useState, useCallback, useEffect } from 'react';
+import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
 import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus } from 'lucide-react';
@@ -64,11 +65,11 @@ export default function Products() {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
       || (p.brand || '').toLowerCase().includes(search.toLowerCase());
     const matchCategory = category === '전체' || p.category === category;
-    const matchLowStock = !lowStockOnly || p.stock <= p.minStock;
+    const matchLowStock = !lowStockOnly || isLowStock(p); // 헤더 "재고부족 N종"과 같은 규칙 — 단종 제품은 제외 (10차 #M6)
     return matchSearch && matchCategory && matchLowStock;
   });
 
-  const lowStockCount = products.filter(p => p.isActive !== false && p.stock <= p.minStock).length;
+  const lowStockCount = products.filter(isLowStock).length;
 
   const normalizedSalesSearch = salesSearch.trim().toLowerCase();
   const recentSales = [...sales]

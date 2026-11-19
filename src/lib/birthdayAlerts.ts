@@ -8,6 +8,7 @@
 import { CustomerStore, SettingsStore } from './store';
 import type { Customer } from '../types';
 import { nextBirthday } from './birthdayRule';
+import { isCountableCustomer } from './customerScope';
 
 export const BIRTHDAY_WINDOW_DAYS = 7;
 
@@ -21,7 +22,7 @@ export interface BirthdayAlert {
 export function getUpcomingBirthdays(today = new Date(), windowDays = BIRTHDAY_WINDOW_DAYS): BirthdayAlert[] {
   const out: BirthdayAlert[] = [];
   for (const c of CustomerStore.getAll()) {
-    if (c.id.startsWith('sample_') || c.isActive === false) continue;
+    if (!isCountableCustomer(c)) continue;
     const nb = nextBirthday(c.birthDate, today);
     if (nb && nb.daysUntil <= windowDays) out.push({ customer: c, ...nb });
   }

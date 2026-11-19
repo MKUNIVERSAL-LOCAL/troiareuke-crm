@@ -13,6 +13,8 @@ import { CustomerStore, TreatmentLogStore, ReservationStore, SettingsStore } fro
 import type { Customer, TreatmentLog } from '../types';
 import { getPreference, setPreference, migrateLegacyPreference } from './shopPreferences';
 import { toISO, daysBetween, computeRevisitDue } from './revisitRule';
+import { computeCustomerStats, buildCustomerStatsIndex, statsFor } from './customerStats';
+import { isCountableCustomer } from './customerScope';
 
 const LEGACY_CYCLE_KEY = 'troiareuke_revisit_cycle_days';
 export const DEFAULT_CYCLE_DAYS = 28;
@@ -60,7 +62,9 @@ export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo 
     .sort()[0] ?? null;
   const lastLog = TreatmentLogStore.getByCustomer(customerId)[0];
   const customer = CustomerStore.getAll().find(c => c.id === customerId);
-  const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: customer?.lastVisitDate, cycleDays: getRevisitCycleDays() });
+  // 마지막 방문일은 기록(완료 예약·시술) 기준 — 저장값은 과거 날짜 시술을 적어도 "오늘"로 찍혀 권장일이 늦게 잡혔다 (10차 숫자 점검 #H1)
+  const recordLast = customer ? computeCustomerStats(customer.id).lastVisitDate : null;
+  const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: recordLast ?? customer?.lastVisitDate, cycleDays: getRevisitCycleDays() });
   if (!due) return null;
   return { dueDate: due.dueDate, daysLeft: daysBetween(todayStr, due.dueDate), basis: due.basis, upcomingReservation: upcoming };
 }
@@ -72,7 +76,8 @@ export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo 
 export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
   const cycle = getRevisitCycleDays();
   const todayISO = toISO(new Date());
-  const customers = CustomerStore.getAll().filter(c => !c.id.startsWith('sample_') && c.isActive !== false); // 익명화(보존기간 경과) 고객 제외
+  const customers = CustomerStore.getAll().filter(isCountableCustomer); // 샘플·익명화(보존기간 경과) 고객 제외 — 대시보드·생일과 같은 규칙
+  const statsIndex = buildCustomerStatsIndex(); // 기록 기준 마지막 방문일 (10차 숫자 점검 #H1)
   // 한 번에 버킷 — 고객 3,000명 × 예약 8,000·시술 15,000건을 고객마다 훑으면 폰에서 포커스 복귀 때마다 1초 이상 멈춘다 (성능 감사 2026-11-18)
   const upcoming = new Set<string>();
   for (const r of ReservationStore.getAll()) if (r.date >= todayISO && r.status !== 'cancelled') upcoming.add(r.customerId);
@@ -89,7 +94,7 @@ export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
     if (upcoming.has(customer.id)) continue;
 
     const lastLog = latestLog.get(customer.id);
-    const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: customer.lastVisitDate, cycleDays: cycle }); // 상세(getCustomerRevisitInfo)와 같은 규칙
+    const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: statsFor(customer, statsIndex).lastVisitDate, cycleDays: cycle }); // 상세(getCustomerRevisitInfo)와 같은 규칙
     if (!due) continue; // 방문 이력이 전혀 없는 고객은 리마인더 대상에서 제외
     const overdueDays = daysBetween(due.dueDate, todayISO);
     if (overdueDays < minOverdueDays) continue;
