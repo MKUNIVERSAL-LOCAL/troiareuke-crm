@@ -165,7 +165,7 @@ test('마감 요약 분해 — 완료만 매출, 분할 결제 1건, 수단별 �
     '· 시술 1건 · 신규 고객 1명',
     '· 예약 6건 (완료 2 / 노쇼 1 / 취소 1 / 미처리 2)',
   ]);
-  // 아무것도 없는 날: 0원 (0건), 수단·구분·환불·지출 줄은 생략, 미처리 0은 표시하지 않음
+  // 아무것도 없는 날: 0원 (0건), 수단·구분·환불·지출 줄은 생략, 미처리 0은 표시하지 않음, 매장 이름이 비면 '매장'
   const empty = summarizeDailyClose(date, { payments: [], expenses: [], treatmentLogs: [], customers: [], reservations: [] });
-  expect(formatDailyCloseMessage(empty, '').split('\n')).toEqual(['[] 11/20(금) 마감 보고', '· 매출 0원 (0건)', '· 시술 0건 · 신규 고객 0명', '· 예약 0건 (완료 0 / 노쇼 0 / 취소 0)']);
+  expect(formatDailyCloseMessage(empty, '').split('\n')).toEqual(['[매장] 11/20(금) 마감 보고', '· 매출 0원 (0건)', '· 시술 0건 · 신규 고객 0명', '· 예약 0건 (완료 0 / 노쇼 0 / 취소 0)']);
 });

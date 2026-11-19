@@ -25,7 +25,7 @@ export function daysBetween(fromISO: string, toISO: string): number {
 }
 
 /** 둘 다 있으면 나중 날짜 — 시술기록만 보면 예약 완료(방문)로만 다녀간 고객이 '기한 지남'으로 잘못 잡힌다 (정합성 감사 2026-11-19) */
-export const later = (a?: string | null, b?: string | null): string | null => (a && b ? (a > b ? a : b) : a || b || null);
+const later = (a?: string | null, b?: string | null): string | null => (a && b ? (a > b ? a : b) : a || b || null);
 
 export interface RevisitInput {
   lastTreatmentDate?: string | null;  // 최근 시술기록의 시술일

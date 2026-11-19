@@ -23,6 +23,7 @@ export interface DailyClose {
 }
 
 export interface DailyCloseSource {
+  /** 전체 결제 — 날짜(paymentDate === date)는 여기서 걸러낸다 */
   payments: Pick<Payment, 'id' | 'referenceId' | 'paymentDate' | 'status' | 'amount' | 'paymentMethod' | 'type'>[];
   expenses: Pick<Expense, 'expenseDate' | 'amount'>[];
   treatmentLogs: Pick<TreatmentLog, 'id' | 'treatmentDate'>[];
@@ -69,11 +70,12 @@ export function summarizeDailyClose(date: string, src: DailyCloseSource): DailyC
 
 const won = (n: number) => `${n.toLocaleString()}원`;
 
-/** 마감 보고 문구 — 복사/공유용. shop 은 매장 이름(없으면 '매장') */
-export function formatDailyCloseMessage(c: DailyClose, shop: string): string {
+/** 마감 보고 문구 — 복사/공유용. shop 은 매장 이름(비어 있으면 '매장') */
+export function formatDailyCloseMessage(c: DailyClose, shop: string | undefined): string {
+  const shopLabel = shop || '매장';
   const d = new Date(c.date + 'T00:00:00');
   const label = Number.isNaN(d.getTime()) ? c.date : `${d.getMonth() + 1}/${d.getDate()}(${['일', '월', '화', '수', '목', '금', '토'][d.getDay()]})`;
-  const lines = [`[${shop}] ${label} 마감 보고`, `· 매출 ${won(c.revenue)} (${c.paymentCount}건)`];
+  const lines = [`[${shopLabel}] ${label} 마감 보고`, `· 매출 ${won(c.revenue)} (${c.paymentCount}건)`];
   if (c.byMethod.length) lines.push(`  ${c.byMethod.map(m => `${m.method} ${won(m.amount)}`).join(' / ')}`);
   const parts: string[] = [];
   if (c.byType.treatment) parts.push(`시술 ${won(c.byType.treatment)}`);

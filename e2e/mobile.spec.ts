@@ -242,8 +242,9 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(manage).toBeHidden();
   await expect(page.getByText(/만료일 \d{4}\.\d{2}\.\d{2}/).filter({ visible: true }).first()).toBeVisible();
 
-  // 고객 정보 수정이 모바일에서도 된다 (2026-11-17)
-  await page.getByRole('button', { name: '고객 정보 수정' }).click();
+  // 고객 정보 수정이 모바일에서도 된다 (2026-11-17) — 헤더 [⋯] 메뉴 안 (7차 UX 점검 99)
+  await page.getByRole('button', { name: '고객 관리 더보기' }).click();
+  await page.getByRole('menuitem', { name: '고객 정보 수정' }).click();
   const memoField = page.getByPlaceholder('특이사항 (알레르기는 위 칸에)').filter({ visible: true }).first();
   await memoField.fill('모바일에서 수정');
   await page.getByRole('textbox', { name: '태그' }).filter({ visible: true }).first().fill('민감성, #재구매'); // 고객 태그 (2026-11-18) — #은 벗겨진다
@@ -266,10 +267,20 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await page.getByLabel('빠른 메모').filter({ visible: true }).first().fill('저자극 제품 선호');
   await page.getByRole('button', { name: '메모 추가' }).filter({ visible: true }).first().click();
   await expect(page.getByText(/\[\d{4}-\d{2}-\d{2}\] 저자극 제품 선호/).filter({ visible: true }).first()).toBeVisible();
-  // 모바일 상세에도 삭제·익명화가 있다 (PC 동등성 감사 2026-11-18) — 뒤 단계가 이 고객을 쓰므로 존재만 확인
-  await expect(page.getByRole('button', { name: '고객 삭제' }).filter({ visible: true }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: '고객 익명화' }).filter({ visible: true }).first()).toBeVisible();
+  // 모바일 상세에도 삭제·익명화가 있다 (PC 동등성 감사 2026-11-18) — 헤더 [⋯] 메뉴 안, 뒤 단계가 이 고객을 쓰므로 존재만 확인
+  await page.getByRole('button', { name: '고객 관리 더보기' }).click();
+  const mobileMore = page.getByRole('menu', { name: '고객 관리 더보기' });
+  await expect(mobileMore.getByRole('menuitem', { name: '고객 삭제' })).toBeVisible();
+  await expect(mobileMore.getByRole('menuitem', { name: '고객 익명화' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(mobileMore).toHaveCount(0);
   await expect(page.getByText('삭제·익명화는 PC에서')).toHaveCount(0);
+  // 하단 고정 액션바에서 [예약 추가] → 예약 화면 → 뒤로가기 → 같은 고객 상세가 다시 열린다 (7차 UX 점검 99 — 전에는 목록으로 떨어졌다)
+  await page.getByRole('button', { name: '예약 추가', exact: true }).filter({ visible: true }).first().click();
+  await expect(page.getByRole('dialog').filter({ hasText: '예약 추가' }).first()).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('button', { name: '고객 관리 더보기' })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: '시술 기록', exact: true }).filter({ visible: true }).first()).toBeVisible();
 
   // 활동 타임라인(모바일 compact) — 예약·결제가 한 줄기에 보인다 (2026-11-18)
   const mobileTimeline = page.getByTestId('customer-timeline').filter({ visible: true }).first();

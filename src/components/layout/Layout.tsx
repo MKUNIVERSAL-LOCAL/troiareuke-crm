@@ -99,15 +99,16 @@ export default function Layout() {
         <MobileUpdateBanner />
         {/* 공지사항 배너 */}
         <AnnouncementBanner />
-        {/* 오프라인 배너 (모바일 전용 — lg:hidden) */}
-        <OfflineBanner />
         {/* 앱 잠금(PIN) — 설정에서 켠 기기에서만 (2026-11-18) */}
         <AppLockOverlay />
-        {/* 모바일 상단 헤더 */}
-        <div className="lg:hidden flex items-center gap-3 px-4 pb-3 pt-safe-3 bg-white border-b border-gray-100 sticky top-0 z-10 shadow-sm">
+        {/* 모바일 상단: 오프라인·전송 대기 배너 + 헤더를 한 덩어리로 고정 — 따로 sticky였을 때 배너(z-30)가 스크롤 중 헤더(z-10) 위를 덮었다.
+            상태바 safe-area는 덩어리 맨 위에 한 번만 (7차 UX 점검 2026-11-20) */}
+        <div className="lg:hidden sticky top-0 z-30 pt-safe bg-white shadow-sm">
+        <OfflineBanner />
+        <div className="flex items-center gap-3 px-4 pb-3 pt-3 bg-white border-b border-gray-100">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
+            className="w-11 h-11 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
             aria-label="사이드바 열기"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -124,6 +125,7 @@ export default function Layout() {
             </div>
             <p className="max-w-[220px] truncate text-sm font-bold text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
           </div>
+        </div>
         </div>
 
         {/* 화면 렌더 예외 → 흰 화면 대신 복구 UI. 라우트가 바뀌면 자동 초기화 (2026-11-17) */}

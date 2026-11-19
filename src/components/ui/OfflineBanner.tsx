@@ -112,7 +112,7 @@ export default function OfflineBanner() {
   const photoIssue = photoDirty > 0 || photoRejected > 0;
   if (!offline && pending === 0 && !sendFailed && rejected.length === 0 && lostRejected === 0 && !authExpired && quotaFallback === 'none' && !photoIssue) return null;
 
-  const base = 'sticky top-0 z-30 border-b text-xs py-2 px-4 flex items-center gap-2 flex-wrap';
+  const base = 'border-b text-xs py-2 px-4 flex items-center gap-2 flex-wrap'; // 고정(sticky)은 Layout의 모바일 상단 덩어리가 맡는다 (7차 UX 점검 2026-11-20)
   const linkBtn = 'text-xs underline px-1 py-1';
 
   if (rejected.length > 0 || lostRejected > 0) {

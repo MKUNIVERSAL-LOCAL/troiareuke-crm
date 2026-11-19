@@ -12,7 +12,7 @@ import { summarizeDailyClose, formatDailyCloseMessage, type DailyClose } from '.
 
 export function getDailyClose(date = todayISO()): DailyClose {
   return summarizeDailyClose(date, {
-    payments: PaymentStore.getByDate(date),
+    payments: PaymentStore.getAll(), // 날짜 걸러내기는 순수 모듈이 — 다른 목록과 같은 계약 (리뷰 2026-11-20)
     expenses: ExpenseStore.getAll(),
     treatmentLogs: TreatmentLogStore.getAll(),
     customers: CustomerStore.getAll(),
@@ -22,5 +22,5 @@ export function getDailyClose(date = todayISO()): DailyClose {
 
 /** 마감 보고 문구 — 복사/공유용 */
 export function buildDailyCloseMessage(c: DailyClose): string {
-  return formatDailyCloseMessage(c, SettingsStore.get().name || '매장');
+  return formatDailyCloseMessage(c, SettingsStore.get().name);
 }

@@ -3,7 +3,7 @@ import { isImeKey } from '../../lib/ime';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
 import { healCustomerStatsWhenReady } from '../../lib/customerStats';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ChevronDown, Tag,
@@ -427,6 +427,8 @@ export default function Customers() {
   const [showGradeMenu, setShowGradeMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false); // PC 상세 [⋯] — 병합·익명화·삭제 (파괴적 동작은 주 버튼 줄에서 분리, 2026-11-18)
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const [showMobileMore, setShowMobileMore] = useState(false); // 모바일 상세 헤더 [⋯] — 수정·병합·익명화·삭제 (7차 UX 점검 2026-11-20)
+  const mobileMoreRef = useRef<HTMLDivElement>(null);
 
   // 선택된 고객의 등급을 변경 (뱃지 클릭 → 드롭다운)
   function changeGrade(grade: CustomerGrade) {
@@ -621,6 +623,23 @@ export default function Customers() {
   useOverlayClose(showMoreMenu, () => setShowMoreMenu(false));
   useFocusTrap(showMoreMenu, moreMenuRef);
   useMenuKeys(showMoreMenu, moreMenuRef);
+  useOverlayClose(showMobileMore, () => setShowMobileMore(false));
+  useFocusTrap(showMobileMore, mobileMoreRef);
+  useMenuKeys(showMobileMore, mobileMoreRef);
+  // 모바일 상세에서 예약·메시지·결제 화면으로 간 뒤 뒤로가기 — 상세는 React state라 목록으로 떨어졌다. 떠나기 전에 현재 history 항목에
+  // 고객 id를 남기고(URL은 그대로), 돌아오면 그 고객을 다시 연다 (7차 UX 점검 2026-11-20)
+  const location = useLocation();
+  useEffect(() => {
+    const id = (location.state as { reopenCustomer?: string } | null)?.reopenCustomer;
+    if (!id) return;
+    const target = CustomerStore.getById(id);
+    if (target) openCustomer(target);
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+  }, [location, navigate]);
+  const leaveDetailTo = (to: string) => {
+    if (selected) navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: { reopenCustomer: selected.id } });
+    navigate(to);
+  };
   // 포커스 트랩 — 첫 입력란 포커스·Tab 순환·닫힐 때 열었던 버튼으로 복원 (키보드 접근성 감사 2026-11-18)
   const addModalRef = useRef<HTMLDivElement>(null);
   const editModalRef = useRef<HTMLDivElement>(null);
@@ -1587,16 +1606,58 @@ export default function Customers() {
             <div className="sticky top-0 bg-white border-b border-gray-100 px-4 pb-3 pt-safe-3 flex items-center gap-3 shadow-sm">
               <button
                 onClick={() => setSelected(null)}
-                className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200"
+                className="w-11 h-11 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200"
                 aria-label="뒤로가기"
               >
                 <ChevronRight size={18} className="rotate-180 text-gray-600" />
               </button>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-gray-900">{selected.name}</span>
+                  <span className="text-base font-bold text-gray-900 truncate">{selected.name}</span>
                   {gradeChip(selected, true)}
                 </div>
+              </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowMobileMore(v => !v)}
+                  aria-label="고객 관리 더보기"
+                  title="수정·병합·익명화·삭제"
+                  aria-haspopup="menu"
+                  aria-expanded={showMobileMore}
+                  className="w-11 h-11 flex items-center justify-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200"
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+                {showMobileMore && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowMobileMore(false)} />
+                    <div ref={mobileMoreRef} role="menu" aria-label="고객 관리 더보기" className="absolute right-0 mt-1 z-20 w-56 bg-white border border-gray-100 rounded-xl shadow-lg py-1">
+                      <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); openEditModal(); }}
+                        className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                        <Pencil size={15} className="text-gray-400" />고객 정보 수정
+                      </button>
+                      {!mergeBlockReason(selected) && (
+                        <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); setShowMergeModal(true); }}
+                          title="같은 사람이 두 번 등록된 경우, 다른 고객의 기록을 이 고객으로 합칩니다"
+                          className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                          <GitMerge size={15} className="text-gray-400" />중복 고객 병합
+                        </button>
+                      )}
+                      {!isAnonymized(selected) && !selected.id.startsWith('sample_') && (
+                        <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); handleAnonymizeOne(); }} aria-label="고객 익명화"
+                          title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
+                          className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                          <UserX size={15} className="text-gray-400" />고객 익명화
+                        </button>
+                      )}
+                      <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); handleDeleteCustomer(); }} aria-label="고객 삭제"
+                        className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        <Trash2 size={15} />고객 삭제
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1608,23 +1669,23 @@ export default function Customers() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">전화번호</span>
-                    <PhoneLink phone={selected.phone} role={user?.role ?? 'staff'} className="text-xs font-medium text-gray-900" />
+                    <PhoneLink phone={selected.phone} role={user?.role ?? 'staff'} className="text-sm font-medium text-gray-900 tabular-nums" />
                   </div>
                   {selected.email && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">이메일</span>
-                      <span className="text-xs font-medium text-gray-900 truncate ml-2">{selected.email}</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums truncate ml-2">{selected.email}</span>
                     </div>
                   )}
                   {selected.birthDate && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">생년월일</span>
-                      <span className="text-xs font-medium text-gray-900">{selected.birthDate}</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums">{selected.birthDate}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">피부 타입</span>
-                    <span className="text-xs font-medium text-gray-900">{selected.skinType || '-'}</span>
+                    <span className="text-sm font-medium text-gray-900 tabular-nums">{selected.skinType || '-'}</span>
                   </div>
                   {selected.allergies && (
                     <div className="flex justify-between gap-2" data-testid="allergy-row">
@@ -1635,34 +1696,34 @@ export default function Customers() {
                   {selected.address && (user?.role ?? 'staff') !== 'staff' && (
                     <div className="flex justify-between gap-2">
                       <span className="text-xs text-gray-500">주소</span>
-                      <span className="text-xs font-medium text-gray-900 text-right truncate">{selected.address}</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums text-right truncate">{selected.address}</span>
                     </div>
                   )}
                   {selected.referralSource && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">유입 경로</span>
-                      <span className="text-xs font-medium text-gray-900">{selected.referralSource}</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums">{selected.referralSource}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 방문</span>
-                    <span className="text-xs font-medium text-gray-900">{selected.totalVisits}회</span>
+                    <span className="text-sm font-medium text-gray-900 tabular-nums">{selected.totalVisits}회</span>
                   </div>
                   {selectedNoShows > 0 && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">노쇼</span>
-                      <span className="text-xs font-medium text-rose-600" data-testid="noshow-count">{selectedNoShows}회</span>
+                      <span className="text-sm font-medium text-rose-600 tabular-nums" data-testid="noshow-count">{selectedNoShows}회</span>
                     </div>
                   )}
                   {dupHint}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 결제</span>
-                    <span className="text-xs font-medium text-gray-900">{(selected.totalSpent || 0).toLocaleString()}원</span>
+                    <span className="text-sm font-medium text-gray-900 tabular-nums">{(selected.totalSpent || 0).toLocaleString()}원</span>
                   </div>
                   {selected.lastVisitDate && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">마지막 방문</span>
-                      <span className="text-xs font-medium text-gray-900">{formatDate(selected.lastVisitDate)}</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums">{formatDate(selected.lastVisitDate)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
@@ -1804,68 +1865,45 @@ export default function Customers() {
                 })()}
               </div>
 
-              <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => navigate(`/sales?new=1&customer=${selected.id}`)} />
+              <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => leaveDetailTo(`/sales?new=1&customer=${selected.id}`)} />
 
               <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
-              {/* 모바일 액션 — PC와 동일한 모달(body 포털) */}
-              <div className="grid grid-cols-2 gap-2">
-                {!isAnonymized(selected) && (
-                  <>
-                    <button
-                      onClick={() => navigate(`/reservations?new=1&customer=${selected.id}`)}
-                      className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                    >
-                      <CalendarPlus size={14} />예약 추가
-                    </button>
-                    <button
-                      onClick={() => navigate(`/messaging?customer=${selected.id}`)}
-                      className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                    >
-                      <MessageSquare size={14} />메시지
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={openTreatmentModal}
-                  className="py-2.5 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium flex items-center justify-center gap-1 whitespace-nowrap"
-                >
-                  <Scissors size={14} />시술 기록
-                </button>
-                <button
-                  onClick={() => setShowProgramModal(true)}
-                  className="py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-1 whitespace-nowrap"
-                >
-                  <Plus size={14} />회차권 등록
-                </button>
-              </div>
-              <button
-                onClick={openEditModal}
-                className="w-full py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 flex items-center justify-center gap-1.5"
-              >
-                <Pencil size={14} />고객 정보 수정
-              </button>
-              {!mergeBlockReason(selected) && (
-                <button
-                  type="button"
-                  onClick={() => setShowMergeModal(true)}
-                  className="w-full py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 flex items-center justify-center gap-1.5"
-                >
-                  <GitMerge size={14} />중복 고객 병합
-                </button>
-              )}
-              <div className="flex gap-2 pb-2">
-                {!isAnonymized(selected) && !selected.id.startsWith('sample_') && (
-                  <button type="button" onClick={handleAnonymizeOne} aria-label="고객 익명화" title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
-                    className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-medium">
-                    익명화
+            </div>
+            {/* 하단 고정 액션 — 응대 중 가장 자주 쓰는 네 가지를 엄지 범위에. 수정·병합·익명화·삭제는 헤더 [⋯] (7차 UX 점검 2026-11-20) */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-100 px-3 pt-2 pb-safe-2 flex gap-2">
+              {!isAnonymized(selected) && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => leaveDetailTo(`/reservations?new=1&customer=${selected.id}`)}
+                    className="flex-1 min-h-[48px] bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex flex-col items-center justify-center gap-0.5 whitespace-nowrap"
+                  >
+                    <CalendarPlus size={16} />예약 추가
                   </button>
-                )}
-                <button type="button" onClick={handleDeleteCustomer} aria-label="고객 삭제"
-                  className="flex-1 py-2.5 bg-red-50 text-red-700 rounded-xl text-xs font-medium flex items-center justify-center gap-1">
-                  <Trash2 size={14} />고객 삭제
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => leaveDetailTo(`/messaging?customer=${selected.id}`)}
+                    className="flex-1 min-h-[48px] bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex flex-col items-center justify-center gap-0.5 whitespace-nowrap"
+                  >
+                    <MessageSquare size={16} />메시지
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={openTreatmentModal}
+                className="flex-1 min-h-[48px] bg-[#1a3a8f] text-white rounded-xl text-xs font-semibold flex flex-col items-center justify-center gap-0.5 whitespace-nowrap"
+              >
+                <Scissors size={16} />시술 기록
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowProgramModal(true)}
+                className="flex-1 min-h-[48px] bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-medium hover:bg-gray-50 transition-colors flex flex-col items-center justify-center gap-0.5 whitespace-nowrap"
+              >
+                <Plus size={16} />회차권 등록
+              </button>
             </div>
           </div>
         )}
