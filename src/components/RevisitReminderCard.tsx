@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellRing, Copy, Check, MessageSquare, X, Share2 } from 'lucide-react';
+import { BellRing, Copy, Check, MessageSquare, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../lib/mobileBridge';
-import { useOverlayClose } from '../lib/overlayStack';
+import Modal from './ui/Modal';
 import { getRevisitDueCustomers, buildReminderMessage, type DueCustomer } from '../lib/reminderEngine';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
@@ -26,7 +26,6 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
   // 대시보드 포커스/가시성 복귀(refreshKey)마다 다시 계산 — 다른 알림 카드와 같은 규칙 (2026-11-18)
   const due = useMemo<DueCustomer[]>(() => getRevisitDueCustomers(0), [refreshKey]);
   const [draftFor, setDraftFor] = useState<DueCustomer | null>(null);
-  useOverlayClose(!!draftFor, () => setDraftFor(null)); // Android 뒤로가기·Esc
   const [copied, setCopied] = useState(false);
 
   const list = compact ? due.slice(0, 3) : due.slice(0, 8);
@@ -105,13 +104,8 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
 
       {/* 메시지 초안 모달 */}
       {draftFor && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setDraftFor(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900">{draftFor.customer.name}님 재방문 안내 초안</h2>
-              <button onClick={() => setDraftFor(null)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-            </div>
-            <div className="p-5 space-y-3">
+        <Modal isOpen onClose={() => setDraftFor(null)} title={`${draftFor.customer.name}님 재방문 안내 초안`} size="md">
+          <div className="space-y-3">
               <textarea
                 readOnly
                 value={buildReminderMessage(draftFor.customer)}
@@ -139,9 +133,8 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
                 </button>
                 <button onClick={() => setDraftFor(null)} className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">닫기</button>
               </div>
-            </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

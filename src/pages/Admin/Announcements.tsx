@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, Megaphone, CheckCircle, XCircle } from 'lucide-react';
+import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import {
   adminListAnnouncements, adminCreateAnnouncement,
@@ -233,8 +234,7 @@ export default function Announcements() {
 
       {/* 작성/수정 모달 */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
+        <AdminDialog title={editTarget ? '공지 수정' : '새 공지 작성'} onClose={() => setShowModal(false)} size="lg">
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">{editTarget ? '공지 수정' : '새 공지 작성'}</h2>
             </div>
@@ -257,7 +257,7 @@ export default function Announcements() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">제목 *</label>
-                <input
+                <input aria-label="제목"
                   className="admin-input"
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
@@ -266,7 +266,7 @@ export default function Announcements() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">내용 *</label>
-                <textarea
+                <textarea aria-label="내용"
                   className="admin-input resize-none"
                   rows={5}
                   value={form.content}
@@ -288,8 +288,7 @@ export default function Announcements() {
                 {saving ? '저장 중...' : '저장하기'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       <style>{`

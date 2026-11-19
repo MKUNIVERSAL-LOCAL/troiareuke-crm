@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import AdminDialog from './AdminDialog';
 
 /**
  * 되돌릴 수 없는 작업(계정·지점 완전 삭제)용 타이핑 확인 모달.
@@ -33,8 +34,7 @@ export default function DangerConfirmModal({ title, description, expected, expec
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={() => !busy && onClose()}>
-      <div className="bg-slate-900 border border-red-500/40 rounded-2xl w-full max-w-lg p-6 space-y-4" onClick={e => e.stopPropagation()}>
+    <AdminDialog title={title} onClose={() => !busy && onClose()} size="lg" danger closeOnBackdrop className="p-6 space-y-4">
         <h3 className="text-base font-bold text-white flex items-center gap-2">
           <AlertTriangle size={16} className="text-red-400" /> {title}
         </h3>
@@ -63,7 +63,6 @@ export default function DangerConfirmModal({ title, description, expected, expec
             {busy ? '처리 중...' : confirmLabel}
           </button>
         </div>
-      </div>
-    </div>
+    </AdminDialog>
   );
 }

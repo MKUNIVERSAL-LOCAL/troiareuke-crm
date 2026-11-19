@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } f
 import type { Branch } from '../../lib/supabase';
 import { createBranchAdmin, adminDeleteBranch, type AdminApiResult } from '../../lib/adminApi';
 import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
+import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
 import { fetchLatestChannelVersion, compareVersions, isOutdated, appModeLabel } from '../../lib/updateChannel';
 
@@ -499,8 +500,7 @@ export default function Branches() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+        <AdminDialog title={editTarget ? '지점 정보 수정' : '새 지점 추가'} onClose={() => setShowModal(false)}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">
                 {editTarget ? '지점 정보 수정' : '새 지점 추가'}
@@ -601,8 +601,7 @@ export default function Branches() {
                 {saving ? '저장 중...' : '저장하기'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       <style>{`
@@ -626,9 +625,10 @@ export default function Branches() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
+    // label로 감싸 안의 입력이 이름(implicit label)을 갖게 — 어드민 게이트가 지점 추가 창의 select-name 위반을 잡았다 (2026-11-19 53)
+    <label className="block">
+      <span className="block text-xs font-medium text-slate-400 mb-1.5">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }

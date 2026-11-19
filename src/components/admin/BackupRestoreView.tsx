@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle, RotateCcw, CheckCircle, Camera } from 'lucide-react';
+import AdminDialog from './AdminDialog';
 import type { AdminBranchOverview, AdminBackupEntry } from '../../lib/adminApi';
 
 /**
@@ -132,8 +133,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
       )}
 
       {target && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={() => !busy && setTarget(null)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <AdminDialog title={`"${target.label}" 백업으로 복원`} onClose={() => !busy && setTarget(null)} size="lg" closeOnBackdrop className="p-6 space-y-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <RotateCcw size={16} className="text-amber-400" /> "{target.label}" 백업으로 복원
             </h3>
@@ -188,8 +188,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                 {busy ? '복원 중...' : '복원 실행'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
     </div>
   );

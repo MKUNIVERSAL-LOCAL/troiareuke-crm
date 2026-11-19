@@ -6,6 +6,7 @@ import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser, 
 import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
 import { adminDeleteUser } from '../../lib/adminApi';
 import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
+import AdminDialog from '../../components/admin/AdminDialog';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
@@ -355,15 +356,14 @@ export default function AdminUsers() {
       )}
 
       {tempPwResult && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+        <AdminDialog title="임시 비밀번호 발급됨" onClose={() => setTempPwResult(null)}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">임시 비밀번호 발급됨</h2>
               <p className="text-xs text-slate-400 mt-1">{tempPwResult.email}</p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <div className="flex gap-2">
-                <input
+                <input aria-label="임시 비밀번호"
                   id="temp-pw-input"
                   readOnly
                   value={tempPwResult.password}
@@ -391,14 +391,12 @@ export default function AdminUsers() {
                 닫기
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       {/* 지점 신청 검토 모달 (2026-09-18) — 사업자등록증 사진 확인 후 승인/거부 */}
       {reviewTarget && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+        <AdminDialog title="지점 신청 검토" onClose={() => setReviewTarget(null)} size="xl" className="max-h-[90vh] flex flex-col">
             <div className="px-6 py-5 border-b border-slate-700 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-white">지점 신청 검토</h2>
@@ -450,7 +448,7 @@ export default function AdminUsers() {
               {showRejectInput && (
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5">거부 사유 * (1~500자, 지점에 다음 로그인 시 표시됩니다)</label>
-                  <textarea
+                  <textarea aria-label="거부 사유"
                     value={rejectReason}
                     onChange={e => setRejectReason(e.target.value.slice(0, 500))}
                     rows={3}
@@ -501,21 +499,19 @@ export default function AdminUsers() {
                 </>
               )}
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       {/* 사용기간 수정 모달 */}
       {periodTarget && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+        <AdminDialog title="사용기간 설정" onClose={() => setPeriodTarget(null)}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">사용기간 설정</h2>
               <p className="text-xs text-slate-400 mt-1">{periodTarget.name || ''} · {periodTarget.email}</p>
             </div>
             <div className="px-6 py-5 space-y-3">
               <label className="block text-xs font-medium text-slate-400">만료일 (그날 자정까지 사용 가능)</label>
-              <input
+              <input aria-label="만료일"
                 type="date"
                 value={periodDate}
                 onChange={e => setPeriodDate(e.target.value)}
@@ -567,8 +563,7 @@ export default function AdminUsers() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       <div className="flex items-center justify-between mb-8">
@@ -613,8 +608,7 @@ export default function AdminUsers() {
 
       {/* 관리자 초대 모달 */}
       {inviteOpen && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+        <AdminDialog title="관리자 초대" onClose={() => setInviteOpen(false)}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">관리자 초대</h2>
               <p className="text-xs text-slate-400 mt-1">관리자 콘솔 전체 권한(슈퍼어드민) 계정을 발급합니다</p>
@@ -622,7 +616,7 @@ export default function AdminUsers() {
             <div className="px-6 py-5 space-y-3">
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">이메일 *</label>
-                <input
+                <input aria-label="이메일"
                   type="email"
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
@@ -632,7 +626,7 @@ export default function AdminUsers() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">이름 (선택)</label>
-                <input
+                <input aria-label="이름"
                   value={inviteName}
                   onChange={e => setInviteName(e.target.value)}
                   placeholder="홍길동"
@@ -661,8 +655,7 @@ export default function AdminUsers() {
                 {inviteBusy ? '발급 중…' : '초대 (임시 비밀번호 발급)'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       {loadError && !loading && (

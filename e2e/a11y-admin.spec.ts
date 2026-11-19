@@ -1,6 +1,6 @@
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, becomeSuperadmin } from './helpers';
-import { scan, assertNoBlocking, type Row } from './a11y-shared';
+import { scan, assertNoBlocking, makeStep, type Row } from './a11y-shared';
 
 /**
  * 본사 어드민 콘솔 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉝) — 다크 테마라 지점 화면과 색 조합이 전혀 달라 따로 본다.
@@ -31,5 +31,17 @@ test('어드민 콘솔 화면 전부에 serious·critical 접근성 위반이 �
     await page.waitForLoadState('networkidle');
     await scan(page, route, rows);
   }
+
+  // 어드민 창(AdminDialog, 53): 지점 추가 창을 열어 놓고 분석 — role=dialog·이름·포커스 트랩에 더해 scan의 dialog-covered 검사도 받는다.
+  // 다른 어드민 창은 로컬 모드에서 열 길이 없다(관리자 초대=인증 API 필요, 공지 작성=백엔드 필요, 구독·사용기간·신청 검토=서버 행 필요) — 조용히 건너뛰는 대신 여기 기록.
+  const step = makeStep(page, rows);
+  await page.goto('/admin/branches');
+  await step('/admin/branches 지점 추가', async () => {
+    await page.getByRole('button', { name: '지점 추가' }).click();
+    await expect(page.getByRole('dialog', { name: '새 지점 추가' })).toBeVisible();
+  });
+  await page.keyboard.press('Escape'); // useOverlayClose — Esc로 닫힌다
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
   assertNoBlocking(rows);
 });
