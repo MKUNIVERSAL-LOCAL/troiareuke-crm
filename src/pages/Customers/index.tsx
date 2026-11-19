@@ -722,7 +722,7 @@ export default function Customers() {
       const list = ConsultationStore.getByCustomer(selected.id);
       setConsultations(list);
       // 상담 사진(AI 분석·비교 이미지)은 photoStore(NAS crm_photos)에 있으므로 다른 PC/앱에서 저장한 것도 받아온다
-      syncPhotosFromNas(list.map(c => `consult:${c.id}`)).then(changed => { if (changed) setConsultPhotoTick(t => t + 1); });
+      syncPhotosFromNas(list.map(c => `consult:${c.id}`)).then(({ changed }) => { if (changed) setConsultPhotoTick(t => t + 1); });
     }
   }, [selected]);
 

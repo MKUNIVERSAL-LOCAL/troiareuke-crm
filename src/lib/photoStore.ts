@@ -375,16 +375,20 @@ function emitSync(): void { try { window.dispatchEvent(new CustomEvent(PHOTO_SYN
 const REJECTED_PUSH = new Map<string, number>();
 export function dirtyPhotoCount(): number { return getDirtyKeys().length; }
 export function rejectedPhotoCount(): number { return REJECTED_PUSH.size; }
-/** 서버가 거부한 사진을 이 기기에만 두기로 함 — 전송 대기(dirty)·거부 표식을 지워 배너가 영구히 빨갛지 않게. 기록의 사진을 줄여 다시 저장하면 그때 다시 올라간다 (UX 점검 2026-11-19) */
+/**
+ * 서버가 거부한 사진을 이 기기에만 두기로 함 — 전송 대기(dirty)·거부 표식을 지워 배너가 영구히 빨갛지 않게. 기록의 사진을 줄여 다시 저장하면 그때 다시 올라간다 (UX 점검 2026-11-19).
+ * 이 사진은 서버에 없으므로 이 기기에서 로그아웃(캐시 비우기)하면 함께 사라진다 — 확인창·로그아웃 경로가 그 사실을 알린다 (리뷰 2026-11-19).
+ */
+export function keepLocalPhotoCount(): number { return getKeepLocalKeys().length; }
 export function keepRejectedPhotosLocal(): number {
   const keys = [...REJECTED_PUSH.keys()];
   for (const key of keys) { setKeepLocal(key, true); setDirty(key, false); REJECTED_PUSH.delete(key); }
   if (keys.length > 0) emitSync();
   return keys.length;
 }
-// 마지막 syncPhotosFromNas에서 서버 조회가 한 번이라도 실패했는지 — 화면이 "서버 사진을 못 받아 이 기기 사진만 보인다"고 말할 수 있게 (UX 점검 2026-11-19)
-let lastSyncFetchFailed = false;
-export function lastPhotoSyncFailed(): boolean { return lastSyncFetchFailed; }
+/** syncPhotosFromNas 결과 — fetchFailed: 서버 조회가 한 번이라도 실패해 로컬 캐시만 보이는 상태(호출자가 "이 기기 사진만 보인다"고 안내). 전역 플래그는 동시 동기화(상담·시술)가 서로 지워 호출자별로 돌려준다 (리뷰 2026-11-19) */
+export interface PhotoSyncResult { changed: boolean; fetchFailed: boolean }
+const SYNC_NOOP: PhotoSyncResult = { changed: false, fetchFailed: false };
 /** 전송 실패분(dirty) 재전송 — 연결 복구(자동, 거부분 제외)·배너 [다시 시도](거부분 포함) */
 export async function retryDirtyPhotos(includeRejected = false): Promise<void> {
   if (!isAuthApiConfigured) return;
@@ -461,18 +465,17 @@ function pushToNas(entityKey: string, photos: PhotoEntry[]): void {
  *  - dirty(푸시 실패분 보유) 키 → 로컬이 정본, 서버로 재푸시
  *  - 서버에 행이 있으면(빈 배열 = 삭제 tombstone 포함) 서버가 정본
  *  - 서버에 행이 없고 로컬에 사진이 있으면 로컬을 올린다 (최초 마이그레이션)
- * @returns 로컬 캐시가 바뀌었으면 true
+ * @returns changed: 로컬 캐시가 바뀌었음 / fetchFailed: 서버 조회 실패로 로컬 캐시만 보이는 상태
  */
-export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> {
-  if (!isAuthApiConfigured) return false;
-  lastSyncFetchFailed = false; // 이른 return들보다 앞에 — 기록 없는 고객을 열어도 지난 실패가 남지 않게 (리뷰 2026-11-19)
+export async function syncPhotosFromNas(entityKeys: string[]): Promise<PhotoSyncResult> {
+  if (!isAuthApiConfigured) return SYNC_NOOP;
   await photoCacheReady; // 이관 전에 빈 로컬을 정본으로 올리지 않도록
 
   // 삭제 tombstone 재전송 — 삭제된 엔티티는 entityKeys에 없으므로 여기서 재시도
   for (const key of getTombstoneKeys()) {
     pushToNas(key, []);
   }
-  if (entityKeys.length === 0) return false;
+  if (entityKeys.length === 0) return SYNC_NOOP;
 
   const dirty = new Set(getDirtyKeys());
   const evicted = new Set(getEvictedKeys());
@@ -490,9 +493,10 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
   }
   const keepLocal = new Set(getKeepLocalKeys());
   const cleanKeys = entityKeys.filter(k => !dirty.has(k) && !keepLocal.has(k)); // 이 기기에만 보관하는 키는 서버본으로 덮어쓰지 않는다
-  if (cleanKeys.length === 0) return false;
+  if (cleanKeys.length === 0) return SYNC_NOOP;
 
   let changed = false;
+  let fetchFailed = false;
 
   // 배치 조회 (500키 단위) — 시술기록 수백 건에서 왕복 폭주 방지
   for (let i = 0; i < cleanKeys.length; i += 500) {
@@ -505,8 +509,8 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
       );
       entries = response.entries;
     } catch {
-      lastSyncFetchFailed = true;
-      continue; // 네트워크 실패 — 로컬 캐시 그대로 사용(호출 쪽은 lastPhotoSyncFailed()로 안내)
+      fetchFailed = true;
+      continue; // 네트워크 실패 — 로컬 캐시 그대로 사용(호출 쪽은 fetchFailed로 안내)
     }
 
     for (const entityKey of chunk) {
@@ -527,7 +531,7 @@ export async function syncPhotosFromNas(entityKeys: string[]): Promise<boolean> 
     }
   }
 
-  return changed;
+  return { changed, fetchFailed };
 }
 
 /**
@@ -546,12 +550,13 @@ export function getPhotos(entityKey: string): PhotoEntry[] {
 function evictPhotoCache(keepEntityKey?: string): number {
   if (!isAuthApiConfigured || backend !== 'ls') return 0; // IndexedDB 백엔드는 용량 여유가 커서 비우지 않는다
   const dirty = new Set(getDirtyKeys());
+  const keepLocal = new Set(getKeepLocalKeys()); // 이 기기에만 보관하는 사진은 서버에 없다 — 비우면 유일본이 사라진다 (리뷰 2026-11-19)
   let evicted = 0;
   for (const key of Object.keys(localStorage)) {
     if (!key.startsWith(PREFIX) || key === DIRTY_KEY) continue; // dirty 목록 자체는 PREFIX로 시작하는 메타키
     const entityKey = key.slice(PREFIX.length);
-    // 현재 저장 중·미전송(dirty)·전송 진행 중 엔티티는 서버에 원본이 확정되지 않았으므로 비우지 않는다
-    if (entityKey === keepEntityKey || dirty.has(entityKey) || PENDING_PUSH.has(entityKey)) continue;
+    // 현재 저장 중·미전송(dirty)·전송 진행 중·이 기기 보관 엔티티는 서버에 원본이 없으므로 비우지 않는다
+    if (entityKey === keepEntityKey || dirty.has(entityKey) || PENDING_PUSH.has(entityKey) || keepLocal.has(entityKey)) continue;
     try {
       localStorage.removeItem(key);
       setEvicted(entityKey, true);

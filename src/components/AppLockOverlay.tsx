@@ -7,7 +7,7 @@ import { isAuthApiConfigured } from '../lib/authApi';
 import { IS_MOBILE_APP } from '../lib/platform';
 import { resetFeatureFlags } from '../lib/featureFlags';
 import { setAppLocked } from '../lib/overlayStack';
-import { clearLocalPhotoCacheForLogout } from '../lib/photoStore';
+import { clearLocalPhotoCacheForLogout, keepLocalPhotoCount } from '../lib/photoStore';
 import { notify } from '../lib/notify';
 
 const MAX_FAILS = 5;
@@ -119,6 +119,9 @@ export default function AppLockOverlay() {
   const handleLogout = async () => {
     // 로그아웃이 '끝난 뒤'에만 잠금을 푼다 — 먼저 풀면 오프라인·서버 장애로 logout이 실패했을 때 로그인 상태 그대로 고객 화면이 열린다 (4차 UX 점검 2026-11-19)
     if (!isAuthApiConfigured) { disableAppLock(); setLocked(false); return; }
+    // 서버에 없는 '이 기기에만 보관' 사진은 로그아웃의 캐시 비우기로 사라진다 — 알고 진행하게 (리뷰 2026-11-19)
+    const keepLocal = keepLocalPhotoCount();
+    if (keepLocal > 0 && !window.confirm(`이 기기에만 보관한 사진이 든 기록 ${keepLocal}건이 로그아웃하면 사라집니다(서버에는 없음). 계속할까요?`)) return;
     try {
       resetFeatureFlags();
       clearLocalPhotoCacheForLogout();

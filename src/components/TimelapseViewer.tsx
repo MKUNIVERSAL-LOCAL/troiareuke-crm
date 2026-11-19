@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Images, ArrowLeftRight, Download, Copy, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { TreatmentLogStore } from '../lib/store';
-import { syncPhotosFromNas, lastPhotoSyncFailed, PHOTO_ANGLES, type PhotoAngle } from '../lib/photoStore';
+import { syncPhotosFromNas, PHOTO_ANGLES, type PhotoAngle } from '../lib/photoStore';
 import { usePhotoCacheVersion } from '../hooks/usePhotoCache';
 import {
   collectCustomerPhotos, photoCaption, daysBetween,
@@ -27,8 +27,8 @@ export default function TimelapseViewer({ customerId, customerName, onSynced }: 
   useEffect(() => {
     const logs = TreatmentLogStore.getByCustomer(customerId);
     setSyncFailed(false);
-    syncPhotosFromNas(logs.map(log => `treatment:${log.id}`)).then(changed => {
-      if (lastPhotoSyncFailed()) setSyncFailed(true); // 다른 기기에서 찍은 사진이 그냥 없는 것처럼 보이지 않게 (UX 점검 2026-11-19)
+    syncPhotosFromNas(logs.map(log => `treatment:${log.id}`)).then(({ changed, fetchFailed }) => {
+      if (fetchFailed) setSyncFailed(true); // 다른 기기에서 찍은 사진이 그냥 없는 것처럼 보이지 않게 (UX 점검 2026-11-19)
       if (!changed) return;
       setPhotoVersion(v => v + 1);
       onSynced?.(); // 부모(고객 상세 썸네일 등)도 같은 캐시를 다시 읽게

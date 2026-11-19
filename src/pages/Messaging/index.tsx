@@ -45,7 +45,7 @@ function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().m
 function segmentFilter(seg: Segment, revisitIds?: Set<string>): (c: Customer) => boolean {
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
   if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
-  return SEGMENT_FILTERS[seg] ?? (() => false); // 모르는 세그먼트는 '아무에게도' — 전체 발송 사고 방지
+  return Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg) ? SEGMENT_FILTERS[seg] : () => false; // 모르는 세그먼트('constructor' 같은 프로토타입 키 포함)는 '아무에게도' — 전체 발송 사고 방지
 }
 
 const SEGMENT_FILTERS: Record<string, (c: Customer) => boolean> = {

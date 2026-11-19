@@ -67,7 +67,7 @@ export default function Treatments() {
     loadLogs();
     // 다른 기기에서 올린 사진을 NAS에서 내려받아 반영
     const keys = TreatmentLogStore.getAll().map(t => `treatment:${t.id}`);
-    syncPhotosFromNas(keys).then(changed => {
+    syncPhotosFromNas(keys).then(({ changed }) => {
       if (changed) setTreatmentLogs([...TreatmentLogStore.getAll()]);
     });
   }, []);
