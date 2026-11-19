@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, isNearMidnightSeoul, visibleButton } from './helpers';
 
 /**
  * 모바일 폭 예약 흐름 E2E (Pixel 7, 2026-11-19 ㊵) — PC 스펙(reservations.spec)과 같은 집계를 모바일 카드 목록·상세 창에서 확인한다.
@@ -10,12 +10,11 @@ const acc = makeAccount('RM');
 
 test('모바일 폭에서도 예약 완료·노쇼·취소·복구가 대시보드·직원 실적·고객 노쇼 횟수에 맞게 반영된다', async ({ page }) => {
   test.slow();
-  const now = new Date();
-  test.skip(now.getHours() === 23 && now.getMinutes() >= 50, '자정 경계 — 예약을 만든 날과 대시보드의 오늘이 달라진다');
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 예약을 만든 날과 대시보드의 오늘이 달라진다');
   page.on('dialog', d => (d.message().includes('이미 예약이 있습니다') ? d.dismiss() : d.accept()));
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
-  const vis = (name: string | RegExp) => page.getByRole('button', typeof name === 'string' ? { name, exact: true } : { name }).filter({ visible: true }).first();
+  const vis = (name: string | RegExp) => visibleButton(page, name);
   const addDialog = page.getByRole('dialog', { name: '예약 추가' });
   const detail = page.getByRole('dialog', { name: '예약 상세' });
   const cards = page.getByTestId('reservation-card').filter({ visible: true });
@@ -34,8 +33,7 @@ test('모바일 폭에서도 예약 완료·노쇼·취소·복구가 대시보�
     await expect(detail).toBeVisible();
   };
 
-  await page.goto('/reservations');
-  await vis('오늘').click();
+  await page.goto('/reservations'); // 모바일 탭 기본값이 '오늘'
   await addReservation('10:00');
   await addReservation('12:00');
   await addReservation('14:00');

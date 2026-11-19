@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, isNearMidnightSeoul } from './helpers';
 
 /**
  * 기간제(무제한) 프로그램 흐름 E2E (로컬 모드, 2026-11-19 ㉘) — 회차권과 달리 횟수 제한이 없는 프로그램이
@@ -11,8 +11,7 @@ const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 
 test('기간제 프로그램은 횟수 제한 없이 기록되고 만료일·완료 처리·매출이 맞다', async ({ page }) => {
   test.slow();
-  const now = new Date();
-  test.skip(now.getHours() === 23 && now.getMinutes() >= 50, '자정 경계 — 만료일(오늘+90) 계산이 날짜를 넘긴다');
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 만료일(오늘+90) 계산이 날짜를 넘긴다');
   page.on('dialog', d => d.accept());
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);

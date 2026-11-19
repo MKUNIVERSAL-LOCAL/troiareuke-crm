@@ -164,3 +164,18 @@ export async function pickCustomer(page: Page, name?: string, scope?: Locator) {
   await option.click();
   await expect(box).toHaveValue(name ? new RegExp(name) : /\S/);
 }
+
+/**
+ * 자정 10분 전 — 날짜 경계를 건너는 스펙(예약을 만든 날과 대시보드의 오늘)은 건너뛴다.
+ * 브라우저는 Asia/Seoul(playwright.config)인데 러너(CI는 UTC)의 시계로 재면 어긋나므로 서울 시각으로 판단한다 (리뷰 2026-11-19).
+ */
+export function isNearMidnightSeoul(now = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
+  const get = (t: string) => Number(parts.find(p => p.type === t)?.value ?? 0);
+  return get('hour') % 24 === 23 && get('minute') >= 50;
+}
+
+/** 같은 이름의 PC·모바일 버튼이 둘 다 DOM에 있을 때 보이는 쪽 — 문자열 이름은 기본 정확 일치('결제 등록'이 '결제 등록하기'에 섞이지 않게) */
+export function visibleButton(page: Page, name: string | RegExp, exact = true): Locator {
+  return page.getByRole('button', typeof name === 'string' ? { name, exact } : { name }).filter({ visible: true }).first();
+}

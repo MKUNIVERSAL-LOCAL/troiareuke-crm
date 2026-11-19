@@ -43,7 +43,7 @@ test('회차권 판매 → 시술 차감 → 잔여 회차, 제품 판매 → �
   // ── 시술 기록에 회차권 연결 → 저장 뒤 시술 목록에 남고(결제 화면으로 가지 않음) 사용 1회 / 잔여 9회 ──
   await page.goto('/treatments?new=1');
   await pickCustomer(page, acc.customer);
-  await page.getByLabel('프로그램 연결').selectOption({ label: '수분관리 10회권 (0/10회)' });
+  await expect(page.getByLabel('프로그램 연결').locator('option:checked')).toHaveText('수분관리 10회권 (0/10회)'); // 쓸 수 있는 회차권 1개 → 자동 연결
   await page.getByText('테스트관리', { exact: true }).filter({ visible: true }).first().click();
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);

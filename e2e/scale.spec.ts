@@ -44,9 +44,9 @@ test('고객 2,000명·시술 6,000건·예약 3,000건·결제 4,000건에서�
     }));
     const payments = Array.from({ length: PAYMENTS }, (_, i) => ({
       id: `scale_p_${i}`, shopId, customerId: `scale_c_${i % CUSTOMERS}`, customerName: `대량고객${i % CUSTOMERS}`,
-      paymentDate: day(-(i % 365)), type: i % 3 === 0 ? 'product' : 'single_treatment', typeLabel: i % 3 === 0 ? '제품 판매' : '단건 시술',
+      paymentDate: day(-(i % 365)), type: i % 3 === 0 ? 'product' : i % 3 === 1 ? 'program' : 'single_treatment', typeLabel: i % 3 === 0 ? '제품 판매' : i % 3 === 1 ? '프로그램' : '단건 시술',
       amount: 50000 + (i % 5) * 10000, paymentMethod: i % 2 === 0 ? '카드' : '현금', discountAmount: 0,
-      status: i % 50 === 0 ? 'refunded' : 'completed', createdAt: new Date().toISOString(),
+      status: i % 50 === 0 ? 'refunded' : 'completed', createdAt: `${day(-(i % 365))}T${String(10 + (i % 8)).padStart(2, '0')}:00:00.000Z`,
     }));
     localStorage.setItem(`${prefix}_customers`, JSON.stringify(customers));
     localStorage.setItem(`${prefix}_treatment_logs`, JSON.stringify(treatments));
@@ -121,14 +121,16 @@ test('고객 2,000명·시술 6,000건·예약 3,000건·결제 4,000건에서�
   await expect(page.getByTestId('staff-performance').locator('tbody tr').first()).toBeVisible({ timeout: 15_000 });
   const staffMs = Date.now() - t0;
 
-  console.log(`[scale] week ${weekMs}ms, combo ${comboMs}ms, sales ${salesMs}ms, pnl ${pnlMs}ms, staff ${staffMs}ms`);
+  // 측정값은 단언보다 먼저 전부 남긴다 — 하나가 예산을 넘겨도 나머지 숫자가 보이게 (리뷰 2026-11-19)
+  const perf = `[scale] customers ${customersMs}ms, search ${searchMs}ms, treatments ${treatmentsMs}ms, reservations(list) ${reservationsMs}ms, dashboard ${dashboardMs}ms, week ${weekMs}ms, combo ${comboMs}ms, sales ${salesMs}ms, pnl ${pnlMs}ms, staff ${staffMs}ms`;
+  console.log(perf);
+  test.info().annotations.push({ type: 'perf', description: perf });
   expect(weekMs, '주간 예약표 첫 표시').toBeLessThan(10_000);
   expect(comboMs, '예약 추가 고객 검색 반응').toBeLessThan(5_000);
   expect(salesMs, '매출 현황 첫 표시').toBeLessThan(10_000);
   expect(pnlMs, '손익계산서 전환').toBeLessThan(5_000);
   expect(staffMs, '직원 실적 첫 표시').toBeLessThan(10_000);
-
-  console.log(`[scale] customers ${customersMs}ms, search ${searchMs}ms, treatments ${treatmentsMs}ms, reservations(list) ${reservationsMs}ms, dashboard ${dashboardMs}ms`);
+  expect(reservationsMs, '예약 목록 첫 표시').toBeLessThan(10_000);
   // CI 변동을 감안한 느슨한 상한 — 회귀(수십 초 멈춤)만 잡는다
   expect(customersMs, '고객 목록 첫 표시').toBeLessThan(10_000);
   expect(searchMs, '고객 검색 반응').toBeLessThan(5_000);

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, visibleButton } from './helpers';
 
 /**
  * 모바일 폭 회차권·제품 흐름 E2E (Pixel 7, 2026-11-19 ㊴) — PC 스펙(programs-products.spec)과 같은 숫자를 모바일 화면(전체 화면 고객 상세,
@@ -14,7 +14,7 @@ test('모바일 폭에서도 회차권 판매 → 시술 차감 → 제품 판�
   page.on('dialog', d => d.accept());
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
-  const vis = (name: string | RegExp, exact = true) => page.getByRole('button', typeof name === 'string' ? { name, exact } : { name }).filter({ visible: true }).first();
+  const vis = (name: string | RegExp) => visibleButton(page, name);
   const openCustomer = async () => {
     await page.goto('/customers');
     await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, isNearMidnightSeoul } from './helpers';
 
 /**
  * 예약 흐름 E2E (로컬 모드) — 예약 3건(완료·노쇼·취소)이 대시보드 집계, 직원 월 실적, 고객 노쇼 횟수에 숫자로 맞게 반영되는지 (2026-11-19).
@@ -29,8 +29,7 @@ async function openDetail(page: import('@playwright/test').Page, startTime: stri
 
 test('예약 완료·노쇼·취소가 대시보드·직원 실적·고객 노쇼 횟수에 맞게 반영된다', async ({ page }) => {
   test.slow();
-  const now = new Date();
-  test.skip(now.getHours() === 23 && now.getMinutes() >= 50, '자정 경계 — 예약을 만든 날과 대시보드의 오늘이 달라진다');
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 예약을 만든 날과 대시보드의 오늘이 달라진다');
   // 겹침(이중예약) 경고만 거절하고 나머지 confirm(휴무일·노쇼·취소)은 수락
   page.on('dialog', d => (d.message().includes('이미 예약이 있습니다') ? d.dismiss() : d.accept()));
   await signupAndOnboard(page, acc);
@@ -101,7 +100,7 @@ test('예약 완료·노쇼·취소가 대시보드·직원 실적·고객 노�
 
   // ── 대시보드: 오늘 예약은 노쇼·취소를 뺀 활성 1건, 부제 "완료 1건 · 남은 0건 · 노쇼 1건" ──
   await page.goto('/');
-  const todayCard = page.getByTestId('stat-card').filter({ hasText: '오늘 예약' }).first();
+  const todayCard = page.getByTestId('stat-card').filter({ hasText: '오늘 예약' }).filter({ visible: true }).first(); // 모바일 카드도 DOM에 있어 보이는 쪽만 (리뷰 2026-11-19)
   await expect(todayCard.getByTestId('stat-value')).toHaveText('1건');
   await expect(todayCard.getByTestId('stat-subtitle')).toHaveText('완료 1건 · 남은 0건 · 노쇼 1건');
 

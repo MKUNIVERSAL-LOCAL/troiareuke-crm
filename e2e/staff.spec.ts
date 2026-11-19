@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, isNearMidnightSeoul } from './helpers';
 
 /**
  * 직원 흐름 E2E (로컬 모드, 2026-11-19 ㉙) — 직원을 추가하면 예약 담당 선택지에 바로 뜨고, 완료 예약이 실적 표에 잡히며,
@@ -10,8 +10,7 @@ const acc = makeAccount('ST');
 
 test('직원 추가 → 예약 담당 → 실적 → 이름 변경 → 퇴사·복직이 맞게 반영된다', async ({ page }) => {
   test.slow();
-  const now = new Date();
-  test.skip(now.getHours() === 23 && now.getMinutes() >= 50, '자정 경계 — 예약을 만든 날과 실적의 이번 달이 달라질 수 있다');
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 예약을 만든 날과 실적의 이번 달이 달라질 수 있다');
   page.on('dialog', d => d.accept());
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);

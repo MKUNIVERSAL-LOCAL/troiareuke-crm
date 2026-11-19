@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, isNearMidnightSeoul } from './helpers';
 
 /**
  * 회차권 만료 흐름 E2E (로컬 모드, 2026-11-19 ㉗) — 구매일을 과거로 등록해 만료된 회차권이 '만료'로 표시되고,
@@ -12,8 +12,7 @@ const localISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).pad
 
 test('만료된 회차권은 차감할 수 없고, 연장하면 다시 쓸 수 있다', async ({ page }) => {
   test.slow();
-  const now = new Date();
-  test.skip(now.getHours() === 23 && now.getMinutes() >= 50, '자정 경계 — 연장 만료일(오늘+30) 계산이 날짜를 넘긴다');
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 연장 만료일(오늘+30) 계산이 날짜를 넘긴다');
   page.on('dialog', d => d.accept());
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);

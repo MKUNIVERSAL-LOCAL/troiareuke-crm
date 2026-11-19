@@ -174,7 +174,7 @@ export default function Dashboard() {
         {/* StatCards 2열 */}
         <div className="grid grid-cols-2 gap-3">
           {salesOn && (
-            <button type="button" onClick={() => navigate('/sales')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
+            <button type="button" onClick={() => navigate('/sales')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">이번 달 총 매출</p>
               <p className="text-lg font-bold text-gray-900 mt-1">{Math.round(thisMonth.totalRevenue / 10000)}만원</p>
               <p className="text-xs text-gray-400 mt-0.5">{revenueGrowth === null ? '전월 매출 없음' : `전월 대비 ${revenueGrowth > 0 ? '+' : ''}${revenueGrowth}%`}</p>
@@ -188,14 +188,14 @@ export default function Dashboard() {
             </button>
           )}
           {customersOn && (
-            <button type="button" onClick={() => navigate('/customers')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
+            <button type="button" onClick={() => navigate('/customers')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">전체 고객</p>
               <p className="text-lg font-bold text-gray-900 mt-1">{totalCustomers}명</p>
               <p className="text-xs text-gray-400 mt-0.5">이번 달 신규 {newThisMonth}명</p>
             </button>
           )}
           {customersOn && (
-            <button type="button" onClick={() => navigate('/customers')} className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
+            <button type="button" onClick={() => navigate('/customers')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">VIP 고객</p>
               <p className="text-lg font-bold text-gray-900 mt-1">{vipCount}명</p>
               <p className="text-xs text-gray-400 mt-0.5">전체의 {totalPercent}%</p>

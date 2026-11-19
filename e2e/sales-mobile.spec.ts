@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, visibleButton } from './helpers';
 
 /**
  * 모바일 폭 돈 흐름 E2E (Pixel 7, 2026-11-19 ㊳) — PC 스펙(sales.spec)과 같은 숫자를 모바일 카드 목록·바텀시트 창에서 확인한다.
@@ -14,7 +14,7 @@ test('모바일 폭에서도 결제 → 지출 → 손익계산서 → 환불이
   page.on('dialog', d => d.accept());
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
-  const vis = (name: string | RegExp) => page.getByRole('button', { name }).filter({ visible: true }).first();
+  const vis = (name: string | RegExp) => visibleButton(page, name);
 
   // ── 결제 50,000원 ──
   await page.goto('/sales');
