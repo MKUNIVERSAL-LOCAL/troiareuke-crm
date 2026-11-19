@@ -13,7 +13,7 @@ import PhoneLink from '../../components/ui/PhoneLink';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore, TreatmentLogStore } from '../../lib/store';
+import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
 import type { Reservation, Staff } from '../../types';
@@ -32,11 +32,38 @@ import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 
-const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
-/** 지금 이후의 첫 시간대 — 오늘 예약을 추가할 때 기본값 (입력 속도 감사 2026-11-18). 영업 종료 뒤면 마지막 시간대 */
-function nextTimeSlot(now = new Date()): string {
-  const hh = `${String(now.getMinutes() > 0 ? now.getHours() + 1 : now.getHours()).padStart(2, '0')}:00`;
-  return TIME_SLOTS.find(t => t >= hh) ?? TIME_SLOTS[TIME_SLOTS.length - 1];
+/** 예약표 시간 범위 — 설정 > 영업시간의 가장 이른 시작·가장 늦은 종료를 덮는 정시 범위. 기본 09:00~21:00, 영업시간이 더 넓으면 그만큼 확장
+ *  (고정 09~21이라 08:00·21:30 예약을 잡을 수 없고 범위 밖 일정이 잘리던 것, 4차 UX 점검 2026-11-19) */
+function gridRangeFromSettings(): { startMin: number; endMin: number } {
+  let start = 9 * 60, end = 21 * 60;
+  const bh = SettingsStore.get().businessHours || {};
+  for (const h of Object.values(bh)) {
+    if (!h || h.isOff) continue;
+    const o = timeToMin(h.open), c = timeToMin(h.close);
+    if (!Number.isNaN(o)) start = Math.min(start, Math.floor(o / 60) * 60);
+    if (!Number.isNaN(c)) end = Math.max(end, Math.ceil(c / 60) * 60);
+  }
+  end = Math.min(Math.max(end, start + 60), 24 * 60);
+  return { startMin: start, endMin: end };
+}
+const minToTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+/** 표의 시간 행(정시) */
+function hourSlots(range: { startMin: number; endMin: number }): string[] {
+  const out: string[] = [];
+  for (let m = range.startMin; m < range.endMin; m += 60) out.push(minToTime(m));
+  return out;
+}
+/** 예약 추가의 시작 시간 선택지(30분 단위) */
+function halfHourSlots(range: { startMin: number; endMin: number }): string[] {
+  const out: string[] = [];
+  for (let m = range.startMin; m < range.endMin; m += 30) out.push(minToTime(m));
+  return out;
+}
+/** 지금 이후의 첫 30분 칸 — 오늘 예약을 추가할 때 기본값 (입력 속도 감사 2026-11-18). 영업 종료 뒤면 마지막 칸 */
+function nextTimeSlot(slots: string[], now = new Date()): string {
+  const rounded = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30;
+  const hh = minToTime(Math.min(rounded, 23 * 60 + 30));
+  return slots.find(t => t >= hh) ?? slots[slots.length - 1];
 }
 /** 고객의 활성 회차권 잔여 — 예약 추가·상세에서 바로 보이게 */
 function ProgramBalance({ customerId }: { customerId: string }) {
@@ -55,9 +82,7 @@ function ProgramBalance({ customerId }: { customerId: string }) {
 
 // ── 스케줄러 시간 비례 렌더링 ─────────────────────────────────────
 // 예약 블록을 관리시간(startTime~endTime)에 비례한 높이로 그리기 위한 유틸.
-// 그리드 범위: 09:00 ~ 21:00 (마지막 슬롯 20:00의 끝)
-const GRID_START_MIN = 9 * 60;
-const GRID_END_MIN = 21 * 60;
+// 그리드 범위는 gridRangeFromSettings()로 뷰마다 계산해 넘긴다 (기본 09:00 ~ 21:00)
 
 function timeToMin(t: string): number {
   const [h, m] = String(t || '').split(':').map(Number);
@@ -74,19 +99,19 @@ interface ScheduleEvent<T> {
 }
 
 /** 하루치 이벤트에 겹침 레인을 배정. 겹치는 예약은 가로로 분할해 나란히 표시. */
-function layoutDayEvents<T>(raw: { item: T; startMin: number; endMin: number }[]): ScheduleEvent<T>[] {
+function layoutDayEvents<T>(raw: { item: T; startMin: number; endMin: number }[], range: { startMin: number; endMin: number }): ScheduleEvent<T>[] {
   const events = raw
-    .filter(e => !Number.isNaN(e.startMin) && e.startMin < GRID_END_MIN)
+    .filter(e => !Number.isNaN(e.startMin) && e.startMin < range.endMin)
     .map(e => ({
       ...e,
       // endTime이 비었거나 역전이면 기본 1시간으로 보정, 그리드 범위로 클램프
-      startMin: Math.max(e.startMin, GRID_START_MIN),
+      startMin: Math.max(e.startMin, range.startMin),
       endMin: Math.min(
         (Number.isNaN(e.endMin) || e.endMin <= e.startMin) ? e.startMin + 60 : e.endMin,
-        GRID_END_MIN,
+        range.endMin,
       ),
     }))
-    .filter(e => e.endMin > GRID_START_MIN)
+    .filter(e => e.endMin > range.startMin)
     .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
 
   const out: ScheduleEvent<T>[] = [];
@@ -535,6 +560,8 @@ export default function Reservations() {
               if (r.staffId !== s.id) return false;
               if (statusFilter !== 'all' && r.status !== statusFilter) return false;
               if (periodDates && !periodDates.includes(r.date)) return false;
+              // 검색어도 오른쪽 "N건"과 같은 기준으로 (4차 UX 점검 2026-11-19)
+              if (normalizedSearch && ![r.customerName, r.customerPhone, r.staffName, r.memo || '', ...r.services.map(sv => sv.serviceName)].some(v => v.toLowerCase().includes(normalizedSearch))) return false;
               return true;
             }).length;
             const active = staffFilter === s.id;
@@ -547,7 +574,7 @@ export default function Reservations() {
                 }`}
               >
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                {s.name} {count}건
+                {s.name} {count}건{periodDates ? '' : ' (전체 기간)'}
               </button>
             );
           })}
@@ -598,6 +625,8 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
   const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
   const today = new Date();
   const ROW_H = 56; // h-14 — 슬롯 1시간의 픽셀 높이 (블록 높이 계산 기준)
+  const gridRange = useMemo(() => gridRangeFromSettings(), []);
+  const timeSlots = hourSlots(gridRange);
 
   // 요일별로 예약+Google 이벤트를 시간 비례 배치 (겹침 레인 포함)
   const dayLayouts = weekDays.map(day => {
@@ -611,7 +640,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
       ...googleEvents
         .filter(ge => ge.date === dayKey)
         .map(ge => ({ item: { kind: 'google' as const, ge }, startMin: timeToMin(ge.startTime), endMin: timeToMin(ge.endTime) })),
-    ]);
+    ], gridRange);
   });
 
   return (
@@ -642,7 +671,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
       {/* Time Grid — 예약 블록은 관리시간(1시간=1칸, 2시간=2칸)에 비례한 높이로 표시 */}
       {/* 스크롤 영역 키보드 접근(axe scrollable-region-focusable) — 부모 overflow-hidden이 바깥 outline을 잘라 inset ring으로 표시 */}
       <div className="overflow-y-auto max-h-[550px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="시간표" tabIndex={0}>
-        {TIME_SLOTS.map(time => {
+        {timeSlots.map(time => {
           const slotStartMin = timeToMin(time);
           return (
             <div key={time} className="grid grid-cols-8 border-b border-gray-50 h-14">
@@ -665,6 +694,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                         const r = ev.item.r;
                         const staff = staffList.find(s => s.id === r.staffId);
                         const tall = ev.endMin - ev.startMin >= 90;
+                        const short = ev.endMin - ev.startMin < 60; // 30분 블록: 한 줄만 (4차 UX 점검 2026-11-19)
                         return (
                           <button
                             key={r.id}
@@ -676,8 +706,12 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                             style={{ backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6'), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
                             title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
                           >
-                            <p className="font-bold truncate">{r.customerName}</p>
-                            <p className="font-normal truncate">{r.services[0]?.serviceName}</p>
+                            {short ? (
+                              <p className="font-bold truncate">{r.customerName} <span className="font-normal">· {r.services[0]?.serviceName}</span></p>
+                            ) : (<>
+                              <p className="font-bold truncate">{r.customerName}</p>
+                              <p className="font-normal truncate">{r.services[0]?.serviceName}</p>
+                            </>)}
                             {tall && <p className="font-normal truncate">{r.startTime}~{r.endTime}</p>}
                           </button>
                         );
@@ -725,6 +759,8 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
   const dayReservations = reservations.filter(r => r.date === dateKey);
   const dayGoogleEvents = googleEvents.filter(ge => ge.date === dateKey);
   const ROW_H = 60; // h-[60px] — 슬롯 1시간의 픽셀 높이
+  const gridRange = useMemo(() => gridRangeFromSettings(), []);
+  const timeSlots = hourSlots(gridRange);
 
   // 시간 비례 배치 (겹침 레인 포함) — 주간 뷰와 동일한 방식
   const dayLayout = layoutDayEvents<
@@ -732,7 +768,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
   >([
     ...dayReservations.map(r => ({ item: { kind: 'reservation' as const, r }, startMin: timeToMin(r.startTime), endMin: timeToMin(r.endTime) })),
     ...dayGoogleEvents.map(ge => ({ item: { kind: 'google' as const, ge }, startMin: timeToMin(ge.startTime), endMin: timeToMin(ge.endTime) })),
-  ]);
+  ], gridRange);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -752,7 +788,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
       </div>
       {/* 예약 블록은 관리시간에 비례한 높이로 표시 (1시간=1칸, 2시간=2칸) */}
       <div className="overflow-y-auto max-h-[600px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="시간표" tabIndex={0}>
-        {TIME_SLOTS.map(time => {
+        {timeSlots.map(time => {
           const slotStartMin = timeToMin(time);
           const slotEvents = dayLayout.filter(ev =>
             ev.startMin >= slotStartMin && ev.startMin < slotStartMin + 60
@@ -911,7 +947,8 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? (services.length === 1 ? services[0].id : ''));
   const todayKey = format(new Date(), 'yyyy-MM-dd');
   const [date, setDate] = useState(editing?.date ?? initialDate ?? todayKey);
-  const [startTime, setStartTime] = useState(editing?.startTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot() : '10:00'));
+  const startOptions = useMemo(() => halfHourSlots(gridRangeFromSettings()), []); // 설정 > 영업시간 범위, 30분 단위 (4차 UX 점검 2026-11-19)
+  const [startTime, setStartTime] = useState(editing?.startTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot(startOptions) : (startOptions.includes('10:00') ? '10:00' : startOptions[0])));
   const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [addToGoogle, setAddToGoogle] = useState(!isEdit && isGoogleCalendarConnected());
@@ -1084,7 +1121,8 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               onChange={e => setStartTime(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
-              {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+              {!startOptions.includes(startTime) && <option value={startTime}>{startTime}</option>}
+              {startOptions.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <DateQuickChips value={date} onChange={setDate} className="col-span-2 sm:col-span-3 sm:order-last !-mt-2.5" />{/* 폰: 날짜·시간 줄 바로 아래, sm+: 날짜·시간·경로 한 줄 뒤(빈 칸 없이) */}

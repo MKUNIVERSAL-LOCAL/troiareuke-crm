@@ -1,5 +1,5 @@
 import { HIDE_ON_MOBILE } from '../../lib/platform';
-import { formatPhoneInput } from '../../lib/format';
+import { formatPhoneInput, todayISO } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
@@ -454,7 +454,9 @@ export default function Settings() {
   };
 
   // ─── Business Hours ───────────────────────────────────────
+  const [hoursDirty, setHoursDirty] = useState(false); // 영업시간은 버튼 저장, 지정 휴일은 즉시 저장 — 미저장 이탈을 막는다 (4차 UX 점검 2026-11-19)
   const updateHours = (day: string, field: string, value: string | boolean) => {
+    setHoursDirty(true);
     setSettings(prev => ({
       ...prev,
       businessHours: {
@@ -473,6 +475,7 @@ export default function Settings() {
       if (h.open >= h.close) { notify(`${day}요일 종료 시간(${h.close})이 시작 시간(${h.open})보다 늦어야 합니다. 오후는 13:00~23:59로 적어주세요.`); return; }
     }
     SettingsStore.save({ businessHours: settings.businessHours, holidays: settings.holidays || [] });
+    setHoursDirty(false);
     flash();
   };
 
@@ -620,7 +623,7 @@ export default function Settings() {
               {tabs.map(t => (
                 <button
                   key={t.key}
-                  onClick={() => setTab(t.key)}
+                  onClick={() => { if (tab === 'hours' && t.key !== 'hours' && hoursDirty && !window.confirm('영업시간 변경을 저장하지 않았습니다. 버리고 이동할까요?')) return; setTab(t.key); }}
                   className={clsx(
                     'flex-shrink-0 lg:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left whitespace-nowrap',
                     tab === t.key
@@ -747,7 +750,7 @@ export default function Settings() {
                     {(settings.holidays || []).length > 0 ? (
                       <ul className="flex flex-wrap gap-2">
                         {(settings.holidays || []).map(d => (
-                          <li key={d} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-medium">
+                          <li key={d} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${d < todayISO() ? 'bg-gray-100 text-gray-500 border border-dashed border-gray-300' : 'bg-rose-50 text-rose-700'}`} title={d < todayISO() ? '지난 휴일' : undefined}>
                             {d}
                             <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="p-1.5 -m-1 rounded text-rose-400 hover:text-rose-600"><X size={14} /></button>
                           </li>
@@ -755,6 +758,11 @@ export default function Settings() {
                       </ul>
                     ) : (
                       <p className="text-xs text-gray-500">지정 휴일 없음</p>
+                    )}
+                    {(settings.holidays || []).some(d => d < todayISO()) && (
+                      <button type="button" onClick={() => saveHolidays((settings.holidays || []).filter(d => d >= todayISO()))} className="text-xs text-gray-500 underline hover:text-gray-700">
+                        지난 휴일 {(settings.holidays || []).filter(d => d < todayISO()).length}개 정리
+                      </button>
                     )}
                   </div>
                   <div className="pt-4">
