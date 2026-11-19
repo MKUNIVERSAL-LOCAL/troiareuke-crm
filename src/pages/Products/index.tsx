@@ -217,7 +217,7 @@ export default function Products() {
                     const isLow = p.stock <= p.minStock;
                     const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
                     return (
-                      <li key={p.id} className={clsx('px-4 py-3', isLow && 'bg-orange-50/40')}>
+                      <li key={p.id} data-testid="product-row" className={clsx('px-4 py-3', isLow && 'bg-orange-50/40')}>
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-gray-900">
@@ -266,7 +266,7 @@ export default function Products() {
                       const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
 
                       return (
-                        <tr key={p.id} className={clsx('hover:bg-gray-50/50 transition-colors', isLow && 'bg-orange-50/40')}>
+                        <tr key={p.id} data-testid="product-row" className={clsx('hover:bg-gray-50/50 transition-colors', isLow && 'bg-orange-50/40')}>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center flex-shrink-0">

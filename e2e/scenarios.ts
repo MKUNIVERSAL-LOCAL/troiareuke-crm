@@ -1,7 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 import { pickCustomer, visibleButton, type E2EAccount } from './helpers';
 import {
-  registerPayment, registerExpense, salesTab, expectPnl, expectSales, changeFirstExpenseCategory, refundFirstPayment,
+  dialog,
+  registerPayment, registerExpense, expectPnl, expectSales, changeFirstExpenseCategory, refundFirstPayment,
   addProgram, sellProgramToCustomer, expectProgramSessions, logTreatment, openCustomer, programCard,
   addProduct, expectStock, sellProduct, cancelFirstSale,
   addReservation, reservationItems, openReservationDetail, completeReservation, setReservationStatus, expectReservationDetail,
@@ -10,7 +11,7 @@ import {
 } from './flows';
 
 /**
- * 끝까지 가는 업무 시나리오 (2026-11-19 ㊷) — PC(chromium)와 모바일(Pixel 7) 스펙이 같은 함수를 호출한다.
+ * 끝까지 가는 업무 시나리오 (2026-11-19 ㊷·㊸, 리뷰 반영 ㊺) — PC(chromium)와 모바일(Pixel 7) 스펙이 같은 함수를 호출한다.
  * 숫자가 바뀌면 여기 한 곳만 고친다. 가입·고객 등록은 스펙이 하고(계정 접두사가 다름), 여기는 그 뒤부터.
  */
 
@@ -20,7 +21,7 @@ export async function salesScenario(page: Page, acc: E2EAccount) {
   await expectSales(page, { total: '50,000원', treatment: '50,000원', count: 1 });
 
   await registerExpense(page, '앰플 20개 매입', 20000);
-  await expect(salesTab(page, /지출 내역 \(1\)/)).toBeVisible({ timeout: 10_000 });
+  await expect(visibleButton(page, /지출 내역 \(1\)/)).toBeVisible();
 
   // 매출 50,000 − 매출원가 20,000 = 영업이익 30,000 (60%)
   await expectPnl(page, { cogs: '−20,000원', gross: '30,000원', operating: '30,000원' });
@@ -32,12 +33,12 @@ export async function salesScenario(page: Page, acc: E2EAccount) {
 
   // 환불: 매출에서 빠진다(건수는 남음), 영업이익 -20,000
   await refundFirstPayment(page);
-  await salesTab(page, '매출 현황').click();
+  await visibleButton(page, '매출 현황').click();
   await expectSales(page, { total: '0원', count: 1 });
   await expectPnl(page, { cogs: '−0원', operating: '-20,000원' });
 
   await page.reload();
-  await expect(salesTab(page, /지출 내역 \(1\)/)).toBeVisible({ timeout: 10_000 });
+  await expect(visibleButton(page, /지출 내역 \(1\)/)).toBeVisible();
   await expectSales(page, { total: '0원' });
 }
 
@@ -68,21 +69,6 @@ export async function programsProductsScenario(page: Page, acc: E2EAccount) {
   await expectSales(page, { total: '300,000원', product: '0원', count: 1 });
 }
 
-/** 같은 담당자 같은 시각에 다시 잡으면 겹침 confirm → (스펙 핸들러가 거절) → 등록되지 않고 창이 남는다 */
-async function attemptDoubleBooking(page: Page, acc: E2EAccount, startTime: string) {
-  await visibleButton(page, '예약 추가').click();
-  const d = page.getByRole('dialog', { name: '예약 추가' });
-  await expect(d).toBeVisible();
-  await pickCustomer(page, acc.customer, d);
-  await d.getByLabel('담당 직원').selectOption({ index: 1 });
-  await d.getByLabel('시술', { exact: true }).selectOption({ index: 1 });
-  await d.getByLabel('시작 시간').selectOption(startTime);
-  await d.getByRole('button', { name: '예약 저장' }).click();
-  await expect(d).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(d).toHaveCount(0);
-}
-
 /**
  * 예약: 10·12·14시 3건 → 이중예약 차단 → 10시 완료+결제 → 12시 노쇼 → 14시 취소→복구→재취소 →
  * 대시보드 "1건 · 완료 1건 · 남은 0건 · 노쇼 1건" → 직원 실적 1건·50,000 → 고객 노쇼 1회 → 매출 50,000.
@@ -94,7 +80,7 @@ export async function reservationsScenario(page: Page, acc: E2EAccount) {
   await addReservation(page, acc, '12:00');
   await addReservation(page, acc, '14:00');
   await expect(reservationItems(page)).toHaveCount(3);
-  await attemptDoubleBooking(page, acc, '10:00');
+  await addReservation(page, acc, '10:00', { expectRejected: true }); // 같은 담당자 같은 시각 → 겹침 confirm 거절 → 미등록
   await expect(reservationItems(page)).toHaveCount(3);
 
   await completeReservation(page, '10:00', true);
@@ -122,7 +108,7 @@ export async function reservationsScenario(page: Page, acc: E2EAccount) {
  */
 export async function programExpiryScenario(page: Page, acc: E2EAccount) {
   const name = '수분관리 10회권';
-  await addProgram(page, { name, sessions: 10, price: 300000 }); // 유효기간 기본 180일
+  await addProgram(page, { name, sessions: 10, price: 300000 }); // 유효기간 기본 180일(addProgram이 확인)
   await sellProgramToCustomer(page, acc, `${name} — 300,000원`, { purchaseDate: '2025-01-01' });
   await expectProgramBadge(page, name, '만료', true);
   await expectProgramExpiry(page, name, '2025-06-30');
@@ -137,7 +123,7 @@ export async function programExpiryScenario(page: Page, acc: E2EAccount) {
   // 예약 추가 창의 회차권 잔여 칩에도 '만료'
   await page.goto('/reservations');
   await visibleButton(page, '예약 추가').click();
-  const resDialog = page.getByRole('dialog', { name: '예약 추가' });
+  const resDialog = dialog(page, '예약 추가');
   await pickCustomer(page, acc.customer, resDialog);
   await expect(resDialog.getByLabel('회차권 잔여')).toContainText(`${name} · 잔여 10회 · 만료`);
 
@@ -161,7 +147,8 @@ export async function programExpiryScenario(page: Page, acc: E2EAccount) {
   await manage.getByRole('button', { name: '취소', exact: true }).click();
   await expect(manage).toHaveCount(0);
 
-  // 선택지에 돌아오고(쓸 수 있는 회차권 1개라 자동 연결) 저장하면 사용 1회 / 잔여 9회
+  // 선택지에 돌아오고 안내는 사라진다 → 자동 연결로 저장하면 사용 1회 / 잔여 9회
+  await expectTreatmentLinkState(page, acc, { select: true, hint: null });
   await logTreatment(page, acc, `${name} (0/10회)`);
   await openCustomer(page, acc);
   await expectProgramSessions(page, name, 1, 10);
@@ -193,22 +180,14 @@ export async function programExpiryScenario(page: Page, acc: E2EAccount) {
 /** 기간제: 등록(총 회차 없음·90일) → 판매(만료일 오늘+90, 잔여 표기 없음) → 기록 2건 연결해도 완료 안 됨 → 관리(총 회차 없음) 완료 처리 → 선택지 없음 → 매출 200,000 */
 export async function periodProgramScenario(page: Page, acc: E2EAccount) {
   const name = '피부진정 기간제';
-  await page.goto('/programs');
-  await visibleButton(page, '프로그램 추가').click();
-  const progDialog = page.getByRole('dialog', { name: '프로그램 추가' });
-  await progDialog.getByLabel('프로그램명').fill(name);
-  await progDialog.getByRole('button', { name: '기간제 (무제한)' }).click();
-  await expect(progDialog.getByLabel('총 회차')).toHaveCount(0);
-  await progDialog.getByLabel('판매가').fill('200000');
-  await progDialog.getByLabel('유효기간 (일)').fill('90');
-  await progDialog.getByRole('button', { name: '프로그램 추가' }).click();
-  await expect(progDialog).toHaveCount(0);
+  await addProgram(page, { name, price: 200000, timed: true, validityDays: 90 });
   const progItem = page.getByTestId('program-item').filter({ hasText: name });
   await expect(progItem.getByText('기간제', { exact: true })).toBeVisible();
   await expect(progItem.getByText('90일 유효')).toBeVisible();
 
   await sellProgramToCustomer(page, acc, `${name} — 200,000원`, { expectPrice: /200,?000/ });
-  const card = programCard(page, name);
+  let card = await programCard(page, name);
+  await expect(card.getByText('기간제 프로그램', { exact: true })).toBeVisible();
   await expectProgramExpiry(page, name, plusDaysISO(90));
   await expect(card.getByText(/잔여/)).toHaveCount(0);
   await expectProgramBadge(page, name, '만료', false);
@@ -217,10 +196,10 @@ export async function periodProgramScenario(page: Page, acc: E2EAccount) {
   await logTreatment(page, acc, `${name} (기간제 · 0회 이용)`);
   await logTreatment(page, acc, `${name} (기간제 · 1회 이용)`);
   await openCustomer(page, acc);
+  card = await programCard(page, name);
   await expectProgramBadge(page, name, '완료', false);
+  await expect(card.getByText('이용 내역 (2건)', { exact: true })).toBeVisible(); // PC·모바일 모두 (㊹)
   await expect(card.getByText(/^-\d+회$/)).toHaveCount(0); // 기간제는 '-1회' 같은 차감 표기를 하지 않는다
-  // 이용 내역 목록은 PC 상세 패널에만 있다 — 있으면 2건이어야 한다
-  if (await card.getByText(/내역 \(\d+건\)/).count()) await expect(card.getByText('이용 내역 (2건)')).toBeVisible();
 
   // 관리: 기간제라 총 회차 입력이 없고, 완료 처리하면 '완료' 배지 + 선택지에서 빠진다
   const manage = await openProgramManage(page, name);
@@ -242,7 +221,7 @@ export async function periodProgramScenario(page: Page, acc: E2EAccount) {
 export async function staffScenario(page: Page, acc: E2EAccount) {
   await page.goto('/staff');
   await visibleButton(page, '직원 추가').click();
-  const addDialog = page.getByRole('dialog', { name: '직원 추가' });
+  const addDialog = dialog(page, '직원 추가');
   await expect(addDialog).toBeVisible();
   await addDialog.getByLabel('이름').fill('김테스트');
   await addDialog.getByPlaceholder('010-0000-0000').fill('010-2222-3333');
@@ -257,19 +236,12 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
 
   // 예약: 담당 직원 선택지에 새 직원 → 10:00 예약 → 결제 없이 완료 → 다시 열면 [결제 등록하기] → 결제 → 사라짐
   await page.goto('/reservations');
-  await visibleButton(page, '예약 추가').click();
-  const dialog = page.getByRole('dialog', { name: '예약 추가' });
-  await pickCustomer(page, acc.customer, dialog);
-  await dialog.getByLabel('담당 직원').selectOption({ label: '박신입 (에스테티션)' });
-  await dialog.getByLabel('시술', { exact: true }).selectOption({ index: 1 });
-  await dialog.getByLabel('시작 시간').selectOption('10:00');
-  await dialog.getByRole('button', { name: '예약 저장' }).click();
-  await expect(dialog).toHaveCount(0);
+  await addReservation(page, acc, '10:00', { staff: '박신입 (에스테티션)' });
   let detail = await openReservationDetail(page, '10:00');
   await expect(detail).toContainText('박신입');
-  await detail.getByRole('button', { name: '완료처리' }).click();
-  await page.getByRole('button', { name: '결제 등록 없이 닫기' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(detail).toHaveCount(0);
+  await completeReservation(page, '10:00', false);
   detail = await openReservationDetail(page, '10:00');
   await expect(detail.getByRole('button', { name: '완료처리' })).toHaveCount(0);
   await expect(detail.getByText('완료 처리됐지만 결제가 아직 등록되지 않은 예약입니다.')).toBeVisible();
@@ -285,8 +257,8 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   const rowOf = (n: string) => perf.locator('tbody tr').filter({ hasText: n }).first();
 
   // 이름 변경(박신입 → 박선임): 예약은 staffId로 연결돼 실적이 따라온다
-  const staffDetail = page.getByRole('dialog', { name: '직원 상세' });
-  const editDialog = page.getByRole('dialog', { name: '직원 수정' });
+  const staffDetail = dialog(page, '직원 상세');
+  const editDialog = dialog(page, '직원 수정');
   const rename = async (from: RegExp, to: string, phone?: string) => {
     await page.getByRole('heading', { name: from }).first().click(); // 직원 카드 제목 — '오늘 직원별 예약 현황'의 이름과 구분
     await staffDetail.getByRole('button', { name: '수정' }).click();
@@ -305,10 +277,14 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   await expect(toast(page, '퇴사 처리했습니다.')).toBeVisible();
   await expect(rowOf('박선임')).toContainText('박선임 (퇴사)');
   await expect(rowOf('박선임').getByTestId('perf-completed')).toHaveText('1건');
-  await page.goto('/reservations');
-  await visibleButton(page, '예약 추가').click();
-  await expect(dialog.getByLabel('담당 직원').locator('option', { hasText: '박선임' })).toHaveCount(0);
-  await expect(dialog.getByLabel('담당 직원').locator('option', { hasText: '김테스트' })).toHaveCount(1);
+  const staffOptions = async () => {
+    await page.goto('/reservations');
+    await visibleButton(page, '예약 추가').click();
+    return dialog(page, '예약 추가').getByLabel('담당 직원').locator('option');
+  };
+  let options = await staffOptions();
+  await expect(options.filter({ hasText: '박선임' })).toHaveCount(0);
+  await expect(options.filter({ hasText: '김테스트' })).toHaveCount(1);
 
   // 복직 전에 같은 이름의 재직자가 있으면 거절 → 이름을 되돌린 뒤 복직 → 담당 목록 복귀
   await page.goto('/staff');
@@ -327,7 +303,6 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   await page.getByRole('heading', { name: /^박선임/ }).first().click();
   await staffDetail.getByRole('button', { name: '복직' }).click();
   await expect(toast(page, '복직 처리했습니다.')).toBeVisible();
-  await page.goto('/reservations');
-  await visibleButton(page, '예약 추가').click();
-  await expect(dialog.getByLabel('담당 직원').locator('option', { hasText: '박선임' })).toHaveCount(1);
+  options = await staffOptions();
+  await expect(options.filter({ hasText: '박선임' })).toHaveCount(1);
 }
