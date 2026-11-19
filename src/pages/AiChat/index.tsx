@@ -51,7 +51,12 @@ function deAlias(text: string, aliases: CustomerAliases): string {
   return text.replace(/고객#(\d+)/g, m => aliases.get(m) ?? m);
 }
 
-function buildCrmContext(): { context: string; aliases: CustomerAliases; forwardAlias: (text: string) => string } {
+/** 이름→가명 치환에서 제외할 CRM 어휘 — 이런 이름의 고객(샘플·테스트 데이터에 흔함)이 질문 문장을 망가뜨리지 않게 */
+const ALIAS_STOP_WORDS = new Set(['고객', '매출', '예약', '오늘', '이번', '지난', '시술', '결제', '직원', '재고', '제품', '등급', '피부', '방문', '회원', '단골', '신규', '프로그램', '회차권', '환불', '취소', '완료', '노쇼', '상담', '사진', '문자', '카카오', '발송']);
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** @param aliasNumbers 세션 동안 고객 id → 가명 번호를 고정(삭제·병합·동기화로 목록 순서가 바뀌어도 "고객#40"이 다른 사람이 되지 않게). 새 id는 max+1 */
+function buildCrmContext(aliasNumbers: Map<string, number>): { context: string; aliases: CustomerAliases; forwardAlias: (text: string) => string } {
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
   const customers = CustomerStore.getAll();
@@ -68,13 +73,29 @@ function buildCrmContext(): { context: string; aliases: CustomerAliases; forward
   // 가명은 고객 id 기준 — 같은 이름의 두 고객이 한 가명으로 합쳐져 모순된 행을 보내지 않게 (리뷰 2026-11-19)
   const aliases: CustomerAliases = new Map();
   const aliasById = new Map<string, string>();
-  customers.forEach((c, i) => { const a = `고객#${i + 1}`; aliases.set(a, c.name); aliasById.set(c.id, a); });
+  let nextNo = Math.max(0, ...aliasNumbers.values());
+  for (const c of customers) {
+    let no = aliasNumbers.get(c.id);
+    if (no === undefined) { no = ++nextNo; aliasNumbers.set(c.id, no); }
+    const a = `고객#${no}`;
+    aliases.set(a, c.name);
+    aliasById.set(c.id, a);
+  }
   const alias = (customerId?: string) => (customerId ? aliasById.get(customerId) ?? '고객(미등록)' : '-');
-  // 질문·이전 답변에 든 실제 이름도 가명으로 바꿔 보낸다 — 2턴째부터 이름이 그대로 나가고, 이름으로 물으면 "데이터에 없다"고 답하던 것 방지. 긴 이름부터(부분 일치 방지), 동명이인은 먼저 등록된 고객의 가명
+  // 질문·이전 답변에 든 실제 이름도 가명으로 바꿔 보낸다 — 2턴째부터 이름이 그대로 나가고, 이름으로 물으면 "데이터에 없다"고 답하던 것 방지.
+  // 동명이인은 먼저 등록된 고객의 가명으로 치환하고 아래 【동명이인】에 전원을 알린다. CRM 어휘·'고객#…' 꼴 이름은 제외, 앞 경계(한글·영숫자 아님) + 긴 이름 우선 — 한 번의 정규식 (리뷰 2026-11-19)
   const nameToAlias = new Map<string, string>();
-  for (const c of customers) if (c.name && c.name.length >= 2 && !nameToAlias.has(c.name)) nameToAlias.set(c.name, aliasById.get(c.id)!);
+  const sameName = new Map<string, string[]>();
+  for (const c of customers) {
+    const name = (c.name || '').trim();
+    if (name.length < 2 || ALIAS_STOP_WORDS.has(name) || /^고객#?\d*$/.test(name)) continue;
+    if (!nameToAlias.has(name)) nameToAlias.set(name, aliasById.get(c.id)!);
+    sameName.set(name, [...(sameName.get(name) ?? []), aliasById.get(c.id)!]);
+  }
   const names = [...nameToAlias.keys()].sort((a, b) => b.length - a.length);
-  const forwardAlias = (text: string) => names.reduce((acc, name) => acc.split(name).join(nameToAlias.get(name)!), text);
+  const nameRe = names.length > 0 ? new RegExp(`(^|[^가-힣A-Za-z0-9])(${names.map(escapeRegExp).join('|')})`, 'g') : null;
+  const forwardAlias = (text: string) => (nameRe ? text.replace(nameRe, (_m, pre: string, name: string) => pre + nameToAlias.get(name)!) : text);
+  const duplicates = [...sameName.entries()].filter(([, list]) => list.length > 1);
 
   const churned = customers.filter(c => {
     if (!c.lastVisitDate) return false;
@@ -91,7 +112,7 @@ function buildCrmContext(): { context: string; aliases: CustomerAliases; forward
   const context = `
 === 더마솔루션 데이터 (${format(today, 'yyyy년 MM월 dd일', { locale: ko })} 기준) ===
 ※ 개인정보 보호를 위해 고객 이름은 고객#번호로 표기했고 연락처는 제외했습니다. 답변에서 고객을 가리킬 때도 반드시 같은 표기(고객#번호)를 그대로 쓰세요.
-
+${duplicates.length > 0 ? `※ 동명이인(질문의 이름은 첫 번호로 치환됨): ${duplicates.map(([, list]) => list.join(' · ')).join(' / ')}\n` : ''}
 【고객 현황】
 - 전체 고객 수: ${customers.length}명
 - VIP 고객: ${vipCustomers.length}명 (${customers.length > 0 ? Math.round((vipCustomers.length / customers.length) * 100) : 0}%)
@@ -256,6 +277,7 @@ function AiChatInner() {
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('ai_key_gemini') || '');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const aliasNumbers = useRef(new Map<string, number>()); // 세션 동안 고객 id → 가명 번호 고정 (리뷰 2026-11-19)
   const [proxyEnabled, setProxyEnabled] = useState(() => isAiProxyEnabled());
   useEffect(() => {
     void refreshAiProxyStatus().then(() => setProxyEnabled(isAiProxyEnabled()));
@@ -286,7 +308,7 @@ function AiChatInner() {
     setIsLoading(true);
 
     try {
-      const { context: crmContext, aliases, forwardAlias } = buildCrmContext();
+      const { context: crmContext, aliases, forwardAlias } = buildCrmContext(aliasNumbers.current);
       // 화면의 메시지는 이름으로 보이지만 모델에는 질문·이전 답변까지 가명으로 — 양방향 (리뷰 2026-11-19)
       const history = [...messages, userMsg]
         .filter(m => m.id !== '0')

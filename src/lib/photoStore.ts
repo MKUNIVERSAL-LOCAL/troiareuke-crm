@@ -380,10 +380,15 @@ export function rejectedPhotoCount(): number { return REJECTED_PUSH.size; }
  * 이 사진은 서버에 없으므로 이 기기에서 로그아웃(캐시 비우기)하면 함께 사라진다 — 확인창·로그아웃 경로가 그 사실을 알린다 (리뷰 2026-11-19).
  */
 export function keepLocalPhotoCount(): number { return getKeepLocalKeys().length; }
-/** 로그아웃 전 공용 확인 — 이 기기에만 보관한 사진이 있으면 사라진다고 묻고, 없으면 그냥 true. 모든 지점 로그아웃 경로(사이드바·모바일 더보기·앱 잠금)가 같이 쓴다 (리뷰 2026-11-19) */
-export function confirmLogoutDespiteKeepLocal(): boolean {
+/** 이 기기에만 보관한 사진이 있을 때 로그아웃 확인창에 넣는 문장(없으면 null) — 사이드바·앱 잠금은 confirmLogoutDespiteKeepLocal로, 모바일 더보기는 기존 확인창에 이 문장을 합쳐 쓴다 (리뷰 2026-11-19) */
+export function keepLocalLogoutWarning(): string | null {
   const n = keepLocalPhotoCount();
-  return n === 0 || window.confirm(`이 기기에만 보관한 사진이 든 기록 ${n}건이 로그아웃하면 사라집니다(서버에는 없음). 계속할까요?`);
+  return n === 0 ? null : `이 기기에만 보관한 사진이 든 기록 ${n}건이 로그아웃하면 사라집니다(서버에는 없음).`;
+}
+/** 로그아웃 전 공용 확인 — 보관 사진이 없으면 그냥 true */
+export function confirmLogoutDespiteKeepLocal(): boolean {
+  const warning = keepLocalLogoutWarning();
+  return warning === null || window.confirm(`${warning} 계속할까요?`);
 }
 export function keepRejectedPhotosLocal(): number {
   const keys = [...REJECTED_PUSH.keys()];
