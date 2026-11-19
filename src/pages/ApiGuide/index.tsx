@@ -4,6 +4,7 @@ import Header from '../../components/layout/Header';
 import clsx from 'clsx';
 import { getPreference, setPreference, migrateLegacyPreference } from '../../lib/shopPreferences';
 import { isAuthApiConfigured } from '../../lib/authApi';
+import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 
 type Status = 'connected' | 'pending' | 'not-started';
 
@@ -36,8 +37,8 @@ const apis: ApiItem[] = [
       '【방법 A — 수동 연동 (즉시 가능)】 스마트플레이스에서 예약이 들어오면 CRM "예약 관리 > + 예약 추가"로 직접 등록',
       '【방법 A】 예약 추가 시 "예약경로"를 "네이버"로 선택하면 네이버 유입 고객 통계가 자동 집계됩니다',
       '【방법 B — 자동 연동 (솔루션 파트너 등록 필요)】 네이버 솔루션 파트너센터에 CRM 솔루션 등록 신청',
-      '【방법 B】 파트너 심사 승인 후 API Key 및 PlaceID 발급',
-      '【방법 B】 설정 > 연동 설정 > 네이버 예약에 API Key / PlaceID 입력',
+      '【방법 B】 파트너 심사 승인 후 PlaceID 확인 (API Key는 본사 서버가 보관 — 지점 입력 없음)',
+      '【방법 B】 설정 > 연동 설정 > 네이버 예약에 플레이스 ID 입력',
       '【방법 B】 테스트 예약 1건 생성하여 CRM 자동 동기화 확인',
       '【참고】 자동 연동 시 네이버 예약 확정 방식은 "예약신청과 동시에 확정"으로 설정해야 합니다',
       '【참고】 네이버페이 결제 예약의 경우 예약 시간·담당자·시술 항목 변경이 불가합니다 (네이버 정책)',
@@ -58,9 +59,9 @@ const apis: ApiItem[] = [
       '카카오 비즈니스 (business.kakao.com) 채널 개설',
       '사업자등록증 제출 후 채널 인증 완료',
       '카카오 i 오픈빌더 또는 알림톡 비즈메시지 신청',
-      '채널 ID 및 API Key 발급',
+      '채널 ID 확인 (API Key는 본사 서버가 보관 — 지점 입력 없음)',
       '발송 템플릿 사전 등록 (카카오 승인 필요, 1~3일)',
-      '설정 > 연동 설정 > 카카오 채널에 정보 입력',
+      '설정 > 연동 설정 > 카카오 채널에 채널 ID 입력',
     ],
     docs: 'https://business.kakao.com/info/bizmessage',
     cost: '알림톡 건당 7~15원, 친구톡 건당 5~15원',
@@ -78,8 +79,8 @@ const apis: ApiItem[] = [
       'NHN Cloud (console.nhncloud.com) 회원가입',
       '콘솔 > Notification > SMS 서비스 활성화',
       '발신번호 등록 (사업자 또는 개인 명의 전화번호, 통신사 인증 필요)',
-      'API Key (AppKey) 발급',
-      '설정 > 연동 설정 > SMS에 AppKey 및 발신번호 입력',
+      'AppKey는 본사 서버에만 보관 (지점 입력 없음)',
+      '설정 > 문자 발송에 발신번호 입력',
       '테스트 문자 발송으로 확인',
     ],
     docs: 'https://docs.nhncloud.com/ko/Notification/SMS/ko/Overview/',
@@ -216,9 +217,12 @@ const apis: ApiItem[] = [
   },
 ];
 
-const categories = ['전체', '예약', '메시지', '인증', '결제', '연동'];
+// 본사 개발 과업(소셜 로그인·SaaS 구독 결제·대안 PG)은 지점 원장이 할 일이 아니다 — 지점 빌드에서는 숨긴다 (9차 점검 #24)
+const HQ_ONLY_IDS = new Set(['naver-login', 'kakao-login', 'toss-saas', 'portone']);
+const visibleApis = BLOCK_ADMIN_UI ? apis.filter(a => !HQ_ONLY_IDS.has(a.id)) : apis;
+const categories = ['전체', '예약', '메시지', '인증', '결제', '연동'].filter(c => c === '전체' || visibleApis.some(a => a.category === c));
 const priorities = { must: { label: '필수', color: 'bg-red-100 text-red-700' }, recommended: { label: '권장', color: 'bg-orange-100 text-orange-700' }, optional: { label: '선택', color: 'bg-gray-100 text-gray-600' } };
-const statuses = { connected: { label: '✅ 연동완료', color: 'text-green-700' }, pending: { label: '⏳ 진행중', color: 'text-orange-700' }, 'not-started': { label: '⬜ 미시작', color: 'text-gray-400' } };
+const statuses = { connected: { label: '연동완료', color: 'text-green-700' }, pending: { label: '진행중', color: 'text-orange-700' }, 'not-started': { label: '미시작', color: 'text-gray-400' } }; // 이모지 라벨은 UI 품질 기준에 어긋난다 (9차 점검 #25)
 
 const LEGACY_API_STATUS_KEY = 'crm_api_guide_status';
 
@@ -235,8 +239,8 @@ export default function ApiGuide() {
 
   const getStatus = (api: ApiItem): Status => localStatus[api.id] ?? api.status;
 
-  const filtered = apis.filter(a => category === '전체' || a.category === category);
-  const connectedCount = apis.filter(a => getStatus(a) === 'connected').length;
+  const filtered = visibleApis.filter(a => category === '전체' || a.category === category);
+  const connectedCount = visibleApis.filter(a => getStatus(a) === 'connected').length;
 
   const toggleStatus = (id: string, current: Status) => {
     const next: Status = current === 'not-started' ? 'pending' : current === 'pending' ? 'connected' : 'not-started';
@@ -250,7 +254,7 @@ export default function ApiGuide() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header title="API 연동 가이드" subtitle="순서대로 연동하면 완성됩니다" />
-      <div className="p-8 flex-1">
+      <div className="p-4 sm:p-8 flex-1">
 
         {/* Progress */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
@@ -293,7 +297,9 @@ export default function ApiGuide() {
             return (
               <div key={api.id} className={clsx('bg-white rounded-2xl border shadow-sm overflow-hidden transition-all',
                 st === 'connected' ? 'border-green-200' : st === 'pending' ? 'border-orange-200' : 'border-gray-100')}>
-                <div className="flex items-center gap-4 px-6 py-4 cursor-pointer" onClick={() => setExpandedId(isOpen ? null : api.id)}>
+                <div className="flex items-center gap-4 px-4 sm:px-6 py-4">
+                  <button type="button" aria-expanded={isOpen} aria-controls={`api-guide-${api.id}`} onClick={() => setExpandedId(isOpen ? null : api.id)}
+                    className="flex-1 min-w-0 flex items-center gap-4 text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300">
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-600">
                     {idx + 1}
                   </div>
@@ -305,6 +311,7 @@ export default function ApiGuide() {
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5 truncate">{api.description}</p>
                   </div>
+                  </button>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <button
                       onClick={e => { e.stopPropagation(); toggleStatus(api.id, st); }}
@@ -316,7 +323,7 @@ export default function ApiGuide() {
                 </div>
 
                 {isOpen && (
-                  <div className="px-6 pb-6 border-t border-gray-50">
+                  <div id={`api-guide-${api.id}`} className="px-4 sm:px-6 pb-6 border-t border-gray-50">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 mb-5">
                       <InfoBox label="목적" value={api.purpose} />
                       <InfoBox label="비용" value={api.cost} />
@@ -324,7 +331,7 @@ export default function ApiGuide() {
                     </div>
 
                     <div className="mb-5">
-                      <p className="text-xs font-bold text-gray-700 mb-3">📋 연동 단계</p>
+                      <p className="text-xs font-bold text-gray-700 mb-3">연동 단계</p>
                       <div className="space-y-2">
                         {api.steps.map((step, i) => (
                           <div key={i} className="flex items-start gap-3">

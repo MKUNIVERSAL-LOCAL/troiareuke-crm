@@ -330,7 +330,7 @@ export default function DataBrowser() {
                 </button>
                 {tab !== '__photos' && tab !== '__backups' && (
                   <button type="button" onClick={() => setShowRaw(v => !v)} aria-pressed={showRaw}
-                    className={clsx('ml-auto text-xs px-2.5 py-1.5 rounded-lg transition-colors', showRaw ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800 text-slate-400 hover:text-white')}>
+                    className={clsx('text-xs px-2.5 py-1.5 rounded-lg transition-colors', showRaw ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-800 text-slate-400 hover:text-white')}>
                     {showRaw ? '개인정보 가리기' : '개인정보 원문 보기'}
                   </button>
                 )}

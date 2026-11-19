@@ -56,6 +56,8 @@ export function formatPhoneInput(value: string): string {
     if (d.length <= 9) return d.slice(0, 2) + '-' + d.slice(2, 5) + '-' + d.slice(5);
     return d.slice(0, 2) + '-' + d.slice(2, 6) + '-' + d.slice(6, 10);
   }
+  // 대표번호(1588·1544·1600·1800 등 8자리) — 1588-1234. 일반 분기로는 158-812-34 가 됐다 (리뷰 2026-11-20)
+  if (/^1[5-9]\d{2}/.test(d) && d.length <= 8) return d.length <= 4 ? d : d.slice(0, 4) + '-' + d.slice(4);
   if (d.length <= 3) return d;
   if (d.length <= 7) return d.slice(0, 3) + '-' + d.slice(3);
   if (d.length <= 10) return d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6);

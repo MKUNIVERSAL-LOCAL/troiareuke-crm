@@ -37,6 +37,11 @@ export default function AnnouncementBanner() {
   useEffect(() => {
     if (!isAuthApiConfigured) return;
     loadAnnouncements();
+    // 프로그램은 하루 종일 켜 둔다 — 한 번만 읽으면 영업 중 올린 긴급 공지가 다음 날에야 보였다 (9차 점검 #26)
+    const iv = setInterval(loadAnnouncements, 30 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === 'visible') loadAnnouncements(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); };
   }, []);
 
   async function loadAnnouncements() {

@@ -20,6 +20,8 @@ test('금액·전화·날짜 표기 helper', () => {
   expect(formatWon(123456)).toBe('12.3만원');
   expect(formatPhoneInput('01012345678')).toBe('010-1234-5678');
   expect(formatPhoneInput('0212345678')).toBe('02-1234-5678'); // 서울 02는 2-4-4
+  expect(formatPhoneInput('15881234')).toBe('1588-1234'); // 대표번호 8자리 (리뷰 2026-11-20)
+  expect(formatPhoneInput('1588')).toBe('1588');
   expect(formatPhoneInput('+821012345678')).toBe('+821012345678'); // 국제번호는 손대지 않는다
   expect(formatDate('2026-11-20')).toBe('2026.11.20');
   expect(formatDate(undefined)).toBe('-');

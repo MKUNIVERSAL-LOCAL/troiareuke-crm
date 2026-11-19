@@ -37,6 +37,7 @@ import { exportConsultationPdf } from '../../lib/consultReport';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
+import { recordPrivacyAction } from '../../lib/privacyLog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
@@ -1069,6 +1070,7 @@ export default function Customers() {
     if (targets.length === 0) return;
     if (!window.confirm(`보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`)) return;
     const n = anonymizeCustomers(targets.map(c => c.id));
+    recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' }); // 파기 대장 (9차 점검 #29)
     notify(`고객 ${n}명을 익명화했습니다.`);
     setSelected(null);
     loadAll();
@@ -1357,6 +1359,7 @@ export default function Customers() {
     if (!window.confirm(`'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`)) return;
     const n = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
+    recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
     notify('고객을 익명화했습니다.');
     const updated = CustomerStore.getById(selected.id);
     setSelected(updated ?? null);

@@ -24,7 +24,7 @@ import { formatPrice, formatDate, todayISO as today, parseISODate } from '../../
 import { countPaymentUnits } from '../../lib/paymentCount';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import PaymentLinkModal from '../../components/PaymentLinkModal';
-import { isPaymentLinkAvailable } from '../../lib/paymentLinks';
+import { isPaymentLinkAvailable, fetchPgConfig } from '../../lib/paymentLinks';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -81,6 +81,13 @@ export default function Sales() {
 
   // 결제 요청 링크 (NAS 서버 모드 전용)
   const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
+  // PG 계약 전엔 모달을 열어야 "준비 중"을 알 수 있었다 — 버튼 라벨에 미리 표시 (9차 점검 #19). 조회 실패는 라벨 그대로(모달이 안내)
+  const [pgEnabled, setPgEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!isPaymentLinkAvailable) return;
+    fetchPgConfig().then(c => setPgEnabled(c.enabled)).catch(() => setPgEnabled(null));
+  }, []);
+  const payLinkLabel = pgEnabled === false ? '결제 요청 (준비 중)' : '결제 요청';
 
   const emptyExpenseForm = {
     expenseDate: today(),
@@ -504,7 +511,7 @@ export default function Sales() {
       <Header title="매출·손익 관리" subtitle="매출 · 지출(매입) · 손익계산서 통합 현황" actions={<div className="hidden lg:flex items-center gap-3">
         {isPaymentLinkAvailable && (
           <button type="button" onClick={() => setShowPaymentLinkModal(true)} className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
-            <CreditCard size={16} />결제 요청
+            <CreditCard size={16} />{payLinkLabel}
           </button>
         )}
         <button type="button" onClick={() => setShowExpenseModal(true)} className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
@@ -525,7 +532,7 @@ export default function Sales() {
         </button>
         {isPaymentLinkAvailable && (
           <button type="button" onClick={() => setShowPaymentLinkModal(true)} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 px-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
-            <CreditCard size={16} />결제 요청
+            <CreditCard size={16} />{payLinkLabel}
           </button>
         )}
       </div>

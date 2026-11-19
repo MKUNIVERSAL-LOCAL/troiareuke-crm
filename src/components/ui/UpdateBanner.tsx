@@ -158,17 +158,16 @@ export default function UpdateBanner() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => api.downloadUpdate?.()}
-              className="bg-white text-[#1a3a8f] text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
-            >
-              지금 업데이트
-            </button>
+            {/* 다운로드는 자동 시작·종료 시 자동 적용 — [지금 업데이트]/[나중에]는 사람 손을 타는 흐름처럼 보여 무인 정책(v1.0.48)과 어긋났다 (9차 점검 #27) */}
             <button
               onClick={() => setDismissed(true)}
-              className="text-white/70 hover:text-white transition-colors text-xs"
+              className="text-white/70 hover:text-white transition-colors"
+              aria-label="닫기"
             >
-              나중에
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </div>
         </div>

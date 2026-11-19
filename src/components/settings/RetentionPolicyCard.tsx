@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
+import { listPrivacyActions, PRIVACY_ACTION_LABEL } from '../../lib/privacyLog';
+import { formatDateTime } from '../../lib/format';
 import {
   getRetentionPolicy, setRetentionPolicy, getExpiredCustomers,
   DEFAULT_RETENTION_YEARS, MIN_RETENTION_YEARS, MAX_RETENTION_YEARS,
@@ -11,6 +13,7 @@ import {
  * 값은 지점 환경설정(서버 동기)에 저장된다. 기본 OFF — 보존기간은 지점(오너)이 정한다.
  */
 export default function RetentionPolicyCard() {
+  const actions = listPrivacyActions();
   const [policy, setPolicy] = useState(() => getRetentionPolicy());
   const [draftYears, setDraftYears] = useState(() => String(getRetentionPolicy().years));
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null);
@@ -76,6 +79,22 @@ export default function RetentionPolicyCard() {
           )}
         </div>
         {message && <p className={`text-xs ${message.tone === 'ok' ? 'text-emerald-700' : 'text-amber-700'}`}>{message.text}</p>}
+        {/* 개인정보 처리 기록 — 익명화·병합을 누가 언제 몇 명 했는지 (이 PC 기록, 백업 파일에 포함) (9차 점검 #29) */}
+        {actions.length > 0 && (
+          <div className="pt-3 border-t border-gray-100" data-testid="privacy-action-log">
+            <p className="text-xs font-semibold text-gray-700 mb-2">최근 개인정보 처리 기록 <span className="text-gray-400 font-normal">(최근 10건 · 이 PC 기준)</span></p>
+            <ul className="space-y-1">
+              {actions.slice(0, 10).map(a => (
+                <li key={a.id} className="text-xs text-gray-600 flex flex-wrap gap-x-2">
+                  <span className="text-gray-400 tabular-nums">{formatDateTime(a.at)}</span>
+                  <span className="font-medium text-gray-800">{PRIVACY_ACTION_LABEL[a.type]} {a.count}명</span>
+                  <span>{a.actor}</span>
+                  {a.detail && <span className="text-gray-400">· {a.detail}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

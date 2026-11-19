@@ -123,7 +123,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
     const result = await sendMessages({ type: 'sms', content, recipients: 1, phones: [selectedCustomer.phone] });
     setBusy(false);
     if (result.pending) setSmsResult(`문자 발송 대기: ${result.reason || '발송사 미설정'}`);
-    else if (result.sent > 0) setSmsResult(`✓ ${selectedCustomer.name}님(${selectedCustomer.phone})에게 문자를 보냈습니다`);
+    else if (result.sent > 0) setSmsResult(`✓ ${selectedCustomer.name}님(${maskPhone(selectedCustomer.phone, user?.role ?? 'staff')})에게 문자를 보냈습니다`); // 목록과 같은 마스킹 (리뷰 2026-11-20)
     else setSmsResult(`문자 발송 실패: ${result.reason || '알 수 없는 오류'}`);
   }
 

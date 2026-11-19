@@ -32,7 +32,8 @@ export async function refreshAiProxyStatus(force = false): Promise<AiProxyStatus
   if (inflight) return inflight;
   inflight = apiRequest<AiProxyStatus>('/api/ai/status')
     .then(status => {
-      const changed = cached?.status.enabled !== status.enabled;
+      // 사용량(usedThisMonth·remaining)이 바뀌어도 알린다 — 챗 화면 배지 "이번 달 N/M건"이 질문 뒤 바로 갱신되게 (리뷰 2026-11-20)
+      const changed = cached?.status.enabled !== status.enabled || cached?.status.usedThisMonth !== status.usedThisMonth || cached?.status.remaining !== status.remaining;
       cached = { at: Date.now(), status };
       if (changed) window.dispatchEvent(new Event(EVENT));
       return status;

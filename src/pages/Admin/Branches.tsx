@@ -61,6 +61,15 @@ export default function Branches() {
 
   const [nasUsersByBranch, setNasUsersByBranch] = useState<Record<string, AuthApiUser[]>>({});
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [rechecking, setRechecking] = useState(false);
+  /** [다시 확인] — 코어 캐시를 우회해 매니페스트를 직접 읽는다. 실패하면 같은 화면이 그대로라 눌러도 반응이 없는 것처럼 보였다 (리뷰 2026-11-20) */
+  async function recheckLatest() {
+    setRechecking(true);
+    const m = await fetchManifestDirect();
+    setRechecking(false);
+    setLatestVersion(m?.version || null);
+    if (!m) notify.error('배포 서버에 연결하지 못했습니다. 잠시 후 다시 확인하세요.');
+  }
 
   // ── 지점 완전 삭제 (폐업·계약 종료) — 지점명 타이핑 확인, 서버가 삭제 직전 스냅샷 보관 ──
   const [deleteBranchTarget, setDeleteBranchTarget] = useState<Branch | null>(null);
@@ -364,8 +373,8 @@ export default function Branches() {
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-10 text-center">
           <p className="text-amber-200 font-medium">최신 버전을 확인하지 못해 구버전 판정을 보류했습니다</p>
           <p className="text-amber-200/80 text-sm mt-1">배포 서버 응답이 없습니다 — 판정 없이 "없음"으로 보이면 구버전 지점을 놓칩니다 (배포 정책 §8)</p>
-          <button type="button" onClick={async () => setLatestVersion((await fetchManifestDirect())?.version || null)}
-            className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl transition-colors">다시 확인</button>
+          <button type="button" disabled={rechecking} onClick={recheckLatest}
+            className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl transition-colors disabled:opacity-50">{rechecking ? '확인 중…' : '다시 확인'}</button>
         </div>
       ) : filteredBranches.length === 0 ? (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">
