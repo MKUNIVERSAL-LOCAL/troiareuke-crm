@@ -214,7 +214,7 @@ export default function Dashboard() {
             <p className="text-sm font-bold text-gray-900">오늘 예약 현황</p>
             <button
               onClick={() => navigate('/reservations')}
-              className="text-xs text-[#1a3a8f] font-medium"
+              className="text-xs text-[#1a3a8f] font-medium min-h-[44px] px-2 -mx-2 flex items-center"
             >
               전체보기 &rsaquo;
             </button>
@@ -224,7 +224,7 @@ export default function Dashboard() {
               <div className="py-8 text-center text-sm text-gray-400">
                 <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
                 오늘 예약이 없습니다
-                <button onClick={() => navigate('/reservations?new=1')} className="block mx-auto mt-2 text-xs font-medium text-[#1a3a8f]">예약 추가하기</button>
+                <button onClick={() => navigate('/reservations?new=1')} className="inline-flex items-center mt-1 px-3 min-h-[44px] text-xs font-medium text-[#1a3a8f]">예약 추가하기</button>
               </div>
             ) : (
               <>{todayReservations.slice(0, 5).map(r => (

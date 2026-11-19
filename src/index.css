@@ -17,6 +17,8 @@
   .pb-safe-2 { padding-bottom: calc(0.5rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
   .pb-safe-4 { padding-bottom: calc(1rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
   .pb-tabbar-safe { padding-bottom: calc(4rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
+  /* 페이지 안 고정 바(예약 탭·시술 검색)의 top — 모바일 상단 덩어리(배너+헤더) 높이. Layout이 --mobile-top에 넣고, 없으면 0 (7차 UX 점검 2026-11-20) */
+  .top-mobile-header { top: var(--mobile-top, 0px); }
   .bottom-toast-safe { bottom: calc(5rem + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))); }
 }
 
@@ -177,4 +179,4 @@ textarea:hover:not(:focus) {
 }
 
 /* 한글은 어절 단위로만 줄을 바꾼다 — 배너·안내문이 글자 중간에서 끊기지 않게. 띄어쓰기 없는 긴 문자열은 넘치기 전에 끊는다 (7차 UX 점검 2026-11-20) */
-body { word-break: keep-all; overflow-wrap: break-word; }
+body { word-break: keep-all; overflow-wrap: anywhere; } /* anywhere: min-content에도 반영돼 띄어쓰기 없는 긴 한글이 flex·표 칸을 넓히지 않는다 (리뷰 2026-11-20) */

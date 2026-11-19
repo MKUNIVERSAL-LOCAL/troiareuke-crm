@@ -272,17 +272,6 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
                   <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  aria-label={m.title + ' 자동 발송 (준비 중)'}
-                  disabled
-                  readOnly
-                  checked={false} // 준비 중 — 켜진 모양이면 자동 발송이 되는 줄 안다 (UX 점검 2026-11-19)
-                />
-                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
-              </label>
             </div>
           ))}
         </div>

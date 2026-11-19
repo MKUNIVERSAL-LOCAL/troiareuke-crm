@@ -76,10 +76,10 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
               <p className="text-xs text-gray-500 truncate">{r.services.map(s => s.serviceName).join(', ') || '시술 항목 미지정'}{r.staffName ? ` · ${r.staffName}` : ''}</p>
             </button>
             <button type="button" onClick={() => settleOneAndPay(r)} aria-label={`${r.customerName} ${formatDate(r.date)} 완료`}
-              className="px-2.5 py-1.5 min-h-[36px] rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
+              className="px-2.5 py-1.5 min-h-[44px] rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
             {/* 노쇼는 고객 기록(노쇼 횟수)에 남는다 — 폰에서 [완료] 옆 오탭이 잦아 한 번 묻는다 (UX 점검 2026-11-19) */}
             <button type="button" onClick={() => { if (window.confirm(`${r.customerName} ${formatDate(r.date)} ${r.startTime} 예약을 노쇼로 처리할까요?\n노쇼 횟수가 1 올라갑니다. 되돌리려면 예약 상세의 [예약 복구].`)) settle([r.id], 'noshow'); }} aria-label={`${r.customerName} ${formatDate(r.date)} 노쇼`}
-              className="px-2.5 py-1.5 min-h-[36px] rounded-lg text-xs font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
+              className="px-2.5 py-1.5 min-h-[44px] rounded-lg text-xs font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
           </li>
         ))}
       </ul>

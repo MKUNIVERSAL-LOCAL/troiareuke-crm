@@ -277,7 +277,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(page.getByText('삭제·익명화는 PC에서')).toHaveCount(0);
   // 하단 고정 액션바에서 [예약 추가] → 예약 화면 → 뒤로가기 → 같은 고객 상세가 다시 열린다 (7차 UX 점검 99 — 전에는 목록으로 떨어졌다)
   await page.getByRole('button', { name: '예약 추가', exact: true }).filter({ visible: true }).first().click();
-  await expect(page.getByRole('dialog').filter({ hasText: '예약 추가' }).first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '예약 추가' })).toBeVisible();
   await page.goBack();
   await expect(page.getByRole('button', { name: '고객 관리 더보기' })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole('button', { name: '시술 기록', exact: true }).filter({ visible: true }).first()).toBeVisible();

@@ -1871,7 +1871,7 @@ export default function Customers() {
 
             </div>
             {/* 하단 고정 액션 — 응대 중 가장 자주 쓰는 네 가지를 엄지 범위에. 수정·병합·익명화·삭제는 헤더 [⋯] (7차 UX 점검 2026-11-20) */}
-            <div className="sticky bottom-0 bg-white border-t border-gray-100 px-3 pt-2 pb-safe-2 flex gap-2">
+            <div className="bg-white border-t border-gray-100 px-3 pt-2 pb-safe-2 flex gap-2">
               {!isAnonymized(selected) && (
                 <>
                   <button

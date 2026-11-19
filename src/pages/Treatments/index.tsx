@@ -140,8 +140,8 @@ export default function Treatments() {
       {/* ── 모바일 뷰 (< lg) ── 타임라인 카드 */}
       <PullToRefreshIndicator {...pull} />
       <div className="block lg:hidden flex-1 flex flex-col">
-        {/* 검색바 */}
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
+        {/* 검색바 — 모바일 상단 덩어리 바로 아래에 붙는다 (7차 UX 점검 2026-11-20) */}
+        <div className="sticky top-mobile-header z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
           <div className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -187,7 +187,7 @@ export default function Treatments() {
                     <p className="text-xs text-gray-500 mt-0.5 truncate">
                       {t.treatmentDetails || t.programName || '시술 내역 없음'}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-gray-500 mt-0.5">
                       {formatDate(t.treatmentDate)}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
                       {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-600">· 사진 {photoCounts.get(t.id)}장</span>}
                     </p>
@@ -258,7 +258,7 @@ export default function Treatments() {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {t.treatmentDetails || t.programName || '시술 내역 없음'}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     {formatDate(t.treatmentDate)}{t.treatmentTime ? ` ${t.treatmentTime}` : ''} · {t.staffName || '담당자 미지정'}
                     {(photoCounts.get(t.id) ?? 0) > 0 && <span className="ml-1.5 text-indigo-600">· 사진 {photoCounts.get(t.id)}장</span>}
                   </p>
@@ -797,8 +797,9 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           )}
         </div>
 
-        {!customerId && <p className="text-xs text-gray-400 text-center">고객을 선택하면 저장할 수 있습니다</p>}
-        <div className="flex gap-3 pt-2">
+        {!customerId && <p className="text-xs text-gray-500 text-center">고객을 선택하면 저장할 수 있습니다</p>}
+        {/* 저장 행은 바닥에 고정 — 사진 구역 뒤에 있어 키보드가 올라오면 보이지 않았다. 발송 모달과 같은 패턴 (7차 UX 점검 2026-11-20) */}
+        <div className="flex gap-3 sticky bottom-0 bg-white pt-3 -mx-6 px-6 -mb-4 pb-4 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
           <button
             onClick={handleSave}
@@ -929,7 +930,7 @@ function TreatmentDetailModal({
             삭제하면 {t.customerProgramId ? `연결된 회차권 잔여 ${t.sessionsUsed}회가 복구되고 ` : ''}{photos.length > 0 ? `사진 ${photos.length}장이 함께 삭제되며 ` : ''}되돌릴 수 없습니다.
           </p>
         )}
-        <div className="flex gap-3 pt-2">
+        <div className="flex flex-wrap gap-3 pt-2">
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}

@@ -91,12 +91,12 @@ export default function Login() {
       </div>
 
       {/* Right Panel */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-gray-50">
         <div className="w-full max-w-md">
           <div className="lg:hidden mb-8 flex justify-center">
             <TroiareukeLogo />
           </div>
-          <div className="bg-white rounded-3xl shadow-xl p-8">
+          <div className="bg-white rounded-3xl shadow-xl p-5 sm:p-8">
             <h1 className="text-2xl font-bold text-gray-900 mb-1">로그인</h1>
             <p className="text-sm text-gray-400 mb-8">더마솔루션에 오신 것을 환영합니다</p>
 

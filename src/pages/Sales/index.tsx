@@ -501,7 +501,7 @@ export default function Sales() {
 
   return (
     <>
-      <Header title="매출·손익 관리" subtitle="매출 · 지출(매입) · 손익계산서 통합 현황" actions={<>
+      <Header title="매출·손익 관리" subtitle="매출 · 지출(매입) · 손익계산서 통합 현황" actions={<div className="hidden lg:flex items-center gap-2">
         {isPaymentLinkAvailable && (
           <button type="button" onClick={() => setShowPaymentLinkModal(true)} className="flex items-center gap-2 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
             <CreditCard size={16} />결제 요청
@@ -513,8 +513,22 @@ export default function Sales() {
         <button type="button" onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium hover:bg-[#152f75] transition-colors">
           <Plus size={16} />결제 등록
         </button>
-      </>} />
+      </div>} />
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      {/* 모바일: 헤더 액션이 제목 아래로 줄바꿈되며 뒤섞였다 — 본문 첫 줄에 같은 세 버튼 (7차 UX 점검 2026-11-20) */}
+      <div className="lg:hidden flex gap-2 mb-4">
+        <button type="button" onClick={() => setShowModal(true)} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 px-3 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">
+          <Plus size={16} />결제 등록
+        </button>
+        <button type="button" onClick={() => setShowExpenseModal(true)} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 px-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
+          <Receipt size={16} />지출 등록
+        </button>
+        {isPaymentLinkAvailable && (
+          <button type="button" onClick={() => setShowPaymentLinkModal(true)} className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 px-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
+            <CreditCard size={16} />결제 요청
+          </button>
+        )}
+      </div>
 
       {/* 월 선택 */}
       <div className="flex items-center gap-3 mb-6 bg-white border border-gray-100 rounded-2xl p-3 w-fit">
@@ -696,7 +710,7 @@ export default function Sales() {
           ) : (
             <div>
               {/* 모바일(lg 미만): 카드 목록 — 표는 720px 폭이라 가로 스크롤만 생긴다 (2026-11-17) */}
-              <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="sales-mobile-list">
+              <ul className="lg:hidden divide-y divide-gray-50" data-testid="sales-mobile-list">
                 {listPayments.map(p => (
                   <li key={p.id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
@@ -830,7 +844,7 @@ export default function Sales() {
               </div>
             ) : (
               <div>
-                <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="expense-mobile-list">
+                <ul className="lg:hidden divide-y divide-gray-50" data-testid="expense-mobile-list">
                   {expenseList.map(x => (
                     <li key={x.id} className="px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
@@ -1170,7 +1184,8 @@ export default function Sales() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
               </div>
 
-              <div className="flex gap-2">
+              {/* 저장 행은 바닥에 고정 — 폰에서 키보드가 올라오면 보이지 않았다 (7차 UX 점검 2026-11-20) */}
+              <div className="flex gap-2 sticky bottom-0 bg-white pt-3 -mx-5 px-5 -mb-5 pb-5 border-t border-gray-100">
                 <button type="button" onClick={closeModal} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
                   <CheckCircle size={14} />{editingId ? '저장' : '결제 등록'}

@@ -116,7 +116,7 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-lg">
         <div className="flex justify-center mb-8"><TroiareukeLogo /></div>
 
@@ -133,7 +133,7 @@ export default function Signup() {
           ))}
         </div>
 
-        <div className="bg-white rounded-3xl shadow-xl p-8">
+        <div className="bg-white rounded-3xl shadow-xl p-5 sm:p-8">
           {step === 1 && (
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">계정 정보 입력</h2>

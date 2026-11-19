@@ -81,7 +81,7 @@ export default function Layout() {
       {/* 모바일 오버레이 */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/40 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/40 z-[25] lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -103,7 +103,7 @@ export default function Layout() {
         <AppLockOverlay />
         {/* 모바일 상단: 오프라인·전송 대기 배너 + 헤더를 한 덩어리로 고정 — 따로 sticky였을 때 배너(z-30)가 스크롤 중 헤더(z-10) 위를 덮었다.
             상태바 safe-area는 덩어리 맨 위에 한 번만 (7차 UX 점검 2026-11-20) */}
-        <div className="lg:hidden sticky top-0 z-30 pt-safe bg-white shadow-sm">
+        <div className="lg:hidden sticky top-0 z-20 pt-safe bg-white shadow-sm">
         <OfflineBanner />
         <div className="flex items-center gap-3 px-4 pb-3 pt-3 bg-white border-b border-gray-100">
           <button

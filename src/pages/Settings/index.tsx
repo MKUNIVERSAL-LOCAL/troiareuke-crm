@@ -115,6 +115,12 @@ export default function Settings() {
     const q = searchParams.get('tab');
     return q && tabs.some(t => t.key === q) ? (q as SettingTab) : 'shop'; // 모바일 앱에서 숨긴 탭(구독)은 받지 않는다
   });
+  // 모바일 탭 칩 8개는 가로 스크롤 — 딥링크(?tab=services)로 들어오면 활성 탭이 화면 밖일 수 있어 가운데로 끌어온다 (7차 UX 점검 2026-11-20)
+  const tabStripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!window.matchMedia('(max-width: 1023px)').matches) return;
+    tabStripRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  }, [tab]);
   useEffect(() => { if (searchParams.has('tab')) setSearchParams({}, { replace: true }); }, []);
   const [settings, setSettings] = useState<ShopSettings>(() => {
     const current = SettingsStore.get();
@@ -622,10 +628,11 @@ export default function Settings() {
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
           {/* Sidebar tabs */}
           <div className="w-full lg:w-48 flex-shrink-0">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 flex lg:block gap-1 overflow-x-auto no-scrollbar pr-6 lg:space-y-0.5">
+            <div ref={tabStripRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2 flex lg:block gap-1 overflow-x-auto no-scrollbar pr-6 lg:space-y-0.5">
               {tabs.map(t => (
                 <button
                   key={t.key}
+                  aria-current={tab === t.key ? 'true' : undefined}
                   onClick={() => {
                     if (tab === 'hours' && t.key !== 'hours' && hoursDirty) {
                       if (!window.confirm('영업시간 변경을 저장하지 않았습니다. 버리고 이동할까요?')) return;
@@ -843,13 +850,6 @@ export default function Settings() {
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
-                      <button
-                        disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="준비 중입니다"
-                      >
-                        연동하기
-                      </button>
                     </div>
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
                       <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
@@ -894,13 +894,6 @@ export default function Settings() {
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
-                      <button
-                        disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="준비 중입니다"
-                      >
-                        연동하기
-                      </button>
                     </div>
 
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
@@ -916,13 +909,6 @@ export default function Settings() {
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">출시 시 안내해 드립니다</p>
                       </div>
-                      <button
-                        disabled
-                        className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-400 cursor-not-allowed"
-                        title="준비 중입니다"
-                      >
-                        연동하기
-                      </button>
                     </div>
 
                     <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-700">
@@ -1114,17 +1100,6 @@ export default function Settings() {
                         <p className="text-xs text-gray-400 mt-0.5">{n.desc}</p>
                         <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
                       </div>
-                      <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
-                        <input
-                          type="checkbox"
-                          className="sr-only peer"
-                          aria-label={`${n.label} 자동 발송 (준비 중)`}
-                          disabled
-                          readOnly
-                          checked={false} // 준비 중 — 켜진 모양이면 자동 발송이 되는 줄 안다 (UX 점검 2026-11-19)
-                        />
-                        <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
-                      </label>
                     </div>
                   ))}
                 </div>
@@ -1498,7 +1473,7 @@ export default function Settings() {
               type="button"
               onClick={() => setShowServiceModal(false)}
               aria-label="닫기"
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              className="absolute top-2 right-2 w-11 h-11 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100"
             >
               <X size={18} />
             </button>

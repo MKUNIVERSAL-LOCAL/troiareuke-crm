@@ -322,8 +322,8 @@ export default function Reservations() {
       {/* ── 모바일 뷰 (< lg) ── 일별 리스트 */}
       <PullToRefreshIndicator {...pull} />
       <div className="block lg:hidden flex-1 flex flex-col">
-        {/* 탭 필터 */}
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
+        {/* 탭 필터 — 모바일 상단 덩어리 바로 아래에 붙는다 (7차 UX 점검 2026-11-20) */}
+        <div className="sticky top-mobile-header z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
           <div className="flex gap-2">
             {(['today', 'week', 'month'] as const).map(tab => {
               const label = tab === 'today' ? '오늘' : tab === 'week' ? '이번주' : '이번달';
@@ -420,10 +420,10 @@ export default function Reservations() {
                       <p className="text-sm font-semibold text-gray-900">{r.customerName}</p>
                       <StatusBadge status={r.status} />
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
                       {r.services.map(s => s.serviceName).join(', ')} · {r.staffName}
                     </p>
-                    <p className="text-xs font-medium text-gray-700 mt-0.5">{r.totalPrice.toLocaleString()}원</p>
+                    <p className="text-sm font-semibold text-gray-900 mt-0.5 tabular-nums">{r.totalPrice.toLocaleString()}원</p>
                   </div>
                 </div>
               </button>

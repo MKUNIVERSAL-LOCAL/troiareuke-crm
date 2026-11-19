@@ -365,7 +365,7 @@ export default function Onboarding() {
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
-                <p className={`text-xs font-medium hidden sm:block ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400'}`}>{s.label}</p>
+                <p className={`text-xs font-medium ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400 hidden sm:block'}`}>{s.label}</p>
               </div>
               {i < steps.length - 1 && (
                 <div className={`w-4 sm:w-12 h-0.5 mx-0.5 sm:mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />
@@ -687,10 +687,10 @@ function StepNav({ onPrev, onNext, nextDisabled, skipLabel, onSkip }: {
 }) {
   return (
     <div className="flex gap-3 mt-8">
-      {onPrev && <button onClick={onPrev} className="px-6 py-2.5 bg-gray-100 text-gray-600 font-medium rounded-xl hover:bg-gray-200 text-sm">이전</button>}
+      {onPrev && <button onClick={onPrev} className="px-6 py-2.5 min-h-[44px] bg-gray-100 text-gray-600 font-medium rounded-xl hover:bg-gray-200 text-sm">이전</button>}
       <div className="flex-1" />
-      {skipLabel && onSkip && <button onClick={onSkip} className="px-4 py-2.5 text-gray-400 text-sm hover:text-gray-600">{skipLabel}</button>}
-      {onNext && <button onClick={onNext} disabled={nextDisabled} className="px-8 py-2.5 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-sm">다음</button>}
+      {skipLabel && onSkip && <button onClick={onSkip} className="px-4 py-2.5 min-h-[44px] text-gray-500 text-sm hover:text-gray-700">{skipLabel}</button>}
+      {onNext && <button onClick={onNext} disabled={nextDisabled} className="px-8 py-2.5 min-h-[44px] bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-sm">다음</button>}
     </div>
   );
 }
