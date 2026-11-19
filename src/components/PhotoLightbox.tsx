@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download } from 'lucide-react';
 import { exportFile, dataUrlToBlob } from '../lib/mobileBridge';
 import { notify } from '../lib/notify';
 import { IS_MOBILE_APP } from '../lib/platform';
-import { useOverlayClose } from '../lib/overlayStack';
+import { useFocusTrap, useOverlayClose } from '../lib/overlayStack';
 
 export interface LightboxPhoto {
   dataUrl: string;
@@ -20,13 +20,9 @@ export interface LightboxPhoto {
 export default function PhotoLightbox({ photo, onClose }: { photo: LightboxPhoto; onClose: () => void }) {
   // Esc·Android 뒤로가기 — 공용 스택이 가장 위의 이 라이트박스만 닫는다 (아래 모달은 유지)
   useOverlayClose(true, onClose);
-  const closeBtnRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    // 포커스를 대화상자 안으로 옮기고, 닫히면 열었던 썸네일로 되돌린다 (키보드·스크린리더)
-    const opener = document.activeElement as HTMLElement | null;
-    closeBtnRef.current?.focus();
-    return () => { opener?.focus?.(); };
-  }, []);
+  // 포커스를 닫기 버튼(data-autofocus)으로 옮기고 Tab을 안에서 순환, 닫히면 열었던 썸네일로 되돌린다 — 자체 effect 대신 공용 트랩 (55)
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(true, rootRef);
 
   async function handleExport() {
     try {
@@ -47,7 +43,8 @@ export default function PhotoLightbox({ photo, onClose }: { photo: LightboxPhoto
       role="dialog"
       aria-modal="true"
       aria-label="사진 크게 보기"
-      className="fixed inset-0 z-[80] bg-black/85 flex flex-col"
+      ref={rootRef}
+      className="fixed inset-0 z-[80] bg-black/85 flex flex-col outline-none"
       onClick={onClose}
     >
       <div className="flex items-center justify-between gap-3 px-4 py-3 text-white" onClick={e => e.stopPropagation()}>
@@ -60,7 +57,7 @@ export default function PhotoLightbox({ photo, onClose }: { photo: LightboxPhoto
           >
             <Download size={14} />{IS_MOBILE_APP ? '공유' : '저장'}
           </button>
-          <button ref={closeBtnRef} type="button" onClick={onClose} aria-label="닫기" className="p-1.5 rounded-lg hover:bg-white/15">
+          <button data-autofocus type="button" onClick={onClose} aria-label="닫기" className="p-1.5 rounded-lg hover:bg-white/15">
             <X size={18} />
           </button>
         </div>

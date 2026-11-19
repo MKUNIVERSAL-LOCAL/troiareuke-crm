@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GitMerge, X, AlertTriangle } from 'lucide-react';
 import { CustomerStore } from '../lib/store';
@@ -10,7 +10,7 @@ import { matchesSearch, formatPrice } from '../lib/format';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
 import { notify } from '../lib/notify';
-import { useOverlayClose } from '../lib/overlayStack';
+import { useFocusTrap, useOverlayClose } from '../lib/overlayStack';
 import type { Customer } from '../types';
 
 const MAX_CANDIDATES = 50;
@@ -83,10 +83,12 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
   }
 
   useOverlayClose(true, onClose); // Esc·Android 뒤로가기
+  const cardRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(true, cardRef); // 검색란에 포커스, Tab 순환, 닫히면 열었던 버튼으로 (55)
 
   return createPortal(
     <div className="modal-backdrop fixed inset-0 bg-black/40 flex justify-center z-[60] p-4 overflow-y-auto" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="고객 병합" onClick={e => e.stopPropagation()}
+      <div ref={cardRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="고객 병합" onClick={e => e.stopPropagation()}
         className="modal-card my-auto bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h2 className="font-bold text-gray-900 flex items-center gap-1.5"><GitMerge size={16} className="text-[#1a3a8f]" />고객 병합</h2>

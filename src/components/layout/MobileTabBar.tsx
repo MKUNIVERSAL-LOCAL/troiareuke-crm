@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar, ClipboardList,
@@ -10,7 +10,7 @@ import { featureForPath } from '../../lib/featureRegistry';
 import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
 import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
 import { useFeatureFlagsTick } from '../../hooks/useFeature';
-import { useOverlayClose } from '../../lib/overlayStack';
+import { useFocusTrap, useOverlayClose } from '../../lib/overlayStack';
 
 const TAB_ITEMS = [
   { to: '/', label: '홈', icon: LayoutDashboard, ariaLabel: '홈으로 이동' },
@@ -22,6 +22,8 @@ const TAB_ITEMS = [
 export default function MobileTabBar() {
   const [moreOpen, setMoreOpen] = useState(false);
   useOverlayClose(moreOpen, () => setMoreOpen(false)); // Android 뒤로가기·Esc로 더보기 시트 닫기
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(moreOpen, sheetRef); // 시트 안에서 Tab 순환, 닫히면 더보기 탭으로 (55)
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   useFeatureFlagsTick();
@@ -112,7 +114,8 @@ export default function MobileTabBar() {
             role="dialog"
             aria-modal="true"
             aria-label="더보기 메뉴"
-            className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl lg:hidden"
+            ref={sheetRef}
+            className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl lg:hidden outline-none"
             style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))' }}
           >
             {/* 드래그 핸들 */}
