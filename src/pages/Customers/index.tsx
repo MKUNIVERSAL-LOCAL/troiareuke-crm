@@ -246,6 +246,33 @@ function CustomerPaymentHistory({ customerId, compact, onAdd }: { customerId: st
 }
 
 /** 예약 노쇼 횟수 — 예약 받을 때 참고(확인 전화·선결제 권장) (2026-11-17) */
+/**
+ * 프로그램 카드의 차감·이용 내역 — 어떤 관리로 몇 회가 차감됐는지(시술 기록 연동). PC 상세 패널에만 있던 것을 모바일 카드에도 (2026-11-19 ㊹).
+ * 회차권은 '차감 내역 -N회', 기간제는 '이용 내역'(차감 표기 없음). 10건까지, 나머지는 최근 시술 기록으로.
+ */
+function ProgramUsageList({ cp, customerId }: { cp: CustomerProgram; customerId: string }) {
+  const deductions = TreatmentLogStore.getByCustomer(customerId).filter(t => t.customerProgramId === cp.id && t.sessionsUsed > 0);
+  if (deductions.length === 0) return null;
+  const sessionBased = cp.totalSessions !== null;
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+      <p className="text-xs font-medium text-gray-400">{sessionBased ? '차감 내역' : '이용 내역'} ({deductions.length}건)</p>
+      {deductions.slice(0, 10).map(t => (
+        <div key={t.id} className="flex items-center justify-between text-xs text-gray-500">
+          <span className="truncate mr-2">
+            {formatDate(t.treatmentDate)} · {t.treatmentDetails || t.programName || '관리'}
+            {t.staffName ? ` (${t.staffName})` : ''}
+          </span>
+          {sessionBased && <span className="font-semibold text-orange-700 whitespace-nowrap">-{t.sessionsUsed}회</span>}
+        </div>
+      ))}
+      {deductions.length > 10 && (
+        <p className="text-xs text-gray-500">외 {deductions.length - 10}건 — 전체는 최근 시술 기록 참조</p>
+      )}
+    </div>
+  );
+}
+
 function noShowCount(customerId: string): number {
   return ReservationStore.getAll().filter(r => r.customerId === customerId && r.status === 'noshow').length;
 }
@@ -1628,6 +1655,8 @@ export default function Customers() {
                             </div>
                           </>
                         )}
+                        {cp.totalSessions == null && <p className="text-xs text-gray-500">기간제 프로그램</p>}
+                        <ProgramUsageList cp={cp} customerId={selected.id} />
                       </div>
                     ))}
                   </div>
@@ -2251,29 +2280,7 @@ export default function Customers() {
                           {cp.expiryDate && <span>만료일: {formatDate(cp.expiryDate)}</span>}
                         </div>
 
-                        {/* 차감 내역 — 어떤 관리로 몇 회가 차감됐는지 (시술기록 연동) */}
-                        {(() => {
-                          const deductions = TreatmentLogStore.getByCustomer(selected.id)
-                            .filter(t => t.customerProgramId === cp.id && t.sessionsUsed > 0);
-                          if (deductions.length === 0) return null;
-                          return (
-                            <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                              <p className="text-xs font-medium text-gray-400">{cp.totalSessions !== null ? '차감 내역' : '이용 내역'} ({deductions.length}건)</p>
-                              {deductions.slice(0, 10).map(t => (
-                                <div key={t.id} className="flex items-center justify-between text-xs text-gray-500">
-                                  <span className="truncate mr-2">
-                                    {formatDate(t.treatmentDate)} · {t.treatmentDetails || t.programName || '관리'}
-                                    {t.staffName ? ` (${t.staffName})` : ''}
-                                  </span>
-                                  {cp.totalSessions !== null && <span className="font-semibold text-orange-700 whitespace-nowrap">-{t.sessionsUsed}회</span>}
-                                </div>
-                              ))}
-                              {deductions.length > 10 && (
-                                <p className="text-xs text-gray-500">외 {deductions.length - 10}건 — 전체는 최근 시술 기록 참조</p>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        <ProgramUsageList cp={cp} customerId={selected.id} />
                       </div>
                     );
                   })}
