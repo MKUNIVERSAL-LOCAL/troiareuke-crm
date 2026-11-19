@@ -121,7 +121,8 @@ ${reservations.slice(0, 10).map((r: any) => `- ${r.date} ${r.startTime} | ${alia
 【시술 기록】
 ${treatmentLogs.map((t: any) => `- ${t.treatmentDate} | ${alias(t.customerId)} | ${t.programName || t.treatmentDetails || '-'} | ${t.customerProgramId ? `회차 차감 ${t.sessionsUsed ?? 1}회` : '단건'} | 담당:${t.staffName || '-'}`).join('\n')}
 `.trim();
-  return { context, alias: book };
+  // 시술 메모(treatmentDetails) 같은 자유 텍스트에 적힌 이름도 컨텍스트 전체를 한 번 치환해 내보낸다 (리뷰 2026-11-20)
+  return { context: book.forwardAlias(context), alias: book };
 }
 
 async function callClaude(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {

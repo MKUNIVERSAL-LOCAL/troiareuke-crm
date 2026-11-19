@@ -22,7 +22,7 @@ export interface AliasBook {
 }
 
 /** 이름→가명 치환에서 제외할 CRM 어휘 — 이런 이름의 고객(샘플·테스트 데이터에 흔함)이 질문 문장을 망가뜨리지 않게 */
-export const ALIAS_STOP_WORDS = new Set(['고객', '매출', '예약', '오늘', '이번', '지난', '시술', '결제', '직원', '재고', '제품', '등급', '피부', '방문', '회원', '단골', '신규', '프로그램', '회차권', '환불', '취소', '완료', '노쇼', '상담', '사진', '문자', '카카오', '발송']);
+export const ALIAS_STOP_WORDS = new Set(['고객', '매출', '예약', '오늘', '이번', '지난', '시술', '결제', '직원', '재고', '제품', '등급', '피부', '방문', '회원', '단골', '신규', '프로그램', '회차권', '환불', '취소', '완료', '노쇼', '상담', '사진', '문자', '카카오', '발송', 'VIP', 'vip', 'Gold', 'GOLD', 'AI', 'ai', 'SMS', 'PC']);
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -43,13 +43,16 @@ export function buildAliasBook(customers: { id: string; name: string }[], aliasN
   const sameName = new Map<string, string[]>();
   for (const c of customers) {
     const name = (c.name || '').trim();
-    if (name.length < 2 || ALIAS_STOP_WORDS.has(name) || /^고객#?\d*$/.test(name)) continue;
+    // 글자(한글·라틴)가 하나도 없는 이름("1234", "010-1234")은 질문의 금액·전화번호를 가명으로 바꿔 버린다 — 제외 (리뷰 2026-11-20)
+    if (name.length < 2 || ALIAS_STOP_WORDS.has(name) || /^고객#?\d*$/.test(name) || !/[가-힣A-Za-z]/.test(name)) continue;
     if (!nameToAlias.has(name)) nameToAlias.set(name, aliasById.get(c.id)!);
     sameName.set(name, [...(sameName.get(name) ?? []), aliasById.get(c.id)!]);
   }
   const names = [...nameToAlias.keys()].sort((a, b) => b.length - a.length);
-  const nameRe = names.length > 0 ? new RegExp(`(^|[^가-힣A-Za-z0-9])(${names.map(escapeRegExp).join('|')})`, 'g') : null;
-  const forwardAlias = (text: string) => (nameRe ? text.replace(nameRe, (_m, pre: string, name: string) => pre + nameToAlias.get(name)!) : text);
+  // 앞 경계는 뒤돌아보기(lookbehind)로 — 경계 글자를 소비하지 않아 "박서준·김민지"처럼 기호로 이어진 이름도 전부 치환된다 (Electron·Chrome·Node 모두 지원).
+  // 띄어쓰기 없이 붙여 쓴 "박서준김민지"의 뒤 이름은 앞 글자가 한글이라 치환되지 않는다 — 의도된 한계(e2e/ai-alias.spec.ts)
+  const nameRe = names.length > 0 ? new RegExp(`(?<![가-힣A-Za-z0-9])(${names.map(escapeRegExp).join('|')})`, 'g') : null;
+  const forwardAlias = (text: string) => (nameRe ? text.replace(nameRe, name => nameToAlias.get(name)!) : text);
   const deAlias = (text: string) => text.replace(/고객#(\d+)/g, m => aliases.get(m) ?? m);
   const duplicates = [...sameName.values()].filter(list => list.length > 1);
   return { aliases, aliasOf, forwardAlias, deAlias, duplicates };

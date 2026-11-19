@@ -50,6 +50,15 @@ test('동명이인은 첫 번호로 치환되고 전원 번호 목록을 돌려�
   expect(book.deAlias('고객#3')).toBe('김영희');
 });
 
+test('글자 없는 이름·라틴 CRM 어휘 이름은 치환하지 않고, 붙어 있는 두 이름은 모두 치환된다', () => {
+  const book = buildAliasBook([{ id: 'n', name: '1234' }, { id: 'p', name: '010-1234' }, { id: 'v', name: 'VIP' }, { id: 'a', name: '박서준' }, { id: 'b', name: '김민지' }], new Map());
+  expect(book.forwardAlias('1234원 결제, 010-1234로 연락, VIP 고객')).toBe('1234원 결제, 010-1234로 연락, VIP 고객');
+  // 구분 기호로 이어진 두 이름은 모두 치환. 띄어쓰기 없이 붙여 쓴 이름("박서준김민지")은 앞 글자가 한글이라 사람 이름으로 보지 않는다(의도된 한계)
+  expect(book.forwardAlias('박서준·김민지 둘 다, 박서준/김민지')).toBe('고객#4·고객#5 둘 다, 고객#4/고객#5');
+  // 시술 메모 같은 자유 텍스트도 같은 규칙
+  expect(book.forwardAlias('- 2026-11-20 | 고객#4 | 김민지 소개로 방문 | 단건')).toBe('- 2026-11-20 | 고객#4 | 고객#5 소개로 방문 | 단건');
+});
+
 test('고객이 없으면 문장은 그대로다', () => {
   const book = buildAliasBook([], new Map());
   expect(book.forwardAlias('이번 달 매출 알려줘')).toBe('이번 달 매출 알려줘');

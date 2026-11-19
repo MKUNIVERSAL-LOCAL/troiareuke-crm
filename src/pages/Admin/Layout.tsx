@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 import { resetFeatureFlags } from '../../lib/featureFlags';
-import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
+import { clearLocalPhotoCacheForLogout, confirmLogoutDespiteKeepLocal } from '../../lib/photoStore';
 import PasswordChangeGate from '../../components/PasswordChangeGate';
 import ToastHost from '../../components/ui/ToastHost';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
@@ -45,7 +45,7 @@ export default function AdminLayout() {
             프로그램에서 이용해주세요.
           </p>
           <button
-            onClick={async () => { clearLocalPhotoCacheForLogout(); await logout(); navigate('/login'); }}
+            onClick={async () => { if (!confirmLogoutDespiteKeepLocal()) return; clearLocalPhotoCacheForLogout(); await logout(); navigate('/login'); }} // 지점 계정이 /admin을 직접 쳤을 때의 로그아웃 — 이 기기 보관 사진이 있으면 묻는다 (리뷰 2026-11-20)
             className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-colors"
           >
             로그아웃하고 지점 계정으로 로그인
