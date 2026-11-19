@@ -91,6 +91,16 @@ export async function createCustomer(page: Page, acc: E2EAccount) {
   await dismissToasts(page);
 }
 
+/** 로컬 모드에는 직원 계정 UI가 없어 저장된 로그인 사용자의 role을 'staff'로 바꾼다 — 역할별 마스킹 검사용 (94) */
+export async function becomeStaff(page: Page) {
+  await page.evaluate(() => {
+    const key = 'troiareuke_auth_user';
+    const u = JSON.parse(localStorage.getItem(key) || 'null');
+    if (u) localStorage.setItem(key, JSON.stringify({ ...u, role: 'staff' }));
+  });
+  await page.reload();
+}
+
 /** 로컬 모드 세션의 역할을 슈퍼어드민으로 바꿔 어드민 콘솔에 진입 (AuthContext가 localStorage 세션을 그대로 복원한다) */
 export async function becomeSuperadmin(page: Page) {
   await page.evaluate(() => {

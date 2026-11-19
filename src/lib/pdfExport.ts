@@ -39,10 +39,9 @@ export async function exportDatasetsToPdf(keys: string[], role: ExportRole): Pro
   const orderedKeys = EXPORT_DATASETS.filter(d => keys.includes(d.key)).map(d => d.key);
   let isFirstPage = true;
 
-  for (const key of orderedKeys) {
+  for (const sheet of buildExportSheets(orderedKeys, role)) { // 시트는 한 번만 만든다 (리뷰 2026-11-20)
+    const key = sheet.key;
     const dataset = EXPORT_DATASETS.find(d => d.key === key)!;
-    const sheet = buildExportSheets([key], role)[0];
-    if (!sheet) continue;
     counts[dataset.label] = sheet.dataRows;
 
     if (!isFirstPage) doc.addPage();
@@ -79,7 +78,12 @@ export async function exportDatasetsToPdf(keys: string[], role: ExportRole): Pro
       headStyles: { font: 'NanumGothic', fontStyle: 'normal', fillColor: [26, 58, 143], textColor: 255, fontSize: 7.5 },
       alternateRowStyles: { fillColor: [246, 248, 252] },
       // 합계 행(데이터 행 뒤)은 굵게·연한 배경 — 세무용 시트에서 한눈에 (리뷰 2026-11-20). NanumGothic은 normal만 등록돼 굵기 대신 색으로 구분
-      didParseCell: (data) => { if (data.section === 'body' && sheet.rows.length > sheet.dataRows && data.row.index === sheet.rows.length - 1) { data.cell.styles.fillColor = [226, 232, 240]; data.cell.styles.textColor = [17, 24, 39]; } },
+      didParseCell: (data) => {
+        const isTotalsRow = data.section === 'body' && sheet.rows.length > sheet.dataRows && data.row.index === sheet.rows.length - 1;
+        if (!isTotalsRow) return;
+        data.cell.styles.fillColor = [226, 232, 240];
+        data.cell.styles.textColor = [17, 24, 39];
+      },
       margin: { left: 40, right: 40, top: 84 },
     });
   }
