@@ -14,7 +14,7 @@ import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
-import { healCustomerStats } from '../../lib/customerStats';
+import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
 import type { Reservation, Staff } from '../../types';
@@ -1259,7 +1259,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 
   const handleComplete = () => {
     ReservationStore.updateStatus(r.id, 'completed');
-    healCustomerStats(r.customerId); // 코어 +1이 같은 날 시술 기록과 겹치면 두 번 세진다 — 기록(다녀간 날 수)으로 바로 맞춤 (리뷰 2026-11-19)
+    healCustomerStatsWhenReady(r.customerId); // 코어 +1이 같은 날 시술 기록과 겹치면 두 번 세진다 — 기록(다녀간 날 수)으로 바로 맞춤, 하이드레이션 뒤 (리뷰 2026-11-19)
     // 완료 → 결제 브리지: 기존엔 상태만 바뀌고 매출에 잡히지 않아 Sales에서 수기 재입력이 필요했음
     if (r.totalPrice > 0) {
       const alreadyPaid = paidForThis.length > 0;

@@ -196,7 +196,7 @@ export function flushNasOutbox(): Promise<void> {
         const recordIds = mutationRecordIds(next).map(id => JSON.stringify(id));
         const siblings = recordIds.length === 0 ? [] : readOutbox(key).filter(item => item.id !== next.id
           && Math.abs(Date.parse(item.createdAt) - t0) <= 1000
-          && recordIds.some(q => (item.body || '').includes(q)));
+          && (recordIds.some(q => (item.body || '').includes(q)) || mutationRecordIds(item).some(id => recordIds.includes(JSON.stringify(id)))));
         const rejectedAt = new Date().toISOString();
         const prior = readRejected();
         const overflow = prior.length + 1 + siblings.length > REJECTED_MAX; // 상한을 넘겨 오래된 거부 항목이 밀려나면 그것도 유실이다

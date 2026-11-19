@@ -12,7 +12,7 @@ import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, ReservationStore } from '../../lib/store';
-import { healCustomerStats } from '../../lib/customerStats';
+import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -297,7 +297,7 @@ export default function Treatments() {
               const r = ReservationStore.getAll().find(x => x.id === reservationId);
               if (r && (r.status === 'confirmed' || r.status === 'pending') && (!savedDate || r.date === savedDate)) {
                 ReservationStore.updateStatus(reservationId, 'completed');
-                healCustomerStats(r.customerId); // 완료 +1이 같은 날 시술 기록과 겹쳐 두 번 세지지 않게 (리뷰 2026-11-19)
+                healCustomerStatsWhenReady(r.customerId); // 완료 +1이 같은 날 시술 기록과 겹쳐 두 번 세지지 않게 — 하이드레이션 뒤 (리뷰 2026-11-19)
               }
             }
             // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
@@ -534,7 +534,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         try { savePhotos(`treatment:${saved.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
       }
       // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로, 방문 횟수를 같은 날 예약 완료와 별도로 +1 한다 — 기록에서 다시 세어 바로 맞춘다(모달이 든 customer 스냅샷이 아닌 저장소 기준) (정합성 감사·리뷰 2026-11-19)
-      if (saved) healCustomerStats(customerId);
+      if (saved) healCustomerStatsWhenReady(customerId);
       // 결제 연계: 회차권 차감이 아닌 단건 시술이고 선택한 시술 항목에 금액이 있으면 결제 등록으로 이어준다 (2026-11-17)
       const amount = linkedProgram ? 0 : selectedServices.reduce((sum, name) => sum + (services.find(s => s.name === name)?.price ?? 0), 0);
       if (saved && amount > 0) {

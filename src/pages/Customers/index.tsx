@@ -2,14 +2,14 @@ import { isImeKey } from '../../lib/ime';
 ﻿import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
-import { healCustomerStats } from '../../lib/customerStats';
+import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search, Plus, User, ChevronRight, AlertCircle, X, CheckCircle,
   Scissors, ChevronDown, Tag,
   Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus, GitMerge, MessageSquare, MoreHorizontal, UserX, FileText
 } from 'lucide-react';
-import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore, initializeStores } from '../../lib/store';
+import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import {
@@ -990,16 +990,12 @@ export default function Customers() {
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
-  // 서버 하이드레이션(initializeStores)이 끝난 뒤에만 — 캐시로 먼저 그려진 화면에서 비어 있는 결제 목록으로 0을 서버에 쓰지 않게 (리뷰 2026-11-19)
+  // 서버 하이드레이션이 끝난 뒤에만 — 캐시로 먼저 그려진 화면에서 비어 있는 결제 목록으로 0을 서버에 쓰지 않게 (리뷰 2026-11-19)
+  const applyHealed = (healed: Customer) => { loadAll(); setSelected(prev => (prev?.id === healed.id ? healed : prev)); };
   const openCustomer = (c: Customer) => {
     setSelected(c);
     setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id));
-    void initializeStores().then(() => {
-      const healed = healCustomerStats(c.id);
-      if (!healed) return;
-      loadAll();
-      setSelected(prev => (prev?.id === c.id ? healed : prev));
-    }).catch(() => { /* 로드 실패는 배너가 알린다 — 재계산만 건너뜀 */ });
+    healCustomerStatsWhenReady(c.id, applyHealed);
   };
   const openFirstMatch = () => { if (filtered.length > 0) openCustomer(filtered[0]); };
   const qHandled = useRef<string | null>(null); // 같은 q로는 1회만 — 검색어를 더 치거나 목록이 갱신될 때 다시 열리지 않게 (리뷰 2026-11-18)
@@ -1413,8 +1409,8 @@ export default function Customers() {
       staffNotes: treatForm.staffNotes || undefined,
       nextAppointment: treatForm.nextAppointment || undefined,
     });
-    // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로, 방문 횟수를 같은 날 예약 완료와 별도로 +1 한다 — 기록에서 다시 세어 바로 맞춘다 (정합성 감사·리뷰 2026-11-19)
-    healCustomerStats(selected.id);
+    // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로, 방문 횟수를 같은 날 예약 완료와 별도로 +1 한다 — 기록에서 다시 세어 바로 맞춘다(하이드레이션 뒤) (정합성 감사·리뷰 2026-11-19)
+    healCustomerStatsWhenReady(selected.id, applyHealed);
 
     setShowTreatmentModal(false);
     setTreatForm({ customerProgramId: '', staffName: '', treatmentDate: today(), treatmentTime: '', treatmentDetails: '', skinCondition: '', staffNotes: '', nextAppointment: '' });
