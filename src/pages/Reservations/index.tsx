@@ -26,7 +26,7 @@ import {
 } from '../../lib/googleCalendar';
 import { registeredPaymentsFor } from '../../lib/pendingCompletion';
 import { readableTextOn } from '../../lib/color';
-import { getGcalMap, rememberGcalEvent, cleanupGcalEvent } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
+import { getGcalMap, rememberGcalEvent, cleanupGcalEvent, localizeGcalEventDates } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
 import { todayISO, formatDate } from '../../lib/format';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
@@ -218,8 +218,8 @@ export default function Reservations() {
       const end = new Date(Math.max(pcEnd.getTime(), mEnd.getTime()));
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
-      const { asReservationLike } = await fetchCalendarEventsAsReservations(start, end);
-      setGoogleEvents(asReservationLike);
+      const { events, asReservationLike } = await fetchCalendarEventsAsReservations(start, end);
+      setGoogleEvents(localizeGcalEventDates(events, asReservationLike)); // 새벽 일정이 전날에 붙던 UTC 날짜 보정 (12차 #H1)
     } catch {
       setGoogleEvents([]);
       // 조용히 비우면 "구글 일정이 왜 안 보이지"만 남는다 — 한 번만 알린다 (4차 UX 점검 2026-11-19)
@@ -1010,14 +1010,14 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     const endDate = addMinutes(startDate, totalDuration);
     const endTime = format(endDate, 'HH:mm');
 
-    // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외)
-    const overlap = ReservationStore.getAll().find(r =>
-      r.id !== editing?.id &&
-      r.staffId === staff.id &&
-      r.date === date &&
-      r.status !== 'cancelled' && r.status !== 'noshow' &&
-      startTime < r.endTime && endTime > r.startTime
-    );
+    // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외). 분 단위로 — 'HH:mm' 문자열 비교는 자정을 넘는 예약(23:30+60분 → "00:30")에서 역전돼 겹침을 놓쳤다 (12차 #H2)
+    const toMin = (t: string) => { const [hh, mm] = t.split(':').map(Number); return hh * 60 + mm; };
+    const newStart = toMin(startTime), newEnd = newStart + totalDuration;
+    const overlap = ReservationStore.getAll().find(r => {
+      if (r.id === editing?.id || r.staffId !== staff.id || r.date !== date || r.status === 'cancelled' || r.status === 'noshow') return false;
+      const rs = toMin(r.startTime); let re = toMin(r.endTime); if (re <= rs) re += 24 * 60; // 자정 넘김
+      return newStart < re && newEnd > rs;
+    });
     // 휴무일·지정 휴일·영업시간 밖 경고 — 예외 영업이 있으니 막지 않고 확인만. 시간이 안 바뀐 수정(메모만 등)은 다시 묻지 않는다 (2026-11-18)
     const timeChanged = !editing || editing.date !== date || editing.startTime !== startTime || editing.endTime !== endTime;
     const hoursWarnings = timeChanged ? checkBusinessHours(date, startTime, totalDuration) : [];

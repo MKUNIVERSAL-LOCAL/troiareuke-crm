@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { CustomerStore, TreatmentLogStore } from './store';
-import { toISODate } from './format';
+import { toISODate, localISODate } from './format';
 import { ConsultationStore } from './consultationStore';
 import { clearPhotos } from './photoStore';
 import type { Customer } from '../types';
@@ -42,7 +42,7 @@ export function setRetentionPolicy(policy: RetentionPolicy): boolean {
 
 /** 고객의 마지막 활동일(YYYY-MM-DD) — 마지막 방문일과 등록일 중 늦은 날 */
 export function lastActivityDate(c: Customer): string {
-  const registered = (c.registeredAt || '').slice(0, 10);
+  const registered = localISODate(c.registeredAt); // UTC ISO → 로컬 날짜 — 방문일(로컬)과 같은 기준으로 비교 (12차 #M3)
   const visit = (c.lastVisitDate || '').slice(0, 10);
   return visit > registered ? visit : registered;
 }
@@ -55,8 +55,7 @@ export function isAnonymized(c: Customer): boolean {
 export function getExpiredCustomers(today = new Date()): Customer[] {
   const policy = getRetentionPolicy();
   if (!policy.enabled) return [];
-  const cutoff = new Date(today);
-  cutoff.setFullYear(cutoff.getFullYear() - policy.years);
+  const cutoff = new Date(today.getFullYear() - policy.years, today.getMonth(), today.getDate()); // 2/29 기준이면 setFullYear 가 3/1 로 밀리던 것 — JS 가 2/29→(평년)3/1 로 정규화하되 기준은 명시적 (12차 #M3)
   const cutoffISO = toISODate(cutoff);
   return CustomerStore.getAll().filter(c => !c.id.startsWith('sample_') && !isAnonymized(c) && lastActivityDate(c) < cutoffISO);
 }

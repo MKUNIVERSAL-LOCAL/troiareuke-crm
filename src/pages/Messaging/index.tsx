@@ -1,7 +1,8 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { notify } from '../../lib/notify';
 import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
-import { formatDateTime } from '../../lib/format';
+import { formatDateTime, parseISODate, todayISO } from '../../lib/format';
+import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -47,11 +48,11 @@ const SEGMENT_FILTERS: Record<string, (c: Customer) => boolean> = {
   vip: c => c.grade === 'VIP',
   birthday: c => {
     if (!c.birthDate) return false;
-    return new Date(c.birthDate).getMonth() === new Date().getMonth();
+    return parseISODate(c.birthDate).getMonth() === new Date().getMonth(); // 앱 공통 로컬 파싱 (12차 #L3)
   },
   novisit: c => {
     if (!c.lastVisitDate) return false;
-    return Date.now() - new Date(c.lastVisitDate).getTime() > 60 * 86400000;
+    return daysBetween(c.lastVisitDate, todayISO()) > 60; // 달력 일수 — UTC 자정 산술은 09시 전에 하루 늦게 들어왔다 (12차 #L4)
   },
 };
 
@@ -209,9 +210,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
 
   const birthdayCount = customers.filter(c => {
     if (!c.birthDate) return false;
-    const now = new Date();
-    const bd = new Date(c.birthDate);
-    return bd.getMonth() === now.getMonth();
+    return parseISODate(c.birthDate).getMonth() === new Date().getMonth();
   }).length;
 
   return (

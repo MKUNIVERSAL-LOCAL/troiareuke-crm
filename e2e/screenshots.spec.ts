@@ -41,7 +41,7 @@ test('주요 화면 스크린샷', async ({ page }, testInfo) => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
     const list = JSON.parse(localStorage.getItem(key) || '[]');
     const old = new Date(); old.setFullYear(old.getFullYear() - 2);
-    list.push({ ...list[0], id: 'old_' + Date.now(), name: '오래된고객', phone: '010-1111-2222', lastVisitDate: old.toISOString().slice(0, 10), registeredAt: old.toISOString() });
+    list.push({ ...list[0], id: 'old_' + Date.now(), name: '오래된고객', phone: '010-1111-2222', lastVisitDate: `${old.getFullYear()}-${String(old.getMonth() + 1).padStart(2, '0')}-${String(old.getDate()).padStart(2, '0')}`, registeredAt: old.toISOString() });
     localStorage.setItem(key, JSON.stringify(list));
   });
   // 회차권 잔여 1회 시드 — 대시보드 회차권 임박 카드가 세트에 찍히도록 (2026-11-17)

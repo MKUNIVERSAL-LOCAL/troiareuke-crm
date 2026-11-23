@@ -5,7 +5,8 @@
 // 예약 화면과 대시보드 "완료 처리 누락" 카드(노쇼 처리)가 같은 정리 경로를 쓴다.
 // ═══════════════════════════════════════════════════════════════
 
-import { isGoogleCalendarConnected, deleteCalendarEvent, createCalendarEvent } from './googleCalendar';
+import { isGoogleCalendarConnected, deleteCalendarEvent, createCalendarEvent, type GoogleCalendarEvent } from './googleCalendar';
+import { toISODate } from './format';
 import type { Reservation } from '../types';
 import { notify } from './notify';
 
@@ -52,4 +53,14 @@ export async function resyncGcalEvents(reservations: Reservation[]): Promise<voi
     }
   }
   if (failed > 0) notify.warning(`Google 캘린더 일정 ${failed}건을 새 이름으로 다시 만들지 못했습니다. 해당 예약을 열어 저장하면 복구됩니다.`);
+}
+
+/** 코어 fetchCalendarEventsAsReservations 는 날짜를 UTC(toISOString)로, 시각은 로컬로 뽑아 KST 00:00~09:00 일정이 전날 칸에 붙는다(코어 잠금이라 못 고침, 12차 #H1) —
+ *  원본 이벤트의 dateTime 으로 로컬 날짜를 다시 계산해 돌려준다. 종일 일정(date 만 있음)은 그대로 */
+export function localizeGcalEventDates<T extends { id: string; date: string }>(events: GoogleCalendarEvent[], rows: T[]): T[] {
+  const startById = new Map(events.map(ev => [ev.id, ev.start.dateTime]));
+  return rows.map(r => {
+    const dt = startById.get(r.id);
+    return dt ? { ...r, date: toISODate(new Date(dt)) } : r;
+  });
 }

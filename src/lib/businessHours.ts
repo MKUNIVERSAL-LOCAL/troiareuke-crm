@@ -2,7 +2,7 @@
 // businessHours — 영업시간·휴무일 점검 (비코어, 2026-11-18)
 // ───────────────────────────────────────────────────────────────
 // 예약을 휴무일·지정 휴일·영업시간 밖에 잡으면 저장 전에 경고한다(막지는 않는다 — 예외 영업이 흔하므로 confirm).
-// 설정 > 영업시간의 요일별 open/close/isOff와 holidays(YYYY-MM-DD, 서버 시드 전용 — 화면 편집기는 아직 없음)를 쓴다.
+// 설정 > 영업시간의 요일별 open/close/isOff와 holidays(YYYY-MM-DD, 설정 > 영업시간의 지정 휴일 편집기에서 관리)를 쓴다.
 // 시간은 분으로 비교한다 — 'HH:mm' 문자열 비교는 자정을 넘는 예약(23:30+60분 → 00:30)에서 틀린다.
 // ═══════════════════════════════════════════════════════════════
 
@@ -46,8 +46,10 @@ export function checkBusinessHours(date: string, startTime: string, durationMinu
     out.push({ kind: 'dayOff', message: `${day}요일은 휴무일입니다.` });
     return out;
   }
-  const open = toMinutes(hours.open), close = toMinutes(hours.close), start = toMinutes(startTime);
+  const open = toMinutes(hours.open), start = toMinutes(startTime);
+  let close = hours.close === '00:00' ? 24 * 60 : toMinutes(hours.close); // '00:00' 마감은 자정(24:00) — 예약표 범위(Reservations gridRangeFromSettings)와 같은 해석 (12차 #M1)
   if (open === null || close === null || start === null) return out;
+  if (close <= open) close += 24 * 60; // 자정 넘는 마감(서버 시드·구버전 데이터) — 정상 영업시간을 "밖"으로 판정하지 않게
   const end = start + Math.max(0, durationMinutes || 0);
   if (start < open || end > close) {
     out.push({ kind: 'outsideHours', message: `${day}요일 영업시간(${hours.open}~${hours.close}) 밖입니다 (${startTime}~${fromMinutes(end)}).` });

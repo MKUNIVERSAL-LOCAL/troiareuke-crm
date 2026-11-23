@@ -51,6 +51,7 @@ import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, localISODate, formatLocalDate } from '../../lib/format';
+import { daysBetween as calendarDaysBetween } from '../../lib/revisitRule'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -100,8 +101,7 @@ const GRADE_COLORS: Record<CustomerGrade, string> = {
 const GRADES: CustomerGrade[] = ['VIP', '골드', '일반', '신규'];
 
 function getDaysSince(d?: string) {
-  if (!d) return null;
-  return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  return d ? calendarDaysBetween(d, today()) : null; // 달력 일수 — new Date('YYYY-MM-DD')(UTC 자정) 산술은 KST 09시 전에 하루 적고 오늘 방문이 -1일이 됐다 (12차 #H3)
 }
 function calcExpiryDate(days?: number | null, baseDate?: string) {
   if (!days) return undefined;
@@ -935,9 +935,8 @@ export default function Customers() {
   // 승급 대상 id만 고른다(쓰기 없음). 실제 쓰기는 runAutoPromote가 첫 화면을 그린 뒤 25명씩 — 코어 update()가 한 명마다
   // 테이블 전체를 저장해 500명이면 4초 넘게 멈추기 때문(대량 데이터 E2E 실측, 성능 감사 2026-11-18)
   function autoPromoteNewCustomers(): string[] {
-    const NINETY_DAYS = 90 * 86400000;
-    const now = Date.now();
-    const candidates = CustomerStore.getAll().filter(c => c.grade === '신규' && !c.id.startsWith('sample_') && !!c.registeredAt && now - new Date(c.registeredAt).getTime() >= NINETY_DAYS);
+    const todayStr = today();
+    const candidates = CustomerStore.getAll().filter(c => c.grade === '신규' && !c.id.startsWith('sample_') && !!c.registeredAt && calendarDaysBetween(localISODate(c.registeredAt), todayStr) >= 90); // 달력 90일(등록 시각에 따라 90/91일로 갈리지 않게, 12차 #L8)
     if (candidates.length === 0) return [];
     // 시술 횟수는 한 번에 집계 — 신규 고객마다 시술 테이블 전체를 훑지 않게 (성능 감사 2026-11-18)
     const treatmentCount = new Map<string, number>();
@@ -2095,7 +2094,7 @@ export default function Customers() {
                       개인정보 동의: {isAnonymized(selected)
                         ? '익명화됨 (보존기간 경과)'
                         : selected.privacyConsent
-                          ? `동의함${selected.privacyConsentAt ? ` (${selected.privacyConsentAt.slice(0, 10)})` : ''}`
+                          ? `동의함${selected.privacyConsentAt ? ` (${formatLocalDate(selected.privacyConsentAt)})` : ''}`
                           : '기록 없음 (구 등록 고객)'}
                     </p>
                     {selectedNoShows > 0 && (

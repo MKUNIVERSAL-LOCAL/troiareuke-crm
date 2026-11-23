@@ -1,4 +1,5 @@
 import { isImeKey } from '../../lib/ime';
+import { localISODate } from '../../lib/format';
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check, Zap, AlertTriangle, Monitor } from 'lucide-react';
 
@@ -72,7 +73,7 @@ function buildCrmContext(aliasNumbers: Map<string, number>): { context: string; 
   const thisMonthStr = format(today, 'yyyy-MM');
   const thisMonthPayments = payments.filter(p => p.paymentDate.startsWith(thisMonthStr) && p.status === 'completed');
   const thisMonthRevenue = thisMonthPayments.reduce((sum, p) => sum + p.amount, 0);
-  const newThisMonth = customers.filter(c => c.registeredAt.startsWith(thisMonthStr));
+  const newThisMonth = customers.filter(c => localISODate(c.registeredAt).startsWith(thisMonthStr)); // registeredAt 은 UTC ISO — 대시보드와 같은 로컬 월 (12차 #M2)
   const vipCustomers = customers.filter(c => c.grade === 'VIP');
   const lowStock = products.filter(p => p.stock <= p.minStock);
 

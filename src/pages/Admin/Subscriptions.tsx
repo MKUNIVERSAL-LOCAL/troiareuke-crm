@@ -69,7 +69,7 @@ export default function Subscriptions() {
         setSubs([...byBranch.entries()].map(([branchId, accounts]) => {
           const rep = accounts.find(u => u.role === 'admin') || accounts[0];
           const serviceEndsAt = rep.serviceEndsAt || null;
-          const isExpired = Boolean(serviceEndsAt && new Date(serviceEndsAt).getTime() < Date.now());
+          const isExpired = Boolean(serviceEndsAt && serviceEndsAt.slice(0, 10) < todayISO()); // 사용자 관리와 같은 규칙(만료일 당일은 유효) — new Date('YYYY-MM-DD') 는 KST 09:00 부터 만료로 보였다 (12차 #M4)
           // 체험(trial) 지점은 체험 만료일도 만료 판정에 넣는다 — 전에는 "활성 · 만료일(과거)" 조합이 나왔다 (8차 점검 2026-11-20)
           const trialExpired = rep.plan === 'trial' && !serviceEndsAt && Boolean(rep.trialEndsAt && new Date(rep.trialEndsAt).getTime() < Date.now());
           const allInactive = accounts.every(u => u.isActive === false);

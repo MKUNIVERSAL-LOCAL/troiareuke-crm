@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, pickCustomer, isNearMidnightSeoul } from './helpers';
 
 /**
  * 핵심 사용 흐름 E2E 스모크 (로컬 모드 빌드, 외부 서버 없음)
@@ -13,6 +13,7 @@ const acc = makeAccount('E2E');
 test.describe.configure({ mode: 'serial' });
 
 test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는다', async ({ page }) => {
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 내일 예약·오늘 생일·어제 누락 카드의 기준일이 시드와 렌더 사이에 바뀐다 (12차 #M6)');
   test.slow(); // 단독 ≈50s — 9개 테스트 병렬 부하에서 60s 전체 제한을 넘겨 실패(2026-11-18 17:00·17:20 재현) → 3배 여유
   page.on('dialog', d => d.accept());
 

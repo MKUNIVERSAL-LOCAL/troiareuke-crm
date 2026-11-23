@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { BRANCH_ROUTES, solidPng, countPhotoEntries, pickCustomer, expectNoHorizontalOverflow } from './helpers';
+import { BRANCH_ROUTES, solidPng, countPhotoEntries, pickCustomer, expectNoHorizontalOverflow, isNearMidnightSeoul } from './helpers';
 
 /**
  * 모바일 최적화 게이트 — 스토어 앱과 같은 화면 폭(Pixel 7, 412×915)에서 핵심 화면이
@@ -16,6 +16,7 @@ const PASSWORD = 'smoke-pass-1234';
 test.describe.configure({ mode: 'serial' });
 
 test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없이 동작한다', async ({ page }) => {
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 회차권 구매일·오늘 기준 카드가 시드와 렌더 사이에 바뀐다 (12차 #M6)');
   test.slow(); // 단독 ≈40s — 병렬 부하 여유 (2026-11-18)
   page.on('dialog', d => d.accept());
 
@@ -229,7 +230,8 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
     const key = customersKey.replace(/_customers$/, '_customer_programs');
     const list = JSON.parse(localStorage.getItem(key) || '[]');
     const now = new Date().toISOString();
-    list.push({ id: 'seed_cp_' + Date.now(), shopId: customer.shopId, customerId: customer.id, customerName: customer.name, programName: '모바일 5회권', category: '회차권', totalSessions: 5, usedSessions: 1, pricePaid: 100000, paymentMethod: '카드', purchaseDate: now.slice(0, 10), isCompleted: false, createdAt: now });
+    const localToday = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })(); // 시드 날짜는 앱 규칙(로컬) — toISOString 은 KST 00~09시에 전날 (12차 #L7)
+    list.push({ id: 'seed_cp_' + Date.now(), shopId: customer.shopId, customerId: customer.id, customerName: customer.name, programName: '모바일 5회권', category: '회차권', totalSessions: 5, usedSessions: 1, pricePaid: 100000, paymentMethod: '카드', purchaseDate: localToday, isCompleted: false, createdAt: now });
     localStorage.setItem(key, JSON.stringify(list));
   });
   await page.goto('/customers');

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, visibleButton } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, visibleButton, isNearMidnightSeoul } from './helpers';
 import { addReservation, completeReservation, logTreatment, openCustomer, refundFirstPayment } from './flows';
 
 /**
@@ -31,6 +31,7 @@ async function patchCustomer(page: Page, name: string, patch: Record<string, unk
 }
 
 test('같은 날 예약 완료 + 시술 기록은 방문 1회, 환불은 누적 결제액 0, 틀어진 저장값은 상세를 열면 기록대로 돌아온다', async ({ page }) => {
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 오늘 예약·시술일의 기준일이 바뀐다 (12차 #M6)');
   test.slow();
   // 시술 기록 저장 뒤 "결제도 지금 등록할까요?"는 거절(이미 예약 완료 때 결제했음) — 나머지 confirm은 수락
   page.on('dialog', d => (/매출에 등록할까요/.test(d.message()) ? d.dismiss() : d.accept()));

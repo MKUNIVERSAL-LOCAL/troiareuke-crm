@@ -10,7 +10,7 @@ import { useOverlayClose, useFocusTrap } from '../lib/overlayStack';
 import { useState, useEffect, useRef } from 'react';
 import { X, Link2, Copy, CheckCircle, MessageSquare, RefreshCw, Ban } from 'lucide-react';
 import type { Customer } from '../types';
-import { formatPrice, todayISO } from '../lib/format';
+import { formatPrice, todayISO, localISODate } from '../lib/format';
 import { copyText } from '../lib/clipboard';
 import { askConfirm } from '../lib/confirmDialog';
 import { maskPhone } from '../lib/masking';
@@ -303,7 +303,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                         <p className="font-medium text-gray-800 truncate">
                           {r.customerName ? `${r.customerName} · ` : ''}{r.orderName}
                         </p>
-                        <p className="text-2xs text-gray-400">{r.createdAt.slice(0, 10)}{r.paidAt ? ` → 결제 ${r.paidAt.slice(0, 10)}` : ''}</p>
+                        <p className="text-2xs text-gray-400">{localISODate(r.createdAt)}{r.paidAt ? ` → 결제 ${localISODate(r.paidAt)}` : ''}</p>
                       </div>
                       <span className="font-bold text-gray-900 whitespace-nowrap">{formatPrice(r.amount)}</span>
                       {(r.status === 'pending' || r.status === 'vbank_wait') && (

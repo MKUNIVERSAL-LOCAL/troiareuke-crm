@@ -1,5 +1,5 @@
 import { notify } from '../../lib/notify';
-import { matchesSearch, todayISO, toISODate, thisYearMonthISO, formatDate } from '../../lib/format';
+import { matchesSearch, todayISO, toISODate, parseISODate, formatDate } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
@@ -349,9 +349,9 @@ function periodRange(period: Period, today: string): { from: string; to: string 
   if (period === 'today') return { from: today, to: today };
   if (period === 'month') {
     const [y, m] = today.split('-').map(Number);
-    return { from: `${thisYearMonthISO()}-01`, to: toISODate(new Date(y, m, 0)) };
+    return { from: `${today.slice(0, 7)}-01`, to: toISODate(new Date(y, m, 0)) };
   }
-  const d = new Date(); const dow = (d.getDay() + 6) % 7;
+  const d = parseISODate(today); const dow = (d.getDay() + 6) % 7; // 전부 인자 기준 — 월·연 경계에서 '지금'과 섞이지 않게 (12차 #L5)
   const mon = new Date(d); mon.setDate(d.getDate() - dow);
   const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
   return { from: toISODate(mon), to: toISODate(sun) };
