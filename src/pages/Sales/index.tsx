@@ -20,7 +20,8 @@ import { ExpenseStore, loadExpenses } from '../../lib/expenseStore';
 import type { Payment, PaymentMethod, Expense, ExpenseCategory, CustomerProgram } from '../../types';
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
-import { formatPrice, formatDate, todayISO as today, parseISODate } from '../../lib/format';
+import { formatPrice, formatDate, todayISO as today, parseISODate, toManwon } from '../../lib/format';
+import { splitPercent } from '../../lib/percent';
 import { countPaymentUnits } from '../../lib/paymentCount';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import PaymentLinkModal from '../../components/PaymentLinkModal';
@@ -187,6 +188,11 @@ export default function Sales() {
     total: monthPayments.reduce((s, p) => s + p.amount, 0),
     count: countPaymentUnits(monthPayments), // 분할 결제 2행 = 1건 — 마감 요약·대시보드와 같은 정의 (금액 감사 2026-11-20)
     paidCount: countPaymentUnits(monthPayments.filter(p => p.amount > 0)), // 0원 회차권(이벤트)은 건당 평균에서 제외 (10차 #M8)
+    shares: splitPercent([
+      monthPayments.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0),
+      monthPayments.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0),
+      monthPayments.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0),
+    ]), // [시술, 제품, 기타] 비중 — 합이 100 (10차 #L3)
   }), [monthPayments]);
 
   const listPayments = useMemo(() => {
@@ -230,9 +236,9 @@ export default function Sales() {
       const dayPayments = monthPayments.filter(p => p.paymentDate === dateStr);
       return {
         day: `${i + 1}일`,
-        시술: dayPayments.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0) / 10000,
-        제품: dayPayments.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0) / 10000,
-        기타: dayPayments.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0) / 10000,
+        시술: toManwon(dayPayments.filter(p => p.type === 'program' || p.type === 'single_treatment').reduce((s, p) => s + p.amount, 0)),
+        제품: toManwon(dayPayments.filter(p => p.type === 'product').reduce((s, p) => s + p.amount, 0)),
+        기타: toManwon(dayPayments.filter(p => p.type === 'other').reduce((s, p) => s + p.amount, 0)),
         total: dayPayments.reduce((s, p) => s + p.amount, 0),
       };
     });
@@ -309,9 +315,9 @@ export default function Sales() {
       const exp = expenses.filter(x => x.expenseDate.startsWith(mo)).reduce((s, x) => s + x.amount, 0);
       return {
         month: `${parseInt(mo.split('-')[1], 10)}월`,
-        매출: Math.round(rev / 10000),
-        지출: Math.round(exp / 10000),
-        이익: Math.round((rev - exp) / 10000),
+        매출: toManwon(rev),
+        지출: toManwon(exp),
+        이익: toManwon(rev - exp),
       };
     });
   }, [pnlMode, pnl.months, payments, expenses, viewMonth]);
@@ -596,14 +602,14 @@ export default function Sales() {
               <p className="text-xs text-gray-400 mb-2">시술 매출</p>
               <p className="text-2xl font-bold text-gray-900" data-testid="sales-treatment-amount">{formatPrice(thisSummary.treatment)}</p>
               <p className="text-xs text-gray-500 mt-1">
-                {thisSummary.total > 0 ? Math.round((thisSummary.treatment / thisSummary.total) * 100) : 0}% 비중
+                {thisSummary.shares[0]}% 비중
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-xs text-gray-400 mb-2">제품 매출</p>
               <p className="text-2xl font-bold text-gray-900" data-testid="sales-product-amount">{formatPrice(thisSummary.product)}</p>
               <p className="text-xs text-gray-500 mt-1">
-                {thisSummary.total > 0 ? Math.round((thisSummary.product / thisSummary.total) * 100) : 0}% 비중
+                {thisSummary.shares[1]}% 비중{thisSummary.other > 0 ? ` · 기타 ${thisSummary.shares[2]}%` : ''}
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
@@ -731,7 +737,7 @@ export default function Sales() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">
-                          {customerLink(p, '—')}
+                          {customerLink(p, '-')}
                           {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">환불</span>}
                           {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
                         </p>
@@ -767,7 +773,7 @@ export default function Sales() {
                     <div key={p.id} className="group grid grid-cols-6 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 items-center text-sm">
                       <span className="text-gray-500 text-xs">{formatDate(p.paymentDate)}</span>
                       <span className="col-span-2 font-medium text-gray-800">
-                        {customerLink(p, '—')}
+                        {customerLink(p, '-')}
                         {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-700">-{formatPrice(p.discountAmount)}</span>}
                         {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">환불</span>}
                         {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
@@ -1007,7 +1013,7 @@ export default function Sales() {
                 </div>
                 <div className="flex justify-between pt-2 text-xs text-gray-400">
                   <span>영업이익률</span>
-                  <span>{pnl.cur.revenue.total > 0 ? `${Math.round((pnl.cur.operatingProfit / pnl.cur.revenue.total) * 100)}%` : '—'}</span>
+                  <span>{pnl.cur.revenue.total > 0 ? `${Math.round((pnl.cur.operatingProfit / pnl.cur.revenue.total) * 100)}%` : '-'}</span>
                 </div>
               </div>
             </div>
@@ -1028,7 +1034,7 @@ export default function Sales() {
                         <p className="text-xs text-gray-400 mb-1">{label}</p>
                         <p className="text-sm font-bold text-gray-900">{formatPrice(cur)}</p>
                         <p className={`text-xs mt-1 font-medium ${diff > 0 ? 'text-green-700' : diff < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                          {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatPrice(diff)}`}
+                          {diff === 0 ? '-' : `${diff > 0 ? '+' : ''}${formatPrice(diff)}`}
                         </p>
                       </div>
                     );

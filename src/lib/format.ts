@@ -8,6 +8,12 @@ export function formatPrice(n: number): string {
 
 /** ISO 날짜 문자열을 "YYYY.MM.DD" 로. 없으면 "-" */
 /** 카드용 짧은 금액 — 10만원 미만은 "48,000원", 이상은 "12.3만원"(반올림으로 "0만원"이 되던 것 방지, 3차 UX 점검 2026-11-19) */
+/** 차트용 만원 환산 — 소수 1자리. Math.round(/10000) 은 4만 8천 원을 5, 4천 원을 0으로 보였다(작은 매장 하루 1건이 사라짐) (10차 숫자 점검 #L2) */
+export function toManwon(n: number, digits = 1): number {
+  const k = 10 ** digits;
+  return Math.round((n / 10000) * k) / k;
+}
+
 export function formatWon(n: number): string {
   if (Math.abs(n) < 100000) return `${n.toLocaleString('ko-KR')}원`;
   return `${(n / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}만원`;

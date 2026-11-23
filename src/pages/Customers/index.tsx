@@ -1725,7 +1725,7 @@ export default function Customers() {
                   {dupHint}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 결제</span>
-                    <span className="text-sm font-medium text-gray-900 tabular-nums">{(selected.totalSpent || 0).toLocaleString()}원</span>
+                    <span className="text-sm font-medium text-gray-900 tabular-nums">{formatPrice((selected.totalSpent || 0))}</span>
                   </div>
                   {(statsOf(selected).lastVisitDate || selected.lastVisitDate) && (
                     <div className="flex justify-between">

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { formatPrice } from '../lib/format';
 import { ClipboardCheck, Copy, Check, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../lib/mobileBridge';
 import { getDailyClose, buildDailyCloseMessage } from '../lib/dailyClose';
@@ -54,17 +55,17 @@ export default function DailyCloseCard({ compact = false, refreshKey = 0 }: { co
       </div>
       {/* PC 우측 알림 열(약 300px)에서는 4열이 잘려 2열 고정 — 모바일도 2열 (시각 QA 2026-11-17) */}
       <div className="grid grid-cols-2 gap-2">
-        <Stat label="오늘 매출" value={`${close.revenue.toLocaleString()}원`} />
+        <Stat label="오늘 매출" value={`${formatPrice(close.revenue)}`} />
         <Stat label="결제" value={`${close.paymentCount}건`} />
-        <Stat label="시술 · 신규" value={`${close.treatments}건 · ${close.newCustomers}명`} />
+        <Stat label="시술 기록 · 신규 고객" value={`${close.treatments}건 · ${close.newCustomers}명`} />
         <Stat label="예약 완료/노쇼" value={`${close.reservations.completed} / ${close.reservations.noshow}`} />
       </div>
       {(close.byMethod.length > 0 || close.refunds > 0 || close.expenses > 0) && (
         <p className="text-xs text-gray-500 mt-2 truncate">
           {[
-            ...close.byMethod.map(m => `${m.method} ${m.amount.toLocaleString()}원`),
-            close.refunds ? `환불(오늘 결제분) ${close.refunds.toLocaleString()}원` : '',
-            close.expenses ? `지출 ${close.expenses.toLocaleString()}원` : '',
+            ...close.byMethod.map(m => `${m.method} ${formatPrice(m.amount)}`),
+            close.refunds ? `환불(오늘 결제분) ${formatPrice(close.refunds)}` : '',
+            close.expenses ? `지출 ${formatPrice(close.expenses)}` : '',
           ].filter(Boolean).join(' · ')}
         </p>
       )}

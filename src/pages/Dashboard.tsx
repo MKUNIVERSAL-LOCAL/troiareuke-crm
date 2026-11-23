@@ -10,7 +10,7 @@ import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
 import StatCard from '../components/ui/StatCard';
-import { formatDate, formatWon } from '../lib/format';
+import { formatDate, formatWon, formatPrice, toManwon } from '../lib/format';
 import { countPaymentUnits } from '../lib/paymentCount';
 import { growthPct } from '../lib/growth';
 import { isCountableCustomer } from '../lib/customerScope';
@@ -74,8 +74,8 @@ function getDashboardData() {
   const weeklyRaw = getLocalDailyData(7);
   const weeklyData = weeklyRaw.map(d => ({
     date: format(new Date(d.date + 'T12:00:00'), 'M/d', { locale: ko }),
-    시술: Math.round(d.treatment / 10000),
-    제품: Math.round(d.product / 10000),
+    시술: toManwon(d.treatment), // 소수 1자리 — 하루 1건(4만 8천)이 0 또는 5 로 보이지 않게 (10차 #L2)
+    제품: toManwon(d.product),
   }));
 
   // Customers
@@ -465,7 +465,7 @@ export default function Dashboard() {
                       <p className="text-xs font-semibold text-gray-800 truncate">{p.customerName || '고객'}</p>
                       <p className="text-xs text-gray-400">{formatDate(p.paymentDate)} · {p.typeLabel}</p>
                     </div>
-                    <span className="text-xs font-bold text-gray-800 flex-shrink-0">{p.amount.toLocaleString()}원</span>
+                    <span className="text-xs font-bold text-gray-800 flex-shrink-0">{formatPrice(p.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -508,7 +508,7 @@ export default function Dashboard() {
                       <p className="text-xs text-gray-400 mt-0.5">{r.services.map(s => s.serviceName).join(', ')} · {r.staffName}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-bold text-gray-800">{r.totalPrice.toLocaleString()}원</p>
+                      <p className="text-sm font-bold text-gray-800">{formatPrice(r.totalPrice)}</p>
                       <StatusBadge status={r.status} />
                     </div>
                   </button>

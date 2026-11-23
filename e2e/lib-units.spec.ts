@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate } from '../src/lib/format';
+import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon } from '../src/lib/format';
+import { splitPercent } from '../src/lib/percent';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -210,4 +211,16 @@ test('환불 처리일 태그 — memo 앞 [환불 YYYY-MM-DD], 읽기·벗기�
   expect(refundedOn({ status: 'completed', memo: '[환불 2026-11-20]' })).toBeNull(); // 완료 결제면 태그가 있어도 환불이 아니다
   expect(memoWithoutRefundTag('[환불 2026-11-20] 고객 요청')).toBe('고객 요청');
   expect(memoWithoutRefundTag(undefined)).toBe('');
+});
+
+test('차트 만원 환산·비중 분배 — 작은 금액이 0 이 되지 않고 비중 합은 100', () => {
+  expect(toManwon(48000)).toBe(4.8);   // 하루 1건 4만 8천 — Math.round(/10000) 이면 5
+  expect(toManwon(4000)).toBe(0.4);    // 0 이 아니다
+  expect(toManwon(1234567)).toBe(123.5);
+  expect(toManwon(0)).toBe(0);
+  expect(toManwon(123456, 0)).toBe(12);
+  expect(splitPercent([1, 1, 1])).toEqual([34, 33, 33]); // 각자 반올림하면 33+33+33=99
+  expect(splitPercent([300000, 48000, 0])).toEqual([86, 14, 0]);
+  expect(splitPercent([0, 0, 0])).toEqual([0, 0, 0]);
+  expect(splitPercent([2, 1]).reduce((a, b) => a + b, 0)).toBe(100);
 });

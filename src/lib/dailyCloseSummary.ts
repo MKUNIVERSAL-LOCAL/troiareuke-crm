@@ -9,6 +9,7 @@
 import type { Payment, Expense, TreatmentLog, Customer, Reservation } from '../types';
 import { countPaymentUnits } from './paymentCount';
 import { refundedOn } from './refundDate';
+import { formatPrice } from './format'; // 브라우저 로케일과 무관하게 ko-KR 천 단위 (10차 #L1)
 
 export interface DailyClose {
   date: string;
@@ -72,23 +73,22 @@ export function summarizeDailyClose(date: string, src: DailyCloseSource): DailyC
   };
 }
 
-const won = (n: number) => `${n.toLocaleString()}원`;
 
 /** 마감 보고 문구 — 복사/공유용. shop 은 매장 이름(비어 있으면 '매장') */
 export function formatDailyCloseMessage(c: DailyClose, shop: string | undefined): string {
   const shopLabel = shop || '매장';
   const d = new Date(c.date + 'T00:00:00');
   const label = Number.isNaN(d.getTime()) ? c.date : `${d.getMonth() + 1}/${d.getDate()}(${['일', '월', '화', '수', '목', '금', '토'][d.getDay()]})`;
-  const lines = [`[${shopLabel}] ${label} 마감 보고`, `· 매출 ${won(c.revenue)} (${c.paymentCount}건)`];
-  if (c.byMethod.length) lines.push(`  ${c.byMethod.map(m => `${m.method} ${won(m.amount)}`).join(' / ')}`);
+  const lines = [`[${shopLabel}] ${label} 마감 보고`, `· 매출 ${formatPrice(c.revenue)} (${c.paymentCount}건)`];
+  if (c.byMethod.length) lines.push(`  ${c.byMethod.map(m => `${m.method} ${formatPrice(m.amount)}`).join(' / ')}`);
   const parts: string[] = [];
-  if (c.byType.treatment) parts.push(`시술 ${won(c.byType.treatment)}`);
-  if (c.byType.product) parts.push(`제품 ${won(c.byType.product)}`);
-  if (c.byType.other) parts.push(`기타 ${won(c.byType.other)}`);
+  if (c.byType.treatment) parts.push(`시술 ${formatPrice(c.byType.treatment)}`);
+  if (c.byType.product) parts.push(`제품 ${formatPrice(c.byType.product)}`);
+  if (c.byType.other) parts.push(`기타 ${formatPrice(c.byType.other)}`);
   if (parts.length) lines.push(`  ${parts.join(' / ')}`);
-  if (c.refunds) lines.push(`· 환불(오늘 결제분) ${won(c.refunds)}`);
-  if (c.refundedToday) lines.push(`· 환불 처리(오늘) ${won(c.refundedToday)}`);
-  if (c.expenses) lines.push(`· 지출 ${won(c.expenses)}`);
+  if (c.refunds) lines.push(`· 환불(오늘 결제분) ${formatPrice(c.refunds)}`);
+  if (c.refundedToday) lines.push(`· 환불 처리(오늘) ${formatPrice(c.refundedToday)}`);
+  if (c.expenses) lines.push(`· 지출 ${formatPrice(c.expenses)}`);
   lines.push(`· 시술 ${c.treatments}건 · 신규 고객 ${c.newCustomers}명`);
   // 예약 N건은 대시보드 "오늘 예약"과 같은 수(취소·노쇼 제외) — 두 화면이 다른 N을 보였다 (10차 #M3)
   lines.push(`· 예약 ${c.reservations.active}건 (완료 ${c.reservations.completed} / 노쇼 ${c.reservations.noshow}${c.reservations.pending ? ` / 미처리 ${c.reservations.pending}` : ''})${c.reservations.cancelled ? ` · 취소 ${c.reservations.cancelled}건` : ''}`);

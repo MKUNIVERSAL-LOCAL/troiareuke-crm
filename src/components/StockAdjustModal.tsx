@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Modal from './ui/Modal';
 import { ProductStore } from '../lib/store';
 import { ExpenseStore } from '../lib/expenseStore';
-import { todayISO } from '../lib/format';
+import { todayISO, formatPrice } from '../lib/format';
 import { getAllPaymentMethods } from '../lib/paymentMethods';
 import { notify } from '../lib/notify';
 import type { Product, PaymentMethod } from '../types';
@@ -62,7 +62,7 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
       });
     }
     notify(mode === 'in'
-      ? `${product.name} ${n}${product.unit} 입고 → 재고 ${nextStock}${product.unit}${logExpense && total > 0 ? ` · 지출 ${total.toLocaleString()}원 기록` : ''}`
+      ? `${product.name} ${n}${product.unit} 입고 → 재고 ${nextStock}${product.unit}${logExpense && total > 0 ? ` · 지출 ${formatPrice(total)} 기록` : ''}`
       : `${product.name} 재고를 ${fresh.stock}${product.unit} → ${nextStock}${product.unit}로 조정했습니다.`);
     onDone();
   }
@@ -119,7 +119,7 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">
-                  매입 합계 <b className="text-gray-800">{total.toLocaleString()}원</b>
+                  매입 합계 <b className="text-gray-800">{formatPrice(total)}</b>
                   {cost !== null && cost > 0 && cost !== product.cost ? ' · 제품 원가도 이 단가로 갱신(기존 재고 마진율도 바뀜)' : ''}
                 </p>
               </>

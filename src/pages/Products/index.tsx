@@ -10,7 +10,7 @@ import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import { ProductStore, ProductSaleStore, CustomerStore, StaffStore, PaymentStore } from '../../lib/store';
-import { todayISO, formatDate } from '../../lib/format';
+import { todayISO, formatDate, formatPrice } from '../../lib/format';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import type { Product, ProductSale, Payment } from '../../types';
@@ -156,9 +156,9 @@ export default function Products() {
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간 · 취소 제외)</p>
             <p className="text-2xl font-bold text-[#1a3a8f]">
-              {totalSalesRevenue.toLocaleString()}<span className="text-sm font-medium">원</span>
+              {formatPrice(totalSalesRevenue)}
             </p>
-            <p className="text-xs text-gray-400 mt-1">이달 {monthSalesRevenue.toLocaleString()}원 — 매출 화면 '제품 매출'과 같은 기준</p>
+            <p className="text-xs text-gray-400 mt-1">이달 {formatPrice(monthSalesRevenue)} — 매출 화면 '제품 매출'과 같은 기준</p>
           </div>
         </div>
 
@@ -257,7 +257,7 @@ export default function Products() {
                             </p>
                           </div>
                           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                            <span className="text-sm font-bold text-gray-900">{p.price.toLocaleString()}원</span>
+                            <span className="text-sm font-bold text-gray-900">{formatPrice(p.price)}</span>
                             <span className="flex items-center gap-1">
                               <button onClick={() => handleSell(p)} disabled={!p.isActive} title={p.isActive ? undefined : '판매 중지 제품 — [수정]에서 판매 활성을 켜세요'} className="inline-flex items-center gap-1 px-3 py-2 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed"><ShoppingCart size={11} />판매</button>
                               <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
@@ -311,10 +311,10 @@ export default function Products() {
                             <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs">{p.category}</span>
                           </td>
                           <td className="px-4 py-4 text-sm font-semibold text-gray-800 text-right">
-                            {p.price.toLocaleString()}원
+                            {formatPrice(p.price)}
                           </td>
                           <td className="px-4 py-4 text-sm text-gray-400 text-right">
-                            {p.cost.toLocaleString()}원
+                            {formatPrice(p.cost)}
                           </td>
                           <td className="px-4 py-4 text-center">
                             <p className={clsx('text-sm font-bold', isLow ? 'text-red-600' : 'text-gray-800')}>
@@ -418,12 +418,12 @@ export default function Products() {
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                           <span>{formatDate(sale.saleDate)}</span>
                           <span>{sale.customerName || '—'}</span>
-                          <span>{sale.quantity}개 × {sale.unitPrice.toLocaleString()}원</span>
+                          <span>{sale.quantity}개 × {formatPrice(sale.unitPrice)}</span>
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{sale.paymentMethod}</span>
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className={`text-sm font-bold ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{sale.totalPrice.toLocaleString()}원</span>
+                        <span className={`text-sm font-bold ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatPrice(sale.totalPrice)}</span>
                         {isCanceled(sale) ? <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
                         <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>)}
                       </div>
@@ -432,7 +432,7 @@ export default function Products() {
                 ))}
                 <li className="px-4 py-3 bg-gray-50/50 flex items-center justify-between text-xs font-semibold text-gray-500">
                   <span>표시분 합계(최근 60건)</span>
-                  <span className="text-sm font-bold text-[#1a3a8f]">{visibleSalesRevenue.toLocaleString()}원</span>
+                  <span className="text-sm font-bold text-[#1a3a8f]">{formatPrice(visibleSalesRevenue)}</span>
                 </li>
               </ul>
               <div className="hidden lg:block overflow-auto max-h-[65vh]">
@@ -458,8 +458,8 @@ export default function Products() {
                       </td>
                       <td className="px-4 py-3.5 text-sm text-gray-500">{sale.customerName || '—'}</td>
                       <td className="px-4 py-3.5 text-sm text-center text-gray-700 font-medium">{sale.quantity}</td>
-                      <td className="px-4 py-3.5 text-sm text-gray-500 text-right">{sale.unitPrice.toLocaleString()}원</td>
-                      <td className={`px-4 py-3.5 text-sm font-bold text-right ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{sale.totalPrice.toLocaleString()}원</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-500 text-right">{formatPrice(sale.unitPrice)}</td>
+                      <td className={`px-4 py-3.5 text-sm font-bold text-right ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatPrice(sale.totalPrice)}</td>
                       <td className="px-6 py-3.5 text-center">
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs">{sale.paymentMethod}</span>
                       </td>
@@ -482,7 +482,7 @@ export default function Products() {
                   <tr className="border-t border-gray-100 bg-gray-50/50">
                     <td colSpan={5} className="px-6 py-3 text-xs font-semibold text-gray-500 text-right">표시분 합계(최근 60건)</td>
                     <td className="px-4 py-3 text-sm font-bold text-[#1a3a8f] text-right">
-                      {visibleSalesRevenue.toLocaleString()}원
+                      {formatPrice(visibleSalesRevenue)}
                     </td>
                     <td colSpan={2} />
                   </tr>
@@ -641,7 +641,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
         {parseInt(form.price) > 0 && form.cost !== '' && (
           <div className="px-3 py-2 bg-blue-50 rounded-xl text-xs text-blue-700">
             마진율: <strong>{Math.round(((parseInt(form.price) - (parseInt(form.cost) || 0)) / parseInt(form.price)) * 100)}%</strong>
-            {' '}· 마진액: <strong>{(parseInt(form.price) - (parseInt(form.cost) || 0)).toLocaleString()}원</strong>
+            {' '}· 마진액: <strong>{formatPrice((parseInt(form.price) - (parseInt(form.cost) || 0)))}</strong>
           </div>
         )}
         <div className="grid grid-cols-3 gap-3">
@@ -791,7 +791,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             <div className="flex items-center gap-2 mt-0.5">
               {product.brand && <span className="text-xs text-gray-500">{product.brand}</span>}
               <span className="text-xs text-gray-400">·</span>
-              <span className="text-xs font-medium text-[#1a3a8f]">정가 {product.price.toLocaleString()}원</span>
+              <span className="text-xs font-medium text-[#1a3a8f]">정가 {formatPrice(product.price)}</span>
               <span className="text-xs text-gray-400">·</span>
               <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-700' : 'text-gray-600')}>
                 재고 {product.stock}{product.unit}
@@ -844,7 +844,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
         {/* Total Price */}
         <div className="px-4 py-3 bg-gray-50 rounded-xl flex items-center justify-between">
           <span className="text-sm text-gray-600">결제 금액</span>
-          <span className="text-xl font-bold text-[#1a3a8f]">{totalPrice.toLocaleString()}원</span>
+          <span className="text-xl font-bold text-[#1a3a8f]">{formatPrice(totalPrice)}</span>
         </div>
 
         {/* Payment Method */}
