@@ -15,7 +15,7 @@ import { isLowStock } from '../src/lib/stockRule';
 import { isCountableCustomer } from '../src/lib/customerScope';
 import { growthPct } from '../src/lib/growth';
 import { canceledSaleIds } from '../src/lib/saleCancel';
-import { parseAmount, parseCount, normalizePhone, isISODate } from '../src/lib/inputRules';
+import { parseAmount, parseCount, normalizePhone, isISODate, coerceISODate, parseDurationMinutes } from '../src/lib/inputRules';
 
 // 저장소·DOM 의존이 없는 순수 helper를 브라우저 없이 직접 검증 (95, 2026-11-20 — 커버리지 감사 B).
 // 날짜 입력은 로컬 Date로 만들어 러너 시간대와 무관하게 같은 답이 나오게 한다.
@@ -253,4 +253,21 @@ test('입력 규칙 — 금액·수량·전화 키·날짜 (14차 점검)', () =
   expect(isISODate('NaN-NaN-NaN')).toBe(false);
   expect(toISODate(new Date(NaN))).toBe('');     // "NaN-NaN-NaN" 저장 방지
   expect(Number.isNaN(parseISODate('').getTime())).toBe(true);
+  // 엑셀 날짜 coerce (14차 #M3) — 시리얼·구분자·한글, 못 읽으면 ''
+  expect(coerceISODate(32874)).toBe('1990-01-01');       // 엑셀 시리얼
+  expect(coerceISODate('1990/01/15')).toBe('1990-01-15');
+  expect(coerceISODate('1990.1.5')).toBe('1990-01-05');
+  expect(coerceISODate('1990년 1월 15일')).toBe('1990-01-15');
+  expect(coerceISODate('19900115')).toBe('1990-01-15');
+  expect(coerceISODate('15000')).toBe('1941-01-24');      // 1950년 이전도 시리얼로
+  expect(coerceISODate('생일 모름')).toBe('');
+  expect(coerceISODate('1990-02-30')).toBe('');
+  // 소요시간 (14차 #M12)
+  expect(parseDurationMinutes('60')).toBe(60);
+  expect(parseDurationMinutes('90분')).toBe(90);
+  expect(parseDurationMinutes('1.5시간')).toBe(90);        // 단위를 떼면 15분이 됐다
+  expect(parseDurationMinutes('-30')).toBeNull();
+  expect(parseDurationMinutes('')).toBeNull();
+  // 이모지 SMS 바이트 (14차 #M9)
+  expect(smsBytes('😀')).toBe(4);
 });

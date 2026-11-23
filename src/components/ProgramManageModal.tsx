@@ -42,6 +42,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
     const changes: string[] = [];
     if (expiryDate !== (cp.expiryDate || '')) {
       if (expiryDate && !/^\d{4}-\d{2}-\d{2}$/.test(expiryDate)) { notify('만료일 형식이 올바르지 않습니다.'); return; }
+      if (expiryDate && cp.purchaseDate && expiryDate < cp.purchaseDate && !window.confirm(`만료일(${formatDate(expiryDate)})이 구매일(${formatDate(cp.purchaseDate)})보다 앞입니다. 저장하면 바로 만료돼 차감할 수 없습니다. 계속할까요?`)) return; // (14차 #L1)
       // 비우면 null — 서버 PATCH가 expiry_date를 실제로 지우게 (타입은 string?지만 스토어·서버·화면 모두 falsy로 다룬다)
       updates.expiryDate = (expiryDate || null) as unknown as string | undefined;
       changes.push(`만료일 ${cp.expiryDate ? formatDate(cp.expiryDate) : '없음'} → ${expiryDate ? formatDate(expiryDate) : '없음'}`);

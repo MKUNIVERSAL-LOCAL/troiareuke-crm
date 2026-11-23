@@ -8,6 +8,7 @@ import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
 import { todayISO, localISODate } from '../../lib/format';
+import { parseAmount } from '../../lib/inputRules';
 
 // NAS 중앙 서버 모드에서는 구독 테이블이 없고 계정(auth_users)의 plan이 진실이다.
 // 이 화면은 NAS 모드일 때 계정 목록에서 구독 뷰를 파생하고, 수정은 plan/활성만 반영한다.
@@ -316,7 +317,7 @@ export default function Subscriptions() {
                 </p>
               </div>
               <Field label="월 금액 (원)">
-                <p className="px-3 py-2 text-sm text-slate-300">{Number(form.amount || 0).toLocaleString()}원 — 플랜 기준 자동</p>
+                <p className="px-3 py-2 text-sm text-slate-300">{(parseAmount(form.amount) ?? 0).toLocaleString('ko-KR')}원 — 플랜 기준 자동</p>
               </Field>
               <Field label="사용기간 만료일 (비우면 무제한)" hint="만료일이 지나면 해당 계정은 로그인할 수 없습니다. 데이터는 유지됩니다.">
                 <input className="admin-input" type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />

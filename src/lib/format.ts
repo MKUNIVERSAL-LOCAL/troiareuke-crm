@@ -90,7 +90,7 @@ function toChosung(text: string): string {
 export function matchesSearch(query: string, fields: Array<string | undefined | null>): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const digitsOnly = /^[\d-]+$/.test(q);
+  const digitsOnly = /^[\d\s-]+$/.test(q); // '010 1234' 붙여넣기도 숫자 검색으로 (14차 #L3)
   const chosungOnly = /^[ㄱ-ㅎ]+$/.test(q);
   const qDigits = q.replace(/\D/g, '');
   for (const raw of fields) {

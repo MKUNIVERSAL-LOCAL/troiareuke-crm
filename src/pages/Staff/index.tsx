@@ -361,7 +361,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
           <input
             type="date"
             aria-label="입사일"
-            value={hireDate}
+            value={hireDate} max={todayISO()}
             onChange={e => setHireDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
@@ -586,7 +586,7 @@ function StaffDetailModal({
             <input
               type="date"
               aria-label="입사일"
-              value={hireDate}
+              value={hireDate} max={todayISO()}
               onChange={e => setHireDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />

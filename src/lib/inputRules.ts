@@ -33,3 +33,34 @@ export function isISODate(s: string | null | undefined): boolean {
 }
 
 export const DATE_REQUIRED_MESSAGE = '날짜를 YYYY-MM-DD 형식으로 선택해주세요.';
+
+/** 엑셀 셀의 날짜를 'YYYY-MM-DD' 로 — 'YYYY-MM-DD'·'YYYY/MM/DD'·'YYYY.MM.DD'·'YYYY년 M월 D일'·엑셀 시리얼(1~2958465 = 1900~9999년). 못 읽으면 '' (조용히 원문을 저장하면 생일 알림에서 영구 제외됐다, 14차 #M3) */
+export function coerceISODate(raw: string | number | null | undefined): string {
+  const t = String(raw ?? '').trim();
+  if (!t) return '';
+  if (/^\d+$/.test(t)) {
+    const n = Number(t);
+    if (n >= 1 && n <= 2958465) { // 엑셀 1900 체계 시리얼 — 1900-01-01 = 1 (UTC 산술은 시리얼 변환에 맞다)
+      const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+      return d.toISOString().slice(0, 10);
+    }
+    if (/^\d{8}$/.test(t)) { const iso = `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`; return isISODate(iso) ? iso : ''; }
+    return '';
+  }
+  const m = t.match(/^(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})\s*일?/);
+  if (!m) return '';
+  const iso = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  return isISODate(iso) ? iso : '';
+}
+
+/** 소요시간 셀 → 분. '60'·'90분'·'1.5시간'·'1h' 모두 받고, 못 읽으면 null (단위를 떼고 숫자만 남기면 '1.5시간'이 15분이 됐다, 14차 #M12) */
+export function parseDurationMinutes(raw: string | number | null | undefined): number | null {
+  const t = String(raw ?? '').trim().toLowerCase();
+  if (!t) return null;
+  const m = t.match(/^(\d+(?:\.\d+)?)\s*(시간|h|hr|분|m|min)?$/);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  const minutes = /^(시간|h|hr)$/.test(m[2] || '') ? n * 60 : n;
+  const r = Math.round(minutes);
+  return r >= 1 ? r : null;
+}

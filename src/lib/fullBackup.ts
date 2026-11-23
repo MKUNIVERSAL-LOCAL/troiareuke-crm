@@ -89,6 +89,12 @@ export function parseBackup(text: string): BackupFile {
   if (!Number.isInteger(v) || (v as number) < 1) throw new Error('백업 파일 버전 정보가 올바르지 않습니다.');
   if ((v as number) > BACKUP_VERSION) throw new Error('이 앱보다 새로운 백업 형식입니다. 앱을 업데이트한 뒤 복원하세요.');
   if (IS_MOBILE_APP && text.length > MOBILE_MAX_BYTES) throw new Error('파일이 이 기기의 저장 공간 한도보다 큽니다. PC 앱에서 복원하세요.');
+  // 테이블 값의 모양도 본다 — 손상된 파일의 {} 나 문자열을 그대로 복원하면 첫 화면의 .filter 에서 죽고 서버 모드에선 되돌릴 UI 도 없다 (14차 #M5)
+  for (const [table, value] of Object.entries(parsed.tables)) {
+    const rawWrapped = isRecord(value) && typeof value[RAW_MARK] === 'string' && Object.keys(value).length === 1;
+    const ok = table === 'settings' ? (isRecord(value) || rawWrapped) : (Array.isArray(value) || rawWrapped);
+    if (!ok) throw new Error(`백업 파일의 '${Object.prototype.hasOwnProperty.call(TABLE_LABELS, table) ? TABLE_LABELS[table] : table}' 데이터가 손상됐습니다. 다른 백업 파일을 사용하세요.`);
+  }
   return parsed as unknown as BackupFile;
 }
 

@@ -54,7 +54,7 @@ import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSe
 import { daysBetween as calendarDaysBetween } from '../../lib/revisitRule';
 import { canDo, canOpenRoute, ADMIN_REQUIRED_MESSAGE } from '../../lib/permissions';
 import { canSeePii, emailFor, birthDateFor } from '../../lib/pii';
-import { parseAmount, normalizePhone, isISODate } from '../../lib/inputRules'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
+import { parseAmount, normalizePhone, isISODate, coerceISODate } from '../../lib/inputRules'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -1209,7 +1209,7 @@ export default function Customers() {
 
         // 기존 전화번호로 중복 스킵
         const existingPhones = new Set(CustomerStore.getAll().map(c => c.phone.replace(/[^0-9]/g, '')));
-        let added = 0, skipped = 0, masked = 0;
+        let added = 0, skipped = 0, masked = 0, badBirth = 0;
         if (rows.length > 2000) { notify(`한 번에 2,000명까지 올릴 수 있습니다(현재 ${rows.length.toLocaleString('ko-KR')}행). 시트를 나눠 올려주세요.`); return; } // 행마다 전체 저장이 일어나 수천 행이면 멈춤·부분 저장 (14차 #H8)
         for (let ri = 0; ri < rows.length; ri++) {
           const r = rows[ri];
@@ -1227,14 +1227,10 @@ export default function Customers() {
           if (existingPhones.has(digits)) { skipped++; continue; }
           existingPhones.add(digits);
           phone = formatPhoneInput(digits); // 직접 등록과 같은 010-0000-0000 형식 (3차 UX 점검 2026-11-19)
-          // 엑셀 날짜 시리얼 숫자로 들어온 생년월일 변환
-          let birthDate = pick(r, ['생년월일', '생일', 'birthDate']);
-          if (/^\d+$/.test(birthDate)) {
-            const n = parseInt(birthDate, 10);
-            if (n >= 20000 && n <= 60000) {
-              birthDate = new Date(Date.UTC(1899, 11, 30) + n * 86400000).toISOString().split('T')[0];
-            }
-          }
+          // 생년월일 — 시리얼·'1990/01/15'·'1990년 1월 15일' 을 모두 'YYYY-MM-DD' 로, 못 읽으면 비우고 건수를 알린다(원문 저장은 생일 알림에서 조용히 빠졌다, 14차 #M3)
+          const rawBirth = pick(r, ['생년월일', '생일', 'birthDate']);
+          const birthDate = coerceISODate(rawBirth);
+          if (rawBirth && !birthDate) badBirth++;
           CustomerStore.save({
             name, phone,
             gender: normGender(pick(r, ['성별', 'gender'])),
@@ -1250,7 +1246,7 @@ export default function Customers() {
           added++;
         }
         loadAll();
-        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 이미 있는 전화번호${masked > 0 ? `, 가린 전화번호 ${masked}건` : ''}). 기존 고객 정보는 바뀌지 않습니다(신규 추가 전용).`);
+        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 이미 있는 전화번호${masked > 0 ? `, 가린 전화번호 ${masked}건` : ''}).${badBirth > 0 ? ` 생년월일 형식을 읽지 못해 비운 고객 ${badBirth}명(YYYY-MM-DD 로 적어주세요).` : ''} 기존 고객 정보는 바뀌지 않습니다(신규 추가 전용).`);
       } catch (err) {
         notify('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
       } finally {
@@ -1756,7 +1752,7 @@ export default function Customers() {
                 {tagChips}
                 <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">메모</p>
-                  {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
+                  {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                   {quickMemoRow(true)}
                 </div>
               </div>
@@ -2238,7 +2234,7 @@ export default function Customers() {
               </div>
 
               <div className="mt-3 p-3 bg-gray-50 rounded-xl">
-                {selected.memo ? <p className="text-xs text-amber-700 whitespace-pre-line">📝 {selected.memo}</p> : <p className="text-xs text-gray-400">📝 메모 없음</p>}
+                {selected.memo ? <p className="text-xs text-amber-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">📝 {selected.memo}</p> : <p className="text-xs text-gray-400">📝 메모 없음</p>}
                 {quickMemoRow(false)}
               </div>
             </div>
@@ -2606,7 +2602,7 @@ export default function Customers() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
-                <textarea aria-label="메모" value={addForm.memo} onChange={e => setAddForm(f => ({ ...f, memo: e.target.value }))}
+                <textarea aria-label="메모" maxLength={2000} value={addForm.memo} onChange={e => setAddForm(f => ({ ...f, memo: e.target.value }))}
                   rows={2} placeholder="특이사항 (알레르기는 위 칸에)"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
               </div>
@@ -2721,7 +2717,7 @@ export default function Customers() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">메모</label>
-                <textarea aria-label="메모" value={editForm.memo} onChange={e => setEditForm(f => ({ ...f, memo: e.target.value }))}
+                <textarea aria-label="메모" maxLength={2000} value={editForm.memo} onChange={e => setEditForm(f => ({ ...f, memo: e.target.value }))}
                   rows={2} placeholder="특이사항 (알레르기는 위 칸에)"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
               </div>

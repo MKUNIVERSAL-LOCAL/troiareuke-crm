@@ -51,7 +51,7 @@ export default function CustomerCombobox({ customers, value, onChange, maskRole 
   const query = selected && text === labelOf(selected) ? '' : text;
   const matches = useMemo(() => {
     const q = query.trim();
-    const list = q ? customers.filter(c => matchesSearch(q, [c.name, c.phone])) : customers;
+    const list = q ? customers.filter(c => matchesSearch(q, [c.name, maskRole === 'staff' ? c.phone.slice(-4) : c.phone])) : customers; // 직원은 가려진 가운데 4자리를 검색으로 추측할 수 없게 뒷 4자리만 (14차 #L4)
     return list.slice(0, MAX_ROWS);
   }, [customers, query]);
   // 목록이 열릴 때 강조 행: 검색 중이면 첫 행, 이미 고른 고객이 있으면 그 고객(Enter가 엉뚱한 첫 고객으로 바꾸지 않게, 리뷰 2026-11-18)

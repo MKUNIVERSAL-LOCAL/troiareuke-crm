@@ -2,6 +2,7 @@ import { notify } from '../../lib/notify';
 import { useNavigate } from 'react-router-dom';
 import { readJson } from '../../lib/safeJson';
 import { todayISO, formatPhoneInput } from '../../lib/format';
+import { parseAmount, parseDurationMinutes } from '../../lib/inputRules';
 import { useState, useRef, useEffect } from 'react';
 import { readDraft, writeDraft, clearDraft } from '../../lib/formDraft';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
@@ -156,17 +157,22 @@ export default function Onboarding() {
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, blankrows: false });
       const parsed: { name: string; duration: number; price: number }[] = [];
+      let badRows = 0;
 
-      // 첫 줄 헤더 스킵
+      // 첫 줄 헤더 스킵. 숫자는 단위를 이해해서 읽는다 — '1.5시간'이 15분, '-30'이 30 으로 저장되던 것 (14차 #M12)
       for (let i = 1; i < rows.length; i++) {
         const cols = rows[i] || [];
         const name = String(cols[0] ?? '').trim();
-        const duration = parseInt(String(cols[1] ?? '60').replace(/[^\d]/g, ''), 10) || 60;
-        const price = parseInt(String(cols[2] ?? '0').replace(/[^\d]/g, ''), 10) || 0;
-        if (name) parsed.push({ name, duration, price });
+        if (!name) continue;
+        const duration = String(cols[1] ?? '').trim() === '' ? 60 : parseDurationMinutes(cols[1]);
+        const price = String(cols[2] ?? '').trim() === '' ? 0 : parseAmount(String(cols[2]).replace(/만원$/, '0000'));
+        if (duration === null || price === null) { badRows++; continue; }
+        parsed.push({ name, duration, price });
       }
       if (parsed.length === 0) {
         notify('시술 데이터를 찾지 못했습니다. 1행은 헤더, 2행부터 [시술명, 소요시간(분), 가격] 순으로 입력해주세요.');
+      } else if (badRows > 0) {
+        notify(`${parsed.length}개 시술을 읽었고, 소요시간·가격을 읽지 못한 ${badRows}행은 건너뛰었습니다(예: 60, 90분, 1.5시간 / 50000, 50,000원).`);
       }
       setExcelServices(parsed);
       // 파일명은 파싱 성공 후에만 표시 (실패한 파일명이 화면에 남는 문제 방지)
@@ -269,7 +275,7 @@ export default function Onboarding() {
       .filter(s => s.name.trim() !== '' && !existingStaffNames.has(s.name.trim()))
       .forEach(s => {
         StaffStore.save({
-          name: s.name,
+          name: s.name.trim(), // 중복 판정은 trim 값, 저장은 원문이던 불일치 (14차 #M11)
           role: s.role,
           phone: '',
           specialty: [],

@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { maskPhone } from '../../lib/pii';
+import { normalizePhone } from '../../lib/inputRules';
 import { notify } from '../../lib/notify';
 import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
 import { formatDateTime, parseISODate, todayISO } from '../../lib/format';
@@ -815,10 +816,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   );
   const recipientCount = targetCustomers.length;
 
-  // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
+  // 수신 대상의 실제 전화번호 목록 — 번호가 없거나 10~11자리가 아닌 것('010-1', 내선 포함)은 발송·비용 추정에서 뺀다(게이트웨이 실패를 발송 뒤에 알던 것, 14차 #M8)
   const recipientPhones = targetCustomers
     .map(c => c.phone)
-    .filter((p): p is string => Boolean(p && p.trim()));
+    .filter((p): p is string => { const k = normalizePhone(p); return k.length === 10 || k.length === 11; });
 
   // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
   const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;

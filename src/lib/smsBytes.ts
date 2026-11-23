@@ -6,6 +6,6 @@ export const SMS_BYTE_LIMIT = 90;
 export const LMS_BYTE_LIMIT = 2000;
 export function smsBytes(text: string): number {
   let n = 0;
-  for (const ch of text) n += ch.charCodeAt(0) > 0x7f ? 2 : 1;
+  for (const ch of text) { const cp = ch.codePointAt(0) ?? 0; n += cp > 0xffff ? 4 : cp > 0x7f ? 2 : 1; } // 이모지는 UTF-8 4바이트 — 2로 세면 SMS 한도를 넘겨 잘려 나갔다 (14차 #M9)
   return n;
 }
