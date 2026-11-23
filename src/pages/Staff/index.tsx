@@ -461,8 +461,11 @@ function StaffDetailModal({
     }
     if (newName !== staff.name) {
       // 시술 기록은 담당자를 이름으로 들고 있어 함께 고친다(실적 표 연결 유지). 제품 판매는 코어에 수정 API가 없어 옛 이름으로 남는다.
-      const logs = TreatmentLogStore.getAll().filter(t => t.staffName === staff.name);
+      // 같은 이름의 다른 직원(퇴사자 포함)이 있으면 이름 매칭이 그 사람의 기록까지 빼앗으므로 시술 기록은 건드리지 않는다 (11차 #H5)
+      const sameName = StaffStore.getAll().some(s => s.id !== staff.id && s.name.trim() === staff.name.trim());
+      const logs = sameName ? [] : TreatmentLogStore.getAll().filter(t => t.staffName === staff.name);
       logs.forEach(t => TreatmentLogStore.update(t.id, { staffName: newName }));
+      if (sameName) notify('같은 이름의 다른 직원이 있어 과거 시술 기록의 담당자 이름은 바꾸지 않았습니다(기록은 그 직원 이름으로 남습니다).');
       // 예약도 담당자 이름을 비정규화해 들고 있다(타임라인·완료 누락 카드·예약 카드 표시) (정합성 감사 2026-11-19)
       const resv = ReservationStore.getAll().filter(r => r.staffId === staff.id && r.staffName !== newName);
       resv.forEach(r => ReservationStore.update(r.id, { staffName: newName }));

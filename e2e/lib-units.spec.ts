@@ -190,7 +190,7 @@ test('공용 집계 규칙 — 재고 부족·집계 대상 고객·성장률·�
   expect(isLowStock({ isActive: false, stock: 0, minStock: 3 })).toBe(false); // 단종 제품은 입고 권유 대상이 아니다
   expect(isLowStock({ isActive: true, stock: 5, minStock: 3 })).toBe(false);
   // 취소(환불)된 제품 판매 = 환불 상태이면서 판매 행을 가리키는 결제 — 제품 화면·직원 실적·엑셀이 같은 집합을 쓴다 (114)
-  expect([...canceledSaleIds([{ status: 'refunded', referenceId: 's1' }, { status: 'completed', referenceId: 's2' }, { status: 'refunded' }, { status: 'refunded', referenceId: 's1' }])]).toEqual(['s1']);
+  expect([...canceledSaleIds([{ type: 'product', status: 'refunded', referenceId: 's1' }, { type: 'product', status: 'completed', referenceId: 's2' }, { type: 'product', status: 'refunded' }, { type: 'product', status: 'refunded', referenceId: 's1' }, { type: 'program', status: 'refunded', referenceId: 'cp9' }])]).toEqual(['s1']); // 환불된 회차권 결제(cp9)는 판매 취소가 아니다 (115)
   expect(isCountableCustomer({ id: 'c1', isActive: true })).toBe(true);
   expect(isCountableCustomer({ id: 'sample_1', isActive: true })).toBe(false);
   expect(isCountableCustomer({ id: 'c2', isActive: false })).toBe(false);     // 익명화(탈퇴)

@@ -1,6 +1,7 @@
 ﻿import { useState, useCallback, useEffect, useMemo } from 'react';
 import { tagRefund } from '../../lib/refundDate';
 import { canceledSaleIds } from '../../lib/saleCancel';
+import { saleCustomerName } from '../../lib/customerIdentity';
 import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
@@ -91,7 +92,7 @@ export default function Products() {
   const recentSales = [...sales]
     .filter(sale => !normalizedSalesSearch || [
       sale.productName,
-      sale.customerName || '',
+      saleCustomerName(sale), // 저장 사본이 아니라 현재 고객 이름(개명·익명화 반영, 11차 #H4)
       sale.paymentMethod,
       sale.saleDate,
     ].some(value => value.toLowerCase().includes(normalizedSalesSearch)))
@@ -418,7 +419,7 @@ export default function Products() {
                         <p className="text-sm font-semibold text-gray-900 truncate">{sale.productName}</p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                           <span>{formatDate(sale.saleDate)}</span>
-                          <span>{sale.customerName || '-'}</span>
+                          <span>{saleCustomerName(sale) || '-'}</span>
                           <span>{sale.quantity}개 × {formatPrice(sale.unitPrice)}</span>
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{sale.paymentMethod}</span>
                         </p>
@@ -457,7 +458,7 @@ export default function Products() {
                       <td className="px-4 py-3.5">
                         <p className="text-sm font-medium text-gray-900">{sale.productName}</p>
                       </td>
-                      <td className="px-4 py-3.5 text-sm text-gray-500">{sale.customerName || '-'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-500">{saleCustomerName(sale) || '-'}</td>
                       <td className="px-4 py-3.5 text-sm text-center text-gray-700 font-medium">{sale.quantity}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-500 text-right">{formatPrice(sale.unitPrice)}</td>
                       <td className={`px-4 py-3.5 text-sm font-bold text-right ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatPrice(sale.totalPrice)}</td>

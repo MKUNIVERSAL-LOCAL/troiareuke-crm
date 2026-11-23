@@ -33,6 +33,7 @@ import CustomerTimeline from '../../components/CustomerTimeline';
 import ProgramManageModal from '../../components/ProgramManageModal';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
 import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../lib/customerMerge';
+import { propagateCustomerIdentity, scrubCustomerBeforeDelete, DELETED_CUSTOMER_NAME } from '../../lib/customerIdentity';
 import { parseTags, topTags } from '../../lib/customerTags';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
@@ -410,6 +411,7 @@ export default function Customers() {
     if (!id) return;
     const target = CustomerStore.getById(id);
     if (target) openCustomer(target); // 프로그램 목록까지 같이 (리뷰 2026-11-18)
+    else notify('고객을 찾을 수 없습니다 — 삭제됐거나 병합된 고객입니다.'); // 기록의 고객명 링크가 먹통처럼 보이지 않게 (11차 #L3)
     const next = new URLSearchParams(searchParams); next.delete('open');
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
@@ -1342,6 +1344,11 @@ export default function Customers() {
       tags: parseTags(editForm.tags),
       allergies: editForm.allergies.trim() || '',
     });
+    if (editForm.name !== selected.name || editForm.phone !== selected.phone) {
+      // 예약·시술·회차권·결제·상담에 복사된 이름(예약은 전화번호도) — 빠뜨리면 개명한 고객이 다른 화면 검색에서 사라지고 예약 카드가 옛 번호로 전화한다 (11차 #H1·H2)
+      const n = propagateCustomerIdentity(selected.id, { name: editForm.name, phone: editForm.phone });
+      if (n > 0) notify(`기록 ${n}건의 고객 이름·연락처도 함께 바꿨습니다.`);
+    }
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
     setShowEditModal(false);
@@ -1377,7 +1384,7 @@ export default function Customers() {
     const linked = previewMerge(selected.id);
     const linkedTotal = linked.reservations + linked.treatments + linked.programs + linked.payments + linked.consultations + linked.productSales;
     const detail = linkedTotal > 0
-      ? `\n연결된 기록 ${linkedTotal}건(예약 ${linked.reservations}·시술 ${linked.treatments}·프로그램 ${linked.programs}·결제 ${linked.payments}·상담 ${linked.consultations}·제품 판매 ${linked.productSales})은 남지만 고객과의 연결이 끊겨 타임라인·통계에서 빠집니다.\n${!mergeBlockReason(selected) ? '같은 사람이 두 번 등록된 경우라면 [병합]을, ' : ''}개인정보만 지우려면 [익명화]를 권장합니다.`
+      ? `\n연결된 기록 ${linkedTotal}건(예약 ${linked.reservations}·시술 ${linked.treatments}·프로그램 ${linked.programs}·결제 ${linked.payments}·상담 ${linked.consultations}·제품 판매 ${linked.productSales})은 남지만 고객과의 연결이 끊겨 타임라인·통계에서 빠집니다. 남는 기록의 이름·연락처는 '${DELETED_CUSTOMER_NAME}'으로 바뀌고 시술·상담 사진은 삭제됩니다.\n${!mergeBlockReason(selected) ? '같은 사람이 두 번 등록된 경우라면 [병합]을, ' : ''}개인정보만 지우려면 [익명화]를 권장합니다.`
       : '\n연결된 기록이 없습니다.';
     // 앞으로의 예약·진행 중 회차권이 걸린 고객을 지우면 예약은 수정 불가, 회차권은 알림에서 사라진다 — 먼저 정리하게 (정합성 감사 2026-11-19)
     const futureRes = ReservationStore.getAll().filter(r => r.customerId === selected.id && r.date >= today() && (r.status === 'confirmed' || r.status === 'pending')).length;
@@ -1389,7 +1396,9 @@ export default function Customers() {
       return;
     }
     if (!(await askConfirm({ title: '고객 삭제', message: `'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
+    const scrubbed = scrubCustomerBeforeDelete(selected.id); // 얼굴 사진이 접근 불가 상태로 영구 잔류하고 상담 기록이 실명으로 엑셀에 나가던 것 (11차 #H3·H6)
     CustomerStore.delete(selected.id);
+    notify(scrubbed.records > 0 || scrubbed.photos > 0 ? `고객을 삭제했습니다 — 기록 ${scrubbed.records}건의 이름·연락처 정리, 사진 ${scrubbed.photos}장 삭제.` : '고객을 삭제했습니다.');
     setSelected(null);
     loadAll();
   }

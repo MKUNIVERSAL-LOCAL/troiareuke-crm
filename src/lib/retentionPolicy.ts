@@ -63,7 +63,7 @@ export function getExpiredCustomers(today = new Date()): Customer[] {
 /**
  * 익명화(파기) — 고객 레코드의 개인 식별 정보를 지우고 통계(방문·결제 합계)만 남긴다.
  * 예약·시술·프로그램·결제·상담 기록에 복사돼 있던 이름(예약은 전화번호도)과 얼굴 사진(시술·상담 사진)도 함께 지운다 —
- * 기록 자체는 고객 id로 연결된 채 남아 매출 통계가 깨지지 않는다. (제품 판매 기록의 이름은 수정 API가 없어 남는다 — 코어 변경 필요, 로드맵 기록)
+ * 기록 자체는 고객 id로 연결된 채 남아 매출 통계가 깨지지 않는다. (제품 판매 기록의 저장 이름은 수정 API가 없어 남지만 화면·엑셀은 customerIdentity.saleCustomerName 으로 현재 이름을 읽어 노출되지 않는다 — 11차 #H4)
  * @returns 처리한 고객 수
  */
 export function anonymizeCustomers(ids: string[]): number {

@@ -439,6 +439,33 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   expect(afterMerge.grade).toBe('VIP'); // 등급은 높은 쪽
   expect(afterMerge.registeredAt).toBe('2020-01-01T00:00:00.000Z'); // 등록일은 이른 쪽
 
+  // ── 9-1-b. 고객 이름 변경 전파 (11차 #H1·H2, 115): 개명하면 예약·시술·결제에 복사된 이름도 바뀌고(토스트에 건수), 되돌리면 다시 원래대로 ──
+  const renameTo = async (name: string) => {
+    await desk.getByRole('button', { name: '수정', exact: true }).first().click(); // 상세 머리의 [수정] — 카드마다 있는 [수정]보다 앞
+    const editDialog = page.getByRole('dialog', { name: '고객 정보 수정' });
+    await editDialog.getByRole('textbox', { name: '이름' }).fill(name);
+    await editDialog.getByRole('button', { name: '저장', exact: true }).click();
+    await expect(editDialog).toHaveCount(0);
+    await expect(desk.getByRole('heading', { name })).toBeVisible();
+    return page.evaluate(n => {
+      const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
+      const read = (re: RegExp) => JSON.parse(localStorage.getItem(key(re)) || '[]');
+      const main = read(/^crm_.*_customers$/).find((c: { name: string }) => c.name === n);
+      const names = new Set<string>();
+      let count = 0;
+      for (const re of [/^crm_.*_payments$/, /^crm_.*_reservations$/, /^crm_.*_treatment_logs$/]) {
+        for (const row of read(re) as { customerId: string; customerName: string }[]) if (row.customerId === main.id) { names.add(row.customerName); count++; }
+      }
+      return { names: [...names], count };
+    }, name);
+  };
+  const renamed = await renameTo(`${acc.customer}개명`);
+  expect(renamed.count).toBeGreaterThanOrEqual(3); // 병합으로 옮겨온 결제·예약·시술 포함
+  expect(renamed.names).toEqual([`${acc.customer}개명`]); // 옛 이름 사본이 하나도 남지 않는다
+  await expect(page.getByText(/기록 \d+건의 고객 이름·연락처도 함께 바꿨습니다/)).toBeVisible();
+  const restored = await renameTo(acc.customer);
+  expect(restored.names).toEqual([acc.customer]);
+
   // ── 9-2. 활동 타임라인 (2026-11-18): 병합으로 옮겨온 결제·예약·시술이 한 줄기 시간순에 보이고, 종류 칩으로 걸러지며, 시술 항목을 누르면 시술 상세가 열린다 ──
   const timeline = desk.getByTestId('customer-timeline');
   await timeline.scrollIntoViewIfNeeded();
