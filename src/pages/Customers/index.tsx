@@ -53,7 +53,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, localISODate, formatLocalDate } from '../../lib/format';
 import { daysBetween as calendarDaysBetween } from '../../lib/revisitRule';
 import { canDo, canOpenRoute, ADMIN_REQUIRED_MESSAGE } from '../../lib/permissions';
-import { canSeePii, emailFor, birthDateFor } from '../../lib/pii'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
+import { canSeePii, emailFor, birthDateFor } from '../../lib/pii';
+import { parseAmount, normalizePhone, isISODate } from '../../lib/inputRules'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -1195,9 +1196,10 @@ export default function Customers() {
         const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '', range: headerRow });
         if (rows.length === 0) { notify('시트에 데이터가 없습니다.'); return; }
 
+        const normHeader = (h: string) => h.replace(/^\uFEFF/, '').replace(/\s/g, '').toLowerCase(); // 'Phone'·BOM 머리글도 맞춘다 (14차 #M4)
         const pick = (r: Record<string, any>, keys: string[]) => {
           for (const k of keys) {
-            const hit = Object.keys(r).find(col => col.replace(/\s/g, '') === k);
+            const hit = Object.keys(r).find(col => normHeader(col) === normHeader(k));
             if (hit && String(r[hit]).trim() !== '') return String(r[hit]).trim();
           }
           return '';
@@ -1208,18 +1210,21 @@ export default function Customers() {
         // 기존 전화번호로 중복 스킵
         const existingPhones = new Set(CustomerStore.getAll().map(c => c.phone.replace(/[^0-9]/g, '')));
         let added = 0, skipped = 0, masked = 0;
-        rows.forEach(r => {
-          const name = pick(r, ['이름', '고객명', '성함', 'name']);
-          let phone = pick(r, ['전화번호', '연락처', '휴대폰', '전화', 'phone']);
-          if (!name || !phone) { skipped++; return; }
-          if (/\*/.test(phone)) { skipped++; masked++; return; } // 직원 계정이 내보낸 가린 번호(010-****-5678)는 새 고객으로 만들지 않는다 (리뷰 2026-11-20)
+        if (rows.length > 2000) { notify(`한 번에 2,000명까지 올릴 수 있습니다(현재 ${rows.length.toLocaleString('ko-KR')}행). 시트를 나눠 올려주세요.`); return; } // 행마다 전체 저장이 일어나 수천 행이면 멈춤·부분 저장 (14차 #H8)
+        for (let ri = 0; ri < rows.length; ri++) {
+          const r = rows[ri];
+          if (ri > 0 && ri % 200 === 0) await new Promise(res => setTimeout(res, 0)); // 200행마다 화면에 양보
+          const name = pick(r, ['이름', '고객명', '성함', 'name']).trim();
+          let phone = pick(r, ['전화번호', '연락처', '휴대폰', '휴대폰번호', '핸드폰', '전화', 'phone', 'mobile', 'tel']);
+          if (!name || !phone) { skipped++; continue; }
+          if (/\*/.test(phone)) { skipped++; masked++; continue; } // 직원 계정이 내보낸 가린 번호(010-****-5678)는 새 고객으로 만들지 않는다 (리뷰 2026-11-20)
           let digits = phone.replace(/[^0-9]/g, '');
           // 엑셀 숫자 셀 함정: 앞 0이 사라진 번호(10xxxxxxxx) 복원
           if (digits.startsWith('10') && (digits.length === 9 || digits.length === 10)) {
             digits = '0' + digits;
             phone = digits;
           }
-          if (existingPhones.has(digits)) { skipped++; return; }
+          if (existingPhones.has(digits)) { skipped++; continue; }
           existingPhones.add(digits);
           phone = formatPhoneInput(digits); // 직접 등록과 같은 010-0000-0000 형식 (3차 UX 점검 2026-11-19)
           // 엑셀 날짜 시리얼 숫자로 들어온 생년월일 변환
@@ -1243,7 +1248,7 @@ export default function Customers() {
             allergies: pick(r, ['알레르기', 'allergies']) || undefined, tags: parseTags(pick(r, ['태그', 'tags'])), isActive: true,
           });
           added++;
-        });
+        }
         loadAll();
         notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 이미 있는 전화번호${masked > 0 ? `, 가린 전화번호 ${masked}건` : ''}). 기존 고객 정보는 바뀌지 않습니다(신규 추가 전용).`);
       } catch (err) {
@@ -1271,9 +1276,8 @@ export default function Customers() {
       notify('개인정보 수집·이용 동의가 필요합니다. 고객에게 동의를 받은 뒤 체크해주세요.');
       return;
     }
-    const normalize = (p: string) => p.replace(/\D/g, '');
-    const newPhone = normalize(addForm.phone);
-    const dup = CustomerStore.getAll().find(c => normalize(c.phone) === newPhone && newPhone !== '');
+    const newPhone = normalizePhone(addForm.phone); // +82 번호도 같은 키로 — 추가·수정·업로드가 같은 규칙 (14차 #M2)
+    const dup = CustomerStore.getAll().find(c => normalizePhone(c.phone) === newPhone && newPhone !== '');
     if (dup) {
       if (window.confirm(`이미 등록된 번호입니다: ${dup.name} (${dup.phone})\n기존 고객을 열까요? (새로 등록하지 않습니다)`)) {
         setShowAddModal(false);
@@ -1283,7 +1287,7 @@ export default function Customers() {
       return;
     }
     CustomerStore.save({
-      name: addForm.name, phone: addForm.phone,
+      name: addForm.name.trim(), phone: addForm.phone.trim(), // 앞뒤 공백이 그대로 저장돼 같은 사람이 '홍길동'/'홍길동 ' 둘로 갈리던 것 (14차 #M1)
       gender: addForm.gender, grade: addForm.grade,
       skinType: addForm.skinType, memo: addForm.memo,
       birthDate: addForm.birthDate || undefined,
@@ -1319,11 +1323,17 @@ export default function Customers() {
     if (!selected) return;
     const identityChanged = editForm.name !== selected.name || (piiOk && editForm.phone !== selected.phone);
     // 연결 기록이 많으면(단골) 건마다 저장·서버 동기가 일어나 수 초 걸린다 — 저장 전에 알리고 확인 (리뷰 #H2)
-    const copies = identityChanged ? countIdentityCopies(selected.id, { name: editForm.name, phone: editForm.phone }) : 0;
+    if (!editForm.name.trim()) { notify('이름을 입력해주세요.'); return; }
+    if (piiOk && editForm.phone !== selected.phone) {
+      const key = normalizePhone(editForm.phone);
+      const dup = key && CustomerStore.getAll().find(c => c.id !== selected.id && normalizePhone(c.phone) === key);
+      if (dup) { notify(`이미 등록된 번호입니다: ${dup.name}. 같은 사람이면 [중복 고객 병합]을 사용해주세요.`); return; } // 수정 경로에만 중복 검사가 없어 같은 번호 고객이 둘이 되던 것 (14차 #H9)
+    }
+    const copies = identityChanged ? countIdentityCopies(selected.id, { name: editForm.name.trim(), phone: editForm.phone }) : 0;
     if (copies > IDENTITY_PROPAGATION_CONFIRM_AT && !(await askConfirm({ title: '기록 일괄 수정', message: `이름·연락처가 바뀌어 연결된 기록 ${copies}건도 함께 고칩니다. 서버 동기화에 시간이 걸릴 수 있습니다. 계속할까요?`, confirmLabel: '함께 수정' }))) return;
     // 직원 계정은 PII 입력칸이 없으므로 기존 값을 그대로 둔다 (13차 #H5)
     CustomerStore.update(selected.id, {
-      name: editForm.name, phone: piiOk ? editForm.phone : selected.phone,
+      name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone,
       gender: editForm.gender, grade: editForm.grade,
       skinType: editForm.skinType, memo: editForm.memo,
       // 비운 값은 ''로 — undefined는 toDbCustomer가 키를 빼서 서버(JSON 병합 PATCH)에 옛 값이 남고 재로그인 때 되살아난다 (NAS 감사 2026-11-18). 소비자는 모두 truthy 검사
@@ -1336,7 +1346,7 @@ export default function Customers() {
     });
     if (identityChanged) {
       // 예약·시술·회차권·결제·상담에 복사된 이름(예약은 전화번호도) — 빠뜨리면 개명한 고객이 다른 화면 검색에서 사라지고 예약 카드가 옛 번호로 전화한다 (11차 #H1·H2)
-      const n = propagateCustomerIdentity(selected.id, { name: editForm.name, phone: editForm.phone });
+      const n = propagateCustomerIdentity(selected.id, { name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone });
       if (n > 0) notify(`기록 ${n}건의 고객 이름·연락처도 함께 바꿨습니다.`);
     }
     const updated = CustomerStore.getById(selected.id);
@@ -1402,12 +1412,13 @@ export default function Customers() {
     const prog = programs.find(p => p.id === progForm.programId);
     if (!prog) return;
 
-    // 결제금액: 빈칸이면 정가, 입력했으면 그 값(0원 이벤트도 유효). 잘못된 값은 차단.
-    const rawPrice = progForm.pricePaid.replace(/,/g, '').trim();
+    // 구매 날짜를 비우면 parseISODate('') 가 1900-01-01 이 되어 만료일 1900년(영구 차감 불가)·결제일 빈 값(매출 누락)이 됐다 (14차 #H1)
+    if (!isISODate(progForm.purchaseDate)) { notify('구매 날짜를 선택해주세요.'); return; }
+    // 결제금액: 빈칸이면 정가, 입력했으면 그 값(0원 이벤트도 유효). 공백·통화기호가 섞여도 자릿수를 잃지 않게 공용 규칙 (14차 #H6)
     let pricePaid = prog.price;
-    if (rawPrice !== '') {
-      const parsed = parseInt(rawPrice, 10);
-      if (Number.isNaN(parsed) || parsed < 0) {
+    if (progForm.pricePaid.trim() !== '') {
+      const parsed = parseAmount(progForm.pricePaid);
+      if (parsed === null) {
         notify('결제 금액을 올바르게 입력해주세요. (0 이상 숫자)');
         return;
       }
@@ -2800,7 +2811,7 @@ export default function Customers() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">구매 날짜</label>
-                  <input aria-label="구매 날짜" type="date" value={progForm.purchaseDate} onChange={e => setProgForm(f => ({ ...f, purchaseDate: e.target.value }))}
+                  <input aria-label="구매 날짜" type="date" required value={progForm.purchaseDate} onChange={e => setProgForm(f => ({ ...f, purchaseDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 </div>
               </div>

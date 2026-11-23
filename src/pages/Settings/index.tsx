@@ -574,7 +574,10 @@ export default function Settings() {
   };
 
   const handleServiceSubmit = () => {
-    if (!serviceForm.name || !serviceForm.category) { notify('시술명과 카테고리를 입력해주세요.'); return; }
+    if (!serviceForm.name.trim() || !serviceForm.category.trim()) { notify('시술명과 카테고리를 입력해주세요.'); return; }
+    // 소요시간 0·음수는 예약 종료 시각을 역전시켜 이중예약 검사를 무력화하고, 가격 비움(0)은 결제 연계를 조용히 건너뛴다 (14차 #H7)
+    if (!Number.isInteger(serviceForm.duration) || serviceForm.duration < 5 || serviceForm.duration > 600) { notify('소요시간은 5분 이상 600분 이하로 입력해주세요.'); return; }
+    if (!Number.isFinite(serviceForm.price) || serviceForm.price < 0) { notify('가격은 0 이상 숫자로 입력해주세요.'); return; }
     if (editingService) {
       ServiceStore.update(editingService.id, {
         name: serviceForm.name,

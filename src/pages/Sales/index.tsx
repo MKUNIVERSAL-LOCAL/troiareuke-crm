@@ -28,6 +28,7 @@ import PaymentLinkModal from '../../components/PaymentLinkModal';
 import { isPaymentLinkAvailable, fetchPgConfig } from '../../lib/paymentLinks';
 import { growthPct } from '../../lib/growth';
 import { tagRefund, refundedOn, memoWithoutRefundTag } from '../../lib/refundDate';
+import { parseAmount, isISODate, DATE_REQUIRED_MESSAGE } from '../../lib/inputRules';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -384,13 +385,14 @@ export default function Sales() {
     const customer = customers.find(c => c.id === form.customerId);
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
 
-    const amount = parseInt(form.amount.replace(/,/g, ''), 10);
+    if (!isISODate(form.paymentDate)) { notify('결제일을 선택해주세요. ' + DATE_REQUIRED_MESSAGE); return; } // 빈 결제일은 어떤 달에도 안 잡혀 매출에서 영구 누락 (14차 #H3)
+    const amount = parseAmount(form.amount) ?? NaN; // "50 000"→50원 같은 조용한 손실 대신 거부 (14차 #H6)
     const zeroAllowed = !!editingId && editingPayment?.amount === 0; // 0원 이벤트 회차권 결제는 메모·수단만 고칠 수 있게 (정합성 감사 2026-11-19)
     if (Number.isNaN(amount) || amount < 0 || (amount === 0 && !zeroAllowed)) {
-      notify('결제 금액을 0보다 큰 숫자로 입력해주세요.');
+      notify('결제 금액을 0보다 큰 숫자로 입력해주세요. (쉼표·공백·원 표기는 자동 정리됩니다)');
       return;
     }
-    const discountAmount = Math.max(0, parseInt(form.discountAmount.replace(/,/g, ''), 10) || 0);
+    const discountAmount = parseAmount(form.discountAmount) ?? 0;
 
     const payload = {
       customerId: form.customerId || undefined,
@@ -486,7 +488,8 @@ export default function Sales() {
 
   function handleExpenseSave(e: React.FormEvent) {
     e.preventDefault();
-    const amount = parseInt(expenseForm.amount.replace(/,/g, ''), 10);
+    if (!isISODate(expenseForm.expenseDate)) { notify('지출일을 선택해주세요. ' + DATE_REQUIRED_MESSAGE); return; } // (14차 #H3)
+    const amount = parseAmount(expenseForm.amount) ?? NaN;
     if (Number.isNaN(amount) || amount <= 0) {
       notify('지출 금액을 0보다 큰 숫자로 입력해주세요.');
       return;
@@ -1193,7 +1196,7 @@ export default function Sales() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">결제일</label>
-                  <input aria-label="결제일" type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
+                  <input aria-label="결제일" type="date" required value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                   <DateQuickChips value={form.paymentDate} onChange={iso => setForm(f => ({ ...f, paymentDate: iso }))} options={[{ label: '오늘', days: 0 }, { label: '어제', days: -1 }]} />
                 </div>
@@ -1312,6 +1315,7 @@ export default function Sales() {
                   <label className="block text-xs font-medium text-gray-600 mb-1">지출일</label>
                   <input aria-label="지출일"
                     type="date"
+                    required
                     value={expenseForm.expenseDate}
                     onChange={e => setExpenseForm(f => ({ ...f, expenseDate: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"

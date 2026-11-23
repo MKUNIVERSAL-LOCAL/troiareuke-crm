@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon } from '../src/lib/format';
+import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate } from '../src/lib/format';
 import { splitPercent } from '../src/lib/percent';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
@@ -15,6 +15,7 @@ import { isLowStock } from '../src/lib/stockRule';
 import { isCountableCustomer } from '../src/lib/customerScope';
 import { growthPct } from '../src/lib/growth';
 import { canceledSaleIds } from '../src/lib/saleCancel';
+import { parseAmount, parseCount, normalizePhone, isISODate } from '../src/lib/inputRules';
 
 // 저장소·DOM 의존이 없는 순수 helper를 브라우저 없이 직접 검증 (95, 2026-11-20 — 커버리지 감사 B).
 // 날짜 입력은 로컬 Date로 만들어 러너 시간대와 무관하게 같은 답이 나오게 한다.
@@ -229,4 +230,27 @@ test('차트 만원 환산·비중 분배 — 작은 금액이 0 이 되지 않�
   expect(splitPercent([300000, 48000, 0])).toEqual([86, 14, 0]);
   expect(splitPercent([0, 0, 0])).toEqual([0, 0, 0]);
   expect(splitPercent([2, 1]).reduce((a, b) => a + b, 0)).toBe(100);
+});
+
+test('입력 규칙 — 금액·수량·전화 키·날짜 (14차 점검)', () => {
+  expect(parseAmount('50,000')).toBe(50000);
+  expect(parseAmount('50 000')).toBe(50000);     // 은행 앱 복사값 — parseInt 는 50 이었다
+  expect(parseAmount('₩50,000원')).toBe(50000);
+  expect(parseAmount('1e5')).toBeNull();         // parseInt 는 1
+  expect(parseAmount('1500.9')).toBeNull();      // 원 단위 절삭을 조용히 하지 않는다
+  expect(parseAmount('-100')).toBeNull();
+  expect(parseAmount('')).toBeNull();
+  expect(parseCount('0')).toBeNull();
+  expect(parseCount('2.9')).toBeNull();
+  expect(parseCount('3')).toBe(3);
+  expect(normalizePhone('+82 10-1234-5678')).toBe('01012345678'); // 국제형도 같은 키
+  expect(normalizePhone('010-1234-5678')).toBe('01012345678');
+  expect(normalizePhone(' 02 123 4567 ')).toBe('021234567');
+  expect(isISODate('2026-11-23')).toBe(true);
+  expect(isISODate('')).toBe(false);             // parseISODate('') 가 1900-01-01 이 되던 것
+  expect(isISODate('2026/11/23')).toBe(false);
+  expect(isISODate('2026-02-30')).toBe(false);   // 존재하지 않는 날짜
+  expect(isISODate('NaN-NaN-NaN')).toBe(false);
+  expect(toISODate(new Date(NaN))).toBe('');     // "NaN-NaN-NaN" 저장 방지
+  expect(Number.isNaN(parseISODate('').getTime())).toBe(true);
 });

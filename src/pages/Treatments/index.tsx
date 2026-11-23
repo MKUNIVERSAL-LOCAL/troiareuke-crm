@@ -17,6 +17,7 @@ import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { canOpenRoute } from '../../lib/permissions';
+import { isISODate } from '../../lib/inputRules';
 import { getPhotos, getPhotosAsync, getPhotoCount, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, PHOTO_ANGLES, PHOTO_LABELS, type PhotoEntry, type PhotoAngle, type PhotoLabel } from '../../lib/photoStore';
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import CameraOverlay, { isCameraPreviewSupported } from '../../components/CameraOverlay';
@@ -488,6 +489,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
   const handleSave = () => {
     if (!customerId) return;
+    if (!isISODate(treatmentDate)) { notify('시술일을 선택해주세요.'); return; } // 고객 상세의 빠른 기록은 required 인데 이 화면은 비어도 저장돼 목록에서 사라졌다 (14차 #H5)
 
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
@@ -580,6 +582,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <input
             type="date"
             aria-label="시술일"
+            required
             value={treatmentDate}
             onChange={e => changeTreatmentDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"

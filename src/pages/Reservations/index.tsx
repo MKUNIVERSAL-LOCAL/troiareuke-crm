@@ -32,6 +32,7 @@ import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgram
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { canOpenRoute } from '../../lib/permissions';
+import { isISODate } from '../../lib/inputRules';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 
 /** 예약표 시간 범위 — 설정 > 영업시간의 가장 이른 시작·가장 늦은 종료를 덮는 정시 범위. 기본 09:00~21:00, 영업시간이 더 넓으면 그만큼 확장
@@ -961,6 +962,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   const [formError, setFormError] = useState('');
 
   const handleSave = () => {
+    if (!isISODate(date)) { setFormError('예약 날짜를 선택해주세요.'); return; } // 빈 날짜 예약은 달력·목록·겹침 검사 어디에도 안 잡히는 유령이 됐다 (14차 #H4)
     // 조용한 실패 금지 — 무엇이 비었는지 명확히 안내
     if (!customerId || !staffId || !serviceId) {
       const missing = [
@@ -1123,6 +1125,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <input
               type="date"
               aria-label="예약 날짜"
+              required
               value={date}
               onChange={e => setDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"

@@ -4,6 +4,7 @@ import { canceledSaleIds } from '../../lib/saleCancel';
 import { saleCustomerNameResolver } from '../../lib/customerIdentity';
 import { askConfirm } from '../../lib/confirmDialog';
 import { canDo } from '../../lib/permissions';
+import { parseAmount, parseCount } from '../../lib/inputRules';
 import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
@@ -560,12 +561,10 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
       notify('제품명, 판매가, 재고는 필수 입력 항목입니다.');
       return;
     }
-    const price = parseInt(form.price, 10);
-    const cost = parseInt(form.cost, 10) || 0;
-    const stock = parseInt(form.stock, 10);
-    const minStock = form.minStock ? parseInt(form.minStock, 10) : 5;
-    if ([price, cost, stock, minStock].some(n => Number.isNaN(n) || n < 0)) {
-      notify('판매가·원가·재고·최소재고는 0 이상 숫자로 입력해주세요.');
+    // "1e5"→1원, "1500.9"→1500 처럼 parseInt 가 조용히 바꾸던 값을 거부한다 (14차 #H6)
+    const price = parseAmount(form.price), cost = form.cost.trim() ? parseAmount(form.cost) : 0, stock = parseAmount(form.stock), minStock = form.minStock.trim() ? parseAmount(form.minStock) : 5;
+    if (price === null || cost === null || stock === null || minStock === null) {
+      notify('판매가·원가·재고·최소재고는 0 이상 정수로 입력해주세요. (소수·지수 표기는 받지 않습니다)');
       return;
     }
     setSaving(true);
@@ -749,8 +748,8 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
 
   const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
-  const qty = Math.max(1, parseInt(form.quantity) || 1);
-  const unitPrice = parseInt(form.unitPrice) || 0;
+  const qty = parseCount(form.quantity) ?? 0;      // 0·소수·문자는 0 으로 보여 합계가 거짓 1개 기준이 되지 않게 (14차 #M6)
+  const unitPrice = parseAmount(form.unitPrice) ?? 0;
   const totalPrice = qty * unitPrice;
 
   const selectedCustomer = customers.find(c => c.id === form.customerId);
@@ -760,13 +759,12 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       notify('수량과 단가를 입력해주세요.');
       return;
     }
-    if (!(parseInt(form.unitPrice, 10) > 0)) {
-      notify('단가는 1원 이상이어야 합니다. 무상 제공이면 메모에 남기고 단가는 실제 가격으로 적어주세요.');
+    if (!(unitPrice > 0)) {
+      notify('단가는 1원 이상 정수여야 합니다. 무상 제공이면 메모에 남기고 단가는 실제 가격으로 적어주세요.');
       return;
     }
-    const rawQty = parseInt(form.quantity, 10);
-    if (Number.isNaN(rawQty) || rawQty < 1) {
-      notify('수량은 1 이상이어야 합니다');
+    if (qty < 1) {
+      notify('수량은 1 이상 정수여야 합니다');
       return;
     }
     const fresh = ProductStore.getById(product.id) ?? product; // 모달을 열어 둔 사이 다른 판매가 있었을 수 있다 — 저장 직전 재고로 (정합성 감사 2026-11-19)
