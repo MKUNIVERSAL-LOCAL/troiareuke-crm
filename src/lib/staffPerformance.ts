@@ -82,7 +82,13 @@ export function getStaffMonthReport(yearMonth = thisYearMonthISO()): StaffMonthR
   for (const [id, names] of Object.entries(staffAliases())) {
     const st = byId.get(id);
     if (!st) continue;
-    for (const raw of names) { const key = raw.trim(); if (key && !byName.has(key)) byName.set(key, st); }
+    for (const raw of names) {
+      const key = raw.trim();
+      if (!key) continue;
+      const cur = byName.get(key);
+      if (!cur) byName.set(key, st);
+      else if (cur.id !== st.id) ambiguousNames.add(key); // 옛 이름을 지금 다른 직원이 쓰면 "구분 불가"로 — 신입 동명이인에게 과거 실적이 넘어가지 않게 (리뷰 #M8)
+    }
   }
   const resolveName = (raw: string | undefined): { staff?: (typeof staff)[number]; ambiguous: boolean } => {
     const key = (raw || '').trim();

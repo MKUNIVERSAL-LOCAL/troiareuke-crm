@@ -13,7 +13,7 @@ import { isProgramExpired } from './customerPrograms';
 import { buildCustomerStatsIndex, statsFor } from './customerStats';
 import { refundedOn, memoWithoutRefundTag } from './refundDate';
 import { canceledSaleIds } from './saleCancel';
-import { saleCustomerName } from './customerIdentity';
+import { saleCustomerNameResolver } from './customerIdentity';
 
 import { saveOrShareFile } from './mobileBridge';
 import type { WorkBook, WorkSheet } from 'xlsx';
@@ -244,10 +244,11 @@ function buildSheet(key: string): Omit<ExportSheet, 'dataRows' | 'key'> | null {
       };
     case 'product_sales': {
       const canceled = canceledSaleIds(PaymentStore.getAll()); // 상태 열이 있으면 합계 행은 '완료'만 더한다 — 취소(환불) 판매가 합계를 부풀리지 않게 (리뷰 2026-11-23)
+      const customerNameOf = saleCustomerNameResolver(); // 익명화·개명·병합이 반영된 현재 이름, 고객 인덱스 1회 (11차 #H4, 리뷰 #M2)
       return {
         name: '제품판매',
         rows: ProductSaleStore.getAll().map(s => ({
-          판매일: s.saleDate, 제품명: s.productName, 고객명: saleCustomerName(s), // 익명화·개명이 반영된 현재 이름 (11차 #H4)
+          판매일: s.saleDate, 제품명: s.productName, 고객명: customerNameOf(s),
           수량: s.quantity, 단가: s.unitPrice, 합계: s.totalPrice,
           결제수단: s.paymentMethod, 담당: s.staffName || '', 상태: canceled.has(s.id) ? '취소(환불)' : '완료', 비고: s.notes || '',
         })),

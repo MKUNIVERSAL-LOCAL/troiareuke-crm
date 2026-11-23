@@ -7,6 +7,7 @@
 
 import { isGoogleCalendarConnected, deleteCalendarEvent, createCalendarEvent } from './googleCalendar';
 import type { Reservation } from '../types';
+import { notify } from './notify';
 
 const GCAL_MAP_KEY = 'crm_gcal_event_map';
 
@@ -32,17 +33,23 @@ export function cleanupGcalEvent(reservationId: string): void {
   }
 }
 
-/** 이름이 바뀐 예약의 캘린더 일정을 지우고 다시 만든다(예약 수정 저장과 같은 경로) — 공유 캘린더에 옛 고객·담당자 이름이 남지 않게 (11차 #M8). 미연결이면 0, 실패는 best-effort */
-export function resyncGcalEvents(reservations: Reservation[]): number {
-  if (!isGoogleCalendarConnected()) return 0;
+/** 이름이 바뀐 예약의 캘린더 일정을 다시 만든다(예약 수정 저장과 같은 경로) — 공유 캘린더에 옛 고객·담당자 이름이 남지 않게 (11차 #M8).
+ *  순차로 "생성 → 성공하면 옛 일정 삭제" — 동시에 수십 건을 쏘면 Google 이 429/403 을 돌려주고, 삭제가 먼저 성공하면 일정이 흔적 없이 사라진다 (리뷰 #H3).
+ *  실패 건은 옛 일정·매핑을 그대로 두고 건수를 알린다(그 예약을 열어 저장하면 복구). 미연결이면 아무 것도 하지 않는다 */
+export async function resyncGcalEvents(reservations: Reservation[]): Promise<void> {
+  if (!isGoogleCalendarConnected()) return;
   const m = getGcalMap();
-  let n = 0;
+  let failed = 0;
   for (const r of reservations) {
     const oldEventId = m[r.id];
     if (!oldEventId) continue;
-    n++;
-    deleteCalendarEvent(oldEventId).catch(() => { /* best-effort */ });
-    createCalendarEvent(r).then(ev => rememberGcalEvent(r.id, ev.id)).catch(() => { /* 다음 예약 수정 때 다시 만들어진다 */ });
+    try {
+      const ev = await createCalendarEvent(r);
+      rememberGcalEvent(r.id, ev.id);
+      await deleteCalendarEvent(oldEventId).catch(() => { /* 옛 일정 삭제 실패는 중복 표시일 뿐 — 다음 수정 때 정리 */ });
+    } catch {
+      failed++;
+    }
   }
-  return n;
+  if (failed > 0) notify.warning(`Google 캘린더 일정 ${failed}건을 새 이름으로 다시 만들지 못했습니다. 해당 예약을 열어 저장하면 복구됩니다.`);
 }

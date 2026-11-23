@@ -8,12 +8,13 @@
 // 정책은 지점 환경설정(서버 동기)에 저장되어 어느 PC/앱에서나 같다. 기본은 OFF(오너 결정 전).
 // ═══════════════════════════════════════════════════════════════
 
-import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
+import { CustomerStore, TreatmentLogStore } from './store';
 import { toISODate } from './format';
 import { ConsultationStore } from './consultationStore';
 import { clearPhotos } from './photoStore';
 import type { Customer } from '../types';
 import { getPreference, setPreference } from './shopPreferences';
+import { propagateCustomerIdentity } from './customerIdentity';
 
 export interface RetentionPolicy {
   enabled: boolean;
@@ -88,12 +89,10 @@ export function anonymizeCustomers(ids: string[]): number {
       privacyConsentAt: undefined,
       isActive: false,            // 재방문 리마인더·예약/발송 대상에서 제외하는 표식
     });
-    // 연결 기록에 복사된 이름·전화 — update는 이름만 바꾸므로 회차 차감·결제 합계에 영향 없음
-    ReservationStore.getAll().filter(r => r.customerId === id).forEach(r => ReservationStore.update(r.id, { customerName: ANONYMIZED_NAME, customerPhone: '' }));
-    TreatmentLogStore.getByCustomer(id).forEach(t => { TreatmentLogStore.update(t.id, { customerName: ANONYMIZED_NAME }); clearPhotos(`treatment:${t.id}`); });
-    CustomerProgramStore.getByCustomer(id).forEach(cp => CustomerProgramStore.update(cp.id, { customerName: ANONYMIZED_NAME }));
-    PaymentStore.getAll().filter(p => p.customerId === id).forEach(p => PaymentStore.update(p.id, { customerName: ANONYMIZED_NAME }));
-    ConsultationStore.getByCustomer(id).forEach(c => { ConsultationStore.update(c.id, { customerName: ANONYMIZED_NAME }); clearPhotos(`consult:${c.id}`); });
+    // 연결 기록에 복사된 이름·전화 + 공유 Google 캘린더 앞 일정 — 고객 정보 수정·삭제와 같은 전파(customerIdentity). 수동 복제본일 때 캘린더만 빠져 실명이 남았다 (리뷰 #H4)
+    propagateCustomerIdentity(id, { name: ANONYMIZED_NAME, phone: '' });
+    TreatmentLogStore.getByCustomer(id).forEach(t => clearPhotos(`treatment:${t.id}`));
+    ConsultationStore.getByCustomer(id).forEach(c => clearPhotos(`consult:${c.id}`));
     n += 1;
   }
   return n;

@@ -83,7 +83,6 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
     .forEach(p => PaymentStore.update(p.id, { customerId: targetId, customerName: name })); // 누적 결제액은 update가 양쪽 반영
   ConsultationStore.getByCustomer(sourceId)
     .forEach(c => ConsultationStore.update(c.id, { customerId: targetId, customerName: name }));
-  recordMergedCustomer(sourceId, targetId); // 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 — 화면·엑셀에서 유령 고객이 되지 않게 (11차 #M10)
 
   // 고객 필드 합치기 — 비어 있는 항목만 source로 채우고, 방문·메모·태그는 합산, 등급은 높은 쪽·등록일은 이른 쪽
   const t = CustomerStore.getById(targetId) ?? target; // 결제 이동으로 totalSpent가 바뀌었을 수 있어 다시 읽는다
@@ -106,5 +105,6 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   if (!t.privacyConsent && source.privacyConsent) { updates.privacyConsent = true; updates.privacyConsentAt = source.privacyConsentAt; }
   CustomerStore.update(targetId, updates);
   CustomerStore.delete(sourceId);
+  recordMergedCustomer(sourceId, targetId); // 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 — 병합이 끝난 뒤에만 기록(중간 예외 시 유령 매핑 방지) (11차 #M10, 리뷰 #M9)
   return preview;
 }

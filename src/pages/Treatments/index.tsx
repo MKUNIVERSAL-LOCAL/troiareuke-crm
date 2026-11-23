@@ -363,7 +363,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
   const { user: authUser } = useAuth();
   const goTo = useNavigate();
   const isEdit = !!editing;
-  const customers = CustomerStore.getAll();
+  const customers = CustomerStore.getAll().filter(c => c.isActive !== false || c.id === editing?.customerId); // 익명화 고객은 새 기록 대상이 아니다 — 예약·결제·판매 폼과 같은 규칙 (리뷰 #M3)
   const staff = StaffStore.getAll().filter(s => s.isActive || s.name === editing?.staffName || s.name === prefill?.staffName); // 퇴사 직원은 새 시술 담당자 목록에서 제외 (기존 기록의 담당자는 유지)
   // 비활성 메뉴는 새 기록에서 제외(예약 추가와 동일). 단 수정 중인 기록에 이미 들어간 메뉴는 남긴다 — 빼면 selectedServices에서도 빠져 저장 때 내역이 조용히 사라진다 (리뷰 2026-11-18)
   const editedNames = new Set((editing?.treatmentDetails ?? '').split(',').map(s => s.trim()).filter(Boolean));

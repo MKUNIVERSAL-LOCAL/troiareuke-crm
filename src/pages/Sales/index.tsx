@@ -118,6 +118,7 @@ export default function Sales() {
   });
 
   const customers = useMemo(() => CustomerStore.getAll(), []);
+  const payableCustomers = useMemo(() => customers.filter(c => c.isActive !== false || c.id === form.customerId), [customers, form.customerId]); // 익명화 고객은 새 결제 대상에서 빼되 수정 중인 결제의 고객은 남긴다 (11차 #M11) — 인라인 filter 는 콤보박스 메모를 매 렌더 깨뜨린다 (리뷰 #L3)
 
   // 시술 기록 저장 → 결제 연계 / 대시보드 빠른 작업: ?new=1(&customer=&amount=&memo=&reference=) 이면 등록 모달을 프리필해 연다 (2026-11-17, reference 2026-11-18)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -347,7 +348,7 @@ export default function Sales() {
       amount: String(p.amount),
       paymentMethod: p.paymentMethod,
       paymentDate: p.paymentDate,
-      memo: p.memo || '',
+      memo: memoWithoutRefundTag(p.memo), // 목록처럼 [환불 날짜] 태그는 숨긴다 — 사용자가 지우면 마감 "환불 처리" 집계가 영구히 빠졌다(저장 때 다시 붙임) (리뷰 #M4)
       discountAmount: String(p.discountAmount || 0),
       status: p.status,
       referenceId: p.referenceId || '',
@@ -439,6 +440,7 @@ export default function Sales() {
 
     // 환불 처리일 — Payment 에 환불일 필드가 없어 memo 태그로(이달 환불 처리 N원 표시의 근거) (10차 #M1)
     if (form.status === 'refunded' && editingPayment?.status !== 'refunded') payload.memo = tagRefund(payload.memo, today());
+    else if (form.status === 'refunded' && editingPayment && refundedOn(editingPayment)) payload.memo = tagRefund(payload.memo, refundedOn(editingPayment)!); // 폼에서 숨긴 기존 태그 재부착
     if (editingId) {
       PaymentStore.update(editingId, payload);
       if (closeProgram) CustomerProgramStore.update(closeProgram.id, { isCompleted: true, notes: `${closeProgram.notes ? closeProgram.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
@@ -1102,7 +1104,7 @@ export default function Sales() {
               {/* 고객 선택 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">고객</label>
-                <CustomerCombobox customers={customers.filter(c => c.isActive !== false || c.id === form.customerId)} value={form.customerId} onChange={id => setForm(f => ({ ...f, customerId: id }))} maskRole={authUser?.role ?? 'staff'} placeholder="이름·전화번호 검색 (선택사항)" /> {/* 익명화 고객은 새 결제 대상에서 빼되 수정 중인 결제의 고객은 남긴다 (11차 #M11) */}
+                <CustomerCombobox customers={payableCustomers} value={form.customerId} onChange={id => setForm(f => ({ ...f, customerId: id }))} maskRole={authUser?.role ?? 'staff'} placeholder="이름·전화번호 검색 (선택사항)" />
               </div>
 
               {/* 금액 */}

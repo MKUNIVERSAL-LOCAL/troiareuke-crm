@@ -1,7 +1,7 @@
 ﻿import { useState, useCallback, useEffect, useMemo } from 'react';
 import { tagRefund } from '../../lib/refundDate';
 import { canceledSaleIds } from '../../lib/saleCancel';
-import { saleCustomerName } from '../../lib/customerIdentity';
+import { saleCustomerNameResolver } from '../../lib/customerIdentity';
 import { askConfirm } from '../../lib/confirmDialog';
 import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
@@ -70,8 +70,8 @@ export default function Products() {
   // 취소된 판매 = 연결 결제가 환불 상태 (판매 행 자체는 코어에 수정 API 가 없어 결제 쪽 상태로 식별)
   const canceled = useMemo(() => canceledSaleIds(payments), [payments]);
   const isCanceled = (sale: ProductSale) => canceled.has(sale.id);
-  const handleDeleteSale = (sale: ProductSale) => {
-    if (!window.confirm(`${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.`)) return;
+  const handleDeleteSale = async (sale: ProductSale) => {
+    if (!(await askConfirm({ title: '판매 취소', danger: true, confirmLabel: '판매 취소', message: `${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.` }))) return;
     const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
     if (linked.length === 0) {
       // 연결 결제가 없는 옛 판매 — 예전처럼 행 삭제(코어: 재고 복구 포함)
@@ -95,15 +95,17 @@ export default function Products() {
   const lowStockCount = products.filter(isLowStock).length;
 
   const normalizedSalesSearch = salesSearch.trim().toLowerCase();
-  const recentSales = [...sales]
+  // 현재 고객 이름(개명·익명화 반영, 11차 #H4) — 고객 인덱스를 한 번 만들어 행마다 선형 탐색하지 않는다 (리뷰 #M2). 비회원 판매는 저장 사본
+  const customerNameOf = useMemo(() => saleCustomerNameResolver(), [sales, payments]); // eslint-disable-line react-hooks/exhaustive-deps -- 판매·결제가 바뀔 때 고객 캐시도 다시 읽는다
+  const recentSales = useMemo(() => [...sales]
     .filter(sale => !normalizedSalesSearch || [
       sale.productName,
-      saleCustomerName(sale), // 저장 사본이 아니라 현재 고객 이름(개명·익명화 반영, 11차 #H4)
+      customerNameOf(sale),
       sale.paymentMethod,
       sale.saleDate,
     ].some(value => value.toLowerCase().includes(normalizedSalesSearch)))
     .sort((a, b) => b.saleDate.localeCompare(a.saleDate))
-    .slice(0, 60);
+    .slice(0, 60), [sales, normalizedSalesSearch, customerNameOf]);
 
   const liveSales = sales.filter(sale => !isCanceled(sale)); // 취소(환불)된 판매는 매출 화면 '제품 매출'처럼 제외 (10차 #H2·#M5)
   const totalSalesRevenue = liveSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
@@ -425,7 +427,7 @@ export default function Products() {
                         <p className="text-sm font-semibold text-gray-900 truncate">{sale.productName}</p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                           <span>{formatDate(sale.saleDate)}</span>
-                          <span>{saleCustomerName(sale) || '-'}</span>
+                          <span>{customerNameOf(sale) || '-'}</span>
                           <span>{sale.quantity}개 × {formatPrice(sale.unitPrice)}</span>
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{sale.paymentMethod}</span>
                         </p>
@@ -464,7 +466,7 @@ export default function Products() {
                       <td className="px-4 py-3.5">
                         <p className="text-sm font-medium text-gray-900">{sale.productName}</p>
                       </td>
-                      <td className="px-4 py-3.5 text-sm text-gray-500">{saleCustomerName(sale) || '-'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-500">{customerNameOf(sale) || '-'}</td>
                       <td className="px-4 py-3.5 text-sm text-center text-gray-700 font-medium">{sale.quantity}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-500 text-right">{formatPrice(sale.unitPrice)}</td>
                       <td className={`px-4 py-3.5 text-sm font-bold text-right ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatPrice(sale.totalPrice)}</td>

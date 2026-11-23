@@ -481,7 +481,7 @@ function StaffDetailModal({
       if (!sameName) recordStaffAlias(staff.id, staff.name);
       // 공유 Google 캘린더의 앞으로의 일정도 새 담당자 이름으로 (11차 #M8)
       const today = todayISO();
-      resyncGcalEvents(ReservationStore.getAll().filter(r => r.staffId === staff.id && r.date >= today && r.status !== 'cancelled'));
+      void resyncGcalEvents(ReservationStore.getAll().filter(r => r.staffId === staff.id && r.date >= today && r.status !== 'cancelled'));
     }
     StaffStore.update(staff.id, {
       name: name.trim(),

@@ -14,6 +14,8 @@ export type ProgramAlertReason = 'exhausted' | 'low' | 'expired' | 'expiring';
 
 export interface ProgramAlert {
   program: CustomerProgram;
+  /** 지금 파는 상품명 — 회차권의 programName 은 구매 당시 사본. 카드·문자 초안이 같은 값을 쓴다 (11차 #M7, 리뷰 #M5) */
+  programLabel: string;
   customer: Customer;
   remaining: number | null;   // 회차제가 아니면 null
   daysToExpiry: number | null; // 만료일 없으면 null (음수 = 지남)
@@ -58,7 +60,7 @@ export function getProgramAlerts(today = new Date()): ProgramAlert[] {
     else if (daysToExpiry !== null && daysToExpiry < 0) reason = 'expired';
     else if (remaining === 1) reason = 'low';
     else if (daysToExpiry !== null && daysToExpiry <= EXPIRY_WINDOW_DAYS) reason = 'expiring';
-    if (reason) out.push({ program: cp, customer, remaining, daysToExpiry, reason });
+    if (reason) out.push({ program: cp, programLabel: (cp.programId && ProgramStore.getById(cp.programId)?.name) || cp.programName, customer, remaining, daysToExpiry, reason });
   }
   const order: Record<ProgramAlertReason, number> = { exhausted: 0, expired: 1, low: 2, expiring: 3 };
   return out.sort((a, b) => order[a.reason] - order[b.reason] || (a.daysToExpiry ?? 9999) - (b.daysToExpiry ?? 9999));
@@ -67,9 +69,7 @@ export function getProgramAlerts(today = new Date()): ProgramAlert[] {
 /** 재구매 안내 문구 초안 — 복사/공유용 (발송사 연동 후 자동 발송) */
 export function buildProgramMessage(alert: ProgramAlert): string {
   const shop = SettingsStore.get().name || '저희 샵';
-  const { customer, program, remaining, daysToExpiry, reason } = alert;
-  // 고객에게 나가는 문구는 지금 파는 이름으로 — 회차권 카드의 programName 은 구매 당시 사본이라 개명한 상품명이 반영되지 않는다 (11차 #M7)
-  const name = (program.programId && ProgramStore.getById(program.programId)?.name) || program.programName;
+  const { customer, programLabel: name, remaining, daysToExpiry, reason } = alert;
   const lines = [`${customer.name}님, 안녕하세요. ${shop}입니다.`];
   if (reason === 'exhausted') lines.push(`이용 중이신 "${name}" 회차를 모두 사용하셨어요.`);
   else if (reason === 'low') lines.push(`이용 중이신 "${name}" 잔여 회차가 ${remaining}회 남았어요.`);

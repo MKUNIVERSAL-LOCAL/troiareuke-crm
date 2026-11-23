@@ -884,7 +884,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(), // 이력에는 {고객명} 치환 전 본문 — 실명이 발송 이력에 영구히 남지 않게(MessageHistory 는 수정·삭제 API 가 없다, 11차 #M1). 실제 발송(sendMessages·scheduleMessage)은 finalContent 그대로
+        content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
         successCount: 0,
         failCount: recipientPhones.length,
@@ -903,7 +903,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(), // 이력에는 {고객명} 치환 전 본문 — 실명이 발송 이력에 영구히 남지 않게(MessageHistory 는 수정·삭제 API 가 없다, 11차 #M1). 실제 발송(sendMessages·scheduleMessage)은 finalContent 그대로
+        content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
         successCount: result.sent,
         failCount: result.failed,
@@ -927,7 +927,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(), // 이력에는 {고객명} 치환 전 본문 — 실명이 발송 이력에 영구히 남지 않게(MessageHistory 는 수정·삭제 API 가 없다, 11차 #M1). 실제 발송(sendMessages·scheduleMessage)은 finalContent 그대로
+        content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
         successCount: 0,
         failCount: recipientPhones.length,

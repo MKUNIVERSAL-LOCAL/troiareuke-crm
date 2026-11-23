@@ -260,11 +260,14 @@ export async function sellProduct(page: Page, name: string) {
   await expect(d).toHaveCount(0);
 }
 
-/** 판매 기록 탭에서 첫 판매를 취소(confirm은 스펙의 dialog 핸들러가 수락) → 재고 현황 탭으로 */
+/** 판매 기록 탭에서 첫 판매를 취소(앱 확인창 '판매 취소' — 117부터 window.confirm 아님) → 재고 현황 탭으로 */
 export async function cancelFirstSale(page: Page) {
   await page.goto('/products');
   await visibleButton(page, /^판매 기록/).click();
   await visibleButton(page, '판매 취소').click();
+  const confirmDialog = dialog(page, '판매 취소');
+  await confirmDialog.getByRole('button', { name: '판매 취소', exact: true }).click();
+  await expect(confirmDialog).toHaveCount(0);
   await visibleButton(page, '재고 현황').click();
 }
 

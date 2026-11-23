@@ -441,12 +441,13 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
 
   // ── 9-1-b. 고객 이름 변경 전파 (11차 #H1·H2, 115): 개명하면 예약·시술·결제에 복사된 이름도 바뀌고(토스트에 건수), 되돌리면 다시 원래대로 ──
   const renameTo = async (name: string) => {
-    await desk.getByRole('button', { name: '수정', exact: true }).first().click(); // 상세 머리의 [수정] — 카드마다 있는 [수정]보다 앞
+    await desk.getByRole('button', { name: '수정', exact: true }).click(); // 상세 머리의 [수정] 하나뿐 — 둘이 되면 strict 위반으로 바로 드러나게 .first() 를 쓰지 않는다
     const editDialog = page.getByRole('dialog', { name: '고객 정보 수정' });
     await editDialog.getByRole('textbox', { name: '이름' }).fill(name);
     await editDialog.getByRole('button', { name: '저장', exact: true }).click();
     await expect(editDialog).toHaveCount(0);
-    await expect(desk.getByRole('heading', { name })).toBeVisible();
+    await expect(page.getByText(/기록 \d+건의 고객 이름·연락처도 함께 바꿨습니다/).first()).toBeVisible(); // 토스트(4초)는 localStorage 전수 파싱 전에 본다 — 토스트 호스트가 PC·모바일 레이아웃에 하나씩이라 2개
+    await expect(desk.getByRole('heading', { name, exact: true })).toBeVisible(); // 부분일치면 '…개명' 헤딩이 남아도 복구 단계가 통과한다
     return page.evaluate(n => {
       const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
       const read = (re: RegExp) => JSON.parse(localStorage.getItem(key(re)) || '[]');
@@ -462,7 +463,6 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const renamed = await renameTo(`${acc.customer}개명`);
   expect(renamed.count).toBeGreaterThanOrEqual(3); // 병합으로 옮겨온 결제·예약·시술 포함
   expect(renamed.names).toEqual([`${acc.customer}개명`]); // 옛 이름 사본이 하나도 남지 않는다
-  await expect(page.getByText(/기록 \d+건의 고객 이름·연락처도 함께 바꿨습니다/)).toBeVisible();
   const restored = await renameTo(acc.customer);
   expect(restored.names).toEqual([acc.customer]);
 
