@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { AlertTriangle, RotateCcw, CheckCircle, Camera } from 'lucide-react';
+import AdminDialog from './AdminDialog';
 import type { AdminBranchOverview, AdminBackupEntry } from '../../lib/adminApi';
+import { formatDateTime } from '../../lib/format';
 
 /**
  * 어드민 > 전체 데이터 > 백업·복원 탭
@@ -10,9 +12,9 @@ import type { AdminBranchOverview, AdminBackupEntry } from '../../lib/adminApi';
  */
 
 const LABELS: Record<string, string> = {
-  customers: '고객', programs: '프로그램', customer_programs: '회권', treatment_logs: '시술기록', products: '제품',
-  product_sales: '제품판매', payments: '결제', staff: '직원', services: '시술메뉴', reservations: '예약',
-  shop_settings: '샵설정', message_templates: '템플릿', message_history: '메시지이력', consultations: '상담', expenses: '지출',
+  customers: '고객', programs: '프로그램', customer_programs: '회차권', treatment_logs: '시술 기록', products: '제품',
+  product_sales: '제품 판매', payments: '결제', staff: '직원', services: '시술 항목', reservations: '예약',
+  shop_settings: '매장 설정', message_templates: '템플릿', message_history: '발송 기록', consultations: '상담', expenses: '지출',
 };
 
 interface Props {
@@ -62,7 +64,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
     }
   }
 
-  const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('ko-KR') : '');
+  const fmt = (iso: string | null) => (iso ? formatDateTime(iso) : ''); // 지점 앱·다른 어드민 화면과 같은 표기 (8차 점검 2026-11-20)
 
   return (
     <div className="space-y-4">
@@ -84,18 +86,18 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
       )}
 
       {!backupDirConfigured ? (
-        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-slate-500">
+        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-slate-400">
           서버에 백업 폴더(BACKUP_DIR)가 설정되어 있지 않습니다.
         </div>
       ) : backups.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-slate-500">
+        <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-8 text-center text-sm text-slate-400">
           이 지점의 백업이 아직 없습니다. 대시보드의 [지금 서버 백업]으로 첫 백업을 만들 수 있습니다.
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
+              <tr className="text-left text-xs text-slate-400 border-b border-slate-800">
                 <th className="px-4 py-2.5 font-medium">백업</th>
                 <th className="px-4 py-2.5 font-medium">종류</th>
                 <th className="px-4 py-2.5 font-medium">포함 데이터</th>
@@ -115,7 +117,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                   <td className="px-4 py-2.5 text-xs text-slate-400">
                     {b.collections.map(c => LABELS[c] || c).join(' · ') || '—'}{b.hasPhotos ? ' · 사진' : ''}
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500">{fmt(b.createdAt)}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-400">{fmt(b.createdAt)}</td>
                   <td className="px-4 py-2.5 text-right">
                     <button
                       onClick={() => openRestore(b)}
@@ -132,8 +134,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
       )}
 
       {target && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={() => !busy && setTarget(null)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <AdminDialog title={`"${target.label}" 백업으로 복원`} onClose={() => !busy && setTarget(null)} size="lg" closeOnBackdrop className="p-6 space-y-4">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <RotateCcw size={16} className="text-amber-400" /> "{target.label}" 백업으로 복원
             </h3>
@@ -148,7 +149,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                     <button
                       key={c}
                       onClick={() => setSelected(prev => { const next = new Set(prev); if (next.has(c)) next.delete(c); else next.add(c); return next; })}
-                      className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${on ? 'bg-amber-600/20 border-amber-500/40 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-500'}`}
+                      className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${on ? 'bg-amber-600/20 border-amber-500/40 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
                     >
                       {LABELS[c] || c}
                     </button>
@@ -157,13 +158,13 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                 {target.hasPhotos && (
                   <button
                     onClick={() => setIncludePhotos(v => !v)}
-                    className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${includePhotos ? 'bg-amber-600/20 border-amber-500/40 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-500'}`}
+                    className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${includePhotos ? 'bg-amber-600/20 border-amber-500/40 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
                   >
                     시술 사진
                   </button>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500 mt-2">선택한 항목은 현재 데이터를 지우고 백업 시점 데이터로 교체됩니다. 선택하지 않은 항목은 그대로 유지됩니다.</p>
+              <p className="text-xs text-slate-400 mt-2">선택한 항목은 현재 데이터를 지우고 백업 시점 데이터로 교체됩니다. 선택하지 않은 항목은 그대로 유지됩니다.</p>
             </div>
 
             <div>
@@ -185,11 +186,10 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
                 disabled={busy || confirmText.trim() !== '복원' || (selected.size === 0 && !includePhotos)}
                 className="px-4 py-2 text-sm font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-40"
               >
-                {busy ? '복원 중…' : '복원 실행'}
+                {busy ? '복원 중...' : '복원 실행'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
     </div>
   );

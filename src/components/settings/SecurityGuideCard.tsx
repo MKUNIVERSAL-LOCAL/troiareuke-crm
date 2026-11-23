@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ShieldCheck, ExternalLink, Copy, CheckCircle } from 'lucide-react';
+import { notify } from '../../lib/notify';
+import { formatDateTime } from '../../lib/format';
 
 /**
- * 백신·보안 예외 등록 안내 카드 (설정 > 데이터 백업 탭, Electron 전용)
+ * 백신·보안 예외 등록 안내 카드 (설정 > 백업·보안 탭, Electron 전용)
  *
  * 배포 불변 원칙: 미서명 exe가 백신에 오탐·검역되면 재설치가 필요해진다.
  * 프로그램이 보안 설정을 대신 바꾸지는 않는다. 대신
@@ -42,24 +44,25 @@ export default function SecurityGuideCard() {
   useEffect(() => {
     if (!api) return;
     api.targets().then(setTargets).catch(() => setTargets(null));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!api) return null;
 
-  async function handleCopy() {
+  async function handleCopy(): Promise<boolean> {
     const r = await api!.copyPaths();
     if (r.success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    }
+    } else notify('폴더 경로를 복사하지 못했습니다. 아래 경로를 직접 선택해 복사해주세요.'); // 조용히 실패하지 않게 (UX 점검 2026-11-19)
+    return r.success;
   }
 
   async function handleOpenDefender() {
     setOpenMsg('');
-    await handleCopy();
+    const copied = await handleCopy();
     const r = await api!.openDefender();
     setOpenMsg(r.success
-      ? 'Windows 보안 화면을 열었습니다. 맨 아래 "제외" → [제외 추가 또는 제거] → [제외 사항 추가] → [폴더]에서 아래 폴더를 하나씩 추가해 주세요. 경로는 이미 복사돼 있습니다.'
+      ? `Windows 보안 화면을 열었습니다. 맨 아래 "제외" → [제외 추가 또는 제거] → [제외 사항 추가] → [폴더]에서 아래 폴더를 하나씩 추가해주세요.${copied ? ' 경로는 이미 복사돼 있습니다.' : ''}`
       : 'Windows 보안 화면을 자동으로 열 수 없습니다. 아래 단계대로 직접 열어 주세요.');
   }
 
@@ -74,9 +77,9 @@ export default function SecurityGuideCard() {
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h3 className="text-sm font-bold text-gray-900">백신·보안 예외 등록 (설치 후 1회)</h3>
         {doneAt ? (
-          <span className="flex items-center gap-1 text-xs font-medium text-emerald-600"><CheckCircle size={14} /> 완료 표시됨</span>
+          <span className="flex items-center gap-1 text-xs font-medium text-emerald-700"><CheckCircle size={14} /> 완료 표시됨</span>
         ) : (
-          <span className="text-xs font-medium text-amber-600">미완료</span>
+          <span className="text-xs font-medium text-amber-700">미완료</span>
         )}
       </div>
       <div className="px-6 py-5 space-y-4">
@@ -87,8 +90,8 @@ export default function SecurityGuideCard() {
 
         {targets && (
           <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3">
-            <p className="text-xs font-bold text-gray-700 mb-1.5">예외로 등록할 폴더 2개</p>
-            <ul className="space-y-1 font-mono text-[11px] text-gray-700 break-all">
+            <p className="text-xs font-bold text-gray-700 mb-1.5">예외로 등록할 폴더 {targets.paths.length}개</p>
+            <ul className="space-y-1 font-mono text-xs text-gray-700 break-all">
               {targets.paths.map(p => <li key={p}>📁 {p}</li>)}
             </ul>
             <button
@@ -142,7 +145,7 @@ export default function SecurityGuideCard() {
           <a href={GUIDE_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-[#1a3a8f] underline underline-offset-2">
             안내 페이지 열기 <ExternalLink size={12} />
           </a>
-          {doneAt && <span className="text-[11px] text-gray-400">완료 표시 {new Date(doneAt).toLocaleString('ko-KR')}</span>}
+          {doneAt && <span className="text-xs text-gray-400">완료 표시 {formatDateTime(doneAt)}</span>}
         </div>
       </div>
     </div>

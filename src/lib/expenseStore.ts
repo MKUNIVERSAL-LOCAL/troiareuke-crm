@@ -83,16 +83,16 @@ function setCache(shopId: string, rows: Expense[]): void {
   _expensesShopId = shopId;
 }
 
-/** 페이지 진입 시 1회 서버 로드 — NAS 우선 (실패 시 localStorage 유지) */
-export async function loadExpenses(): Promise<void> {
-  if (!isNasDataConfigured) return;
+/** 페이지 진입 시 1회 서버 로드 — NAS 우선. @returns true면 서버 행 적용, false면 서버에서 못 받아 localStorage 캐시 유지(호출 쪽이 알림). 로컬 모드는 true */
+export async function loadExpenses(): Promise<boolean> {
+  if (!isNasDataConfigured) return true;
   const rows = await nasLoad('expenses');
-  if (rows) {
-    const shopId = getShopId();
-    const parsed = rows.map(fromDbExpense);
-    setCache(shopId, parsed);
-    saveList(shopKey(), parsed);
-  }
+  if (!rows) return false;
+  const shopId = getShopId();
+  const parsed = rows.map(fromDbExpense);
+  setCache(shopId, parsed);
+  saveList(shopKey(), parsed);
+  return true;
 }
 
 export const ExpenseStore = {

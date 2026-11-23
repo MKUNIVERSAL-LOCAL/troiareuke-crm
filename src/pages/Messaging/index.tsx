@@ -1,6 +1,12 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { notify } from '../../lib/notify';
-import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search } from 'lucide-react';
+import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
+import { formatDateTime, parseISODate, todayISO } from '../../lib/format';
+import { daysBetween } from '../../lib/revisitRule';
+import { useSearchParams } from 'react-router-dom';
+import { getRevisitDueCustomers } from '../../lib/reminderEngine';
+import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
+import { canShareText, shareText } from '../../lib/mobileBridge';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import { MessageTemplateStore, MessageHistoryStore, CustomerStore, SettingsStore } from '../../lib/store';
@@ -9,38 +15,49 @@ import {
   isScheduleAvailable, type ScheduledMessage,
 } from '../../lib/messagingGateway';
 import type { MessageType, MessageTemplate, MessageHistory, Customer } from '../../types';
+import { topTags } from '../../lib/customerTags';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit';
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | `tag:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
-const SEGMENT_LABELS: Record<Segment, string> = {
+const SEGMENT_LABELS: Record<string, string> = {
   all: '전체',
   vip: 'VIP',
   birthday: '이번달 생일',
   novisit: '미방문 60일+',
+  revisit: '재방문 권장', // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
 };
 
-const SEGMENT_FILTERS: Record<Segment, (c: Customer) => boolean> = {
+function segmentLabel(seg: Segment): string {
+  return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);
+}
+/** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
+/** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
+function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
+function segmentFilter(seg: Segment, revisitIds?: Set<string>): (c: Customer) => boolean {
+  if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
+  if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
+  return Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg) ? SEGMENT_FILTERS[seg] : () => false; // 모르는 세그먼트('constructor' 같은 프로토타입 키 포함)는 '아무에게도' — 전체 발송 사고 방지
+}
+
+const SEGMENT_FILTERS: Record<string, (c: Customer) => boolean> = {
   all: () => true,
   vip: c => c.grade === 'VIP',
   birthday: c => {
     if (!c.birthDate) return false;
-    return new Date(c.birthDate).getMonth() === new Date().getMonth();
+    return parseISODate(c.birthDate).getMonth() === new Date().getMonth(); // 앱 공통 로컬 파싱 (12차 #L3)
   },
   novisit: c => {
     if (!c.lastVisitDate) return false;
-    return Date.now() - new Date(c.lastVisitDate).getTime() > 60 * 86400000;
+    return daysBetween(c.lastVisitDate, todayISO()) > 60; // 달력 일수 — UTC 자정 산술은 09시 전에 하루 늦게 들어왔다 (12차 #L4)
   },
 };
 
-/** 실발송 경로(NAS 서버 또는 레거시 게이트웨이)가 하나라도 살아있는가 */
-function isMessagingLive(): boolean {
-  if (isAuthApiConfigured) return true;
-  try { return Boolean(localStorage.getItem('crm_sms_gateway_url')); } catch { return false; }
-}
+/** 실발송 경로(NAS 서버)가 살아있는가 — 레거시 수동 게이트웨이는 제거됨 (보안 감사 2026-11-19) */
+function isMessagingLive(): boolean { return isAuthApiConfigured; }
 
 const MSG_TYPE_LABELS: Record<string, string> = {
   sms: 'SMS',
@@ -63,6 +80,26 @@ export default function Messaging() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendSegment, setSendSegment] = useState<Segment>('all');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  // 고객 상세 [메시지](?customer=<id>) → 그 고객 한 명에게 보내는 발송 모달 (1회 캡처 후 URL 비움, 2026-11-18)
+  const [sendCustomerId, setSendCustomerId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    // 대시보드 재방문 리마인더 [단체 발송](?segment=revisit)·생일 카드(?segment=birthday) → 그 대상이 걸린 발송 모달 (3차·5차 UX 점검 2026-11-19)
+    const seg = searchParams.get('segment');
+    if (seg && (seg === 'revisit' || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
+      setSendCustomerId(null);
+      setSendSegment(seg as Segment);
+      setShowSendModal(true);
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    const id = searchParams.get('customer');
+    if (!id) return;
+    setSendCustomerId(id);
+    setSendSegment('all');
+    setShowSendModal(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [reloadKey, setReloadKey] = useState(0);
 
   const reload = useCallback(() => setReloadKey(k => k + 1), []);
@@ -89,35 +126,34 @@ export default function Messaging() {
         action={{ label: '메시지 보내기', onClick: () => openSendModal('all') }}
       />
 
-      <div className="p-8 flex-1">
+      <div className="p-4 sm:p-6 lg:p-8 flex-1">
         {/* 실발송 경로 미연동 안내 */}
         {!messagingLive && (
           <div className="flex items-start gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
             <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
             <span>
-              실제 문자/카카오 발송은 중앙 서버(NAS) 연동 후 지원됩니다. 지금 발송을 시도하면
+              실제 문자/카카오 발송은 발송사 연동 후 지원됩니다. 지금 발송을 시도하면
               발송되지 않고 이력에 '미연동'으로만 기록됩니다.
             </span>
           </div>
         )}
 
-        {/* Connection Status — 실제 발송 경로 기준 (설정값 장식 아님) */}
-        <div className="flex gap-3 mb-6">
+        {/* Connection Status — 실제 발송 경로 기준 (설정값 장식 아님). 칩은 포커스 가능한 자식이 없어 가로 스크롤 대신 줄바꿈(axe, 2026-11-18); 아래 탭·카테고리 스트립은 버튼이라 스크롤 유지 */}
+        <div className="flex gap-2 mb-6 flex-wrap">
           <StatusChip label="발송 서버" connected={messagingLive} />
           <StatusChip label="카카오 채널" connected={!!settings.kakao?.channelConnected} />
           <StatusChip label="카카오 오픈채팅" connected={!!settings.kakao?.openchatConnected} />
-          <StatusChip label="네이버 톡톡" connected={false} />
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
+        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full mb-6">
           {tabs.map(t => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={clsx(
-                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                'flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
               )}
             >
               {t.icon} {t.label}
@@ -127,14 +163,15 @@ export default function Messaging() {
 
         {tab === 'send' && <SendPanel onSend={openSendModal} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
-        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} />}
+        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} />}
       </div>
 
       {showSendModal && (
         <SendMessageModal
-          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); }}
+          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); setSendCustomerId(null); }}
           initialTemplate={selectedTemplate}
           initialSegment={sendSegment}
+          initialCustomerId={sendCustomerId}
           onSent={reload}
         />
       )}
@@ -145,7 +182,7 @@ export default function Messaging() {
 function StatusChip({ label, connected }: { label: string; connected: boolean }) {
   return (
     <div className={clsx(
-      'flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium',
+      'flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium',
       connected ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-400'
     )}>
       <span className={clsx('w-1.5 h-1.5 rounded-full', connected ? 'bg-green-500' : 'bg-gray-300')}></span>
@@ -156,36 +193,24 @@ function StatusChip({ label, connected }: { label: string; connected: boolean })
 }
 
 function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; reloadKey: number }) {
-  const [customers, setCustomers] = useState(CustomerStore.getAll());
-  const [settings, setSettings] = useState(SettingsStore.get());
+  const [customers, setCustomers] = useState(() => CustomerStore.getAll().filter(c => c.isActive !== false)); // 익명화 고객 제외
 
   useEffect(() => {
-    setCustomers(CustomerStore.getAll());
-    setSettings(SettingsStore.get());
+    setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false));
   }, [reloadKey]);
+  const revisitCount = useMemo(() => revisitIdSet().size, [reloadKey]); // 대시보드 재방문 카드와 같은 기준 (리뷰 63)
 
   const autoMessages = [
-    { title: '예약 확인 문자', desc: '예약 완료 시 자동 발송', type: 'sms', key: 'reservationConfirm' as const },
-    { title: '예약 리마인더', desc: '예약 전날 09:00 자동 발송', type: 'sms', key: 'reservationReminder' as const },
-    { title: '생일 축하 메시지', desc: '생일 당일 오전 자동 발송', type: 'kakao-channel', key: 'birthdayMessage' as const },
-    { title: '미방문 고객 케어', desc: '60일 미방문 시 자동 발송', type: 'kakao-channel', key: 'novisitMessage' as const },
+    // 설명은 설정 > 알림 설정과 같은 문구 (UX QA 2026-11-17)
+    { title: '예약 확인 문자', desc: '예약 등록 시 즉시 발송', type: 'sms', key: 'reservationConfirm' as const },
+    { title: '예약 리마인더', desc: '예약 전날 오전 9시 발송', type: 'sms', key: 'reservationReminder' as const },
+    { title: '생일 축하 메시지', desc: '생일 당일 오전 10시 카카오 발송', type: 'kakao-channel', key: 'birthdayMessage' as const },
+    { title: '미방문 고객 케어', desc: '60일 미방문 시 카카오 발송', type: 'kakao-channel', key: 'novisitMessage' as const },
   ];
-
-  const handleToggle = (key: keyof typeof settings.notificationSettings, checked: boolean) => {
-    const updated = SettingsStore.save({
-      notificationSettings: {
-        ...settings.notificationSettings,
-        [key]: checked,
-      },
-    });
-    setSettings(updated);
-  };
 
   const birthdayCount = customers.filter(c => {
     if (!c.birthDate) return false;
-    const now = new Date();
-    const bd = new Date(c.birthDate);
-    return bd.getMonth() === now.getMonth();
+    return parseISODate(c.birthDate).getMonth() === new Date().getMonth();
   }).length;
 
   return (
@@ -193,13 +218,15 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
       {/* Quick Send Targets */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { key: 'all' as Segment, label: '전체 고객', count: customers.length, color: 'purple' },
+          { key: 'all' as Segment, label: '전체 고객', count: customers.length, color: 'primary' },
           { key: 'vip' as Segment, label: 'VIP 고객', count: customers.filter(SEGMENT_FILTERS.vip).length, color: 'yellow' },
           { key: 'birthday' as Segment, label: '이번달 생일', count: birthdayCount, color: 'pink' },
           { key: 'novisit' as Segment, label: '미방문 60일+', count: customers.filter(SEGMENT_FILTERS.novisit).length, color: 'orange' },
+          { key: 'revisit' as Segment, label: '재방문 권장', count: revisitCount, color: 'amber' },
+          ...topTags(customers, 4).map(t => ({ key: `tag:${t.tag}` as Segment, label: `#${t.tag}`, count: t.count, color: 'amber' })),
         ].map(t => (
           <button
-            key={t.label}
+            key={t.key}
             onClick={() => onSend(t.key)}
             className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all text-left hover:-translate-y-0.5"
           >
@@ -207,16 +234,17 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
               <Users size={20} className="text-gray-400" />
               <span className={clsx(
                 'text-xs font-bold px-2 py-0.5 rounded-full',
-                t.color === 'purple' && 'bg-purple-100 text-purple-700',
+                t.color === 'primary' && 'bg-primary-100 text-primary-700',
                 t.color === 'yellow' && 'bg-yellow-100 text-yellow-700',
                 t.color === 'pink' && 'bg-pink-100 text-pink-700',
                 t.color === 'orange' && 'bg-orange-100 text-orange-700',
+                t.color === 'amber' && 'bg-amber-100 text-amber-700',
               )}>
                 {t.count}명
               </span>
             </div>
             <p className="text-sm font-bold text-gray-900">{t.label}</p>
-            <p className="text-xs text-purple-500 mt-1 font-medium">메시지 발송 →</p>
+            <p className="text-xs text-primary-500 mt-1 font-medium">메시지 발송 →</p>
           </button>
         ))}
       </div>
@@ -240,19 +268,9 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
                       {MSG_TYPE_LABELS[m.type]}
                     </span>
                   </div>
-                  <p className="text-xs text-amber-600 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
+                  <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-not-allowed opacity-50">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  disabled
-                  checked={settings.notificationSettings[m.key]}
-                  onChange={e => handleToggle(m.key, e.target.checked)}
-                />
-                <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
-              </label>
             </div>
           ))}
         </div>
@@ -288,7 +306,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
 
   const handleDelete = (id: string) => {
     const target = templates.find(t => t.id === id);
-    if (!window.confirm(`'${target?.name ?? '이 템플릿'}' 템플릿을 삭제하시겠습니까?`)) return;
+    if (!window.confirm(`'${target?.name ?? '이 템플릿'}' 템플릿을 삭제할까요?\n이미 보낸 발송 이력은 남습니다.`)) return;
     MessageTemplateStore.delete(id);
     setTemplates(MessageTemplateStore.getAll());
     onReload();
@@ -314,14 +332,14 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
             aria-label="메시지 템플릿 검색"
           />
         </label>
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="flex flex-wrap gap-2 pb-1">
         {categories.map(c => (
           <button
             key={c}
             onClick={() => setCat(c)}
             className={clsx(
               'px-3 py-1.5 text-sm font-medium rounded-lg border transition-all',
-              cat === c ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'
+              cat === c ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200'
             )}
           >
             {c}
@@ -330,7 +348,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="lg:ml-auto flex items-center justify-center gap-1 px-3 py-2.5 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg border border-purple-200 hover:bg-purple-100 whitespace-nowrap"
+          className="lg:ml-auto flex items-center justify-center gap-1 px-3 py-2.5 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg border border-primary-200 hover:bg-primary-100 whitespace-nowrap"
         >
           <Plus size={14} /> 템플릿 추가
         </button>
@@ -349,30 +367,30 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
               <div>
                 <p className="text-sm font-bold text-gray-900">{t.name}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={clsx('px-2 py-0.5 rounded text-[11px] font-medium', MSG_TYPE_COLORS[t.type])}>
+                  <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', MSG_TYPE_COLORS[t.type])}>
                     {MSG_TYPE_LABELS[t.type]}
                   </span>
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[11px]">{t.category}</span>
+                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{t.category}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setEditing(t)}
-                  className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                   title="수정"
                 >
                   <Pencil size={14} />
                 </button>
                 <button
                   onClick={() => handleDelete(t.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   title="삭제"
                 >
                   <Trash2 size={14} />
                 </button>
                 <button
                   onClick={() => onSelect(t.id)}
-                  className="px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-medium hover:bg-purple-600 transition-colors"
+                  className="px-3 py-1.5 bg-primary-600 text-white rounded-lg text-xs font-medium hover:bg-primary-700 transition-colors"
                 >
                   발송
                 </button>
@@ -384,7 +402,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
               {t.variables.length > 0 && (
                 <div className="flex gap-1 mt-2 flex-wrap">
                   {t.variables.map(v => (
-                    <span key={v} className="px-1.5 py-0.5 bg-purple-50 text-purple-500 rounded text-xs">{'{' + v + '}'}</span>
+                    <span key={v} className="px-1.5 py-0.5 bg-primary-50 text-primary-500 rounded text-xs">{'{' + v + '}'}</span>
                   ))}
                 </div>
               )}
@@ -439,7 +457,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             placeholder="예: 예약 확인 메시지"
           />
         </div>
@@ -458,8 +476,8 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
                 className={clsx(
                   'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                   type === t.key
-                    ? 'bg-purple-600 text-white border-purple-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
                 )}
               >
                 {t.label}
@@ -478,8 +496,8 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
                 className={clsx(
                   'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                   category === c
-                    ? 'bg-purple-600 text-white border-purple-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300'
                 )}
               >
                 {c}
@@ -495,7 +513,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               placeholder="예: [우리샵] 예약 안내"
             />
           </div>
@@ -507,18 +525,18 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
             rows={5}
             value={content}
             onChange={e => setContent(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="메시지 내용을 입력하세요"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1.5">변수 (쉼표로 구분)</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1.5">변수 (쉼표로 구분 — 발송 전 바꿔 넣을 자리 표시, {'{'}고객명{'}'}은 개별 발송에서 자동 치환)</label>
           <input
             type="text"
             value={variablesStr}
             onChange={e => setVariablesStr(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             placeholder="예: 고객명, 날짜, 시간"
           />
         </div>
@@ -528,9 +546,9 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
           <button
             onClick={handleSave}
             disabled={!name.trim() || !content.trim()}
-            className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isEdit ? <><Pencil size={14} /> 수정 저장</> : <><Plus size={14} /> 저장</>}
+            {isEdit ? <><Pencil size={14} /> 저장</> : <><Plus size={14} /> 템플릿 추가</>}
           </button>
         </div>
       </div>
@@ -539,12 +557,12 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
 }
 
 const SCHEDULE_STATUS_LABELS: Record<ScheduledMessage['status'], { label: string; color: string }> = {
-  pending: { label: '대기', color: 'bg-blue-100 text-blue-600' },
-  processing: { label: '발송 중', color: 'bg-purple-100 text-purple-600' },
-  sent: { label: '발송 완료', color: 'bg-green-100 text-green-600' },
-  partial: { label: '일부 실패', color: 'bg-amber-100 text-amber-600' },
-  failed: { label: '실패', color: 'bg-red-100 text-red-600' },
-  canceled: { label: '취소됨', color: 'bg-gray-100 text-gray-500' },
+  pending: { label: '대기', color: 'bg-blue-100 text-blue-700' },
+  processing: { label: '발송 중', color: 'bg-primary-100 text-primary-600' },
+  sent: { label: '발송 완료', color: 'bg-green-100 text-green-700' },
+  partial: { label: '일부 실패', color: 'bg-amber-100 text-amber-800' },
+  failed: { label: '실패', color: 'bg-red-100 text-red-700' },
+  canceled: { label: '취소됨', color: 'bg-gray-100 text-gray-600' },
 };
 
 function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
@@ -585,8 +603,8 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
             <div key={item.id} className="px-6 py-3 flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={clsx('text-[11px] px-2 py-0.5 rounded-full font-medium', badge.color)}>{badge.label}</span>
-                  <span className="text-xs text-gray-500">{new Date(item.send_at).toLocaleString()}</span>
+                  <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', badge.color)}>{badge.label}</span>
+                  <span className="text-xs text-gray-500">{formatDateTime(item.send_at)}</span>
                   <span className="text-xs text-gray-400">{item.phones.length}명</span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1 truncate">{item.title ? `[${item.title}] ` : ''}{item.content}</p>
@@ -594,7 +612,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
               {item.status === 'pending' && (
                 <button
                   onClick={() => handleCancel(item.id)}
-                  className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
+                  className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
                 >
                   취소
                 </button>
@@ -610,10 +628,10 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
 // 신규 이력은 ISO 저장, 기존 이력은 toLocaleString 문자열이라 파싱 실패 시 원문 유지
 function formatSentAt(value: string): string {
   const d = new Date(value);
-  return isNaN(d.getTime()) ? value : d.toLocaleString();
+  return isNaN(d.getTime()) ? value : formatDateTime(value);
 }
 
-function HistoryPanel({ reloadKey }: { reloadKey: number }) {
+function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => void }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>('all');
@@ -645,8 +663,9 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
           </div>
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
             <Clock size={40} className="mb-3 text-gray-300" />
-            <p className="text-sm font-medium">발송 이력이 없습니다</p>
+            <p className="text-sm font-medium">발송 이력이 없어요</p>
             <p className="text-xs mt-1">메시지를 발송하면 이곳에 이력이 표시됩니다</p>
+            <button type="button" onClick={onSend} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">메시지 보내기</button>
           </div>
         </div>
       </div>
@@ -698,39 +717,39 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
                     h.status === 'sent' ? 'bg-green-100' : isGatewayPending ? 'bg-amber-100' : 'bg-red-100'
                   )}>
                     {h.status === 'sent'
-                      ? <CheckCircle size={16} className="text-green-600" />
+                      ? <CheckCircle size={16} className="text-green-700" />
                       : isGatewayPending
-                        ? <AlertCircle size={16} className="text-amber-500" />
-                        : <AlertCircle size={16} className="text-red-500" />
+                        ? <AlertCircle size={16} className="text-amber-700" />
+                        : <AlertCircle size={16} className="text-red-600" />
                     }
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-bold text-gray-900">{h.templateName || '직접 작성'}</p>
-                      <span className={clsx('px-2 py-0.5 rounded text-[11px] font-medium', MSG_TYPE_COLORS[h.type])}>
+                      <span className={clsx('px-2 py-0.5 rounded text-xs font-medium', MSG_TYPE_COLORS[h.type])}>
                         {MSG_TYPE_LABELS[h.type]}
                       </span>
                       {isGatewayPending && (
-                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-700">미연동</span>
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">미연동</span>
                       )}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{formatSentAt(h.sentAt)}</p>
                     {isGatewayPending && (
-                      <p className="text-[11px] text-amber-600 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
+                      <p className="text-xs text-amber-700 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
                     )}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-bold text-gray-800">{h.recipients}명 대상</p>
                   {h.status === 'sent'
-                    ? <p className="text-xs text-green-500">성공 {h.successCount}명</p>
+                    ? <p className="text-xs text-green-700">성공 {h.successCount}명</p>
                     : isGatewayPending
-                      ? <p className="text-xs text-amber-500">미발송 (미연동)</p>
-                      : <p className="text-xs text-red-400">실패 {h.failCount}명</p>
+                      ? <p className="text-xs text-amber-700">미발송 (미연동)</p>
+                      : <p className="text-xs text-red-600">실패 {h.failCount}명</p>
                   }
-                  {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-400">실패 {h.failCount}명</p>}
+                  {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-600">실패 {h.failCount}명</p>}
                   {h.status === 'sent' && h.cost !== undefined && h.cost > 0 && (
-                    <p className="text-[11px] text-gray-400 mt-1">예상 비용 {h.cost.toLocaleString()}원</p>
+                    <p className="text-xs text-gray-400 mt-1">예상 비용 {h.cost.toLocaleString()}원</p>
                   )}
                 </div>
               </div>
@@ -744,7 +763,7 @@ function HistoryPanel({ reloadKey }: { reloadKey: number }) {
   );
 }
 
-function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; onSent: () => void }) {
+function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; onSent: () => void }) {
   const [msgType, setMsgType] = useState<MessageType>('sms');
   const [recipientMode, setRecipientMode] = useState<Segment>(initialSegment ?? 'all');
   const [content, setContent] = useState('');
@@ -755,9 +774,14 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
   const [resultMessage, setResultMessage] = useState('');
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
   const [scheduleAt, setScheduleAt] = useState('');
-  const charLimit = msgType === 'sms' ? 90 : 1000;
+  const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
+  const contentBytes = smsBytes(content);
 
-  const customers = CustomerStore.getAll();
+  const customers = useMemo(() => CustomerStore.getAll().filter(c => c.isActive !== false), []);
+  // 개별 고객 발송 — 고객 상세에서 열었을 때. [대상 바꾸기]로 세그먼트 발송으로 되돌릴 수 있다.
+  // 요청한 고객이 발송 대상이 아니면(익명화·없음) 세그먼트로 떨어뜨리지 않고 막는다 — 전체 발송 사고 방지
+  const [onlyCustomer, setOnlyCustomer] = useState<Customer | null>(() => (initialCustomerId && customers.find(c => c.id === initialCustomerId)) || null);
+  const blockedCustomer = !!initialCustomerId && !onlyCustomer;
   const templates = MessageTemplateStore.getAll();
   const kakaoSettings = SettingsStore.get().kakao;
 
@@ -780,8 +804,12 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
     { key: 'kakao-openchat', label: `카카오 오픈채팅${kakaoSettings?.openchatConnected ? '' : ' (채널 미연결)'}`, disabled: !kakaoSettings?.openchatConnected },
   ];
 
-  // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준)
-  const targetCustomers = customers.filter(SEGMENT_FILTERS[recipientMode]);
+  // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준). 재방문 집합은 창이 열릴 때 한 번만 — 글자 입력마다 전수 스캔하지 않게 (리뷰 63)
+  const revisitIds = useMemo(() => revisitIdSet(), []);
+  const targetCustomers = useMemo(
+    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds))),
+    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds],
+  );
   const recipientCount = targetCustomers.length;
 
   // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
@@ -789,20 +817,32 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
     .map(c => c.phone)
     .filter((p): p is string => Boolean(p && p.trim()));
 
-  const estimatedCost = msgType === 'sms' ? recipientPhones.length * 11 : msgType === 'lms' ? recipientPhones.length * 25 : recipientPhones.length * 5;
+  // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
+  const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;
+  const estimatedCost = effectiveType === 'sms' ? recipientPhones.length * 11 : effectiveType === 'lms' ? recipientPhones.length * 25 : recipientPhones.length * 5;
+  const excludedCount = recipientCount - recipientPhones.length;
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
+    if (recipientPhones.length === 0) { notify('전화번호가 있는 수신 대상이 없습니다. 고객 정보의 전화번호를 확인해주세요.'); return; }
+    // 개별 발송(고객 상세에서 열었을 때)은 {고객명}을 그 고객 이름으로 바꾼다 — 단체 발송은 수신자별 치환이 없으므로 그대로 두지 않고 막는다 (UX 점검 2026-11-19)
+    const finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
+    // 종류는 실제로 나가는 문자열 기준 — 이름 치환으로 길어지거나 공백 정리로 짧아질 수 있다 (리뷰 60)
+    const sendType: MessageType = msgType === 'sms' && smsBytes(finalContent) > SMS_BYTE_LIMIT ? 'lms' : msgType;
     // 치환 안 된 변수({고객명} 등)가 그대로 나가는 사고 방지 — 예약/즉시 발송 공통
-    if (/\{[^}]+\}/.test(content)) {
-      notify('메시지에 치환되지 않은 변수({고객명} 등)가 있습니다. 실제 값으로 바꾼 뒤 발송해주세요.');
+    if (/\{[^}]+\}/.test(finalContent)) {
+      notify(onlyCustomer
+        ? '메시지에 바꿀 수 없는 변수가 있습니다. {고객명} 외의 변수는 실제 값으로 바꾼 뒤 발송해주세요.'
+        : '메시지에 치환되지 않은 변수({고객명} 등)가 있습니다. 단체 발송은 이름을 자동으로 넣지 못하므로 실제 값으로 바꾸거나 변수를 빼고 발송해주세요.');
       return;
     }
+    // 발송은 되돌릴 수 없다 — 대상·인원을 한 번 더 확인 (전체 고객이 기본 대상이라 특히) (UX 점검 2026-11-19)
+    const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode)} ${recipientPhones.length}명`;
+    const action = scheduleMode === 'later' && isScheduleAvailable ? '예약 발송을 등록' : '지금 발송';
+    if (!window.confirm(`${target}에게 ${sendType === 'sms' ? 'SMS' : sendType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(전화번호 없는 ${excludedCount}명 제외)` : ''}`)) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
-    // "90자 초과 시 자동 LMS 전환" 안내대로 실제 전환 (기존엔 문구만 있고 미구현)
-    const effectiveType: MessageType = msgType === 'sms' && content.trim().length > 90 ? 'lms' : msgType;
 
     // 예약 발송: 서버 큐에 등록하고 종료 (시각 도달 시 서버가 발송)
     if (scheduleMode === 'later' && isScheduleAvailable) {
@@ -810,14 +850,14 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
         if (!scheduleAt) throw new Error('발송 시각을 선택해주세요.');
         await scheduleMessage({
           sendAt: new Date(scheduleAt).toISOString(),
-          type: effectiveType,
+          type: sendType,
           title: title || undefined,
-          content: content.trim(),
+          content: finalContent,
           phones: recipientPhones,
         });
         setSending(false);
         setSendResult('success');
-        setResultMessage(`${new Date(scheduleAt).toLocaleString()} 발송 예약 완료`);
+        setResultMessage(`${formatDateTime(scheduleAt)} 발송 예약 완료`);
         onSent();
         setTimeout(() => { onClose(); }, 1500);
       } catch (e: any) {
@@ -829,24 +869,24 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
     }
 
     const result = await sendMessages({
-      type: effectiveType,
-      content: content.trim(),
+      type: sendType,
+      content: finalContent,
       title: title || undefined,
-      recipients: recipientCount,
+      recipients: recipientPhones.length,
       phones: recipientPhones,
     });
 
     if (result.pending) {
       // 게이트웨이 미연동 — 발송되지 않았음을 명확히 기록
       MessageHistoryStore.save({
-        type: effectiveType,
+        type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(),
-        recipients: recipientCount,
+        content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
+        recipients: recipientPhones.length,
         successCount: 0,
-        failCount: recipientCount,
+        failCount: recipientPhones.length,
         sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
@@ -858,12 +898,12 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
     } else if (result.sent > 0) {
       // 실제 발송 성공 (일부 실패 포함 — 부분 성공도 sent로 기록해 성공/실패 건수 모두 노출)
       MessageHistoryStore.save({
-        type: effectiveType,
+        type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(),
-        recipients: recipientCount,
+        content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
+        recipients: recipientPhones.length,
         successCount: result.sent,
         failCount: result.failed,
         sentAt: new Date().toISOString(),
@@ -882,14 +922,14 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
     } else {
       // 발송 실패
       MessageHistoryStore.save({
-        type: effectiveType,
+        type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
-        content: content.trim(),
-        recipients: recipientCount,
+        content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
+        recipients: recipientPhones.length,
         successCount: 0,
-        failCount: recipientCount,
+        failCount: recipientPhones.length,
         sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
@@ -905,7 +945,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
     <Modal isOpen={true} onClose={onClose} title="메시지 발송" size="lg">
       {sendResult === 'success' ? (
         <div className="flex flex-col items-center justify-center py-12">
-          <CheckCircle size={48} className="text-green-500 mb-3" />
+          <CheckCircle size={48} className="text-green-700 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 완료!</p>
           <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다`}</p>
         </div>
@@ -914,8 +954,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
           <AlertCircle size={48} className="text-amber-400 mb-3" />
           <p className="text-lg font-bold text-gray-900">실제 발송이 되지 않았습니다</p>
           <p className="text-sm text-gray-600 mt-2 leading-relaxed">
-            메시지 발송 게이트웨이가 아직 연동되지 않았습니다.<br />
-            설정 &gt; 연동에서 준비 예정입니다.
+            본사 서버에 문자·알림톡 발송사가 아직 연동되지 않았습니다.<br />
+            연동되면 이 화면 그대로 실제 발송됩니다 — 지점에서 따로 설정할 것은 없습니다.
           </p>
           <p className="text-xs text-gray-400 mt-3 bg-gray-50 rounded-lg px-3 py-2">{resultMessage}</p>
           <p className="text-xs text-gray-400 mt-2">발송 이력에 '미연동' 사유로 기록되었습니다.</p>
@@ -923,9 +963,9 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
         </div>
       ) : sendResult === 'error' ? (
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-          <AlertCircle size={48} className="text-red-400 mb-3" />
+          <AlertCircle size={48} className="text-red-600 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 실패</p>
-          <p className="text-xs text-gray-400 mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
+          <p className="text-xs mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
           <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
         </div>
       ) : (
@@ -942,8 +982,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                   className={clsx(
                     'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                     msgType === t.key
-                      ? 'bg-purple-600 text-white border-purple-600'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300',
+                      ? 'bg-primary-600 text-white border-primary-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-primary-300',
                     t.disabled && 'opacity-50 cursor-not-allowed hover:border-gray-200'
                   )}
                 >
@@ -956,10 +996,25 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
           {/* Recipients */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">수신 대상</label>
+            {blockedCustomer ? (
+              <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2" data-testid="recipient-blocked">
+                이 고객은 발송 대상이 아닙니다(익명화됐거나 삭제됨). 창을 닫고 다른 고객을 선택해주세요.
+              </p>
+            ) : onlyCustomer ? (
+              <div className="flex items-center gap-2 flex-wrap" data-testid="recipient-single">
+                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-primary-600 text-white">개별 발송: {onlyCustomer.name} ({onlyCustomer.phone || '전화번호 없음'})</span>
+                <button type="button" onClick={() => setOnlyCustomer(null)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">대상 바꾸기</button>
+              </div>
+            ) : (
             <div className="flex gap-2 flex-wrap">
-              {(['all', 'vip', 'birthday', 'novisit'] as Segment[]).map(key => ({
+              {(() => {
+                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
+                // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
+                if (recipientMode.startsWith('tag:') && !keys.includes(recipientMode)) keys.push(recipientMode);
+                return keys;
+              })().map(key => ({
                 key,
-                label: `${SEGMENT_LABELS[key]} (${customers.filter(SEGMENT_FILTERS[key]).length}명)`,
+                label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key, revisitIds)).length}명)`,
               })).map(r => (
                 <button
                   key={r.key}
@@ -967,7 +1022,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                   className={clsx(
                     'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
                     recipientMode === r.key
-                      ? 'bg-purple-600 text-white border-purple-600'
+                      ? 'bg-primary-600 text-white border-primary-600'
                       : 'bg-white text-gray-600 border-gray-200'
                   )}
                 >
@@ -975,13 +1030,15 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                 </button>
               ))}
             </div>
+            )}
           </div>
 
           {/* Template selector */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">템플릿 선택 (선택사항)</label>
             <select
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              aria-label="템플릿 선택"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
               value={selectedTemplateId || ''}
               onChange={e => {
                 const tmpl = templates.find(t => t.id === e.target.value);
@@ -999,15 +1056,15 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
             </select>
           </div>
 
-          {/* Title (Kakao only) */}
-          {msgType.startsWith('kakao') && (
+          {/* 제목 — LMS·카카오 (템플릿 폼과 같은 기준) */}
+          {msgType !== 'sms' && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">메시지 제목</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">메시지 제목 (LMS·카카오)</label>
               <input
                 type="text"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
                 placeholder="제목 입력"
               />
             </div>
@@ -1019,20 +1076,20 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
               <label className="text-xs font-medium text-gray-600">메시지 내용 *</label>
               <span className={clsx(
                 'text-xs font-medium',
-                content.length > charLimit ? 'text-red-500' : 'text-gray-400'
+                contentBytes > byteLimit ? 'text-red-600' : 'text-gray-400'
               )}>
-                {content.length}/{charLimit}자
+                {contentBytes}/{byteLimit}바이트{msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? ' · LMS로 발송' : ''}
               </span>
             </div>
             <textarea
               rows={5}
               value={content}
               onChange={e => setContent(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
-              placeholder={'발송할 메시지 내용을 입력하세요\n{고객명}, {날짜} 등의 변수를 사용할 수 있습니다'}
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
+              placeholder={'발송할 메시지 내용을 입력하세요\n{고객명}은 고객 상세에서 연 개별 발송에서만 자동으로 바뀝니다 — 단체 발송은 실제 값으로 바꿔 넣으세요'}
             />
             {msgType === 'sms' && (
-              <p className="text-[11px] text-gray-400 mt-1">90자 초과 시 자동으로 LMS로 전환됩니다</p>
+              <p className="text-xs text-gray-400 mt-1">SMS는 90바이트(한글 약 45자)까지 — 넘으면 자동으로 LMS로 발송됩니다</p>
             )}
           </div>
 
@@ -1044,7 +1101,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                 type="button"
                 onClick={() => setScheduleMode('now')}
                 className={clsx('px-4 py-2 text-sm font-medium rounded-xl border',
-                  scheduleMode === 'now' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
+                  scheduleMode === 'now' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
               >
                 즉시 발송
               </button>
@@ -1053,7 +1110,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                   type="button"
                   onClick={() => setScheduleMode('later')}
                   className={clsx('px-4 py-2 text-sm font-medium rounded-xl border',
-                    scheduleMode === 'later' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
+                    scheduleMode === 'later' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50')}
                 >
                   예약 발송
                 </button>
@@ -1062,7 +1119,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                   type="button"
                   disabled
                   className="px-4 py-2 text-sm font-medium bg-white text-gray-400 rounded-xl border border-gray-200 flex items-center gap-1.5 cursor-not-allowed opacity-60"
-                  title="중앙 서버(NAS) 연동 후 지원됩니다"
+                  title="발송사 연동 후 지원됩니다"
                 >
                   예약 발송
                   <HelpCircle size={12} className="text-gray-400" />
@@ -1074,33 +1131,45 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, onSent }: 
                 type="datetime-local"
                 value={scheduleAt}
                 onChange={e => setScheduleAt(e.target.value)}
-                className="mt-2 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+                className="mt-2 px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
                 aria-label="예약 발송 시각"
               />
             )}
             {!isScheduleAvailable && (
-              <p className="text-[11px] text-gray-400 mt-1.5">예약 발송은 NAS 서버 연동 후 지원됩니다.</p>
+              <p className="text-xs text-gray-400 mt-1.5">예약 발송은 준비 중입니다.</p>
             )}
           </div>
 
           {/* Cost estimate */}
           <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-500">예상 수신자</p>
-              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientCount}명</p>
+              <p className="text-xs text-gray-500">발송 대상 (전화번호 있는 고객)</p>
+              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientPhones.length}명{excludedCount > 0 && <span className="ml-1.5 text-xs font-normal text-amber-700">전화번호 없는 {excludedCount}명 제외</span>}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">예상 발송 비용</p>
-              <p className="text-base font-bold text-purple-600 mt-0.5">약 {estimatedCost.toLocaleString()}원</p>
+              <p className="text-base font-bold text-primary-600 mt-0.5">약 {estimatedCost.toLocaleString()}원</p>
             </div>
           </div>
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 sticky bottom-0 bg-white pt-3 -mx-6 px-6 -mb-4 pb-4 border-t border-gray-100 lg:rounded-b-2xl">
             <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
+            {canShareText && (
+              // 모바일: 발송사 미계약이어도 문구를 카카오톡·문자 앱으로 넘겨 직접 보낼 수 있다 (2026-11-17)
+              <button
+                type="button"
+                onClick={() => shareText(content, '고객 안내')}
+                disabled={!content.trim()}
+                className="flex-1 py-2.5 text-sm font-medium text-white bg-green-700 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                title="카카오톡·문자 앱으로 문구 보내기"
+              >
+                <Share2 size={14} />앱으로 보내기
+              </button>
+            )}
             <button
               onClick={handleSend}
-              disabled={sending || !content.trim() || recipientCount === 0}
-              className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={sending || !content.trim() || recipientCount === 0 || recipientPhones.length === 0}
+              className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sending ? <Clock size={14} className="animate-spin" /> : <Send size={14} />}
               {sending ? '처리 중...' : '발송하기'}

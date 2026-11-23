@@ -276,7 +276,8 @@ function publicUser(row) {
 // 클라이언트(authApi.ts)가 매 요청에 X-App-Version / X-App-Mode를 실어 보낸다.
 // 값이 바뀌었거나 마지막 기록이 5분 이상 지났을 때만 UPDATE (요청마다 쓰지 않음).
 const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}([-.][0-9A-Za-z.-]{0,20})?$/;
-const APP_MODES = new Set(['portable', 'folder', 'admin', 'web']);
+// android/ios: 스토어 앱(Capacitor) — 채널(latest.json) 버전 비교·구버전 경보 대상에서 제외하기 위해 모드를 보존한다
+const APP_MODES = new Set(['portable', 'folder', 'admin', 'web', 'android', 'ios']);
 const APP_SEEN_REFRESH_MS = 5 * 60 * 1000;
 /** 로그인 시도 기록(성공·실패 모두). 실패해도 로그인 흐름을 막지 않는다(fire-and-forget). */
 function recordLoginAttempt(req, { userId = null, email, branchId = null, branchName = null, status, failReason = null }) {
@@ -550,6 +551,57 @@ async function bootstrapSuperadmin() {
 }
 
 // 만료 세션·재설정 토큰 정리 (기동 시 + 매일)
+// ── 구버전 지점 감시 ─────────────────────────────────────────────────────
+// 릴리스 완료 조건(docs/DISTRIBUTION-POLICY.md): 채널 게시 48시간 내 구버전 지점 0곳.
+// 어드민 대시보드를 사람이 열어야만 보이던 것을 서버가 매일 점검해 운영 경보 메일로 보낸다.
+// 기준: 최근 7일 내 접속한 지점 PC 계정(모바일 앱은 스토어 배포라 채널 버전과 비교하지 않음).
+const UPDATE_CHANNEL_URL = String(process.env.UPDATE_CHANNEL_URL || 'https://crm-update.mkcorp.familyds.com/portable/latest.json').trim();
+
+function compareVersions(a, b) {
+  const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+async function checkOutdatedBranches() {
+  let latest = '';
+  try {
+    const response = await fetch(UPDATE_CHANNEL_URL, { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    latest = String((await response.json())?.version || '');
+  } catch (error) {
+    log('warn', 'update_channel_unreachable', { url: UPDATE_CHANNEL_URL, ...errorDetails(error) });
+    return;
+  }
+  if (!latest) return;
+  const { rows } = await pool.query(
+    `SELECT email, branch_name, shop_name, last_app_version, last_app_mode, last_seen_at
+       FROM auth_users
+      WHERE role <> 'superadmin' AND is_active
+        AND last_app_version IS NOT NULL
+        AND (last_app_mode IS NULL OR last_app_mode NOT IN ('android', 'ios'))
+        AND last_seen_at > now() - interval '7 days'`,
+  );
+  const outdated = rows.filter(row => compareVersions(row.last_app_version, latest) < 0);
+  log('info', 'outdated_branch_check', { latest, checked: rows.length, outdated: outdated.length });
+  if (outdated.length === 0) return;
+  notifyOps('outdated_branches', {
+    latest,
+    count: outdated.length,
+    hint: '지점에 "프로그램을 닫고 다시 켜세요"로 안내 (재다운로드 금지 — docs/BRANCH-INSTALL-GUIDE.md)',
+    branches: outdated.map(row => ({
+      branch: row.branch_name || row.shop_name || maskEmail(row.email),
+      version: row.last_app_version,
+      mode: row.last_app_mode || null,
+      lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null,
+    })),
+  });
+}
+
 async function cleanupExpired() {
   try {
     await pool.query("DELETE FROM password_reset_tokens WHERE expires_at < now() - interval '1 day'");
@@ -3697,6 +3749,9 @@ initializeDatabase()
     setInterval(() => runExclusive('dispatch', dispatchScheduledMessages), 60 * 1000).unref();
     setInterval(() => runExclusive('reminder', runRevisitReminders), 10 * 60 * 1000).unref();
     setInterval(() => runExclusive('backup', runDailyBackup), 10 * 60 * 1000).unref();
+    // 구버전 지점 감시 — 기동 1시간 뒤 첫 점검(릴리스 직후 재시작 시 지점들이 적용할 시간), 이후 매일
+    setTimeout(() => runExclusive('outdated', checkOutdatedBranches), 60 * 60 * 1000).unref();
+    setInterval(() => runExclusive('outdated', checkOutdatedBranches), 24 * 60 * 60 * 1000).unref();
     if (process.env.SMTP_HOST) {
       await smtp.verify().catch(error => log('error', 'smtp_verify_failed', errorDetails(error)));
     }

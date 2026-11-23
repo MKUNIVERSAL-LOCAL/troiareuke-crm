@@ -1,12 +1,22 @@
-﻿import { useState, useCallback, useEffect, type CSSProperties } from 'react';
+﻿import { useState, useCallback, useEffect, useMemo, type CSSProperties, useRef } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { notify } from '../../lib/notify';
-import { ChevronLeft, ChevronRight, LayoutGrid, List, RefreshCw, Clock, Trash2, Calendar, Search } from 'lucide-react';
-import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, parseISO, addMinutes } from 'date-fns';
+import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
+import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
-import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore } from '../../lib/store';
+import PrereqHint from '../../components/ui/PrereqHint';
+import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import PhoneLink from '../../components/ui/PhoneLink';
+import DateQuickChips from '../../components/ui/DateQuickChips';
+import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
+import { healCustomerStatsWhenReady } from '../../lib/customerStats';
+import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
+import { checkBusinessHours } from '../../lib/businessHours';
 import type { Reservation, Staff } from '../../types';
 import {
   isGoogleCalendarConnected,
@@ -14,18 +24,66 @@ import {
   createCalendarEvent,
   deleteCalendarEvent,
 } from '../../lib/googleCalendar';
+import { registeredPaymentsFor } from '../../lib/pendingCompletion';
+import { readableTextOn } from '../../lib/color';
+import { getGcalMap, rememberGcalEvent, cleanupGcalEvent, localizeGcalEventDates } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
+import { todayISO, formatDate } from '../../lib/format';
+import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
-import { maskPhone } from '../../lib/masking';
 import { useAuth } from '../../contexts/AuthContext';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 
-const TIME_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
+/** 예약표 시간 범위 — 설정 > 영업시간의 가장 이른 시작·가장 늦은 종료를 덮는 정시 범위. 기본 09:00~21:00, 영업시간이 더 넓으면 그만큼 확장
+ *  (고정 09~21이라 08:00·21:30 예약을 잡을 수 없고 범위 밖 일정이 잘리던 것, 4차 UX 점검 2026-11-19) */
+function gridRangeFromSettings(): { startMin: number; endMin: number } {
+  let start = 9 * 60, end = 21 * 60;
+  const bh = SettingsStore.get().businessHours || {};
+  for (const h of Object.values(bh)) {
+    if (!h || h.isOff) continue;
+    const o = timeToMin(h.open), c = h.close === '00:00' ? 24 * 60 : timeToMin(h.close); // 자정 마감은 24:00 (리뷰 67)
+    if (!Number.isNaN(o)) start = Math.min(start, Math.floor(o / 60) * 60);
+    if (!Number.isNaN(c)) end = Math.max(end, Math.ceil(c / 60) * 60);
+  }
+  end = Math.min(Math.max(end, start + 60), 24 * 60);
+  return { startMin: start, endMin: end };
+}
+const minToTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+/** 표의 시간 행(정시) */
+function hourSlots(range: { startMin: number; endMin: number }): string[] {
+  const out: string[] = [];
+  for (let m = range.startMin; m < range.endMin; m += 60) out.push(minToTime(m));
+  return out;
+}
+/** 예약 추가의 시작 시간 선택지(30분 단위) */
+function halfHourSlots(range: { startMin: number; endMin: number }): string[] {
+  const out: string[] = [];
+  for (let m = range.startMin; m < range.endMin; m += 30) out.push(minToTime(m));
+  return out;
+}
+/** 지금 이후의 첫 30분 칸 — 오늘 예약을 추가할 때 기본값 (입력 속도 감사 2026-11-18). 영업 종료 뒤면 마지막 칸 */
+function nextTimeSlot(slots: string[], now = new Date()): string {
+  const rounded = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30;
+  const hh = minToTime(Math.min(rounded, 23 * 60 + 30));
+  return slots.find(t => t >= hh) ?? slots[slots.length - 1];
+}
+/** 고객의 활성 회차권 잔여 — 예약 추가·상세에서 바로 보이게 */
+function ProgramBalance({ customerId }: { customerId: string }) {
+  const active = customerId ? CustomerProgramStore.getActive(customerId) : [];
+  if (active.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1" aria-label="회차권 잔여">
+      {active.map(cp => (
+        <span key={cp.id} className={`text-xs px-2 py-0.5 rounded-full border ${isProgramExpired(cp) ? 'bg-red-50 text-red-700 border-red-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+          {cp.programName}{cp.totalSessions != null ? ` · 잔여 ${Math.max(0, cp.totalSessions - (cp.usedSessions || 0))}회` : ' · 기간제'}{isProgramExpired(cp) ? ' · 만료' : ''}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 // ── 스케줄러 시간 비례 렌더링 ─────────────────────────────────────
 // 예약 블록을 관리시간(startTime~endTime)에 비례한 높이로 그리기 위한 유틸.
-// 그리드 범위: 09:00 ~ 21:00 (마지막 슬롯 20:00의 끝)
-const GRID_START_MIN = 9 * 60;
-const GRID_END_MIN = 21 * 60;
+// 그리드 범위는 gridRangeFromSettings()로 뷰마다 계산해 넘긴다 (기본 09:00 ~ 21:00)
 
 function timeToMin(t: string): number {
   const [h, m] = String(t || '').split(':').map(Number);
@@ -42,19 +100,19 @@ interface ScheduleEvent<T> {
 }
 
 /** 하루치 이벤트에 겹침 레인을 배정. 겹치는 예약은 가로로 분할해 나란히 표시. */
-function layoutDayEvents<T>(raw: { item: T; startMin: number; endMin: number }[]): ScheduleEvent<T>[] {
+function layoutDayEvents<T>(raw: { item: T; startMin: number; endMin: number }[], range: { startMin: number; endMin: number }): ScheduleEvent<T>[] {
   const events = raw
-    .filter(e => !Number.isNaN(e.startMin) && e.startMin < GRID_END_MIN)
+    .filter(e => !Number.isNaN(e.startMin) && e.startMin < range.endMin)
     .map(e => ({
       ...e,
       // endTime이 비었거나 역전이면 기본 1시간으로 보정, 그리드 범위로 클램프
-      startMin: Math.max(e.startMin, GRID_START_MIN),
+      startMin: Math.max(e.startMin, range.startMin),
       endMin: Math.min(
         (Number.isNaN(e.endMin) || e.endMin <= e.startMin) ? e.startMin + 60 : e.endMin,
-        GRID_END_MIN,
+        range.endMin,
       ),
     }))
-    .filter(e => e.endMin > GRID_START_MIN)
+    .filter(e => e.endMin > range.startMin)
     .sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
 
   const out: ScheduleEvent<T>[] = [];
@@ -90,32 +148,6 @@ function eventBlockStyle(ev: ScheduleEvent<unknown>, slotStartMin: number, rowH:
 }
 
 // ── Google Calendar 이벤트 매핑 (reservationId → eventId) ─────────────────
-// 예약 수정/취소/삭제 시 캘린더의 유령 일정을 정리하기 위해 로컬에 매핑 보관.
-// (Reservation 코어 타입에 googleEventId 필드가 없어 비코어 우회 저장)
-const GCAL_MAP_KEY = 'crm_gcal_event_map';
-
-function getGcalMap(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(GCAL_MAP_KEY) || '{}'); } catch { return {}; }
-}
-
-function rememberGcalEvent(reservationId: string, eventId: string): void {
-  const m = getGcalMap();
-  m[reservationId] = eventId;
-  try { localStorage.setItem(GCAL_MAP_KEY, JSON.stringify(m)); } catch { /* noop */ }
-}
-
-/** 예약에 연결된 Google 이벤트를 캘린더에서 삭제하고 매핑 제거 (미연결/실패는 무시) */
-function cleanupGcalEvent(reservationId: string): void {
-  const m = getGcalMap();
-  const eventId = m[reservationId];
-  if (!eventId) return;
-  delete m[reservationId];
-  try { localStorage.setItem(GCAL_MAP_KEY, JSON.stringify(m)); } catch { /* noop */ }
-  if (isGoogleCalendarConnected()) {
-    deleteCalendarEvent(eventId).catch(() => { /* 캘린더 정리는 best-effort */ });
-  }
-}
-
 type ViewMode = 'week' | 'day' | 'list';
 
 interface GoogleEventLike {
@@ -132,6 +164,27 @@ export default function Reservations() {
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
+  // 대시보드 빠른 작업(?new=1) → 바로 추가 모달
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 고객 상세 [예약 추가](?customer=) 프리필 — 1회 캡처 후 URL을 비워 수동 열기·뒤로가기에 다시 붙지 않게 (리뷰 2026-11-17)
+  const [newCustomerId, setNewCustomerId] = useState<string | undefined>(undefined);
+  const [newDate, setNewDate] = useState<string | undefined>(undefined); // 시술 기록 "다음 방문 권장" → 그 날짜로 예약 (2026-11-18)
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setNewCustomerId(searchParams.get('customer') ?? undefined);
+    const d = searchParams.get('date');
+    setNewDate(d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : undefined);
+    setShowAddModal(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
+  // 대시보드 오늘 예약 항목(?open=<id>) → 예약 상세 모달 바로 열기 (2026-11-17)
+  useEffect(() => {
+    const id = searchParams.get('open');
+    if (!id) return;
+    const target = ReservationStore.getAll().find(r => r.id === id);
+    if (target) setSelectedReservation(target);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [editReservation, setEditReservation] = useState<Reservation | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>(() => ReservationStore.getAll());
@@ -141,28 +194,58 @@ export default function Reservations() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [staffFilter, setStaffFilter] = useState('all');
   const googleConnected = isGoogleCalendarConnected();
+  const googleLoadErrorNotified = useRef(false); // Google 일정 로드 실패 알림은 1회만
 
   const reloadReservations = useCallback(() => {
     setReservations(ReservationStore.getAll());
   }, []);
 
-  // Google Calendar 이벤트 로드
+  const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
+  const [mobileMonthOffset, setMobileMonthOffset] = useState(0); // '이번달' 탭에서 ‹ › 로 다른 달 보기 (2026-11-18) — 다음 달 예약을 모바일에서도 찾을 수 있게
+
+  // Google Calendar 이벤트 로드 — PC 주/일 범위와 모바일 목록 탭(오늘/이번주/이번달 ‹ ›) 범위의 합집합.
+  // 모바일은 currentDate/viewMode를 바꾸지 않아 PC 주간만 받으면 월 탭에서 Google 일정이 빠진다 (리뷰 2026-11-18)
   const loadGoogleEvents = useCallback(async () => {
     if (!googleConnected) { setGoogleEvents([]); return; }
     try {
       const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-      const start = viewMode === 'day' ? new Date(currentDate) : weekStart;
-      const end = viewMode === 'day' ? addDays(currentDate, 1) : addDays(weekStart, 7);
+      const pcStart = viewMode === 'day' ? new Date(currentDate) : weekStart;
+      const pcEnd = viewMode === 'day' ? addDays(currentDate, 1) : addDays(weekStart, 7);
+      const mDate = new Date(); mDate.setDate(1); mDate.setMonth(mDate.getMonth() + mobileMonthOffset);
+      const mStart = mobileTab === 'today' ? new Date() : mobileTab === 'week' ? startOfWeek(new Date(), { weekStartsOn: 1 }) : startOfMonth(mDate);
+      const mEnd = mobileTab === 'today' ? new Date() : mobileTab === 'week' ? endOfWeek(new Date(), { weekStartsOn: 1 }) : endOfMonth(mDate);
+      const start = new Date(Math.min(pcStart.getTime(), mStart.getTime()));
+      const end = new Date(Math.max(pcEnd.getTime(), mEnd.getTime()));
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
-      const { asReservationLike } = await fetchCalendarEventsAsReservations(start, end);
-      setGoogleEvents(asReservationLike);
+      const { events, asReservationLike } = await fetchCalendarEventsAsReservations(start, end);
+      setGoogleEvents(localizeGcalEventDates(events, asReservationLike)); // 새벽 일정이 전날에 붙던 UTC 날짜 보정 (12차 #H1)
     } catch {
       setGoogleEvents([]);
+      // 조용히 비우면 "구글 일정이 왜 안 보이지"만 남는다 — 한 번만 알린다 (4차 UX 점검 2026-11-19)
+      if (!googleLoadErrorNotified.current) { googleLoadErrorNotified.current = true; notify('Google 캘린더 일정을 불러오지 못했습니다. 설정 > 연동 설정에서 다시 연결해주세요.'); }
     }
-  }, [googleConnected, currentDate, viewMode]);
+  }, [googleConnected, currentDate, viewMode, mobileTab, mobileMonthOffset]);
 
   useEffect(() => { loadGoogleEvents(); }, [loadGoogleEvents]);
+  // 모바일: 맨 위에서 당겨서 새로고침(이 기기 저장분 + Google 일정 다시 읽기)
+  const pull = usePullToRefresh(async () => { reloadReservations(); await loadGoogleEvents(); });
+  // PC 키보드: ← → 주/일 이동, T 오늘, N 새 예약 — 입력 중이거나 모달이 열려 있으면 무시 (UI 품질 기준 2026-11-18)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      if (viewMode === 'list' && e.key !== 'n' && e.key !== 'N') return; // 목록 뷰엔 날짜 머리글이 없다 — 보이지 않는 주를 옮기지 않는다 (리뷰 67)
+      if (e.key === 'ArrowLeft') { e.preventDefault(); navigate('prev'); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); navigate('next'); }
+      else if (e.key === 't' || e.key === 'T') { e.preventDefault(); setCurrentDate(new Date()); }
+      else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setShowAddModal(true); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [currentDate, viewMode]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -191,11 +274,13 @@ export default function Reservations() {
   };
 
   // 모바일 전용 상태
-  const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
+  // (mobileTab·mobileMonthOffset 선언은 위 Google 로드 앞으로 옮김)
+  const mobileMonthDate = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + mobileMonthOffset); return d; })();
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const normalizedSearch = search.trim().toLowerCase();
-  const filteredReservations = reservations.filter(r => {
+  // 입력·필터·목록이 바뀔 때만 (8,000건을 매 렌더마다 훑지 않게, 성능 감사 2026-11-18)
+  const filteredReservations = useMemo(() => reservations.filter(r => {
     const staffMatches = staffFilter === 'all' || r.staffId === staffFilter;
     const statusMatches = statusFilter === 'all' || r.status === statusFilter;
     const searchMatches = !normalizedSearch || [
@@ -206,31 +291,25 @@ export default function Reservations() {
       ...r.services.map(service => service.serviceName),
     ].some(value => value.toLowerCase().includes(normalizedSearch));
     return staffMatches && statusMatches && searchMatches;
-  });
-  const mobileFilteredReservations = (() => {
-    if (mobileTab === 'today') {
-      return filteredReservations.filter(r => r.date === todayStr);
-    } else if (mobileTab === 'week') {
-      const wStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      const wEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      return filteredReservations.filter(r => r.date >= wStart && r.date <= wEnd);
-    } else {
-      const mStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-      const mEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
-      return filteredReservations.filter(r => r.date >= mStart && r.date <= mEnd);
-    }
-  })().sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  }), [reservations, staffFilter, statusFilter, normalizedSearch]);
+  // 주/일 뷰에는 그 기간 예약만 — 뷰 안에서 날짜 파싱(parseISO) 대신 문자열 비교
+  const weekRange: readonly [string, string] = [format(weekDays[0], 'yyyy-MM-dd'), format(weekDays[6], 'yyyy-MM-dd')];
+  const weekReservations = useMemo(() => filteredReservations.filter(r => r.date >= weekRange[0] && r.date <= weekRange[1]), [filteredReservations, weekRange[0], weekRange[1]]);
+  const dayKey = format(currentDate, 'yyyy-MM-dd');
+  const dayReservations = useMemo(() => filteredReservations.filter(r => r.date === dayKey), [filteredReservations, dayKey]);
+  const mobileRange: readonly [string, string] = (() => {
+    if (mobileTab === 'today') return [todayStr, todayStr];
+    if (mobileTab === 'week') return [format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'), format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')];
+    return [format(startOfMonth(mobileMonthDate), 'yyyy-MM-dd'), format(endOfMonth(mobileMonthDate), 'yyyy-MM-dd')];
+  })();
+  const mobileFilteredReservations = filteredReservations
+    .filter(r => r.date >= mobileRange[0] && r.date <= mobileRange[1])
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  // Google 캘린더 일정 — PC 주/일/목록 뷰처럼 모바일 목록에도 같은 기간으로 (링크는 외부 브라우저)
+  const mobileGoogleEvents = googleEvents
+    .filter(ge => ge.date >= mobileRange[0] && ge.date <= mobileRange[1])
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 
-  const STATUS_COLORS: Record<string, string> = {
-    confirmed: 'bg-indigo-100 text-indigo-700',
-    pending: 'bg-amber-100 text-amber-700',
-    completed: 'bg-emerald-100 text-emerald-700',
-    cancelled: 'bg-slate-100 text-slate-500',
-    noshow: 'bg-red-100 text-red-600',
-  };
-  const STATUS_LABELS: Record<string, string> = {
-    confirmed: '확정', pending: '대기', completed: '완료', cancelled: '취소', noshow: '노쇼',
-  };
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -241,9 +320,10 @@ export default function Reservations() {
       />
 
       {/* ── 모바일 뷰 (< lg) ── 일별 리스트 */}
+      <PullToRefreshIndicator {...pull} />
       <div className="block lg:hidden flex-1 flex flex-col">
-        {/* 탭 필터 */}
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
+        {/* 탭 필터 — 모바일 상단 덩어리 바로 아래에 붙는다 (7차 UX 점검 2026-11-20) */}
+        <div className="sticky top-mobile-header z-10 bg-white border-b border-gray-100 px-4 py-3 shadow-sm">
           <div className="flex gap-2">
             {(['today', 'week', 'month'] as const).map(tab => {
               const label = tab === 'today' ? '오늘' : tab === 'week' ? '이번주' : '이번달';
@@ -263,6 +343,13 @@ export default function Reservations() {
               );
             })}
           </div>
+          {mobileTab === 'month' && (
+            <div className="flex items-center justify-between mt-2" data-testid="mobile-month-nav">
+              <button type="button" onClick={() => setMobileMonthOffset(o => o - 1)} aria-label="이전 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronLeft size={16} /></button>
+              <button type="button" onClick={() => setMobileMonthOffset(0)} data-testid="mobile-month-label" className="text-sm font-semibold text-gray-800">{format(mobileMonthDate, 'yyyy년 M월')}{mobileMonthOffset !== 0 && <span className="ml-1 text-xs font-normal text-[#1a3a8f]">(이번달로)</span>}</button>
+              <button type="button" onClick={() => setMobileMonthOffset(o => o + 1)} aria-label="다음 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronRight size={16} /></button>
+            </div>
+          )}
           <div className="flex gap-2 mt-2">
             <label className="relative flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -300,18 +387,26 @@ export default function Reservations() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-          {mobileFilteredReservations.length === 0 ? (
+          {mobileFilteredReservations.length === 0 && mobileGoogleEvents.length === 0 ? (
             <div className="py-16 text-center">
               <Calendar size={32} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm text-slate-500">
-                {mobileTab === 'today' ? '오늘' : mobileTab === 'week' ? '이번 주' : '이번 달'} 예약이 없습니다
+                {search.trim() || statusFilter !== 'all' || staffFilter !== 'all'
+                  ? '조건에 맞는 예약이 없습니다'
+                  : `${mobileTab === 'today' ? '오늘' : mobileTab === 'week' ? '이번 주' : format(mobileMonthDate, 'M월')} 예약이 없습니다`}
               </p>
-              <p className="text-xs text-slate-400 mt-1">PC에서 예약을 추가하세요</p>
+              {search.trim() || statusFilter !== 'all' || staffFilter !== 'all'
+                ? <button type="button" onClick={() => { setSearch(''); setStatusFilter('all'); setStaffFilter('all'); }} className="mt-3 px-4 py-2 bg-slate-100 text-gray-700 rounded-xl text-sm font-medium">필터 초기화</button>
+                : <button type="button" onClick={() => { if (mobileTab === 'month' && mobileMonthOffset !== 0) setNewDate(format(mobileMonthDate, 'yyyy-MM-dd')); setShowAddModal(true); }} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-sm font-medium">예약 추가하기</button>}
             </div>
           ) : (
-            mobileFilteredReservations.map(r => (
+            <>
+            {mobileFilteredReservations.map(r => (
               <button
                 key={r.id}
+                type="button"
+                data-testid="reservation-card"
+                data-start={r.startTime}
                 onClick={() => setSelectedReservation(r)}
                 className="w-full bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-left min-h-[60px]"
               >
@@ -323,21 +418,38 @@ export default function Reservations() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900">{r.customerName}</p>
-                      <span className={clsx(
-                        'text-xs font-medium px-1.5 py-0.5 rounded-full',
-                        STATUS_COLORS[r.status] ?? 'bg-slate-100 text-slate-500',
-                      )}>
-                        {STATUS_LABELS[r.status] ?? r.status}
-                      </span>
+                      <StatusBadge status={r.status} />
                     </div>
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
                       {r.services.map(s => s.serviceName).join(', ')} · {r.staffName}
                     </p>
-                    <p className="text-xs font-medium text-gray-700 mt-0.5">{r.totalPrice.toLocaleString()}원</p>
+                    <p className="text-sm font-semibold text-gray-900 mt-0.5 tabular-nums">{r.totalPrice.toLocaleString()}원</p>
                   </div>
                 </div>
               </button>
-            ))
+            ))}
+            {mobileGoogleEvents.map(ge => (
+              <a
+                key={`g-${ge.id}`}
+                href={ge.htmlLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={clsx('w-full bg-white rounded-xl border border-blue-100 shadow-sm p-4 text-left min-h-[60px] flex items-start gap-3', !ge.htmlLink && 'pointer-events-none')}
+              >
+                <div className="text-center w-14 flex-shrink-0 pt-0.5">
+                  <p className="text-xs text-slate-500">{ge.date.slice(5).replace('-', '/')}</p>
+                  <p className="text-sm font-bold text-blue-600">{ge.startTime}</p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{ge.summary}</p>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full"><Calendar size={10} /> Google</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">{ge.startTime} ~ {ge.endTime}</p>
+                </div>
+              </a>
+            ))}
+            </>
           )}
         </div>
       </div>
@@ -347,19 +459,25 @@ export default function Reservations() {
         {/* Controls */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('prev')} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
+            {viewMode !== 'list' && (<>
+            <button type="button" onClick={() => navigate('prev')} aria-label="이전" className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
               <ChevronLeft size={18} className="text-gray-600" />
             </button>
             <button onClick={() => setCurrentDate(new Date())} className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex items-center gap-2">
-              <RefreshCw size={14} /> 오늘
+              <Calendar size={14} /> 오늘
             </button>
-            <button onClick={() => navigate('next')} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
+            <button type="button" onClick={() => navigate('next')} aria-label="다음" className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
               <ChevronRight size={18} className="text-gray-600" />
             </button>
+            <span className="hidden xl:inline ml-2 text-xs text-gray-400" title="키보드 단축키">← → 이동 · T 오늘 · N 새 예약</span>
+            </>)}
+            {/* 목록 뷰는 날짜와 무관한 전체 목록 — 날짜 머리글·‹ ›·오늘을 보여 주면 "오늘 목록"으로 오해한다 (4차 UX 점검 2026-11-19) */}
             <h3 className="text-base font-bold text-gray-900">
-              {viewMode === 'week'
-                ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
-                : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
+              {viewMode === 'list'
+                ? `전체 예약 ${filteredReservations.length}건 · 날짜순`
+                : viewMode === 'week'
+                  ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
+                  : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
               }
             </h3>
           </div>
@@ -387,7 +505,7 @@ export default function Reservations() {
                     onClick={() => setViewMode(m)}
                     className={clsx(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-                      viewMode === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                      viewMode === m ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
                     )}
                   >
                     {icons[m]} {labels[m]}
@@ -444,6 +562,8 @@ export default function Reservations() {
               if (r.staffId !== s.id) return false;
               if (statusFilter !== 'all' && r.status !== statusFilter) return false;
               if (periodDates && !periodDates.includes(r.date)) return false;
+              // 검색어도 오른쪽 "N건"과 같은 기준으로 (4차 UX 점검 2026-11-19)
+              if (normalizedSearch && ![r.customerName, r.customerPhone, r.staffName, r.memo || '', ...r.services.map(sv => sv.serviceName)].some(v => v.toLowerCase().includes(normalizedSearch))) return false;
               return true;
             }).length;
             const active = staffFilter === s.id;
@@ -456,7 +576,7 @@ export default function Reservations() {
                 }`}
               >
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                {s.name} {count}건
+                {s.name} {count}건{periodDates ? '' : ' (전체 기간)'}
               </button>
             );
           })}
@@ -464,18 +584,18 @@ export default function Reservations() {
 
         {/* Calendar Views */}
         {viewMode === 'week' && (
-          <WeekView weekDays={weekDays} reservations={filteredReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <WeekView weekDays={weekDays} reservations={weekReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'day' && (
-          <DayView date={currentDate} reservations={filteredReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <DayView date={currentDate} reservations={dayReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
         {viewMode === 'list' && (
-          <ListView reservations={filteredReservations} onSelect={setSelectedReservation} googleEvents={googleEvents} />
+          <ListView reservations={filteredReservations} onSelect={setSelectedReservation} googleEvents={googleEvents} filterKey={`${staffFilter}|${statusFilter}|${normalizedSearch}`} />
         )}
       </div>
 
       {showAddModal && (
-        <AddReservationModal onClose={() => setShowAddModal(false)} onSave={handleSaveReservation} />
+        <AddReservationModal initialCustomerId={newCustomerId} initialDate={newDate} onClose={() => { setShowAddModal(false); setNewCustomerId(undefined); setNewDate(undefined); }} onSave={() => { setNewCustomerId(undefined); setNewDate(undefined); handleSaveReservation(); }} />
       )}
       {editReservation && (
         <AddReservationModal
@@ -507,6 +627,8 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
   const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
   const today = new Date();
   const ROW_H = 56; // h-14 — 슬롯 1시간의 픽셀 높이 (블록 높이 계산 기준)
+  const gridRange = useMemo(() => gridRangeFromSettings(), []);
+  const timeSlots = hourSlots(gridRange);
 
   // 요일별로 예약+Google 이벤트를 시간 비례 배치 (겹침 레인 포함)
   const dayLayouts = weekDays.map(day => {
@@ -520,7 +642,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
       ...googleEvents
         .filter(ge => ge.date === dayKey)
         .map(ge => ({ item: { kind: 'google' as const, ge }, startMin: timeToMin(ge.startTime), endMin: timeToMin(ge.endTime) })),
-    ]);
+    ], gridRange);
   });
 
   return (
@@ -530,17 +652,18 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
         <div className="py-3 px-3 text-xs text-gray-400 text-center border-r border-gray-100">시간</div>
         {weekDays.map((day, i) => {
           const isToday = isSameDay(day, today);
-          const dayReservations = reservations.filter(r => isSameDay(parseISO(r.date), day));
+          const dayKey = format(day, 'yyyy-MM-dd');
+          const dayReservations = reservations.filter(r => r.date === dayKey);
           return (
-            <div key={i} className={clsx('py-3 px-2 text-center border-r border-gray-100 last:border-r-0', isToday && 'bg-purple-50')}>
-              <p className={clsx('text-[11px] font-medium', i === 5 ? 'text-blue-500' : i === 6 ? 'text-red-500' : 'text-gray-500')}>
+            <div key={i} className={clsx('py-3 px-2 text-center border-r border-gray-100 last:border-r-0', isToday && 'bg-primary-50')}>
+              <p className={clsx('text-xs font-medium', i === 5 ? 'text-primary-600' : i === 6 ? 'text-red-600' : 'text-gray-500')}>
                 {dayNames[i]}
               </p>
-              <p className={clsx('text-sm font-bold mt-0.5', isToday ? 'text-purple-600' : 'text-gray-800')}>
+              <p className={clsx('text-sm font-bold mt-0.5', isToday ? 'text-primary-700' : 'text-gray-800')}>
                 {format(day, 'd')}
               </p>
               {dayReservations.length > 0 && (
-                <span className="text-xs text-purple-500 font-medium">{dayReservations.length}건</span>
+                <span className="text-xs text-primary-600 font-medium">{dayReservations.length}건</span>
               )}
             </div>
           );
@@ -548,12 +671,13 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
       </div>
 
       {/* Time Grid — 예약 블록은 관리시간(1시간=1칸, 2시간=2칸)에 비례한 높이로 표시 */}
-      <div className="overflow-y-auto max-h-[550px]">
-        {TIME_SLOTS.map(time => {
+      {/* 스크롤 영역 키보드 접근(axe scrollable-region-focusable) — 부모 overflow-hidden이 바깥 outline을 잘라 inset ring으로 표시 */}
+      <div className="overflow-y-auto max-h-[550px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="시간표" tabIndex={0}>
+        {timeSlots.map(time => {
           const slotStartMin = timeToMin(time);
           return (
             <div key={time} className="grid grid-cols-8 border-b border-gray-50 h-14">
-              <div className="py-2 px-3 text-[11px] text-gray-400 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
+              <div className="py-2 px-3 text-xs text-gray-400 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
                 {time}
               </div>
               {weekDays.map((day, di) => {
@@ -565,24 +689,32 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                 return (
                   <div key={di} className={clsx(
                     'border-r border-gray-50 last:border-r-0 relative',
-                    isToday && 'bg-purple-50/30'
+                    isToday && 'bg-primary-50/40'
                   )}>
                     {slotEvents.map(ev => {
                       if (ev.item.kind === 'reservation') {
                         const r = ev.item.r;
                         const staff = staffList.find(s => s.id === r.staffId);
                         const tall = ev.endMin - ev.startMin >= 90;
+                        const short = ev.endMin - ev.startMin < 60; // 30분 블록: 한 줄만 (4차 UX 점검 2026-11-19)
                         return (
                           <button
                             key={r.id}
+                            type="button"
+                            data-testid="reservation-block"
+                            data-start={r.startTime}
                             onClick={() => onSelect(r)}
-                            className="absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
-                            style={{ backgroundColor: staff?.color || '#8B5CF6', ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
+                            className="absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
+                            style={{ backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6'), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
                             title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
                           >
-                            <p className="font-bold truncate">{r.customerName}</p>
-                            <p className="opacity-80 truncate">{r.services[0]?.serviceName}</p>
-                            {tall && <p className="opacity-70 truncate">{r.startTime}~{r.endTime}</p>}
+                            {short ? (
+                              <p className="font-bold truncate">{r.customerName} <span className="font-normal">· {r.services[0]?.serviceName}</span></p>
+                            ) : (<>
+                              <p className="font-bold truncate">{r.customerName}</p>
+                              <p className="font-normal truncate">{r.services[0]?.serviceName}</p>
+                            </>)}
+                            {tall && <p className="font-normal truncate">{r.startTime}~{r.endTime}</p>}
                           </button>
                         );
                       }
@@ -625,9 +757,12 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
   onSelect: (r: Reservation) => void;
   googleEvents?: GoogleEventLike[];
 }) {
-  const dayReservations = reservations.filter(r => isSameDay(parseISO(r.date), date));
-  const dayGoogleEvents = googleEvents.filter(ge => ge.date === format(date, 'yyyy-MM-dd'));
+  const dateKey = format(date, 'yyyy-MM-dd');
+  const dayReservations = reservations.filter(r => r.date === dateKey);
+  const dayGoogleEvents = googleEvents.filter(ge => ge.date === dateKey);
   const ROW_H = 60; // h-[60px] — 슬롯 1시간의 픽셀 높이
+  const gridRange = useMemo(() => gridRangeFromSettings(), []);
+  const timeSlots = hourSlots(gridRange);
 
   // 시간 비례 배치 (겹침 레인 포함) — 주간 뷰와 동일한 방식
   const dayLayout = layoutDayEvents<
@@ -635,14 +770,14 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
   >([
     ...dayReservations.map(r => ({ item: { kind: 'reservation' as const, r }, startMin: timeToMin(r.startTime), endMin: timeToMin(r.endTime) })),
     ...dayGoogleEvents.map(ge => ({ item: { kind: 'google' as const, ge }, startMin: timeToMin(ge.startTime), endMin: timeToMin(ge.endTime) })),
-  ]);
+  ], gridRange);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="p-4 border-b border-gray-100 flex items-center justify-between">
         <p className="text-sm font-bold text-gray-800">
           {dayReservations.length}건의 예약
-          {dayGoogleEvents.length > 0 && <span className="text-blue-500 ml-2">+ Google {dayGoogleEvents.length}건</span>}
+          {dayGoogleEvents.length > 0 && <span className="text-primary-600 ml-2">+ Google {dayGoogleEvents.length}건</span>}
         </p>
         <div className="flex items-center gap-3">
           {staffList.map(s => (
@@ -654,8 +789,8 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
         </div>
       </div>
       {/* 예약 블록은 관리시간에 비례한 높이로 표시 (1시간=1칸, 2시간=2칸) */}
-      <div className="overflow-y-auto max-h-[600px]">
-        {TIME_SLOTS.map(time => {
+      <div className="overflow-y-auto max-h-[600px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="시간표" tabIndex={0}>
+        {timeSlots.map(time => {
           const slotStartMin = timeToMin(time);
           const slotEvents = dayLayout.filter(ev =>
             ev.startMin >= slotStartMin && ev.startMin < slotStartMin + 60
@@ -675,16 +810,16 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                       <button
                         key={r.id}
                         onClick={() => onSelect(r)}
-                        className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
-                        style={{ backgroundColor: staff?.color || '#8B5CF6', ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
+                        className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
+                        style={{ backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6'), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
                         title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
                       >
                         <p className="truncate">
                           <span className="font-bold">{r.customerName}</span>
-                          <span className="text-white/80 text-xs ml-2">{r.services.map(s => s.serviceName).join(', ')}</span>
-                          <span className="text-white/70 text-xs ml-2">{r.staffName}</span>
+                          <span className="text-xs ml-2 font-normal">{r.services.map(s => s.serviceName).join(', ')}</span>
+                          <span className="text-xs ml-2 font-normal">{r.staffName}</span>
                         </p>
-                        {tall && <p className="text-white/70 text-xs mt-0.5">{r.startTime}~{r.endTime}</p>}
+                        {tall && <p className="text-xs mt-0.5 font-normal">{r.startTime}~{r.endTime}</p>}
                       </button>
                     );
                   }
@@ -696,7 +831,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                       target="_blank"
                       rel="noopener noreferrer"
                       className={clsx(
-                        'absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
+                        'absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium text-white bg-blue-600 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
                         !ge.htmlLink && 'pointer-events-none', // 링크 없으면 클릭 무반응 앵커 방지
                       )}
                       style={eventBlockStyle(ev, slotStartMin, ROW_H)}
@@ -705,7 +840,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                       <p className="truncate flex items-center gap-2">
                         <Calendar size={14} className="flex-shrink-0" />
                         <span className="font-bold">{ge.summary}</span>
-                        <span className="text-white/80 text-xs">{ge.startTime}~{ge.endTime}</span>
+                        <span className="text-xs font-normal">{ge.startTime}~{ge.endTime}</span>
                       </p>
                     </a>
                   );
@@ -719,13 +854,16 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
   );
 }
 
-function ListView({ reservations, onSelect, googleEvents = [] }: { reservations: Reservation[]; onSelect: (r: Reservation) => void; googleEvents?: GoogleEventLike[] }) {
-  const sorted = [...reservations].sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`));
+function ListView({ reservations, onSelect, googleEvents = [], filterKey }: { reservations: Reservation[]; onSelect: (r: Reservation) => void; googleEvents?: GoogleEventLike[]; filterKey: string }) {
+  const sorted = useMemo(() => [...reservations].sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`)), [reservations]);
+  // 목록은 200건씩 — 전체 예약(수천 건)을 한 번에 마운트하지 않는다 (성능 감사 2026-11-18)
+  const [limit, setLimit] = useState(200);
+  useEffect(() => { setLimit(200); }, [filterKey]); // 필터·검색이 바뀔 때만 처음부터 — 예약 수정으로 목록이 새로 와도 펼친 상태 유지
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="divide-y divide-gray-50">
-        {sorted.map(r => (
+        {sorted.slice(0, limit).map(r => (
           <button
             key={r.id}
             onClick={() => onSelect(r)}
@@ -733,10 +871,10 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
           >
             <div className="text-center w-20 flex-shrink-0">
               <p className="text-xs font-medium text-gray-500">{r.date.slice(5).replace('-', '/')}</p>
-              <p className="text-sm font-bold text-purple-600 mt-0.5">{r.startTime}</p>
+              <p className="text-sm font-bold text-primary-700 mt-0.5">{r.startTime}</p>
             </div>
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-sm font-bold">{r.customerName[0]}</span>
+            <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-sm font-bold">{(r.customerName || '?')[0]}</span>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -753,6 +891,11 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
             <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
           </button>
         ))}
+        {sorted.length > limit && (
+          <button type="button" onClick={() => setLimit(n => n + 200)} className="w-full py-3 text-sm font-medium text-[#1a3a8f] hover:bg-gray-50 min-h-[44px]">
+            더 보기 ({sorted.length - limit}건 남음)
+          </button>
+        )}
         {/* Google Calendar 이벤트 */}
         {googleEvents.map(ge => (
           <a
@@ -791,18 +934,25 @@ function ListView({ reservations, onSelect, googleEvents = [] }: { reservations:
   );
 }
 
-function AddReservationModal({ reservation: editing, onClose, onSave }: { reservation?: Reservation | null; onClose: () => void; onSave: () => void }) {
+function AddReservationModal({ reservation: editing, initialCustomerId, initialDate, onClose, onSave }: { reservation?: Reservation | null; initialCustomerId?: string; initialDate?: string; onClose: () => void; onSave: () => void }) {
   const { user: authUser } = useAuth();
+  const goTo = useNavigate();
   const isEdit = !!editing;
-  const customers = CustomerStore.getAll();
-  const staffList = StaffStore.getAll();
-  const services = ServiceStore.getAll().filter(s => s.isActive);
+  // 익명화 고객·퇴사 직원·비활성 시술은 새 예약 선택지에서 빼되, 수정 중인 예약에 이미 걸린 것은 남긴다 — 아니면 메모만 고쳐도 조용히 저장이 안 됐다 (정합성 감사 2026-11-19)
+  const customers = CustomerStore.getAll().filter(c => c.isActive !== false || c.id === editing?.customerId);
+  const staffList = StaffStore.getAll().filter(s => s.isActive || s.id === editing?.staffId);
+  const editingServiceId = editing?.services?.[0]?.serviceId;
+  const services = ServiceStore.getAll().filter(s => s.isActive || s.id === editingServiceId);
 
-  const [customerId, setCustomerId] = useState(editing?.customerId ?? '');
-  const [staffId, setStaffId] = useState(editing?.staffId ?? '');
-  const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? '');
-  const [date, setDate] = useState(editing?.date ?? format(new Date(), 'yyyy-MM-dd'));
-  const [startTime, setStartTime] = useState(editing?.startTime ?? '10:00');
+  // 고객 상세 [예약 추가](?customer=)에서 왔으면 그 고객을 미리 선택 (2026-11-17)
+  const [customerId, setCustomerId] = useState(editing?.customerId ?? (initialCustomerId && customers.some(c => c.id === initialCustomerId) ? initialCustomerId : ''));
+  // 입력 속도: 직원이 한 명이면 그 직원, 아니면 로그인한 직원 본인; 시술이 하나면 그 시술; 오늘이면 지금 이후 첫 시간대 (입력 속도 감사 2026-11-18)
+  const [staffId, setStaffId] = useState(editing?.staffId ?? (staffList.length === 1 ? staffList[0].id : (staffList.find(s => s.name === authUser?.name)?.id ?? '')));
+  const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? (services.length === 1 ? services[0].id : ''));
+  const todayKey = format(new Date(), 'yyyy-MM-dd');
+  const [date, setDate] = useState(editing?.date ?? initialDate ?? todayKey);
+  const startOptions = useMemo(() => halfHourSlots(gridRangeFromSettings()), []); // 설정 > 영업시간 범위, 30분 단위 (4차 UX 점검 2026-11-19)
+  const [startTime, setStartTime] = useState(editing?.startTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot(startOptions) : (startOptions.includes('10:00') ? '10:00' : startOptions[0])));
   const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [addToGoogle, setAddToGoogle] = useState(!isEdit && isGoogleCalendarConnected());
@@ -818,6 +968,7 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
         !serviceId && '시술',
       ].filter(Boolean).join(', ');
       const guide = [
+        customers.length === 0 && !customerId ? '등록된 고객이 없습니다 — 고객 관리에서 먼저 등록해주세요.' : '',
         staffList.length === 0 && !staffId ? '등록된 직원이 없습니다 — 직원 관리에서 먼저 등록해주세요.' : '',
         services.length === 0 && !serviceId ? '등록된 시술이 없습니다 — 설정 > 시술 관리에서 먼저 등록해주세요.' : '',
       ].filter(Boolean).join(' ');
@@ -829,7 +980,7 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
     const customer = customers.find(c => c.id === customerId);
     const staff = staffList.find(s => s.id === staffId);
     const service = services.find(s => s.id === serviceId);
-    if (!customer || !staff || !service) return;
+    if (!customer || !staff || !service) { setFormError('선택한 고객·담당자·시술 중 더 이상 쓸 수 없는 항목이 있습니다. 다시 선택해주세요.'); return; }
 
     // 다중 시술 예약 보호 — 편집 폼은 services[0]만 로드하므로 그대로 저장하면
     // 나머지 시술·금액이 소실됨. 시술을 안 바꿨으면 원본 전체 보존, 바꿨으면 확인 후 교체.
@@ -859,18 +1010,24 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
     const endDate = addMinutes(startDate, totalDuration);
     const endTime = format(endDate, 'HH:mm');
 
-    // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외)
-    const overlap = ReservationStore.getAll().find(r =>
-      r.id !== editing?.id &&
-      r.staffId === staff.id &&
-      r.date === date &&
-      r.status !== 'cancelled' && r.status !== 'noshow' &&
-      startTime < r.endTime && endTime > r.startTime
-    );
-    if (overlap) {
-      const proceed = window.confirm(
-        `${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.\n그래도 등록하시겠습니까?`
-      );
+    // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외). 분 단위로 — 'HH:mm' 문자열 비교는 자정을 넘는 예약(23:30+60분 → "00:30")에서 역전돼 겹침을 놓쳤다 (12차 #H2)
+    const toMin = (t: string) => { const [hh, mm] = t.split(':').map(Number); return hh * 60 + mm; };
+    const newStart = toMin(startTime), newEnd = newStart + totalDuration;
+    const overlap = ReservationStore.getAll().find(r => {
+      if (r.id === editing?.id || r.staffId !== staff.id || r.date !== date || r.status === 'cancelled' || r.status === 'noshow') return false;
+      const rs = toMin(r.startTime); let re = toMin(r.endTime); if (re <= rs) re += 24 * 60; // 자정 넘김
+      return newStart < re && newEnd > rs;
+    });
+    // 휴무일·지정 휴일·영업시간 밖 경고 — 예외 영업이 있으니 막지 않고 확인만. 시간이 안 바뀐 수정(메모만 등)은 다시 묻지 않는다 (2026-11-18)
+    const timeChanged = !editing || editing.date !== date || editing.startTime !== startTime || editing.endTime !== endTime;
+    const hoursWarnings = timeChanged ? checkBusinessHours(date, startTime, totalDuration) : [];
+    const warnings = [
+      ...(overlap ? [`${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.`] : []),
+      ...hoursWarnings.map(w => w.message),
+    ];
+    if (warnings.length > 0) {
+      // 확인창은 하나로 — 모바일에서 네이티브 confirm 두 번은 답답하다
+      const proceed = window.confirm(`${warnings.join('\n')}\n그래도 ${isEdit ? '저장' : '등록'}할까요?`);
       if (!proceed) return;
     }
 
@@ -890,6 +1047,14 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
       totalPrice,
     };
 
+    if (isEdit && editing && editing.status === 'completed') {
+      // 완료·결제된 예약의 금액·고객 변경 — 결제(PaymentStore)는 따라 바뀌지 않는다 (정합성 감사 2026-11-19)
+      const paid = registeredPaymentsFor(editing.id).reduce((sum, p) => sum + p.amount, 0);
+      const customerChanged = customer.id !== editing.customerId;
+      if (paid > 0 && (customerChanged || totalPrice !== editing.totalPrice)) {
+        if (!window.confirm(`이 예약에는 등록된 결제 ${paid.toLocaleString('ko-KR')}원이 있습니다. 예약의 ${customerChanged ? '고객' : '금액'}을 바꿔도 결제는 바뀌지 않습니다 — 매출 화면에서 결제를 따로 수정해주세요.\n그래도 저장할까요?`)) return;
+      }
+    }
     if (isEdit && editing) {
       // 수정: 기존 예약 갱신 (상태·네이버ID 등 보존)
       ReservationStore.update(editing.id, reservation);
@@ -899,7 +1064,7 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
         deleteCalendarEvent(oldEventId).catch(() => { /* best-effort */ });
         createCalendarEvent({ ...reservation, id: editing.id } as Reservation)
           .then(ev => rememberGcalEvent(editing.id, ev.id))
-          .catch(() => { /* Google 동기화 실패해도 CRM 예약은 저장됨 */ });
+          .catch(() => notify('예약은 저장했지만 Google 캘린더 일정은 만들지 못했습니다. 캘린더에서 직접 추가해주세요.')); // 조용히 어긋나지 않게 (6차 UX 감사 2026-11-20)
       }
     } else {
       const saved = ReservationStore.save(reservation);
@@ -907,9 +1072,7 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
       if (addToGoogle && googleAvailable && saved) {
         createCalendarEvent({ ...reservation, id: saved.id })
           .then(ev => rememberGcalEvent(saved.id, ev.id))
-          .catch(() => {
-            // Google Calendar 동기화 실패해도 CRM 예약은 저장됨
-          });
+          .catch(() => notify('예약은 저장했지만 Google 캘린더 일정은 만들지 못했습니다. 캘린더에서 직접 추가해주세요.'));
       }
     }
     onSave();
@@ -917,68 +1080,68 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
 
   return (
     <Modal isOpen={true} onClose={onClose} title={isEdit ? '예약 수정' : '예약 추가'} size="lg">
-      <div className="space-y-4">
+      <form onSubmit={e => { e.preventDefault(); handleSave(); }} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
-            <select
-              value={customerId}
-              onChange={e => setCustomerId(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
-            >
-              <option value="">고객 선택</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.name} ({maskPhone(c.phone, authUser?.role ?? 'staff')})</option>)}
-            </select>
+            <CustomerCombobox customers={customers} value={customerId} onChange={setCustomerId} maskRole={authUser?.role ?? 'staff'} />
+            {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
+            <ProgramBalance customerId={customerId} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원 *</label>
-            <select
+            <select aria-label="담당 직원"
               value={staffId}
               onChange={e => setStaffId(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="">직원 선택</option>
               {staffList.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
             </select>
+            {staffList.length === 0 && <PrereqHint text="등록된 직원이 없습니다" action="직원 등록" onGo={() => { onClose(); goTo('/staff?new=1'); }} />}
           </div>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 *</label>
-          <select
+          <select aria-label="시술"
             value={serviceId}
             onChange={e => setServiceId(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           >
             <option value="">시술 선택</option>
             {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {s.price.toLocaleString()}원)</option>)}
           </select>
+          {services.length === 0 && <PrereqHint text="등록된 시술 항목이 없습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">날짜 *</label>
             <input
               type="date"
+              aria-label="예약 날짜"
               value={date}
               onChange={e => setDate(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">시작 시간 *</label>
-            <select
+            <select aria-label="시작 시간"
               value={startTime}
               onChange={e => setStartTime(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
-              {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+              {!startOptions.includes(startTime) && <option value={startTime}>{startTime}</option>}
+              {startOptions.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+          <DateQuickChips value={date} onChange={setDate} className="col-span-2 sm:col-span-3 sm:order-last !-mt-2.5" />{/* 폰: 날짜·시간 줄 바로 아래, sm+: 날짜·시간·경로 한 줄 뒤(빈 칸 없이) */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">예약 경로</label>
-            <select
+            <select aria-label="예약 경로"
               value={source}
               onChange={e => setSource(e.target.value as Reservation['source'])}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300"
+              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="manual">직접등록</option>
               <option value="naver">네이버</option>
@@ -991,11 +1154,11 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">메모</label>
-          <textarea
+          <textarea aria-label="메모"
             rows={2}
             value={memo}
             onChange={e => setMemo(e.target.value)}
-            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="특이사항"
           />
         </div>
@@ -1005,9 +1168,9 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
               type="checkbox"
               checked={addToGoogle}
               onChange={e => setAddToGoogle(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-300"
+              className="w-4 h-4"
             />
-            <Calendar size={14} className="text-blue-500" />
+            <Calendar size={14} className="text-primary-600" />
             <span className="text-sm text-gray-700">Google 캘린더에도 추가</span>
           </label>
         )}
@@ -1017,15 +1180,15 @@ function AddReservationModal({ reservation: editing, onClose, onSave }: { reserv
           </div>
         )}
         <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
+          <button type="button" onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">취소</button>
           <button
-            onClick={handleSave}
-            className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-md"
+            type="submit"
+            className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e] transition-colors"
           >
             예약 저장
           </button>
         </div>
-      </div>
+      </form>
     </Modal>
   );
 }
@@ -1038,11 +1201,55 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   onEdit: () => void;
 }) {
   const { user } = useAuth();
+  const goTo = useNavigate();
+  // 예약 → 시술 기록(사진 첨부) 연계: 고객·시술일·담당자·시술 항목을 프리필해 시술 기록 화면을 연다 (2026-11-17)
+  const openTreatmentLog = () => {
+    const q = new URLSearchParams({ new: '1', customer: r.customerId, date: r.date, reservation: r.id });
+    if (r.staffName) q.set('staff', r.staffName);
+    r.services.map(s => s.serviceName).filter(Boolean).forEach(n => q.append('services', n)); // 반복 키 — 쉼표가 든 메뉴명도 안전
+    goTo(`/treatments?${q.toString()}`);
+  };
+  // 이 예약에 등록된 결제(완료·대기, 환불 제외 — pendingCompletion과 같은 기준). 상세가 열려 있는 동안 결제가 바뀌는 길은 결제 창뿐이고 그 뒤 상세가 닫히므로 예약 id로만 메모 (2026-11-19)
+  const paidForThis = useMemo(() => registeredPaymentsFor(r.id), [r.id]);
+  const paidAmount = paidForThis.reduce((s, p) => s + p.amount, 0);
+  // 이 예약 날짜에 작성된 이 고객의 시술 기록 — 시술 기록은 예약 id를 들고 있지 않아 코어 updateStatus와 같은 기준(고객+날짜)으로 센다.
+  // 취소·복구해도 시술 기록과 회차 차감은 그대로 남으므로 confirm에 알린다 (UX 점검 2026-11-19)
+  const logsOnDate = useMemo(() => TreatmentLogStore.getByCustomer(r.customerId).filter(t => t.treatmentDate === r.date), [r.customerId, r.date]);
+  const logsWarn = logsOnDate.length > 0
+    ? `\n\n이 날짜에 작성한 시술 기록 ${logsOnDate.length}건(회차 차감 포함)은 그대로 남습니다. 잘못 쓴 기록이면 시술 기록 화면에서 삭제해주세요.`
+    : '';
   const handleCancel = () => {
-    // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행
-    if (!window.confirm('이 예약을 취소 처리하시겠습니까?')) return;
+    // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행. 결제가 붙은 완료 예약은 취소해도 결제가 남는다는 걸 분명히 한다
+    const warn = r.status === 'completed' && paidForThis.length > 0
+      ? `\n\n이 예약은 완료 처리됐고 등록된 결제 ${paidAmount.toLocaleString('ko-KR')}원은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.`
+      : '';
+    if (!window.confirm(`이 예약을 취소 처리할까요?${warn}${logsWarn}`)) return;
     ReservationStore.updateStatus(r.id, 'cancelled');
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
+    onUpdate();
+  };
+  // 노쇼 — 상세에서 바로 처리 (2026-11-18). 고객 상세 "노쇼 N회"·직원 실적 제외·완료 누락 카드에서 빠진다.
+  // 캘린더 일정도 지운다 — 남겨 두면 공유 캘린더에서 그 시간이 여전히 잡혀 보여 대체 예약이 이중 일정처럼 보인다(취소와 동일 처리)
+  const canNoShow = r.date <= todayISO() && r.status !== 'cancelled' && r.status !== 'noshow' && r.status !== 'completed';
+  // 잘못 취소·노쇼 처리한 예약을 되돌리는 길 — 상태만 '예약확정'으로, 취소 때 지운 Google 캘린더 일정은 다시 만든다 (리뷰 2026-11-19)
+  const isClosed = r.status === 'cancelled' || r.status === 'noshow';
+  const handleRestore = () => {
+    const google = isGoogleCalendarConnected();
+    if (!window.confirm(`이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}`)) return;
+    ReservationStore.updateStatus(r.id, 'confirmed');
+    if (google) {
+      createCalendarEvent({ ...r, status: 'confirmed' })
+        .then(ev => rememberGcalEvent(r.id, ev.id))
+        .catch(() => notify('예약은 되돌렸지만 Google 캘린더 일정은 다시 만들지 못했습니다. 캘린더에서 직접 추가해주세요.'));
+    }
+    notify.success('예약확정 상태로 되돌렸습니다. 시술 기록·결제는 바뀌지 않았습니다.');
+    onUpdate();
+  };
+  const handleNoShow = () => {
+    if (!window.confirm(`${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`)) return;
+    ReservationStore.updateStatus(r.id, 'noshow');
+    cleanupGcalEvent(r.id);
+    notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
     onUpdate();
   };
 
@@ -1050,11 +1257,12 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 
   const handleComplete = () => {
     ReservationStore.updateStatus(r.id, 'completed');
+    healCustomerStatsWhenReady(r.customerId); // 코어 +1이 같은 날 시술 기록과 겹치면 두 번 세진다 — 기록(다녀간 날 수)으로 바로 맞춤, 하이드레이션 뒤 (리뷰 2026-11-19)
     // 완료 → 결제 브리지: 기존엔 상태만 바뀌고 매출에 잡히지 않아 Sales에서 수기 재입력이 필요했음
     if (r.totalPrice > 0) {
-      const alreadyPaid = PaymentStore.getAll().some(p => p.referenceId === r.id);
+      const alreadyPaid = paidForThis.length > 0;
       if (alreadyPaid) {
-        notify('완료 처리했습니다. (이 예약의 결제는 이미 등록되어 있어 중복 등록하지 않았습니다)');
+        notify.success('완료 처리했습니다. 결제는 이미 등록돼 있어 다시 묻지 않았습니다.');
       } else {
         // 결제수단 선택 모달로 — 단일/복합(분할) 결제와 커스텀 수단 지원
         setShowPayModal(true);
@@ -1065,7 +1273,10 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   };
 
   const handleDelete = () => {
-    if (window.confirm('이 예약을 삭제하시겠습니까?')) {
+    // 삭제해도 이 예약 id로 등록된 결제는 남는다(취소처리와 같은 안내). [취소처리] 권유는 그 버튼이 있을 때만 (리뷰 2026-11-19)
+    const payWarn = paidForThis.length > 0 ? `\n\n등록된 결제 ${paidAmount.toLocaleString('ko-KR')}원은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.` : '';
+    const cancelTip = isClosed ? '' : ' 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.';
+    if (window.confirm(`이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`)) {
       ReservationStore.delete(r.id);
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();
@@ -1078,27 +1289,35 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
         <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center">
-                <span className="text-white font-bold">{r.customerName[0]}</span>
+              <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center">
+                <span className="text-white font-bold">{(r.customerName || '?')[0]}</span>
               </div>
               <div>
-                <p className="font-bold text-gray-900">{r.customerName}</p>
-                <p className="text-xs text-gray-400">{maskPhone(r.customerPhone, user?.role ?? 'staff')}</p>
+                {r.customerId ? (
+                  <button type="button" onClick={() => { onClose(); goTo(`/customers?open=${encodeURIComponent(r.customerId)}`); }}
+                    className="font-bold text-gray-900 hover:underline text-left" title="고객 상세 열기" aria-label={`${r.customerName} 고객 상세 열기`}>
+                    {r.customerName}
+                  </button>
+                ) : (
+                  <p className="font-bold text-gray-900">{r.customerName}</p>
+                )}
+                <p className="text-xs text-gray-400"><PhoneLink phone={r.customerPhone} role={user?.role ?? 'staff'} /></p>
               </div>
             </div>
             <div className="flex gap-2">
               <SourceBadge source={r.source} />
-              <StatusBadge status={r.status} />
+              <span data-testid="reservation-status"><StatusBadge status={r.status} /></span>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <InfoItem label="날짜" value={r.date} />
+          <InfoItem label="날짜" value={formatDate(r.date)} />
           <InfoItem label="시간" value={`${r.startTime} ~ ${r.endTime}`} />
           <InfoItem label="담당자" value={r.staffName} />
           <InfoItem label="금액" value={`${r.totalPrice.toLocaleString()}원`} />
         </div>
+        <ProgramBalance customerId={r.customerId} />
 
         <div>
           <p className="text-xs font-medium text-gray-500 mb-2">시술 내역</p>
@@ -1124,39 +1343,100 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           </div>
         )}
 
-        <div className="flex gap-2 pt-2">
+        {r.status !== 'cancelled' && r.status !== 'noshow' && (
           <button
-            onClick={handleCancel}
-            className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            type="button"
+            onClick={openTreatmentLog}
+            className="w-full py-2.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-xl hover:bg-green-100 transition-colors flex items-center justify-center gap-1.5"
+            title="이 예약의 고객·날짜·시술 항목이 채워진 시술 기록 창을 엽니다 (사진 첨부)"
           >
-            취소처리
+            <Scissors size={14} />시술 기록 작성
           </button>
+        )}
+        <div className="flex flex-wrap gap-2 pt-2">
+          {!isClosed && (
+            <button
+              onClick={handleCancel}
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+            >
+              취소처리
+            </button>
+          )}
+          {canNoShow && (
+            <button
+              onClick={handleNoShow}
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-rose-700 bg-rose-50 rounded-xl hover:bg-rose-100 transition-colors"
+              title="고객이 오지 않은 예약 — 노쇼 횟수에 반영"
+            >
+              노쇼
+            </button>
+          )}
+          {isClosed && (
+            <button
+              onClick={handleRestore}
+              title="잘못 취소·노쇼 처리한 경우 — 예약확정으로 되돌립니다"
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-[#1a3a8f] bg-blue-50 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors"
+            >
+              예약 복구
+            </button>
+          )}
+          {/* 이미 완료된 예약엔 '완료처리'를 다시 보이지 않는다(상태 배지가 완료를 보여줌). 결제가 아직 없으면 그 자리에 '결제 등록하기'.
+              취소·노쇼 예약은 지난 날짜일 때만 완료처리(실제로 왔던 경우) — 앞으로의 예약은 [예약 복구]로 되돌린다 */}
+          {r.status !== 'completed' ? (
+            (!isClosed || r.date <= todayISO()) && (
+              <button
+                onClick={handleComplete}
+                title={isClosed ? '고객이 실제로 방문했던 경우 — 바로 완료로 기록합니다' : undefined}
+                className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-700 rounded-xl hover:bg-green-800 transition-colors"
+              >
+                완료처리
+              </button>
+            )
+          ) : r.totalPrice > 0 && paidForThis.length === 0 ? (
+            <button
+              onClick={() => setShowPayModal(true)}
+              aria-describedby="unpaid-completed-hint"
+              className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-green-700 rounded-xl hover:bg-green-800 transition-colors"
+            >
+              결제 등록하기
+            </button>
+          ) : null}
+          <button onClick={onEdit} className="flex-1 min-w-[6.5rem] py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e] transition-colors">수정</button>
+        </div>
+        {r.status === 'completed' && r.totalPrice > 0 && paidForThis.length === 0 && (
+          <p id="unpaid-completed-hint" className="text-xs text-amber-700">완료 처리됐지만 결제가 아직 등록되지 않은 예약입니다.</p>
+        )}
+        {/* 삭제는 되돌릴 수 없는 보조 동작 — 주 동작 행과 떨어진 작은 글자 버튼으로. 고객이 취소한 예약은 [취소처리]가 맞다 (UX 점검 L5, 2026-11-19) */}
+        <div className="flex justify-end">
           <button
-            onClick={handleComplete}
-            className="flex-1 py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-colors"
-          >
-            완료처리
-          </button>
-          <button
+            type="button"
             onClick={handleDelete}
-            className="py-2.5 px-3 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors flex items-center gap-1"
+            title="예약을 기록에서 완전히 지웁니다 — 고객이 취소한 예약은 [취소처리]를 써주세요"
+            className="text-xs text-red-600 hover:text-red-700 hover:underline flex items-center gap-1 px-1.5 min-h-[44px] -my-2.5 rounded"
           >
-            <Trash2 size={14} /> 삭제
+            <Trash2 size={12} /> 이 예약 삭제
           </button>
-          <button onClick={onEdit} className="flex-1 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all">수정</button>
         </div>
       </div>
-      {showPayModal && (
-        <CompletePaymentModal reservation={r} onDone={() => { setShowPayModal(false); onUpdate(); }} />
-      )}
+      {showPayModal && (() => {
+        // 시술 기록은 예약일(r.date)로 프리필되므로 회차권 사용 가능 여부도 같은 날짜 기준으로 판단한다 (리뷰 2026-11-19)
+        const usable = getUsablePrograms(r.customerId, r.date);
+        const expired = getExpiredPrograms(r.customerId, r.date);
+        return (
+          <CompletePaymentModal reservation={r} late={r.status === 'completed'} onDone={() => { setShowPayModal(false); onUpdate(); }} onTreatmentLog={usable.length > 0 ? () => { setShowPayModal(false); openTreatmentLog(); } : undefined}
+            expiredNote={usable.length === 0 && expired.length > 0
+              ? `${expiredProgramsHint(expired, '고객 상세의 [관리]', '')} 연장해서 차감하려면 [결제 등록 없이 닫기]로 나가 연장한 뒤 시술 기록을 작성하고, 단건으로 받았다면 아래에서 결제를 등록하세요.`
+              : undefined} />
+        );
+      })()}
     </Modal>
   );
 }
 
 // 완료처리 결제 등록 모달 — 단일 결제 + 복합(2가지 수단 분할) + 커스텀 결제수단
-function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reservation; onDone: () => void }) {
+function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredNote, late }: { reservation: Reservation; onDone: () => void; onTreatmentLog?: () => void; expiredNote?: string; late?: boolean }) {
   const [mode, setMode] = useState<'single' | 'split'>('single');
-  const [method, setMethod] = useState('카드');
+  const [method, setMethod] = useState(getLastPaymentMethod() ?? '카드'); // 지난번 결제수단 (입력 속도 감사 2026-11-18)
   const [methodA, setMethodA] = useState('카드');
   const [methodB, setMethodB] = useState('현금');
   const [amountA, setAmountA] = useState(String(r.totalPrice));
@@ -1176,6 +1456,7 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
   const handleSave = () => {
     if (mode === 'single') {
       PaymentStore.save({ ...basePayment, amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
+      rememberPaymentMethod(method);
     } else {
       const a = Math.max(0, Number(amountA.replace(/\D/g, '')) || 0);
       const b = Math.max(0, Number(amountB.replace(/\D/g, '')) || 0);
@@ -1198,7 +1479,7 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
     <Modal isOpen={true} onClose={onDone} title="결제 등록" size="md">
       <div className="space-y-4">
         <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 text-sm text-gray-700">
-          완료 처리됐습니다. 결제 <span className="font-bold">{r.totalPrice.toLocaleString()}원</span>을 매출에 등록하세요.
+          {late ? '완료 처리된 예약입니다. 아직 등록되지 않은 결제 ' : '완료 처리됐습니다. 결제 '}<span className="font-bold">{r.totalPrice.toLocaleString()}원</span>을 매출에 등록하세요.
         </div>
 
         <div className="flex gap-2">
@@ -1230,7 +1511,7 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
                   inputMode="numeric"
                   value={row.amt}
                   onChange={e => row.setAmt(e.target.value.replace(/[^\d]/g, ''))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-300"
                   placeholder="금액(원)"
                 />
               </div>
@@ -1241,11 +1522,20 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
           </div>
         )}
 
+        {onTreatmentLog && (
+          <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-2 flex-wrap text-xs text-blue-800">
+            <span className="flex-1 min-w-0">회차권·프로그램이 있는 고객입니다. 그 프로그램으로 받은 시술이면 결제 대신 시술 기록을 작성해 차감하세요.</span>
+            <button type="button" onClick={onTreatmentLog} className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 font-medium text-[#1a3a8f] hover:bg-blue-100">시술 기록 작성 (회차 차감)</button>
+          </div>
+        )}
+        {expiredNote && (
+          <p className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">{expiredNote}</p>
+        )}
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onDone} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
             결제 등록 없이 닫기
           </button>
-          <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-sm font-medium hover:bg-green-600">
+          <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium hover:bg-green-800">
             결제 등록
           </button>
         </div>
@@ -1257,7 +1547,7 @@ function CompletePaymentModal({ reservation: r, onDone }: { reservation: Reserva
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-gray-50 rounded-xl p-3">
-      <p className="text-[11px] text-gray-400 mb-0.5">{label}</p>
+      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
       <p className="text-sm font-semibold text-gray-800">{value}</p>
     </div>
   );

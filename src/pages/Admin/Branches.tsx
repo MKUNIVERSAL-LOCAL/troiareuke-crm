@@ -1,10 +1,14 @@
 ﻿import { useState, useEffect } from 'react';
+import { readJson } from '../../lib/safeJson';
+import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
-import { supabase, isSupabaseConfigured, type Branch } from '../../lib/supabase';
+import type { Branch } from '../../lib/supabase';
 import { createBranchAdmin, adminDeleteBranch, type AdminApiResult } from '../../lib/adminApi';
 import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
+import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
-import { fetchLatestChannelVersion, compareVersions, isOutdated, appModeLabel } from '../../lib/updateChannel';
+import { fetchLatestChannelVersion, isOutdated, appModeLabel } from '../../lib/updateChannel';
+import { groupByBranch, branchVersionInfo as branchVersionOf, fetchManifestDirect } from '../../lib/adminBranches';
 
 // NAS 모드에서는 지점의 진실이 서버 계정(auth_users)의 branch_id/branch_name이다.
 // 기존처럼 localStorage를 읽으면 기기마다 목록이 달라지는 문제가 있어 서버에서 파생한다.
@@ -50,13 +54,22 @@ export default function Branches() {
   const [adminPending, setAdminPending] = useState(false);
   const [adminNotice, setAdminNotice] = useState('');
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'outdated'>('all'); // outdated: 구버전으로 실행 중인 지점만 (8차 점검 #11, NAS 모드)
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => { loadBranches(); }, []);
 
   const [nasUsersByBranch, setNasUsersByBranch] = useState<Record<string, AuthApiUser[]>>({});
   const [latestVersion, setLatestVersion] = useState<string | null>(null);
+  const [rechecking, setRechecking] = useState(false);
+  /** [다시 확인] — 코어 캐시를 우회해 매니페스트를 직접 읽는다. 실패하면 같은 화면이 그대로라 눌러도 반응이 없는 것처럼 보였다 (리뷰 2026-11-20) */
+  async function recheckLatest() {
+    setRechecking(true);
+    const m = await fetchManifestDirect();
+    setRechecking(false);
+    setLatestVersion(m?.version || null);
+    if (!m) notify.error('배포 서버에 연결하지 못했습니다. 잠시 후 다시 확인하세요.');
+  }
 
   // ── 지점 완전 삭제 (폐업·계약 종료) — 지점명 타이핑 확인, 서버가 삭제 직전 스냅샷 보관 ──
   const [deleteBranchTarget, setDeleteBranchTarget] = useState<Branch | null>(null);
@@ -64,20 +77,14 @@ export default function Branches() {
   async function runDeleteBranch() {
     if (!deleteBranchTarget) return;
     const r = await adminDeleteBranch(deleteBranchTarget.id, { confirmName: deleteBranchTarget.name });
-    setDeleteBranchNotice(`${deleteBranchTarget.name} 지점을 삭제했습니다 — 계정 ${r.accounts}개, 레코드 ${r.purged.records}건, 사진 ${r.purged.photos}건. 삭제 직전 스냅샷: ${r.snapshot}`);
+    setDeleteBranchNotice(`${deleteBranchTarget.name} 지점을 삭제했습니다 — 계정 ${r.accounts}개, 레코드 ${r.purged?.records ?? 0}건, 사진 ${r.purged?.photos ?? 0}건. 삭제 직전 스냅샷: ${r.snapshot}`);
     setDeleteBranchTarget(null);
     await loadBranches();
   }
 
-  /** 지점의 실행 버전 = 소속 계정 중 가장 최근 접속 기록의 버전 (없으면 null) */
+  /** 지점의 실행 버전 — 대시보드와 같은 규칙(adminBranches.branchVersionInfo): 가장 낮은 버전이 경고 대상, 접속 시각은 가장 최근 */
   function branchVersionInfo(branchId: string) {
-    const seen = (nasUsersByBranch[branchId] || []).filter(u => u.lastAppVersion);
-    if (seen.length === 0) return null;
-    seen.sort((a, b) => (b.lastSeenAt || '').localeCompare(a.lastSeenAt || ''));
-    const latestSeen = seen[0];
-    // 같은 지점 안에 더 낮은 버전으로 접속한 PC가 있으면 그것을 경고 대상으로 본다
-    const lowest = seen.reduce((acc, u) => (compareVersions(u.lastAppVersion, acc.lastAppVersion) < 0 ? u : acc), latestSeen);
-    return { version: lowest.lastAppVersion!, mode: lowest.lastAppMode || '', lastSeenAt: latestSeen.lastSeenAt || null };
+    return branchVersionOf(nasUsersByBranch[branchId] || []);
   }
 
   async function loadBranches() {
@@ -87,11 +94,7 @@ export default function Branches() {
       // 서버 계정 목록에서 지점 파생 (Users 화면과 같은 소스 → 두 화면 목록 일치)
       try {
         const users = await adminListUsers();
-        const map: Record<string, AuthApiUser[]> = {};
-        for (const u of users.filter(u => u.role !== 'superadmin')) {
-          const bid = u.branchId || u.id;
-          (map[bid] ||= []).push(u);
-        }
+        const map: Record<string, AuthApiUser[]> = Object.fromEntries(groupByBranch(users)); // 승인 대기·거부 신청자는 지점이 아니다 (8차 점검 2026-11-20)
         setNasUsersByBranch(map);
         fetchLatestChannelVersion().then(m => setLatestVersion(m?.version || null));
         setBranches(Object.entries(map).map(([bid, us]) => {
@@ -113,19 +116,9 @@ export default function Branches() {
         setLoadError(`지점 목록을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
         setBranches([]);
       }
-    } else if (isSupabaseConfigured) {
-      const { data, error } = await supabase.from('branches').select('*').order('created_at', { ascending: false });
-      if (error) {
-        console.warn('[Branches] 로드 실패:', error.message);
-        setLoadError(`지점 목록을 불러오지 못했습니다: ${error.message}`);
-      }
-      setBranches(data || []);
     } else {
       // 로컬 폴백: localStorage에서 지점 목록 읽기
-      try {
-        const data = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
-        setBranches(data);
-      } catch { setBranches([]); }
+      setBranches(readJson<Branch[]>('troiareuke_branches', []));
     }
     setLoading(false);
   }
@@ -193,15 +186,21 @@ export default function Branches() {
             setSaving(false);
             return;
           }
+          // 계정별 순차 호출 — 중간에 실패해도 몇 개가 바뀌었는지 알리고 목록은 다시 읽는다(활성/비활성 토글과 같은 패턴, 8차 점검 2026-11-20)
+          const failed: string[] = [];
           for (const u of users) {
             const updates: { plan?: string; serviceEndsAt?: string | null } = {};
             if (u.plan !== form.plan) updates.plan = form.plan;
-            if (periodChanged) updates.serviceEndsAt = nextEndsAt;
-            if (Object.keys(updates).length > 0) await adminUpdateUser(u.id, updates);
+            const curEndsAt = u.serviceEndsAt ? u.serviceEndsAt.slice(0, 10) : null; // 계정별 비교 — 대표 계정만 보면 실패한 직원 계정의 사용기간이 재시도에서 빠진다 (리뷰 2026-11-20)
+            if (curEndsAt !== nextEndsAt) updates.serviceEndsAt = nextEndsAt;
+            if (Object.keys(updates).length === 0) continue;
+            try { await adminUpdateUser(u.id, updates); } catch { failed.push(u.email); }
           }
-          if (form.name.trim() !== editTarget.name) {
-            setAdminNotice('지점명·주소·전화는 해당 지점 관리자가 CRM 설정에서 직접 변경해야 합니다. (플랜·사용기간 변경은 반영됨)');
-            isPending = true;
+          if (failed.length > 0) {
+            setError(`계정 ${users.length}개 중 ${users.length - failed.length}개 변경, ${failed.length}개 실패: ${failed.join(', ')} — [저장]을 다시 눌러 재시도하세요`);
+            setSaving(false);
+            loadBranches();
+            return;
           }
         } else {
           // NAS 모드 신규 지점 = 관리자 계정 발급 (계정에 지점 정보가 실림)
@@ -226,46 +225,9 @@ export default function Branches() {
         return;
       }
 
-      if (isSupabaseConfigured) {
-        if (editTarget) {
-          const { error: updateError } = await supabase.from('branches').update({
-            name: form.name, address: form.address, phone: form.phone,
-            shop_type: form.shop_type, plan: form.plan,
-          }).eq('id', editTarget.id);
-          if (updateError) {
-            // 실패를 성공처럼 위장하지 않도록 — 모달 유지 + 오류 표시
-            setError(`저장 실패: ${updateError.message}`);
-            return;
-          }
-        } else {
-          // 지점 레코드 생성
-          const { data: branch, error: insertError } = await supabase.from('branches').insert({
-            name: form.name, address: form.address, phone: form.phone,
-            shop_type: form.shop_type, plan: form.plan,
-            trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
-          }).select().single();
-          if (insertError) {
-            setError(`저장 실패: ${insertError.message}`);
-            return;
-          }
-
-          // 관리자 계정 생성은 NAS 관리자 API를 통해 수행 (auth.admin 직접 호출 금지)
-          if (form.admin_email && branch) {
-            const result = await createBranchAdmin({
-              email: form.admin_email,
-              branchId: branch.id,
-              branchName: form.name,
-              shopType: form.shop_type,
-              plan: form.plan,
-            });
-            if (applyAdminResult(result)) {
-              isPending = true;
-            }
-          }
-        }
-      } else {
+      {
         // 로컬 폴백 — 지점 정보만 저장, 계정 생성은 NAS 연동 후 지원
-        const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
+        const localBranches: Branch[] = readJson<Branch[]>('troiareuke_branches', []);
         if (editTarget) {
           const idx = localBranches.findIndex(b => b.id === editTarget.id);
           if (idx !== -1) {
@@ -316,30 +278,29 @@ export default function Branches() {
       if (users.length === 0) return;
       const nextActive = !b.is_active;
       if (!window.confirm(`${b.name} 지점의 계정 ${users.length}개를 ${nextActive ? '활성화' : '비활성화'}할까요?`)) return;
-      try {
-        for (const u of users) await adminUpdateUser(u.id, { isActive: nextActive });
-      } catch (e: any) {
-        alert(`변경 실패: ${e?.message || '서버 오류'}`);
+      // 계정별 순차 호출 — 중간에 실패하면 몇 개가 바뀌었는지 알려 준다(목록은 '일부 활성'이면 운영 중으로 보여 실패를 숨긴다) (4차 UX 점검 2026-11-19)
+      const failed: string[] = [];
+      for (const u of users) {
+        try { await adminUpdateUser(u.id, { isActive: nextActive }); }
+        catch { failed.push(u.email); }
       }
+      if (failed.length > 0) notify.error(`${users.length}개 중 ${users.length - failed.length}개 변경, ${failed.length}개 실패: ${failed.join(', ')} — 다시 눌러 재시도하세요`);
+      else notify.success(`${b.name} 지점 계정 ${users.length}개를 ${nextActive ? '활성화' : '비활성화'}했습니다.`);
       loadBranches();
       return;
     }
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.from('branches').update({ is_active: !b.is_active }).eq('id', b.id);
-      if (error) alert(`변경 실패: ${error.message}`);
-    } else {
-      const localBranches: Branch[] = JSON.parse(localStorage.getItem('troiareuke_branches') || '[]');
-      const idx = localBranches.findIndex(x => x.id === b.id);
-      if (idx !== -1) localBranches[idx].is_active = !b.is_active;
-      localStorage.setItem('troiareuke_branches', JSON.stringify(localBranches));
-    }
+    const localBranches: Branch[] = readJson<Branch[]>('troiareuke_branches', []);
+    const idx = localBranches.findIndex(x => x.id === b.id);
+    if (idx !== -1) localBranches[idx].is_active = !b.is_active;
+    localStorage.setItem('troiareuke_branches', JSON.stringify(localBranches));
     loadBranches();
   }
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredBranches = branches.filter(branch => {
     const statusMatches = statusFilter === 'all'
-      || (statusFilter === 'active' ? branch.is_active : !branch.is_active);
+      || (statusFilter === 'outdated' ? (() => { const info = branchVersionInfo(branch.id); return Boolean(info && isOutdated(info.version, latestVersion)); })()
+        : statusFilter === 'active' ? branch.is_active : !branch.is_active);
     const planLabel = planLabels[branch.plan]?.label || branch.plan;
     const searchMatches = !normalizedSearch || [
       branch.name,
@@ -369,12 +330,12 @@ export default function Branches() {
 
       <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-3 mb-4 flex flex-col md:flex-row gap-3 md:items-center">
         <label className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="지점명, 주소, 연락처, 유형, 플랜 검색"
-            className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-500"
+            className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-400 outline-none focus:border-blue-500"
             aria-label="지점 검색"
           />
         </label>
@@ -383,6 +344,7 @@ export default function Branches() {
             ['all', '전체'],
             ['active', '운영 중'],
             ['inactive', '비활성'],
+            ...(NAS_MODE ? [['outdated', '구버전']] as const : []),
           ] as const).map(([value, label]) => (
             <button
               key={value}
@@ -393,7 +355,7 @@ export default function Branches() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-slate-500 whitespace-nowrap">{filteredBranches.length}개 지점</span>
+        <span className="text-xs text-slate-400 whitespace-nowrap">{filteredBranches.length}개 지점</span>
       </div>
 
       {loadError && !loading && (
@@ -407,11 +369,18 @@ export default function Branches() {
         <div className="flex items-center justify-center h-64">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : statusFilter === 'outdated' && latestVersion === null ? (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-10 text-center">
+          <p className="text-amber-200 font-medium">최신 버전을 확인하지 못해 구버전 판정을 보류했습니다</p>
+          <p className="text-amber-200/80 text-sm mt-1">배포 서버 응답이 없습니다 — 판정 없이 "없음"으로 보이면 구버전 지점을 놓칩니다 (배포 정책 §8)</p>
+          <button type="button" disabled={rechecking} onClick={recheckLatest}
+            className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl transition-colors disabled:opacity-50">{rechecking ? '확인 중…' : '다시 확인'}</button>
+        </div>
       ) : filteredBranches.length === 0 ? (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-16 text-center">
-          <Building2 size={32} className="text-slate-600 mx-auto mb-3" />
+          <Building2 size={32} className="text-slate-400 mx-auto mb-3" />
           <p className="text-slate-400 font-medium">조건에 맞는 지점이 없습니다</p>
-          <p className="text-slate-600 text-sm mt-1">검색어나 상태 필터를 바꿔보세요</p>
+          <p className="text-slate-400 text-sm mt-1">검색어나 상태 필터를 바꿔보세요</p>
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden">
@@ -419,17 +388,17 @@ export default function Branches() {
           <table className="w-full min-w-[850px]">
             <thead>
               <tr className="sticky top-0 z-10 border-b border-slate-700/30 bg-slate-900">
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">지점명</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">유형</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">플랜</th>
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">상태</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">지점명</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">유형</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">플랜</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">상태</th>
                 {NAS_MODE && (
-                  <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                    프로그램 버전{latestVersion && <span className="ml-1 normal-case text-slate-600">(최신 v{latestVersion})</span>}
+                  <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    프로그램 버전{latestVersion && <span className="ml-1 normal-case text-slate-400">(최신 v{latestVersion})</span>}
                   </th>
                 )}
-                <th className="text-left px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">등록일</th>
-                <th className="text-right px-6 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">액션</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">등록일</th>
+                <th className="text-right px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">액션</th>
               </tr>
             </thead>
             <tbody>
@@ -440,12 +409,12 @@ export default function Branches() {
                     <td className="px-6 py-4">
                       <div>
                         <p className="text-sm font-semibold text-white">{b.name}</p>
-                        {b.address && <p className="text-xs text-slate-500 mt-0.5">{b.address}</p>}
+                        {b.address && <p className="text-xs text-slate-400 mt-0.5">{b.address}</p>}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-400">{b.shop_type || '—'}</td>
                     <td className="px-6 py-4">
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${plan.color}`}>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${plan.color}`}>
                         {plan.label}
                       </span>
                     </td>
@@ -455,7 +424,7 @@ export default function Branches() {
                           <CheckCircle size={12} /> 운영 중
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
                           <XCircle size={12} /> 비활성
                         </span>
                       )}
@@ -466,14 +435,14 @@ export default function Branches() {
                       return (
                         <td className="px-6 py-4">
                           {!info ? (
-                            <span className="text-xs text-slate-600" title="v1.0.48 이상 프로그램이 접속하면 표시됩니다">기록 없음</span>
+                            <span className="text-xs text-slate-400" title="v1.0.48 이상 프로그램이 접속하면 표시됩니다">기록 없음</span>
                           ) : (
                             <div className="text-xs">
                               <span className={outdated ? 'font-bold text-red-400' : 'text-emerald-400'}>v{info.version}</span>
                               {outdated && (
-                                <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
+                                <span className="ml-1.5 text-2xs font-bold px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">구버전</span>
                               )}
-                              <p className="text-[11px] text-slate-500 mt-0.5">
+                              <p className="text-xs text-slate-400 mt-0.5">
                                 {appModeLabel[info.mode] || info.mode}
                                 {info.lastSeenAt && ` · ${format(parseISO(info.lastSeenAt), 'MM/dd HH:mm', { locale: ko })}`}
                               </p>
@@ -482,13 +451,14 @@ export default function Branches() {
                         </td>
                       );
                     })()}
-                    <td className="px-6 py-4 text-xs text-slate-500">
+                    <td className="px-6 py-4 text-xs text-slate-400">
                       {format(parseISO(b.created_at), 'yyyy.MM.dd', { locale: ko })}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEdit(b)}
+                          aria-label={`${b.name} 지점 정보 수정`}
                           className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
                         >
                           <Pencil size={13} />
@@ -547,8 +517,7 @@ export default function Branches() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+        <AdminDialog title={editTarget ? '지점 정보 수정' : '새 지점 추가'} onClose={() => setShowModal(false)} escape={false}>
             <div className="px-6 py-5 border-b border-slate-700">
               <h2 className="text-base font-bold text-white">
                 {editTarget ? '지점 정보 수정' : '새 지점 추가'}
@@ -562,20 +531,25 @@ export default function Branches() {
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                   <Info size={13} className="text-amber-500 mt-0.5 shrink-0" />
                   <p className="text-xs text-amber-600 leading-relaxed">
-                    NAS 모드에서는 지점명 외 정보(주소·전화·샵 유형)는 본사 서버에서 관리됩니다. 이 화면에서는 플랜·사용기간 변경만 저장됩니다.
+                    NAS 모드에서는 지점명·주소·전화·샵 유형을 해당 지점 관리자가 CRM 설정에서 직접 바꿉니다. 이 화면에서는 플랜·사용기간 변경만 저장됩니다.
                   </p>
                 </div>
               )}
 
               <Field label="지점명 *">
-                <input className="admin-input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="강남점" />
+                <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="강남점" />
               </Field>
+              {NAS_MODE && !editTarget && (
+                <p className="text-xs text-slate-400">주소·전화·샵 유형은 지점 관리자가 CRM 설정 &gt; 샵 정보에서 직접 입력합니다. (여기서 받아도 서버에 저장되지 않아 입력란을 두지 않습니다)</p>
+              )}
+              {!(NAS_MODE && !editTarget) && (<>
               <Field label="주소">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="서울시 강남구..." />
               </Field>
               <Field label="전화번호">
                 <input className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="02-0000-0000" />
               </Field>
+              </>)}
               <Field label="샵 유형">
                 <select className="admin-input disabled:opacity-50" disabled={NAS_MODE && !!editTarget} value={form.shop_type} onChange={e => setForm(f => ({ ...f, shop_type: e.target.value }))}>
                   {shopTypes.map(t => <option key={t} value={t}>{t}</option>)}
@@ -590,16 +564,13 @@ export default function Branches() {
                 </select>
               </Field>
               {NAS_MODE && editTarget && (
-                <Field label="사용기간 만료일 (비우면 무제한)">
+                <Field label="사용기간 만료일 (비우면 무제한)" hint="이 지점의 모든 계정에 일괄 적용됩니다. 만료일이 지나면 로그인할 수 없습니다 (데이터는 유지).">
                   <input
                     className="admin-input"
                     type="date"
                     value={form.service_ends_at}
                     onChange={e => setForm(f => ({ ...f, service_ends_at: e.target.value }))}
                   />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    이 지점의 모든 계정에 일괄 적용됩니다. 만료일이 지나면 로그인할 수 없습니다 (데이터는 유지).
-                  </p>
                 </Field>
               )}
 
@@ -649,8 +620,7 @@ export default function Branches() {
                 {saving ? '저장 중...' : '저장하기'}
               </button>
             </div>
-          </div>
-        </div>
+        </AdminDialog>
       )}
 
       <style>{`
@@ -672,11 +642,16 @@ export default function Branches() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: React.ReactNode; children: React.ReactNode }) {
   return (
+    // label로 감싸 안의 입력이 이름(implicit label)을 갖게 — 어드민 게이트가 지점 추가 창의 select-name 위반을 잡았다 (2026-11-19 53)
+    // 도움말(hint)은 label 밖에 — 안에 두면 문장 전체가 입력의 이름으로 읽힌다 (리뷰 54)
     <div>
-      <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
-      {children}
+      <label className="block">
+        <span className="block text-xs font-medium text-slate-400 mb-1.5">{label}</span>
+        {children}
+      </label>
+      {hint && <p className="text-xs text-slate-400 mt-1">{hint}</p>}
     </div>
   );
 }

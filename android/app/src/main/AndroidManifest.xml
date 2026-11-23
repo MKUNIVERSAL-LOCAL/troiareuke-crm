@@ -38,4 +38,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 촬영 가이드 카메라(WebView getUserMedia) — Capacitor BridgeWebChromeClient가 앱 권한을 WebView에 위임 (2026-11-17) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

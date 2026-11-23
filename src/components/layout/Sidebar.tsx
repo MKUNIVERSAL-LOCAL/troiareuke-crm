@@ -2,14 +2,16 @@
 import {
   LayoutDashboard, Users, Calendar, ClipboardList,
   UserCog, Package, TrendingUp, MessageSquare,
-  Settings, ChevronRight, Link2, LogOut, Sparkles, Tag, Bot, X
+  Settings, ChevronRight, Link2, LogOut, Sparkles, Tag, Bot
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
-import { differenceInDays, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
+import { formatLocalDate } from '../../lib/format';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
 import { featureForPath } from '../../lib/featureRegistry';
 import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
+import { clearLocalPhotoCacheForLogout, confirmLogoutDespiteKeepLocal } from '../../lib/photoStore';
 import { useFeatureFlagsTick } from '../../hooks/useFeature';
 
 const navItems = [
@@ -27,12 +29,7 @@ const navItems = [
   { to: '/settings', label: '설정', icon: Settings },
 ];
 
-interface SidebarProps {
-  open?: boolean;
-  onClose?: () => void;
-}
-
-export default function Sidebar({ open = false, onClose }: SidebarProps) {
+export default function Sidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { shopName, programName } = useCrmBrand(user?.shopName);
@@ -50,48 +47,28 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
     .filter((item): item is typeof navItems[number] & { badge: string | null } => item !== null);
 
   // 올림 기준 — 가입 당일 "14일"로 표시 (내림이면 13일로 보이는 off-by-one)
-  const trialDaysLeft = user?.trialEndsAt
-    ? Math.ceil((parseISO(user.trialEndsAt).getTime() - Date.now()) / 86400000)
-    : null;
+  const daysUntil = (iso: string) => { const d = Math.ceil((parseISO(iso).getTime() - Date.now()) / 86400000); return Number.isFinite(d) ? d : null; }; // 깨진 날짜면 "NaN일" 대신 숨김 (6차 UX 감사 2026-11-20)
+  const trialDaysLeft = user?.trialEndsAt ? daysUntil(user.trialEndsAt) : null;
 
   // 어드민이 설정한 사용기간(serviceEndsAt) — NAS 서버 응답에 실려 오는 필드로,
   // 코어(AuthContext) 타입에는 없어 런타임 값으로만 읽는다. 만료 14일 전부터 안내.
   const serviceEndsAt = (user as { serviceEndsAt?: string | null } | null)?.serviceEndsAt || null;
-  const serviceDaysLeft = serviceEndsAt
-    ? Math.ceil((parseISO(serviceEndsAt).getTime() - Date.now()) / 86400000)
-    : null;
-
-  const handleNavClick = () => {
-    // 모바일에서 메뉴 클릭 시 사이드바 닫기
-    if (onClose) onClose();
-  };
+  const serviceDaysLeft = serviceEndsAt ? daysUntil(serviceEndsAt) : null;
 
   return (
-    <aside className={clsx(
-      'w-64 h-screen bg-white border-r border-gray-100 flex flex-col fixed left-0 top-0 z-30 shadow-sm transition-transform duration-300',
-      // 데스크탑: 항상 표시
-      'lg:translate-x-0',
-      // 모바일: open 상태에 따라
-      open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-    )}>
+    // PC 전용 — 폰은 하단 탭바·더보기 시트가 같은 메뉴를 맡는다 (7차 UX 점검 2026-11-20)
+    <aside className="hidden lg:flex w-64 h-screen bg-white border-r border-gray-100 flex-col fixed left-0 top-0 z-30 shadow-sm">
       {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-[#1a3a8f] rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 flex-shrink-0">
+          <div className="w-9 h-9 bg-[#1a3a8f] rounded-xl flex items-center justify-center flex-shrink-0">
             <Sparkles size={18} className="text-white" />
           </div>
           <div>
-            <p className="max-w-[145px] truncate text-[13px] font-black text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
-            <p className="text-[10px] text-gray-400 font-medium tracking-wide">에스테틱 고객관리</p>
+            <p className="max-w-[145px] truncate text-[13px] font-bold text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
+            <p className="text-2xs text-gray-400 font-medium tracking-wide">에스테틱 고객관리</p>
           </div>
         </div>
-        {/* 모바일 닫기 버튼 */}
-        <button
-          onClick={onClose}
-          className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 transition-colors"
-        >
-          <X size={16} />
-        </button>
       </div>
 
       {/* Navigation */}
@@ -105,18 +82,17 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
               <li key={to}>
                 <NavLink
                   to={to}
-                  onClick={handleNavClick}
                   className={clsx(
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group',
                     isActive
-                      ? 'bg-[#1a3a8f] text-white shadow-md shadow-blue-200'
+                      ? 'bg-[#1a3a8f] text-white'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                   )}
                 >
                   <Icon size={16} className={clsx('flex-shrink-0', isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-600')} />
                   <span className="flex-1 truncate">{label}</span>
                   {badge && !isActive && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">
+                    <span className="text-2xs font-bold px-1.5 py-0.5 bg-[#1a3a8f] text-white rounded-full">
                       {badge}
                     </span>
                   )}
@@ -132,16 +108,16 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
       <div className="px-4 py-4 border-t border-gray-100 space-y-3">
         {serviceDaysLeft !== null && serviceDaysLeft >= 0 && serviceDaysLeft <= 14 && (
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl px-4 py-3">
-            <p className="text-[11px] font-bold text-amber-700">⏰ 사용기간 만료 예정</p>
-            <p className="text-xs text-amber-500 mt-0.5">
-              {serviceEndsAt!.slice(0, 10).replace(/-/g, '.')}까지 (D-{serviceDaysLeft})
+            <p className="text-xs font-bold text-amber-700">사용기간 만료 예정</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              {formatLocalDate(serviceEndsAt)}까지 (D-{serviceDaysLeft})
             </p>
-            <p className="text-[10px] text-amber-400 mt-1">연장은 본사에 문의해주세요</p>
+            <p className="text-2xs text-amber-700 mt-1">연장은 본사에 문의해주세요</p>
           </div>
         )}
         {user?.plan === 'trial' && trialDaysLeft !== null && trialDaysLeft >= 0 && (
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl px-4 py-3">
-            <p className="text-[11px] font-bold text-blue-700">🎁 무료 체험 중</p>
+            <p className="text-xs font-bold text-blue-700">무료 체험 중</p>
             <p className="text-xs text-blue-400 mt-0.5">남은 기간: {trialDaysLeft}일</p>
             <div className="mt-2 bg-blue-200 rounded-full h-1">
               <div className="bg-blue-500 rounded-full h-1" style={{ width: `${Math.max(5, ((14 - trialDaysLeft) / 14) * 100)}%` }} />
@@ -149,16 +125,12 @@ export default function Sidebar({ open = false, onClose }: SidebarProps) {
           </div>
         )}
         <div className="bg-gray-50 rounded-xl px-4 py-3">
-          <p className="text-[11px] font-bold text-gray-700 truncate">{shopName || '샵 정보 미설정'}</p>
+          <p className="text-xs font-bold text-gray-700 truncate">{shopName || '샵 정보 미설정'}</p>
           <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
-          <div className="flex items-center gap-1.5 mt-2">
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span>
-            <span className="text-xs text-green-600 font-medium">정상 운영 중</span>
-          </div>
         </div>
         <button
-          onClick={() => { resetFeatureFlags(); logout(); }}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+          onClick={() => { if (!confirmLogoutDespiteKeepLocal()) return; resetFeatureFlags(); clearLocalPhotoCacheForLogout(); logout(); }} // 이 기기 보관 사진이 있으면 사라진다고 먼저 묻는다 (리뷰 2026-11-19)
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
         >
           <LogOut size={14} />
           <span>로그아웃</span>

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { notify } from '../../lib/notify';
 import { SlidersHorizontal, Save, RotateCcw, Globe, Building2 } from 'lucide-react';
 import clsx from 'clsx';
 import { isAuthApiConfigured, adminListUsers } from '../../lib/authApi';
+import { approvedBranchUsers } from '../../lib/adminBranches';
 import { adminGetFeatureFlags, adminSaveFeatureFlags, type FeatureFlagMap } from '../../lib/adminApi';
 import { FEATURES, FEATURE_CATEGORIES, type FeatureDef } from '../../lib/featureRegistry';
 
@@ -24,24 +26,32 @@ export default function AdminFeatures() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState(''); // 로드 실패 뒤 저장하면 그 스코프의 서버 플래그 전체가 초안(한두 키)으로 덮인다 — 그동안 저장을 막는다 (8차 점검 2026-11-20)
+  const [chipQuery, setChipQuery] = useState(''); // 지점 수십 곳이면 칩이 벽처럼 쌓인다 — 이름 검색·오버라이드 있는 지점만 (8차 점검 #19)
+  const [onlyOverridden, setOnlyOverridden] = useState(false);
+  // 선택 중인 지점 칩은 검색·필터와 무관하게 늘 보인다 — 편집 중인 플래그의 주인이 사라지면 안 된다
+  const visibleBranches = branches.filter(b => selected === b.id
+    || ((!onlyOverridden || Object.keys(scopes[b.id] || {}).length > 0)
+      && (!chipQuery.trim() || b.name.toLowerCase().includes(chipQuery.trim().toLowerCase()))));
 
   useEffect(() => { load(); }, []);
 
   async function load() {
     if (!NAS_MODE) { setLoading(false); return; }
     setLoading(true);
+    setLoadError('');
     try {
       const [flagsRes, users] = await Promise.all([adminGetFeatureFlags(), adminListUsers()]);
       setScopes(flagsRes.scopes || {});
       // 지점 목록: 지점 계정(admin/staff)의 branchId를 중복 제거해 구성
       const map = new Map<string, string>();
-      for (const u of users) {
-        if (u.role === 'superadmin' || !u.branchId) continue;
+      for (const u of approvedBranchUsers(users)) { // 승인 대기·거부 신청자 칩 제외 (8차 점검 2026-11-20)
+        if (!u.branchId) continue;
         if (!map.has(u.branchId)) map.set(u.branchId, u.branchName || u.shopName || u.branchId);
       }
       setBranches([...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ko')));
     } catch (e: any) {
-      alert(`기능 설정을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
+      setLoadError(`기능 설정을 불러오지 못했습니다: ${e?.message || '서버 오류'}`);
     }
     setLoading(false);
   }
@@ -53,6 +63,7 @@ export default function AdminFeatures() {
   }, [selected, scopes]);
 
   function selectScope(scope: string) {
+    if (scope !== selected && dirty && !window.confirm('저장하지 않은 변경이 있습니다. 버리고 다른 범위로 이동할까요?')) return; // (4차 UX 점검 2026-11-19)
     setSelected(scope);
     setSavedAt(null);
   }
@@ -103,7 +114,7 @@ export default function AdminFeatures() {
       setScopes((prev) => ({ ...prev, [selected]: res.flags }));
       setSavedAt(Date.now());
     } catch (e: any) {
-      alert(`저장에 실패했습니다: ${e?.message || '서버 오류'}`);
+      notify.error(`저장에 실패했습니다: ${e?.message || '서버 오류'}`);
     }
     setSaving(false);
   }
@@ -137,7 +148,7 @@ export default function AdminFeatures() {
           </button>
           <button
             onClick={handleSave}
-            disabled={!NAS_MODE || !dirty || saving}
+            disabled={!NAS_MODE || !dirty || saving || !!loadError}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Save size={16} />
@@ -145,6 +156,12 @@ export default function AdminFeatures() {
           </button>
         </div>
       </div>
+      {loadError && (
+        <div className="mb-6 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-300 flex items-center justify-between gap-3">
+          <span>{loadError} — 서버 값을 모르는 상태라 저장이 잠겼습니다.</span>
+          <button type="button" onClick={load} className="text-xs underline text-red-200 hover:text-white shrink-0">다시 시도</button>
+        </div>
+      )}
 
       {!NAS_MODE && (
         <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-4 text-sm text-amber-200">
@@ -152,7 +169,18 @@ export default function AdminFeatures() {
         </div>
       )}
 
-      {/* 스코프 선택: 전역 + 지점 */}
+      {/* 스코프 선택: 전역 + 지점 (검색·오버라이드 필터는 지점이 8곳 넘을 때만) */}
+      {branches.length > 8 && (
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <input value={chipQuery} onChange={e => setChipQuery(e.target.value)} placeholder="지점 이름 검색" aria-label="지점 이름 검색"
+            className="w-56 bg-slate-900 border border-slate-700/50 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500" />
+          <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={onlyOverridden} onChange={e => setOnlyOverridden(e.target.checked)} />
+            개별 설정이 있는 지점만
+          </label>
+          <span className="text-xs text-slate-400">{visibleBranches.length} / {branches.length} 지점</span>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 mb-8">
         <button
           onClick={() => selectScope(GLOBAL_SCOPE)}
@@ -166,7 +194,7 @@ export default function AdminFeatures() {
           <Globe size={14} />
           전역 기본값
         </button>
-        {branches.map((b) => (
+        {visibleBranches.map((b) => (
           <button
             key={b.id}
             onClick={() => selectScope(b.id)}
@@ -211,7 +239,7 @@ export default function AdminFeatures() {
           {FEATURE_CATEGORIES.map((category) => (
             <section key={category}>
               <h2 className="flex items-center gap-2 text-sm font-bold text-slate-300 uppercase tracking-wider mb-3">
-                <SlidersHorizontal size={14} className="text-slate-500" />
+                <SlidersHorizontal size={14} className="text-slate-400" />
                 {category}
               </h2>
               <div className="bg-slate-900 border border-slate-700/50 rounded-2xl divide-y divide-slate-800">
@@ -231,20 +259,20 @@ export default function AdminFeatures() {
                         <p className="text-sm font-semibold text-white">
                           {def.label}
                           {def.deviceToggle && (
-                            <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full align-middle">
+                            <span className="ml-2 text-2xs font-bold px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full align-middle">
                               샵에서 추가 토글
                             </span>
                           )}
                         </p>
                         <p className="text-xs text-slate-400 mt-0.5 truncate" title={def.description}>{def.description}</p>
                       </div>
-                      <span className={clsx('text-xs font-semibold w-14 text-right', effective ? 'text-emerald-400' : 'text-slate-500')}>
+                      <span className={clsx('text-xs font-semibold w-14 text-right', effective ? 'text-emerald-400' : 'text-slate-400')}>
                         {effective ? '사용 중' : '꺼짐'}
                       </span>
-                      <select
+                      <select aria-label={`${def.label} 사용 설정`}
                         value={state}
                         onChange={(e) => setState(def, e.target.value as 'inherit' | 'on' | 'off')}
-                        disabled={!NAS_MODE}
+                        disabled={!NAS_MODE || !!loadError}
                         className="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <option value="inherit">{inheritLabel(def)}</option>
@@ -258,7 +286,7 @@ export default function AdminFeatures() {
             </section>
           ))}
 
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="text-xs text-slate-400 leading-relaxed">
             우선순위: <strong className="text-slate-400">지점 설정 &gt; 전역 기본값 &gt; 프로그램 기본값</strong>.
             &lsquo;샵에서 추가 토글&rsquo; 표시가 있는 기능은 여기서 허용해도 샵 관리자가 설정 화면에서 기기별로 켜야 표시됩니다.
             지점 프로그램은 오프라인에서 마지막으로 받은 설정으로 동작합니다.

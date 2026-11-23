@@ -5,9 +5,10 @@
  * 기간 단위 손익 표와 분류 상세, 지점 비교를 렌더링한다.
  * 매출원가/판관비 구분은 지점 화면(Sales 손익 탭)과 동일한 기준을 사용한다.
  */
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { RefreshCw, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import ChartFallback from '../../components/charts/ChartFallback';
+const PnlCompareChart = lazy(() => import('../../components/charts/admin/AdminCharts').then(m => ({ default: m.PnlCompareChart }))); // recharts 지연 로드 (2026-11-18)
 import { fetchAdminPnl, type AdminPnlResponse } from '../../lib/adminApi';
 import { COGS_CATEGORIES, EXPENSE_CATEGORIES, type ExpenseCategory } from '../../types';
 
@@ -140,7 +141,7 @@ export default function PnlReport() {
       const expense = data.expenses.filter(x => x.branchId === id).reduce((s, x) => s + x.amount, 0);
       return { name: branchLabel(id), 매출: revenue, 지출: expense, 영업이익: revenue - expense };
     }).sort((a, b) => b.영업이익 - a.영업이익);
-  }, [data, branchIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, branchIds]);
 
   // 등록된 분류 중 금액이 있는 것 전부 — 표준 9개에 없는 값(구버전·수기 입력)도 빠뜨리지 않아야
   // 상세 항목 합계가 총지출과 어긋나지 않는다
@@ -230,7 +231,7 @@ export default function PnlReport() {
       ) : branchIds.length === 0 ? (
         <div className="bg-slate-900 border border-slate-700/50 rounded-2xl p-12 text-center">
           <p className="text-slate-400">{year}년에 등록된 매출·지출 데이터가 없습니다</p>
-          <p className="text-slate-600 text-xs mt-1">지점이 CRM의 매출·손익 관리에서 결제·지출을 등록하면 여기에 집계됩니다</p>
+          <p className="text-slate-400 text-xs mt-1">지점이 CRM의 매출·손익 관리에서 결제·지출을 등록하면 여기에 집계됩니다</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -247,7 +248,7 @@ export default function PnlReport() {
                 <p className="text-xs text-slate-400">{c.label}</p>
                 <p className={`text-lg font-bold mt-1 ${c.color}`}>{won(c.value)}</p>
                 {c.label === '영업이익' && (
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-xs text-slate-400 mt-0.5">
                     이익률 {yearTotal.revenue.total > 0 ? Math.round((yearTotal.operatingProfit / yearTotal.revenue.total) * 100) : 0}%
                   </p>
                 )}
@@ -267,7 +268,7 @@ export default function PnlReport() {
                 <thead>
                   <tr className="border-b border-slate-700/30">
                     {['기간', '매출액', '매출원가', '매출총이익', '판매비·관리비', '영업이익', '이익률'].map(h => (
-                      <th key={h} className="text-right first:text-left px-5 py-3 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                      <th key={h} className="text-right first:text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -279,10 +280,10 @@ export default function PnlReport() {
                       <td className="px-5 py-3 text-sm text-right text-orange-400/90">{r.cogs ? won(r.cogs) : '—'}</td>
                       <td className="px-5 py-3 text-sm text-right text-slate-300">{r.revenue.total || r.cogs ? won(r.grossProfit) : '—'}</td>
                       <td className="px-5 py-3 text-sm text-right text-rose-400/90">{r.sga ? won(r.sga) : '—'}</td>
-                      <td className={`px-5 py-3 text-sm text-right font-bold ${r.operatingProfit > 0 ? 'text-emerald-400' : r.operatingProfit < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                      <td className={`px-5 py-3 text-sm text-right font-bold ${r.operatingProfit > 0 ? 'text-emerald-400' : r.operatingProfit < 0 ? 'text-red-400' : 'text-slate-400'}`}>
                         {r.revenue.total || r.totalExpense ? won(r.operatingProfit) : '—'}
                       </td>
-                      <td className="px-5 py-3 text-xs text-right text-slate-500">
+                      <td className="px-5 py-3 text-xs text-right text-slate-400">
                         {r.revenue.total > 0 ? `${Math.round((r.operatingProfit / r.revenue.total) * 100)}%` : '—'}
                       </td>
                     </tr>
@@ -322,13 +323,13 @@ export default function PnlReport() {
                   <span>지출</span><span>{won(yearTotal.totalExpense)}</span>
                 </div>
                 {activeCategories.length === 0 && (
-                  <p className="text-xs text-slate-600 py-1 pl-3">등록된 지출이 없습니다</p>
+                  <p className="text-xs text-slate-400 py-1 pl-3">등록된 지출이 없습니다</p>
                 )}
                 {activeCategories.map(c => (
                   <div key={c} className="flex justify-between py-1 pl-3 text-xs">
                     <span className="text-slate-400">
                       {c}
-                      <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${COGS_CATEGORIES.includes(c as ExpenseCategory) ? 'bg-orange-500/10 text-orange-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                      <span className={`ml-1.5 text-2xs px-1.5 py-0.5 rounded-full ${COGS_CATEGORIES.includes(c as ExpenseCategory) ? 'bg-orange-500/10 text-orange-400' : 'bg-rose-500/10 text-rose-400'}`}>
                         {COGS_CATEGORIES.includes(c as ExpenseCategory) ? '매출원가' : '판관비'}
                       </span>
                     </span>
@@ -343,31 +344,18 @@ export default function PnlReport() {
               <h3 className="text-sm font-bold text-white mb-4">
                 {selected === 'all' ? `${year}년 지점별 손익 비교` : `${year}년 ${mode === 'quarter' ? '분기별' : '월별'} 추이`}
               </h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart
+              <Suspense fallback={<ChartFallback height={280} dark />}>
+                <PnlCompareChart
                   data={selected === 'all'
                     ? branchCompare
                     : rows.map(r => ({ name: r.label, 매출: r.revenue.total, 지출: r.totalExpense, 영업이익: r.operatingProfit }))}
-                  margin={{ top: 0, right: 0, left: 8, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickFormatter={v => `${Math.round(Number(v) / 10000).toLocaleString('ko-KR')}만`} />
-                  <Tooltip
-                    formatter={(v: number, name: string) => [won(v), name]}
-                    contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 12, fontSize: 12 }}
-                    labelStyle={{ color: '#e2e8f0' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="매출" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="지출" fill="#f97316" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="영업이익" fill="#10b981" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+                  won={won}
+                />
+              </Suspense>
             </div>
           </div>
 
-          <p className="text-[11px] text-slate-600">
+          <p className="text-xs text-slate-400">
             * 지점이 CRM에 등록한 결제(완료)·지출 기록 기준의 운영 참고용 집계입니다. 세무 신고 자료와 다를 수 있습니다.
           </p>
         </div>

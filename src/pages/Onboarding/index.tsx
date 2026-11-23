@@ -1,20 +1,21 @@
 import { notify } from '../../lib/notify';
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { readJson } from '../../lib/safeJson';
+import { todayISO, formatPhoneInput } from '../../lib/format';
+import { useState, useRef, useEffect } from 'react';
+import { readDraft, writeDraft, clearDraft } from '../../lib/formDraft';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { StaffStore, ServiceStore, ProgramStore, SettingsStore } from '../../lib/store';
-import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { StaffStore, ServiceStore, SettingsStore } from '../../lib/store';
 import { PLANS } from '../../lib/payment';
 import type { ShopSettings, SubscriptionPlan } from '../../types';
-import * as XLSX from 'xlsx';
+import { loadXlsx } from '../../lib/dataExport';
 
 const steps = [
   { icon: <Store size={20} />, label: '샵 정보', desc: '기본 정보 입력' },
   { icon: <Users size={20} />, label: '직원 설정', desc: '직원 등록' },
-  { icon: <Scissors size={20} />, label: '시술 항목', desc: '메뉴 등록' },
+  { icon: <Scissors size={20} />, label: '시술 항목', desc: '시술 항목 등록' },
   { icon: <Link2 size={20} />, label: '연동 설정', desc: '외부 서비스 연결' },
-  { icon: <CreditCard size={20} />, label: '플랜 선택', desc: '요금제 선택' },
+  { icon: <CreditCard size={20} />, label: '무료 체험', desc: '14일 체험 시작' },
   { icon: <CheckCircle size={20} />, label: '완료', desc: '시작 준비' },
 ];
 
@@ -73,24 +74,40 @@ const planIcons: Record<string, React.ReactNode> = {
   enterprise: <Sparkles size={24} />,
 };
 
+/** 새로고침·실수로 닫힘에도 남겨 두는 온보딩 입력(탭 세션, 계정별). 완료하면 지운다 (3차 UX 점검 후속 2026-11-19) */
+interface OnboardingDraft {
+  step: number; shopName: string; shopType: string; shopPhone: string; shopAddress: string;
+  staffList: { name: string; role: string }[];
+  customServices: { name: string; duration: string; price: string }[];
+  selectedTroiPrograms: string[];
+  excelServices: { name: string; duration: number; price: number }[];
+  excelFileName: string;
+  selectedPlan: SubscriptionPlan;
+}
+
 export default function Onboarding() {
-  const navigate = useNavigate();
   const { completeOnboarding, user } = useAuth();
-  const [step, setStep] = useState(0);
-  const [shopName, setShopName] = useState('');
-  const [shopType, setShopType] = useState('');
-  const [shopPhone, setShopPhone] = useState('');
-  const [shopAddress, setShopAddress] = useState('');
-  const [staffList, setStaffList] = useState([{ name: '', role: '대표' }]);
+  // 키는 첫 렌더에 동기적으로 정해져야 한다 — 새로고침 직후 AuthContext의 user는 잠시 비어 있어 거기서 id를 가져오면 초안을 못 찾는다(E2E 발견)
+  const [draftKey] = useState(() => `onboarding-draft:${readJson<{ id?: string }>('troiareuke_auth_user', {}).id || user?.id || 'anon'}`);
+  const [draft] = useState(() => readDraft<OnboardingDraft | null>(draftKey, null));
+  const [step, setStep] = useState(draft?.step ?? 0);
+  const [shopName, setShopName] = useState(draft?.shopName ?? '');
+  const [shopType, setShopType] = useState(draft?.shopType ?? '');
+  const [shopPhone, setShopPhone] = useState(draft?.shopPhone ?? '');
+  const [shopAddress, setShopAddress] = useState(draft?.shopAddress ?? '');
+  const [staffList, setStaffList] = useState(draft?.staffList?.length ? draft.staffList : [{ name: '', role: '대표' }]);
   // 시술 항목: 직접 입력 + 트로이아르케 프로그램 + 엑셀 업로드
-  const [customServices, setCustomServices] = useState<{ name: string; duration: string; price: string }[]>([]);
-  const [selectedTroiPrograms, setSelectedTroiPrograms] = useState<Set<string>>(new Set());
+  const [customServices, setCustomServices] = useState<{ name: string; duration: string; price: string }[]>(draft?.customServices ?? []);
+  const [selectedTroiPrograms, setSelectedTroiPrograms] = useState<Set<string>>(new Set(draft?.selectedTroiPrograms ?? []));
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
-  const [excelServices, setExcelServices] = useState<{ name: string; duration: number; price: number }[]>([]);
-  const [excelFileName, setExcelFileName] = useState('');
+  const [excelServices, setExcelServices] = useState<{ name: string; duration: number; price: number }[]>(draft?.excelServices ?? []);
+  const [excelFileName, setExcelFileName] = useState(draft?.excelFileName ?? '');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('trial');
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(draft?.selectedPlan ?? 'trial');
+  useEffect(() => {
+    writeDraft(draftKey, { step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms: [...selectedTroiPrograms], excelServices, excelFileName, selectedPlan } satisfies OnboardingDraft);
+  }, [draftKey, step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms, excelServices, excelFileName, selectedPlan]);
 
   const addStaff = () => setStaffList(p => [...p, { name: '', role: '피부관리사' }]);
   const updateStaff = (i: number, k: string, v: string) =>
@@ -123,9 +140,11 @@ export default function Onboarding() {
     const input = e.target;
     const file = input.files?.[0];
     if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { notify('엑셀 파일이 10MB를 넘습니다. 시트를 나눠 올려주세요.'); input.value = ''; return; } // 파서 멈춤 방지 (보안 감사 2026-11-19)
 
     try {
       // xlsx/xls/csv 모두 SheetJS로 실제 파싱 (엑셀 바이너리를 텍스트로 잘못 읽는 문제 해결)
+      const XLSX = await loadXlsx();
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -154,7 +173,7 @@ export default function Onboarding() {
     }
   };
 
-  // 구독 정보를 Supabase에 저장
+  // 구독 정보 로컬 저장 (NAS 모드는 서버 계정 plan이 정본)
   const saveSubscription = async (plan: SubscriptionPlan, impUid?: string, merchantUid?: string, amount?: number) => {
     if (!user) return;
 
@@ -181,15 +200,7 @@ export default function Onboarding() {
       notes: plan === 'trial' ? '14일 무료 체험' : `${plan} 플랜 결제`,
     };
 
-    if (isSupabaseConfigured) {
-      // 라이브 subscriptions 테이블에는 currency 컬럼이 없음(PGRST204) — 제외하고 저장
-      const { currency: _currency, ...dbRow } = subscriptionData;
-      const { error } = await supabase.from('subscriptions').insert(dbRow);
-      if (error) {
-        console.error('구독 저장 실패:', error);
-      }
-    }
-
+    // 구독 기록: NAS 모드는 서버 계정이 플랜을 보유하므로 로컬 표시용만 저장
     // 로컬에도 저장
     localStorage.setItem('troiareuke_subscription', JSON.stringify({
       ...subscriptionData,
@@ -202,7 +213,7 @@ export default function Onboarding() {
     // ★ 1단계: branchId를 먼저 확정한 후 localStorage에 저장
     // 이렇게 해야 이후 모든 Store.save()가 올바른 shopKey를 사용함
     const STORAGE_KEY = 'troiareuke_auth_user';
-    const currentUser = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const currentUser = readJson<any>(STORAGE_KEY, {});
     const fixedBranchId = currentUser.branchId || currentUser.id;
     const updatedUser = {
       ...currentUser,
@@ -217,7 +228,7 @@ export default function Onboarding() {
     // 온보딩이 다시 뜨고 데이터가 사라져 보이는 치명 버그가 됨 (QA⑤ 발견)
     try {
       const LOCAL_USERS_KEY = 'troiareuke_local_users';
-      const localUsers = JSON.parse(localStorage.getItem(LOCAL_USERS_KEY) || '[]');
+      const localUsers = readJson<any[]>(LOCAL_USERS_KEY, []);
       const idx = localUsers.findIndex(
         (r: any) => r?.user?.id === updatedUser.id || r?.email === updatedUser.email
       );
@@ -240,25 +251,10 @@ export default function Onboarding() {
     // 직원/시술이 중복 생성되지 않도록, 이미 저장된 이름은 건너뛴다.
     const existingStaffNames = new Set(StaffStore.getAll().filter(s => !s.id.startsWith('sample_')).map(s => s.name));
     const existingServiceNames = new Set(ServiceStore.getAll().filter(s => !s.id.startsWith('sample_')).map(s => s.name));
-    const existingProgramNames = new Set(ProgramStore.getAll().filter(p => !p.id.startsWith('sample_')).map(p => p.name));
     const saveServiceOnce = (svc: { name: string; category: string; duration: number; price: number; description?: string }) => {
       if (!existingServiceNames.has(svc.name)) {
-        ServiceStore.save({ name: svc.name, category: svc.category, duration: svc.duration, price: svc.price, isActive: true });
+        ServiceStore.save({ name: svc.name, category: svc.category, duration: svc.duration, price: svc.price, description: svc.description, isActive: true });
         existingServiceNames.add(svc.name);
-      }
-      if (!existingProgramNames.has(svc.name)) {
-        ProgramStore.save({
-          name: svc.name,
-          category: svc.category,
-          totalSessions: null,
-          validityDays: null,
-          price: svc.price,
-          costPrice: 0,
-          description: svc.description,
-          color: '#1a3a8f',
-          isActive: true,
-        });
-        existingProgramNames.add(svc.name);
       }
     };
 
@@ -273,7 +269,7 @@ export default function Onboarding() {
           specialty: [],
           color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
           isActive: true,
-          hireDate: new Date().toISOString().split('T')[0],
+          hireDate: todayISO(),
         });
       });
 
@@ -322,6 +318,7 @@ export default function Onboarding() {
     // 온보딩 완료의 서버 반영 실패는 삼키지 않고 알린다 — 로컬 완료는 유지되므로 진행은 계속
     try {
       await completeOnboarding({ shopName, shopType, shopPhone, shopAddress });
+      clearDraft(draftKey);
     } catch {
       notify('온보딩 완료가 서버에 반영되지 않았습니다. 인터넷 연결 후 다시 로그인하면 온보딩이 다시 표시될 수 있습니다 — 그 경우 기존 입력은 보존됩니다.');
     }
@@ -348,11 +345,11 @@ export default function Onboarding() {
               <Sparkles size={20} className="text-white" />
             </div>
             <div className="text-left">
-              <p className="text-sm font-black tracking-wider text-[#1a3a8f] leading-tight">DERMASOLUTION</p>
+              <p className="text-sm font-bold tracking-wider text-[#1a3a8f] leading-tight">DERMASOLUTION</p>
               <p className="text-xs text-gray-400">에스테틱 전용 CRM</p>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">안녕하세요, {user?.name}님!</h1>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900">안녕하세요, {user?.name}님!</h1>
           <p className="text-sm text-gray-400 mt-1">에스테틱 샵 정보를 설정하고 CRM을 시작해보세요</p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
             <Sparkles size={12} className="text-[#1a3a8f]" />
@@ -361,17 +358,17 @@ export default function Onboarding() {
         </div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-center mb-8 overflow-x-auto">
+        <div className="flex items-center justify-center mb-8">{/* 6단계가 폰 폭(≈364px)에 들어가도록 연결선을 좁힘 — overflow+center는 왼쪽이 잘려 접근 불가 (리뷰 2026-11-18) */}
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center">
-              <div className={`flex flex-col items-center gap-1 transition-all ${i <= step ? 'opacity-100' : 'opacity-40'}`}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-500 text-white' : i === step ? 'bg-[#1a3a8f] text-white shadow-lg shadow-blue-200' : 'bg-gray-100 text-gray-400'}`}>
+              <div className="flex flex-col items-center gap-1">
+                <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
-                <p className={`text-xs font-medium hidden sm:block ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400'}`}>{s.label}</p>
+                <p className={`text-xs font-medium whitespace-nowrap ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400 hidden sm:block'}`}>{s.label}</p>
               </div>
               {i < steps.length - 1 && (
-                <div className={`w-8 sm:w-12 h-0.5 mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />
+                <div className={`w-4 sm:w-12 h-0.5 mx-0.5 sm:mx-1 transition-all ${i < step ? 'bg-green-400' : 'bg-gray-200'}`} />
               )}
             </div>
           ))}
@@ -400,11 +397,11 @@ export default function Onboarding() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="ob-label">대표 전화</label>
-                    <input value={shopPhone} onChange={e => setShopPhone(e.target.value)} className="ob-input" placeholder="02-0000-0000" />
+                    <input value={shopPhone} onChange={e => setShopPhone(formatPhoneInput(e.target.value))} inputMode="tel" className="ob-input" placeholder="02-0000-0000" />
                   </div>
                   <div>
                     <label className="ob-label">주소</label>
-                    <input value={shopAddress} onChange={e => setShopAddress(e.target.value)} className="ob-input" placeholder="서울시 강남구..." />
+                    <input value={shopAddress} onChange={e => setShopAddress(e.target.value)} className="ob-input" placeholder="예: 서울시 강남구 테헤란로 1" />
                   </div>
                 </div>
               </div>
@@ -419,10 +416,10 @@ export default function Onboarding() {
                 {staffList.map((s, i) => (
                   <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
                     <input value={s.name} onChange={e => updateStaff(i, 'name', e.target.value)}
-                      className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                       placeholder={`직원 ${i + 1} 이름`} />
                     <select value={s.role} onChange={e => updateStaff(i, 'role', e.target.value)}
-                      className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300">
+                      className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300">
                       {['대표', '원장', '부원장', '실장', '피부관리사', '에스테티션', '테라피스트', '상담팀', '마케팅팀', '매니저', '인턴'].map(r => <option key={r}>{r}</option>)}
                     </select>
                   </div>
@@ -431,7 +428,7 @@ export default function Onboarding() {
                   + 직원 추가
                 </button>
               </div>
-              <StepNav onPrev={() => setStep(0)} onNext={() => setStep(2)} skipLabel="나중에 설정" onSkip={() => setStep(2)} />
+              <StepNav onPrev={() => setStep(0)} onNext={() => setStep(2)} skipLabel="나중에 (직원 관리에서)" onSkip={() => setStep(2)} />
             </StepWrapper>
           )}
 
@@ -449,15 +446,15 @@ export default function Onboarding() {
                     {customServices.map((s, i) => (
                       <div key={i} className="flex gap-2 items-center">
                         <input value={s.name} onChange={e => updateCustomService(i, 'name', e.target.value)}
-                          className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                           placeholder="시술명" />
                         <input value={s.duration} onChange={e => updateCustomService(i, 'duration', e.target.value)}
-                          className="w-20 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 text-center"
+                          className="w-20 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 text-center"
                           placeholder="분" />
                         <input value={s.price} onChange={e => updateCustomService(i, 'price', e.target.value)}
-                          className="w-28 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 text-right"
+                          className="w-28 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 text-right"
                           placeholder="가격 (원)" />
-                        <button onClick={() => removeCustomService(i)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
+                        <button onClick={() => removeCustomService(i)} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors">
                           <X size={16} />
                         </button>
                       </div>
@@ -499,7 +496,7 @@ export default function Onboarding() {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                                    <p className="text-[11px] text-gray-400 truncate">{p.desc}</p>
+                                    <p className="text-xs text-slate-600 truncate">{p.desc}</p>
                                   </div>
                                   <div className="text-right flex-shrink-0">
                                     <p className="text-sm font-bold text-[#1a3a8f]">{p.price.toLocaleString()}원</p>
@@ -520,7 +517,7 @@ export default function Onboarding() {
                   <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
                     <Upload size={14} className="text-[#1a3a8f]" /> 엑셀/CSV 파일 업로드
                   </h3>
-                  <input ref={fileInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" onChange={handleExcelUpload} className="hidden" />
+                  <input ref={fileInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,text/csv,text/comma-separated-values,text/tab-separated-values,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={handleExcelUpload} className="hidden" />
                   <button onClick={() => fileInputRef.current?.click()}
                     className="w-full py-4 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-blue-300 hover:text-blue-400 transition-colors flex flex-col items-center gap-1.5">
                     <FileSpreadsheet size={24} />
@@ -552,7 +549,7 @@ export default function Onboarding() {
                   </div>
                 )}
               </div>
-              <StepNav onPrev={() => setStep(1)} onNext={() => setStep(3)} skipLabel="나중에 설정" onSkip={() => setStep(3)} />
+              <StepNav onPrev={() => setStep(1)} onNext={() => setStep(3)} skipLabel="나중에 (설정 > 시술 관리에서)" onSkip={() => setStep(3)} />
             </StepWrapper>
           )}
 
@@ -573,7 +570,7 @@ export default function Onboarding() {
                       <p className="text-sm font-semibold text-gray-900">{item.name}</p>
                       <p className="text-xs text-gray-400">{item.desc}</p>
                     </div>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-lg">나중에 설정</span>
+                    <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-lg">나중에 설정</span>
                   </div>
                 ))}
                 <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-600">
@@ -584,9 +581,9 @@ export default function Onboarding() {
             </StepWrapper>
           )}
 
-          {/* Step 4: 플랜 선택 (현재 무료 체험만 가능) */}
+          {/* Step 4: 무료 체험 시작 (플랜은 체험 뒤 설정에서 — 여기서 고를 것은 없다) */}
           {step === 4 && (
-            <StepWrapper title="요금제 선택" subtitle="14일 무료 체험으로 시작합니다">
+            <StepWrapper title="무료 체험 시작" subtitle="지금은 고를 것이 없어요 — 14일 무료 체험으로 시작하고, 유료 플랜은 체험 뒤 설정에서 바꿉니다">
               <div className="space-y-3">
                 {/* 무료 체험 - 선택됨 */}
                 <div className="w-full text-left p-4 rounded-xl border-2 border-[#1a3a8f] bg-blue-50">
@@ -606,10 +603,10 @@ export default function Onboarding() {
 
                 {/* 유료 플랜 - 준비 중 표시 */}
                 {PLANS.filter(p => p.id !== 'enterprise' && p.id !== 'trial').map(plan => (
-                  <div key={plan.id} className="w-full text-left p-4 rounded-xl border-2 border-gray-100 opacity-50">
+                  <div key={plan.id} className="w-full text-left p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50">
                     <div className="flex items-start gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        plan.id === 'starter' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'
+                        plan.id === 'starter' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-600'
                       }`}>
                         {planIcons[plan.id]}
                       </div>
@@ -636,29 +633,24 @@ export default function Onboarding() {
           {/* Step 5: 완료 */}
           {step === 5 && (
             <div className="p-8 text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-200">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#1a3a8f] to-blue-400 flex items-center justify-center mx-auto mb-6">
                 <CheckCircle size={36} className="text-white" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">설정 완료!</h2>
-              <p className="text-gray-400 mb-2 text-sm">{shopName} 의 에스테틱 CRM이 준비되었습니다</p>
-              <p className="text-xs text-blue-500 mb-2 font-medium">
+              <p className="text-gray-400 mb-2 text-sm">{shopName}의 에스테틱 CRM이 준비되었습니다</p>
+              <p className="text-xs text-primary-600 mb-2 font-medium">
                 {selectedPlan === 'trial'
                   ? '14일 무료 체험이 시작됩니다'
                   : `${PLANS.find(p => p.id === selectedPlan)?.name || ''} 플랜이 활성화되었습니다`}
               </p>
-              {selectedPlan !== 'trial' && (
-                <p className="text-xs text-green-600 mb-6 font-medium flex items-center justify-center gap-1">
-                  <CheckCircle size={12} /> 결제가 성공적으로 완료되었습니다
-                </p>
-              )}
               <div className="grid grid-cols-2 gap-3 mb-8 text-sm">
-                {['고객 관리 시작', '예약 등록', '직원 스케줄', 'AI 분석 챗봇'].map(f => (
+                {['고객 관리 시작', '예약 등록', '시술 기록·사진 비교', '매출·손익 관리'].map(f => (
                   <div key={f} className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl text-[#1a3a8f] font-medium">
                     <ChevronRight size={14} /> {f}
                   </div>
                 ))}
               </div>
-              <button onClick={finish} className="w-full py-3.5 bg-[#1a3a8f] text-white font-bold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 text-base">
+              <button onClick={finish} className="w-full py-3.5 bg-[#1a3a8f] text-white font-bold rounded-xl hover:bg-[#0d2260] transition-all text-base">
                 더마솔루션 시작하기
               </button>
             </div>
@@ -668,7 +660,7 @@ export default function Onboarding() {
 
       <style>{`
         .ob-label { display: block; font-size: 0.75rem; font-weight: 500; color: #4b5563; margin-bottom: 0.375rem; }
-        .ob-input { width: 100%; padding: 0.625rem 0.75rem; font-size: 0.875rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; outline: none; transition: all 0.15s; }
+        .ob-input { width: 100%; padding: 0.625rem 0.75rem; font-size: 1rem; border: 1px solid #e5e7eb; border-radius: 0.75rem; outline: none; transition: all 0.15s; }
         .ob-input:focus { box-shadow: 0 0 0 2px rgba(26,58,143,0.25); border-color: transparent; }
       `}</style>
     </div>
@@ -690,10 +682,10 @@ function StepNav({ onPrev, onNext, nextDisabled, skipLabel, onSkip }: {
 }) {
   return (
     <div className="flex gap-3 mt-8">
-      {onPrev && <button onClick={onPrev} className="px-6 py-2.5 bg-gray-100 text-gray-600 font-medium rounded-xl hover:bg-gray-200 text-sm">이전</button>}
+      {onPrev && <button onClick={onPrev} className="px-6 py-2.5 min-h-[44px] bg-gray-100 text-gray-600 font-medium rounded-xl hover:bg-gray-200 text-sm">이전</button>}
       <div className="flex-1" />
-      {skipLabel && onSkip && <button onClick={onSkip} className="px-4 py-2.5 text-gray-400 text-sm hover:text-gray-600">{skipLabel}</button>}
-      {onNext && <button onClick={onNext} disabled={nextDisabled} className="px-8 py-2.5 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-sm shadow-md shadow-blue-100">다음</button>}
+      {skipLabel && onSkip && <button onClick={onSkip} className="px-4 py-2.5 min-h-[44px] text-gray-500 text-sm hover:text-gray-700">{skipLabel}</button>}
+      {onNext && <button onClick={onNext} disabled={nextDisabled} className="px-8 py-2.5 min-h-[44px] bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-40 disabled:cursor-not-allowed text-sm">다음</button>}
     </div>
   );
 }

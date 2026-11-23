@@ -1,11 +1,14 @@
-import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2, Database, FileText, SlidersHorizontal } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
 import { resetFeatureFlags } from '../../lib/featureFlags';
+import { clearLocalPhotoCacheForLogout, confirmLogoutDespiteKeepLocal } from '../../lib/photoStore';
 import PasswordChangeGate from '../../components/PasswordChangeGate';
 import ToastHost from '../../components/ui/ToastHost';
+import ErrorBoundary from '../../components/ui/ErrorBoundary';
+import { usePreloadReload } from '../../hooks/usePreloadReload';
 
 // search가 있는 항목은 pathname+search까지 일치해야 활성 (통계 vs 전체 데이터 구분)
 const adminNav = [
@@ -22,6 +25,7 @@ const adminNav = [
 ];
 
 export default function AdminLayout() {
+  usePreloadReload(); // 어드민 콘솔(웹 배포)도 옛 지연 청크(차트) 404면 1회 새로고침
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,7 +36,7 @@ export default function AdminLayout() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
         <div className="max-w-md text-center space-y-4">
           <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto">
-            <span className="text-white text-xl font-black">T</span>
+            <span className="text-white text-xl font-bold">T</span>
           </div>
           <h1 className="text-xl font-bold text-white">관리자 전용 기능입니다</h1>
           <p className="text-sm text-slate-400 leading-relaxed">
@@ -41,7 +45,7 @@ export default function AdminLayout() {
             프로그램에서 이용해주세요.
           </p>
           <button
-            onClick={async () => { await logout(); navigate('/login'); }}
+            onClick={async () => { if (!confirmLogoutDespiteKeepLocal()) return; clearLocalPhotoCacheForLogout(); await logout(); navigate('/login'); }} // 지점 계정이 /admin을 직접 쳤을 때의 로그아웃 — 이 기기 보관 사진이 있으면 묻는다 (리뷰 2026-11-20)
             className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl transition-colors"
           >
             로그아웃하고 지점 계정으로 로그인
@@ -69,22 +73,30 @@ export default function AdminLayout() {
 
   const handleLogout = async () => {
     resetFeatureFlags(); // 같은 기기에서 지점 계정 재로그인 시 플래그 잔류 방지
+    clearLocalPhotoCacheForLogout();
     await logout();
     navigate('/admin/login');
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex">
+    <div className="min-h-screen bg-slate-950 lg:flex">
+      {/* 폰 폭(lg 미만): 사이드바·4열 카드가 고정 폭이라 글자가 세로로 쪼개진다 — 숨기지 말고 이유를 말한다 (4차 UX 점검 2026-11-19) */}
+      <div className="lg:hidden min-h-screen flex items-center justify-center p-6 text-center">
+        <div className="max-w-xs">
+          <p className="text-lg font-bold text-white mb-2">관리자 콘솔은 PC 화면에서 이용하세요</p>
+          <p className="text-sm text-slate-300 leading-relaxed">가로 1024px 이상(PC·태블릿 가로) 화면에 맞춰져 있습니다. 폰에서는 지점용 CRM 앱만 지원합니다.</p>
+        </div>
+      </div>
       {/* Admin Sidebar */}
-      <aside className="w-64 h-screen bg-slate-900 flex flex-col fixed left-0 top-0 z-30 border-r border-slate-700/50">
+      <aside className="hidden lg:flex w-64 h-screen bg-slate-900 flex-col fixed left-0 top-0 z-30 border-r border-slate-700/50">
         {/* Logo */}
         <div className="px-5 py-5 border-b border-slate-700/50">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm font-black">D</span>
+              <span className="text-white text-sm font-bold">D</span>
             </div>
             <div>
-              <p className="text-xs font-black tracking-widest text-white leading-tight">DERMASOLUTION</p>
+              <p className="text-xs font-bold tracking-widest text-white leading-tight">DERMASOLUTION</p>
               <p className="text-xs text-blue-400 font-medium">관리자 콘솔</p>
             </div>
           </div>
@@ -92,7 +104,7 @@ export default function AdminLayout() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">메뉴</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest px-3 mb-2">메뉴</p>
           <ul className="space-y-0.5">
             {adminNav.map(({ to, label, icon: Icon }) => {
               const active = isNavActive(to);
@@ -107,7 +119,7 @@ export default function AdminLayout() {
                         : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                     )}
                   >
-                    <Icon size={15} className={clsx('flex-shrink-0', active ? 'text-white' : 'text-slate-500')} />
+                    <Icon size={15} className={clsx('flex-shrink-0', active ? 'text-white' : 'text-slate-400')} />
                     <span className="flex-1">{label}</span>
                     {active && <ChevronRight size={12} className="text-white/50" />}
                   </Link>
@@ -141,9 +153,11 @@ export default function AdminLayout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 ml-64 min-h-screen overflow-x-hidden bg-slate-950">
+      <main className="hidden lg:block flex-1 ml-64 min-h-screen overflow-x-hidden bg-slate-950">
         <ToastHost />
-        <Outlet />
+        <ErrorBoundary resetKey={location.pathname + location.search}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, Sparkles, CheckCircle, Mail, Phone, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured } from '../../lib/authApi';
-import { isSupabaseConfigured, supabase } from '../../lib/supabase';
+import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
+import { useFocusTrap, useOverlayClose } from '../../lib/overlayStack';
 
 const features = [
   '고객 관리 · 예약 · 시술 기록 통합',
@@ -23,70 +24,13 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resetOpen, setResetOpen] = useState(false);
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-  const [resetError, setResetError] = useState('');
+  const resetRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(resetOpen, resetRef); // 재설정 창: 첫 입력란에 포커스, Tab 순환, 닫히면 열었던 링크로 (55)
+  useOverlayClose(resetOpen, () => setResetOpen(false)); // Android 뒤로가기·Esc — 로그인 화면은 라우터 back 대상이 없어 이게 유일한 닫기 경로
 
   const resetComplete = new URLSearchParams(location.search).get('reset') === 'success';
 
-  const openPasswordReset = () => {
-    setResetEmail(email.trim());
-    setResetError('');
-    setResetSent(false);
-    setResetOpen(true);
-  };
-
-  const handlePasswordReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const normalizedEmail = resetEmail.trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      setResetError('가입할 때 사용한 이메일을 입력해주세요.');
-      return;
-    }
-    setResetLoading(true);
-    setResetError('');
-    try {
-      if (isAuthApiConfigured) {
-        // NAS 중앙서버 모드 우선: 계정이 본사 서버에 있어 Supabase 재설정 메일은 영원히 도착하지 않음.
-        // 이 모드에서는 렌더 분기의 "본사 안내 모달"이 표시되므로 여기서는 아무것도 보내지 않는다.
-        setResetLoading(false);
-        return;
-      }
-      if (isSupabaseConfigured) {
-        // NAS 미배포 환경 폴백: Supabase 재설정 메일 (웹 /reset-password로 복귀)
-        const configuredUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.trim().replace(/\/$/, '');
-        const browserUrl = window.location.protocol === 'http:' || window.location.protocol === 'https:'
-          ? window.location.origin
-          : '';
-        const publicAppUrl = configuredUrl || browserUrl || 'https://troiareuke-crm.vercel.app';
-        const { error: resetRequestError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-          redirectTo: `${publicAppUrl}/reset-password`,
-        });
-        if (resetRequestError) throw resetRequestError;
-      } else {
-        setResetError('비밀번호 재설정 서버가 연결되어 있지 않습니다. 관리자에게 문의해주세요.');
-        setResetLoading(false);
-        return;
-      }
-      setResetSent(true);
-    } catch (e: any) {
-      const message = e?.message || '';
-      if (/rate limit|too many/i.test(message)) {
-        setResetError('요청이 너무 많습니다. 잠시 후 다시 시도해주세요.');
-      } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(message)) {
-        // 인터넷 문제와 서버(클라우드) 다운을 구분해 안내 — 잘못된 안내는 사용자를 헛수고시킴
-        setResetError(navigator.onLine
-          ? '클라우드 서버가 응답하지 않습니다. 서비스 점검 중이거나 일시정지 상태일 수 있으니 관리자에게 문의해주세요.'
-          : '인터넷 연결이 끊겨 있습니다. 네트워크 연결을 확인해주세요.');
-      } else {
-        setResetError('재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해주세요.');
-      }
-    } finally {
-      setResetLoading(false);
-    }
-  };
+  const openPasswordReset = () => setResetOpen(true);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,12 +41,12 @@ export default function Login() {
       navigate('/');
     } catch (e: any) {
       const msg = e?.message || '';
-      if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
+      if (e?.name === 'AbortError' || /aborted/i.test(msg)) {
+        setError('서버 응답이 없습니다(시간 초과). 인터넷 연결을 확인하고 잠시 후 다시 시도해주세요.');
+      } else if (/Failed to fetch|Network|ENOTFOUND|name not resolved/i.test(msg)) {
         setError('서버에 연결할 수 없습니다. 인터넷 연결 또는 관리자에게 문의해주세요.');
       } else if (/올바르지 않|Invalid|invalid_credentials/i.test(msg)) {
         setError('이메일 또는 비밀번호가 올바르지 않습니다.');
-      } else if (/Email not confirmed/i.test(msg)) {
-        setError('이메일 인증이 필요합니다. 가입 시 받은 메일에서 확인 링크를 클릭해주세요.');
       } else if (msg) {
         setError(`로그인 실패: ${msg}`);
       } else {
@@ -145,12 +89,12 @@ export default function Login() {
       </div>
 
       {/* Right Panel */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 bg-gray-50">
         <div className="w-full max-w-md">
           <div className="lg:hidden mb-8 flex justify-center">
             <TroiareukeLogo />
           </div>
-          <div className="bg-white rounded-3xl shadow-xl p-8">
+          <div className="bg-white rounded-3xl shadow-xl p-5 sm:p-8">
             <h1 className="text-2xl font-bold text-gray-900 mb-1">로그인</h1>
             <p className="text-sm text-gray-400 mb-8">더마솔루션에 오신 것을 환영합니다</p>
 
@@ -165,25 +109,27 @@ export default function Login() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">이메일</label>
+                <label htmlFor="login-email" className="block text-xs font-medium text-gray-600 mb-1.5">이메일</label>
                 <input
+                  id="login-email"
                   type="email" value={email} onChange={e => setEmail(e.target.value)}
                   inputMode="email"
                   autoComplete="email"
-                  className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent transition-all"
                   placeholder="example@email.com"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호</label>
+                <label htmlFor="login-password" className="block text-xs font-medium text-gray-600 mb-1.5">비밀번호</label>
                 <div className="relative">
                   <input
+                    id="login-password"
                     type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                     autoComplete="current-password"
-                    className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all pr-11"
+                    className="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent transition-all pr-11"
                     placeholder="비밀번호 입력"
                   />
-                  <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <button type="button" onClick={() => setShowPw(!showPw)} aria-label={showPw ? '비밀번호 숨기기' : '비밀번호 보기'} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
@@ -195,7 +141,7 @@ export default function Login() {
               </div>
               <button
                 type="submit" disabled={loading}
-                className="w-full min-h-[48px] py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all shadow-lg shadow-blue-200 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+                className="w-full min-h-[48px] py-3 bg-[#1a3a8f] text-white font-semibold rounded-xl hover:bg-[#0d2260] transition-all disabled:opacity-60 disabled:cursor-not-allowed mt-2"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -216,11 +162,14 @@ export default function Login() {
               </p>
             </div>
 
-            <div className="mt-4 text-center">
-              <Link to="/admin/login" className="text-[11px] text-gray-400 hover:text-blue-500 transition-colors">
-                관리자 로그인 →
-              </Link>
-            </div>
+            {/* 지점 원장(앱 안 '관리자' 배지)이 누르던 막다른 입구 — 본사용임을 밝히고, 지점 exe에서는 아예 숨긴다 (3차 UX 점검 2026-11-19) */}
+            {!BLOCK_ADMIN_UI && (
+              <div className="mt-4 text-center">
+                <Link to="/admin/login" className="text-xs text-gray-400 hover:text-primary-600 transition-colors">
+                  본사(트로이아르케) 관리자 로그인 →
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -231,9 +180,9 @@ export default function Login() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="password-reset-title"
-          onMouseDown={e => { if (e.target === e.currentTarget && !resetLoading) setResetOpen(false); }}
+          onMouseDown={e => { if (e.target === e.currentTarget) setResetOpen(false); }}
         >
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+          <div ref={resetRef} tabIndex={-1} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl outline-none">
             <div className="flex items-start justify-between gap-4">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#1a3a8f]">
                 {isAuthApiConfigured ? <Phone size={20} /> : <Mail size={20} />}
@@ -241,8 +190,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setResetOpen(false)}
-                disabled={resetLoading}
-                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                 aria-label="닫기"
               >
                 <X size={18} />
@@ -257,20 +205,7 @@ export default function Login() {
                   비밀번호를 잊으셨다면 <span className="font-semibold text-gray-700">본사 관리자에게 연락</span>해주세요.
                   본인 확인 후 임시 비밀번호를 발급해드리며, 로그인하신 뒤 설정에서 새 비밀번호로 변경하시면 됩니다.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setResetOpen(false)}
-                  className="mt-6 w-full rounded-xl bg-[#1a3a8f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0d2260]"
-                >
-                  확인
-                </button>
-              </div>
-            ) : resetSent ? (
-              <div className="mt-5">
-                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">메일을 확인해주세요</h2>
-                <p className="mt-2 text-sm leading-6 text-gray-500">
-                  가입된 이메일이면 비밀번호 재설정 링크가 발송됩니다. 메일이 보이지 않으면 스팸함도 확인해주세요.
-                </p>
+                <p className="mt-2 text-sm text-gray-500">문의: <a href="mailto:mkclub21@gmail.com" className="text-blue-600 underline">mkclub21@gmail.com</a></p>
                 <button
                   type="button"
                   onClick={() => setResetOpen(false)}
@@ -280,34 +215,21 @@ export default function Login() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handlePasswordReset} className="mt-5">
-                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">비밀번호 재설정</h2>
+              // 로컬(오프라인) 모드: 재설정 메일을 보낼 서버가 없다 (2026-11-17 Supabase 메일 경로 폐기)
+              <div className="mt-5">
+                <h2 id="password-reset-title" className="text-xl font-bold text-gray-900">비밀번호 재설정 안내</h2>
                 <p className="mt-2 text-sm leading-6 text-gray-500">
-                  가입할 때 사용한 이메일을 입력하면 새 비밀번호를 설정할 수 있는 링크를 보내드립니다.
+                  이 프로그램은 중앙 서버에 연결되어 있지 않아 재설정 메일을 보낼 수 없습니다.
+                  설치한 관리자에게 문의해주세요.
                 </p>
-                <label className="mt-5 block text-xs font-medium text-gray-600" htmlFor="reset-email">이메일</label>
-                <input
-                  id="reset-email"
-                  type="email"
-                  value={resetEmail}
-                  onChange={e => setResetEmail(e.target.value)}
-                  autoComplete="email"
-                  autoFocus
-                  required
-                  className="mt-1.5 w-full rounded-xl border border-gray-200 px-4 py-3 text-base focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  placeholder="example@email.com"
-                />
-                {resetError && (
-                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-600">{resetError}</div>
-                )}
                 <button
-                  type="submit"
-                  disabled={resetLoading}
-                  className="mt-5 w-full min-h-[48px] rounded-xl bg-[#1a3a8f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0d2260] disabled:cursor-not-allowed disabled:opacity-60"
+                  type="button"
+                  onClick={() => setResetOpen(false)}
+                  className="mt-6 w-full rounded-xl bg-[#1a3a8f] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0d2260]"
                 >
-                  {resetLoading ? '메일 보내는 중...' : '재설정 메일 보내기'}
+                  확인
                 </button>
-              </form>
+              </div>
             )}
           </div>
         </div>
@@ -323,7 +245,7 @@ export function TroiareukeLogo({ white = false }: { white?: boolean }) {
         <Sparkles size={18} className={white ? 'text-white' : 'text-white'} />
       </div>
       <div>
-        <p className={`text-sm font-black tracking-wider leading-tight ${white ? 'text-white' : 'text-[#1a3a8f]'}`}>DERMASOLUTION</p>
+        <p className={`text-sm font-bold tracking-wider leading-tight ${white ? 'text-white' : 'text-[#1a3a8f]'}`}>DERMASOLUTION</p>
         <p className={`text-xs font-medium tracking-wide ${white ? 'text-blue-200' : 'text-gray-400'}`}>에스테틱 전용 CRM</p>
       </div>
     </div>

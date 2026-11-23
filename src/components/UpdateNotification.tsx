@@ -134,7 +134,7 @@ export default function UpdateNotification() {
         )}
 
         {state === 'error' && (
-          <div className="bg-red-500 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3">
+          <div className="bg-red-600 text-white rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3">
             <X className="w-5 h-5 flex-shrink-0" />
             <p className="flex-1 text-sm">{errorMessage || '업데이트에 실패했습니다. 잠시 후 다시 시도해주세요.'}</p>
             <button onClick={() => setDismissed(true)} className="p-1 hover:bg-red-400 rounded-lg" aria-label="닫기">
