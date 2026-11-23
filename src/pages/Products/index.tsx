@@ -2,6 +2,7 @@
 import { tagRefund } from '../../lib/refundDate';
 import { canceledSaleIds } from '../../lib/saleCancel';
 import { saleCustomerName } from '../../lib/customerIdentity';
+import { askConfirm } from '../../lib/confirmDialog';
 import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
@@ -55,8 +56,13 @@ export default function Products() {
     setPayments(PaymentStore.getAll());
   }, []);
 
-  const handleDeleteProduct = (product: Product) => {
-    if (!window.confirm(`'${product.name}' 제품을 삭제할까요?\n판매 기록은 남지만 재고 항목은 복구할 수 없습니다.`)) return;
+  const handleDeleteProduct = async (product: Product) => {
+    // 제품을 지우면 그 판매를 나중에 [판매 취소]해도 재고를 돌려줄 대상이 없다 — 판매만 멈추려면 비활성 (11차 #M9)
+    const linked = sales.filter(s => s.productId === product.id).length;
+    const detail = linked > 0
+      ? `\n연결된 판매 기록 ${linked}건은 남지만, 삭제 뒤에는 그 판매를 취소해도 재고가 복구되지 않습니다.\n판매만 멈추려면 삭제 대신 [수정]에서 '판매 활성'을 끄세요.`
+      : '\n재고 항목은 복구할 수 없습니다.';
+    if (!(await askConfirm({ title: '제품 삭제', message: `'${product.name}' 제품을 삭제할까요?${detail}`, confirmLabel: '삭제', danger: true }))) return;
     ProductStore.delete(product.id);
     refresh();
   };
@@ -722,7 +728,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
 // ─── 제품 판매 모달 ──────────────────────────────────────────────
 function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
   const { user: authUser } = useAuth();
-  const customers = CustomerStore.getAll();
+  const customers = CustomerStore.getAll().filter(c => c.isActive !== false); // 익명화('탈퇴고객')·퇴점 고객은 새 판매 대상이 아니다 — 예약 폼과 같은 규칙 (11차 #M11)
 
   const [form, setForm] = useState({
     customerId: '',

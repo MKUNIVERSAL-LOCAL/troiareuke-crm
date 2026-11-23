@@ -10,7 +10,7 @@ import {
   Scissors, ChevronDown, Tag,
   Sparkles, Activity, Download, Pencil, Trash2, Upload, Camera, Loader2, Send, Images, ArrowLeftRight, CreditCard, CalendarPlus, GitMerge, MessageSquare, MoreHorizontal, UserX, FileText
 } from 'lucide-react';
-import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, ServiceStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
+import { CustomerStore, ProgramStore, CustomerProgramStore, TreatmentLogStore, StaffStore, MessageHistoryStore, SettingsStore, PaymentStore, ReservationStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import {
@@ -972,28 +972,8 @@ export default function Customers() {
     setDetailTick(t => t + 1);
     runAutoPromote(); // 첫 화면을 그린 뒤 백그라운드로
     setCustomers(CustomerStore.getAll());
-    // Pull from ProgramStore first; if empty, create Program-like entries from ServiceStore
-    const storePrograms = ProgramStore.getAll().filter(p => p.isActive);
-    if (storePrograms.length > 0) {
-      setPrograms(storePrograms);
-    } else {
-      // Fallback: convert ServiceStore entries to Program-compatible objects
-      const services = ServiceStore.getAll().filter(s => s.isActive);
-      const serviceAsPrograms: Program[] = services.map(s => ({
-        id: s.id,
-        shopId: '',
-        name: s.name,
-        category: s.category || '',
-        totalSessions: null,
-        validityDays: null,
-        price: s.price,
-        costPrice: 0,
-        color: '#1a3a8f',
-        isActive: true,
-        createdAt: '',
-      }));
-      setPrograms(serviceAsPrograms);
-    }
+    // 활성 프로그램만 — 0건일 때 시술 메뉴를 프로그램처럼 보여 주던 폴백은 제거: 총회차 null(무제한)·만료 없는 회차권이 Service id 로 만들어졌다 (11차 #M6)
+    setPrograms(ProgramStore.getAll().filter(p => p.isActive));
   }
 
   // 보존기간 경과 고객 id — 고객 목록이나 정책이 바뀔 때만 재계산
@@ -1260,7 +1240,7 @@ export default function Customers() {
           added++;
         });
         loadAll();
-        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 중복${masked > 0 ? `, 가린 전화번호 ${masked}건` : ''}).`);
+        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 이미 있는 전화번호${masked > 0 ? `, 가린 전화번호 ${masked}건` : ''}). 기존 고객 정보는 바뀌지 않습니다(신규 추가 전용).`);
       } catch (err) {
         notify('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
       } finally {
@@ -2738,13 +2718,19 @@ export default function Customers() {
                   }}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                 >
-                  <option value="">프로그램을 선택하세요</option>
+                  <option value="">{programs.length === 0 ? '등록할 수 있는 활성 프로그램이 없습니다' : '프로그램을 선택하세요'}</option>
                   {programs.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} — {p.price.toLocaleString('ko-KR')}원
+                      {p.name} — {formatPrice(p.price)}
                     </option>
                   ))}
                 </select>
+                {programs.length === 0 && (
+                  <p className="mt-1.5 text-xs text-amber-700">
+                    먼저 시술 프로그램을 등록(또는 활성)하세요.{' '}
+                    <button type="button" onClick={() => { setShowProgramModal(false); navigate('/programs'); }} className="underline font-medium">시술 프로그램으로 이동</button>
+                  </p>
+                )}
               </div>
 
               {selectedProgForForm && (

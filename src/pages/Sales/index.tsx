@@ -1102,7 +1102,7 @@ export default function Sales() {
               {/* 고객 선택 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">고객</label>
-                <CustomerCombobox customers={customers} value={form.customerId} onChange={id => setForm(f => ({ ...f, customerId: id }))} maskRole={authUser?.role ?? 'staff'} placeholder="이름·전화번호 검색 (선택사항)" />
+                <CustomerCombobox customers={customers.filter(c => c.isActive !== false || c.id === form.customerId)} value={form.customerId} onChange={id => setForm(f => ({ ...f, customerId: id }))} maskRole={authUser?.role ?? 'staff'} placeholder="이름·전화번호 검색 (선택사항)" /> {/* 익명화 고객은 새 결제 대상에서 빼되 수정 중인 결제의 고객은 남긴다 (11차 #M11) */}
               </div>
 
               {/* 금액 */}

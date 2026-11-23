@@ -170,6 +170,10 @@ export interface ShopPreferences {
   apiGuideStatus?: Record<string, 'connected' | 'pending' | 'not-started'>;
   /** 개인정보 처리 기록(익명화·병합) — 파기 대장. 지점 설정에 두어 서버 동기·PC 교체·로그아웃 wipe 와 무관 (9차 점검 #29, 리뷰 2026-11-20) */
   privacyActions?: { id: string; at: string; type: 'anonymize' | 'merge'; count: number; actor: string; detail?: string }[];
+  /** 직원 이름 변경 이력 staffId → 옛 이름들 — 제품 판매 행은 수정 API 가 없어(코어) 옛 담당자 이름으로 남으므로 실적 집계가 별칭으로 찾는다 (11차 #M2) */
+  staffAliases?: Record<string, string[]>;
+  /** 병합으로 사라진 고객 id → 남은 고객 id — 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 (11차 #M10) */
+  mergedCustomerIds?: Record<string, string>;
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
   retentionPolicy?: { enabled: boolean; years: number };
 }

@@ -498,7 +498,7 @@ export default function Dashboard() {
                       <p className="text-xs text-gray-400">{r.endTime}</p>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
-                      <span className="text-white text-xs font-bold">{r.customerName[0]}</span>
+                      <span className="text-white text-xs font-bold">{(r.customerName || '?')[0]}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">

@@ -4,6 +4,9 @@
 import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
 import { ConsultationStore } from './consultationStore';
 import { getPhotos, clearPhotos } from './photoStore';
+import { getPreference, setPreference } from './shopPreferences';
+import { resyncGcalEvents } from './gcalEventMap';
+import { todayISO } from './format';
 import type { ProductSale } from '../types';
 
 /** 삭제된 고객의 기록에 남기는 이름 — 실명을 남기지 않되 '탈퇴고객'(익명화)과 구분한다 */
@@ -20,7 +23,31 @@ export function propagateCustomerIdentity(customerId: string, next: { name: stri
   for (const cp of CustomerProgramStore.getByCustomer(customerId)) if (cp.customerName !== next.name) { CustomerProgramStore.update(cp.id, { customerName: next.name }); n++; }
   for (const p of PaymentStore.getAll()) if (p.customerId === customerId && p.customerName !== next.name) { PaymentStore.update(p.id, { customerName: next.name }); n++; }
   for (const c of ConsultationStore.getByCustomer(customerId)) if (c.customerName !== next.name) { ConsultationStore.update(c.id, { customerName: next.name }); n++; }
+  // 공유 Google 캘린더의 앞으로의 일정도 새 이름으로 (11차 #M8)
+  const today = todayISO();
+  resyncGcalEvents(ReservationStore.getAll().filter(r => r.customerId === customerId && r.date >= today && r.status !== 'cancelled'));
   return n;
+}
+
+/** 병합으로 사라진 고객 id 를 기록 — 옮길 수 없는 제품 판매 행(코어)을 읽을 때 되짚는다 (11차 #M10) */
+export function recordMergedCustomer(sourceId: string, targetId: string): void {
+  const map = mergedCustomerIds();
+  const next: Record<string, string> = { ...map, [sourceId]: targetId };
+  for (const [k, v] of Object.entries(map)) if (v === sourceId) next[k] = targetId; // 이전에 source 로 합쳐진 것도 target 으로
+  setPreference('mergedCustomerIds', next);
+}
+
+function mergedCustomerIds(): Record<string, string> {
+  const v = getPreference('mergedCustomerIds');
+  return v && typeof v === 'object' ? v : {};
+}
+
+/** 병합 사슬을 따라 현재 살아 있는 고객 id 로 (최대 10단계) */
+export function resolveCustomerId(id: string): string {
+  const map = mergedCustomerIds();
+  let cur = id;
+  for (let i = 0; i < 10 && map[cur]; i++) cur = map[cur];
+  return cur;
 }
 
 /** 고객 삭제 직전 정리 — 시술·상담의 얼굴 사진을 지우고(개별 삭제·익명화와 같은 규칙) 남는 기록의 이름·전화를 '삭제된 고객'으로. 기록 자체는 매출 통계를 위해 남는다 */
@@ -35,5 +62,5 @@ export function scrubCustomerBeforeDelete(customerId: string): { photos: number;
  *  고객이 없으면(삭제·병합) '삭제된 고객', 고객 연결이 없는 비회원 판매만 저장 사본 */
 export function saleCustomerName(sale: Pick<ProductSale, 'customerId' | 'customerName'>): string {
   if (!sale.customerId) return sale.customerName || '';
-  return CustomerStore.getById(sale.customerId)?.name ?? DELETED_CUSTOMER_NAME;
+  return CustomerStore.getById(resolveCustomerId(sale.customerId))?.name ?? DELETED_CUSTOMER_NAME;
 }

@@ -7,6 +7,10 @@ import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import StaffPerformanceCard from '../../components/StaffPerformanceCard';
 import { StaffStore, ReservationStore, TreatmentLogStore } from '../../lib/store';
+import { ConsultationStore } from '../../lib/consultationStore';
+import { recordStaffAlias } from '../../lib/staffAliases';
+import { resyncGcalEvents } from '../../lib/gcalEventMap';
+import { askConfirm } from '../../lib/confirmDialog';
 import { todayISO, thisYearMonthISO, formatPhoneInput, formatPrice } from '../../lib/format';
 import type { Staff } from '../../types';
 
@@ -465,11 +469,19 @@ function StaffDetailModal({
       const sameName = StaffStore.getAll().some(s => s.id !== staff.id && s.name.trim() === staff.name.trim());
       const logs = sameName ? [] : TreatmentLogStore.getAll().filter(t => t.staffName === staff.name);
       logs.forEach(t => TreatmentLogStore.update(t.id, { staffName: newName }));
-      if (sameName) notify('같은 이름의 다른 직원이 있어 과거 시술 기록의 담당자 이름은 바꾸지 않았습니다(기록은 그 직원 이름으로 남습니다).');
+      // 상담 기록의 담당자도 이름 사본 (11차 #M3)
+      const consults = sameName ? [] : ConsultationStore.getAll().filter(c => c.staffName === staff.name);
+      consults.forEach(c => ConsultationStore.update(c.id, { staffName: newName }));
+      if (sameName) notify('같은 이름의 다른 직원이 있어 과거 시술·상담 기록의 담당자 이름은 바꾸지 않았습니다(기록은 그 직원 이름으로 남습니다).');
       // 예약도 담당자 이름을 비정규화해 들고 있다(타임라인·완료 누락 카드·예약 카드 표시) (정합성 감사 2026-11-19)
       const resv = ReservationStore.getAll().filter(r => r.staffId === staff.id && r.staffName !== newName);
       resv.forEach(r => ReservationStore.update(r.id, { staffName: newName }));
-      if (logs.length > 0 || resv.length > 0) notify(`시술 기록 ${logs.length}건·예약 ${resv.length}건의 담당자 이름도 '${newName}'(으)로 바꿨습니다.`);
+      if (logs.length > 0 || resv.length > 0 || consults.length > 0) notify(`시술 기록 ${logs.length}건·예약 ${resv.length}건${consults.length > 0 ? `·상담 ${consults.length}건` : ''}의 담당자 이름도 '${newName}'(으)로 바꿨습니다.`);
+      // 제품 판매 행은 옛 이름으로 남으므로(코어) 실적 집계가 되짚을 별칭을 남긴다 (11차 #M2)
+      if (!sameName) recordStaffAlias(staff.id, staff.name);
+      // 공유 Google 캘린더의 앞으로의 일정도 새 담당자 이름으로 (11차 #M8)
+      const today = todayISO();
+      resyncGcalEvents(ReservationStore.getAll().filter(r => r.staffId === staff.id && r.date >= today && r.status !== 'cancelled'));
     }
     StaffStore.update(staff.id, {
       name: name.trim(),
@@ -499,13 +511,14 @@ function StaffDetailModal({
     if (leaving) notify.info('퇴사 처리했습니다.'); else notify.success('복직 처리했습니다.');
     onUpdate();
   };
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const linkedRes = ReservationStore.getAll().filter(r => r.staffId === staff.id).length;
     const linkedLogs = TreatmentLogStore.getAll().filter(t => t.staffName === staff.name).length;
+    // 삭제된 직원은 예약 폼의 담당자 목록에 못 들어가 그 예약은 담당자를 바꾸지 않으면 저장이 막힌다 — 미리 알린다 (11차 #M4)
     const detail = linkedRes + linkedLogs > 0
-      ? `\n연결된 예약 ${linkedRes}건·시술 기록 ${linkedLogs}건은 남지만 담당자 연결이 끊겨 직원 실적·필터에서 빠집니다. 퇴사한 직원이라면 [퇴사 처리]를 권장합니다.`
+      ? `\n연결된 예약 ${linkedRes}건·시술 기록 ${linkedLogs}건은 남지만 담당자 연결이 끊겨 직원 실적·필터에서 빠지고, 이 직원이 담당인 예약은 담당자를 바꾸지 않으면 수정할 수 없게 됩니다.\n퇴사한 직원이라면 [퇴사 처리]를 권장합니다 — 기록·실적이 그대로 남습니다.`
       : '';
-    if (!window.confirm(`"${staff.name}" 직원을 삭제할까요?${detail}\n복구할 수 없습니다.`)) return;
+    if (!(await askConfirm({ title: '직원 삭제', message: `"${staff.name}" 직원을 삭제할까요?${detail}\n복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
     StaffStore.delete(staff.id);
     onDelete();
   };

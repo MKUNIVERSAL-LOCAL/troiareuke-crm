@@ -11,7 +11,8 @@ import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
-import { SettingsStore, ServiceStore, getShopId } from '../../lib/store';
+import { SettingsStore, ServiceStore, ReservationStore, getShopId } from '../../lib/store';
+import { askConfirm } from '../../lib/confirmDialog';
 import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured, updateAuthProfile } from '../../lib/authApi';
@@ -597,9 +598,14 @@ export default function Settings() {
     flash(editingService ? '수정 완료' : '추가 완료');
   };
 
-  const handleDeleteService = (id: string) => {
+  const handleDeleteService = async (id: string) => {
     const svc = services.find(sv => sv.id === id);
-    if (!confirm(`${svc ? `'${svc.name}' 시술` : '이 시술'}을 삭제할까요?\n예약·시술 기록에 남은 시술명은 그대로 유지됩니다.`)) return;
+    // 삭제된 메뉴가 걸린 예약은 폼의 시술 목록에 못 들어가 시간·메모 수정도 막힌다(다른 메뉴로 바꾸면 금액이 현재가로 덮임) — 판매만 멈추려면 비활성 (11차 #M5)
+    const linked = ReservationStore.getAll().filter(r => (r.services ?? []).some(sv => sv.serviceId === id)).length;
+    const detail = linked > 0
+      ? `\n이 시술이 걸린 예약 ${linked}건은 시술명은 남지만 시술을 바꾸지 않으면 수정할 수 없게 됩니다.\n판매만 멈추려면 삭제 대신 [비활성]을 권장합니다.`
+      : '\n예약·시술 기록에 남은 시술명은 그대로 유지됩니다.';
+    if (!(await askConfirm({ title: '시술 메뉴 삭제', message: `${svc ? `'${svc.name}' 시술` : '이 시술'}을 삭제할까요?${detail}`, confirmLabel: '삭제', danger: true }))) return;
     ServiceStore.delete(id);
     setServices(ServiceStore.getAll());
     flash('삭제 완료');

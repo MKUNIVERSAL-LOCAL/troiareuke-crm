@@ -127,7 +127,7 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
               <p>예약 {preview.reservations} · 시술 {preview.treatments} · 프로그램 {preview.programs} · 결제 {preview.payments} · 상담 {preview.consultations} (총 {total}건)</p>
               <p>방문 횟수·메모·태그는 합쳐지고, 등급은 높은 쪽·등록일은 이른 쪽을 따르며, 비어 있는 정보(이메일·주소·생년월일 등)는 {source.name} 고객 값으로 채워집니다.</p>
               <p>누적 결제액은 완료된 결제 기록 기준 {formatPrice(preview.completedAmount)}이 더해집니다{spentMismatch ? ` (이 고객 화면의 누적 ${formatPrice(source.totalSpent || 0)}과 다름 — 결제 기록 없는 금액은 옮겨지지 않음)` : ''}.</p>
-              {preview.productSales > 0 && <p className="font-semibold">제품 판매 {preview.productSales}건은 옮겨지지 않고 {source.name} 이름으로 남습니다.</p>}
+              {preview.productSales > 0 && <p className="font-semibold">제품 판매 {preview.productSales}건은 저장 행을 옮길 수 없지만 화면·엑셀에서는 {target.name} 고객으로 보입니다.</p>}
               {pendingRequests > 0 && <p className="font-semibold text-red-700">미결 결제 요청(링크) {pendingRequests}건이 있어 병합할 수 없습니다. 결제 링크 화면에서 취소하거나 완료된 뒤 다시 시도하세요.</p>}
               {serverCheckFailed && <p className="font-semibold text-red-700">서버의 결제 요청·상담 기록을 확인하지 못했습니다. 네트워크를 확인한 뒤 다시 열어주세요.</p>}
               {serverChecking && <p className="text-gray-500">서버 기록을 확인하는 중...</p>}

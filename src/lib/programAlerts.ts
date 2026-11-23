@@ -5,7 +5,7 @@
 // 대시보드에 모아 보여주고, 재구매 안내 문구 초안을 만든다(발송은 복사/공유 — 발송사 연동 후 자동).
 // ═══════════════════════════════════════════════════════════════
 
-import { CustomerStore, CustomerProgramStore, SettingsStore } from './store';
+import { CustomerStore, CustomerProgramStore, SettingsStore, ProgramStore } from './store';
 import type { Customer, CustomerProgram } from '../types';
 
 export const EXPIRY_WINDOW_DAYS = 14;
@@ -68,11 +68,13 @@ export function getProgramAlerts(today = new Date()): ProgramAlert[] {
 export function buildProgramMessage(alert: ProgramAlert): string {
   const shop = SettingsStore.get().name || '저희 샵';
   const { customer, program, remaining, daysToExpiry, reason } = alert;
+  // 고객에게 나가는 문구는 지금 파는 이름으로 — 회차권 카드의 programName 은 구매 당시 사본이라 개명한 상품명이 반영되지 않는다 (11차 #M7)
+  const name = (program.programId && ProgramStore.getById(program.programId)?.name) || program.programName;
   const lines = [`${customer.name}님, 안녕하세요. ${shop}입니다.`];
-  if (reason === 'exhausted') lines.push(`이용 중이신 "${program.programName}" 회차를 모두 사용하셨어요.`);
-  else if (reason === 'low') lines.push(`이용 중이신 "${program.programName}" 잔여 회차가 ${remaining}회 남았어요.`);
-  else if (reason === 'expired') lines.push(`"${program.programName}" 이용 기간이 지났어요.`);
-  else lines.push(`"${program.programName}" 이용 기간이 ${daysToExpiry === 0 ? '오늘' : `${daysToExpiry}일 뒤`} 끝나요.`);
+  if (reason === 'exhausted') lines.push(`이용 중이신 "${name}" 회차를 모두 사용하셨어요.`);
+  else if (reason === 'low') lines.push(`이용 중이신 "${name}" 잔여 회차가 ${remaining}회 남았어요.`);
+  else if (reason === 'expired') lines.push(`"${name}" 이용 기간이 지났어요.`);
+  else lines.push(`"${name}" 이용 기간이 ${daysToExpiry === 0 ? '오늘' : `${daysToExpiry}일 뒤`} 끝나요.`);
   lines.push('재등록하시면 관리 흐름이 끊기지 않도록 일정을 바로 잡아드릴게요. 편한 시간을 알려주세요 :)');
   return lines.join('\n');
 }

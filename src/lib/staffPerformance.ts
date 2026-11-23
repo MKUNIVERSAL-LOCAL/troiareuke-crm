@@ -11,6 +11,7 @@
 import { StaffStore, ReservationStore, TreatmentLogStore, ProductSaleStore, PaymentStore } from './store';
 import { thisYearMonthISO, todayISO, formatPrice } from './format';
 import { canceledSaleIds } from './saleCancel';
+import { staffAliases } from './staffAliases';
 
 export interface StaffMonthStat {
   staffId: string;
@@ -76,6 +77,12 @@ export function getStaffMonthReport(yearMonth = thisYearMonthISO()): StaffMonthR
     if (!existing) { byName.set(key, s); continue; }
     if (existing.isActive && s.isActive) ambiguousNames.add(key);
     else if (!existing.isActive && s.isActive) byName.set(key, s);
+  }
+  // 옛 이름(직원 이름 변경 이력) — 제품 판매 행은 옛 담당자 이름으로 남으므로 별칭으로 찾는다. 현재 이름과 겹치면 현재 이름 우선 (11차 #M2)
+  for (const [id, names] of Object.entries(staffAliases())) {
+    const st = byId.get(id);
+    if (!st) continue;
+    for (const raw of names) { const key = raw.trim(); if (key && !byName.has(key)) byName.set(key, st); }
   }
   const resolveName = (raw: string | undefined): { staff?: (typeof staff)[number]; ambiguous: boolean } => {
     const key = (raw || '').trim();
