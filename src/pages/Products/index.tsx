@@ -4,7 +4,7 @@ import { canceledSaleIds } from '../../lib/saleCancel';
 import { saleCustomerNameResolver } from '../../lib/customerIdentity';
 import { askConfirm } from '../../lib/confirmDialog';
 import { canDo } from '../../lib/permissions';
-import { parseAmount, parseCount } from '../../lib/inputRules';
+import { parseAmount, parseCount, isISODate } from '../../lib/inputRules';
 import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
@@ -755,6 +755,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
   const selectedCustomer = customers.find(c => c.id === form.customerId);
 
   const handleSubmit = () => {
+    if (!isISODate(form.saleDate)) { notify('판매일을 선택해주세요(YYYY-MM-DD).'); return; } // 빈 판매일은 월 매출·목록에서 사라지는 유령 판매 (120~122 리뷰 #M8)
     if (!form.unitPrice || !form.quantity) {
       notify('수량과 단가를 입력해주세요.');
       return;
@@ -874,8 +875,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             <label className="block text-xs font-medium text-gray-600 mb-1.5">판매일</label>
             <input
               type="date"
-              aria-label="판매일"
-              value={form.saleDate}
+              aria-label="판매일" required value={form.saleDate}
               onChange={e => set('saleDate', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
             />

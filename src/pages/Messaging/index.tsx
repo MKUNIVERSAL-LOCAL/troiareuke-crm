@@ -828,7 +828,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
-    if (recipientPhones.length === 0) { notify('전화번호가 있는 수신 대상이 없습니다. 고객 정보의 전화번호를 확인해주세요.'); return; }
+    if (recipientPhones.length === 0) { notify('발송할 수 있는 전화번호가 없습니다(10~11자리 휴대폰 번호만). 고객 정보의 전화번호를 확인해주세요.'); return; }
     // 개별 발송(고객 상세에서 열었을 때)은 {고객명}을 그 고객 이름으로 바꾼다 — 단체 발송은 수신자별 치환이 없으므로 그대로 두지 않고 막는다 (UX 점검 2026-11-19)
     const finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
     // 종류는 실제로 나가는 문자열 기준 — 이름 치환으로 길어지거나 공백 정리로 짧아질 수 있다 (리뷰 60)
@@ -843,7 +843,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     // 발송은 되돌릴 수 없다 — 대상·인원을 한 번 더 확인 (전체 고객이 기본 대상이라 특히) (UX 점검 2026-11-19)
     const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode)} ${recipientPhones.length}명`;
     const action = scheduleMode === 'later' && isScheduleAvailable ? '예약 발송을 등록' : '지금 발송';
-    if (!window.confirm(`${target}에게 ${sendType === 'sms' ? 'SMS' : sendType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(전화번호 없는 ${excludedCount}명 제외)` : ''}`)) return;
+    if (!window.confirm(`${target}에게 ${sendType === 'sms' ? 'SMS' : sendType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(번호가 없거나 10~11자리가 아닌 ${excludedCount}명 제외)` : ''}`)) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
@@ -1148,7 +1148,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-500">발송 대상 (전화번호 있는 고객)</p>
-              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientPhones.length}명{excludedCount > 0 && <span className="ml-1.5 text-xs font-normal text-amber-700">전화번호 없는 {excludedCount}명 제외</span>}</p>
+              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientPhones.length}명{excludedCount > 0 && <span className="ml-1.5 text-xs font-normal text-amber-700">번호 없음·자릿수 불가 {excludedCount}명 제외 제외</span>}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">예상 발송 비용</p>

@@ -38,7 +38,7 @@ const ROUTE_ACTIONS: ReadonlyArray<[string, Action]> = [
 
 export function actionForRoute(pathname: string): Action | null {
   // react-router 라우트는 대소문자를 가리지 않으므로(/SETTINGS 도 설정 화면) 여기서도 소문자·후행 슬래시를 정리한다 (117~119 리뷰 #H1)
-  const p = pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  const p = pathname.toLowerCase().split(/[?#]/)[0].replace(/\/+$/, '') || '/'; // '/settings?tab=shop' 같은 메뉴 링크도 같은 판정 — 체크리스트가 직원에게 남아 있었다 (120~122 리뷰 #H1)
   const hit = ROUTE_ACTIONS.find(([q]) => p === q || p.startsWith(q + '/'));
   return hit ? hit[1] : null;
 }

@@ -28,7 +28,7 @@ import PaymentLinkModal from '../../components/PaymentLinkModal';
 import { isPaymentLinkAvailable, fetchPgConfig } from '../../lib/paymentLinks';
 import { growthPct } from '../../lib/growth';
 import { tagRefund, refundedOn, memoWithoutRefundTag } from '../../lib/refundDate';
-import { parseAmount, isISODate, DATE_REQUIRED_MESSAGE } from '../../lib/inputRules';
+import { parseAmount, isISODate } from '../../lib/inputRules';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -385,14 +385,15 @@ export default function Sales() {
     const customer = customers.find(c => c.id === form.customerId);
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
 
-    if (!isISODate(form.paymentDate)) { notify('결제일을 선택해주세요. ' + DATE_REQUIRED_MESSAGE); return; } // 빈 결제일은 어떤 달에도 안 잡혀 매출에서 영구 누락 (14차 #H3)
+    if (!isISODate(form.paymentDate)) { notify('결제일을 선택해주세요(YYYY-MM-DD).'); return; } // 빈 결제일은 어떤 달에도 안 잡혀 매출에서 영구 누락 (14차 #H3)
     const amount = parseAmount(form.amount) ?? NaN; // "50 000"→50원 같은 조용한 손실 대신 거부 (14차 #H6)
     const zeroAllowed = !!editingId && editingPayment?.amount === 0; // 0원 이벤트 회차권 결제는 메모·수단만 고칠 수 있게 (정합성 감사 2026-11-19)
     if (Number.isNaN(amount) || amount < 0 || (amount === 0 && !zeroAllowed)) {
       notify('결제 금액을 0보다 큰 숫자로 입력해주세요. (쉼표·공백·원 표기는 자동 정리됩니다)');
       return;
     }
-    const discountAmount = parseAmount(form.discountAmount) ?? 0;
+    const discountAmount = form.discountAmount.trim() === '' || form.discountAmount === '0' ? 0 : parseAmount(form.discountAmount);
+    if (discountAmount === null) { notify('할인 금액을 0 이상 정수로 입력해주세요.'); return; } // 결제 금액과 같은 기준 — '1500.9'·'-100' 이 조용히 0 이 되던 것 (120~122 리뷰 #L3)
 
     const payload = {
       customerId: form.customerId || undefined,
@@ -488,7 +489,7 @@ export default function Sales() {
 
   function handleExpenseSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!isISODate(expenseForm.expenseDate)) { notify('지출일을 선택해주세요. ' + DATE_REQUIRED_MESSAGE); return; } // (14차 #H3)
+    if (!isISODate(expenseForm.expenseDate)) { notify('지출일을 선택해주세요(YYYY-MM-DD).'); return; } // (14차 #H3)
     const amount = parseAmount(expenseForm.amount) ?? NaN;
     if (Number.isNaN(amount) || amount <= 0) {
       notify('지출 금액을 0보다 큰 숫자로 입력해주세요.');
@@ -1117,7 +1118,7 @@ export default function Sales() {
                   <input aria-label="결제 금액"
                     required
                     type="text"
-                    value={form.amount && !Number.isNaN(parseInt(form.amount, 10)) ? parseInt(form.amount, 10).toLocaleString('ko-KR') : ''}
+                    value={form.amount ? (parseAmount(form.amount)?.toLocaleString('ko-KR') ?? form.amount) : ''} /* 표시도 저장과 같은 규칙 — "50 000" 이 50 으로 보이고 50,000 으로 저장되던 불일치 (120~122 리뷰 #M6); 못 읽는 값은 원문 그대로 보여 거부 이유가 드러나게 */
                     onChange={e => setForm(f => ({ ...f, amount: e.target.value.replace(/,/g, '') }))}
                     className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"
@@ -1140,7 +1141,7 @@ export default function Sales() {
                 <div className="relative">
                   <input aria-label="할인 금액"
                     type="text"
-                    value={form.discountAmount && form.discountAmount !== '0' && !Number.isNaN(parseInt(form.discountAmount, 10)) ? parseInt(form.discountAmount, 10).toLocaleString('ko-KR') : ''}
+                    value={form.discountAmount && form.discountAmount !== '0' ? (parseAmount(form.discountAmount)?.toLocaleString('ko-KR') ?? form.discountAmount) : ''}
                     onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value.replace(/,/g, '') || '0' }))}
                     className="w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300"
                     placeholder="0"

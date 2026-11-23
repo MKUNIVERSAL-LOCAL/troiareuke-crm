@@ -114,7 +114,7 @@ export default function Onboarding() {
   useEffect(() => {
     if (!hasSession) return; // 비로그인 직접 진입은 로그인으로 보내는 중 — anon 초안 키를 남기지 않는다 (117~119 리뷰 #M9)
     writeDraft(draftKey, { step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms: [...selectedTroiPrograms], excelServices, excelFileName, selectedPlan } satisfies OnboardingDraft);
-  }, [draftKey, step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms, excelServices, excelFileName, selectedPlan]);
+  }, [hasSession, draftKey, step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms, excelServices, excelFileName, selectedPlan]);
 
   const addStaff = () => setStaffList(p => [...p, { name: '', role: '피부관리사' }]);
   const updateStaff = (i: number, k: string, v: string) =>
@@ -166,8 +166,8 @@ export default function Onboarding() {
         if (!name) continue;
         const duration = String(cols[1] ?? '').trim() === '' ? 60 : parseDurationMinutes(cols[1]);
         const price = String(cols[2] ?? '').trim() === '' ? 0 : parseAmount(String(cols[2]).replace(/만원$/, '0000'));
-        if (duration === null || price === null) { badRows++; continue; }
-        parsed.push({ name, duration, price });
+        if (duration === null || price === null || duration > 600) { badRows++; continue; } // 600분 초과('600시간')는 설정 화면이 받지 않는 값 (120~122 리뷰 #M5)
+        parsed.push({ name, duration: Math.max(5, duration), price });
       }
       if (parsed.length === 0) {
         notify('시술 데이터를 찾지 못했습니다. 1행은 헤더, 2행부터 [시술명, 소요시간(분), 가격] 순으로 입력해주세요.');
@@ -287,11 +287,14 @@ export default function Onboarding() {
 
     // 직접 입력한 시술 항목 저장
     customServices.filter(s => s.name.trim()).forEach(s => {
+      // 엑셀 경로와 같은 해석 + 설정 화면의 5~600분 범위 (120~122 리뷰 #M5)
+      const dur = s.duration.trim() === '' ? 60 : parseDurationMinutes(s.duration);
+      const price = s.price.trim() === '' ? 0 : parseAmount(s.price);
       saveServiceOnce({
         name: s.name.trim(),
         category: '직접 입력',
-        duration: parseInt(s.duration, 10) || 60,
-        price: parseInt(s.price.replace(/,/g, ''), 10) || 0,
+        duration: Math.min(600, Math.max(5, dur ?? 60)),
+        price: price ?? 0,
       });
     });
 

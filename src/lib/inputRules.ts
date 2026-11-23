@@ -21,7 +21,8 @@ export function parseCount(raw: string | number | null | undefined): number | nu
 export function normalizePhone(raw: string | null | undefined): string {
   const t = (raw ?? '').trim();
   const digits = t.replace(/\D/g, '');
-  if (t.startsWith('+82') || digits.startsWith('82') && t.startsWith('+')) return '0' + digits.slice(2);
+  // +82 10-…, +82 010-…, +82(0)10-… 전부 01012345678 로 — 국가코드 뒤에 국내 선행 0 이 또 붙은 표기가 가장 흔한데 slice(2) 는 00101… 을 만들었다 (120~122 리뷰 #H2)
+  if (t.startsWith('+82') || (t.startsWith('+') && digits.startsWith('82'))) return '0' + digits.replace(/^82/, '').replace(/^0+/, '');
   return digits;
 }
 
@@ -32,25 +33,33 @@ export function isISODate(s: string | null | undefined): boolean {
   return !Number.isNaN(d.getTime()) && d.getMonth() + 1 === Number(s.slice(5, 7)) && d.getDate() === Number(s.slice(8, 10));
 }
 
-export const DATE_REQUIRED_MESSAGE = '날짜를 YYYY-MM-DD 형식으로 선택해주세요.';
 
 /** 엑셀 셀의 날짜를 'YYYY-MM-DD' 로 — 'YYYY-MM-DD'·'YYYY/MM/DD'·'YYYY.MM.DD'·'YYYY년 M월 D일'·엑셀 시리얼(1~2958465 = 1900~9999년). 못 읽으면 '' (조용히 원문을 저장하면 생일 알림에서 영구 제외됐다, 14차 #M3) */
 export function coerceISODate(raw: string | number | null | undefined): string {
   const t = String(raw ?? '').trim();
   if (!t) return '';
   if (/^\d+$/.test(t)) {
-    const n = Number(t);
-    if (n >= 1 && n <= 2958465) { // 엑셀 1900 체계 시리얼 — 1900-01-01 = 1 (UTC 산술은 시리얼 변환에 맞다)
+    if (/^\d{8}$/.test(t)) { const iso = `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`; return plausibleBirth(iso) ? iso : ''; }
+    // 엑셀 1900 체계 시리얼은 5자리(10000~99999 = 1927~2173년)만 받는다 — 연도만 적은 '1990' 은 1905-06-12, YYMMDD '900115' 는 4364년이 되므로 그 길이는 거부해 badBirth 로 안내한다 (120~122 리뷰 #M2). 1900 윤년 버그(시리얼 1~59 하루 어긋남)는 범위 밖
+    if (/^\d{5}$/.test(t)) {
+      const n = Number(t);
       const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
-      return d.toISOString().slice(0, 10);
+      const iso = d.toISOString().slice(0, 10);
+      return plausibleBirth(iso) ? iso : '';
     }
-    if (/^\d{8}$/.test(t)) { const iso = `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`; return isISODate(iso) ? iso : ''; }
     return '';
   }
   const m = t.match(/^(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})\s*일?/);
   if (!m) return '';
   const iso = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
-  return isISODate(iso) ? iso : '';
+  return plausibleBirth(iso) ? iso : '';
+}
+
+/** 생년월일로 말이 되는 범위 — 1900-01-01 ~ 오늘 */
+function plausibleBirth(iso: string): boolean {
+  if (!isISODate(iso)) return false;
+  const today = new Date(); const t = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  return iso >= '1900-01-01' && iso <= t;
 }
 
 /** 소요시간 셀 → 분. '60'·'90분'·'1.5시간'·'1h' 모두 받고, 못 읽으면 null (단위를 떼고 숫자만 남기면 '1.5시간'이 15분이 됐다, 14차 #M12) */

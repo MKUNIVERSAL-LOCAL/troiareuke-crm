@@ -1208,7 +1208,7 @@ export default function Customers() {
         const normGrade = (g: string): CustomerGrade => (GRADES as string[]).includes(g) ? g as CustomerGrade : '신규';
 
         // 기존 전화번호로 중복 스킵
-        const existingPhones = new Set(CustomerStore.getAll().map(c => c.phone.replace(/[^0-9]/g, '')));
+        const existingPhones = new Set(CustomerStore.getAll().map(c => normalizePhone(c.phone))); // 추가·수정과 같은 키 — +82 로 저장된 고객이 업로드 행과 다른 키가 되어 2건째가 생기던 것 (120~122 리뷰 #M1)
         let added = 0, skipped = 0, masked = 0, badBirth = 0;
         if (rows.length > 2000) { notify(`한 번에 2,000명까지 올릴 수 있습니다(현재 ${rows.length.toLocaleString('ko-KR')}행). 시트를 나눠 올려주세요.`); return; } // 행마다 전체 저장이 일어나 수천 행이면 멈춤·부분 저장 (14차 #H8)
         for (let ri = 0; ri < rows.length; ri++) {
@@ -1218,7 +1218,7 @@ export default function Customers() {
           let phone = pick(r, ['전화번호', '연락처', '휴대폰', '휴대폰번호', '핸드폰', '전화', 'phone', 'mobile', 'tel']);
           if (!name || !phone) { skipped++; continue; }
           if (/\*/.test(phone)) { skipped++; masked++; continue; } // 직원 계정이 내보낸 가린 번호(010-****-5678)는 새 고객으로 만들지 않는다 (리뷰 2026-11-20)
-          let digits = phone.replace(/[^0-9]/g, '');
+          let digits = normalizePhone(phone);
           // 엑셀 숫자 셀 함정: 앞 0이 사라진 번호(10xxxxxxxx) 복원
           if (digits.startsWith('10') && (digits.length === 9 || digits.length === 10)) {
             digits = '0' + digits;
@@ -1236,7 +1236,7 @@ export default function Customers() {
             gender: normGender(pick(r, ['성별', 'gender'])),
             grade: normGrade(pick(r, ['등급', 'grade'])),
             skinType: pick(r, ['피부유형', '피부타입', 'skinType']),
-            memo: pick(r, ['메모', '비고', 'memo']),
+            memo: pick(r, ['메모', '비고', 'memo']).slice(0, 2000), // 폼의 2,000자 상한을 업로드로 우회하지 않게 (120~122 리뷰 #L8)
             birthDate: birthDate || undefined,
             referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
             email: pick(r, ['이메일', 'email']) || undefined,
@@ -1325,7 +1325,7 @@ export default function Customers() {
       const dup = key && CustomerStore.getAll().find(c => c.id !== selected.id && normalizePhone(c.phone) === key);
       if (dup) { notify(`이미 등록된 번호입니다: ${dup.name}. 같은 사람이면 [중복 고객 병합]을 사용해주세요.`); return; } // 수정 경로에만 중복 검사가 없어 같은 번호 고객이 둘이 되던 것 (14차 #H9)
     }
-    const copies = identityChanged ? countIdentityCopies(selected.id, { name: editForm.name.trim(), phone: editForm.phone }) : 0;
+    const copies = identityChanged ? countIdentityCopies(selected.id, { name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone }) : 0;
     if (copies > IDENTITY_PROPAGATION_CONFIRM_AT && !(await askConfirm({ title: '기록 일괄 수정', message: `이름·연락처가 바뀌어 연결된 기록 ${copies}건도 함께 고칩니다. 서버 동기화에 시간이 걸릴 수 있습니다. 계속할까요?`, confirmLabel: '함께 수정' }))) return;
     // 직원 계정은 PII 입력칸이 없으므로 기존 값을 그대로 둔다 (13차 #H5)
     CustomerStore.update(selected.id, {

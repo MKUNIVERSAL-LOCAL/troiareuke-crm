@@ -244,6 +244,8 @@ test('입력 규칙 — 금액·수량·전화 키·날짜 (14차 점검)', () =
   expect(parseCount('2.9')).toBeNull();
   expect(parseCount('3')).toBe(3);
   expect(normalizePhone('+82 10-1234-5678')).toBe('01012345678'); // 국제형도 같은 키
+  expect(normalizePhone('+82 010-1234-5678')).toBe('01012345678'); // 국가코드 뒤 국내 선행 0 (가장 흔한 표기, 123)
+  expect(normalizePhone('+82(0)10-1234-5678')).toBe('01012345678');
   expect(normalizePhone('010-1234-5678')).toBe('01012345678');
   expect(normalizePhone(' 02 123 4567 ')).toBe('021234567');
   expect(isISODate('2026-11-23')).toBe(true);
@@ -261,6 +263,9 @@ test('입력 규칙 — 금액·수량·전화 키·날짜 (14차 점검)', () =
   expect(coerceISODate('19900115')).toBe('1990-01-15');
   expect(coerceISODate('15000')).toBe('1941-01-24');      // 1950년 이전도 시리얼로
   expect(coerceISODate('생일 모름')).toBe('');
+  expect(coerceISODate('1990')).toBe('');            // 연도만 — 시리얼로 읽으면 1905-06-12 가 됐다 (123)
+  expect(coerceISODate('900115')).toBe('');          // YYMMDD 는 세기가 모호해 거부
+  expect(coerceISODate('2099-01-01')).toBe('');      // 미래 생년월일
   expect(coerceISODate('1990-02-30')).toBe('');
   // 소요시간 (14차 #M12)
   expect(parseDurationMinutes('60')).toBe(60);

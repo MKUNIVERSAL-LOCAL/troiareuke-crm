@@ -69,9 +69,11 @@ export function getExpiredCustomers(today = new Date()): Customer[] {
  */
 export function anonymizeCustomers(ids: string[]): number {
   let n = 0;
+  const done: string[] = [];
   for (const id of ids) {
     const c = CustomerStore.getById(id);
     if (!c || isAnonymized(c)) continue;
+    done.push(id);
     // 문자열 필드는 undefined가 아니라 ''로 지운다 — store의 toDbCustomer는 undefined 필드를 서버(NAS)에 보내지 않아
     // 로컬만 지워지고 서버 행에는 개인정보가 남는다 (2026-11-17 자체 점검에서 발견)
     CustomerStore.update(id, {
@@ -95,6 +97,6 @@ export function anonymizeCustomers(ids: string[]): number {
     ConsultationStore.getByCustomer(id).forEach(c => clearPhotos(`consult:${c.id}`));
     n += 1;
   }
-  if (n > 0) void resyncGcalEvents(upcomingReservationsOf(ids)); // 캘린더 재동기·실패 경고는 일괄 1회 (117~119 리뷰 #M1)
+  if (n > 0) void resyncGcalEvents(upcomingReservationsOf(done)); // 건너뛴 id 는 제외 (120~122 리뷰 #L6) // 캘린더 재동기·실패 경고는 일괄 1회 (117~119 리뷰 #M1)
   return n;
 }

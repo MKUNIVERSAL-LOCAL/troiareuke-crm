@@ -67,7 +67,12 @@ const MESSAGE_STATUS_LABEL: Record<string, string> = { sent: '발송됨', failed
 const PII_KEY_RE = /^(phone|mobile|tel|customer_phone|customerPhone|shop_phone|email|customer_email|customer_name|customerName|address|birth_date|birthDate|memo|notes)$/i; // 이름·주소·생년월일·메모도 기본 가림 (13차 #M19)
 /** address·memo·notes 는 열 이름만으로는 개인정보인지 모른다 — 같은 행에 전화·생년월일·고객 키가 있는(고객 계열) 행에서만 가린다. 지점 주소·공지 본문은 그대로 (117~119 리뷰 #M8) */
 const SOFT_PII_RE = /^(address|memo|notes)$/i;
-const isCustomerLikeRow = (row?: Record<string, unknown>) => !!row && Object.keys(row).some(k => /phone|mobile|birth|customer/i.test(k));
+const isCustomerLikeRow = (row?: Record<string, unknown>) => {
+  if (!row) return false;
+  const keys = Object.keys(row);
+  if (keys.some(k => /^(businessHours|business_hours|shop_name|shopName|shopType|shop_type)$/.test(k))) return false; // 지점 설정 행 — phone·address 가 함께 있어 고객처럼 보였다 (120~122 리뷰 #M7)
+  return keys.some(k => /phone|mobile|birth|customer/i.test(k));
+};
 function maskPii(key: string, v: string, showRaw: boolean, row?: Record<string, unknown>): string {
   if (showRaw || !PII_KEY_RE.test(key) || !v) return v;
   if (SOFT_PII_RE.test(key) && !isCustomerLikeRow(row)) return v;
