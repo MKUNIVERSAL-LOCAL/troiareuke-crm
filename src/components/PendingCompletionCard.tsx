@@ -5,6 +5,8 @@ import { getPendingCompletionReservations, settleReservations, bulkCompletableId
 import { formatDate, formatPrice } from '../lib/format';
 import { notify } from '../lib/notify';
 import type { Reservation } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { canOpenRoute } from '../lib/permissions';
 
 const PAGE_COMPACT = 4;
 const PAGE = 8;
@@ -15,6 +17,7 @@ const PAGE = 8;
  * 완료 처리해야 방문 통계·재방문 리마인더·직원 실적에 반영된다. 처리 후 onSettled로 대시보드 전체(refreshKey)를 다시 계산한다.
  */
 export default function PendingCompletionCard({ compact = false, refreshKey = 0, onSettled }: { compact?: boolean; refreshKey?: number; onSettled?: () => void }) {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [showAll, setShowAll] = useState(false);
   const list = useMemo(() => getPendingCompletionReservations(), [refreshKey]);
@@ -34,6 +37,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
   const settleOneAndPay = (r: Reservation) => {
     settle([r.id], 'completed');
     if (r.totalPrice > 0 && !hasPaymentFor(r.id)) {
+      if (!canOpenRoute(user?.role, '/sales')) { notify.info('완료 처리했습니다. 결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'); return; } // 직원은 매출 화면이 막혀 있다 — 확인창 뒤 막다른 길 대신 안내 (117~119 리뷰 #H4)
       if (window.confirm(`${r.customerName} 고객의 결제 ${formatPrice(r.totalPrice)}을 지금 매출에 등록할까요?\n(나중에 매출 화면에서도 등록할 수 있습니다)`)) { // 완료 안내는 settle의 토스트가 한다
         navigate(`/sales?new=1&customer=${encodeURIComponent(r.customerId)}&amount=${r.totalPrice}&memo=${encodeURIComponent('예약 완료 처리(대시보드)')}&reference=${encodeURIComponent(r.id)}`);
       }

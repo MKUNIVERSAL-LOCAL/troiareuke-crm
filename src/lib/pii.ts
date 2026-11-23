@@ -23,13 +23,5 @@ export function maskBirthDate(v: string | undefined | null): string {
   return s.length >= 4 ? `${s.slice(0, 4)}-**-**` : (s ? '****' : '');
 }
 
-export function maskAddress(v: string | undefined | null): string {
-  const s = (v || '').trim();
-  if (!s) return '';
-  const first = s.split(/\s+/)[0];
-  return first.length < s.length ? `${first} ***` : '***';
-}
-
 export function emailFor(role: string | undefined | null, v: string | undefined | null): string { return canSeePii(role) ? (v || '') : maskEmail(v); }
 export function birthDateFor(role: string | undefined | null, v: string | undefined | null): string { return canSeePii(role) ? (v || '') : maskBirthDate(v); }
-export function addressFor(role: string | undefined | null, v: string | undefined | null): string { return canSeePii(role) ? (v || '') : maskAddress(v); }

@@ -5,6 +5,8 @@ import { canShareText, shareText } from '../lib/mobileBridge';
 import { getDailyClose, buildDailyCloseMessage } from '../lib/dailyClose';
 import { notify } from '../lib/notify';
 import { useFeature } from '../hooks/useFeature';
+import { useAuth } from '../contexts/AuthContext';
+import { canDo } from '../lib/permissions';
 
 /**
  * 대시보드 — 오늘 마감 요약 카드 (2026-11-17)
@@ -12,7 +14,8 @@ import { useFeature } from '../hooks/useFeature';
  * 매출 모듈이 꺼진 지점(본사 기능관리)에서는 숨긴다.
  */
 export default function DailyCloseCard({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
-  const salesOn = useFeature('module.sales');
+  const { user } = useAuth();
+  const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view'); // 매출·환불·지출 요약 — 직원 계정에는 숨긴다(매출 화면과 같은 규칙, 117~119 리뷰 #H2)
   const close = useMemo(() => getDailyClose(), [refreshKey]);
   const [copied, setCopied] = useState(false);
   if (!salesOn) return null;

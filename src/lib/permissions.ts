@@ -2,6 +2,8 @@
 // 그동안 user.role 은 전화번호 마스킹과 모바일 더보기의 매출 숨김에만 쓰였고, 설정·직원 관리·매출·백업·고객 삭제/익명화는 직원(staff) 계정도 URL·메뉴로 전부 할 수 있었다.
 // 오너 결정 #14(2026-11-23, 가정): 직원은 예약·고객·시술·제품·문자·AI 챗(매출 제외)까지, 그 밖은 매장 관리자 전용.
 // 라우트(FeatureRouteGate)·메뉴(Sidebar/MobileTabBar)·파괴적 핸들러가 전부 이 한 곳을 본다 — 버튼 숨김만으로는 URL·딥링크·키보드 경로가 남는다.
+import { isAuthApiConfigured } from './authApi';
+
 export type Role = 'superadmin' | 'admin' | 'staff';
 
 export type Action =
@@ -10,15 +12,16 @@ export type Action =
   | 'sales.view'         // 매출·손익 화면, 대시보드 금액 카드, AI 챗 매출 블록
   | 'customer.delete'    // 고객 삭제·익명화(개별/일괄)·병합
   | 'customer.pii'       // 고객 전화·이메일·주소·생년월일 원문 보기·수정
-  | 'export.adminOnly'   // 상담 내역·직원 목록·로그인 기록 내보내기
   | 'ai.key'             // AI API 키 입력·삭제
   | 'outbox.download';   // 서버가 거부한 저장분(고객 레코드 원문) 파일 내려받기
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set<Role>(['admin', 'superadmin']);
 
-/** 역할이 없으면(옛 세션·로컬 모드 복원 전) 직원으로 취급 — 기존 `role ?? 'staff'` 관례 */
+/** 역할이 없는 세션 — 서버(NAS) 모드에서는 직원으로(안전 쪽), 로컬 모드에서는 관리자로.
+ *  로컬 모드는 가입이 항상 admin 이고 직원 계정이 없는데(코어 AuthContext), role 필드가 없는 구버전 세션을 직원으로 보면 매장 관리자가 자기 설정에서 영구히 잠긴다 (117~119 리뷰 #H3) */
 export function isAdminRole(role: string | undefined | null): boolean {
-  return ADMIN_ROLES.has(role ?? 'staff');
+  if (!role) return !isAuthApiConfigured;
+  return ADMIN_ROLES.has(role);
 }
 
 /** 지금은 모든 Action 이 관리자 전용 — 이름을 나눠 둔 것은 나중에 직원에게 일부를 열 때 한 줄로 바꾸기 위해서 */
@@ -34,7 +37,9 @@ const ROUTE_ACTIONS: ReadonlyArray<[string, Action]> = [
 ];
 
 export function actionForRoute(pathname: string): Action | null {
-  const hit = ROUTE_ACTIONS.find(([p]) => pathname === p || pathname.startsWith(p + '/'));
+  // react-router 라우트는 대소문자를 가리지 않으므로(/SETTINGS 도 설정 화면) 여기서도 소문자·후행 슬래시를 정리한다 (117~119 리뷰 #H1)
+  const p = pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  const hit = ROUTE_ACTIONS.find(([q]) => p === q || p.startsWith(q + '/'));
   return hit ? hit[1] : null;
 }
 

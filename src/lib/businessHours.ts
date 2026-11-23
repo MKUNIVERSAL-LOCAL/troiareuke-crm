@@ -50,9 +50,10 @@ export function checkBusinessHours(date: string, startTime: string, durationMinu
   let close = hours.close === '00:00' ? 24 * 60 : toMinutes(hours.close); // '00:00' 마감은 자정(24:00) — 예약표 범위(Reservations gridRangeFromSettings)와 같은 해석 (12차 #M1)
   if (open === null || close === null || start === null) return out;
   if (close <= open) close += 24 * 60; // 자정 넘는 마감(서버 시드·구버전 데이터) — 정상 영업시간을 "밖"으로 판정하지 않게
-  const end = start + Math.max(0, durationMinutes || 0);
-  if (start < open || end > close) {
-    out.push({ kind: 'outsideHours', message: `${day}요일 영업시간(${hours.open}~${hours.close}) 밖입니다 (${startTime}~${fromMinutes(end)}).` });
+  const s0 = close > 24 * 60 && start < open ? start + 24 * 60 : start; // 18:00~02:00 영업의 01:00 예약은 다음날 새벽으로 본다 (117~119 리뷰 #M3)
+  const end = s0 + Math.max(0, durationMinutes || 0);
+  if (s0 < open || end > close) {
+    out.push({ kind: 'outsideHours', message: `${day}요일 영업시간(${hours.open}~${hours.close}) 밖입니다 (${startTime}~${fromMinutes(end % (24 * 60))}).` });
   }
   return out;
 }

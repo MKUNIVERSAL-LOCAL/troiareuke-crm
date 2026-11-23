@@ -135,12 +135,13 @@ test('지점 앱(NAS 흉내) 직원 계정: 설정·직원 관리·매출 메뉴
   await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
   // 대시보드: 매출 금액 카드 없음(예약 카드는 있음)
   await expect(page.getByText('이번 달 총 매출')).toHaveCount(0);
+  await expect(page.getByTestId('daily-close-card')).toHaveCount(0); // 마감 요약(매출·환불·지출)도 직원에게는 없다 (120)
   // PC 사이드바: 고객 관리는 있고 설정·직원 관리·매출은 없다
   const nav = page.getByRole('navigation').first();
   await expect(nav.getByRole('link', { name: '고객 관리' })).toBeVisible();
   for (const name of ['설정', '직원 관리', '매출·손익 관리']) await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   // URL 직접 진입 → 역할 게이트
-  for (const path of ['/settings', '/staff', '/sales', '/settings?tab=backup']) {
+  for (const path of ['/settings', '/staff', '/sales', '/settings?tab=backup', '/SETTINGS', '/Staff', '/sales/']) { // 대소문자·후행 슬래시 우회 포함 (120)
     await page.goto(path);
     await expect(page.getByTestId('role-gate')).toBeVisible();
     await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();

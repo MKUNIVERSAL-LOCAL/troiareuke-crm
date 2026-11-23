@@ -3,6 +3,7 @@ import { tagRefund } from '../../lib/refundDate';
 import { canceledSaleIds } from '../../lib/saleCancel';
 import { saleCustomerNameResolver } from '../../lib/customerIdentity';
 import { askConfirm } from '../../lib/confirmDialog';
+import { canDo } from '../../lib/permissions';
 import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
@@ -27,6 +28,7 @@ type Tab = 'inventory' | 'sales';
 
 // ─── 메인 컴포넌트 ──────────────────────────────────────────────
 export default function Products() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('inventory');
   const [search, setSearch] = useState('');
   const [salesSearch, setSalesSearch] = useState('');
@@ -163,6 +165,7 @@ export default function Products() {
             <p className="text-xs text-gray-500 mb-1">총 판매건수</p>
             <p className="text-2xl font-bold text-gray-900">{sales.length}<span className="text-sm font-medium ml-1">건</span></p>
           </div>
+          {canDo(user?.role, 'sales.view') && ( /* 매출 금액은 매출 화면·대시보드와 같은 권한 (117~119 리뷰 #M6) */
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간 · 취소 제외)</p>
             <p className="text-2xl font-bold text-[#1a3a8f]">
@@ -170,6 +173,7 @@ export default function Products() {
             </p>
             <p className="text-xs text-gray-400 mt-1">이달 {formatPrice(monthSalesRevenue)} — 매출 화면 '제품 매출'과 같은 기준</p>
           </div>
+          )}
         </div>
 
         {/* Tabs */}

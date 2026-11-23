@@ -7,7 +7,7 @@ import { groupByBranch } from '../../lib/adminBranches';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
-import { todayISO } from '../../lib/format';
+import { todayISO, localISODate } from '../../lib/format';
 
 // NAS 중앙 서버 모드에서는 구독 테이블이 없고 계정(auth_users)의 plan이 진실이다.
 // 이 화면은 NAS 모드일 때 계정 목록에서 구독 뷰를 파생하고, 수정은 plan/활성만 반영한다.
@@ -71,7 +71,7 @@ export default function Subscriptions() {
           const serviceEndsAt = rep.serviceEndsAt || null;
           const isExpired = Boolean(serviceEndsAt && serviceEndsAt.slice(0, 10) < todayISO()); // 사용자 관리와 같은 규칙(만료일 당일은 유효) — new Date('YYYY-MM-DD') 는 KST 09:00 부터 만료로 보였다 (12차 #M4)
           // 체험(trial) 지점은 체험 만료일도 만료 판정에 넣는다 — 전에는 "활성 · 만료일(과거)" 조합이 나왔다 (8차 점검 2026-11-20)
-          const trialExpired = rep.plan === 'trial' && !serviceEndsAt && Boolean(rep.trialEndsAt && new Date(rep.trialEndsAt).getTime() < Date.now());
+          const trialExpired = rep.plan === 'trial' && !serviceEndsAt && Boolean(rep.trialEndsAt && localISODate(rep.trialEndsAt) < todayISO()); // 사용기간과 같은 규칙(만료일 당일 유효) — 밀리초 비교는 KST 09시부터 만료로 보였다 (117~119 리뷰 #M7)
           const allInactive = accounts.every(u => u.isActive === false);
           return {
             id: rep.id,

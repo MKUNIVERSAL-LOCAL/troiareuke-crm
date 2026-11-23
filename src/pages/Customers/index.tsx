@@ -52,7 +52,7 @@ import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, localISODate, formatLocalDate } from '../../lib/format';
 import { daysBetween as calendarDaysBetween } from '../../lib/revisitRule';
-import { canDo, ADMIN_REQUIRED_MESSAGE } from '../../lib/permissions';
+import { canDo, canOpenRoute, ADMIN_REQUIRED_MESSAGE } from '../../lib/permissions';
 import { canSeePii, emailFor, birthDateFor } from '../../lib/pii'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
@@ -312,6 +312,7 @@ export default function Customers() {
   const { user } = useAuth();
   const canManage = canDo(user?.role, 'customer.delete'); // 삭제·익명화·병합 — 메뉴 항목과 핸들러 양쪽에서 본다 (13차 #H4)
   const piiOk = canSeePii(user?.role);                     // 전화·이메일·주소·생년월일 원문 (13차 #H5·H6)
+  const canSales = canOpenRoute(user?.role, '/sales');   // [결제 추가] 는 매출 화면으로 가므로 직원에게는 안내만 (117~119 리뷰 #H4)
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
@@ -1703,7 +1704,7 @@ export default function Customers() {
                       <span className="text-xs font-semibold text-amber-800 text-right">{selected.allergies}</span>
                     </div>
                   )}
-                  {selected.address && (user?.role ?? 'staff') !== 'staff' && (
+                  {selected.address && piiOk && (
                     <div className="flex justify-between gap-2">
                       <span className="text-xs text-gray-500">주소</span>
                       <span className="text-sm font-medium text-gray-900 tabular-nums text-right truncate">{selected.address}</span>
@@ -1875,7 +1876,7 @@ export default function Customers() {
                 })()}
               </div>
 
-              <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => leaveDetailTo(`/sales?new=1&customer=${selected.id}`)} />
+              <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => (canSales ? leaveDetailTo(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
               <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
@@ -2091,8 +2092,8 @@ export default function Customers() {
                       const parts = [
                         selected.gender && selected.gender !== '미입력' ? selected.gender : '',
                         selected.birthDate ? `생일 ${birthDateFor(user?.role, selected.birthDate)}` : '',
-                        (user?.role ?? 'staff') !== 'staff' && selected.email ? selected.email : '',
-                        (user?.role ?? 'staff') !== 'staff' && selected.address ? selected.address : '',
+                        piiOk && selected.email ? selected.email : '',
+                        piiOk && selected.address ? selected.address : '',
                         selected.referralSource ? `유입 ${selected.referralSource}` : '',
                       ].filter(Boolean);
                       return parts.length > 0 ? <p className="text-xs text-gray-400 mt-0.5 truncate" title={parts.join(' · ')}>{parts.join(' · ')}</p> : null;
@@ -2457,7 +2458,7 @@ export default function Customers() {
               })()}
             </div>
 
-            <CustomerPaymentHistory customerId={selected.id} onAdd={() => navigate(`/sales?new=1&customer=${selected.id}`)} />
+            <CustomerPaymentHistory customerId={selected.id} onAdd={() => (canSales ? navigate(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
             <CustomerTimeline key={selected.id} customerId={selected.id} tick={detailTick} />
           </div>

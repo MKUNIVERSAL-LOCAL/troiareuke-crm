@@ -111,6 +111,7 @@ export default function Onboarding() {
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(draft?.selectedPlan ?? 'trial');
   useEffect(() => {
+    if (!hasSession) return; // 비로그인 직접 진입은 로그인으로 보내는 중 — anon 초안 키를 남기지 않는다 (117~119 리뷰 #M9)
     writeDraft(draftKey, { step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms: [...selectedTroiPrograms], excelServices, excelFileName, selectedPlan } satisfies OnboardingDraft);
   }, [draftKey, step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms, excelServices, excelFileName, selectedPlan]);
 

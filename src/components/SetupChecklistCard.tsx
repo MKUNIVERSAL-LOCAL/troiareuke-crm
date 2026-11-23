@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Circle, ChevronRight, ListChecks } from 'lucide-react';
 import { StaffStore, ServiceStore, CustomerStore, SettingsStore, getShopId } from '../lib/store';
+import { useAuth } from '../contexts/AuthContext';
+import { canOpenRoute } from '../lib/permissions';
 
 /**
  * 첫 설정 체크리스트 (첫 실행 감사 2026-11-18)
@@ -26,8 +28,10 @@ function buildSetupItems(): Item[] {
 
 export default function SetupChecklistCard({ refreshKey = 0 }: { refreshKey?: number }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const role = user?.role;
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(hiddenKey()) === '1'; } catch { return false; } });
-  const items = useMemo(buildSetupItems, [refreshKey]);
+  const items = useMemo(() => buildSetupItems().filter(i => canOpenRoute(role, i.to)), [refreshKey, role]); // 직원 계정에는 열 수 없는 줄(매장 정보·직원·시술 항목)을 빼 막다른 길이 없게 (117~119 리뷰 #H4)
   const remaining = items.filter(i => !i.done);
   if (hidden || remaining.length === 0) return null;
   const hide = () => { try { localStorage.setItem(hiddenKey(), '1'); } catch { /* 저장 불가여도 이번 화면에선 숨긴다 */ } setHidden(true); };

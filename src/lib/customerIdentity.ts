@@ -29,7 +29,7 @@ export function countIdentityCopies(customerId: string, next: Identity): number 
 }
 
 /** 고객 이름·전화가 바뀌면 기록의 사본도 같이. update 는 이름만 바꾸므로 회차 차감·누적 결제액에 영향 없음. 공유 Google 캘린더의 앞 일정도 다시 만든다(best-effort). @returns 바꾼 기록 수 */
-export function propagateCustomerIdentity(customerId: string, next: Identity): number {
+export function propagateCustomerIdentity(customerId: string, next: Identity, opts: { resyncCalendar?: boolean } = {}): number {
   let n = 0;
   for (const r of ReservationStore.getAll()) {
     if (r.customerId !== customerId || (r.customerName === next.name && r.customerPhone === next.phone)) continue;
@@ -39,10 +39,16 @@ export function propagateCustomerIdentity(customerId: string, next: Identity): n
   for (const cp of CustomerProgramStore.getByCustomer(customerId)) if (cp.customerName !== next.name) { CustomerProgramStore.update(cp.id, { customerName: next.name }); n++; }
   for (const p of PaymentStore.getAll()) if (p.customerId === customerId && p.customerName !== next.name) { PaymentStore.update(p.id, { customerName: next.name }); n++; }
   for (const c of ConsultationStore.getByCustomer(customerId)) if (c.customerName !== next.name) { ConsultationStore.update(c.id, { customerName: next.name }); n++; }
-  // 공유 Google 캘린더의 앞으로의 일정도 새 이름으로 (11차 #M8) — 익명화·삭제도 같은 길이라 캘린더에 실명이 남지 않는다
-  const today = todayISO();
-  void resyncGcalEvents(ReservationStore.getAll().filter(r => r.customerId === customerId && r.date >= today && r.status !== 'cancelled'));
+  // 공유 Google 캘린더의 앞으로의 일정도 새 이름으로 (11차 #M8) — 익명화·삭제도 같은 길이라 캘린더에 실명이 남지 않는다.
+  // 일괄 처리(보존기간 익명화)는 호출자가 resyncCalendar:false 로 끄고 끝에 upcomingReservationsOf 로 한 번만 돌린다 — 고객 수만큼 경고 토스트·레이트리밋이 나지 않게 (117~119 리뷰 #M1)
+  if (opts.resyncCalendar !== false) void resyncGcalEvents(upcomingReservationsOf([customerId]));
   return n;
+}
+
+/** 앞으로의 미취소 예약(캘린더 재동기 대상) */
+export function upcomingReservationsOf(customerIds: string[]) {
+  const ids = new Set(customerIds); const today = todayISO();
+  return ReservationStore.getAll().filter(r => ids.has(r.customerId) && r.date >= today && r.status !== 'cancelled');
 }
 
 const MERGED_MAP_MAX = 500;
@@ -61,11 +67,6 @@ export function recordMergedCustomer(sourceId: string, targetId: string): void {
 function mergedCustomerIds(): Record<string, string> {
   const v = getPreference('mergedCustomerIds');
   return v && typeof v === 'object' ? v : {};
-}
-
-/** 병합으로 사라진 id 면 남은 고객 id 로(기록이 평탄화돼 한 번 조회) */
-export function resolveCustomerId(id: string): string {
-  return mergedCustomerIds()[id] ?? id;
 }
 
 /** 고객 삭제 직전 정리 — 시술·상담의 얼굴 사진을 지우고(개별 삭제·익명화와 같은 규칙) 남는 기록의 이름·전화를 '삭제된 고객'으로. 기록 자체는 매출 통계를 위해 남는다.

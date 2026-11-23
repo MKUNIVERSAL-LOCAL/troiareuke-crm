@@ -31,6 +31,7 @@ import { todayISO, formatDate } from '../../lib/format';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
+import { canOpenRoute } from '../../lib/permissions';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 
 /** 예약표 시간 범위 — 설정 > 영업시간의 가장 이른 시작·가장 늦은 종료를 덮는 정시 범위. 기본 09:00~21:00, 영업시간이 더 넓으면 그만큼 확장
@@ -1011,11 +1012,12 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     const endTime = format(endDate, 'HH:mm');
 
     // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외). 분 단위로 — 'HH:mm' 문자열 비교는 자정을 넘는 예약(23:30+60분 → "00:30")에서 역전돼 겹침을 놓쳤다 (12차 #H2)
-    const toMin = (t: string) => { const [hh, mm] = t.split(':').map(Number); return hh * 60 + mm; };
-    const newStart = toMin(startTime), newEnd = newStart + totalDuration;
+    const toMin = (t: string): number | null => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }; // 'HH:mm' 이 아니면 null — NaN 비교는 전부 false 라 겹침을 조용히 놓쳤다 (117~119 리뷰 #M10)
+    const newStart = toMin(startTime) ?? 0, newEnd = newStart + totalDuration;
     const overlap = ReservationStore.getAll().find(r => {
       if (r.id === editing?.id || r.staffId !== staff.id || r.date !== date || r.status === 'cancelled' || r.status === 'noshow') return false;
-      const rs = toMin(r.startTime); let re = toMin(r.endTime); if (re <= rs) re += 24 * 60; // 자정 넘김
+      const rs = toMin(r.startTime); if (rs === null) return true; // 시간이 깨진 기존 예약은 겹침으로 보고 확인을 받는다
+      let re = toMin(r.endTime) ?? rs + 60; if (re <= rs) re += 24 * 60; // 자정 넘김
       return newStart < re && newEnd > rs;
     });
     // 휴무일·지정 휴일·영업시간 밖 경고 — 예외 영업이 있으니 막지 않고 확인만. 시간이 안 바뀐 수정(메모만 등)은 다시 묻지 않는다 (2026-11-18)
@@ -1111,7 +1113,9 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <option value="">시술 선택</option>
             {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {s.price.toLocaleString()}원)</option>)}
           </select>
-          {services.length === 0 && <PrereqHint text="등록된 시술 항목이 없습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
+          {services.length === 0 && (canOpenRoute(authUser?.role, '/settings')
+            ? <PrereqHint text="등록된 시술 항목이 없습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />
+            : <p className="mt-1.5 text-xs text-amber-700">등록된 시술 항목이 없습니다 — 매장 관리자에게 시술 항목 등록을 요청해주세요.</p>)} {/* 직원은 설정이 막혀 있다 (117~119 리뷰 #H4) */}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div>

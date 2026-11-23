@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { ShieldAlert, ChevronRight } from 'lucide-react';
 import { getExpiredCustomers, getRetentionPolicy } from '../lib/retentionPolicy';
+import { useAuth } from '../contexts/AuthContext';
+import { canDo } from '../lib/permissions';
 
 /**
  * 대시보드 — 개인정보 보존기간 경과 고객 안내 (P4, 2026-11-17)
@@ -8,8 +10,9 @@ import { getExpiredCustomers, getRetentionPolicy } from '../lib/retentionPolicy'
  */
 export default function RetentionNoticeCard({ compact }: { compact?: boolean }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const policy = getRetentionPolicy();
-  if (!policy.enabled) return null;
+  if (!policy.enabled || !canDo(user?.role, 'customer.delete')) return null; // 익명화는 관리자만 — 직원에게 조치 불가 목록으로 보내지 않는다 (117~119 리뷰 #M4)
   const expired = getExpiredCustomers();
   if (expired.length === 0) return null;
   return (

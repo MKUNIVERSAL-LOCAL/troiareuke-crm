@@ -14,7 +14,8 @@ import { ConsultationStore } from './consultationStore';
 import { clearPhotos } from './photoStore';
 import type { Customer } from '../types';
 import { getPreference, setPreference } from './shopPreferences';
-import { propagateCustomerIdentity } from './customerIdentity';
+import { propagateCustomerIdentity, upcomingReservationsOf } from './customerIdentity';
+import { resyncGcalEvents } from './gcalEventMap';
 
 export interface RetentionPolicy {
   enabled: boolean;
@@ -89,10 +90,11 @@ export function anonymizeCustomers(ids: string[]): number {
       isActive: false,            // 재방문 리마인더·예약/발송 대상에서 제외하는 표식
     });
     // 연결 기록에 복사된 이름·전화 + 공유 Google 캘린더 앞 일정 — 고객 정보 수정·삭제와 같은 전파(customerIdentity). 수동 복제본일 때 캘린더만 빠져 실명이 남았다 (리뷰 #H4)
-    propagateCustomerIdentity(id, { name: ANONYMIZED_NAME, phone: '' });
+    propagateCustomerIdentity(id, { name: ANONYMIZED_NAME, phone: '' }, { resyncCalendar: false });
     TreatmentLogStore.getByCustomer(id).forEach(t => clearPhotos(`treatment:${t.id}`));
     ConsultationStore.getByCustomer(id).forEach(c => clearPhotos(`consult:${c.id}`));
     n += 1;
   }
+  if (n > 0) void resyncGcalEvents(upcomingReservationsOf(ids)); // 캘린더 재동기·실패 경고는 일괄 1회 (117~119 리뷰 #M1)
   return n;
 }

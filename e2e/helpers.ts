@@ -186,7 +186,8 @@ export async function pickCustomer(page: Page, name?: string, scope?: Locator) {
 export function isNearMidnightSeoul(now = new Date()): boolean {
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
   const get = (t: string) => Number(parts.find(p => p.type === t)?.value ?? 0);
-  return get('hour') % 24 === 23 && get('minute') >= 50;
+  const h = get('hour') % 24, m = get('minute');
+  return (h === 23 && m >= 45) || (h === 0 && m < 5); // test.slow() 스펙이 23:45 에 시작해 자정을 넘기는 경우까지 (117~119 리뷰 #L5)
 }
 
 /** 같은 이름의 PC·모바일 버튼이 둘 다 DOM에 있을 때 보이는 쪽 — 문자열 이름은 기본 정확 일치('결제 등록'이 '결제 등록하기'에 섞이지 않게) */
