@@ -5,6 +5,7 @@ import MobileTabBar from './MobileTabBar';
 import UpdateBanner from '../ui/UpdateBanner';
 import MobileUpdateBanner from '../ui/MobileUpdateBanner';
 import ToastHost from '../ui/ToastHost';
+import ConfirmHost from '../ui/ConfirmDialog';
 import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
 import AppLockOverlay from '../AppLockOverlay';
@@ -95,6 +96,8 @@ export default function Layout() {
       <main className="flex-1 lg:ml-64 min-h-screen overflow-x-hidden pb-tabbar-safe lg:pb-0">
         {/* 공통 알림(토스트) — notify() 표시 영역 */}
         <ToastHost />
+        {/* 공용 확인창(askConfirm) — 파괴적 동작의 window.confirm 을 앱 디자인으로 (9차 #30, 2026-11-23) */}
+        <ConfirmHost />
         {/* 업데이트 배너 — PC(포터블) / 모바일 앱(스토어 버전 안내), 각자 해당 플랫폼에서만 렌더 */}
         <UpdateBanner />
         <MobileUpdateBanner />

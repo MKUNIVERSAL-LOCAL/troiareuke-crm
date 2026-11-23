@@ -39,6 +39,7 @@ import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
 import { recordPrivacyAction } from '../../lib/privacyLog';
+import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
 import { isBeaconConsultationEnabled, onFeatureFlagsChanged } from '../../lib/featureFlags';
@@ -1069,10 +1070,10 @@ export default function Customers() {
     </span>
   ) : null;
 
-  function handleAnonymizeExpired() {
+  async function handleAnonymizeExpired() {
     const targets = filtered.filter(c => expiredIds.has(c.id) && !isAnonymized(c));
     if (targets.length === 0) return;
-    if (!window.confirm(`보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`)) return;
+    if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
     const n = anonymizeCustomers(targets.map(c => c.id));
     recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' }); // 파기 대장 (9차 점검 #29)
     notify(`고객 ${n}명을 익명화했습니다.`);
@@ -1358,9 +1359,9 @@ export default function Customers() {
   }
 
   // 고객 요청 등으로 개인정보만 지울 때 — 삭제와 달리 기록 연결·방문/결제 통계는 남는다 (2026-11-18)
-  function handleAnonymizeOne() {
+  async function handleAnonymizeOne() {
     if (!selected || isAnonymized(selected)) return;
-    if (!window.confirm(`'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`)) return;
+    if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`, confirmLabel: '익명화', danger: true }))) return;
     const n = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
     recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
@@ -1370,7 +1371,7 @@ export default function Customers() {
     loadAll();
   }
 
-  function handleDeleteCustomer() {
+  async function handleDeleteCustomer() {
     if (!selected) return;
     // 연결된 기록이 있으면 건수를 보여 주고 병합·익명화를 권한다 — 삭제하면 기록의 고객 연결이 끊겨 타임라인·통계에서 빠진다 (2026-11-18)
     const linked = previewMerge(selected.id);
@@ -1387,7 +1388,7 @@ export default function Customers() {
       notify(`삭제할 수 없습니다 — ${blockers}이(가) 있습니다. ${guide} 뒤 삭제해주세요. 중복 고객이면 [병합]이 맞습니다.`);
       return;
     }
-    if (!window.confirm(`'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`)) return;
+    if (!(await askConfirm({ title: '고객 삭제', message: `'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
     CustomerStore.delete(selected.id);
     setSelected(null);
     loadAll();

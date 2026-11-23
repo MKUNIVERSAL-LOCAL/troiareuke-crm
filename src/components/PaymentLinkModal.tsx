@@ -12,6 +12,7 @@ import { X, Link2, Copy, CheckCircle, MessageSquare, RefreshCw, Ban } from 'luci
 import type { Customer } from '../types';
 import { formatPrice, todayISO } from '../lib/format';
 import { copyText } from '../lib/clipboard';
+import { askConfirm } from '../lib/confirmDialog';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -135,7 +136,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
   }
 
   async function handleCancel(r: PaymentRequestRow) {
-    if (!window.confirm(`${r.orderName} · ${formatPrice(r.amount)} 결제 요청을 취소할까요?\n고객이 링크를 열어도 결제할 수 없게 됩니다.`)) return;
+    if (!(await askConfirm({ title: '결제 요청 취소', message: `${r.orderName} · ${formatPrice(r.amount)} 결제 요청을 취소할까요?\n고객이 링크를 열어도 결제할 수 없게 됩니다.`, confirmLabel: '요청 취소', danger: true }))) return;
     try {
       await cancelPaymentRequest(r.id);
       refresh();

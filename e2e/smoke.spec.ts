@@ -406,7 +406,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(dupOption).toHaveCount(1);
   await dupOption.check();
   await expect(mergeDialog.getByTestId('merge-preview')).toContainText('예약 1 · 시술 1 · 프로그램 0 · 결제 1');
-  await mergeDialog.getByRole('button', { name: '병합 실행' }).click(); // confirm은 dialog 핸들러가 수락
+  await mergeDialog.getByRole('button', { name: '병합 실행' }).click();
+  await page.getByRole('dialog', { name: '고객 병합' }).getByRole('button', { name: '병합', exact: true }).click(); // 앱 확인창(113 — window.confirm 아님)
   await expect(mergeDialog).toHaveCount(0);
   await expect(desk).toContainText('중복 메모'); // 흡수된 고객의 메모가 본 고객 메모에 합쳐짐
   await expect(desk.getByTestId('dup-hint')).toHaveCount(0); // 중복이 사라져 안내도 사라진다
@@ -577,7 +578,10 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page).toHaveURL(/retention=1/);
   const bar = page.getByTestId('retention-bar').filter({ visible: true }).first();
   await expect(bar).toContainText('경과 1명');
-  await bar.getByRole('button', { name: '1명 익명화' }).click(); // confirm은 dialog 핸들러가 수락
+  await bar.getByRole('button', { name: '1명 익명화' }).click();
+  const anonConfirm = page.getByRole('dialog', { name: '보존기간 경과 고객 익명화' });
+  await expect(anonConfirm.getByTestId('confirm-dialog')).toContainText('1명'); // 건수가 창에 보인다 (113)
+  await anonConfirm.getByRole('button', { name: '1명 익명화' }).click();
   await expect(page.getByText('고객 1명을 익명화했습니다.').first()).toBeVisible();
   await expect(bar).toContainText('경과 0명');
   await page.goto('/customers');
