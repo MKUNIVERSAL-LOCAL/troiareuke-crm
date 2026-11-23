@@ -27,7 +27,7 @@ import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import PaymentLinkModal from '../../components/PaymentLinkModal';
 import { isPaymentLinkAvailable, fetchPgConfig } from '../../lib/paymentLinks';
 import { growthPct } from '../../lib/growth';
-import { tagRefund, refundedOn } from '../../lib/refundDate';
+import { tagRefund, refundedOn, memoWithoutRefundTag } from '../../lib/refundDate';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -747,7 +747,7 @@ export default function Sales() {
                           <span>{p.paymentMethod}</span>
                           {p.discountAmount > 0 && <span className="text-orange-700">-{formatPrice(p.discountAmount)}</span>}
                         </p>
-                        {p.memo && <p className="mt-0.5 text-xs text-gray-500 truncate">{p.memo}</p>}
+                        {memoWithoutRefundTag(p.memo) && <p className="mt-0.5 text-xs text-gray-500 truncate">{memoWithoutRefundTag(p.memo)}</p>}
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
@@ -777,7 +777,7 @@ export default function Sales() {
                         {p.discountAmount > 0 && <span className="ml-1.5 text-xs text-orange-700">-{formatPrice(p.discountAmount)}</span>}
                         {p.status === 'refunded' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full font-medium">환불</span>}
                         {p.status === 'pending' && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">대기</span>}
-                        {p.memo && <span className="block text-xs text-gray-500 font-normal truncate" title={p.memo}>{p.memo}</span>}
+                        {memoWithoutRefundTag(p.memo) && <span className="block text-xs text-gray-500 font-normal truncate" title={memoWithoutRefundTag(p.memo)}>{memoWithoutRefundTag(p.memo)}</span>}
                       </span>
                       <span>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'product' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-700'}`}>

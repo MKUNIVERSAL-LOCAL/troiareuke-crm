@@ -20,10 +20,11 @@ export default function ConfirmHost() {
           <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{message}</p>
         </div>
         <div className="flex gap-2 justify-end">
-          <button type="button" onClick={() => resolve(false)} className="min-h-[44px] px-4 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">
+          {/* 되돌릴 수 없는 동작은 Enter 한 번에 실행되지 않게 기본 포커스를 [취소]에 (리뷰 2026-11-23) */}
+          <button type="button" onClick={() => resolve(false)} autoFocus={!!danger} className="min-h-[44px] px-4 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50">
             {cancelLabel}
           </button>
-          <button type="button" onClick={() => resolve(true)} autoFocus
+          <button type="button" onClick={() => resolve(true)} autoFocus={!danger}
             className={`min-h-[44px] px-5 rounded-xl text-sm font-semibold text-white ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-[#1a3a8f] hover:bg-[#15306e]'}`}>
             {confirmLabel}
           </button>

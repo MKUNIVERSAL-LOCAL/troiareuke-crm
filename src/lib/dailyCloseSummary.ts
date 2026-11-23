@@ -18,7 +18,7 @@ export interface DailyClose {
   byMethod: { method: string; amount: number }[];   // 금액 큰 순
   byType: { treatment: number; product: number; other: number };
   refunds: number;            // 오늘 결제분 중 환불된 금액(결제일 기준)
-  refundedToday: number;      // 오늘 환불 "처리"한 금액(memo 태그 [환불 YYYY-MM-DD] 기준, 10차 #M1)
+  refundedToday: number;      // 오늘 환불 "처리"한 이전 결제분(memo 태그 [환불 YYYY-MM-DD], 오늘 결제분은 refunds 에 — 같은 건이 두 줄에 나오지 않게) (10차 #M1, 리뷰 11-23)
   expenses: number;           // 오늘 지출 합계
   treatments: number;         // 오늘 시술 기록 수(방문)
   newCustomers: number;
@@ -58,7 +58,7 @@ export function summarizeDailyClose(date: string, src: DailyCloseSource): DailyC
       other: sum(completed.filter(p => p.type === 'other')),
     },
     refunds: sum(payments.filter(p => p.status === 'refunded')),
-    refundedToday: sum(src.payments.filter(p => refundedOn(p) === date)),
+    refundedToday: sum(src.payments.filter(p => refundedOn(p) === date && p.paymentDate !== date)),
     expenses: sum(src.expenses.filter(e => e.expenseDate === date)),
     treatments: src.treatmentLogs.filter(t => t.treatmentDate === date && !t.id.startsWith('sample_')).length,
     newCustomers: src.customers.filter(c => !c.id.startsWith('sample_') && !!c.registeredAt && localDay(c.registeredAt) === date).length,
@@ -87,7 +87,7 @@ export function formatDailyCloseMessage(c: DailyClose, shop: string | undefined)
   if (c.byType.other) parts.push(`기타 ${formatPrice(c.byType.other)}`);
   if (parts.length) lines.push(`  ${parts.join(' / ')}`);
   if (c.refunds) lines.push(`· 환불(오늘 결제분) ${formatPrice(c.refunds)}`);
-  if (c.refundedToday) lines.push(`· 환불 처리(오늘) ${formatPrice(c.refundedToday)}`);
+  if (c.refundedToday) lines.push(`· 환불 처리(오늘, 이전 결제분) ${formatPrice(c.refundedToday)}`);
   if (c.expenses) lines.push(`· 지출 ${formatPrice(c.expenses)}`);
   lines.push(`· 시술 ${c.treatments}건 · 신규 고객 ${c.newCustomers}명`);
   // 예약 N건은 대시보드 "오늘 예약"과 같은 수(취소·노쇼 제외) — 두 화면이 다른 N을 보였다 (10차 #M3)

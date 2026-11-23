@@ -14,6 +14,7 @@ import { statsFor } from '../src/lib/customerStatsRule';
 import { isLowStock } from '../src/lib/stockRule';
 import { isCountableCustomer } from '../src/lib/customerScope';
 import { growthPct } from '../src/lib/growth';
+import { canceledSaleIds } from '../src/lib/saleCancel';
 
 // 저장소·DOM 의존이 없는 순수 helper를 브라우저 없이 직접 검증 (95, 2026-11-20 — 커버리지 감사 B).
 // 날짜 입력은 로컬 Date로 만들어 러너 시간대와 무관하게 같은 답이 나오게 한다.
@@ -157,7 +158,7 @@ test('마감 요약 분해 — 완료만 매출, 분할 결제 1건, 수단별 �
   expect(c.byMethod).toEqual([{ method: '카드', amount: 230000 }, { method: '현금', amount: 100000 }]); // 환불·미완료 수단은 빠진다
   expect(c.byType).toEqual({ treatment: 300000, product: 30000, other: 0 });
   expect(c.refunds).toBe(50000);
-  expect(c.refundedToday).toBe(50000); // memo 태그 [환불 2026-11-20] 로 오늘 처리분을 안다
+  expect(c.refundedToday).toBe(0); // 오늘 결제분(p4)은 refunds 에만 — 같은 건이 두 줄에 나오지 않는다 (114)
   expect(c.expenses).toBe(15000);
   expect(c.treatments).toBe(1);
   expect(c.newCustomers).toBe(1);                                   // 새벽 1:30 등록은 오늘(로컬), 샘플 제외
@@ -170,11 +171,14 @@ test('마감 요약 분해 — 완료만 매출, 분할 결제 1건, 수단별 �
     '  카드 230,000원 / 현금 100,000원',
     '  시술 300,000원 / 제품 30,000원',
     '· 환불(오늘 결제분) 50,000원',
-    '· 환불 처리(오늘) 50,000원',
     '· 지출 15,000원',
     '· 시술 1건 · 신규 고객 1명',
     '· 예약 4건 (완료 2 / 노쇼 1 / 미처리 2) · 취소 1건',
   ]);
+  const prior = summarizeDailyClose(date, { payments: [pay('old', 70000, '카드', 'program', 'refunded', undefined, '2026-11-01')], expenses: [], treatmentLogs: [], customers: [], reservations: [] });
+  expect(prior.refunds).toBe(0); // 오늘 결제분이 아니다
+  expect(prior.refundedToday).toBe(70000); // 11-01 결제를 오늘 환불 처리
+  expect(formatDailyCloseMessage(prior, '샵')).toContain('· 환불 처리(오늘, 이전 결제분) 70,000원');
   // 아무것도 없는 날: 0원 (0건), 수단·구분·환불·지출 줄은 생략, 미처리 0은 표시하지 않음, 매장 이름이 비면 '매장'
   const empty = summarizeDailyClose(date, { payments: [], expenses: [], treatmentLogs: [], customers: [], reservations: [] });
   expect(formatDailyCloseMessage(empty, '').split('\n')).toEqual(['[매장] 11/20(금) 마감 보고', '· 매출 0원 (0건)', '· 시술 0건 · 신규 고객 0명', '· 예약 0건 (완료 0 / 노쇼 0)']);
@@ -185,6 +189,8 @@ test('공용 집계 규칙 — 재고 부족·집계 대상 고객·성장률·�
   expect(isLowStock({ isActive: true, stock: 3, minStock: 3 })).toBe(true);   // 최소 재고와 같아도 부족
   expect(isLowStock({ isActive: false, stock: 0, minStock: 3 })).toBe(false); // 단종 제품은 입고 권유 대상이 아니다
   expect(isLowStock({ isActive: true, stock: 5, minStock: 3 })).toBe(false);
+  // 취소(환불)된 제품 판매 = 환불 상태이면서 판매 행을 가리키는 결제 — 제품 화면·직원 실적·엑셀이 같은 집합을 쓴다 (114)
+  expect([...canceledSaleIds([{ status: 'refunded', referenceId: 's1' }, { status: 'completed', referenceId: 's2' }, { status: 'refunded' }, { status: 'refunded', referenceId: 's1' }])]).toEqual(['s1']);
   expect(isCountableCustomer({ id: 'c1', isActive: true })).toBe(true);
   expect(isCountableCustomer({ id: 'sample_1', isActive: true })).toBe(false);
   expect(isCountableCustomer({ id: 'c2', isActive: false })).toBe(false);     // 익명화(탈퇴)

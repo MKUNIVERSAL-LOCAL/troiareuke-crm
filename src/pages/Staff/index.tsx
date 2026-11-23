@@ -138,7 +138,6 @@ export default function StaffPage() {
                   <div className="bg-gray-50 rounded-xl p-2.5 text-center" title="완료·예정 포함, 취소·노쇼 제외">
                     <p className="text-base font-bold text-gray-800">{formatPrice(monthlyRevenue)}</p>
                     <p className="text-xs text-gray-400 whitespace-nowrap" title="이달 예약표 금액 합(예정·미완료 포함, 취소·노쇼 제외) — 실적표의 완료 예약액·실결제액과 다릅니다">월 예약액(예정 포함)</p>
-                    <p className="text-2xs text-gray-500 whitespace-nowrap">예정 포함</p>
                   </div>
                 </div>
 

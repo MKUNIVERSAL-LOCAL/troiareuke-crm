@@ -1,5 +1,6 @@
 ﻿import { useState, useCallback, useEffect, useMemo } from 'react';
 import { tagRefund } from '../../lib/refundDate';
+import { canceledSaleIds } from '../../lib/saleCancel';
 import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
@@ -31,7 +32,7 @@ export default function Products() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [products, setProducts] = useState(() => ProductStore.getAll());
   const [sales, setSales] = useState(() => ProductSaleStore.getAll());
-  const [payments, setPayments] = useState<Payment[]>([]); // 판매 취소(환불) 식별용
+  const [payments, setPayments] = useState<Payment[]>(() => PaymentStore.getAll()); // 판매 취소(환불) 식별용 — 빈 배열로 시작하면 화면을 새로 열 때 취소 표시가 사라지고 같은 판매를 다시 취소할 수 있었다(재고 이중 복구) (리뷰 2026-11-23)
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
@@ -60,8 +61,8 @@ export default function Products() {
   };
 
   // 취소된 판매 = 연결 결제가 환불 상태 (판매 행 자체는 코어에 수정 API 가 없어 결제 쪽 상태로 식별)
-  const canceledSaleIds = useMemo(() => new Set(payments.filter(p => p.status === 'refunded' && p.referenceId).map(p => p.referenceId as string)), [payments]);
-  const isCanceled = (sale: ProductSale) => canceledSaleIds.has(sale.id);
+  const canceled = useMemo(() => canceledSaleIds(payments), [payments]);
+  const isCanceled = (sale: ProductSale) => canceled.has(sale.id);
   const handleDeleteSale = (sale: ProductSale) => {
     if (!window.confirm(`${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.`)) return;
     const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
@@ -417,7 +418,7 @@ export default function Products() {
                         <p className="text-sm font-semibold text-gray-900 truncate">{sale.productName}</p>
                         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                           <span>{formatDate(sale.saleDate)}</span>
-                          <span>{sale.customerName || '—'}</span>
+                          <span>{sale.customerName || '-'}</span>
                           <span>{sale.quantity}개 × {formatPrice(sale.unitPrice)}</span>
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{sale.paymentMethod}</span>
                         </p>
@@ -456,7 +457,7 @@ export default function Products() {
                       <td className="px-4 py-3.5">
                         <p className="text-sm font-medium text-gray-900">{sale.productName}</p>
                       </td>
-                      <td className="px-4 py-3.5 text-sm text-gray-500">{sale.customerName || '—'}</td>
+                      <td className="px-4 py-3.5 text-sm text-gray-500">{sale.customerName || '-'}</td>
                       <td className="px-4 py-3.5 text-sm text-center text-gray-700 font-medium">{sale.quantity}</td>
                       <td className="px-4 py-3.5 text-sm text-gray-500 text-right">{formatPrice(sale.unitPrice)}</td>
                       <td className={`px-4 py-3.5 text-sm font-bold text-right ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatPrice(sale.totalPrice)}</td>

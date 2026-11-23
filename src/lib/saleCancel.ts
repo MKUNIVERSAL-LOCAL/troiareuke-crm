@@ -1,0 +1,6 @@
+import type { Payment } from '../types';
+
+/** 취소(환불)된 제품 판매 id 집합 — 판매 행에는 수정 API 가 없어(코어) 연결 결제의 환불 상태로 식별한다. 제품 화면·직원 실적·엑셀 제품판매 시트가 같은 규칙 (111 #H2, 114 리뷰) */
+export function canceledSaleIds(payments: Pick<Payment, 'status' | 'referenceId'>[]): Set<string> {
+  return new Set(payments.filter(p => p.status === 'refunded' && p.referenceId).map(p => p.referenceId as string));
+}

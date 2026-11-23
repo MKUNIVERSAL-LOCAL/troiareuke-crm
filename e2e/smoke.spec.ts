@@ -400,14 +400,14 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.keyboard.press('Escape');
   await expect(kbMenu).toHaveCount(0);
   await desk.getByTestId('dup-hint').click(); // "같은 전화번호 고객 1명 — 병합하기" → 전화번호가 검색칸에 미리 입력된다
-  const mergeDialog = page.getByRole('dialog', { name: '고객 병합' });
+  const mergeDialog = page.getByRole('dialog', { name: '고객 병합', exact: true }); // 확인창 '고객 병합 확인'과 부분일치하지 않게 (114)
   await expect(mergeDialog.getByLabel('병합할 고객 검색')).toHaveValue(acc.customerPhone);
   const dupOption = mergeDialog.getByRole('radio', { name: new RegExp(dupName) });
   await expect(dupOption).toHaveCount(1);
   await dupOption.check();
   await expect(mergeDialog.getByTestId('merge-preview')).toContainText('예약 1 · 시술 1 · 프로그램 0 · 결제 1');
   await mergeDialog.getByRole('button', { name: '병합 실행' }).click();
-  await page.getByRole('dialog', { name: '고객 병합' }).getByRole('button', { name: '병합', exact: true }).click(); // 앱 확인창(113 — window.confirm 아님)
+  await page.getByRole('dialog', { name: '고객 병합 확인' }).getByRole('button', { name: '병합', exact: true }).click(); // 앱 확인창(113 — window.confirm 아님)
   await expect(mergeDialog).toHaveCount(0);
   await expect(desk).toContainText('중복 메모'); // 흡수된 고객의 메모가 본 고객 메모에 합쳐짐
   await expect(desk.getByTestId('dup-hint')).toHaveCount(0); // 중복이 사라져 안내도 사라진다

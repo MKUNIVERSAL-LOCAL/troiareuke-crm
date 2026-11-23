@@ -10,6 +10,7 @@
 
 import { StaffStore, ReservationStore, TreatmentLogStore, ProductSaleStore, PaymentStore } from './store';
 import { thisYearMonthISO, todayISO, formatPrice } from './format';
+import { canceledSaleIds } from './saleCancel';
 
 export interface StaffMonthStat {
   staffId: string;
@@ -129,8 +130,9 @@ export function getStaffMonthReport(yearMonth = thisYearMonthISO()): StaffMonthR
     served.get(st.id)!.add(t.customerId);
   }
 
+  const canceled = canceledSaleIds(PaymentStore.getAll()); // 취소(환불)된 판매는 실적이 아니다 — 111 뒤로 행이 남아 실적이 부풀었다 (리뷰 2026-11-23)
   for (const sale of ProductSaleStore.getAll()) {
-    if (!inMonth(sale.saleDate)) continue;
+    if (!inMonth(sale.saleDate) || canceled.has(sale.id)) continue;
     const { staff: st, ambiguous } = resolveName(sale.staffName);
     if (ambiguous) { unassigned.ambiguous++; continue; }
     if (!st) { unassigned.nameMismatch++; continue; }

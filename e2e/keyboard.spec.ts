@@ -117,7 +117,7 @@ test('전역 검색·예약표 단축키·모달 포커스 트랩·Ctrl+Enter �
   const moreBtn = page.getByTestId('customers-desktop').getByRole('button', { name: '더보기', exact: true });
   await moreBtn.click();
   await page.getByRole('menuitem', { name: '중복 고객 병합' }).click();
-  const mergeDialog = page.getByRole('dialog', { name: '고객 병합' });
+  const mergeDialog = page.getByRole('dialog', { name: '고객 병합', exact: true });
   await expect(mergeDialog).toBeVisible();
   await expect.poll(async () => (await activeInfo(page)).label).toBe('병합할 고객 검색');
   await mergeDialog.getByRole('button', { name: '닫기', exact: true }).focus();
