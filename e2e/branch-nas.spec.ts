@@ -16,6 +16,9 @@ const BRANCH_ADMIN = {
   createdAt: '2026-06-01T00:00:00.000Z', serviceEndsAt: null,
 };
 
+/** 직원 계정 — 설정·직원 관리·매출은 열 수 없고 금액 카드도 없다 (13차 점검 2026-11-23) */
+const BRANCH_STAFF = { ...BRANCH_ADMIN, id: 'u-br-2', email: 'staff@example.test', name: '김직원', role: 'staff' };
+
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 const INITIAL = { pgEnabled: false };
@@ -24,12 +27,12 @@ const unmocked: string[] = [];
 const created: Record<string, unknown>[] = [];
 test.beforeEach(() => { Object.assign(state, INITIAL); unmocked.length = 0; created.length = 0; });
 
-async function mockNas(page: Page) {
+async function mockNas(page: Page, user: typeof BRANCH_ADMIN = BRANCH_ADMIN) {
   await page.route(`${API}/**`, route => { unmocked.push(new URL(route.request().url()).pathname); return json(route, { error: 'not mocked' }, 404); });
   await page.route(`${UPDATE}/**`, route => { unmocked.push(new URL(route.request().url()).pathname); return json(route, { error: 'not mocked' }, 404); });
   await page.route('https://cdn.iamport.kr/**', route => route.abort());
-  await page.route(`${API}/api/auth/login`, route => json(route, { token: 'test-token', user: BRANCH_ADMIN }));
-  await page.route(`${API}/api/auth/me`, route => json(route, { user: BRANCH_ADMIN }));
+  await page.route(`${API}/api/auth/login`, route => json(route, { token: 'test-token', user }));
+  await page.route(`${API}/api/auth/me`, route => json(route, { user }));
   await page.route(`${API}/api/auth/logout`, route => route.fulfill({ status: 204 }));
   await page.route(`${API}/api/auth/signup`, route => json(route, { user: { ...BRANCH_ADMIN, id: 'u-new', status: 'pending', isOnboarded: false }, pending: true }));
   await page.route(`${API}/api/data/**`, route => (route.request().method() === 'GET' ? json(route, { rows: [] }) : json(route, { ok: true })));
@@ -121,4 +124,44 @@ test('지점 앱(NAS 흉내): 가입 신청 대기, 재설정 안내, AI 중계 
 
   const unexpected = [...new Set(unmocked)];
   expect(unexpected, '흉내 내지 않은 서버 경로').toEqual([]);
+});
+
+test('지점 앱(NAS 흉내) 직원 계정: 설정·직원 관리·매출 메뉴가 없고 URL 로 들어가도 "관리자 권한이 필요합니다", 대시보드 금액 카드 없음, 고객 상세 ⋯(삭제·익명화·병합) 없음', async ({ page }) => {
+  await mockNas(page, BRANCH_STAFF);
+  await page.goto('/login');
+  await page.getByLabel('이메일', { exact: true }).fill(BRANCH_STAFF.email);
+  await page.getByLabel('비밀번호', { exact: true }).fill('test-password-only-for-mock');
+  await page.locator('form button[type="submit"]').first().click();
+  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+  // 대시보드: 매출 금액 카드 없음(예약 카드는 있음)
+  await expect(page.getByText('이번 달 총 매출')).toHaveCount(0);
+  // PC 사이드바: 고객 관리는 있고 설정·직원 관리·매출은 없다
+  const nav = page.getByRole('navigation').first();
+  await expect(nav.getByRole('link', { name: '고객 관리' })).toBeVisible();
+  for (const name of ['설정', '직원 관리', '매출·손익 관리']) await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
+  // URL 직접 진입 → 역할 게이트
+  for (const path of ['/settings', '/staff', '/sales', '/settings?tab=backup']) {
+    await page.goto(path);
+    await expect(page.getByTestId('role-gate')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '관리자 권한이 필요합니다' })).toBeVisible();
+  }
+  // 고객 화면: 관리자 전용 ⋯(병합·익명화·삭제) 버튼이 없다 — 고객을 하나 만들어 상세를 연다
+  await page.goto('/customers');
+  await page.getByRole('button', { name: '고객 추가' }).click(); // helpers.createCustomer 와 같은 단계(계정 픽스처 없이)
+  await page.getByPlaceholder('홍길동').fill('직원테스트고객');
+  await page.getByPlaceholder('010-0000-0000').fill('01099990001');
+  await page.getByText('[필수] 개인정보 수집·이용 동의').click();
+  await page.getByRole('button', { name: '등록', exact: true }).click();
+  const desk = page.getByTestId('customers-desktop');
+  await expect(desk.getByText('직원테스트고객').first()).toBeVisible();
+  await desk.getByText('직원테스트고객').first().click();
+  await expect(desk.getByRole('button', { name: '수정', exact: true })).toBeVisible();
+  await expect(desk.getByRole('button', { name: '더보기', exact: true })).toHaveCount(0); // 삭제·익명화·병합 메뉴(⋯) 자체가 렌더되지 않는다
+  // 수정 창: 전화번호는 가린 글자로만 보이고 입력칸이 없다, 이메일·주소·생년월일 칸도 없다
+  await desk.getByRole('button', { name: '수정', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: '고객 정보 수정' });
+  await expect(edit.getByText('010-****-0001')).toBeVisible();
+  await expect(edit.getByRole('textbox', { name: '전화번호' })).toHaveCount(0);
+  await expect(edit.getByRole('textbox', { name: '이메일' })).toHaveCount(0);
+  await expect(edit.getByRole('textbox', { name: '주소' })).toHaveCount(0);
 });

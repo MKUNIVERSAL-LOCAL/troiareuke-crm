@@ -1351,7 +1351,7 @@ export default function Settings() {
                     </p>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setExportSelection(new Set(EXPORT_DATASETS.map(d => d.key)))}
+                        onClick={() => setExportSelection(new Set(EXPORT_DATASETS.filter(d => isAdmin || !d.adminOnly).map(d => d.key)))}
                         className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
                       >
                         전체 선택
@@ -1364,7 +1364,7 @@ export default function Settings() {
                       </button>
                     </div>
                     <div className="grid sm:grid-cols-2 gap-2">
-                      {EXPORT_DATASETS.map(d => (
+                      {EXPORT_DATASETS.filter(d => isAdmin || !d.adminOnly).map(d => (
                         <label
                           key={d.key}
                           className={`flex items-start gap-2.5 px-3 py-2.5 border rounded-xl cursor-pointer transition-colors ${

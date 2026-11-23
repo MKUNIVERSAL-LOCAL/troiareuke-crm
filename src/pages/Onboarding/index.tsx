@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { useNavigate } from 'react-router-dom';
 import { readJson } from '../../lib/safeJson';
 import { todayISO, formatPhoneInput } from '../../lib/format';
 import { useState, useRef, useEffect } from 'react';
@@ -87,6 +88,10 @@ interface OnboardingDraft {
 
 export default function Onboarding() {
   const { completeOnboarding, user } = useAuth();
+  // 비로그인 상태로 /onboarding 에 직접 들어와 finish() 가 세션 객체를 써 넣던 길 차단 — 새로고침 직후엔 user 가 잠시 비므로 저장된 세션 id 로 판단 (13차 #M18)
+  const hasSession = !!(user || readJson<{ id?: string }>('troiareuke_auth_user', {}).id);
+  const navigateGuard = useNavigate();
+  useEffect(() => { if (!hasSession) navigateGuard('/login', { replace: true }); }, [hasSession, navigateGuard]);
   // 키는 첫 렌더에 동기적으로 정해져야 한다 — 새로고침 직후 AuthContext의 user는 잠시 비어 있어 거기서 id를 가져오면 초안을 못 찾는다(E2E 발견)
   const [draftKey] = useState(() => `onboarding-draft:${readJson<{ id?: string }>('troiareuke_auth_user', {}).id || user?.id || 'anon'}`);
   const [draft] = useState(() => readDraft<OnboardingDraft | null>(draftKey, null));

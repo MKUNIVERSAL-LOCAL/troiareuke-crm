@@ -64,14 +64,17 @@ const MESSAGE_TYPE_LABEL: Record<string, string> = { sms: '문자', lms: '장문
 const MESSAGE_STATUS_LABEL: Record<string, string> = { sent: '발송됨', failed: '실패', pending: '대기', processing: '발송 중', partial: '일부 실패', canceled: '취소' };
 
 /** 본사 콘솔은 전 지점 최종 고객의 개인정보를 다룬다 — 기본은 가리고 [원문 보기]로만 푼다 (8차 점검 2026-11-20) */
-const PII_KEY_RE = /^(phone|mobile|tel|customer_phone|customerPhone|shop_phone|email|customer_email)$/i;
+const PII_KEY_RE = /^(phone|mobile|tel|customer_phone|customerPhone|shop_phone|email|customer_email|customer_name|customerName|address|birth_date|birthDate|memo|notes)$/i; // 이름·주소·생년월일·메모도 기본 가림 (13차 #M19)
 function maskEmail(v: string): string {
   const at = v.indexOf('@');
   return at > 0 ? `${v.slice(0, 1)}***${v.slice(at)}` : '***';
 }
 function maskPii(key: string, v: string, showRaw: boolean): string {
-  if (showRaw || !PII_KEY_RE.test(key)) return v;
-  return /email/i.test(key) ? maskEmail(v) : maskPhone(v, 'staff');
+  if (showRaw || !PII_KEY_RE.test(key) || !v) return v;
+  if (/email/i.test(key)) return maskEmail(v);
+  if (/phone|mobile|tel/i.test(key)) return maskPhone(v, 'staff');
+  if (/name/i.test(key)) return v.length <= 1 ? '○' : v[0] + '○'.repeat(Math.min(v.length - 1, 3));
+  return '***';
 }
 
 const PAGE_SIZE = 50;

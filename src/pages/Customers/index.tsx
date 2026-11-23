@@ -51,7 +51,9 @@ import { maskPhone } from '../../lib/masking';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, localISODate, formatLocalDate } from '../../lib/format';
-import { daysBetween as calendarDaysBetween } from '../../lib/revisitRule'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
+import { daysBetween as calendarDaysBetween } from '../../lib/revisitRule';
+import { canDo, ADMIN_REQUIRED_MESSAGE } from '../../lib/permissions';
+import { canSeePii, emailFor, birthDateFor } from '../../lib/pii'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
 const CONCERN_GROUPS: { group: string; items: string[] }[] = [
@@ -308,6 +310,8 @@ const LIST_PAGE = 100; // 목록 1회 표시 수 — [더 보기]로 늘린다
 
 export default function Customers() {
   const { user } = useAuth();
+  const canManage = canDo(user?.role, 'customer.delete'); // 삭제·익명화·병합 — 메뉴 항목과 핸들러 양쪽에서 본다 (13차 #H4)
+  const piiOk = canSeePii(user?.role);                     // 전화·이메일·주소·생년월일 원문 (13차 #H5·H6)
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
@@ -1052,6 +1056,7 @@ export default function Customers() {
   ) : null;
 
   async function handleAnonymizeExpired() {
+    if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
     const targets = filtered.filter(c => expiredIds.has(c.id) && !isAnonymized(c));
     if (targets.length === 0) return;
     if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
@@ -1311,19 +1316,20 @@ export default function Customers() {
   async function handleEditCustomer(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
-    const identityChanged = editForm.name !== selected.name || editForm.phone !== selected.phone;
+    const identityChanged = editForm.name !== selected.name || (piiOk && editForm.phone !== selected.phone);
     // 연결 기록이 많으면(단골) 건마다 저장·서버 동기가 일어나 수 초 걸린다 — 저장 전에 알리고 확인 (리뷰 #H2)
     const copies = identityChanged ? countIdentityCopies(selected.id, { name: editForm.name, phone: editForm.phone }) : 0;
     if (copies > IDENTITY_PROPAGATION_CONFIRM_AT && !(await askConfirm({ title: '기록 일괄 수정', message: `이름·연락처가 바뀌어 연결된 기록 ${copies}건도 함께 고칩니다. 서버 동기화에 시간이 걸릴 수 있습니다. 계속할까요?`, confirmLabel: '함께 수정' }))) return;
+    // 직원 계정은 PII 입력칸이 없으므로 기존 값을 그대로 둔다 (13차 #H5)
     CustomerStore.update(selected.id, {
-      name: editForm.name, phone: editForm.phone,
+      name: editForm.name, phone: piiOk ? editForm.phone : selected.phone,
       gender: editForm.gender, grade: editForm.grade,
       skinType: editForm.skinType, memo: editForm.memo,
       // 비운 값은 ''로 — undefined는 toDbCustomer가 키를 빼서 서버(JSON 병합 PATCH)에 옛 값이 남고 재로그인 때 되살아난다 (NAS 감사 2026-11-18). 소비자는 모두 truthy 검사
-      birthDate: editForm.birthDate || '',
+      birthDate: piiOk ? (editForm.birthDate || '') : (selected.birthDate || ''),
       referralSource: editForm.referralSource || '',
-      email: editForm.email.trim() || '',
-      address: editForm.address.trim() || '',
+      email: piiOk ? (editForm.email.trim() || '') : (selected.email || ''),
+      address: piiOk ? (editForm.address.trim() || '') : (selected.address || ''),
       tags: parseTags(editForm.tags),
       allergies: editForm.allergies.trim() || '',
     });
@@ -1351,6 +1357,7 @@ export default function Customers() {
   // 고객 요청 등으로 개인정보만 지울 때 — 삭제와 달리 기록 연결·방문/결제 통계는 남는다 (2026-11-18)
   async function handleAnonymizeOne() {
     if (!selected || isAnonymized(selected)) return;
+    if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
     if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`, confirmLabel: '익명화', danger: true }))) return;
     const n = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
@@ -1363,6 +1370,7 @@ export default function Customers() {
 
   async function handleDeleteCustomer() {
     if (!selected) return;
+    if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
     // 연결된 기록이 있으면 건수를 보여 주고 병합·익명화를 권한다 — 삭제하면 기록의 고객 연결이 끊겨 타임라인·통계에서 빠진다 (2026-11-18)
     const linked = previewMerge(selected.id);
     const linkedTotal = linked.reservations + linked.treatments + linked.programs + linked.payments + linked.consultations + linked.productSales;
@@ -1525,7 +1533,7 @@ export default function Customers() {
               </button>
             )}
           </div>
-          {retentionOnly && (
+          {retentionOnly && canManage && (
             <div className="mt-2 flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" data-testid="retention-bar">
               <p className="text-xs text-amber-800 min-w-0">보존기간({retentionPolicy.years}년) 경과 {filtered.length}명 — 개인 식별 정보·기록의 이름·사진을 지우고 통계만 남깁니다</p>
               <button
@@ -1637,24 +1645,26 @@ export default function Customers() {
                         className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                         <Pencil size={15} className="text-gray-400" />고객 정보 수정
                       </button>
-                      {!mergeBlockReason(selected) && (
+                      {canManage && !mergeBlockReason(selected) && (
                         <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); setShowMergeModal(true); }}
                           title="같은 사람이 두 번 등록된 경우, 다른 고객의 기록을 이 고객으로 합칩니다"
                           className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                           <GitMerge size={15} className="text-gray-400" />중복 고객 병합
                         </button>
                       )}
-                      {!isAnonymized(selected) && !selected.id.startsWith('sample_') && (
+                      {canManage && !isAnonymized(selected) && !selected.id.startsWith('sample_') && (
                         <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); handleAnonymizeOne(); }} aria-label="고객 익명화"
                           title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
                           className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                           <UserX size={15} className="text-gray-400" />고객 익명화
                         </button>
                       )}
+                      {canManage && (
                       <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); handleDeleteCustomer(); }} aria-label="고객 삭제"
                         className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
                         <Trash2 size={15} />고객 삭제
                       </button>
+                      )}
                     </div>
                   </>
                 )}
@@ -1674,13 +1684,13 @@ export default function Customers() {
                   {selected.email && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">이메일</span>
-                      <span className="text-sm font-medium text-gray-900 tabular-nums truncate ml-2">{selected.email}</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums truncate ml-2">{emailFor(user?.role, selected.email)}</span>
                     </div>
                   )}
                   {selected.birthDate && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">생년월일</span>
-                      <span className="text-sm font-medium text-gray-900 tabular-nums">{selected.birthDate}</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums">{birthDateFor(user?.role, selected.birthDate)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
@@ -1988,7 +1998,7 @@ export default function Customers() {
               </button>
             )}
           </div>
-          {retentionOnly && (
+          {retentionOnly && canManage && (
             <div className="mt-2 flex items-center justify-between gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" data-testid="retention-bar">
               <p className="text-xs text-amber-800 min-w-0">보존기간({retentionPolicy.years}년) 경과 {filtered.length}명 — 개인 식별 정보·기록의 이름·사진을 지우고 통계만 남깁니다</p>
               <button
@@ -2080,7 +2090,7 @@ export default function Customers() {
                       // 폼에서 받는 정보를 상세에서도 보이게 — 이메일·주소는 목록 내보내기(이 화면)와 같은 규칙으로 staff 역할에게 숨김, 역할을 모르면 숨김 (2026-11-18)
                       const parts = [
                         selected.gender && selected.gender !== '미입력' ? selected.gender : '',
-                        selected.birthDate ? `생일 ${selected.birthDate}` : '',
+                        selected.birthDate ? `생일 ${birthDateFor(user?.role, selected.birthDate)}` : '',
                         (user?.role ?? 'staff') !== 'staff' && selected.email ? selected.email : '',
                         (user?.role ?? 'staff') !== 'staff' && selected.address ? selected.address : '',
                         selected.referralSource ? `유입 ${selected.referralSource}` : '',
@@ -2147,6 +2157,7 @@ export default function Customers() {
                   >
                     <Pencil size={12} />수정
                   </button>
+                  {canManage && ( /* 병합·익명화·삭제 — 관리자만 (13차 #H4). hidden 속성은 flex 클래스가 이겨 보였다 */
                   <div className="relative">
                     <button
                       type="button"
@@ -2163,28 +2174,31 @@ export default function Customers() {
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setShowMoreMenu(false)} />
                         <div ref={moreMenuRef} role="menu" aria-label="고객 관리 더보기" className="absolute right-0 mt-1 z-20 w-56 bg-white border border-gray-100 rounded-xl shadow-lg py-1">
-                          {!mergeBlockReason(selected) && (
+                          {canManage && !mergeBlockReason(selected) && (
                             <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); setShowMergeModal(true); }}
                               title="같은 사람이 두 번 등록된 경우, 다른 고객의 기록을 이 고객으로 합칩니다"
                               className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                               <GitMerge size={13} className="text-gray-400" />중복 고객 병합
                             </button>
                           )}
-                          {!isAnonymized(selected) && !selected.id.startsWith('sample_') && (
+                          {canManage && !isAnonymized(selected) && !selected.id.startsWith('sample_') && (
                             <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); handleAnonymizeOne(); }} aria-label="고객 익명화"
                               title="개인정보만 지우고 방문·결제 통계와 기록 연결은 남깁니다"
                               className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                               <UserX size={13} className="text-gray-400" />고객 익명화
                             </button>
                           )}
+                          {canManage && (
                           <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); handleDeleteCustomer(); }} aria-label="고객 삭제"
                             className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
                             <Trash2 size={13} />고객 삭제
                           </button>
+                          )}
                         </div>
                       </>
                     )}
                   </div>
+                  )}
                 </div>
               </div>
 
@@ -2618,11 +2632,18 @@ export default function Customers() {
                   <input aria-label="이름" required value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="홍길동" />
                 </div>
+                {piiOk ? (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">전화번호 *</label>
                   <input aria-label="전화번호" type="tel" inputMode="numeric" autoComplete="off" required value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="010-0000-0000" />
                 </div>
+                ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">전화번호</label>
+                  <p className="px-3 py-2 text-sm text-gray-500 bg-gray-50 rounded-xl tabular-nums" title="전화·이메일·주소·생년월일은 매장 관리자만 수정할 수 있습니다">{maskPhone(selected.phone, 'staff')}</p>
+                </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2641,10 +2662,12 @@ export default function Customers() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
+                {piiOk && (
                 <div className="col-span-2">{/* 연/월/일 3칸 — PC 모달(max-w-md)에서도 반 폭이면 "연도"가 잘려 항상 한 줄 전체 (리뷰 2026-11-18) */}
                   <label className="block text-xs font-medium text-gray-600 mb-1">생년월일</label>
                   <BirthDateSelect value={editForm.birthDate} onChange={v => setEditForm(f => ({ ...f, birthDate: v }))} />
                 </div>
+                )}
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-600 mb-1">피부 유형</label>
                   <select aria-label="피부 유형" value={editForm.skinType} onChange={e => setEditForm(f => ({ ...f, skinType: e.target.value }))}
@@ -2654,6 +2677,7 @@ export default function Customers() {
                   </select>
                 </div>
               </div>
+              {piiOk && (<>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">이메일</label>
                 <input aria-label="이메일" type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
@@ -2664,6 +2688,7 @@ export default function Customers() {
                 <input aria-label="주소" type="text" value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" placeholder="예: 서울시 강남구 테헤란로 1" />
               </div>
+              </>)}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">유입 경로</label>
                 <select aria-label="유입 경로" value={editForm.referralSource} onChange={e => setEditForm(f => ({ ...f, referralSource: e.target.value }))}

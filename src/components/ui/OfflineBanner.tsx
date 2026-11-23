@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { canDo } from '../../lib/permissions';
 import { WifiOff, UploadCloud, AlertTriangle, Image } from 'lucide-react';
 import {
   pendingNasOutboxCount, listRejectedNasOutbox, clearRejectedNasOutbox, retryRejectedNasOutbox,
@@ -56,6 +58,7 @@ function describeReason(items: { status: number; method: string }[]): string {
  * 우선순위: 거부(사람이 조치) > 세션 만료 > 용량 폴백 실패 > 오프라인 > 일시 실패 > 대기 중.
  */
 export default function OfflineBanner() {
+  const { user } = useAuth();
   const [offline, setOffline] = useState(!navigator.onLine);
   const [minutes, setMinutes] = useState<number | null>(null);
   const [pending, setPending] = useState(() => pendingNasOutboxCount());
@@ -140,7 +143,7 @@ export default function OfflineBanner() {
         </span>
         <span className="ml-auto flex items-center gap-1">
           {rejected.length > 0 && <button type="button" onClick={retry} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>}
-          {rejected.length > 0 && <button type="button" onClick={download} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>내려받기</button>}
+          {rejected.length > 0 && canDo(user?.role, 'outbox.download') && <button type="button" onClick={download} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>내려받기</button>} {/* 고객 레코드 원문 파일 — 관리자만 (13차 #M13) */}
           <button type="button" onClick={() => { if (window.confirm('거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.')) { clearRejectedNasOutbox(); setRejected([]); setLostRejected(0); } }} className={`${linkBtn} text-rose-500 hover:text-rose-700`}>지우기</button>
         </span>
       </div>

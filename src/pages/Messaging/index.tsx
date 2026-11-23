@@ -1,4 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { maskPhone } from '../../lib/pii';
 import { notify } from '../../lib/notify';
 import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
 import { formatDateTime, parseISODate, todayISO } from '../../lib/format';
@@ -764,6 +766,7 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
 }
 
 function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; onSent: () => void }) {
+  const { user: authUser } = useAuth(); // 수신 대상 미리보기 전화번호 마스킹 기준 (13차 #M12)
   const [msgType, setMsgType] = useState<MessageType>('sms');
   const [recipientMode, setRecipientMode] = useState<Segment>(initialSegment ?? 'all');
   const [content, setContent] = useState('');
@@ -1002,7 +1005,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               </p>
             ) : onlyCustomer ? (
               <div className="flex items-center gap-2 flex-wrap" data-testid="recipient-single">
-                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-primary-600 text-white">개별 발송: {onlyCustomer.name} ({onlyCustomer.phone || '전화번호 없음'})</span>
+                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-primary-600 text-white">개별 발송: {onlyCustomer.name} ({onlyCustomer.phone ? maskPhone(onlyCustomer.phone, authUser?.role ?? 'staff') : '전화번호 없음'})</span>
                 <button type="button" onClick={() => setOnlyCustomer(null)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">대상 바꾸기</button>
               </div>
             ) : (
