@@ -38,6 +38,7 @@ import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/us
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
+import { formatBriefing, pseudonymizeStaff, BRIEFING_SYSTEM } from '../src/lib/ai/briefingRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -753,4 +754,31 @@ test('키 꼴 탐지·스크럽 — 제공사 키·토큰은 가리고 일반 �
   expect(scrubKeyLike('두 개 AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ012345 그리고 sk-proj-ABCDEFGHIJKLMNOPQRSTUV')).toBe('두 개 AIza••••(가려진 키) 그리고 sk-p••••(가려진 키)');
   expect(scrubKeyLike('평범한 문장')).toBe('평범한 문장');
   expect(findKeyLikeEntries({ a: '안전', crm_x_customers: '[{"memo":"sk-proj-ABCDEFGHIJKLMNOPQRSTUV"}]', ai_key_openai: 'sk-proj-ABCDEFGHIJKLMNOPQRSTUV' })).toEqual(['crm_x_customers', 'ai_key_openai']);
+});
+
+test('AI 경영 브리핑 컨텍스트 — 엔진 숫자에 [확정]/[예측] 라벨·근거 모듈, 직원 실명은 가명, 매출 권한 없으면 매출 줄 없음 (153)', () => {
+  const metrics = { month: '2026-11', total: 400000, prevMonth: 200000, lastYear: 800000, momPct: 100, yoyPct: -50, target: 800000, achievementPct: 50, newCustomerRevenue: 300000, existingCustomerRevenue: 100000, newSharePct: 75, discount: 20000, programSold: 300000, programRealized: 60000, unusedBalance: 240000, cogs: 80000, sga: 150000, breakEven: 187500, openHours: 136, perHour: 2941, daysElapsed: 20, daysInMonth: 30, isCurrentMonth: true, projected: 600000 };
+  const kpi = { visitors: 12, returning: 8, rebooked: 5, revisitRate: 67, rebookRate: 42, avgTicket: 33333, monthRevenue: 400000 };
+  const text = formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics, kpi,
+    tasks: [{ label: '이탈 위험 고객 연락', count: 3, detail: '90일 위험 매출 약 120,000원' }],
+    segments: { total: 40, churnHigh: 3, churnMedium: 5, loyal: 10, dormant: 4, newThisMonth: 6, atRiskRevenue90: 120000 },
+    lowStock: [{ name: '앰플', stock: 2, minStock: 5, unit: '개' }],
+    staff: [{ name: '김수아', completed: 7, revenue: 350000 }, { name: '박지민', completed: 3, revenue: 90000 }] });
+  expect(text).toContain('[확정] 이달 매출 400,000원');
+  expect(text).toContain('전월 대비 +100%');
+  expect(text).toContain('[예측] 월말 예상 매출 600,000원');
+  expect(text).toContain('[확정] 이달 방문 고객 12명 · 재방문율 67%');
+  expect(text).toContain('이탈 위험 높음 3명(90일 위험 매출 [추정] 120,000원)');
+  expect(text).toContain('이탈 위험 고객 연락 3건');
+  expect(text).toContain('앰플 2개(안전 5)');
+  expect(text).toContain('직원A 7건 350,000원 / 직원B 3건 90,000원');
+  expect(text).not.toContain('김수아'); expect(text).not.toContain('박지민');     // 직원 실명 없음
+  expect(text).toContain('revenueMetricsRule'); expect(text).toContain('kpiRule'); // 근거 모듈
+  const noSales = formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics: null, kpi: null, tasks: [], segments: null, lowStock: [], staff: [] });
+  expect(noSales).toContain('[권한] 매출 자료는 이 계정에 제공되지 않습니다.');
+  expect(noSales).toContain('오늘 할 일: 없음');
+  expect(noSales).not.toContain('이달 매출');
+  expect(pseudonymizeStaff(['a', 'b', 'a', 'c']).get('a')).toBe('직원A');
+  expect(pseudonymizeStaff(['a', 'b', 'a', 'c']).get('c')).toBe('직원C');
+  expect(BRIEFING_SYSTEM).toContain('숫자를 새로 계산하거나 추정하지 말고');
 });
