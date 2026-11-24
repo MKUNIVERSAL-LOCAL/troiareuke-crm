@@ -36,6 +36,11 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   const row = card.getByTestId('campaign-row').filter({ hasText: '예약 전날 안내' });
   await expect(row).toContainText('내일 예약(확정·대기)이 있는 고객에게 · 사건마다 1회');
 
+  // 대시보드 "오늘 할 일"에 캠페인 대상 1명 (177)
+  await page.goto('/');
+  await expect(page.getByTestId('today-tasks-card').filter({ visible: true }).first()).toContainText('캠페인 발송 대상 확인·승인');
+  await page.goto('/messaging');
+
   // 대상 확인 → 치환된 본문 → 승인
   await row.getByRole('button', { name: '대상 확인·발송' }).click();
   const run = page.getByRole('dialog', { name: '캠페인 실행 — 예약 전날 안내' });

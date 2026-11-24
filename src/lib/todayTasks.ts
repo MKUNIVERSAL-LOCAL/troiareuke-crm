@@ -12,6 +12,10 @@ import { isLowStock } from './stockRule';
 import { buildCustomerStatsIndex } from './customerStats';
 import { monthlyKpis, type MonthlyKpis } from './kpiRule';
 import { toISO } from './revisitRule';
+import { listCampaigns, sentKeysOf } from './campaignStore';
+import { collectRawCandidates } from './campaignTriggers';
+import { selectCandidates } from './campaignRule';
+import { buildSegmentFacts, segmentIdsFor } from './savedSegments';
 
 /**
  * 대시보드 "오늘 할 일" — 흩어진 알림 카드(회차권·생일·재방문·완료 누락·내일 예약·재고)와 136 의 이탈 위험을 **행동 목록**으로 모은다 (138, GAP D-1).
@@ -45,6 +49,16 @@ export function buildTodayTasks(opts: { customersOn: boolean; reservationsOn: bo
   if (opts.productsOn) {
     const low = ProductStore.getAll().filter(isLowStock).length;
     if (low > 0) out.push({ key: 'stock', label: '재고 부족 제품 입고', count: low, href: '/products', tone: 'normal' });
+  }
+  if (opts.customersOn) {
+    // 켜진 캠페인의 오늘 승인 전 대상 합계 — AI 브리핑 "연락할 고객" 과 같은 계산(156·167), 세그먼트 사실은 세그먼트 캠페인이 있을 때만 1회 (177)
+    const campaigns = listCampaigns().filter(c => c.enabled);
+    if (campaigns.length > 0) {
+      const year = toISO(new Date()).slice(0, 4);
+      const facts = campaigns.some(c => c.segmentId) ? buildSegmentFacts() : undefined;
+      const ready = campaigns.reduce((sum, c) => sum + selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year, segmentIdsFor(c.segmentId, facts)).ready.length, 0);
+      if (ready > 0) out.push({ key: 'campaign', label: '캠페인 발송 대상 확인·승인', count: ready, detail: `${campaigns.length}개 캠페인`, href: '/messaging', tone: 'normal' });
+    }
   }
   return out;
 }
