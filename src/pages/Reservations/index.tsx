@@ -206,7 +206,10 @@ export default function Reservations() {
   const reloadReservations = useCallback(() => {
     setReservations(ReservationStore.getAll());
   }, []);
-  useDataRefreshed(reloadReservations); // 다른 기기가 잡은 예약이 재시작 없이 보이게 (16차 #H3)
+  useDataRefreshed(() => { // 다른 기기가 잡은 예약이 재시작 없이 보이게 (16차 #H3) — 열어 둔 상세도 최신 객체로, 지워졌으면 닫는다 (리뷰 #M3)
+    reloadReservations();
+    setSelectedReservation(prev => (prev ? ReservationStore.getAll().find(x => x.id === prev.id) ?? null : null));
+  });
 
   const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
   const [mobileMonthOffset, setMobileMonthOffset] = useState(0); // '이번달' 탭에서 ‹ › 로 다른 달 보기 (2026-11-18) — 다음 달 예약을 모바일에서도 찾을 수 있게
@@ -1222,7 +1225,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     goTo(`/treatments?${q.toString()}`);
   };
   // 이 예약에 등록된 결제(완료·대기, 환불 제외 — pendingCompletion과 같은 기준). 상세가 열려 있는 동안 결제가 바뀌는 길은 결제 창뿐이고 그 뒤 상세가 닫히므로 예약 id로만 메모 (2026-11-19)
-  const paidForThis = useMemo(() => registeredPaymentsFor(r.id), [r.id]);
+  const paidForThis = registeredPaymentsFor(r.id); // 열 때 값으로 고정하면 다른 기기의 결제 등록을 모른 채 결제 창을 열어 이중 결제 (리뷰 #M3)
   const paidAmount = paidForThis.reduce((s, p) => s + p.amount, 0);
   // 이 예약 날짜에 작성된 이 고객의 시술 기록 — 시술 기록은 예약 id를 들고 있지 않아 코어 updateStatus와 같은 기준(고객+날짜)으로 센다.
   // 취소·복구해도 시술 기록과 회차 차감은 그대로 남으므로 confirm에 알린다 (UX 점검 2026-11-19)

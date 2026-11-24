@@ -23,6 +23,7 @@ import type { Payment, PaymentMethod, Expense, ExpenseCategory, CustomerProgram 
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
 import { formatPrice, formatDate, todayISO as today, parseISODate, toManwon } from '../../lib/format';
+import { usedSessionsFor } from '../../lib/programSessions';
 import { splitPercent } from '../../lib/percent';
 import { countPaymentUnits } from '../../lib/paymentCount';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -371,9 +372,10 @@ export default function Sales() {
     // 회차권 결제도 같은 이유 — 지우면 회차권만 남아 계속 차감된다. 고객 상세 [관리] > [등록 취소]가 결제와 회차권을 함께 지운다 (정합성 감사 2026-11-19)
     const linkedProgram = p.type === 'program' && p.referenceId ? CustomerProgramStore.getById(p.referenceId) : undefined;
     if (linkedProgram) {
-      // [등록 취소]는 한 번도 쓰지 않은 회차권에만 있다 — 쓴 회차권은 환불 경로로 (리뷰 2026-11-19)
-      notify(linkedProgram.usedSessions > 0
-        ? `이미 ${linkedProgram.usedSessions}회 사용한 회차권의 결제는 삭제할 수 없습니다. 고객 상세의 [관리]에서 완료 처리한 뒤 이 결제를 [수정] > 환불로 바꿔주세요.`
+      // [등록 취소]는 한 번도 쓰지 않은 회차권에만 있다 — 쓴 회차권은 환불 경로로 (리뷰 2026-11-19). 사용 회차는 기록 기준 (리뷰 #L4)
+      const usedLinked = usedSessionsFor(linkedProgram);
+      notify(usedLinked > 0
+        ? `이미 ${usedLinked}회 사용한 회차권의 결제는 삭제할 수 없습니다. 고객 상세의 [관리]에서 완료 처리한 뒤 이 결제를 [수정] > 환불로 바꿔주세요.`
         : '회차권 결제는 여기서 지우면 회차권만 남아 계속 차감됩니다. 고객 상세의 해당 프로그램 [관리] > [등록 취소]로 결제와 회차권을 함께 지워주세요.');
       return;
     }
@@ -427,8 +429,9 @@ export default function Sales() {
     if (form.status === 'refunded' && editingId && editingPayment?.type === 'program' && editingPayment.referenceId && editingPayment.status !== 'refunded') {
       const cp = CustomerProgramStore.getById(editingPayment.referenceId);
       if (cp && !cp.isCompleted) {
-        if (cp.usedSessions > 0) {
-          notify(`이미 ${cp.usedSessions}회 사용한 회차권입니다. 부분 환불은 고객 상세의 [관리]에서 먼저 완료 처리한 뒤 이 결제를 환불로 바꿔주세요.`);
+        const usedCp = usedSessionsFor(cp); // 기록 기준 (리뷰 #L4)
+        if (usedCp > 0) {
+          notify(`이미 ${usedCp}회 사용한 회차권입니다. 부분 환불은 고객 상세의 [관리]에서 먼저 완료 처리한 뒤 이 결제를 환불로 바꿔주세요.`);
           return;
         }
         if (!(await askConfirm({ title: '회차권 함께 종료', message: `환불로 저장하면 ${cp.programName} 회차권(${cp.totalSessions != null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'})을 함께 종료합니다. 계속할까요?`, confirmLabel: '환불로 저장', cancelLabel: '닫기' }))) return;

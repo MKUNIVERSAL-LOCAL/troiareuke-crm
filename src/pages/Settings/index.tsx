@@ -14,6 +14,7 @@ import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore, ReservationStore, getShopId } from '../../lib/store';
 import { askConfirm } from '../../lib/confirmDialog';
 import { refreshFromServer } from '../../lib/liveRefresh';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured, updateAuthProfile } from '../../lib/authApi';
@@ -132,6 +133,12 @@ export default function Settings() {
     return current;
   });
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  useDataRefreshed(() => setSettings(prev => ({ ...prev, holidays: SettingsStore.get().holidays || [] }))); // 다른 기기가 추가한 휴일을 저장 전에도 목록에 (리뷰 #L5) — 편집 중인 다른 칸은 건드리지 않는다
+  // 설정 저장은 행 전체 PUT — 저장 직전 서버 기준으로 맞춘다. 맞추지 못했으면(미전송분·불통) 조용히 옛 캐시로 덮지 않고 알린다 (16차 #H1, 리뷰 #L5)
+  const syncBeforeSave = async () => {
+    const ok = await refreshFromServer({ force: true });
+    if (isAuthApiConfigured && !ok) notify('서버와 맞추지 못해 이 기기 기준으로 저장합니다 — 다른 기기에서 바꾼 설정이 있으면 덮일 수 있습니다.');
+  };
   const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
   const beaconAllowed = useFeatureAllowed('customers.beacon');
   // 원격 플래그가 마운트 이후 도착해도 토글 표시가 실제 값과 어긋나지 않게 구독
@@ -409,7 +416,7 @@ export default function Settings() {
   };
   const doShopSave = async () => {
     const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
-    await refreshFromServer({ force: true }); // 설정 저장은 행 전체 PUT — 다른 기기가 바꾼 영업시간·휴일을 옛 캐시로 덮지 않게 먼저 서버 기준으로 (16차 #H1)
+    await syncBeforeSave(); // 설정 저장은 행 전체 PUT — 다른 기기가 바꾼 영업시간·휴일을 옛 캐시로 덮지 않게 먼저 서버 기준으로 (16차 #H1)
     if (!shopName) {
       notify('매장 이름을 입력해주세요.');
       return;
@@ -479,7 +486,7 @@ export default function Settings() {
       if (!h.open || !h.close) { notify(`${day}요일 영업시간을 모두 입력해주세요. 쉬는 날이면 체크를 풀어주세요.`); return; }
       if (h.open >= h.close) { notify(`${day}요일 종료 시간(${h.close})이 시작 시간(${h.open})보다 늦어야 합니다. 오후는 13:00~23:59로 적어주세요.`); return; }
     }
-    await refreshFromServer({ force: true }); // 다른 기기의 휴일·연동 설정과 병합 (16차 #H1)
+    await syncBeforeSave(); // 다른 기기의 휴일·연동 설정과 병합 (16차 #H1)
     const holidays = SettingsStore.get().holidays || []; // 휴일은 [추가]/[삭제] 때 즉시 저장되므로 서버 기준을 그대로 — 이 화면의 옛 목록으로 덮지 않는다
     SettingsStore.save({ businessHours: settings.businessHours, holidays });
     setSettings(prev => ({ ...prev, holidays }));
@@ -496,28 +503,28 @@ export default function Settings() {
   const addHoliday = async () => {
     const d = holidayInput;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { notify('날짜를 선택해주세요.'); return; }
-    await refreshFromServer({ force: true }); // 다른 기기가 추가한 휴일 위에 더한다 (16차 #H1)
+    await syncBeforeSave(); // 다른 기기가 추가한 휴일 위에 더한다 (16차 #H1)
     saveHolidays([...new Set([...(SettingsStore.get().holidays || []), d])].sort());
     setHolidayInput('');
     notify(`${d} 휴일을 추가했습니다.`);
   };
-  const removeHoliday = async (d: string) => { await refreshFromServer({ force: true }); saveHolidays((SettingsStore.get().holidays || []).filter(x => x !== d)); notify(`${d} 휴일을 삭제했습니다.`); }; // 추가와 같은 피드백 (6차 UX 감사 2026-11-20)
+  const removeHoliday = async (d: string) => { await syncBeforeSave(); saveHolidays((SettingsStore.get().holidays || []).filter(x => x !== d)); notify(`${d} 휴일을 삭제했습니다.`); }; // 추가와 같은 피드백 (6차 UX 감사 2026-11-20)
 
   // ─── Integrations ─────────────────────────────────────────
   const handleNaverSave = async () => {
-    await refreshFromServer({ force: true }); // (16차 #H1)
+    await syncBeforeSave(); // (16차 #H1)
     SettingsStore.save({ naverBooking: settings.naverBooking });
     notify.success('네이버 예약 연동 설정을 저장했습니다.');
   };
 
   const handleKakaoSave = async () => {
-    await refreshFromServer({ force: true }); // (16차 #H1)
+    await syncBeforeSave(); // (16차 #H1)
     SettingsStore.save({ kakao: settings.kakao });
     notify.success('카카오 연동 설정을 저장했습니다.');
   };
 
   const handleSmsSave = async () => {
-    await refreshFromServer({ force: true }); // (16차 #H1)
+    await syncBeforeSave(); // (16차 #H1)
     SettingsStore.save({ smsCallerId: settings.smsCallerId }); // 발송사 API 키는 본사 서버에만 — 지점 입력란 제거 (보안 감사 2026-11-19)
     notify.success('문자 발신번호를 저장했습니다.');
   };

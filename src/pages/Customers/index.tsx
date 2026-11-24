@@ -1317,8 +1317,10 @@ export default function Customers() {
   }
 
   // 고객 수정 — 상세에서 '수정' 클릭 시 현재 값으로 폼 채우고 모달 오픈
+  const editBaseRef = useRef<Customer | null>(null); // 수정 창을 연 시점의 고객 — diff 기준 (127~130 리뷰 #H3)
   function openEditModal() {
     if (!selected) return;
+    editBaseRef.current = selected;
     setEditForm({
       name: selected.name, phone: selected.phone,
       email: selected.email ?? '', address: selected.address ?? '',
@@ -1359,8 +1361,9 @@ export default function Customers() {
       tags: parseTags(editForm.tags),
       allergies: editForm.allergies.trim() || '',
     };
+    const base = editBaseRef.current && editBaseRef.current.id === selected.id ? editBaseRef.current : selected; // 재조회로 selected 가 바뀌어도 폼이 본 값과 비교
     const changed = Object.fromEntries(Object.entries(next).filter(([k, v]) => {
-      const before = (selected as unknown as Record<string, unknown>)[k];
+      const before = (base as unknown as Record<string, unknown>)[k];
       return JSON.stringify(v ?? '') !== JSON.stringify(before ?? (Array.isArray(v) ? [] : '')); // 비운 값 '' 과 저장 안 된 undefined 는 같은 뜻
     })) as Partial<Customer>;
     if (Object.keys(changed).length > 0) CustomerStore.update(selected.id, changed);

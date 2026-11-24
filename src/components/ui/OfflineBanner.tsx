@@ -32,6 +32,12 @@ const COLLECTION_LABELS: Record<string, string> = {
   expenses: '지출', customer_programs: '고객 회차권', programs: '프로그램', products: '제품', product_sales: '제품 판매',
   staff: '직원', services: '시술 항목', settings: '설정', message_templates: '메시지 템플릿', message_history: '발송 기록',
 };
+/** 대기 시간 표기 — 며칠 전 거부분이 큐 머리가 되면 "4,320분째"가 됐다 (리뷰 #L3) */
+function formatWaited(minutes: number): string {
+  if (minutes < 60) return `${minutes}분째`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}시간째`;
+  return `${Math.floor(minutes / 1440)}일째`;
+}
 function describeRejected(items: { path: string }[]): string {
   const counts = new Map<string, number>();
   for (const { path } of items) {
@@ -162,8 +168,8 @@ export default function OfflineBanner() {
         <AlertTriangle size={14} className="flex-shrink-0" />
         <span>
           {authExpired === 403
-            ? `사용기간이 끝났거나 계정이 중지돼 저장분 ${pending}건을 보내지 못하고 있습니다 — 본사에서 연장·활성화하면 자동으로 전송됩니다. 그 전까지 이 기기의 데이터를 지우지 말고 설정 > 백업·보안에서 백업해 두세요.`
-            : `로그인 세션이 만료돼 저장분 ${pending}건을 보내지 못하고 있습니다 — 프로그램을 다시 시작해 로그인하면 이어서 전송됩니다 (대기분은 이 기기에 남아 있습니다).`}
+            ? `사용기간이 끝나 저장분 ${pending}건을 보내지 못하고 있습니다 — 본사에서 연장하면 자동으로 전송됩니다. 그 전까지 이 기기의 데이터를 지우지 말고 설정 > 백업·보안에서 백업해 두세요.`
+            : `로그인 정보가 만료됐거나 계정이 중지돼 저장분 ${pending}건을 보내지 못하고 있습니다 — 다시 로그인이 되면 이어서 전송됩니다 (대기분은 이 기기에 남아 있습니다).`}
         </span>
       </div>
     );
@@ -224,7 +230,7 @@ export default function OfflineBanner() {
     return (
       <div role="status" aria-live="polite" className={`${base} bg-amber-50 border-amber-200 text-amber-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
-        <span>저장분 {pending}건을 보내지 못하고 있습니다({why}) — {waited}분째 1분마다 다시 보내는 중입니다. 대기분은 이 기기에 남아 있고, 서버가 응답하면 자동으로 전송됩니다.</span>
+        <span>저장분 {pending}건을 보내지 못하고 있습니다({why}) — {formatWaited(waited)} 1분마다 다시 보내는 중입니다. 대기분은 이 기기에 남아 있고, 서버가 응답하면 자동으로 전송됩니다.</span>
       </div>
     );
   }

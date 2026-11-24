@@ -172,4 +172,16 @@ const order = calls.filter(c => c.path.includes('customers')).map(c => c.method)
 assert.deepEqual(order.slice(0, 2), ['PUT', 'PATCH'], '거부됐던 PUT 이 나중 PATCH 보다 먼저 가야 새 이름이 남는다.');
 assert.equal(queueLength(), 0);
 
-console.log('NAS outbox tests: 8/8 OK');
+// ⑨ 동기화 시각은 실제 전송 성공 때만 — 영구 거부(400)로 치워 큐가 빈 경우는 "동기화됨"이 아니다 (127~130 리뷰 #L2)
+localStorage.removeItem('troiareuke_nas_outbox_rejected_branch-a');
+localStorage.setItem('crm_last_sync_at', '1');
+failWith = 400;
+await silent(async () => { nasData.nasUpsert('customers', { id: 'c9' }); await settle(); });
+assert.equal(queueLength(), 0);
+assert.equal(localStorage.getItem('crm_last_sync_at'), '1', '거부로 비운 큐는 동기화 시각을 갱신하면 안 된다.');
+failWith = null;
+await silent(async () => { nasData.nasUpsert('customers', { id: 'c10' }); await settle(); });
+await outbox.flushNasOutbox();
+assert.notEqual(localStorage.getItem('crm_last_sync_at'), '1', '실제 전송 성공은 동기화 시각을 갱신한다.');
+
+console.log('NAS outbox tests: 9/9 OK');

@@ -181,14 +181,16 @@ export function flushNasOutbox(): Promise<void> {
   ensureRetryLoop(); // 재시작 직후 큐가 남아있는 경우에도 복구 루프가 살아있게 한다
 
   flushPromise = (async () => {
+    let sentAny = false;
     for (;;) {
       const next = readOutbox(key)[0];
-      if (!next) { try { localStorage.setItem('crm_last_sync_at', String(Date.now())); } catch { /* noop */ } return; } // 전송 성공으로 큐가 비면 동기화 시각 갱신 (16차 #L2)
+      if (!next) { if (sentAny) { try { localStorage.setItem('crm_last_sync_at', String(Date.now())); } catch { /* noop */ } } return; } // 실제 전송 성공으로 큐가 비었을 때만 동기화 시각 갱신 (16차 #L2, 리뷰 #L2)
       try {
         await apiRequest(next.path, {
           method: next.method,
           ...(next.body === undefined ? {} : { body: next.body }),
         });
+        sentAny = true;
       } catch (error) {
         if (!isPermanentRejection(error)) {
           // 세션 만료는 연결 복구로 풀리지 않는다 — 배너가 "자동 전송"이라고 하지 않게 알린다
