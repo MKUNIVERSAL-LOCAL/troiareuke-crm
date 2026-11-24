@@ -13,7 +13,7 @@ const IS_ELECTRON =
 import Header from '../../components/layout/Header';
 import { buildAliasBook, type AliasBook } from '../../lib/aiAlias';
 import { chatWithFallback } from '../../lib/ai/chat';
-import { getAiKey, setAiKey } from '../../lib/ai/keys';
+import { getAiKey, setAiKey, getAiModels } from '../../lib/ai/keys';
 import { copyText } from '../../lib/clipboard';
 import { notify } from '../../lib/notify';
 import { useFeature } from '../../hooks/useFeature';
@@ -237,7 +237,7 @@ function AiChatInner() {
       }
 
       // 지점 키 경로 — 어댑터 층이 Claude 우선 선택·폴백·사용량 기록을 맡는다 (150, GAP A-1). 동작은 종전과 같다
-      const r = await chatWithFallback({ keys: { claude: claudeKey, openai: openaiKey, gemini: geminiKey }, system: CHAT_SYSTEM, context: crmContext, messages: history });
+      const r = await chatWithFallback({ keys: { claude: claudeKey, openai: openaiKey, gemini: geminiKey }, models: getAiModels(), system: CHAT_SYSTEM, context: crmContext, messages: history });
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

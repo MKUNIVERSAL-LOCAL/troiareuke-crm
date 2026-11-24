@@ -5,7 +5,7 @@ import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
+import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download, Sparkles } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -24,7 +24,7 @@ import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
 import ResourcesCard from '../../components/settings/ResourcesCard';
-import { getAiKey, setAiKey } from '../../lib/ai/keys';
+import AiServiceCard from '../../components/settings/AiServiceCard';
 import AppLockCard from '../../components/settings/AppLockCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
 import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
@@ -91,12 +91,13 @@ function importLegacyShopData(fromShopId: string, toShopId: string): number {
   return copied;
 }
 
-type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup' | 'notice';
+type SettingTab = 'shop' | 'integrations' | 'ai' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup' | 'notice';
 
 const allTabs = [
   { key: 'shop' as SettingTab, label: '매장 정보', icon: <Store size={16} /> },
   { key: 'hours' as SettingTab, label: '영업시간', icon: <Clock size={16} /> },
   { key: 'integrations' as SettingTab, label: '연동 설정', icon: <Link2 size={16} /> },
+  { key: 'ai' as SettingTab, label: 'AI 서비스', icon: <Sparkles size={16} /> }, // 이용 방식·키·모델·연결 테스트·마법사 (151)
   { key: 'notifications' as SettingTab, label: '알림 설정', icon: <Bell size={16} /> },
   { key: 'services' as SettingTab, label: '시술 관리', icon: <Palette size={16} /> },
   { key: 'subscription' as SettingTab, label: '구독/플랜', icon: <CreditCard size={16} /> },
@@ -550,11 +551,7 @@ export default function Settings() {
 
   // ─── AI 분석 키 (피부분석·AI챗봇 공유) ──────────────────────
   // AiChat이 Coming Soon 게이트로 막혀 있어도 피부분석이 쓸 키를 여기서 입력 가능하게 한다.
-  const [aiKeys, setAiKeys] = useState(() => ({ openai: getAiKey('openai'), gemini: getAiKey('gemini') })); // 키 접근은 lib/ai/keys 한 곳 (150, GAP A-2)
-  const handleAiKeysSave = () => {
-    if (setAiKey('openai', aiKeys.openai) && setAiKey('gemini', aiKeys.gemini)) notify.success('AI 분석 키를 저장했습니다.');
-    else notify('키 저장 실패 — 브라우저 저장소를 확인해주세요.');
-  };
+  // AI 키·모델은 설정 > AI 서비스 탭(AiServiceCard)으로 옮김 (151)
 
   // ─── Notifications ────────────────────────────────────────
   // ─── Services ─────────────────────────────────────────────
@@ -801,6 +798,12 @@ export default function Settings() {
             {tab === 'hours' && (
               <SettingCard title="베드·룸 자원">
                 <ResourcesCard />
+              </SettingCard>
+            )}
+
+            {tab === 'ai' && (
+              <SettingCard title="AI 서비스">
+                <AiServiceCard />
               </SettingCard>
             )}
 
@@ -1051,43 +1054,6 @@ export default function Settings() {
                   </div>
                 </SettingCard>
 
-                {/* AI 피부분석 키 */}
-                <SettingCard title="AI 피부분석 (비전 분석 키)">
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
-                      <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>
-                        고객 상세의 AI 피부분석 기능이 사용할 키입니다. OpenAI 또는 Gemini 중 하나만
-                        입력해도 동작합니다. 키는 이 기기에만 저장됩니다.
-                        <b> 본사가 서버에 AI 키를 설정한 경우에는 여기 키를 넣지 않아도 AI 피부분석·AI 챗봇이 동작합니다</b>(지점별 월 사용 한도 적용).
-                      </span>
-                    </div>
-                    <FormRow label="OpenAI API Key">
-                      <input
-                        type="password"
-                        value={aiKeys.openai}
-                        onChange={e => setAiKeys(prev => ({ ...prev, openai: e.target.value }))}
-                        className="form-input"
-                        placeholder="sk-..."
-                      />
-                    </FormRow>
-                    <FormRow label="Gemini API Key">
-                      <input
-                        type="password"
-                        value={aiKeys.gemini}
-                        onChange={e => setAiKeys(prev => ({ ...prev, gemini: e.target.value }))}
-                        className="form-input"
-                        placeholder="AIza..."
-                      />
-                    </FormRow>
-                    <button
-                      onClick={handleAiKeysSave}
-                      className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
-                    >
-                      저장하기
-                    </button>
-                  </div>
-                </SettingCard>
               </div>
             )}
 

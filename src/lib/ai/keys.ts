@@ -37,3 +37,16 @@ export function looksLikeKey(provider: AiProvider, key: string): boolean {
   if (provider === 'openai') return k.startsWith('sk-') && k.length > 20;
   return /^[A-Za-z0-9_-]{20,}$/.test(k);
 }
+
+/** 제공사별 선택 모델(이 기기 편의 설정, 카탈로그 id) — 없으면 카탈로그 기본 (151) */
+export function getAiModel(provider: AiProvider): string | null {
+  try { return localStorage.getItem(`crm_ai_model_${provider}`) || null; } catch { return null; }
+}
+export function setAiModel(provider: AiProvider, modelId: string): void {
+  try { if (modelId) localStorage.setItem(`crm_ai_model_${provider}`, modelId); else localStorage.removeItem(`crm_ai_model_${provider}`); } catch { /* 기기 편의 설정 — 못 남겨도 기본 모델로 동작 */ }
+}
+export function getAiModels(): Partial<Record<AiProvider, string>> {
+  const out: Partial<Record<AiProvider, string>> = {};
+  for (const p of ['claude', 'openai', 'gemini'] as AiProvider[]) { const m = getAiModel(p); if (m) out[p] = m; }
+  return out;
+}
