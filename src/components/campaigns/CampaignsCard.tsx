@@ -1,0 +1,79 @@
+// CampaignsCard — 문자/카카오 발송 > 자동 발송(캠페인) 목록 (비코어, 156, GAP M-3). 옛 "자동 발송 준비 중" 장식 블록을 대체
+import { useState } from 'react';
+import { Zap, Pencil, Trash2, Plus } from 'lucide-react';
+import clsx from 'clsx';
+import { useAuth } from '../../contexts/AuthContext';
+import { canDo } from '../../lib/permissions';
+import { askConfirm } from '../../lib/confirmDialog';
+import { notify } from '../../lib/notify';
+import { formatDateTime } from '../../lib/format';
+import { listCampaigns, deleteCampaign, setCampaignEnabled, lastRunOf } from '../../lib/campaignStore';
+import { describeTrigger, REPEAT_LABELS, type Campaign } from '../../lib/campaignRule';
+import CampaignEditModal from './CampaignEditModal';
+import CampaignRunModal from './CampaignRunModal';
+
+export default function CampaignsCard({ onSent }: { onSent: () => void }) {
+  const { user } = useAuth();
+  const canManage = canDo(user?.role, 'customer.pii');
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => listCampaigns());
+  const [editing, setEditing] = useState<Campaign | null | 'new'>(null);
+  const [running, setRunning] = useState<Campaign | null>(null);
+  const refresh = () => setCampaigns(listCampaigns());
+
+  const remove = async (c: Campaign) => {
+    if (!(await askConfirm({ title: '캠페인 삭제', message: `"${c.name}" 캠페인을 삭제할까요? 발송 기록은 남습니다.`, confirmLabel: '삭제', danger: true }))) return;
+    deleteCampaign(c.id); refresh(); notify.success('캠페인을 삭제했습니다.');
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden" data-testid="campaigns-card">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900">자동 발송(캠페인)</h3>
+          <p className="text-xs text-gray-400 mt-0.5">조건에 맞는 고객을 모아 보여주고, 직원이 확인한 뒤 발송합니다. 같은 고객·같은 회차에 두 번 나가지 않습니다.</p>
+        </div>
+        {canManage && (
+          <button type="button" onClick={() => setEditing('new')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e]">
+            <Plus size={14} /> 캠페인 추가
+          </button>
+        )}
+      </div>
+      <div className="divide-y divide-gray-50">
+        {campaigns.length === 0 && <p className="px-6 py-8 text-sm text-gray-500 text-center">아직 캠페인이 없습니다. "캠페인 추가"로 예약 전날 안내·생일 축하·미방문 케어를 만들어보세요.</p>}
+        {campaigns.map(c => {
+          const last = lastRunOf(c.id);
+          return (
+            <div key={c.id} className="flex items-center justify-between gap-3 px-6 py-4 flex-wrap" data-testid="campaign-row">
+              <div className="flex items-start gap-3 min-w-0">
+                <Zap size={16} className={clsx('mt-0.5 flex-shrink-0', c.enabled ? 'text-amber-500' : 'text-gray-300')} />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                    {c.name}
+                    <span className={clsx('px-1.5 py-0.5 rounded text-xs font-medium', c.channel === 'sms' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700')}>{c.channel === 'sms' ? 'SMS' : '카카오 채널'}</span>
+                    {c.isAd && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">광고</span>}
+                    {!c.enabled && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">꺼짐</span>}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">{describeTrigger(c)} · {REPEAT_LABELS[c.repeat]}{last ? ` · 마지막 발송 ${formatDateTime(last)}` : ''}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {canManage && (
+                  <label className="text-xs text-gray-600 flex items-center gap-1 mr-1"><input type="checkbox" checked={c.enabled} onChange={e => { setCampaignEnabled(c.id, e.target.checked); refresh(); }} className="rounded" aria-label={`${c.name} 사용`} />사용</label>
+                )}
+                <button type="button" onClick={() => setRunning(c)} disabled={!c.enabled} className="px-3 py-1.5 text-xs font-medium text-[#1a3a8f] bg-blue-50 rounded-lg hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed">대상 확인·발송</button>
+                {canManage && (
+                  <>
+                    <button type="button" onClick={() => setEditing(c)} className="p-1.5 text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100" aria-label={`${c.name} 수정`}><Pencil size={14} /></button>
+                    <button type="button" onClick={() => remove(c)} className="p-1.5 text-gray-500 hover:text-red-600 rounded-lg hover:bg-gray-100" aria-label={`${c.name} 삭제`}><Trash2 size={14} /></button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {editing !== null && <CampaignEditModal campaign={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
+      {running && <CampaignRunModal campaign={running} onClose={() => setRunning(null)} onSent={() => { refresh(); onSent(); }} />}
+    </div>
+  );
+}

@@ -39,8 +39,9 @@ import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
 import { formatBriefing, pseudonymizeStaff, BRIEFING_SYSTEM } from '../src/lib/ai/briefingRule';
-import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend } from '../src/lib/adComplianceRule';
+import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent } from '../src/lib/consentRule';
+import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger } from '../src/lib/campaignRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -824,4 +825,34 @@ test('광고 메시지 규칙 — (광고)·080 표기, 21~08시 차단과 다�
   expect(consentFromTags(['광고수신거부'])).toEqual({ ad: 'optout', sms: true, kakao: true, consentAt: undefined });
   expect(tagsWithConsent(['VIP', '광고수신거부'], { ad: 'consented', sms: false, kakao: true }, '2026-11-24')).toEqual(['VIP', '광고수신동의', '광고동의:2026-11-24', '문자수신거부']);
   expect(tagsWithConsent(['광고수신동의', '광고동의:2026-11-01'], { ad: 'optout', sms: true, kakao: true }, '2026-11-24')).toEqual(['광고수신거부']);
+});
+
+test('캠페인 규칙 — 멱등키 버킷, 변수 치환, 후보 선별(중복·동의·채널·번호·변수), 검증 (156)', () => {
+  expect(idempotencyKey('c1', 'u1', 'once', { year: '2026', eventId: 'r9' })).toBe('c1|u1|once');
+  expect(idempotencyKey('c1', 'u1', 'yearly', { year: '2026', eventId: 'r9' })).toBe('c1|u1|2026');
+  expect(idempotencyKey('c1', 'u1', 'per_event', { year: '2026', eventId: 'r9' })).toBe('c1|u1|r9');
+  expect(renderCampaignContent('{고객명}님 {예약일시} — {매장명}', { '{고객명}': '김', '{예약일시}': '11.25 14:00', '{매장명}': '샵' })).toBe('김님 11.25 14:00 — 샵');
+  expect(renderCampaignContent('{고객명} {잔여회차}회', { '{고객명}': '김' })).toBe('김 {잔여회차}회'); // 값 없는 변수는 그대로 → 선별에서 제외
+  const consented: ConsentState = { ad: 'consented', sms: true, kakao: true };
+  const raw = (id: string, over: Partial<{ phone: string; consent: ConsentState; eventId: string; vars: Record<string, string> }> = {}) => ({ customerId: id, customerName: id, phone: '01012345678', consent: consented, reason: 'r', eventId: 'e1', vars: {}, ...over });
+  const camp = { id: 'c1', repeat: 'per_event' as const, isAd: true, channel: 'sms' as const, content: '{고객명}님 이벤트' };
+  const sel = selectCandidates(camp, [
+    raw('a'),
+    raw('b', { consent: { ad: 'unknown', sms: true, kakao: true } }),
+    raw('c', { consent: { ad: 'consented', sms: false, kakao: true } }),
+    raw('d', { phone: '02-123' }),
+    raw('e', { eventId: 'sent-already' }),
+    raw('a', { eventId: 'e2' }), // 같은 고객 다른 사건 → per_event 라 별도 후보
+  ], new Set(['c1|e|sent-already']), '2026');
+  expect(sel.ready.map(r => r.customerId)).toEqual(['a', 'a']);
+  expect(sel.ready[0].key).toBe('c1|a|e1');
+  expect(sel.ready[0].message).toBe('a님 이벤트');
+  expect(sel.skipped.map(s => s.why)).toEqual(['no_consent', 'channel_optout', 'no_phone', 'already_sent']);
+  // 거래 안내(광고 아님)는 동의 없이도 가고, 채널 거부만 본다; once 는 같은 고객 두 사건을 하나로
+  const tx = selectCandidates({ ...camp, isAd: false, repeat: 'once', content: '{고객명} {잔여회차}' }, [raw('b', { consent: { ad: 'unknown', sms: true, kakao: true }, vars: { '{잔여회차}': '1' } }), raw('b', { eventId: 'e2', vars: { '{잔여회차}': '1' } }), raw('f', { vars: {} })], new Set(), '2026');
+  expect(tx.ready.map(r => r.key)).toEqual(['c1|b|once']);
+  expect(tx.skipped.map(s => s.why)).toEqual(['unresolved_vars']);
+  expect(validateCampaign({ name: '', content: '{고객명} {없는변수}', trigger: 'novisit', days: 3 })).toEqual(['캠페인 이름을 입력해주세요.', '마지막 방문 뒤 며칠 이상: 7~365 사이 정수로 입력해주세요.', '쓸 수 없는 변수: {없는변수}']);
+  expect(validateCampaign({ name: 'x', content: 'y', trigger: 'reservation_tomorrow', days: 0 })).toEqual([]);
+  expect(describeTrigger({ trigger: 'birthday', days: 3 })).toBe('생일 3일 전부터 생일까지');
 });

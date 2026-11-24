@@ -11,7 +11,7 @@ import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
-import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
+import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../../lib/mobileBridge';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -25,6 +25,7 @@ import { topTags } from '../../lib/customerTags';
 import { consentOf, getOptOutNumber } from '../../lib/marketingConsent';
 import { canReceiveAd, decorateAdMessage, checkAdSend, type AdChannel } from '../../lib/adComplianceRule';
 import { isAuthApiConfigured } from '../../lib/authApi';
+import CampaignsCard from '../../components/campaigns/CampaignsCard';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
@@ -172,7 +173,7 @@ export default function Messaging() {
           ))}
         </div>
 
-        {tab === 'send' && <SendPanel onSend={openSendModal} reloadKey={reloadKey} />}
+        {tab === 'send' && <SendPanel onSend={openSendModal} onSent={reload} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
         {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} />}
       </div>
@@ -203,7 +204,7 @@ function StatusChip({ label, connected }: { label: string; connected: boolean })
   );
 }
 
-function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; reloadKey: number }) {
+function SendPanel({ onSend, onSent, reloadKey }: { onSend: (segment: Segment) => void; onSent: () => void; reloadKey: number }) {
   const [customers, setCustomers] = useState(() => CustomerStore.getAll().filter(c => c.isActive !== false)); // 익명화 고객 제외
   useDataRefreshed(() => setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false))); // 발송 대상 인원이 다른 기기 등록분을 반영 (16차 #H3)
 
@@ -211,14 +212,6 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
     setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false));
   }, [reloadKey]);
   const revisitCount = useMemo(() => revisitIdSet().size, [reloadKey]); // 대시보드 재방문 카드와 같은 기준 (리뷰 63)
-
-  const autoMessages = [
-    // 설명은 설정 > 알림 설정과 같은 문구 (UX QA 2026-11-17)
-    { title: '예약 확인 문자', desc: '예약 등록 시 즉시 발송', type: 'sms', key: 'reservationConfirm' as const },
-    { title: '예약 리마인더', desc: '예약 전날 오전 9시 발송', type: 'sms', key: 'reservationReminder' as const },
-    { title: '생일 축하 메시지', desc: '생일 당일 오전 10시 카카오 발송', type: 'kakao-channel', key: 'birthdayMessage' as const },
-    { title: '미방문 고객 케어', desc: '60일 미방문 시 카카오 발송', type: 'kakao-channel', key: 'novisitMessage' as const },
-  ];
 
   const birthdayCount = customers.filter(c => {
     if (!c.birthDate) return false;
@@ -261,32 +254,8 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
         ))}
       </div>
 
-      {/* Auto Messages */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-bold text-gray-900">자동 발송 설정</h3>
-          <p className="text-xs text-gray-400 mt-0.5">조건에 따라 자동으로 발송되는 메시지를 관리합니다</p>
-        </div>
-        <div className="divide-y divide-gray-50">
-          {autoMessages.map((m, i) => (
-            <div key={i} className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-3">
-                <MessageSquare size={16} className="text-gray-400" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{m.title}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-xs text-gray-400">{m.desc}</p>
-                    <span className={clsx('px-1.5 py-0.5 rounded text-xs font-medium', MSG_TYPE_COLORS[m.type])}>
-                      {MSG_TYPE_LABELS[m.type]}
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* 자동 발송(캠페인) — 승인 발송 모드, 멱등키 (156) */}
+      <CampaignsCard onSent={onSent} />
     </div>
   );
 }

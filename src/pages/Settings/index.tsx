@@ -4,7 +4,7 @@ import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download, Sparkles } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
@@ -1064,23 +1064,9 @@ export default function Settings() {
               <AdOptOutCard />
               <RetentionPolicyCard />
 
-              <SettingCard title="자동 알림 설정">
-                <div className="space-y-4">
-                  {([
-                    { key: 'reservationConfirm' as const, label: '예약 확인 문자', desc: '예약 등록 시 즉시 발송' },
-                    { key: 'reservationReminder' as const, label: '예약 리마인더', desc: '예약 전날 오전 9시 발송' },
-                    { key: 'birthdayMessage' as const, label: '생일 축하 메시지', desc: '생일 당일 오전 10시 카카오 발송' },
-                    { key: 'novisitMessage' as const, label: '미방문 고객 케어', desc: '60일 미방문 시 카카오 발송' },
-                  ]).map(n => (
-                    <div key={n.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{n.label}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{n.desc}</p>
-                        <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <SettingCard title="자동 발송(캠페인)">
+                <p className="text-sm text-gray-600">예약 전날 안내·생일 축하·미방문 케어·회차권 만료 안내 같은 자동 발송은 <b>문자/카카오 발송 &gt; 발송하기 &gt; 자동 발송(캠페인)</b>에서 만들고, 대상을 확인한 뒤 승인해 보냅니다. 광고성 캠페인은 위 080 번호와 고객의 수신 동의를 따릅니다.</p>
+                <Link to="/messaging" className="inline-block mt-3 px-4 py-2 text-sm font-medium text-[#1a3a8f] bg-blue-50 rounded-xl hover:bg-blue-100">캠페인 관리로 이동</Link>
               </SettingCard>
               </div>
             )}

@@ -166,6 +166,11 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await expect(dialog('메시지 발송')).toBeVisible();
   });
   await closeDialog('메시지 발송');
+  await step('/messaging 캠페인 추가', async () => { // 자동 발송 캠페인 정의 창 (156)
+    await page.getByRole('button', { name: '캠페인 추가' }).click();
+    await expect(dialog('캠페인 추가')).toBeVisible();
+  });
+  await closeDialog('캠페인 추가');
   await step('/messaging 템플릿 추가', async () => {
     await page.getByRole('button', { name: '템플릿 관리' }).click();
     await page.getByRole('button', { name: '템플릿 추가' }).first().click();

@@ -1,3 +1,4 @@
+import type { Campaign } from '../lib/campaignRule'; // 캠페인 정의는 순수 규칙 모듈에 (156)
 // =============================================
 // 기존 타입
 // =============================================
@@ -227,6 +228,8 @@ export interface ShopPreferences {
   monthlyTargets?: Record<string, number>;
   /** 광고 메시지 무료수신거부 080 번호(정보통신망법 표기) — 없으면 광고 발송 차단 (155) */
   adsOptOutNumber?: string;
+  /** 자동 발송 캠페인 정의(트리거·조건·채널·본문·반복·광고 여부) — 작고 적어 설정 행에 둔다. 발송 기록·멱등키는 기기별(서버 보관은 승인 B-4) (156) */
+  campaigns?: Campaign[];
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
   retentionPolicy?: { enabled: boolean; years: number };
 }
