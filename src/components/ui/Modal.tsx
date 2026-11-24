@@ -11,6 +11,8 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /** z-[60] 포털 창(고객 상세의 빠른 시술 기록 등) 위에 겹쳐 열려야 할 때 — 기본 z-50은 그 아래에 깔려 조작할 수 없다 (리뷰 2026-11-19) */
   elevated?: boolean;
+  /** 공용 확인창 전용 — elevated 창 위에서도 항상 맨 위(z-[80]) */
+  topmost?: boolean;
 }
 
 const sizes = {
@@ -24,7 +26,7 @@ const sizes = {
 // 풀면 안 되므로, 열린 모달 수를 전역으로 세어 0이 될 때만 복원한다.
 let openModalCount = 0;
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md', elevated = false }: ModalProps) {
+export default function Modal({ isOpen, onClose, title, children, size = 'md', elevated = false, topmost = false }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return;
     openModalCount++;
@@ -73,7 +75,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', e
 
   return (
     // modal-backdrop/modal-card: index.css가 lg 미만에서 바텀시트(전체 폭·위 모서리만 둥글게·아래에서 올라옴)로 바꾼다 (UI 품질 기준 2026-11-18)
-    <div className={`modal-backdrop fixed inset-0 ${elevated ? 'z-[70]' : 'z-50'} flex items-center justify-center px-4 pt-safe-4 pb-safe-4`} role="dialog" aria-modal="true" aria-label={title}>
+    <div className={`modal-backdrop fixed inset-0 ${topmost ? 'z-[80]' : elevated ? 'z-[70]' : 'z-50'} flex items-center justify-center px-4 pt-safe-4 pb-safe-4`} role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div ref={cardRef} tabIndex={-1} onKeyDown={onKeyDown} className={`modal-card relative bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} max-h-[90vh] flex flex-col outline-none`}>
         <div className="lg:hidden py-2 cursor-grab touch-none" onTouchStart={onHandleTouchStart} onTouchMove={onHandleTouchMove} onTouchEnd={onHandleTouchEnd} aria-hidden="true">

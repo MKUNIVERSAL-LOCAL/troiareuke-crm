@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, pickCustomer, isNearMidnightSeoul } from './helpers';
+import { acceptAppConfirm } from './flows';
 
 /**
  * 핵심 사용 흐름 E2E 스모크 (로컬 모드 빌드, 외부 서버 없음)
@@ -194,7 +195,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await manageDialog.getByRole('button', { name: '저장', exact: true }).click();
   await expect(manageDialog).toHaveCount(0);
   await page.getByRole('button', { name: '회차권10 관리' }).filter({ visible: true }).first().click();
-  await manageDialog.getByRole('button', { name: '완료 처리' }).click(); // confirm은 dialog 핸들러가 수락
+  await manageDialog.getByRole('button', { name: '완료 처리' }).click();
+  await acceptAppConfirm(page, '회차권 완료 처리', '완료 처리'); // 125부터 앱 확인창
   await expect(manageDialog).toHaveCount(0);
   const managed2 = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;
@@ -328,7 +330,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     return id;
   });
   await page.goto(`/reservations?open=${noshowId}`);
-  await page.getByRole('button', { name: '노쇼', exact: true }).click(); // confirm은 dialog 핸들러가 수락
+  await page.getByRole('button', { name: '노쇼', exact: true }).click();
+  await acceptAppConfirm(page, '노쇼 처리', '노쇼 기록');
   const noshowStatus = await page.evaluate(id => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
     return JSON.parse(localStorage.getItem(key) || '[]').find((r: { id: string }) => r.id === id)?.status;
@@ -524,13 +527,15 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
 
   // ── 9-3-0. 직원 퇴사 처리/복직 (2026-11-18): 삭제 대신 비활성 — 재직 목록에서 빠지고 '퇴사·비활성' 필터에 보이며, 복직하면 돌아온다 ──
   await page.getByRole('heading', { name: perfExpected.name }).first().click(); // 직원 카드
-  await page.getByRole('button', { name: '퇴사 처리' }).click(); // confirm은 dialog 핸들러가 수락
+  await page.getByRole('button', { name: '퇴사 처리' }).click();
+  await acceptAppConfirm(page, '퇴사 처리', '퇴사 처리');
   await expect(page.getByText('퇴사 처리했습니다.').first()).toBeVisible();
   await expect(page.getByRole('heading', { name: perfExpected.name })).toHaveCount(0); // 기본 '재직' 필터에서 사라짐
   await page.getByRole('button', { name: '퇴사·비활성' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(perfExpected.name) }).first()).toContainText('퇴사');
   await page.getByRole('heading', { name: new RegExp(perfExpected.name) }).first().click();
   await page.getByRole('button', { name: '복직' }).click();
+  await acceptAppConfirm(page, '복직 처리', '복직');
   await expect(page.getByText('복직 처리했습니다.').first()).toBeVisible();
   await page.getByRole('button', { name: '재직', exact: true }).click();
   await expect(page.getByRole('heading', { name: perfExpected.name })).toBeVisible();
@@ -577,7 +582,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await backupCard.getByLabel('백업 파일 선택').setInputFiles(backupPath!);
   await expect(backupCard.getByTestId('restore-preview')).toContainText('고객');
   const reloaded = page.waitForEvent('load'); // 복원 뒤 location.reload() — 끝나기 전에 이동하면 내비게이션이 끊긴다
-  await backupCard.getByRole('button', { name: '복원 실행' }).click(); // confirm은 dialog 핸들러가 수락
+  await backupCard.getByRole('button', { name: '복원 실행' }).click();
+  await page.getByRole('dialog', { name: '백업 복원', exact: true }).getByRole('button', { name: '복원', exact: true }).click(); // 앱 확인창 — 복원 직후 새로고침되므로 닫힘 단언은 생략
   await reloaded;
   const restoredShopName = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!;

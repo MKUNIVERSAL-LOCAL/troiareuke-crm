@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { askConfirm } from '../../lib/confirmDialog';
 import { maskPhone } from '../../lib/pii';
 import { normalizePhone } from '../../lib/inputRules';
 import { notify } from '../../lib/notify';
@@ -307,9 +308,9 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
     return categoryMatches && searchMatches;
   });
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const target = templates.find(t => t.id === id);
-    if (!window.confirm(`'${target?.name ?? '이 템플릿'}' 템플릿을 삭제할까요?\n이미 보낸 발송 이력은 남습니다.`)) return;
+    if (!(await askConfirm({ title: '템플릿 삭제', message: `'${target?.name ?? '이 템플릿'}' 템플릿을 삭제할까요?\n이미 보낸 발송 이력은 남습니다.`, confirmLabel: '삭제', danger: true }))) return;
     MessageTemplateStore.delete(id);
     setTemplates(MessageTemplateStore.getAll());
     onReload();
@@ -582,7 +583,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
   useEffect(() => { refresh(); }, [reloadKey, refresh]);
 
   const handleCancel = async (id: string) => {
-    if (!confirm('이 발송 예약을 취소할까요?')) return;
+    if (!(await askConfirm({ title: '발송 예약 취소', message: '이 발송 예약을 취소할까요?', confirmLabel: '예약 취소', cancelLabel: '닫기' }))) return;
     try {
       await cancelScheduledMessage(id);
       refresh();

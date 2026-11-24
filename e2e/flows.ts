@@ -72,6 +72,12 @@ export async function refundFirstPayment(page: Page) {
   await expect(d).toBeVisible();
   await d.getByRole('button', { name: '환불', exact: true }).click();
   await d.getByRole('button', { name: '저장', exact: true }).click();
+  // 회차권 결제면 "회차권 함께 종료" 앱 확인창이 뜬다(그 외 결제는 바로 저장) — 잔여 회차를 말하는지 확인하고 수락
+  const close = page.getByRole('dialog', { name: '회차권 함께 종료', exact: true });
+  if (await close.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await expect(close).toContainText(/환불로 저장하면 .*함께 종료/);
+    await close.getByRole('button', { name: '환불로 저장', exact: true }).click();
+  }
   await expect(d).toHaveCount(0);
 }
 
@@ -316,10 +322,20 @@ export async function completeReservation(page: Page, startTime: string, pay: bo
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
-/** 상세의 상태 버튼 하나를 누르고 창이 닫히는지 (노쇼·취소처리·예약 복구 — confirm은 스펙 핸들러가 수락) */
+/** 앱 확인창(askConfirm)을 제목으로 찾아 확인 버튼을 누른다 — 125부터 파괴적 동작은 window.confirm 이 아니라 앱 창이라 dialog 핸들러로는 안 닫힌다 */
+export async function acceptAppConfirm(page: Page, title: string, button: string) {
+  const d = page.getByRole('dialog', { name: title, exact: true });
+  await expect(d).toBeVisible();
+  await d.getByRole('button', { name: button, exact: true }).click();
+  await expect(d).toHaveCount(0);
+}
+
+const STATUS_CONFIRM: Record<'노쇼' | '취소처리' | '예약 복구', [string, string]> = { '노쇼': ['노쇼 처리', '노쇼 기록'], '취소처리': ['예약 취소 처리', '취소 처리'], '예약 복구': ['예약 복구', '복구'] };
+/** 상세의 상태 버튼 하나를 누르고 앱 확인창을 수락해 창이 닫히는지 (노쇼·취소처리·예약 복구) */
 export async function setReservationStatus(page: Page, startTime: string, button: '노쇼' | '취소처리' | '예약 복구') {
   const d = await openReservationDetail(page, startTime);
   await d.getByRole('button', { name: button, exact: true }).click();
+  await acceptAppConfirm(page, ...STATUS_CONFIRM[button]);
   await expect(d).toHaveCount(0);
 }
 

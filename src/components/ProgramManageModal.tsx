@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { askConfirm } from '../lib/confirmDialog';
 import { createPortal } from 'react-dom';
 import Modal from './ui/Modal';
 import { CustomerProgramStore, PaymentStore, TreatmentLogStore } from '../lib/store';
@@ -72,17 +73,17 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
 
   // 고객·프로그램을 잘못 골라 등록한 경우 — 아직 한 번도 쓰지 않았을 때만. 연결된 결제(referenceId)를 지우면 누적 결제액은 자동 차감된다 (정합성 감사 2026-11-19)
   const cancelable = cp.usedSessions === 0 && !TreatmentLogStore.getAll().some(t => t.customerProgramId === cp.id);
-  function cancelRegistration() {
+  async function cancelRegistration() {
     const linked = PaymentStore.getAll().filter(p => p.referenceId === cp.id);
     const paid = linked.reduce((sum, p) => sum + p.amount, 0);
-    if (!window.confirm(`${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${paid.toLocaleString('ko-KR')}원)이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.`)) return;
+    if (!(await askConfirm({ title: '회차권 등록 취소', confirmLabel: '등록 취소', cancelLabel: '닫기', danger: true, message: `${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${paid.toLocaleString('ko-KR')}원)이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.` }))) return;
     for (const p of linked) PaymentStore.delete(p.id);
     CustomerProgramStore.delete(cp.id);
     notify.success(`${cp.programName} 등록을 취소했습니다.${linked.length ? ` 결제 ${linked.length}건 삭제.` : ''}`);
     onDone();
   }
 
-  function toggleCompleted() {
+  async function toggleCompleted() {
     if (dirty) { notify('만료일·총 회차 변경을 먼저 [저장]하거나 취소한 뒤 완료 상태를 바꿔주세요.'); return; }
     if (cp.isCompleted) {
       if (isSessionBased && cp.usedSessions >= (cp.totalSessions as number)) { notify('회차를 모두 사용한 프로그램은 되돌릴 수 없습니다. 총 회차를 늘려주세요.'); return; }
@@ -90,7 +91,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
       notify(`${cp.programName}을(를) 진행중으로 되돌렸습니다.`);
     } else {
       const left = remaining !== null && remaining > 0 ? `\n잔여 ${remaining}회는 더 이상 쓸 수 없게 됩니다.` : '';
-      if (!window.confirm(`${cp.programName}을(를) 완료 처리할까요?${left}`)) return;
+      if (!(await askConfirm({ title: '회차권 완료 처리', message: `${cp.programName}을(를) 완료 처리할까요?${left}`, confirmLabel: '완료 처리' }))) return;
       CustomerProgramStore.update(cp.id, { isCompleted: true, notes: appendNote(cp.notes, `완료 처리${remaining ? ` (잔여 ${remaining}회 소멸)` : ''}`) });
       notify(`${cp.programName}을(를) 완료 처리했습니다.`);
     }

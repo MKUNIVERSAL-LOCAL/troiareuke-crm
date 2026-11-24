@@ -498,7 +498,7 @@ function StaffDetailModal({
   };
 
   // 퇴사 처리/복직 — 삭제 대신 isActive만 바꿔 과거 예약·시술·실적의 담당자 연결을 유지한다 (2026-11-18)
-  const handleToggleActive = () => {
+  const handleToggleActive = async () => {
     const leaving = staff.isActive;
     // 복직도 추가·수정과 같은 규칙 — 같은 이름의 재직자가 둘이면 이름으로 잇는 시술·판매 기록이 구분되지 않는다 (리뷰 2026-11-19)
     if (!leaving && StaffStore.getAll().some(s => s.id !== staff.id && s.isActive && s.name.trim() === staff.name.trim())) {
@@ -506,9 +506,9 @@ function StaffDetailModal({
       return;
     }
     const futureRes = leaving ? ReservationStore.getAll().filter(r => r.staffId === staff.id && r.date >= todayISO() && (r.status === 'confirmed' || r.status === 'pending')).length : 0;
-    if (!window.confirm(leaving
-      ? `"${staff.name}" 직원을 퇴사 처리할까요?${futureRes > 0 ? `\n앞으로의 예약 ${futureRes}건은 담당자가 이 직원으로 남고 그 시간은 계속 잡혀 있습니다 — 예약 화면에서 담당자를 바꿔주세요.` : ''}\n새 예약·시술의 담당자 목록에서 빠지고, 과거 기록과 실적은 그대로 남습니다. 언제든 복직할 수 있습니다.`
-      : `"${staff.name}" 직원을 복직 처리할까요?`)) return;
+    if (!(await askConfirm({ title: leaving ? '퇴사 처리' : '복직 처리', confirmLabel: leaving ? '퇴사 처리' : '복직', cancelLabel: '닫기', message: leaving
+      ? `'${staff.name}' 직원을 퇴사 처리할까요?${futureRes > 0 ? `\n앞으로의 예약 ${futureRes}건은 담당자가 이 직원으로 남고 그 시간은 계속 잡혀 있습니다 — 예약 화면에서 담당자를 바꿔주세요.` : ''}\n새 예약·시술의 담당자 목록에서 빠지고, 과거 기록과 실적은 그대로 남습니다. 언제든 복직할 수 있습니다.`
+      : `'${staff.name}' 직원을 복직 처리할까요?` }))) return; // 인접 [직원 삭제]와 같은 앱 확인창 (15차 #H3·L7)
     StaffStore.update(staff.id, { isActive: !leaving });
     if (leaving) notify.info('퇴사 처리했습니다.'); else notify.success('복직 처리했습니다.');
     onUpdate();
@@ -520,7 +520,7 @@ function StaffDetailModal({
     const detail = linkedRes + linkedLogs > 0
       ? `\n연결된 예약 ${linkedRes}건·시술 기록 ${linkedLogs}건은 남지만 담당자 연결이 끊겨 직원 실적·필터에서 빠지고, 이 직원이 담당인 예약은 담당자를 바꾸지 않으면 수정할 수 없게 됩니다.\n퇴사한 직원이라면 [퇴사 처리]를 권장합니다 — 기록·실적이 그대로 남습니다.`
       : '';
-    if (!(await askConfirm({ title: '직원 삭제', message: `"${staff.name}" 직원을 삭제할까요?${detail}\n복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
+    if (!(await askConfirm({ title: '직원 삭제', message: `'${staff.name}' 직원을 삭제할까요?${detail}\n복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
     StaffStore.delete(staff.id);
     onDelete();
   };

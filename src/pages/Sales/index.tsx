@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { askConfirm } from '../../lib/confirmDialog';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -360,7 +361,7 @@ export default function Sales() {
 
   // 결제 삭제 — 판매 기록과 연결된 제품 결제(referenceId)는 차단 (PaymentStore.delete는 재고·판매기록을 복구하지 않아
   // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생). 연결 없는 옛 제품 결제는 일반 결제처럼 지운다 (UX 점검 2026-11-19)
-  function handleDelete(p: Payment) {
+  async function handleDelete(p: Payment) {
     if (p.type === 'product' && p.referenceId) {
       notify('제품 결제는 여기서 삭제하면 재고·판매기록과 어긋납니다. 제품/재고 페이지의 판매 취소를 사용해주세요.');
       return;
@@ -374,13 +375,13 @@ export default function Sales() {
         : '회차권 결제는 여기서 지우면 회차권만 남아 계속 차감됩니다. 고객 상세의 해당 프로그램 [관리] > [등록 취소]로 결제와 회차권을 함께 지워주세요.');
       return;
     }
-    if (!window.confirm(`${formatDate(p.paymentDate)} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
+    if (!(await askConfirm({ title: '결제 삭제', message: `${formatDate(p.paymentDate)} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`, confirmLabel: '삭제', danger: true }))) return; // 앱 확인창 (15차 #H3)
     PaymentStore.delete(p.id);
     loadPayments();
   }
 
   // 결제 등록/수정
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const customer = customers.find(c => c.id === form.customerId);
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
@@ -428,7 +429,7 @@ export default function Sales() {
           notify(`이미 ${cp.usedSessions}회 사용한 회차권입니다. 부분 환불은 고객 상세의 [관리]에서 먼저 완료 처리한 뒤 이 결제를 환불로 바꿔주세요.`);
           return;
         }
-        if (!window.confirm(`환불로 저장하면 ${cp.programName} 회차권(${cp.totalSessions != null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'})을 함께 종료합니다. 계속할까요?`)) return;
+        if (!(await askConfirm({ title: '회차권 함께 종료', message: `환불로 저장하면 ${cp.programName} 회차권(${cp.totalSessions != null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'})을 함께 종료합니다. 계속할까요?`, confirmLabel: '환불로 저장', cancelLabel: '닫기' }))) return;
         closeProgram = cp;
       }
     }
@@ -481,8 +482,8 @@ export default function Sales() {
     setShowExpenseModal(true);
   }
 
-  function handleExpenseDelete(x: Expense) {
-    if (!window.confirm(`${x.expenseDate} · ${x.category} · ${formatPrice(x.amount)} 지출을 삭제할까요?`)) return;
+  async function handleExpenseDelete(x: Expense) {
+    if (!(await askConfirm({ title: '지출 삭제', message: `${x.expenseDate} · ${x.category} · ${formatPrice(x.amount)} 지출을 삭제할까요?`, confirmLabel: '삭제', danger: true }))) return;
     ExpenseStore.delete(x.id);
     refreshExpenses();
   }

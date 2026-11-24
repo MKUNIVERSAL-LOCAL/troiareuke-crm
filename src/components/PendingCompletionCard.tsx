@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { askConfirm } from '../lib/confirmDialog';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck, Check, UserX } from 'lucide-react';
 import { getPendingCompletionReservations, settleReservations, bulkCompletableIds, hasPaymentFor, PENDING_LOOKBACK_DAYS } from '../lib/pendingCompletion';
@@ -43,10 +44,14 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
       }
     }
   };
-  const settleAll = () => {
+  const noShowOne = async (r: Reservation) => {
+    if (!(await askConfirm({ title: '노쇼 처리', message: `${r.customerName} ${formatDate(r.date)} ${r.startTime} 예약을 노쇼로 처리할까요?\n노쇼 횟수가 1 올라갑니다. 되돌리려면 예약 상세의 [예약 복구].`, confirmLabel: '노쇼 기록', cancelLabel: '닫기' }))) return;
+    settle([r.id], 'noshow');
+  };
+  const settleAll = async () => {
     if (confirmedIds.length === 0) return;
     const extra = pendingCount > 0 ? `\n대기 상태 ${pendingCount}건은 왔는지 알 수 없어 그대로 둡니다 — 건별로 처리해주세요.` : '';
-    if (!window.confirm(`확정 예약 ${confirmedIds.length}건을 모두 완료 처리할까요?\n오지 않은 고객이 있으면 먼저 건별로 [노쇼]를 눌러 주세요.${extra}`)) return;
+    if (!(await askConfirm({ title: '일괄 완료 처리', message: `확정 예약 ${confirmedIds.length}건을 모두 완료 처리할까요?\n오지 않은 고객이 있으면 먼저 건별로 [노쇼]를 눌러 주세요.${extra}`, confirmLabel: '모두 완료', cancelLabel: '닫기' }))) return;
     settle(confirmedIds, 'completed');
   };
 
@@ -82,7 +87,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
             <button type="button" onClick={() => settleOneAndPay(r)} aria-label={`${r.customerName} ${formatDate(r.date)} 완료`}
               className="px-2.5 py-1.5 min-h-[44px] rounded-lg text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 whitespace-nowrap">완료</button>
             {/* 노쇼는 고객 기록(노쇼 횟수)에 남는다 — 폰에서 [완료] 옆 오탭이 잦아 한 번 묻는다 (UX 점검 2026-11-19) */}
-            <button type="button" onClick={() => { if (window.confirm(`${r.customerName} ${formatDate(r.date)} ${r.startTime} 예약을 노쇼로 처리할까요?\n노쇼 횟수가 1 올라갑니다. 되돌리려면 예약 상세의 [예약 복구].`)) settle([r.id], 'noshow'); }} aria-label={`${r.customerName} ${formatDate(r.date)} 노쇼`}
+            <button type="button" onClick={() => noShowOne(r)} aria-label={`${r.customerName} ${formatDate(r.date)} 노쇼`}
               className="px-2.5 py-1.5 min-h-[44px] rounded-lg text-xs font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 whitespace-nowrap flex items-center gap-0.5"><UserX size={11} />노쇼</button>
           </li>
         ))}

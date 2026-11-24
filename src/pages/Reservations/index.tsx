@@ -1,5 +1,6 @@
 ﻿import { useState, useCallback, useEffect, useMemo, type CSSProperties, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { askConfirm } from '../../lib/confirmDialog';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, addMinutes } from 'date-fns';
@@ -1225,12 +1226,12 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const logsWarn = logsOnDate.length > 0
     ? `\n\n이 날짜에 작성한 시술 기록 ${logsOnDate.length}건(회차 차감 포함)은 그대로 남습니다. 잘못 쓴 기록이면 시술 기록 화면에서 삭제해주세요.`
     : '';
-  const handleCancel = () => {
+  const handleCancel = async () => {
     // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행. 결제가 붙은 완료 예약은 취소해도 결제가 남는다는 걸 분명히 한다
     const warn = r.status === 'completed' && paidForThis.length > 0
       ? `\n\n이 예약은 완료 처리됐고 등록된 결제 ${paidAmount.toLocaleString('ko-KR')}원은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.`
       : '';
-    if (!window.confirm(`이 예약을 취소 처리할까요?${warn}${logsWarn}`)) return;
+    if (!(await askConfirm({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기' }))) return; // 앱 확인창 (15차 #H3)
     ReservationStore.updateStatus(r.id, 'cancelled');
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     onUpdate();
@@ -1240,9 +1241,9 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const canNoShow = r.date <= todayISO() && r.status !== 'cancelled' && r.status !== 'noshow' && r.status !== 'completed';
   // 잘못 취소·노쇼 처리한 예약을 되돌리는 길 — 상태만 '예약확정'으로, 취소 때 지운 Google 캘린더 일정은 다시 만든다 (리뷰 2026-11-19)
   const isClosed = r.status === 'cancelled' || r.status === 'noshow';
-  const handleRestore = () => {
+  const handleRestore = async () => {
     const google = isGoogleCalendarConnected();
-    if (!window.confirm(`이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}`)) return;
+    if (!(await askConfirm({ title: '예약 복구', confirmLabel: '복구', message: `이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}` }))) return;
     ReservationStore.updateStatus(r.id, 'confirmed');
     if (google) {
       createCalendarEvent({ ...r, status: 'confirmed' })
@@ -1252,8 +1253,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     notify.success('예약확정 상태로 되돌렸습니다. 시술 기록·결제는 바뀌지 않았습니다.');
     onUpdate();
   };
-  const handleNoShow = () => {
-    if (!window.confirm(`${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`)) return;
+  const handleNoShow = async () => {
+    if (!(await askConfirm({ title: '노쇼 처리', message: `${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`, confirmLabel: '노쇼 기록', cancelLabel: '닫기' }))) return;
     ReservationStore.updateStatus(r.id, 'noshow');
     cleanupGcalEvent(r.id);
     notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
@@ -1279,11 +1280,11 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     onUpdate();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     // 삭제해도 이 예약 id로 등록된 결제는 남는다(취소처리와 같은 안내). [취소처리] 권유는 그 버튼이 있을 때만 (리뷰 2026-11-19)
     const payWarn = paidForThis.length > 0 ? `\n\n등록된 결제 ${paidAmount.toLocaleString('ko-KR')}원은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.` : '';
     const cancelTip = isClosed ? '' : ' 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.';
-    if (window.confirm(`이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`)) {
+    if (await askConfirm({ title: '예약 삭제', message: `이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`, confirmLabel: '삭제', danger: true })) {
       ReservationStore.delete(r.id);
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();

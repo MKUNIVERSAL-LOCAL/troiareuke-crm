@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { askConfirm } from '../../lib/confirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { canDo } from '../../lib/permissions';
 import { WifiOff, UploadCloud, AlertTriangle, Image } from 'lucide-react';
@@ -144,7 +145,7 @@ export default function OfflineBanner() {
         <span className="ml-auto flex items-center gap-1">
           {rejected.length > 0 && <button type="button" onClick={retry} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>}
           {rejected.length > 0 && canDo(user?.role, 'outbox.download') && <button type="button" onClick={download} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>내려받기</button>} {/* 고객 레코드 원문 파일 — 관리자만 (13차 #M13) */}
-          <button type="button" onClick={() => { if (window.confirm('거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.')) { clearRejectedNasOutbox(); setRejected([]); setLostRejected(0); } }} className={`${linkBtn} text-rose-500 hover:text-rose-700`}>지우기</button>
+          <button type="button" onClick={async () => { if (await askConfirm({ title: '거부된 저장분 지우기', message: '거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.', confirmLabel: '지우기', cancelLabel: '닫기', danger: true })) { clearRejectedNasOutbox(); setRejected([]); setLostRejected(0); } }} className={`${linkBtn} text-rose-500 hover:text-rose-700`}>지우기</button>
         </span>
       </div>
     );
