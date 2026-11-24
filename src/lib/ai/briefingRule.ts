@@ -9,6 +9,12 @@ import type { MonthlyKpis } from '../kpiRule';
 export interface BriefingTask { label: string; count: number; detail?: string }
 export interface BriefingSegments { total: number; churnHigh: number; churnMedium: number; loyal: number; dormant: number; newThisMonth: number; atRiskRevenue90: number | null }
 export interface BriefingStaffPerf { name: string; completed: number; revenue: number }
+// ── 158 AI 경영비서 2차 — 오늘 연락할 고객·빈 시간·목표 대비·원인 후보·캠페인 추천 (숫자는 엔진, AI 는 해석)
+export interface BriefingContacts { campaign: string; ready: number; skipped: number }            // 캠페인별 오늘 대상(승인 전)
+export interface BriefingFreeSlot { staff: string; slots: string[]; total: number }               // 직원별 오늘 빈 시작 시각(실명 → 가명)
+export interface BriefingTarget { target: number; revenue: number; pct: number; daysLeft: number; neededPerDay: number | null; paceProjected: number | null }
+export interface BriefingCause { label: string; current: number | null; previous: number | null; unit: '명' | '원' | '%' } // 지난달 → 이달
+export interface BriefingRecommendation { campaign: string; ready: number; exists: boolean }      // 대상 많은 순, exists=이미 만든 캠페인
 export interface BriefingInput {
   shopLabel: string;            // 매장 이름 대신 "우리 매장" 등 — 실명 불필요
   today: string;                // YYYY-MM-DD
@@ -19,6 +25,30 @@ export interface BriefingInput {
   segments: BriefingSegments | null;
   lowStock: { name: string; stock: number; minStock: number; unit: string }[];
   staff: BriefingStaffPerf[];   // 실명 → 가명으로 바뀐다
+  contacts?: BriefingContacts[];           // 158 — 있으면 줄을 쓴다(빈 배열 = 대상 없음)
+  freeSlots?: BriefingFreeSlot[];          // 158 — 있으면 줄을 쓴다
+  target?: BriefingTarget | null;          // 158 — null·없음 = 줄 생략(목표 미설정·권한 없음)
+  causes?: BriefingCause[];                // 158
+  recommendations?: BriefingRecommendation[]; // 158
+}
+
+/** 목표 대비 페이스 — 남은 날 하루 필요 매출, 지금 속도의 월말 도달액. 분모 0 이면 null (158) */
+export function targetPace(i: { target: number; revenue: number; daysElapsed: number; daysInMonth: number }): BriefingTarget {
+  const daysLeft = Math.max(0, i.daysInMonth - i.daysElapsed);
+  const remain = Math.max(0, i.target - i.revenue);
+  return {
+    target: i.target, revenue: i.revenue, pct: i.target > 0 ? Math.round((i.revenue / i.target) * 100) : 0, daysLeft,
+    neededPerDay: daysLeft > 0 ? Math.round(remain / daysLeft) : null,
+    paceProjected: i.daysElapsed > 0 ? Math.round((i.revenue / i.daysElapsed) * i.daysInMonth) : null,
+  };
+}
+
+/** 지난달 → 이달 변화 문구(증감률은 여기서 계산, 지난달 0 이면 증감률 생략) */
+export function describeCause(c: BriefingCause): string {
+  const f = (v: number | null) => (v === null ? '산출 불가' : c.unit === '원' ? won(v) : `${v}${c.unit}`);
+  if (c.current === null || c.previous === null) return `${c.label} ${f(c.previous)} → ${f(c.current)}`;
+  const delta = c.previous > 0 ? Math.round(((c.current - c.previous) / c.previous) * 100) : null;
+  return `${c.label} ${f(c.previous)} → ${f(c.current)}${delta === null ? '' : ` (${delta > 0 ? '+' : ''}${delta}%)`}`;
 }
 
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
@@ -68,9 +98,33 @@ export function formatBriefing(i: BriefingInput): string {
   if (i.lowStock.length) {
     lines.push('[확정] 재고 부족: ' + i.lowStock.map(p => `${p.name} ${p.stock}${p.unit}(안전 ${p.minStock})`).join(', '));
   }
+  const alias = pseudonymizeStaff([...i.staff.map(s => s.name), ...(i.freeSlots || []).map(f => f.staff)]); // 실적·빈 시간이 같은 가명을 쓰게 한 번에
   if (i.staff.length) {
-    const alias = pseudonymizeStaff(i.staff.map(s => s.name));
     lines.push('[확정] 직원별 이달 완료 예약·실결제(실명은 가명): ' + i.staff.map(s => `${alias.get(s.name)} ${s.completed}건 ${won(s.revenue)}`).join(' / '));
+  }
+  // ── 158 경영비서 2차
+  if (i.contacts) {
+    lines.push(i.contacts.length
+      ? '[확정] 오늘 연락할 고객(캠페인별 대상 수, 직원 승인 뒤 발송): ' + i.contacts.map(c => `${c.campaign} ${c.ready}명${c.skipped ? `(제외 ${c.skipped})` : ''}`).join(' / ')
+      : '[확정] 오늘 연락할 고객(캠페인): 대상 없음');
+  }
+  if (i.freeSlots) {
+    const has = i.freeSlots.filter(f => f.total > 0);
+    lines.push(has.length
+      ? '[확정] 오늘 빈 시간(60분 시술 기준 시작 가능 시각, 지금 이후): ' + has.map(f => `${alias.get(f.staff)} ${f.slots.join('·')}${f.total > f.slots.length ? ` 외 ${f.total - f.slots.length}칸` : ''}`).join(' / ')
+      : '[확정] 오늘 빈 시간: 없음(영업 종료·휴무 또는 모두 예약)');
+  }
+  if (i.target) {
+    const t = i.target;
+    lines.push(`[확정] 목표 대비: ${won(t.revenue)} / ${won(t.target)} (${t.pct}%) · 남은 ${t.daysLeft}일` + (t.neededPerDay === null ? '' : ` · [예측] 목표 도달에 하루 ${won(t.neededPerDay)} 필요`) + (t.paceProjected === null ? '' : ` · [예측] 지금 속도면 월말 ${won(t.paceProjected)}`));
+  }
+  if (i.causes && i.causes.length) {
+    lines.push('[확정] 전월 대비 변화(원인 후보, 지난달 → 이달): ' + i.causes.map(describeCause).join(' · '));
+  }
+  if (i.recommendations) {
+    lines.push(i.recommendations.length
+      ? '[추정] 이번 주 캠페인 추천(지금 대상 수 많은 순): ' + i.recommendations.map(r => `${r.campaign} ${r.ready}명${r.exists ? '' : '(기본 시나리오, 아직 미등록)'}`).join(' / ')
+      : '[추정] 이번 주 캠페인 추천: 지금 대상이 있는 시나리오 없음');
   }
   return lines.join('\n');
 }
@@ -78,4 +132,4 @@ export function formatBriefing(i: BriefingInput): string {
 /** 브리핑 전용 시스템 프롬프트 — 계산 금지·근거 인용·불확실성 표기 */
 export const BRIEFING_SYSTEM = `당신은 더마솔루션의 AI 경영 비서입니다. 아래 <data> 블록의 숫자는 프로그램이 이미 계산한 값입니다.
 규칙: ① 숫자를 새로 계산하거나 추정하지 말고 자료의 값을 그대로 인용하세요(비율·합계도 자료에 있는 것만). ② 각 판단마다 근거 줄의 라벨([확정]/[예측]/[추정])과 기간을 함께 말하세요. ③ 자료에 없는 것은 "자료 없음"이라고 하세요.
-④ 형식: 1) 한 줄 요약 2) 잘 된 점 2가지 3) 걱정되는 점 2가지(근거) 4) 이번 주에 할 행동 3가지(누구에게·무엇을, 고객·직원은 자료의 가명/건수로만) 5) 불확실한 부분. 한국어, 존댓말, 과장 없이.`;
+④ 형식: 1) 한 줄 요약 2) 잘 된 점 2가지 3) 걱정되는 점 2가지(근거) 4) 이번 주에 할 행동 3가지(누구에게·무엇을, 고객·직원은 자료의 가명/건수로만) 5) 불확실한 부분. 한국어, 존댓말, 과장 없이. 6) 캠페인 추천은 자료의 [추정] 추천 줄에 있는 시나리오만 말하고, 발송은 직원이 대상을 확인·승인한 뒤라고 안내하세요.`;

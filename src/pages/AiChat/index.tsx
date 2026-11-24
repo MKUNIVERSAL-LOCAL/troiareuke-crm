@@ -219,7 +219,7 @@ function AiChatInner() {
   const sendBriefing = async (kind: 'month' | 'today') => {
     if (isLoading) return;
     if (!hasAnyKey) { setShowSettings(true); return; }
-    const question = kind === 'month' ? '이달 경영 브리핑을 해주세요. 잘 된 점, 걱정되는 점, 이번 주 할 행동 3가지를 근거와 함께.' : '오늘 할 일 브리핑을 해주세요. 무엇부터 할지 순서와 이유를 근거와 함께.';
+    const question = kind === 'month' ? '이달 경영 브리핑을 해주세요. 잘 된 점, 걱정되는 점, 목표 대비 상황과 전월 대비 변화의 원인 후보, 이번 주 할 행동 3가지와 추천 캠페인을 근거와 함께.' : '오늘 할 일 브리핑을 해주세요. 오늘 연락할 고객(캠페인별)과 빈 시간 활용을 포함해 무엇부터 할지 순서와 이유를 근거와 함께.';
     setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: question, timestamp: new Date() }]);
     setIsLoading(true);
     try {

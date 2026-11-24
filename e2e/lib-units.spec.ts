@@ -38,7 +38,7 @@ import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/us
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
-import { formatBriefing, pseudonymizeStaff, BRIEFING_SYSTEM } from '../src/lib/ai/briefingRule';
+import { formatBriefing, pseudonymizeStaff, BRIEFING_SYSTEM, targetPace, describeCause } from '../src/lib/ai/briefingRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
@@ -883,4 +883,32 @@ test('기본 시나리오 16개는 모두 유효하고 트리거 11종을 덮으
   expect(p).toEqual({ sent: 3, reserved: 1, paid: 1, revenue: 80000, windowDays: 14 });
   expect(describePerformance(p, n => n.toLocaleString() + '원')).toBe('[추정] 발송 3명 → 14일 내 예약 1명 · 결제 1명 80,000원');
   expect(describePerformance(estimatePerformance([], [], []), String)).toBeNull(); // 발송 없으면 값을 만들지 않는다
+});
+
+test('경영비서 2차 — 목표 페이스·원인 후보 증감률·연락할 고객·빈 시간 가명·캠페인 추천 라벨 (158)', () => {
+  expect(targetPace({ target: 1000000, revenue: 400000, daysElapsed: 10, daysInMonth: 30 })).toEqual({ target: 1000000, revenue: 400000, pct: 40, daysLeft: 20, neededPerDay: 30000, paceProjected: 1200000 });
+  expect(targetPace({ target: 1000000, revenue: 1200000, daysElapsed: 30, daysInMonth: 30 })).toEqual({ target: 1000000, revenue: 1200000, pct: 120, daysLeft: 0, neededPerDay: null, paceProjected: 1200000 }); // 월말·초과 달성
+  expect(describeCause({ label: '방문 고객', current: 25, previous: 30, unit: '명' })).toBe('방문 고객 30명 → 25명 (-17%)');
+  expect(describeCause({ label: '객단가', current: 55000, previous: 50000, unit: '원' })).toBe('객단가 50,000원 → 55,000원 (+10%)');
+  expect(describeCause({ label: '재예약률', current: 40, previous: null, unit: '%' })).toBe('재예약률 산출 불가 → 40%');
+  expect(describeCause({ label: '신규 등록', current: 3, previous: 0, unit: '명' })).toBe('신규 등록 0명 → 3명'); // 지난달 0 이면 증감률 생략
+  const base = { shopLabel: '우리 매장', today: '2026-11-24', month: '2026-11', metrics: null, kpi: null, tasks: [], segments: null, lowStock: [], staff: [] };
+  const t = formatBriefing({ ...base,
+    contacts: [{ campaign: '예약 전날 안내', ready: 3, skipped: 1 }],
+    freeSlots: [{ staff: '김수아', slots: ['14:00', '15:30'], total: 5 }, { staff: '박지민', slots: [], total: 0 }],
+    target: { target: 1000000, revenue: 400000, pct: 40, daysLeft: 20, neededPerDay: 30000, paceProjected: 1200000 },
+    causes: [{ label: '방문 고객', current: 25, previous: 30, unit: '명' }],
+    recommendations: [{ campaign: '미방문 60일 케어 안내', ready: 12, exists: false }, { campaign: '예약 전날 안내', ready: 3, exists: true }] });
+  expect(t).toContain('[확정] 오늘 연락할 고객(캠페인별 대상 수, 직원 승인 뒤 발송): 예약 전날 안내 3명(제외 1)');
+  expect(t).toContain('[확정] 오늘 빈 시간(60분 시술 기준 시작 가능 시각, 지금 이후): 직원A 14:00·15:30 외 3칸');
+  expect(t).not.toContain('김수아'); expect(t).not.toContain('박지민'); // 빈 시간도 가명
+  expect(t).toContain('[확정] 목표 대비: 400,000원 / 1,000,000원 (40%) · 남은 20일 · [예측] 목표 도달에 하루 30,000원 필요 · [예측] 지금 속도면 월말 1,200,000원');
+  expect(t).toContain('[확정] 전월 대비 변화(원인 후보, 지난달 → 이달): 방문 고객 30명 → 25명 (-17%)');
+  expect(t).toContain('[추정] 이번 주 캠페인 추천(지금 대상 수 많은 순): 미방문 60일 케어 안내 12명(기본 시나리오, 아직 미등록) / 예약 전날 안내 3명');
+  const empty = formatBriefing({ ...base, contacts: [], freeSlots: [{ staff: 'x', slots: [], total: 0 }], target: null, causes: [], recommendations: [] });
+  expect(empty).toContain('오늘 연락할 고객(캠페인): 대상 없음');
+  expect(empty).toContain('오늘 빈 시간: 없음');
+  expect(empty).not.toContain('목표 대비'); expect(empty).not.toContain('전월 대비 변화');
+  expect(empty).toContain('캠페인 추천: 지금 대상이 있는 시나리오 없음');
+  expect(BRIEFING_SYSTEM).toContain('6) 캠페인 추천은');
 });
