@@ -21,6 +21,7 @@ import { personalCycleDays, resolveVisitCycle } from '../src/lib/visitCycleRule'
 import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
 import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
+import { monthlyKpis } from '../src/lib/kpiRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -400,4 +401,28 @@ test('고객 가치 — 현금 유입 vs 실현 매출(회차권은 사용 비�
   expect(v.annualForecast).toBe(554_018);      // 42,500 × 365/28
   expect(computeCustomerValue({ payments: [], programs: [], visits: 0, cycleDays: 28 })).toEqual({ cashCollected: 0, realizedRevenue: 0, avgTicket: null, annualForecast: null }); // 방문 0 → 없음
   expect(computeCustomerValue({ payments: [{ type: 'other', status: 'completed', amount: 1000 }], programs: [], visits: 1, cycleDays: null }).annualForecast).toBeNull(); // 주기 없음 → 예측 없음
+});
+
+test('이달 운영 지표 — 방문 고객·재방문율·재예약률·객단가(현금), 분모 0 은 없음 (138, ANALYTICS-DEFINITIONS)', () => {
+  const visitDays = new Map<string, string[]>([
+    ['a', ['2026-09-10', '2026-11-03']],            // 기존 고객, 이달 방문
+    ['b', ['2026-11-12']],                          // 이달 첫 방문(신규)
+    ['c', ['2026-10-01']],                          // 이달 방문 없음
+    ['d', ['2026-11-20', '2026-11-22']],            // 이달 2회 방문해도 1명
+  ]);
+  const k = monthlyKpis({ month: '2026-11', visitDays, payments: [
+    { customerId: 'a', status: 'completed', amount: 100_000, paymentDate: '2026-11-03' },
+    { customerId: 'b', status: 'completed', amount: 50_000, paymentDate: '2026-11-12' },
+    { customerId: 'b', status: 'refunded', amount: 50_000, paymentDate: '2026-11-13' },  // 환불 제외
+    { customerId: 'c', status: 'completed', amount: 999_999, paymentDate: '2026-10-01' }, // 지난달 제외
+  ], upcomingByCustomer: new Set(['a', 'c']) });
+  expect(k.visitors).toBe(3);
+  expect(k.returning).toBe(1);
+  expect(k.revisitRate).toBe(33);
+  expect(k.rebooked).toBe(1);        // c 는 이달 방문이 아니라 분자에 안 들어간다
+  expect(k.rebookRate).toBe(33);
+  expect(k.monthRevenue).toBe(150_000);
+  expect(k.avgTicket).toBe(50_000);
+  const empty = monthlyKpis({ month: '2026-11', visitDays: new Map(), payments: [], upcomingByCustomer: new Set() });
+  expect(empty).toEqual({ visitors: 0, returning: 0, rebooked: 0, revisitRate: null, rebookRate: null, avgTicket: null, monthRevenue: 0 });
 });
