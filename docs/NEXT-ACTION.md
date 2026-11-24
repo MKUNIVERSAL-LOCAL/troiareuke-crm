@@ -14,7 +14,9 @@
 - 상세 표: `OWNER-APPROVAL-QUEUE.md`, 설계서: `SERVER-INTEGRITY-DESIGN-2026-11-24.md`·`AI-SECURITY-POLICY.md`·`AI-GATEWAY-ARCHITECTURE.md`·`REFUND-MODEL-DESIGN-2026-11-24.md`·`AI-PRICING-AND-COST-ANALYSIS.md`.
 
 ## 바로 다음 작업 (순서)
-1. (완료) 179~181 → 리뷰 → 182 반영 → exe 재빌드(155~182, 00:53/00:54). 남은 것: 아침 보고 최종(`OWNER-BRIEFING-2026-11-25.md`·노션·이 문서), 시간이 남으면 소형 묶음(183~, 다음 리뷰는 185 뒤, 마지막 exe 재빌드 아침 전 한 번 더).
+1. (완료) 179~181 → 리뷰 → 182 반영 → exe 재빌드(155~182, 00:53/00:54).
+   **183(운영 지표 "공식 보기" 토글 + GAP C-7/D-1 현행화)은 작업 트리에 적용·tsc 양쪽 0 에러까지 확인했으나 미커밋** — 00:56 build:e2e·Playwright 단계에서 시스템이 메모리 부족(여유 3GB/15.7GB)으로 백그라운드 작업을 중단했고, 규칙(자동 재실행 금지)대로 다시 돌리지 않았다. 변경 파일: `src/components/TodayTasksCard.tsx`·`e2e/smoke.spec.ts`·`docs/GLOBAL-CRM-GAP-ANALYSIS.md`(미커밋 보존). 오너 지시 뒤 `npm run build:e2e && npx playwright test --project=chromium e2e/smoke.spec.ts e2e/a11y-modals.spec.ts` → 통과 시 scratchpad `msg183.txt`·`docs183.cjs` 로 커밋(188차).
+   이후: 아침 보고 최종(`OWNER-BRIEFING-2026-11-25.md`·노션·이 문서), 다음 리뷰는 185 뒤, exe 는 183 커밋 뒤 한 번 더.
 2. 다음 세션 첫 묶음 후보(승인 불필요): 캠페인 프리셋에 세그먼트 추천, 모바일 세그먼트 칩 UX, 파일럿 지표 2/2(161 뒤).
 3. 오너 복귀 뒤: 전체 Playwright 재실행(--workers=3) → 통과 확인 → "릴리스 진행해" 지시가 있으면 PR #56 머지 → `release:all`(NAS 단계는 B-7).
 4. 승인 뒤 묶음: 161 서버 AI 게이트웨이(B-2·C-7), 캠페인 서버 디스패처(B-4), 환불 UI(결정 #9), 코어 키 보관(A-17).
