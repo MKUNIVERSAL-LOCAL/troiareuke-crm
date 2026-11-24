@@ -1057,3 +1057,13 @@ test('저장 세그먼트 규칙 — AND 조건 평가·빈 조건 거절·설�
   expect(describeSegment({ grades: ['VIP'], lastVisitDaysMin: 60, hasUpcoming: false, adConsent: 'consented' })).toBe('등급 VIP · 마지막 방문 60일 이상 전 · 다음 예약 없음 · 광고 동의');
   expect(describeSegment({})).toBe('전체');
 });
+
+test('캠페인 대상을 저장 세그먼트로 좁힌다 — 세그먼트 밖은 제외 사유, 없으면 제한 없음 (167)', () => {
+  const consented = { ad: 'consented' as const, sms: true, kakao: true };
+  const raw = (id: string) => ({ customerId: id, customerName: id, phone: '01012345678', consent: consented, reason: 'r', eventId: 'e', vars: {} });
+  const camp = { id: 'c', repeat: 'per_event' as const, isAd: false, channel: 'sms' as const, content: '{고객명}' };
+  const sel = selectCandidates(camp, [raw('a'), raw('b')], new Set(), '2026', new Set(['b']));
+  expect(sel.ready.map(r => r.customerId)).toEqual(['b']); expect(sel.skipped).toEqual([{ customerId: 'a', customerName: 'a', why: 'not_in_segment' }]);
+  expect(selectCandidates(camp, [raw('a'), raw('b')], new Set(), '2026', null).ready.length).toBe(2);
+  expect(selectCandidates(camp, [raw('a')], new Set(), '2026', new Set()).ready.length).toBe(0); // 삭제된 세그먼트 → 아무에게도
+});

@@ -5,12 +5,14 @@ import { notify } from '../../lib/notify';
 import { saveCampaign, newCampaignDraft, type CampaignInput } from '../../lib/campaignStore';
 import { TRIGGER_LABELS, TRIGGER_DAYS, TRIGGER_DEFAULT_REPEAT, REPEAT_LABELS, CAMPAIGN_VARS, describeTrigger, validateCampaign, type Campaign, type CampaignTrigger, type CampaignRepeat } from '../../lib/campaignRule';
 import { CAMPAIGN_PRESETS } from '../../lib/campaignPresets';
+import { listSavedSegments } from '../../lib/savedSegments';
 
 const TRIGGERS = Object.keys(TRIGGER_LABELS) as CampaignTrigger[];
 
 export default function CampaignEditModal({ campaign, onClose, onSaved }: { campaign: Campaign | null; onClose: () => void; onSaved: () => void }) {
   const [draft, setDraft] = useState<CampaignInput>(() => (campaign ? { ...campaign } : newCampaignDraft('reservation_tomorrow')));
   const daysSpec = TRIGGER_DAYS[draft.trigger];
+  const segments = listSavedSegments(); // 대상을 더 좁힐 저장 세그먼트(선택) (167)
   const set = <K extends keyof CampaignInput>(k: K, v: CampaignInput[K]) => setDraft(d => ({ ...d, [k]: v }));
   const applyPreset = (key: string) => {
     const p = CAMPAIGN_PRESETS.find(x => x.key === key);
@@ -69,7 +71,16 @@ export default function CampaignEditModal({ campaign, onClose, onSaved }: { camp
             </select>
           </div>
         </div>
-        <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">{describeTrigger(draft)} · {REPEAT_LABELS[draft.repeat]} · 같은 고객·같은 회차에 두 번 나가지 않습니다.</p>
+        <div>
+          <label htmlFor="cp-segment" className="block text-xs font-medium text-gray-600 mb-1">대상 세그먼트(선택)</label>
+          <select id="cp-segment" value={draft.segmentId ?? ''} onChange={e => set('segmentId', e.target.value || undefined)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white">
+            <option value="">트리거 대상 전부</option>
+            {segments.map(sg => <option key={sg.id} value={sg.id}>{sg.name}</option>)}
+            {draft.segmentId && !segments.some(sg => sg.id === draft.segmentId) && <option value={draft.segmentId}>삭제된 세그먼트(아무에게도 안 감)</option>}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">고객 목록의 "+ 세그먼트"로 만든 조건 조합. 고르면 트리거에 걸린 고객 중 세그먼트에 든 고객에게만 갑니다.</p>
+        </div>
+        <p className="text-xs text-gray-600 bg-gray-50 rounded-xl px-3 py-2">{describeTrigger(draft)} · {REPEAT_LABELS[draft.repeat]}{draft.segmentId ? ` · 세그먼트 ${segments.find(sg => sg.id === draft.segmentId)?.name ?? '삭제됨'}` : ''} · 같은 고객·같은 회차에 두 번 나가지 않습니다.</p>
         <div>
           <label htmlFor="cp-content" className="block text-xs font-medium text-gray-600 mb-1">메시지 내용</label>
           <textarea id="cp-content" value={draft.content} onChange={e => set('content', e.target.value)} rows={4} placeholder="{고객명}님, 내일 {예약일시} 예약을 기다리고 있어요. — {매장명}" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl resize-none" />

@@ -11,6 +11,7 @@ import { sendMessages } from '../../lib/messagingGateway';
 import { smsBytes, SMS_BYTE_LIMIT, MESSAGE_UNIT_COST } from '../../lib/smsBytes';
 import { collectRawCandidates } from '../../lib/campaignTriggers';
 import { sentKeysOf, markSent } from '../../lib/campaignStore';
+import { segmentIdsFor } from '../../lib/savedSegments';
 import { selectCandidates, describeTrigger, SKIP_LABELS, type Campaign, type SkipReason } from '../../lib/campaignRule';
 import { checkAdSend, decorateAdMessage } from '../../lib/adComplianceRule';
 import { getOptOutNumber } from '../../lib/marketingConsent';
@@ -20,7 +21,7 @@ const FAIL_STREAK_STOP = 3;
 
 export default function CampaignRunModal({ campaign, onClose, onSent }: { campaign: Campaign; onClose: () => void; onSent: () => void }) {
   const { user } = useAuth();
-  const selection = useMemo(() => selectCandidates(campaign, collectRawCandidates(campaign), sentKeysOf(campaign.id), String(new Date().getFullYear())), [campaign]);
+  const selection = useMemo(() => selectCandidates(campaign, collectRawCandidates(campaign), sentKeysOf(campaign.id), String(new Date().getFullYear()), segmentIdsFor(campaign.segmentId)), [campaign]); // 저장 세그먼트로 좁힘 (167)
   const [checked, setChecked] = useState<Set<string>>(() => new Set(selection.ready.map(r => r.key)));
   const [phase, setPhase] = useState<'review' | 'sending' | 'done'>('review');
   const [result, setResult] = useState<{ sent: number; failed: number; pending: boolean; reason?: string } | null>(null);

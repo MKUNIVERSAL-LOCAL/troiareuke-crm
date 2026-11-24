@@ -14,6 +14,7 @@ import { isUpcomingReservation } from '../upcomingRule';
 import { isLowStock } from '../stockRule';
 import { localMonthOf } from '../revenueMetricsRule';
 import { listCampaigns, sentKeysOf } from '../campaignStore';
+import { buildSegmentFacts, segmentIdsFor } from '../savedSegments';
 import { collectRawCandidates } from '../campaignTriggers';
 import { selectCandidates, type Campaign } from '../campaignRule';
 import { CAMPAIGN_PRESETS } from '../campaignPresets';
@@ -32,8 +33,9 @@ const RECOMMEND_MAX = 5;
 
 /** 캠페인별 오늘 대상 수 — 켜진 캠페인만, 승인 전 수치 (158) */
 function campaignContacts(year: string): BriefingContacts[] {
+  const facts = buildSegmentFacts(); // 세그먼트 좁힘용 사실은 한 번만 (167)
   return listCampaigns().filter(c => c.enabled).map(c => {
-    const sel = selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year);
+    const sel = selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year, segmentIdsFor(c.segmentId, facts));
     return { campaign: c.name, ready: sel.ready.length, skipped: sel.skipped.length };
   }).filter(c => c.ready > 0 || c.skipped > 0);
 }
@@ -43,8 +45,9 @@ function campaignRecommendations(year: string): BriefingRecommendation[] {
   const existing = listCampaigns();
   const names = new Set(existing.map(c => c.name));
   const out: BriefingRecommendation[] = [];
+  const facts = buildSegmentFacts();
   for (const c of existing.filter(x => x.enabled)) {
-    const n = selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year).ready.length;
+    const n = selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year, segmentIdsFor(c.segmentId, facts)).ready.length;
     if (n > 0) out.push({ campaign: c.name, ready: n, exists: true });
   }
   for (const p of CAMPAIGN_PRESETS.filter(p => !names.has(p.name))) {

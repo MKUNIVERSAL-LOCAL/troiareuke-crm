@@ -46,6 +46,16 @@ test('세그먼트를 조건으로 만들고 고객 목록·발송 대상에 쓴
   // 빠른 발송 카드에도 세그먼트 카드
   await expect(page.getByRole('button', { name: /첫 방문 전 고객/ }).first()).toContainText('1명');
 
+  // 캠페인 대상을 이 세그먼트로 좁힌다 (167)
+  await page.getByTestId('campaigns-card').getByRole('button', { name: '캠페인 추가' }).click();
+  const edit = page.getByRole('dialog', { name: '캠페인 추가' });
+  await edit.getByLabel('캠페인 이름').fill('세그먼트 캠페인');
+  await edit.getByLabel('메시지 내용').fill('{고객명}님 안내');
+  await edit.getByLabel('대상 세그먼트(선택)').selectOption({ label: '첫 방문 전 고객' });
+  await expect(edit).toContainText('세그먼트 첫 방문 전 고객');
+  await edit.getByRole('button', { name: '추가', exact: true }).click();
+  await expect(page.getByTestId('campaign-row').filter({ hasText: '세그먼트 캠페인' })).toContainText('세그먼트 첫 방문 전 고객');
+
   // 편집: 조건을 "방문 3회 이상" 으로 → 0명
   await page.goto('/customers');
   await chip.click();

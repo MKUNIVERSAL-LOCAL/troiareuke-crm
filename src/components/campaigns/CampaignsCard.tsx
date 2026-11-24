@@ -11,6 +11,7 @@ import { listCampaigns, deleteCampaign, setCampaignEnabled, lastRunOf, sendsOf, 
 import { ReservationStore, PaymentStore } from '../../lib/store';
 import { estimatePerformance, describePerformance } from '../../lib/campaignPerformanceRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../../lib/campaignPresets';
+import { listSavedSegments } from '../../lib/savedSegments';
 import { describeTrigger, REPEAT_LABELS, type Campaign } from '../../lib/campaignRule';
 import CampaignEditModal from './CampaignEditModal';
 import CampaignRunModal from './CampaignRunModal';
@@ -23,6 +24,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
   const [running, setRunning] = useState<Campaign | null>(null);
   const refresh = () => setCampaigns(listCampaigns());
   const missing = missingPresets(campaigns.map(c => c.name)).length;
+  const segmentNames = useMemo(() => new Map(listSavedSegments().map(sg => [sg.id, sg.name])), [campaigns]); // 행에 세그먼트 이름 (167) // eslint-disable-line react-hooks/exhaustive-deps
   const addPresets = () => {
     const n = addMissingPresets();
     refresh();
@@ -75,7 +77,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
                     {c.isAd && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">광고</span>}
                     {!c.enabled && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">꺼짐</span>}
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5">{describeTrigger(c)} · {REPEAT_LABELS[c.repeat]}{last ? ` · 마지막 발송 ${formatDateTime(last)}` : ''}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{describeTrigger(c)} · {REPEAT_LABELS[c.repeat]}{c.segmentId ? ` · 세그먼트 ${segmentNames.get(c.segmentId) ?? '삭제됨(아무에게도 안 감)'}` : ''}{last ? ` · 마지막 발송 ${formatDateTime(last)}` : ''}</p>
                   {perf && <p className="text-xs text-gray-600 mt-0.5" data-testid="campaign-perf">{perf}</p>}
                 </div>
               </div>

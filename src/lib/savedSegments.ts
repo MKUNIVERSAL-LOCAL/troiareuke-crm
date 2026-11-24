@@ -56,3 +56,10 @@ export function segmentIds(condition: SegmentCondition, facts: Map<string, Custo
   for (const [id, f] of facts) if (matchesSegment(f, condition, today)) ids.add(id);
   return ids;
 }
+
+/** 캠페인 등이 가리키는 저장 세그먼트의 고객 id 집합 — segmentId 없음 → null(제한 없음), 삭제된 세그먼트 → 빈 집합(아무에게도) (167) */
+export function segmentIdsFor(segmentId: string | undefined, facts: Map<string, CustomerFacts> = buildSegmentFacts()): Set<string> | null {
+  if (!segmentId) return null;
+  const seg = listSavedSegments().find(x => x.id === segmentId);
+  return seg ? segmentIds(seg.condition, facts) : new Set();
+}

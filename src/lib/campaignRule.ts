@@ -34,6 +34,8 @@ export interface Campaign {
   /** 광고성(이벤트·할인) — 수신 동의 고객만, (광고)·080 자동 표기, 21~08시 차단 (155 규칙) */
   isAd: boolean;
   repeat: CampaignRepeat;
+  /** 저장 세그먼트 id — 있으면 트리거 대상 중 이 세그먼트에 든 고객만(167, GAP C-6·M-2 연결) */
+  segmentId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -131,19 +133,20 @@ export interface RawCandidate {
   /** yearly 반복의 연도 버킷(생일이면 그 생일의 연도) — 없으면 실행 연도. 12월 말·1월 초 두 번 나가지 않게 (159 리뷰 M-2) */
   yearBucket?: string;
 }
-export type SkipReason = 'already_sent' | 'no_consent' | 'channel_optout' | 'no_phone' | 'unresolved_vars';
+export type SkipReason = 'already_sent' | 'no_consent' | 'channel_optout' | 'no_phone' | 'unresolved_vars' | 'not_in_segment';
 export const SKIP_LABELS: Record<SkipReason, string> = {
   already_sent: '이미 발송',
   no_consent: '광고 수신 동의 없음·거부',
   channel_optout: '이 채널 수신 거부',
   no_phone: '전화번호 없음',
   unresolved_vars: '채울 수 없는 변수',
+  not_in_segment: '세그먼트 밖',
 };
 export interface CampaignCandidate extends RawCandidate { key: string; message: string }
 export interface Selection { ready: CampaignCandidate[]; skipped: { customerId: string; customerName: string; why: SkipReason }[] }
 
 /** 원 후보 → 발송 가능 후보: 멱등키 중복·동의·채널 거부·번호·변수 치환을 거른다. 광고가 아니면 동의는 보지 않고 채널 거부만 본다 */
-export function selectCandidates(c: Pick<Campaign, 'id' | 'repeat' | 'isAd' | 'channel' | 'content'>, raw: RawCandidate[], sentKeys: Set<string>, year: string): Selection {
+export function selectCandidates(c: Pick<Campaign, 'id' | 'repeat' | 'isAd' | 'channel' | 'content'>, raw: RawCandidate[], sentKeys: Set<string>, year: string, segmentIds?: Set<string> | null): Selection {
   const ready: CampaignCandidate[] = [];
   const skipped: Selection['skipped'] = [];
   const adChannel: AdChannel = c.channel === 'sms' ? 'sms' : 'kakao';
@@ -154,6 +157,7 @@ export function selectCandidates(c: Pick<Campaign, 'id' | 'repeat' | 'isAd' | 'c
     seen.add(key);
     const skip = (why: SkipReason) => skipped.push({ customerId: r.customerId, customerName: r.customerName, why });
     if (sentKeys.has(key)) { skip('already_sent'); continue; }
+    if (segmentIds && !segmentIds.has(r.customerId)) { skip('not_in_segment'); continue; } // 저장 세그먼트로 좁힘 (167)
     if (c.isAd && !canReceiveAd(r.consent, adChannel)) { skip(r.consent.ad === 'consented' ? 'channel_optout' : 'no_consent'); continue; }
     if (!c.isAd && (adChannel === 'sms' ? !r.consent.sms : !r.consent.kakao)) { skip('channel_optout'); continue; }
     if (!/^\d{10,11}$/.test(r.phone.replace(/\D/g, ''))) { skip('no_phone'); continue; }
