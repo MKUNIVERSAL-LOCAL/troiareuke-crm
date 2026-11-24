@@ -44,6 +44,7 @@
 | 손익분기 매출 | 판관비 ÷ (1 − 매출원가율), 원가율 = 매출원가(제품·소모품 매입) ÷ 월 매출 | expenses | 월 | 원가율 ≥ 1 이면 —, 매출 0·원가 0 이면 판관비 | 확정 | monthMetrics.breakEven | 147 |
 | 영업시간·시간당 매출 | 휴무·지정 휴일이 아닌 날의 (마감 − 오픈) 합(이달은 오늘까지), 매출 ÷ 영업시간 | 설정 businessHours·holidays | 월 | 영업시간 설정 없으면 — | 확정 | revenueMetricsRule.openHoursInMonth, monthMetrics.perHour | 147 |
 | 월말 예상 | 이달 매출 ÷ 지난 일수 × 그 달 일수 | 월 매출 | 이달 | 과거 달·매출 0 이면 — | **예측** | monthMetrics.projected | 147 |
+| 캠페인 성과 | 고객별 첫 발송일 D 부터 D+14 안의 예약(취소·노쇼 제외) 고객 수, 완료 결제 고객 수·금액 합 | campaign_sends(이 기기 발송 성공), reservations, payments | 발송 뒤 14일 | 발송 0 이면 표시 없음; 창 안 발생 = 인과 아님 | **추정** | campaignPerformanceRule | 157 |
 ## 원칙
 - 데이터가 부족하면 값을 만들지 않는다(null → 화면은 "-" 또는 "매장 기준").
 - 확정과 예측을 라벨로 구분한다("예상"·"추정").

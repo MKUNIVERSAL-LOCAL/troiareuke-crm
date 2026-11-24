@@ -70,4 +70,18 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await expect(adRun.getByTestId('campaign-ad-block')).toContainText('무료수신거부 080 번호가 없습니다');
   await expect(adRun.getByTestId('campaign-approve')).toBeDisabled();
   await expect(adRun).toContainText('광고 수신 동의 없음·거부 1명'); // 동의 없는 고객은 광고 대상에서 제외
+  await page.keyboard.press('Escape');
+  await expect(adRun).toHaveCount(0);
+
+  // 기본 시나리오 16개 한 번에 추가 — 이미 있는 이름("예약 전날 안내")은 건너뛰어 15개가 더 들어가고, 버튼은 사라진다 (157)
+  await expect(card.getByTestId('campaign-presets')).toContainText('기본 시나리오 15개 더 추가');
+  await card.getByTestId('campaign-presets').click();
+  await expect(card.getByTestId('campaign-row')).toHaveCount(17); // 2 + 15
+  await expect(card.getByTestId('campaign-presets')).toHaveCount(0);
+  await expect(card.getByTestId('campaign-row').filter({ hasText: '시술 다음날 홈케어 안내' })).toContainText('방문 1일 뒤에 · 사건마다 1회');
+  // 오늘 예약 캠페인은 내일 예약을 잡지 않는다(트리거 분리)
+  await card.getByTestId('campaign-row').filter({ hasText: '예약 당일 아침 안내' }).getByRole('button', { name: '대상 확인·발송' }).click();
+  const todayRun = page.getByRole('dialog', { name: '캠페인 실행 — 예약 당일 아침 안내' });
+  await expect(todayRun.getByTestId('campaign-ready-count')).toHaveText('0');
+  await expect(todayRun.getByTestId('campaign-approve')).toBeDisabled();
 });

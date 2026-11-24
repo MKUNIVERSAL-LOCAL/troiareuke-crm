@@ -1,13 +1,16 @@
 // CampaignsCard — 문자/카카오 발송 > 자동 발송(캠페인) 목록 (비코어, 156, GAP M-3). 옛 "자동 발송 준비 중" 장식 블록을 대체
 import { useState } from 'react';
-import { Zap, Pencil, Trash2, Plus } from 'lucide-react';
+import { Zap, Pencil, Trash2, Plus, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { canDo } from '../../lib/permissions';
 import { askConfirm } from '../../lib/confirmDialog';
 import { notify } from '../../lib/notify';
-import { formatDateTime } from '../../lib/format';
-import { listCampaigns, deleteCampaign, setCampaignEnabled, lastRunOf } from '../../lib/campaignStore';
+import { formatDateTime, formatPrice } from '../../lib/format';
+import { listCampaigns, deleteCampaign, setCampaignEnabled, lastRunOf, sendsOf, addMissingPresets } from '../../lib/campaignStore';
+import { ReservationStore, PaymentStore } from '../../lib/store';
+import { estimatePerformance, describePerformance } from '../../lib/campaignPerformanceRule';
+import { CAMPAIGN_PRESETS, missingPresets } from '../../lib/campaignPresets';
 import { describeTrigger, REPEAT_LABELS, type Campaign } from '../../lib/campaignRule';
 import CampaignEditModal from './CampaignEditModal';
 import CampaignRunModal from './CampaignRunModal';
@@ -19,6 +22,14 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
   const [editing, setEditing] = useState<Campaign | null | 'new'>(null);
   const [running, setRunning] = useState<Campaign | null>(null);
   const refresh = () => setCampaigns(listCampaigns());
+  const missing = missingPresets(campaigns.map(c => c.name)).length;
+  const addPresets = () => {
+    const n = addMissingPresets();
+    refresh();
+    notify.success(n ? `기본 시나리오 ${n}개를 추가했습니다. 문구와 일수는 수정에서 바꿀 수 있어요.` : '기본 시나리오가 모두 들어 있습니다.');
+  };
+  // 성과 추정 — 이 기기의 발송 성공 기록 기준, 14일 창 (157, GAP M-6, ANALYTICS-DEFINITIONS)
+  const perfOf = (id: string) => describePerformance(estimatePerformance(sendsOf(id), ReservationStore.getAll(), PaymentStore.getAll()), formatPrice);
 
   const remove = async (c: Campaign) => {
     if (!(await askConfirm({ title: '캠페인 삭제', message: `"${c.name}" 캠페인을 삭제할까요? 발송 기록은 남습니다.`, confirmLabel: '삭제', danger: true }))) return;
@@ -33,15 +44,23 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
           <p className="text-xs text-gray-400 mt-0.5">조건에 맞는 고객을 모아 보여주고, 직원이 확인한 뒤 발송합니다. 같은 고객·같은 회차에 두 번 나가지 않습니다.</p>
         </div>
         {canManage && (
-          <button type="button" onClick={() => setEditing('new')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e]">
-            <Plus size={14} /> 캠페인 추가
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {missing > 0 && (
+              <button type="button" onClick={addPresets} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[#1a3a8f] bg-blue-50 rounded-xl hover:bg-blue-100" data-testid="campaign-presets">
+                <Sparkles size={14} /> 기본 시나리오 {missing === CAMPAIGN_PRESETS.length ? CAMPAIGN_PRESETS.length : `${missing}개 더`} 추가
+              </button>
+            )}
+            <button type="button" onClick={() => setEditing('new')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e]">
+              <Plus size={14} /> 캠페인 추가
+            </button>
+          </div>
         )}
       </div>
       <div className="divide-y divide-gray-50">
-        {campaigns.length === 0 && <p className="px-6 py-8 text-sm text-gray-500 text-center">아직 캠페인이 없습니다. "캠페인 추가"로 예약 전날 안내·생일 축하·미방문 케어를 만들어보세요.</p>}
+        {campaigns.length === 0 && <p className="px-6 py-8 text-sm text-gray-500 text-center">아직 캠페인이 없습니다. "기본 시나리오 {CAMPAIGN_PRESETS.length} 추가"로 예약·케어·리텐션·회차권·이벤트 시나리오를 한 번에 넣거나, "캠페인 추가"로 직접 만들어보세요.</p>}
         {campaigns.map(c => {
           const last = lastRunOf(c.id);
+          const perf = perfOf(c.id);
           return (
             <div key={c.id} className="flex items-center justify-between gap-3 px-6 py-4 flex-wrap" data-testid="campaign-row">
               <div className="flex items-start gap-3 min-w-0">
@@ -54,6 +73,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
                     {!c.enabled && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">꺼짐</span>}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">{describeTrigger(c)} · {REPEAT_LABELS[c.repeat]}{last ? ` · 마지막 발송 ${formatDateTime(last)}` : ''}</p>
+                  {perf && <p className="text-xs text-gray-600 mt-0.5" data-testid="campaign-perf">{perf}</p>}
                 </div>
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">

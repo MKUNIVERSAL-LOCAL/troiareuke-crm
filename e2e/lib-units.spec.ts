@@ -41,7 +41,9 @@ import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai
 import { formatBriefing, pseudonymizeStaff, BRIEFING_SYSTEM } from '../src/lib/ai/briefingRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent } from '../src/lib/consentRule';
-import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger } from '../src/lib/campaignRule';
+import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
+import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
+import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -855,4 +857,30 @@ test('캠페인 규칙 — 멱등키 버킷, 변수 치환, 후보 선별(중복
   expect(validateCampaign({ name: '', content: '{고객명} {없는변수}', trigger: 'novisit', days: 3 })).toEqual(['캠페인 이름을 입력해주세요.', '마지막 방문 뒤 며칠 이상: 7~365 사이 정수로 입력해주세요.', '쓸 수 없는 변수: {없는변수}']);
   expect(validateCampaign({ name: 'x', content: 'y', trigger: 'reservation_tomorrow', days: 0 })).toEqual([]);
   expect(describeTrigger({ trigger: 'birthday', days: 3 })).toBe('생일 3일 전부터 생일까지');
+});
+
+test('기본 시나리오 16개는 모두 유효하고 트리거 11종을 덮으며, 성과 추정은 발송 뒤 14일 창의 예약·결제만 센다 (157)', () => {
+  expect(CAMPAIGN_PRESETS.length).toBe(16);
+  expect(new Set(CAMPAIGN_PRESETS.map(p => p.name)).size).toBe(16);
+  for (const p of CAMPAIGN_PRESETS) expect(validateCampaign(p), p.name).toEqual([]);
+  expect(new Set(CAMPAIGN_PRESETS.map(p => p.trigger)).size).toBe(Object.keys(TRIGGER_LABELS).length); // 트리거 전부에 시나리오 하나 이상
+  expect(CAMPAIGN_PRESETS.filter(p => p.isAd).map(p => p.name)).toEqual(['미방문 90일 복귀 혜택', '생일 주간 혜택']); // 혜택만 광고, 거래 안내는 비광고
+  expect(missingPresets(['예약 전날 안내', '생일 축하']).length).toBe(14);
+  const sends = [{ customerId: 'a', at: '2026-11-01T10:00:00.000Z' }, { customerId: 'a', at: '2026-11-05T10:00:00.000Z' }, { customerId: 'b', at: '2026-11-10T10:00:00.000Z' }, { customerId: 'c', at: '2026-11-10T10:00:00.000Z' }];
+  const resv = [
+    { customerId: 'a', date: '2026-11-03', status: 'completed' },
+    { customerId: 'b', date: '2026-11-30', status: 'confirmed' },   // 창(14일) 밖
+    { customerId: 'c', date: '2026-11-12', status: 'cancelled' },   // 취소는 제외
+    { customerId: 'a', date: '2026-10-30', status: 'completed' },   // 발송 전
+  ];
+  const pays = [
+    { customerId: 'a', paymentDate: '2026-11-03', amount: 50000, status: 'completed' },
+    { customerId: 'a', paymentDate: '2026-11-14', amount: 30000, status: 'completed' },
+    { customerId: 'a', paymentDate: '2026-11-16', amount: 99999, status: 'completed' }, // 첫 발송 11-01 + 14 = 11-15 → 밖
+    { customerId: 'b', paymentDate: '2026-11-12', amount: 10000, status: 'refunded' },  // 환불 제외
+  ];
+  const p = estimatePerformance(sends, resv, pays);
+  expect(p).toEqual({ sent: 3, reserved: 1, paid: 1, revenue: 80000, windowDays: 14 });
+  expect(describePerformance(p, n => n.toLocaleString() + '원')).toBe('[추정] 발송 3명 → 14일 내 예약 1명 · 결제 1명 80,000원');
+  expect(describePerformance(estimatePerformance([], [], []), String)).toBeNull(); // 발송 없으면 값을 만들지 않는다
 });

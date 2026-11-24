@@ -4,6 +4,7 @@ import Modal from '../ui/Modal';
 import { notify } from '../../lib/notify';
 import { saveCampaign, newCampaignDraft, type CampaignInput } from '../../lib/campaignStore';
 import { TRIGGER_LABELS, TRIGGER_DAYS, TRIGGER_DEFAULT_REPEAT, REPEAT_LABELS, CAMPAIGN_VARS, describeTrigger, validateCampaign, type Campaign, type CampaignTrigger, type CampaignRepeat } from '../../lib/campaignRule';
+import { CAMPAIGN_PRESETS } from '../../lib/campaignPresets';
 
 const TRIGGERS = Object.keys(TRIGGER_LABELS) as CampaignTrigger[];
 
@@ -11,6 +12,12 @@ export default function CampaignEditModal({ campaign, onClose, onSaved }: { camp
   const [draft, setDraft] = useState<CampaignInput>(() => (campaign ? { ...campaign } : newCampaignDraft('reservation_tomorrow')));
   const daysSpec = TRIGGER_DAYS[draft.trigger];
   const set = <K extends keyof CampaignInput>(k: K, v: CampaignInput[K]) => setDraft(d => ({ ...d, [k]: v }));
+  const applyPreset = (key: string) => {
+    const p = CAMPAIGN_PRESETS.find(x => x.key === key);
+    if (!p) return;
+    const { key: _k, group: _g, ...rest } = p;
+    setDraft(d => ({ ...d, ...rest, name: d.name.trim() ? d.name : rest.name }));
+  };
   const changeTrigger = (t: CampaignTrigger) => setDraft(d => ({ ...d, trigger: t, days: TRIGGER_DAYS[t]?.defaultDays ?? 0, repeat: TRIGGER_DEFAULT_REPEAT[t] }));
   const submit = () => {
     const errs = validateCampaign(draft);
@@ -22,6 +29,15 @@ export default function CampaignEditModal({ campaign, onClose, onSaved }: { camp
   return (
     <Modal isOpen={true} onClose={onClose} title={campaign ? '캠페인 수정' : '캠페인 추가'} size="lg">
       <div className="space-y-4">
+        {!campaign && (
+          <div>
+            <label htmlFor="cp-preset" className="block text-xs font-medium text-gray-600 mb-1">시나리오에서 불러오기(선택)</label>
+            <select id="cp-preset" defaultValue="" onChange={e => applyPreset(e.target.value)} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white">
+              <option value="">직접 작성</option>
+              {CAMPAIGN_PRESETS.map(p => <option key={p.key} value={p.key}>[{p.group}] {p.name}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label htmlFor="cp-name" className="block text-xs font-medium text-gray-600 mb-1">캠페인 이름</label>
           <input id="cp-name" value={draft.name} onChange={e => set('name', e.target.value)} placeholder="예: 예약 전날 안내" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl" />

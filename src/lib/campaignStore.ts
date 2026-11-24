@@ -5,6 +5,7 @@ import { getShopId, safeSetItem } from './store';
 import { getPreference, setPreference } from './shopPreferences';
 import type { Campaign } from './campaignRule';
 import { TRIGGER_DAYS, TRIGGER_DEFAULT_REPEAT, type CampaignTrigger } from './campaignRule';
+import { missingPresets } from './campaignPresets';
 
 function genId(): string {
   return globalThis.crypto?.randomUUID?.() || Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -34,18 +35,33 @@ export function setCampaignEnabled(id: string, enabled: boolean): void {
   setPreference('campaigns', listCampaigns().map(c => (c.id === id ? { ...c, enabled, updatedAt: new Date().toISOString() } : c)));
 }
 
+/** 기본 시나리오 16개 중 아직 없는 것(이름 기준)을 한 번에 추가 — 추가된 수를 돌려준다 (157) */
+export function addMissingPresets(): number {
+  const list = listCampaigns();
+  const add = missingPresets(list.map(c => c.name));
+  if (!add.length) return 0;
+  const now = new Date().toISOString();
+  setPreference('campaigns', [...list, ...add.map(({ key: _key, group: _group, ...p }) => ({ ...p, id: genId(), createdAt: now, updatedAt: now }))]);
+  return add.length;
+}
+
 /** 새 캠페인 초안 — 트리거별 기본 일수·반복 */
 export function newCampaignDraft(trigger: CampaignTrigger): CampaignInput {
   return { name: '', enabled: true, trigger, days: TRIGGER_DAYS[trigger]?.defaultDays ?? 0, channel: 'sms', content: '', isAd: false, repeat: TRIGGER_DEFAULT_REPEAT[trigger] };
 }
 
 // ── 발송 기록·멱등키 (이 기기) ─────────────────────────────────
-export interface CampaignSendRecord { key: string; campaignId: string; customerId: string; at: string; historyId?: string }
+export interface CampaignSendRecord { key: string; campaignId: string; customerId: string; at: string }
 const SENDS_KEY = () => `crm_${getShopId()}_campaign_sends`;
 const MAX_SENDS = 50000;
 
 function readSends(): CampaignSendRecord[] {
   try { const raw = localStorage.getItem(SENDS_KEY()); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+
+/** 성과 추정용 발송 성공 기록(이 기기) (157) */
+export function sendsOf(campaignId: string): CampaignSendRecord[] {
+  return readSends().filter(s => s.campaignId === campaignId);
 }
 
 export function sentKeysOf(campaignId: string): Set<string> {
