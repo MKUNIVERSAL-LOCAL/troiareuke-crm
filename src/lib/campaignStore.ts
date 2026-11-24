@@ -64,6 +64,11 @@ export function sendsOf(campaignId: string): CampaignSendRecord[] {
   return readSends().filter(s => s.campaignId === campaignId);
 }
 
+/** 고객 한 명의 발송 성공 기록(이 기기) — 활동 타임라인 (179) */
+export function sendsForCustomer(customerId: string): CampaignSendRecord[] {
+  return readSends().filter(s => s.customerId === customerId);
+}
+
 export function sentKeysOf(campaignId: string): Set<string> {
   return new Set(readSends().filter(s => s.campaignId === campaignId).map(s => s.key));
 }

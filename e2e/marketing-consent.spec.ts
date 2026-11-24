@@ -36,6 +36,7 @@ test('수신 동의·거부가 광고 대상에 반영되고 (광고)·080 표�
   await consent.getByRole('button', { name: '동의 받음' }).click();
   await expect(consent).toContainText('광고 수신 동의 (');
   await expect(page.getByTestId('customer-tags').filter({ visible: true }).first()).toContainText('#광고수신동의');
+  await expect(page.getByTestId('customer-timeline').filter({ visible: true }).first()).toContainText('광고 수신 동의'); // 활동 타임라인에 동의일 한 줄 (179)
 
   // 광고 대상 1명 — 080 번호 없음 → 발송 차단 안내
   await page.goto('/messaging');

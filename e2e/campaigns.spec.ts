@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer } from './helpers';
-import { addReservation } from './flows';
+import { addReservation, openCustomer } from './flows';
 
 /**
  * 캠페인(자동 발송) — 정의·대상 산출·승인 발송·멱등키 (156, GAP M-3)
@@ -62,6 +62,22 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   // 이력에 캠페인 1건(미발송)
   await page.getByRole('button', { name: '발송 이력' }).click();
   await expect(page.getByText('캠페인: 예약 전날 안내').first()).toBeVisible();
+
+  // 발송 성공 기록(이 PC)이 있으면 고객 활동 타임라인에 "캠페인 발송 · 이름" 줄 — 미연동 환경이라 성공 기록 1건을 심어 확인 (179)
+  await page.evaluate((name: string) => {
+    const keyOf = (suffix: string) => Object.keys(localStorage).find(k => k.startsWith('crm_') && k.endsWith(suffix));
+    const customers = JSON.parse(localStorage.getItem(keyOf('_customers') || '') || '[]') as { id: string; name: string }[];
+    const settings = JSON.parse(localStorage.getItem(keyOf('_settings') || '') || '{}') as { preferences?: { campaigns?: { id: string; name: string }[] } };
+    const c = customers.find(x => x.name === name);
+    const camp = (settings.preferences?.campaigns || []).find(x => x.name === '예약 전날 안내');
+    if (!c || !camp) throw new Error('seed: 고객/캠페인을 localStorage 에서 찾지 못함');
+    localStorage.setItem((keyOf('_customers') as string).replace(/_customers$/, '_campaign_sends'), JSON.stringify([{ key: `${camp.id}|${c.id}|seed`, campaignId: camp.id, customerId: c.id, at: new Date().toISOString() }]));
+  }, acc.customer);
+  await openCustomer(page, acc);
+  const timeline = page.getByTestId('customer-timeline').filter({ visible: true }).first();
+  await expect(timeline).toContainText('캠페인 발송 · 예약 전날 안내');
+  await expect(timeline).toContainText('이 PC 에서 승인·발송 성공');
+  await page.goto('/messaging');
 
   // 광고성 캠페인 — 080 번호 없으면 승인 불가
   await page.getByRole('button', { name: '발송하기' }).first().click();

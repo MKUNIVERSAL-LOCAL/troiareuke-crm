@@ -17,7 +17,7 @@
 | C-1 | 기본 프로필·검색·등급·태그·메모 | ✅ | `pages/Customers`, `customerTags.ts` | 등급은 수동, 태그 마스터 없음 | Twenty(B) | 유지. 등급 자동 제안은 C-6 | — | — | — | — | — |
 | C-2 | 상담 기록·피부타입·비컨·PDF | ✅ | `consultationStore.ts`, `consultReport.ts` | 비컨은 기기 플래그 | — | 유지 | — | — | — | — | — |
 | C-3 | Before/After 사진·타임랩스 | ✅ | `photoStore.ts`, `beforeAfter.ts` | 백업에 사진 미포함 | — | 백업 범위 결정(용량) | 낮음 | 중 | 1 | 정책 | 백업/복원 E2E 에 사진 포함 여부 명시 |
-| C-4 | 활동 타임라인 | ◐ | `customerTimeline.ts` | 예약·시술·결제·상담만, 발송·사진·메모 변경·병합 이력 없음 | Twenty TimelineActivity(B) | 이벤트 소스 확장(메시지 이력·사진·privacyLog·회차권 notes) + 행위자 표시 | 낮음 | 상 | 1 | — | 타임라인에 6종 이벤트가 시간순으로, E2E 단언 |
+| C-4 | 활동 타임라인 | ◐ 137·179 | `customerTimeline.ts` | 예약·시술·결제·상담·제품 판매·회차권 변경(137)·캠페인 발송(이 PC 성공 기록)·광고 수신 동의(179); 사진·메모 변경·병합 이력은 없음 | Twenty TimelineActivity(B) | 이벤트 소스 확장(메시지 이력·사진·privacyLog·회차권 notes) + 행위자 표시 | 낮음 | 상 | 1 | — | 타임라인에 6종 이벤트가 시간순으로, E2E 단언 |
 | C-5 | 방문 주기·다음 추천 관리일 | ◐ | `revisitRule.ts`, `reminderEngine.ts` | 매장 공통 주기(기본 28일)만, 고객별 실제 평균 주기 미계산 | Zenoti(공개 개념) | 순수 모듈 `analytics/visitCycle.ts`: 고객별 평균·중앙값 주기(방문 ≥3 일 때), 매장 기본 폴백, 상세·리마인더가 사용 | 낮음 | 상 | 1 | — | lib-units: 데이터 부족 시 null, 상세 화면 표시 |
 | C-6 | 세그먼트·이탈 위험·RFM | ✅ 136·166 | rfmRule·churnRule·segmentFilterRule·savedSegments | 저장 세그먼트(조건 11종 AND) 칩·발송 대상 | Mautic 필터 스키마(B), Zenoti | `analytics/rfm.ts`(5분위, 매장 기준 조정), `segments/` 필터 타입+평가기, 이탈 위험 = 고객별 주기 대비 초과율 | 낮음(신규) | 상 | 3 | — | lib-units 공식 고정, 고객 목록 필터·상세 배지 |
 | C-7 | 누적 실현 매출·객단가·LTV | ◐ | `customerStats.ts` | 누적결제(현금 유입)만 — 회차권 사용 기준 실현 매출·객단가·LTV 추정 없음 | ERPNext 원장 개념(B) | `analytics/customerValue.ts`: 실현 매출(회차 사용 × 단가 + 단건 + 제품), 객단가, LTV(평균 주기·유지율 기반, 예측 표시) | 낮음 | 상 | 2 | — | 확정/예측 구분 표시, 스펙 |
