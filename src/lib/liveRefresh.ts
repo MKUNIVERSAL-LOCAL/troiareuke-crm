@@ -46,9 +46,29 @@ export function refreshFromServer(opts: { force?: boolean } = {}): Promise<boole
   return inFlight;
 }
 
+/**
+ * 같은 PC 에서 창/탭을 2개 띄운 경우(웹·PWA, 포터블 2중 실행 추정) — 다른 탭이 localStorage 에 저장하면 이 탭의 메모리 캐시가 옛것이 되고,
+ * 다음 저장이 전체 배열을 옛 캐시로 덮어 다른 탭의 고객이 사라졌다(로컬 모드는 서버가 없어 복구 불가, 16차 #M8).
+ * storage 이벤트(다른 탭의 쓰기에만 온다)로 캐시를 버리면 getAll() 이 localStorage 를 다시 읽는다. 양쪽 모드 공통.
+ */
+function startCrossTabInvalidation(): () => void {
+  let timer = 0;
+  const onStorage = (e: StorageEvent) => {
+    if (!e.key || !e.key.startsWith('crm_')) return; // 데이터 키만(outbox·세션 키 제외)
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      resetStoreCache();
+      void initializeStores().finally(() => window.dispatchEvent(new CustomEvent(DATA_REFRESHED_EVENT))); // 로컬 모드는 즉시 반환, 서버 모드는 서버 기준으로
+    }, 300); // 한 동작이 키 여러 개를 쓰므로 묶는다
+  };
+  window.addEventListener('storage', onStorage);
+  return () => { window.clearTimeout(timer); window.removeEventListener('storage', onStorage); };
+}
+
 /** Layout 마운트 시 1회 — 포커스 복귀·가시성 복귀(폰 앱 재개)·연결 복구·outbox 비움·1분 주기. 해제 함수를 돌려준다 */
 export function startLiveRefresh(): () => void {
-  if (!isNasDataConfigured) return () => {};
+  const stopCrossTab = startCrossTabInvalidation();
+  if (!isNasDataConfigured) return stopCrossTab;
   const onFocus = () => { void refreshFromServer(); };
   const onVisible = () => { if (document.visibilityState === 'visible') void refreshFromServer(); };
   const onOnline = () => { void refreshFromServer({ force: true }); }; // 끊긴 동안 다른 기기가 바꾼 것을 바로
@@ -59,6 +79,7 @@ export function startLiveRefresh(): () => void {
   window.addEventListener('online', onOnline);
   window.addEventListener(OUTBOX_CHANGED_EVENT, onOutbox);
   return () => {
+    stopCrossTab();
     window.clearInterval(timer);
     window.removeEventListener('focus', onFocus);
     document.removeEventListener('visibilitychange', onVisible);

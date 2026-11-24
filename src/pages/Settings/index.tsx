@@ -13,6 +13,7 @@ import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogle
 import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore, ReservationStore, getShopId } from '../../lib/store';
 import { askConfirm } from '../../lib/confirmDialog';
+import { refreshFromServer } from '../../lib/liveRefresh';
 import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured, updateAuthProfile } from '../../lib/authApi';
@@ -408,6 +409,7 @@ export default function Settings() {
   };
   const doShopSave = async () => {
     const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
+    await refreshFromServer({ force: true }); // 설정 저장은 행 전체 PUT — 다른 기기가 바꾼 영업시간·휴일을 옛 캐시로 덮지 않게 먼저 서버 기준으로 (16차 #H1)
     if (!shopName) {
       notify('매장 이름을 입력해주세요.');
       return;
@@ -469,7 +471,7 @@ export default function Settings() {
     }));
   };
 
-  const handleHoursSave = () => {
+  const handleHoursSave = async () => {
     // 종료<시작(오후 8시를 08:00으로 오타)·빈 값이 그대로 저장되면 이후 모든 예약에 "영업시간 밖" 경고가 뜬다 (4차 UX 점검 2026-11-19)
     for (const day of dayLabels) {
       const h = settings.businessHours[day];
@@ -477,7 +479,10 @@ export default function Settings() {
       if (!h.open || !h.close) { notify(`${day}요일 영업시간을 모두 입력해주세요. 쉬는 날이면 체크를 풀어주세요.`); return; }
       if (h.open >= h.close) { notify(`${day}요일 종료 시간(${h.close})이 시작 시간(${h.open})보다 늦어야 합니다. 오후는 13:00~23:59로 적어주세요.`); return; }
     }
-    SettingsStore.save({ businessHours: settings.businessHours, holidays: settings.holidays || [] });
+    await refreshFromServer({ force: true }); // 다른 기기의 휴일·연동 설정과 병합 (16차 #H1)
+    const holidays = SettingsStore.get().holidays || []; // 휴일은 [추가]/[삭제] 때 즉시 저장되므로 서버 기준을 그대로 — 이 화면의 옛 목록으로 덮지 않는다
+    SettingsStore.save({ businessHours: settings.businessHours, holidays });
+    setSettings(prev => ({ ...prev, holidays }));
     setHoursDirty(false);
     notify.success('영업시간을 저장했습니다.');
   };
@@ -488,27 +493,31 @@ export default function Settings() {
     setSettings(prev => ({ ...prev, holidays }));
     SettingsStore.save({ holidays }); // 즉시 저장 — 영업시간 [저장하기]와 무관하게 유지(다른 탭 저장 버튼이 휴일을 안 담는 혼선 방지)
   };
-  const addHoliday = () => {
+  const addHoliday = async () => {
     const d = holidayInput;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { notify('날짜를 선택해주세요.'); return; }
-    saveHolidays([...new Set([...(settings.holidays || []), d])].sort());
+    await refreshFromServer({ force: true }); // 다른 기기가 추가한 휴일 위에 더한다 (16차 #H1)
+    saveHolidays([...new Set([...(SettingsStore.get().holidays || []), d])].sort());
     setHolidayInput('');
     notify(`${d} 휴일을 추가했습니다.`);
   };
-  const removeHoliday = (d: string) => { saveHolidays((settings.holidays || []).filter(x => x !== d)); notify(`${d} 휴일을 삭제했습니다.`); }; // 추가와 같은 피드백 (6차 UX 감사 2026-11-20)
+  const removeHoliday = async (d: string) => { await refreshFromServer({ force: true }); saveHolidays((SettingsStore.get().holidays || []).filter(x => x !== d)); notify(`${d} 휴일을 삭제했습니다.`); }; // 추가와 같은 피드백 (6차 UX 감사 2026-11-20)
 
   // ─── Integrations ─────────────────────────────────────────
-  const handleNaverSave = () => {
+  const handleNaverSave = async () => {
+    await refreshFromServer({ force: true }); // (16차 #H1)
     SettingsStore.save({ naverBooking: settings.naverBooking });
     notify.success('네이버 예약 연동 설정을 저장했습니다.');
   };
 
-  const handleKakaoSave = () => {
+  const handleKakaoSave = async () => {
+    await refreshFromServer({ force: true }); // (16차 #H1)
     SettingsStore.save({ kakao: settings.kakao });
     notify.success('카카오 연동 설정을 저장했습니다.');
   };
 
-  const handleSmsSave = () => {
+  const handleSmsSave = async () => {
+    await refreshFromServer({ force: true }); // (16차 #H1)
     SettingsStore.save({ smsCallerId: settings.smsCallerId }); // 발송사 API 키는 본사 서버에만 — 지점 입력란 제거 (보안 감사 2026-11-19)
     notify.success('문자 발신번호를 저장했습니다.');
   };

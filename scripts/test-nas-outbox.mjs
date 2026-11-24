@@ -135,4 +135,41 @@ await silent(async () => {
 assert.equal(queueLength(), 0, 'quota 폴백은 큐에 남기지 않는다.');
 assert.ok(calls.some(c => c.method === 'PUT'), 'quota 폴백은 직접 전송해야 한다.');
 
-console.log('NAS outbox tests: 6/6 OK');
+// ⑦ 일시 오류(5xx·네트워크)는 transient 이벤트로 알린다 — 전에는 무음이라 배너가 "대기 중"만 보였다 (16차 #M7)
+const events = [];
+globalThis.window.dispatchEvent = e => { events.push(e); };
+failWith = 503;
+calls.length = 0;
+await silent(async () => { nasData.nasUpsert('customers', { id: 'c7' }); await settle(); });
+const transient = events.find(e => e.type === 'crm:nas-outbox-error' && e.detail?.transient);
+assert.ok(transient, '5xx 는 transient 이벤트를 보내야 한다.');
+assert.equal(transient.detail.status, 503);
+assert.ok(typeof transient.detail.since === 'string' && transient.detail.since.length > 0, 'since(가장 오래된 대기 항목 시각)를 실어야 한다.');
+assert.equal(queueLength(), 1, '일시 오류는 큐를 보존한다.');
+events.length = 0;
+failWith = 401;
+await silent(() => outbox.flushNasOutbox().catch(() => {})); // 401 은 reject(큐 보존)
+assert.ok(events.some(e => e.detail?.auth && e.detail.status === 401), '401 은 auth 이벤트에 status 를 싣는다.');
+assert.ok(!events.some(e => e.detail?.transient), '401 은 transient 로 중복 보고하지 않는다.');
+failWith = null;
+await outbox.flushNasOutbox();
+assert.equal(queueLength(), 0);
+
+// ⑧ 거부분 [다시 시도]는 큐 앞(원래 순서)으로 — 뒤에 넣으면 그 사이의 같은 기록 PATCH 뒤에 옛 PUT 이 가서 덮었다 (16차 #L4)
+localStorage.removeItem('troiareuke_nas_outbox_rejected_branch-a');
+failWith = (path, method) => (method === 'PUT' ? 400 : null);
+await silent(async () => { nasData.nasUpsert('customers', { id: 'c8', name: '옛 이름' }); await settle(); });
+assert.equal(outbox.listRejectedNasOutbox().length, 1, 'PUT 400 은 거부 목록으로 간다.');
+failWith = 'network';
+await silent(async () => { nasData.nasUpdate('customers', 'c8', { name: '새 이름' }); await settle(); });
+assert.equal(queueLength(), 1, 'PATCH 는 큐에 남는다.');
+failWith = null;
+calls.length = 0;
+assert.equal(outbox.retryRejectedNasOutbox(), 1);
+await settle();
+await outbox.flushNasOutbox();
+const order = calls.filter(c => c.path.includes('customers')).map(c => c.method);
+assert.deepEqual(order.slice(0, 2), ['PUT', 'PATCH'], '거부됐던 PUT 이 나중 PATCH 보다 먼저 가야 새 이름이 남는다.');
+assert.equal(queueLength(), 0);
+
+console.log('NAS outbox tests: 8/8 OK');
