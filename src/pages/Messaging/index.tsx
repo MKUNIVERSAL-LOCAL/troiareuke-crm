@@ -5,7 +5,7 @@ import { maskPhone } from '../../lib/pii';
 import { normalizePhone } from '../../lib/inputRules';
 import { notify } from '../../lib/notify';
 import { useDataRefreshed } from '../../hooks/useDataRefreshed';
-import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
+import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT, MESSAGE_UNIT_COST } from '../../lib/smsBytes';
 import { formatDateTime, parseISODate, todayISO, formatPrice } from '../../lib/format';
 import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
@@ -810,7 +810,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
   // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
   const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;
-  const estimatedCost = effectiveType === 'sms' ? recipientPhones.length * 11 : effectiveType === 'lms' ? recipientPhones.length * 25 : recipientPhones.length * 5;
+  const estimatedCost = recipientPhones.length * (effectiveType === 'sms' ? MESSAGE_UNIT_COST.sms : effectiveType === 'lms' ? MESSAGE_UNIT_COST.lms : MESSAGE_UNIT_COST.kakao); // 단가는 공용 상수 (165 리뷰 L-12)
   const excludedCount = adEligible.length - recipientPhones.length; // 번호 문제로 빠진 수(광고 동의 제외는 ad-recipients 에 따로 표시, 155)
 
   const handleSend = async () => {

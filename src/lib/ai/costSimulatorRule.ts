@@ -60,8 +60,18 @@ export function simulatePlan(plan: AiPlan, a: SimAssumptions): PlanSim {
   return { plan, callsPerShop, byKind, costUsdPerShop, costKrwPerShop, priceKrw, marginKrwPerShop, marginPct: priceKrw > 0 ? Math.round((marginKrwPerShop / priceKrw) * 100) : null };
 }
 
+/** 매장 수 × 비중을 정수로 — 독립 반올림은 합이 어긋나므로 최대 잔여법 (165 리뷰 L-6) */
+export function allocateShops(shops: number, mix: PlanMix): Record<AiPlan, number> {
+  const raw = PLANS.map(p => ({ p, v: shops * (mix[p] || 0) }));
+  const out = Object.fromEntries(raw.map(r => [r.p, Math.floor(r.v)])) as Record<AiPlan, number>;
+  let left = shops - PLANS.reduce((s, p) => s + out[p], 0);
+  for (const r of [...raw].sort((x, y) => (y.v - Math.floor(y.v)) - (x.v - Math.floor(x.v)) || PLANS.indexOf(x.p) - PLANS.indexOf(y.p))) { if (left <= 0) break; out[r.p] += 1; left -= 1; }
+  return out;
+}
+
 export function simulate(shops: number, mix: PlanMix, a: SimAssumptions): Scenario {
-  const rows = PLANS.map(plan => ({ ...simulatePlan(plan, a), shops: Math.round(shops * mix[plan]) }));
+  const counts = allocateShops(shops, mix);
+  const rows = PLANS.map(plan => ({ ...simulatePlan(plan, a), shops: counts[plan] }));
   const totalCostKrw = rows.reduce((s, r) => s + r.costKrwPerShop * r.shops, 0);
   const totalRevenueKrw = rows.reduce((s, r) => s + r.priceKrw * r.shops, 0);
   const totalMarginKrw = totalRevenueKrw - totalCostKrw;

@@ -80,7 +80,7 @@
 |---|---|
 | 160 | ✅ 11-24 `AI-GATEWAY-ARCHITECTURE.md` + 순수 modelRouterRule·creditLedgerRule(테스트) — 서버는 승인 C-7/B-2 뒤 |
 | 161 | 서버 모듈 분리(현 /api/ai 중계 확장: 인증·구독·라우팅·토큰·비용·한도·감사) — 승인 뒤 |
-| 162 | ✅ 11-24 어드민 AI 서비스 관리 `/admin/subscriptions?view=ai`(요약·지점별·크레딧 지급·카탈로그 배포; 서버 미배포는 안내) |
+| 162 | ✅ 11-24 어드민 AI 서비스 관리 `/admin/subscriptions?view=ai`(요약·지점별·크레딧 지급; 서버 미배포는 안내. 카탈로그 배포는 161 전용 엔드포인트 뒤 — 165 리뷰 H-1) |
 | 163 | ✅ 11-24 `AI-PRICING-AND-COST-ANALYSIS.md` 1판(가설) + 순수 costSimulatorRule — 2판은 161 실측 뒤 |
 
 ## PHASE 6 — 파일럿 · PHASE 7 — 유료 AI 출시

@@ -172,13 +172,12 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
   await page.goto('/admin/subscriptions?view=ai');
   await expect(page.getByTestId('ai-not-deployed')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('ai-stat-이달 호출')).toHaveCount(0);
-  await expect(page.getByTestId('ai-catalog-editor')).toContainText('기본값 사용 중'); // 카탈로그 배포는 플래그 경로라 미배포에도 동작
   state.aiDeployed = true;
   await page.getByTestId('ai-not-deployed').getByRole('button', { name: '다시 시도' }).click();
   await expect(page.getByTestId('ai-stat-이달 호출')).toContainText('123', { timeout: 15_000 });
   await expect(page.getByTestId('ai-stat-이달 호출')).toContainText('활성 지점 2곳');
   await expect(page.getByTestId('ai-stat-추정 원가')).toContainText('$1.23');
-  await expect(page.getByTestId('ai-stat-크레딧 차감 · 마진')).toContainText('[추정]'); // 마진은 추정 라벨
+  await expect(page.getByTestId('ai-stat-추정 원가')).toContainText('[가설 환율'); // 원 환산은 가설 라벨, 마진 카드는 없다(165 리뷰 L-7)
   await expect(page.getByTestId('ai-branch-row')).toHaveCount(2);
   await expect(page.getByTestId('ai-branch-row').filter({ hasText: '강남점' })).toContainText('2,800 / 200');
   await page.getByRole('button', { name: '강남점 크레딧 지급' }).click();

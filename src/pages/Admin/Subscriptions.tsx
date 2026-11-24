@@ -59,7 +59,7 @@ export default function Subscriptions() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
 
-  useEffect(() => { loadSubs(); }, []);
+  useEffect(() => { if (!aiView) loadSubs(); }, [aiView]); // AI 뷰에서는 숨은 구독 표를 위해 호출하지 않는다 (165 리뷰 L-10) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [loadError, setLoadError] = useState('');
   async function loadSubs() {

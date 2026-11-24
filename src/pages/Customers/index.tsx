@@ -1279,7 +1279,7 @@ export default function Customers() {
             referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
             email: pick(r, ['이메일', 'email']) || undefined,
             address: pick(r, ['주소', 'address']) || undefined,
-            allergies: pick(r, ['알레르기', 'allergies']) || undefined, tags: parseTags(pick(r, ['태그', 'tags'])), isActive: true,
+            allergies: pick(r, ['알레르기', 'allergies']) || undefined, tags: parseTags(pick(r, ['태그', 'tags'])).filter(t => !isConsentTag(t)), isActive: true, // 업로드 열로 동의를 만들 수 없다 — 동의는 고객 상세 컨트롤로만 (165 리뷰 M-1)
           });
           added++;
         }

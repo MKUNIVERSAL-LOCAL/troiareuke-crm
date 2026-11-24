@@ -43,7 +43,7 @@ import { DEFAULT_CATALOG as GW_CATALOG } from '../src/lib/ai/catalog';
 import type { AiProvider as GwProvider } from '../src/lib/ai/types';
 import { routeModel, tierFor } from '../src/lib/ai/modelRouterRule';
 import { applyEntry, ledgerState, creditsForCost, expireEntry, MONTHLY_GRANT, type LedgerEntry } from '../src/lib/ai/creditLedgerRule';
-import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
+import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, allocateShops, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
 import { setupChecks, setupCompletionPct, utilizationPct, activityLevel, pilotSummary, type BranchCounts } from '../src/lib/pilotMetricsRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
@@ -977,7 +977,20 @@ test('AI 게이트웨이 규칙 — 모델 라우터(티어·비전·크레딧 �
   expect(ledgerState(led).balance).toBe(800);
   const ex = expireEntry(led, 'e1', '2026-11-30T23:59:59Z'); expect(ex?.amount).toBe(800);
   add(ex!); expect(ledgerState(led).balance).toBe(0); expect(expireEntry(led, 'e2', '')).toBeNull();
-  expect(MONTHLY_GRANT.pro).toBe(3000);
+  expect(MONTHLY_GRANT.pro).toBe(4500);
+  // 165 리뷰 M-3·L-5·L-4: 월말 소멸은 활성 홀드를 남긴다, 같은 requestId 홀드 중복·열린 홀드 없는 release 거절, NaN 크레딧은 거절
+  let l2: LedgerEntry[] = [];
+  const add2 = (e: LedgerEntry) => { const r = applyEntry(l2, e); expect(r.ok, JSON.stringify(e)).toBe(true); if (r.ok) l2 = r.entries; };
+  add2({ id: 'g', kind: 'grant', amount: 1000, at: '' }); add2({ id: 'h', kind: 'hold', amount: 300, at: '', requestId: 'q1' });
+  expect(applyEntry(l2, { id: 'h2', kind: 'hold', amount: 10, at: '', requestId: 'q1' }).ok).toBe(false);
+  expect(applyEntry(l2, { id: 'r9', kind: 'release', amount: 10, at: '', requestId: 'q9' }).ok).toBe(false);
+  const ex2 = expireEntry(l2, 'x', ''); expect(ex2?.amount).toBe(700); add2(ex2!);
+  expect(ledgerState(l2)).toEqual({ balance: 300, holds: 300, available: 0 });
+  add2({ id: 'c', kind: 'consume', amount: 300, at: '', requestId: 'q1' }); // 진행 중 호출은 월말 뒤에도 차감된다
+  expect(ledgerState(l2)).toEqual({ balance: 0, holds: 0, available: 0 });
+  expect(applyEntry(l2, { id: 'x2', kind: 'expire', amount: 1, at: '' }).ok).toBe(false);
+  expect(routeModel({ kind: 'chat', plan: 'pro', needsVision: false, available: all, catalog: cat, creditsAvailable: Number.NaN }).reason).toBe('no-credits');
+  expect(forced.tier).toBe('standard'); // 전부 밴드 밖이면 고른 모델의 실제 밴드로 보고(gpt-4o 12.5 → standard)
 });
 
 test('AI 원가·가격 시뮬레이터 — 호출 원가·플랜 원가·시나리오·목표 마진 요금·예산 상한(문서 AI-PRICING-AND-COST-ANALYSIS 표와 일치) (163)', () => {
@@ -997,6 +1010,11 @@ test('AI 원가·가격 시뮬레이터 — 호출 원가·플랜 원가·시나
   expect(budgetCapKrw(sc)).toBe(170000);
   expect(priceForMargin('pro', 50, a)).toBe(4100); expect(priceForMargin('enterprise', 85, a)).toBe(24500); expect(priceForMargin('pro', 100, a)).toBe(Number.POSITIVE_INFINITY);
   expect(simulate(1000, DEFAULT_PLAN_MIX, { ...a, available: ['openai'] }).marginPct).toBe(88); // Claude 없이 OpenAI 만 — 원가 ↓
+  // 165 리뷰 M-2: 플랜별 월 지급 크레딧이 가정 사용량의 크레딧 환산을 덮어야 한다(평균 매장이 매달 상한에 걸리지 않게)
+  for (const p of ['trial', 'starter', 'pro', 'enterprise'] as const) expect(creditsForCost(simulatePlan(p, a).costUsdPerShop), p).toBeLessThanOrEqual(MONTHLY_GRANT[p]);
+  // 165 리뷰 L-6: 매장 배분 합 = 매장 수
+  expect(Object.values(allocateShops(5, DEFAULT_PLAN_MIX)).reduce((x, y) => x + y, 0)).toBe(5);
+  expect(allocateShops(5, DEFAULT_PLAN_MIX)).toEqual({ trial: 1, starter: 2, pro: 2, enterprise: 0 }); // 1.0/2.0/1.5/0.5 → 바닥 1/2/1/0, 잔여 1 은 소수 큰 pro(동률 enterprise 보다 앞 순서)
 });
 
 test('파일럿 지표 — 초기 설정 6단계·활용 7영역·활동 상태·요약 정렬 (166)', () => {

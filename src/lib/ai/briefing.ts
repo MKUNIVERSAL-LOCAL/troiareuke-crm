@@ -62,13 +62,15 @@ function freeSlotsToday(today: string, now: Date): BriefingFreeSlot[] {
   const day = dayKeyOf(now);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const todays = ReservationStore.getAll().filter(r => r.date === today && r.status !== 'cancelled' && r.status !== 'noshow');
+  const holiday = (st.holidays || []).includes(today); // 매장 휴일은 빈 시간 없음 (165 리뷰 L-2)
   return StaffStore.getAll().filter(s => s.isActive).map(s => {
+    if (holiday) return { staff: s.id, slots: [], total: 0 };
     const w = dayWindow(getStaffSchedule(s.id), day, st.businessHours?.[day]);
-    if (!w.work) return { staff: s.name, slots: [], total: 0 };
+    if (!w.work) return { staff: s.id, slots: [], total: 0 }; // 가명 키는 id — 동명이인이 한 가명으로 합쳐지지 않게 (165 리뷰 L-3)
     const busy: Interval[] = [...w.breaks];
     for (const r of todays) if (r.staffId === s.id) { const iv = toInterval(r.startTime, r.endTime); if (iv) busy.push(iv); }
     const starts = availableStarts({ openMin: w.work.startMin, closeMin: w.work.endMin, durationMin: FREE_SLOT_DURATION_MIN, busy, bufferBeforeMin: w.bufferBeforeMin, bufferAfterMin: w.bufferAfterMin, notBeforeMin: nowMin });
-    return { staff: s.name, slots: starts.slice(0, FREE_SLOT_SHOW).map(fromMinutes), total: starts.length };
+    return { staff: s.id, slots: starts.slice(0, FREE_SLOT_SHOW).map(fromMinutes), total: starts.length };
   });
 }
 
@@ -89,7 +91,6 @@ function monthCauses(month: string, prevMonth: string, salesOn: boolean): Briefi
     { label: '방문 고객', current: cur.visitors, previous: prev.visitors, unit: '명' },
     { label: '재방문 고객', current: cur.returning, previous: prev.returning, unit: '명' },
     { label: '신규 등록', current: newOf(month), previous: newOf(prevMonth), unit: '명' },
-    { label: '재예약률', current: cur.rebookRate, previous: prev.rebookRate, unit: '%' },
   ];
   if (salesOn) causes.push({ label: '객단가', current: cur.avgTicket, previous: prev.avgTicket, unit: '원' });
   return causes;
@@ -136,7 +137,7 @@ export function buildBriefingContext(perm: BriefingPermissions, kind: BriefingKi
     for (const p of pays) paidByRef.set(p.referenceId as string, (paidByRef.get(p.referenceId as string) || 0) + p.amount);
     staff = StaffStore.getAll().filter(s => s.isActive).map(s => {
       const mine = done.filter(r => r.staffId === s.id);
-      return { name: s.name, completed: mine.length, revenue: mine.reduce((sum, r) => sum + (paidByRef.get(r.id) || 0), 0) };
+      return { name: s.id, completed: mine.length, revenue: mine.reduce((sum, r) => sum + (paidByRef.get(r.id) || 0), 0) }; // 실명 대신 id 를 가명 키로 — 컨텍스트에 실명이 애초에 들어가지 않는다 (165 리뷰 L-3)
     }).filter(s => s.completed > 0);
   }
   // ── 158 경영비서 2차: 오늘 브리핑 = 연락할 고객·빈 시간 / 월 브리핑 = 목표 페이스·원인 후보·캠페인 추천(+연락할 고객)

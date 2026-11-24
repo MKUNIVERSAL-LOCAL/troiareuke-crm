@@ -13,6 +13,8 @@ import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStor
 import { ConsultationStore } from './consultationStore';
 import { isAnonymized } from './retentionPolicy';
 import { recordMergedCustomer } from './customerIdentity';
+import { consentFromTags, tagsWithConsent } from './consentRule';
+import { todayISO } from './format';
 import type { Customer, CustomerGrade } from '../types';
 
 export interface MergePreview {
@@ -89,7 +91,7 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   const updates: Partial<Customer> = {
     totalVisits: (t.totalVisits || 0) + (source.totalVisits || 0),
     lastVisitDate: later(t.lastVisitDate, source.lastVisitDate),
-    tags: [...new Set([...(t.tags || []), ...(source.tags || [])])],
+    tags: normalizeMergedTags([...new Set([...(t.tags || []), ...(source.tags || [])])]),
     isActive: t.isActive !== false || source.isActive !== false,
   };
   if (source.registeredAt && (!t.registeredAt || source.registeredAt < t.registeredAt)) updates.registeredAt = source.registeredAt;
@@ -107,4 +109,9 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   CustomerStore.delete(sourceId);
   recordMergedCustomer(sourceId, targetId); // 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 — 병합이 끝난 뒤에만 기록(중간 예외 시 유령 매핑 방지) (11차 #M10, 리뷰 #M9)
   return preview;
+}
+
+/** 합집합 태그의 동의 예약어를 한 상태로 정리 — 동의+거부가 공존하면 거부 우선(consentFromTags), 동의일은 하나만 (165 리뷰 L-15) */
+function normalizeMergedTags(union: string[]): string[] {
+  return tagsWithConsent(union, consentFromTags(union), todayISO());
 }

@@ -42,7 +42,7 @@
 - **크레딧 단위**: 정수. `creditsForCost(usd, fx, margin)` = ceil(USD × 환율(월 고정, 어드민 설정) × 마진 배수) — 마진·요금은 163(가격 분석)·C-8 에서 확정. 기본 가정 환율 1,400원/USD, 마진 2.0 → 1크레딧 ≈ 원가 0.5원.
 - **행 종류**: `grant`(월 지급·수동 지급), `hold`(호출 전 예상 비용 선점), `consume`(실제 비용 확정 차감), `release`(홀드 해제), `refund`(오류 환급), `expire`(월말 소멸).
 - **불변식**: 잔액 = Σgrant + Σrefund − Σconsume − Σexpire ≥ 0; 가용 = 잔액 − 활성 홀드; `consume`·`hold` 는 가용을 넘을 수 없다; 같은 `requestId` 의 consume 은 한 번만(멱등); 금액은 양의 정수.
-- **월 지급(가설, 163 확정)**: trial 300 / starter 1,000 / pro 3,000 / enterprise 10,000 크레딧. 미사용분은 월말 `expire`(이월 없음).
+- **월 지급(가설, 163 확정)**: trial 300 / starter 1,000 / pro **4,500** / enterprise 10,000 크레딧 — 가정 사용량의 크레딧 환산(282 / 600 / 4,081 / 7,321)을 덮도록(165 리뷰 M-2). 미사용분은 월말 `expire`(이월 없음) — **활성 홀드는 남기고 가용(잔액 − 홀드)만 소멸**해 진행 중 호출의 consume 이 실패하지 않게 한다(165 리뷰 M-3). 같은 requestId 의 홀드 중복·열린 홀드 없는 release 는 거절(L-5).
 - **서버 테이블**: `ai_credit_ledger(id uuid, branch_id, kind, amount int, balance_after int, request_id text unique nullable, model, provider, usd numeric, note, created_at)`, `ai_usage` 확장 열: `model, input_tokens, output_tokens, usd, credits, latency_ms, status, request_id`.
 
 ## 5. API 계약(161 에서 구현, 승인 뒤)
@@ -54,14 +54,14 @@
 | GET | `/api/admin/ai/summary?month=` | 전 지점 호출·토큰·USD·크레딧·지점 수·플랜별 | 어드민 162 |
 | GET | `/api/admin/ai/branches?month=` | 지점별 사용·잔액·플랜·마지막 호출 | 어드민 162 |
 | POST | `/api/admin/ai/credits/grant` | `{ branchId, amount, note }` → 원장 grant 행 | 어드민 162, 감사 로그 |
-| PUT | `/api/admin/ai/catalog` | 카탈로그 배열(검증 `isAiModel`) → 플래그 `ai.catalog` 로 배포 | 기존 플래그 경로 재사용 |
+| PUT | `/api/admin/ai/catalog` | 카탈로그 배열(검증 `isAiModel`) → 서버가 `feature_flags.global['ai.catalog']` 에 저장(지점 소비자 `featureFlags.ts` 는 이미 이 키를 읽음) | **전용 엔드포인트 필요** — 기존 `PUT /api/admin/feature-flags/:scope` 는 `validateFlagsInput` 이 boolean 만 받아 배열을 400 으로 거절(165 리뷰 H-1) |
 
 ## 6. 어드민 화면 설계(162) — 구현됨 `src/pages/Admin/AiService.tsx`(`/admin/subscriptions?view=ai`), API 래퍼 `src/lib/adminAi.ts`
 `/admin/ai` "AI 서비스 관리" — 메뉴 `구독/플랜 관리` 아래.
 - 요약 카드(이달): 호출 수 · 입력/출력 토큰 · 추정 원가(USD·원) · 크레딧 차감 합 · 활성 지점 수 · **마진(크레딧 매출 − 원가, [추정])**.
 - 지점 표: 지점 · 플랜 · 호출 · 토큰 · 원가 · 크레딧 사용/잔액 · 마지막 호출 · [크레딧 지급] 버튼(금액·사유 → grant).
 - 모델 사용 분포(제공사·모델별 호출·원가), 실패율·폴백율.
-- 카탈로그 편집(가격·기본 모델·비전) → 저장 시 플래그 `ai.catalog` 배포(지점 앱이 다음 로드에 반영).
+- 카탈로그 편집(가격·기본 모델·비전) → `PUT /api/admin/ai/catalog`(161) — 162 에서 플래그 PUT 으로 만들었던 편집기는 서버가 배열을 거절해 삭제(165 리뷰 H-1), 161 과 함께 복원.
 - 서버 모듈(161) 미배포 상태에서는 "서버 AI 모듈이 아직 배포되지 않았습니다(승인 B-2)" 를 표시하고 숫자를 만들지 않는다(가짜 성공 금지).
 
 ## 7. 보안·개인정보

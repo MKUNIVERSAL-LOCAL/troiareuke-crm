@@ -8,7 +8,7 @@ import { maskPhone } from '../../lib/pii';
 import { useAuth } from '../../contexts/AuthContext';
 import { MessageHistoryStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
-import { smsBytes, SMS_BYTE_LIMIT } from '../../lib/smsBytes';
+import { smsBytes, SMS_BYTE_LIMIT, MESSAGE_UNIT_COST } from '../../lib/smsBytes';
 import { collectRawCandidates } from '../../lib/campaignTriggers';
 import { sentKeysOf, markSent } from '../../lib/campaignStore';
 import { selectCandidates, describeTrigger, SKIP_LABELS, type Campaign, type SkipReason } from '../../lib/campaignRule';
@@ -50,7 +50,7 @@ export default function CampaignRunModal({ campaign, onClose, onSent }: { campai
       const type: MessageType = base === 'sms' && smsBytes(content) > SMS_BYTE_LIMIT ? 'lms' : base;
       const res = await sendMessages({ type, content, recipients: 1, phones: [r.phone] });
       if (res.pending) { pending = true; reason = res.reason; break; } // 미연동은 전부 같다 — 첫 건에서 멈춘다 (159 리뷰 M-5)
-      if (res.sent > 0) { sent += 1; streak = 0; cost += type === 'sms' ? 11 : type === 'lms' ? 25 : 5; okKeys.push({ key: r.key, customerId: r.customerId }); }
+      if (res.sent > 0) { sent += 1; streak = 0; cost += type === 'sms' ? MESSAGE_UNIT_COST.sms : type === 'lms' ? MESSAGE_UNIT_COST.lms : MESSAGE_UNIT_COST.kakao; okKeys.push({ key: r.key, customerId: r.customerId }); }
       else { streak += 1; reason = reason || res.reason; if (streak >= FAIL_STREAK_STOP) { reason = `${reason || '발송 실패'} — 연속 ${FAIL_STREAK_STOP}건 실패로 중단`; break; } } // 서버 장애에 N건 전부 타임아웃을 기다리지 않게
     }
     const failed = picked.length - sent; // 시도 못 한 건도 실패로 — 다음 실행에 다시 잡힌다(멱등키 미기록)

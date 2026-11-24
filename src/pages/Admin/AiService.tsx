@@ -1,20 +1,19 @@
-// AiService — 어드민 "AI 서비스 관리" (/admin/subscriptions?view=ai, 비코어, 162, docs/AI-GATEWAY-ARCHITECTURE.md 6절)
+// AiService — 어드민 "AI 서비스 관리" (/admin/subscriptions?view=ai, 비코어, 162·165, docs/AI-GATEWAY-ARCHITECTURE.md 6절)
 // 라우트는 코어 App.tsx 를 건드리지 않기 위해 구독 화면의 쿼리 뷰로 붙인다(통계 ?view=data 방식).
-// 서버 모듈(161)이 없으면(404) "미배포" 상태를 그대로 보여준다 — 가짜 숫자 금지. 카탈로그 배포는 기존 플래그 경로라 지금도 동작한다.
-import { useEffect, useMemo, useState } from 'react';
-import { Sparkles, RefreshCw, Coins, Save, RotateCcw, Plus, Trash2 } from 'lucide-react';
+// 서버 모듈(161)이 없으면(404) "미배포" 상태를 그대로 보여준다 — 가짜 숫자 금지. 모델 카탈로그 배포도 161 의 전용 엔드포인트와 함께(165 리뷰 H-1: 플래그 PUT 은 boolean 만 받는다).
+import { useEffect, useState } from 'react';
+import { Sparkles, RefreshCw, Coins } from 'lucide-react';
 import { notify } from '../../lib/notify';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { formatDateTime, todayISO } from '../../lib/format';
 import AdminDialog from '../../components/admin/AdminDialog';
-import { fetchAdminAiSummary, fetchAdminAiBranches, adminGrantAiCredits, fetchAiCatalogFlag, saveAiCatalogFlag, AiModuleNotDeployed, type AdminAiSummary, type AdminAiBranchRow } from '../../lib/adminAi';
-import { DEFAULT_CATALOG, isAiModel, type AiModel } from '../../lib/ai/catalog';
+import { fetchAdminAiSummary, fetchAdminAiBranches, adminGrantAiCredits, AiModuleNotDeployed, type AdminAiSummary, type AdminAiBranchRow } from '../../lib/adminAi';
 import { DEFAULT_FX_KRW_PER_USD } from '../../lib/ai/creditLedgerRule';
-import type { AiProvider } from '../../lib/ai/types';
 
 const NAS_MODE = isAuthApiConfigured;
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
 const num = (n: number) => n.toLocaleString('ko-KR');
+const MONTH_RE = /^\d{4}-\d{2}$/;
 
 export default function AdminAiService() {
   const [month, setMonth] = useState(() => todayISO().slice(0, 7));
@@ -29,6 +28,7 @@ export default function AdminAiService() {
 
   async function load() {
     if (!NAS_MODE) { setLoading(false); return; }
+    if (!MONTH_RE.test(month)) { setLoadError('기준 월을 YYYY-MM 으로 선택해주세요.'); return; } // type=month 를 지우면 '' 가 온다 (165 리뷰 L-13)
     setLoading(true); setLoadError(''); setNotDeployed(false);
     try {
       const [s, b] = await Promise.all([fetchAdminAiSummary(month), fetchAdminAiBranches(month)]);
@@ -41,16 +41,15 @@ export default function AdminAiService() {
     setLoading(false);
   }
 
-  // 마진 [추정] — 크레딧 1 = 1원 가설(creditLedgerRule), 원가 = USD × 기본 환율
+  // 원가 환산 [가설] — USD × 기본 환율. 크레딧은 요금(정액)과 별개의 사용량 단위라 "매출"이 아니다 → 마진은 적지 않는다 (165 리뷰 L-7)
   const costKrw = summary ? summary.usd * DEFAULT_FX_KRW_PER_USD : 0;
-  const marginKrw = summary ? summary.credits - costKrw : 0;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8" data-testid="admin-ai-service">
       <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2"><Sparkles size={22} className="text-amber-400" /> AI 서비스 관리</h1>
-          <p className="text-slate-400 text-sm mt-1">본사 Managed AI 의 사용량·원가·크레딧과 지점 배포 모델 카탈로그. 숫자는 서버가 계측한 값이며 원가·마진은 [추정]입니다.</p>
+          <p className="text-slate-400 text-sm mt-1">본사 Managed AI 의 사용량·원가·크레딧. 숫자는 서버가 계측한 값이며 원 환산은 [가설 환율]입니다. 모델 카탈로그 배포는 서버 모듈(161)과 함께 열립니다.</p>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="ai-month" className="text-xs text-slate-400">기준 월</label>
@@ -63,7 +62,7 @@ export default function AdminAiService() {
       {NAS_MODE && notDeployed && (
         <div className="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-6" data-testid="ai-not-deployed">
           <p className="font-semibold">서버 AI 게이트웨이 모듈이 아직 배포되지 않았습니다.</p>
-          <p className="text-amber-200/80 mt-1">사용량·원가·크레딧은 승인 B-2(서버 배포)·C-7(공식 API 프로젝트) 뒤 161 묶음에서 켜집니다(설계: docs/AI-GATEWAY-ARCHITECTURE.md). 지금은 지점이 자기 키로 쓰는 BYOK 와 기존 /api/ai 중계(월 300회)가 동작합니다. 아래 모델 카탈로그 배포는 지금도 됩니다.</p>
+          <p className="text-amber-200/80 mt-1">사용량·원가·크레딧·모델 카탈로그 배포는 승인 B-2(서버 배포)·C-7(공식 API 프로젝트) 뒤 161 묶음에서 켜집니다(설계: docs/AI-GATEWAY-ARCHITECTURE.md). 지금은 지점이 자기 키로 쓰는 BYOK 와 기존 /api/ai 중계(월 300회)가 동작합니다.</p>
           <button type="button" onClick={() => void load()} className="mt-2 px-3 py-1.5 text-xs font-medium text-amber-100 bg-amber-500/20 rounded-lg hover:bg-amber-500/30">다시 시도</button>
         </div>
       )}
@@ -79,8 +78,8 @@ export default function AdminAiService() {
             {[
               { label: '이달 호출', value: num(summary.calls), sub: `활성 지점 ${summary.activeBranches}곳` },
               { label: '토큰(입력/출력)', value: `${num(summary.inputTokens)} / ${num(summary.outputTokens)}`, sub: '서버 계측' },
-              { label: '추정 원가', value: `$${summary.usd.toFixed(2)}`, sub: `≈ ${won(costKrw)} [추정, 환율 ${num(DEFAULT_FX_KRW_PER_USD)}]` },
-              { label: '크레딧 차감 · 마진', value: `${num(summary.credits)}`, sub: `마진 [추정] ${won(marginKrw)} · 실패 ${summary.failRate === null ? '-' : `${summary.failRate}%`} · 폴백 ${summary.fallbackRate === null ? '-' : `${summary.fallbackRate}%`}` },
+              { label: '추정 원가', value: `$${summary.usd.toFixed(2)}`, sub: `≈ ${won(costKrw)} [가설 환율 ${num(DEFAULT_FX_KRW_PER_USD)}]` },
+              { label: '크레딧 차감', value: `${num(summary.credits)}`, sub: `실패 ${summary.failRate === null ? '-' : `${summary.failRate}%`} · 폴백 ${summary.fallbackRate === null ? '-' : `${summary.fallbackRate}%`}` },
             ].map(c => (
               <div key={c.label} data-testid={`ai-stat-${c.label}`} className="bg-slate-900 border border-slate-700/50 rounded-2xl px-5 py-4">
                 <p className="text-xl font-bold text-white break-all">{c.value}</p>
@@ -128,8 +127,6 @@ export default function AdminAiService() {
       )}
       {NAS_MODE && loading && !summary && <p className="text-sm text-slate-500 mb-6">불러오는 중…</p>}
 
-      {NAS_MODE && <CatalogEditor />}
-
       {grantFor && <GrantDialog row={grantFor} onClose={() => setGrantFor(null)} onDone={() => { setGrantFor(null); void load(); }} />}
     </div>
   );
@@ -165,66 +162,5 @@ function GrantDialog({ row, onClose, onDone }: { row: AdminAiBranchRow; onClose:
         </div>
       </div>
     </AdminDialog>
-  );
-}
-
-/** 지점 배포 모델 카탈로그 — 기능 플래그 'ai.catalog' payload. 저장하면 지점 앱이 다음 로드에 반영(150·154) */
-function CatalogEditor() {
-  const [rows, setRows] = useState<AiModel[]>(DEFAULT_CATALOG);
-  const [remote, setRemote] = useState<AiModel[] | null | undefined>(undefined); // undefined = 아직 안 읽음
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    fetchAiCatalogFlag().then(c => { setRemote(c); if (c) setRows(c); }).catch((e: unknown) => setError(`카탈로그를 불러오지 못했습니다: ${e instanceof Error ? e.message : '서버 오류'}`));
-  }, []);
-  const invalid = useMemo(() => rows.map((r, i) => (isAiModel(r) ? null : i + 1)).filter((x): x is number => x !== null), [rows]);
-  const set = (i: number, patch: Partial<AiModel>) => setRows(rs => rs.map((r, k) => (k === i ? { ...r, ...patch } : r)));
-  const save = async () => {
-    if (invalid.length) { notify.error(`${invalid.join(', ')}행의 값을 확인해주세요(제공사·id·가격 ≥ 0).`); return; }
-    const providers = new Set(rows.map(r => r.provider));
-    if (providers.size < 1) { notify.error('모델이 최소 1개 필요합니다.'); return; }
-    setSaving(true);
-    try { await saveAiCatalogFlag(rows); setRemote(rows); notify.success('모델 카탈로그를 배포했습니다. 지점 앱은 다음 실행(플래그 갱신) 때 반영합니다.'); }
-    catch (e: unknown) { notify.error(`배포 실패: ${e instanceof Error ? e.message : '서버 오류'}`); }
-    setSaving(false);
-  };
-  const reset = async () => {
-    setSaving(true);
-    try { await saveAiCatalogFlag(null); setRemote(null); setRows(DEFAULT_CATALOG); notify.success('기본 카탈로그로 되돌렸습니다.'); }
-    catch (e: unknown) { notify.error(`되돌리기 실패: ${e instanceof Error ? e.message : '서버 오류'}`); }
-    setSaving(false);
-  };
-  return (
-    <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden" data-testid="ai-catalog-editor">
-      <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between gap-3 flex-wrap">
-        <div><h2 className="text-sm font-bold text-white">지점 배포 모델 카탈로그</h2><p className="text-xs text-slate-500 mt-0.5">가격은 USD/100만 토큰 참고값(지점 화면 "추정" 표시용). {remote === undefined ? '불러오는 중…' : remote ? '본사 배포본 사용 중' : '기본값 사용 중(배포본 없음)'}</p></div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setRows(rs => [...rs, { provider: 'openai', id: '', label: '', inputPer1M: 0, outputPer1M: 0, contextK: 128, vision: false }])} className="flex items-center gap-1 px-3 py-1.5 text-xs text-slate-200 bg-slate-800 rounded-lg hover:bg-slate-700"><Plus size={12} /> 모델 추가</button>
-          <button type="button" onClick={() => void reset()} disabled={saving || remote === undefined} className="flex items-center gap-1 px-3 py-1.5 text-xs text-slate-200 bg-slate-800 rounded-lg hover:bg-slate-700 disabled:opacity-50"><RotateCcw size={12} /> 기본값으로</button>
-          <button type="button" onClick={() => void save()} disabled={saving || remote === undefined || invalid.length > 0} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-500 disabled:opacity-50" data-testid="ai-catalog-save"><Save size={12} /> {saving ? '배포 중…' : '배포'}</button>
-        </div>
-      </div>
-      {error && <p className="px-5 py-3 text-xs text-red-300">{error}</p>}
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead className="text-slate-400"><tr><th className="text-left px-4 py-2">제공사</th><th className="text-left px-2 py-2">모델 id</th><th className="text-left px-2 py-2">표시명</th><th className="text-right px-2 py-2">입력 $/1M</th><th className="text-right px-2 py-2">출력 $/1M</th><th className="text-right px-2 py-2">컨텍스트(K)</th><th className="px-2 py-2">비전</th><th className="px-2 py-2">기본</th><th className="px-2 py-2"></th></tr></thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className={`border-t border-slate-800 text-slate-200 ${invalid.includes(i + 1) ? 'bg-red-500/5' : ''}`}>
-                <td className="px-4 py-1.5"><select value={r.provider} onChange={e => set(i, { provider: e.target.value as AiProvider })} aria-label={`${i + 1}행 제공사`} className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1"><option value="claude">claude</option><option value="openai">openai</option><option value="gemini">gemini</option></select></td>
-                <td className="px-2 py-1.5"><input value={r.id} onChange={e => set(i, { id: e.target.value.trim() })} aria-label={`${i + 1}행 모델 id`} className="w-44 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1" /></td>
-                <td className="px-2 py-1.5"><input value={r.label} onChange={e => set(i, { label: e.target.value })} aria-label={`${i + 1}행 표시명`} className="w-32 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1" /></td>
-                <td className="px-2 py-1.5 text-right"><input type="number" min={0} step="0.001" value={r.inputPer1M} onChange={e => set(i, { inputPer1M: Number(e.target.value) })} aria-label={`${i + 1}행 입력 가격`} className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-right" /></td>
-                <td className="px-2 py-1.5 text-right"><input type="number" min={0} step="0.001" value={r.outputPer1M} onChange={e => set(i, { outputPer1M: Number(e.target.value) })} aria-label={`${i + 1}행 출력 가격`} className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-right" /></td>
-                <td className="px-2 py-1.5 text-right"><input type="number" min={1} value={r.contextK} onChange={e => set(i, { contextK: Number(e.target.value) })} aria-label={`${i + 1}행 컨텍스트`} className="w-20 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-right" /></td>
-                <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={r.vision} onChange={e => set(i, { vision: e.target.checked })} aria-label={`${i + 1}행 비전`} /></td>
-                <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={!!r.default} onChange={e => set(i, { default: e.target.checked || undefined })} aria-label={`${i + 1}행 기본 모델`} /></td>
-                <td className="px-2 py-1.5 text-right"><button type="button" onClick={() => setRows(rs => rs.filter((_, k) => k !== i))} className="p-1 text-slate-500 hover:text-red-400" aria-label={`${i + 1}행 삭제`}><Trash2 size={12} /></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
   );
 }

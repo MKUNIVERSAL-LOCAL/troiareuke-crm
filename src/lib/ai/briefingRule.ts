@@ -8,10 +8,10 @@ import type { MonthlyKpis } from '../kpiRule';
 
 export interface BriefingTask { label: string; count: number; detail?: string }
 export interface BriefingSegments { total: number; churnHigh: number; churnMedium: number; loyal: number; dormant: number; newThisMonth: number; atRiskRevenue90: number | null }
-export interface BriefingStaffPerf { name: string; completed: number; revenue: number }
+export interface BriefingStaffPerf { name: string; completed: number; revenue: number } // name 자리에는 직원 id 를 넘긴다(가명 키) (165 L-3)
 // ── 158 AI 경영비서 2차 — 오늘 연락할 고객·빈 시간·목표 대비·원인 후보·캠페인 추천 (숫자는 엔진, AI 는 해석)
 export interface BriefingContacts { campaign: string; ready: number; skipped: number }            // 캠페인별 오늘 대상(승인 전)
-export interface BriefingFreeSlot { staff: string; slots: string[]; total: number }               // 직원별 오늘 빈 시작 시각(실명 → 가명)
+export interface BriefingFreeSlot { staff: string; slots: string[]; total: number }               // 직원별 오늘 빈 시작 시각(staff = 직원 id → 가명)
 export interface BriefingTarget { target: number; revenue: number; pct: number; daysLeft: number; neededPerDay: number | null; paceProjected: number | null }
 export interface BriefingCause { label: string; current: number | null; previous: number | null; unit: '명' | '원' | '%' } // 지난달 → 이달
 export interface BriefingRecommendation { campaign: string; ready: number; exists: boolean }      // 대상 많은 순, exists=이미 만든 캠페인
