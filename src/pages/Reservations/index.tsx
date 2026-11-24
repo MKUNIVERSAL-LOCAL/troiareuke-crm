@@ -1289,7 +1289,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       }
     }
     // 예약 정책 "겹치는 예약 금지" — 같은 담당자 겹침은 강행 없이 막고 빈 시간만 안내 (173, GAP R-3 2단계). 버퍼·근무 외·휴무 경고는 정책과 무관하게 확인만
-    if (decideOverlap(getReservationPolicy(), !!overlap) === 'block') {
+    if (decideOverlap(getReservationPolicy(), !!overlap && timeChanged) === 'block') { // 시간을 바꾸지 않은 수정(메모 등)은 막지 않는다 — 정책 켠 뒤 기존 겹침 예약이 편집 불가가 되지 않게 (174 리뷰 M-1)
       notify.error(`${warnings[0]} 설정 > 영업시간 > 예약 정책이 겹치는 예약을 막고 있습니다.${freeHint ? ` ${freeHint}` : ''}`);
       return;
     }

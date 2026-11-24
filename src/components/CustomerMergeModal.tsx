@@ -24,9 +24,9 @@ const MAX_CANDIDATES = 50;
  * PC·모바일 공용(body 포털). 되돌릴 수 없어 confirm 2단계. 서버 결제 링크가 켜진 지점은 흡수 고객의 미결 결제 요청이 있으면 막는다
  * (요청의 customer_id는 서버에만 있어 옮길 수 없고, 입금되면 삭제된 고객 앉으로 결제가 기록되기 때문).
  */
-export default function CustomerMergeModal({ target, initialQuery = '', onClose, onMerged }: { target: Customer; initialQuery?: string; onClose: () => void; onMerged: () => void }) {
+export default function CustomerMergeModal({ target, onClose, onMerged }: { target: Customer; onClose: () => void; onMerged: () => void }) {
   const { user } = useAuth();
-  const [query, setQuery] = useState(initialQuery);
+  const [query, setQuery] = useState(''); // 검색 전에는 중복 의심 후보가 먼저 보인다(171) — 프리필 없음 (174 리뷰 M-2)
   const [sourceId, setSourceId] = useState('');
   const [pendingBySource, setPendingBySource] = useState<Record<string, number> | null>(isPaymentLinkAvailable ? null : {});
   const [busy, setBusy] = useState(false);

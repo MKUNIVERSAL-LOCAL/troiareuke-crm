@@ -508,9 +508,8 @@ export default function Customers() {
     }
     loadAll();
   };
-  const [mergeQuery, setMergeQuery] = useState(''); // 중복 의심 안내에서 열면 전화번호가 미리 입력된다
   const dupCandidates = useMemo(() => (selected ? findDuplicateCandidates(selected, customers) : []), [selected, customers]); // 전화·이메일·이름+생년월일·이름+뒷 4자리 (171, GAP C-9)
-  const openMergeFromHint = () => { setMergeQuery(''); setShowMergeModal(true); }; // 병합 창이 중복 의심 후보를 먼저 보여준다 — 검색어로 좁히지 않는다
+  const openMergeFromHint = () => setShowMergeModal(true); // 병합 창이 중복 의심 후보를 먼저 보여준다 — 검색어 프리필 없음 (171·174)
   const dupHint = dupCandidates.length > 0 && (
     <button type="button" onClick={openMergeFromHint} data-testid="dup-hint"
       className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 hover:bg-amber-100">
@@ -1435,7 +1434,6 @@ export default function Customers() {
   function handleMerged() {
     if (!selected) return;
     setShowMergeModal(false);
-    setMergeQuery('');
     const updated = CustomerStore.getById(selected.id);
     setSelected(updated ?? null);
     loadAll();
@@ -3454,7 +3452,7 @@ export default function Customers() {
       )}
       {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
       {manageProgram && <ProgramManageModal program={manageProgram} onClose={() => setManageProgram(null)} onDone={handleProgramManaged} />}
-      {showMergeModal && selected && <CustomerMergeModal target={selected} initialQuery={mergeQuery} onClose={() => { setShowMergeModal(false); setMergeQuery(''); }} onMerged={handleMerged} />}
+      {showMergeModal && selected && <CustomerMergeModal target={selected} onClose={() => setShowMergeModal(false)} onMerged={handleMerged} />}
       </div>
     </div>
   );
