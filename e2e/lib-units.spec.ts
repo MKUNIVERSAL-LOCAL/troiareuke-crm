@@ -292,4 +292,9 @@ test('조사 자동 선택 — 받침·숫자·영문·닫는 인용부호 (15�
   expect(josa('2026-11-20', '은/는')).toBe('2026-11-20은');    // 0(영)
   expect(josa('mkclub21', '을/를')).toBe('mkclub21을');        // 1(일)
   expect(josa('', '을/를')).toBe('를');                         // 빈 값도 플레이스홀더를 남기지 않는다
+  expect(josa('mkclub.net', '을/를')).toBe('mkclub.net을');     // 영문 t/k/p/b 받침 (123~126 리뷰 #L6)
+  expect(josa('Facebook', '을/를')).toBe('Facebook을');
+  expect(josa("'홍길동'", '으로/로')).toBe("'홍길동'으로");       // 개명 토스트 (#M4)
+  expect(josa('재고 1병', '을/를')).toBe('재고 1병을');            // 판매 취소 토스트 (#M3)
+  expect(josa('재고 2개', '을/를')).toBe('재고 2개를');
 });

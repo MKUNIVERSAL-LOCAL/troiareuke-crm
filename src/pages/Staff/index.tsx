@@ -12,6 +12,7 @@ import { recordStaffAlias } from '../../lib/staffAliases';
 import { resyncGcalEvents } from '../../lib/gcalEventMap';
 import { askConfirm } from '../../lib/confirmDialog';
 import { todayISO, thisYearMonthISO, formatPhoneInput, formatPrice } from '../../lib/format';
+import { josa } from '../../lib/josa';
 import type { Staff } from '../../types';
 
 const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '왁싱', '각질관리'];
@@ -478,7 +479,7 @@ function StaffDetailModal({
       // 한 문장으로, 0건 항목은 빼고 (15차 #H4)
       const changed = [logs.length > 0 && `시술 기록 ${logs.length}건`, resv.length > 0 && `예약 ${resv.length}건`, consults.length > 0 && `상담 ${consults.length}건`].filter(Boolean).join('·');
       const kept = sameName ? ' 같은 이름의 다른 직원이 있어 과거 시술·상담 기록의 담당자는 그대로 두었습니다.' : '';
-      if (changed || kept) notify(`${changed ? `${changed}의 담당자 이름을 '${newName}' 로 바꿨습니다.` : ''}${kept}`.trim());
+      if (changed || kept) notify(`${changed ? `${changed}의 담당자 이름을 ${josa(`'${newName}'`, '으로/로')} 바꿨습니다.` : ''}${kept}`.trim());
       // 제품 판매 행은 옛 이름으로 남으므로(코어) 실적 집계가 되짚을 별칭을 남긴다 (11차 #M2)
       if (!sameName) recordStaffAlias(staff.id, staff.name);
       // 공유 Google 캘린더의 앞으로의 일정도 새 담당자 이름으로 (11차 #M8)

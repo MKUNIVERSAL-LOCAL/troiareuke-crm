@@ -518,7 +518,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
               value={title}
               onChange={e => setTitle(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
-              placeholder="예: [우리샵] 예약 안내"
+              placeholder="예: [우리 매장] 예약 안내"
             />
           </div>
         )}
@@ -925,7 +925,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         (recipientCount > recipientPhones.length ? ` (번호가 없거나 10~11자리가 아닌 ${recipientCount - recipientPhones.length}명 제외)` : '') // 사유 표기 통일 (15차 #L11)
       );
       onSent();
-      setTimeout(() => { onClose(); }, 1800);
+      if (result.failed === 0) setTimeout(() => { onClose(); }, 1800); // 일부 실패는 실패 인원을 읽을 수 있게 [닫기]로만 (123~126 리뷰 #M2)
     } else {
       // 발송 실패
       MessageHistoryStore.save({

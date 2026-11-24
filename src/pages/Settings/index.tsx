@@ -90,7 +90,7 @@ function importLegacyShopData(fromShopId: string, toShopId: string): number {
 type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup' | 'notice';
 
 const allTabs = [
-  { key: 'shop' as SettingTab, label: '샵 정보', icon: <Store size={16} /> },
+  { key: 'shop' as SettingTab, label: '매장 정보', icon: <Store size={16} /> },
   { key: 'hours' as SettingTab, label: '영업시간', icon: <Clock size={16} /> },
   { key: 'integrations' as SettingTab, label: '연동 설정', icon: <Link2 size={16} /> },
   { key: 'notifications' as SettingTab, label: '알림 설정', icon: <Bell size={16} /> },
@@ -409,7 +409,7 @@ export default function Settings() {
   const doShopSave = async () => {
     const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
     if (!shopName) {
-      notify('샵 이름을 입력해주세요.');
+      notify('매장 이름을 입력해주세요.');
       return;
     }
 
@@ -653,13 +653,13 @@ export default function Settings() {
           {/* Content */}
           <div className="flex-1 min-w-0">
             {tab === 'shop' && (
-              <SettingCard title="샵 기본 정보">
+              <SettingCard title="매장 기본 정보">
                 <div className="space-y-4">
-                  <FormRow label="샵 이름">
+                  <FormRow label="매장 이름">
                     <div className="space-y-2">
                       <input
                         type="text"
-                        aria-label="샵 이름"
+                        aria-label="매장 이름"
                         value={settings.name}
                         onChange={e => setSettings(prev => ({ ...prev, name: e.target.value }))}
                         className="form-input"
@@ -667,11 +667,11 @@ export default function Settings() {
                         maxLength={40}
                       />
                       <p className="text-xs text-gray-400">
-                        프로그램명 미리보기: <strong className="text-[#1a3a8f]">{settings.name.trim().replace(/\s*CRM\s*$/i, '') || '샵 이름'} CRM</strong>
+                        프로그램명 미리보기: <strong className="text-[#1a3a8f]">{settings.name.trim().replace(/\s*CRM\s*$/i, '') || '매장 이름'} CRM</strong>
                       </p>
                     </div>
                   </FormRow>
-                  <FormRow label="샵 유형">
+                  <FormRow label="매장 유형">
                     <select
                       value={settings.type}
                       onChange={e => setSettings(prev => ({ ...prev, type: e.target.value as ShopSettings['type'] }))}
@@ -1336,7 +1336,7 @@ export default function Settings() {
                 <SettingCard title="데이터 내보내기">
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">
-                      로그인한 계정의 샵 데이터만 내보내집니다. 선택한 항목이 {exportFormat === 'pdf' ? 'PDF 파일 하나로' : '시트별로 담긴 엑셀(.xlsx) 파일 하나로'} {IS_MOBILE_APP ? '만들어져 공유 시트로 전달됩니다' : '다운로드됩니다'}.
+                      로그인한 계정의 매장 데이터만 내보내집니다. 선택한 항목이 {exportFormat === 'pdf' ? 'PDF 파일 하나로' : '시트별로 담긴 엑셀(.xlsx) 파일 하나로'} {IS_MOBILE_APP ? '만들어져 공유 시트로 전달됩니다' : '다운로드됩니다'}.
                     </p>
                     <div className="flex gap-2">
                       <button

@@ -9,7 +9,8 @@ const FORMS: Record<JosaPair, [withFinal: string, withoutFinal: string]> = {
   '을/를': ['을', '를'], '이/가': ['이', '가'], '은/는': ['은', '는'], '과/와': ['과', '와'], '으로/로': ['으로', '로'],
 };
 const DIGIT_FINAL: Record<string, number> = { '0': 1, '1': 8, '2': 0, '3': 1, '4': 0, '5': 0, '6': 1, '7': 8, '8': 8, '9': 0 }; // 종성 인덱스(0 없음·8 ㄹ·그 외 1)
-const LATIN_FINAL: Record<string, number> = { l: 8, r: 8, m: 1, n: 1 };
+const LATIN_FINAL: Record<string, number> = { l: 8, r: 8, m: 1, n: 1 }; // 홀로 쓰인 글자(수아B → 비, A → 에이)
+const LATIN_WORD_FINAL: Record<string, number> = { ...LATIN_FINAL, t: 1, k: 1, p: 1, b: 1 }; // 영문 단어 끝(넷·북·톱·웹) — g 는 지/그 양쪽이라 제외 (123~126 리뷰 #L6)
 
 /** 마지막 글자의 종성 인덱스 — 0: 받침 없음, 8: ㄹ, 그 외: 받침 있음, null: 판단 불가 */
 function finalOf(word: string): number | null {
@@ -20,7 +21,10 @@ function finalOf(word: string): number | null {
   if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28;
   if (ch in DIGIT_FINAL) return DIGIT_FINAL[ch];
   const lower = ch.toLowerCase();
-  if (/[a-z]/.test(lower)) return LATIN_FINAL[lower] ?? 0;
+  if (/[a-z]/.test(lower)) {
+    const inWord = /[a-z]/i.test(w[w.length - 2] ?? '');
+    return (inWord ? LATIN_WORD_FINAL : LATIN_FINAL)[lower] ?? 0;
+  }
   return null;
 }
 

@@ -24,7 +24,7 @@ export default function FeatureRouteGate({ children }: { children: React.ReactNo
     const action = actionForRoute(location.pathname);
     const label = action === 'settings.open' ? '설정' : action === 'staff.manage' ? '직원 관리' : '매출·손익';
     return (
-      <div ref={panelRef} tabIndex={-1} className="min-h-[60vh] flex items-center justify-center p-6 outline-none" data-testid="role-gate" aria-labelledby="role-gate-title">
+      <div ref={panelRef} role="region" tabIndex={-1} className="min-h-[60vh] flex items-center justify-center p-6 outline-none" data-testid="role-gate" aria-labelledby="role-gate-title">
         <div className="max-w-md text-center space-y-4">
           <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto">
             <Lock size={24} className="text-gray-400" />

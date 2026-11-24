@@ -68,7 +68,7 @@ export function getProgramAlerts(today = new Date()): ProgramAlert[] {
 
 /** 재구매 안내 문구 초안 — 복사/공유용 (발송사 연동 후 자동 발송) */
 export function buildProgramMessage(alert: ProgramAlert): string {
-  const shop = SettingsStore.get().name || '저희 샵';
+  const shop = SettingsStore.get().name || '저희 매장';
   const { customer, programLabel: name, remaining, daysToExpiry, reason } = alert;
   const lines = [`${customer.name}님, 안녕하세요. ${shop}입니다.`];
   if (reason === 'exhausted') lines.push(`이용 중이신 "${name}" 회차를 모두 사용하셨어요.`);

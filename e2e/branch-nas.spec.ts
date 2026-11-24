@@ -65,7 +65,7 @@ test('지점 앱(NAS 흉내): 가입 신청 대기, 재설정 안내, AI 중계 
 
   // ── 가입 1→2→3단계 (NAS: 신청 → 심사 대기 화면) ──
   await page.goto('/signup');
-  await page.getByLabel('샵명 *').fill('테스트지점');
+  await page.getByLabel('매장명 *').fill('테스트지점');
   await page.getByLabel('이메일 *').fill('apply@example.test');
   await page.getByLabel('휴대폰 번호 *').fill('01012345678');
   await page.getByLabel('사업자등록번호 *').fill('1234567890');

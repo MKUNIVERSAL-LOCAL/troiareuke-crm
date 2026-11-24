@@ -39,7 +39,7 @@ export interface BackupFile {
 const TABLE_LABELS: Record<string, string> = {
   customers: '고객', reservations: '예약', treatment_logs: '시술 기록', customer_programs: '고객 프로그램', programs: '프로그램',
   payments: '결제', product_sales: '제품 판매', products: '제품', services: '시술 메뉴', staff: '직원', consultations: '피부 상담',
-  expenses: '지출', settings: '샵 설정', msg_templates: '메시지 템플릿', msg_history: '발송 이력',
+  expenses: '지출', settings: '매장 설정', msg_templates: '메시지 템플릿', msg_history: '발송 이력',
 };
 
 export const RESTORE_ALLOWED = !isAuthApiConfigured;

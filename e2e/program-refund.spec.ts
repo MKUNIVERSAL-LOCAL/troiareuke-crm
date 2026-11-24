@@ -21,8 +21,7 @@ async function readTable<T>(page: import('@playwright/test').Page, table: string
 
 test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료되고 매출·차감 경로에서 사라진다', async ({ page }) => {
   test.slow();
-  const dialogs: string[] = [];
-  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
+  page.on('dialog', d => d.accept()); // 남은 질문형 confirm 수락 — 파괴적 확인은 앱 창이라 아래에서 직접 단언
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
 
@@ -31,7 +30,7 @@ test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료�
 
   await page.goto('/sales');
   await expectSales(page, { total: '300,000원', count: 1 });
-  await refundFirstPayment(page); // "회차권 함께 종료" 앱 확인창(잔여 회차 표기)은 flows.refundFirstPayment 가 단언·수락
+  await refundFirstPayment(page, { remaining: 10 }); // "회차권 함께 종료" 앱 확인창이 잔여 10회를 말하는지 flows 가 단언
   await visibleButton(page, '매출 현황').click(); // 결제 내역 보기에서 현황 카드로 돌아와서 확인
   await expectSales(page, { total: '0원', count: 1 }); // 환불 행은 남고 매출만 0
 
@@ -51,8 +50,7 @@ test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료�
 
 test('[등록 취소]는 쓰지 않은 회차권에만 보이고, 누르면 연결 결제까지 함께 지운다', async ({ page }) => {
   test.slow();
-  const dialogs: string[] = [];
-  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
+  page.on('dialog', d => d.accept()); // 남은 질문형 confirm 수락 — 파괴적 확인은 앱 창이라 아래에서 직접 단언
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
 

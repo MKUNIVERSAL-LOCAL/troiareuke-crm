@@ -477,10 +477,10 @@ export default function Dashboard() {
         </div>
         )}
 
-        <div className="dash-grid grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* Today's Reservations — items-start: 예약 1건일 때 오른쪽 열 높이만큼 카드가 늘어나 빈 공간이 생기지 않게 (2026-11-18 시각 QA) */}
           {reservationsOn && (
-          <div className="lg:col-span-2 [.dash-grid:has(>.dash-alerts:empty)_&]:lg:col-span-3 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"> {/* 알림 카드가 하나도 없으면(직원·조용한 날) 오른쪽 1/3 이 비는 대신 전폭 (15차 #M11) */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
               <h3 className="text-sm font-bold text-gray-900">오늘 예약 현황</h3>
               <button onClick={() => navigate('/reservations')} className="flex items-center gap-1 text-xs text-[#1a3a8f] hover:text-[#152d6e] font-medium">
@@ -521,8 +521,8 @@ export default function Dashboard() {
           </div>
           )}
 
-          {/* Alerts — 카드가 전부 null 이면 열 자체를 숨긴다 */}
-          <div className="dash-alerts space-y-4 empty:hidden">
+          {/* Alerts — 오늘 타임라인(reservationsOn)·재고 카드(productsOn)가 늘 있어 이 열은 비지 않는다 (123~126 리뷰 #M1: 15차 #M11 의 "빈 열" 전제는 틀렸다) */}
+          <div className="space-y-4">
             {/* 오늘 마감 요약 — 복사/공유 (2026-11-17) */}
             <DailyCloseCard refreshKey={refreshKey} />
             {/* 완료 처리 누락 예약 — 방문 통계·실적 누수 방지 (2026-11-18) */}

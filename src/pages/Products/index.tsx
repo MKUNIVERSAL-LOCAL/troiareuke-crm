@@ -6,6 +6,7 @@ import { askConfirm } from '../../lib/confirmDialog';
 import { canDo } from '../../lib/permissions';
 import { parseAmount, parseCount, isISODate } from '../../lib/inputRules';
 import { thisYearMonthISO } from '../../lib/format';
+import { josa } from '../../lib/josa';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
@@ -85,7 +86,7 @@ export default function Products() {
       if (sale.productId) ProductStore.adjustStock(sale.productId, -sale.quantity); // 제품이 지워진 옛 판매는 재고 복구 대상이 없다
       for (const p of linked) PaymentStore.update(p.id, { status: 'refunded', memo: tagRefund(p.memo, todayISO()) });
     }
-    notify(`판매를 취소했습니다. 재고 ${sale.quantity}${(sale.productId && ProductStore.getById(sale.productId)?.unit) || '개'}를 복구했습니다.`); // 파괴적 동작 뒤 피드백 (15차 #M10)
+    notify(`판매를 취소했습니다. ${josa(`재고 ${sale.quantity}${(sale.productId && ProductStore.getById(sale.productId)?.unit) || '개'}`, '을/를')} 복구했습니다.`); // '1병를' 이 되던 것 (123~126 리뷰 #M3) // 파괴적 동작 뒤 피드백 (15차 #M10)
     refresh();
   };
 

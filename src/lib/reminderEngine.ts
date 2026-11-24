@@ -108,7 +108,7 @@ export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
 
 /** 재방문 리마인더 메시지 초안 생성 (카카오/문자용) */
 export function buildReminderMessage(customer: Customer): string {
-  const shopName = SettingsStore.get().name || '저희 샵';
+  const shopName = SettingsStore.get().name || '저희 매장';
   const name = customer.name || '고객';
   return (
     `[${shopName}] ${name}님, 안녕하세요.\n` + // 이모지는 SMS를 유니코드(LMS 요금)로 만들고 일부 발송사가 지운다 (산출물 감사 2026-11-20)

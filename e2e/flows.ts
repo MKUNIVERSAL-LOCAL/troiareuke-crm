@@ -65,7 +65,7 @@ export async function changeFirstExpenseCategory(page: Page, category: string) {
 }
 
 /** 첫 결제를 환불 상태로 */
-export async function refundFirstPayment(page: Page) {
+export async function refundFirstPayment(page: Page, opts: { remaining?: number } = {}) {
   await visibleButton(page, /결제 내역 \(\d+\)/).click();
   await visibleButton(page, '결제 수정').click();
   const d = dialog(page, '결제 수정');
@@ -74,8 +74,11 @@ export async function refundFirstPayment(page: Page) {
   await d.getByRole('button', { name: '저장', exact: true }).click();
   // 회차권 결제면 "회차권 함께 종료" 앱 확인창이 뜬다(그 외 결제는 바로 저장) — 잔여 회차를 말하는지 확인하고 수락
   const close = page.getByRole('dialog', { name: '회차권 함께 종료', exact: true });
-  if (await close.isVisible({ timeout: 1500 }).catch(() => false)) {
+  // isVisible 의 timeout 은 무시된다(즉시 판정) — 창이 뜨는 데 걸리는 시간을 실제로 기다린다 (123~126 리뷰 #L1)
+  const shown = opts.remaining != null || await close.waitFor({ state: 'visible', timeout: 1500 }).then(() => true, () => false);
+  if (shown) {
     await expect(close).toContainText(/환불로 저장하면 .*함께 종료/);
+    if (opts.remaining != null) await expect(close).toContainText(`잔여 ${opts.remaining}회`); // 호출부가 아는 잔여 회차를 창이 그대로 말하는지 (#L2)
     await close.getByRole('button', { name: '환불로 저장', exact: true }).click();
   }
   await expect(d).toHaveCount(0);
