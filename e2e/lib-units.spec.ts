@@ -22,6 +22,7 @@ import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
 import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
 import { monthlyKpis } from '../src/lib/kpiRule';
+import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -347,10 +348,11 @@ test('RFM 5분위·고객 구분 — 상대 순위, 동점, 소수 인원, 구�
   expect(quintileScores([7, 7, 7])).toEqual([3, 3, 3]);                           // 동점은 같은 점수(가운데)
   expect(quintileScores([1, 2])).toEqual([2, 4]);                                 // 2명이어도 동작
   expect(quintileScores([])).toEqual([]);
+  expect(quintileScores([42])).toEqual([3]);                                       // 1명 → 가운데 (139 #L9)
   expect(segmentOf({ r: 5, f: 5, m: 5 }, true, 12)).toBe('충성');
   expect(segmentOf({ r: 5, f: 1, m: 2 }, true, 1)).toBe('신규');                 // 최근 1회 방문
   expect(segmentOf({ r: 3, f: 2, m: 5 }, true, 3)).toBe('우수');
-  expect(segmentOf({ r: 1, f: 4, m: 3 }, true, 8)).toBe('이탈 위험');             // 자주 오던 고객이 오래 안 옴
+  expect(segmentOf({ r: 1, f: 4, m: 3 }, true, 8)).toBe('이탈 우려');             // 자주 오던 고객이 오래 안 옴 (RFM 상대 순위 — churnRule 의 '이탈 위험'과 다른 정의, 139 #M5)
   expect(segmentOf({ r: 1, f: 1, m: 1 }, true, 2)).toBe('휴면');
   expect(segmentOf({ r: 3, f: 3, m: 3 }, true, 4)).toBe('일반');
   expect(segmentOf({ r: 1, f: 1, m: 1 }, false, 0)).toBe('미방문');
@@ -364,7 +366,7 @@ test('RFM 5분위·고객 구분 — 상대 순위, 동점, 소수 인원, 구�
   ]);
   expect(idx.get('a')).toEqual({ r: 5, f: 5, m: 5, segment: '충성' });
   expect(idx.get('d')?.segment).toBe('휴면');
-  expect(idx.get('c')?.segment).toBe('이탈 위험');
+  expect(idx.get('c')?.segment).toBe('이탈 우려');
   expect(idx.get('e')?.segment).toBe('신규');
   expect(idx.get('z')).toEqual({ r: 1, f: 1, m: 1, segment: '미방문' }); // 미방문은 백분위 계산에서 빠진다
 });
@@ -374,6 +376,15 @@ test('이탈 위험 — 개인 주기 대비 비율, 미래 예약 완화, 기�
   expect(churnRisk({ daysSinceLastVisit: 42, cycleDays: 14, hasUpcomingReservation: false })).toEqual({ level: 'high', ratio: 3 });
   expect(churnRisk({ daysSinceLastVisit: 42, cycleDays: 90, hasUpcomingReservation: false })).toEqual({ level: 'low', ratio: 0.47 }); // 3개월 주기 고객은 아직 정상
   expect(churnRisk({ daysSinceLastVisit: 42, cycleDays: 14, hasUpcomingReservation: true })).toEqual({ level: 'low', ratio: 3 });      // 다음 예약이 있으면 위험 아님
+  expect(churnRisk({ daysSinceLastVisit: 26, cycleDays: 20, hasUpcomingReservation: false })?.level).toBe('medium');   // 정확히 1.3
+  expect(churnRisk({ daysSinceLastVisit: 40, cycleDays: 20, hasUpcomingReservation: false })?.level).toBe('high');     // 정확히 2.0
+  expect(churnRisk({ daysSinceLastVisit: 25, cycleDays: 20, hasUpcomingReservation: false })?.level).toBe('low');      // 1.25
+  // 미래 예약의 단일 정의 — 오늘 완료된 예약은 "다음 예약"이 아니다, 취소·노쇼 제외 (139 #H3·#M3)
+  expect(isUpcomingReservation({ date: '2026-11-24', status: 'completed' }, '2026-11-24')).toBe(false);
+  expect(isUpcomingReservation({ date: '2026-11-24', status: 'confirmed' }, '2026-11-24')).toBe(true);
+  expect(isUpcomingReservation({ date: '2026-11-25', status: 'completed' }, '2026-11-24')).toBe(true); // 미래 날짜 기록은 날짜로만
+  expect(isUpcomingReservation({ date: '2026-11-25', status: 'noshow' }, '2026-11-24')).toBe(false);
+  expect(isUpcomingReservation({ date: '2026-11-23', status: 'confirmed' }, '2026-11-24')).toBe(false);
   expect(churnRisk({ daysSinceLastVisit: null, cycleDays: 28, hasUpcomingReservation: false })).toBeNull();
   expect(churnRisk({ daysSinceLastVisit: 10, cycleDays: 0, hasUpcomingReservation: false })).toBeNull();
   expect(atRiskRevenue90(365_000)).toBe(90_000);
@@ -384,6 +395,10 @@ test('고객 가치 — 현금 유입 vs 실현 매출(회차권은 사용 비�
   expect(realizedProgramRevenue({ pricePaid: 300_000, totalSessions: 10, usedSessions: 3 })).toBe(90_000);
   expect(realizedProgramRevenue({ pricePaid: 300_000, totalSessions: 10, usedSessions: 12 })).toBe(300_000); // 초과 차감은 전액까지만
   expect(realizedProgramRevenue({ pricePaid: 500_000, totalSessions: null, usedSessions: 4 })).toBe(500_000); // 기간제는 판매 시 전액
+  expect(realizedProgramRevenue({ pricePaid: 500_000, totalSessions: null, usedSessions: 4, refunded: true })).toBe(0); // 환불된 회차권은 실현 0 (139 #H1)
+  expect(realizedProgramRevenue({ pricePaid: 300_000, totalSessions: 10, usedSessions: 3, refunded: true })).toBe(0);
+  expect(realizedProgramRevenue({ pricePaid: 0, totalSessions: 10, usedSessions: 3 })).toBe(0);
+  expect(realizedProgramRevenue({ pricePaid: 300_000, totalSessions: 0, usedSessions: 0 })).toBe(300_000); // 총 회차 0 은 기간제처럼
   const v = computeCustomerValue({
     payments: [
       { type: 'program', status: 'completed', amount: 300_000 },   // 회차권 판매 — 현금 유입에만

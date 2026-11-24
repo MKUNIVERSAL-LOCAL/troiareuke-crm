@@ -19,7 +19,8 @@ export default function TodayTasksCard({ compact = false, refreshKey = 0 }: { co
   const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view');
   const tasks = useMemo(() => buildTodayTasks({ customersOn, reservationsOn, productsOn, salesOn }), [refreshKey, customersOn, reservationsOn, productsOn, salesOn]);
   const kpi = useMemo(() => (customersOn ? getMonthlyKpis() : null), [refreshKey, customersOn]);
-  if (tasks.length === 0 && !kpi) return null;
+  const showKpi = !!kpi && kpi.visitors > 0; // 이달 방문이 없으면 "- 0/0명" 칸을 띄우지 않는다 (139 #L8)
+  if (tasks.length === 0 && !showKpi) return null;
   const pct = (v: number | null) => (v === null ? '-' : `${v}%`);
   return (
     <div className={`bg-white rounded-xl border border-slate-200 ${compact ? 'p-4' : 'p-5 shadow-sm'}`} data-testid="today-tasks-card">
@@ -44,7 +45,7 @@ export default function TodayTasksCard({ compact = false, refreshKey = 0 }: { co
           ))}
         </ul>
       )}
-      {kpi && (
+      {showKpi && kpi && (
         <div className={`grid grid-cols-3 gap-2 ${tasks.length > 0 ? 'mt-3 pt-3 border-t border-gray-100' : ''}`} aria-label="이달 운영 지표">
           <div title="이달 방문 고객 중 이달 이전에도 방문 기록이 있는 고객 비율" className="text-center">
             <p className="text-xs text-gray-500">재방문율</p>

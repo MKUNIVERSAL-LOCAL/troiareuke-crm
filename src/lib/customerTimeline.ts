@@ -100,11 +100,11 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
   }
   // 회차권 변경 기록 — 관리 창이 notes 에 "[YYYY-MM-DD] 내용" 으로 남긴 줄(만료일·총 회차 보정, 완료/되돌림) (137)
   for (const cp of CustomerProgramStore.getByCustomer(customerId)) {
-    for (const line of (cp.notes || '').split('\n')) {
+    (cp.notes || '').split('\n').forEach((line, idx) => {
       const m = /^\[(\d{4}-\d{2}-\d{2})\]\s*(.+)$/.exec(line.trim());
-      if (!m) continue;
-      items.push({ id: `pnote:${cp.id}:${m[1]}:${m[2].slice(0, 20)}`, kind: 'programNote', date: m[1], title: `${cp.programName} 변경`, detail: m[2], tone: 'muted' });
-    }
+      if (!m) return;
+      items.push({ id: `pnote:${cp.id}:${idx}`, kind: 'programNote', date: m[1], title: `${cp.programName} 변경`, detail: m[2], tone: 'muted' }); // 줄 번호로 고유 (139 #L5)
+    });
   }
 
   for (const p of PaymentStore.getAll()) {

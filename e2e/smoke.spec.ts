@@ -304,6 +304,10 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     localStorage.setItem(key, JSON.stringify(list));
   });
   await page.goto('/');
+  // 대시보드 "오늘 할 일" — 회차권 임박이 생겼으니 카드가 뜨고 해당 줄이 보인다 (138)
+  const tasksCard = page.getByTestId('today-tasks-card').filter({ visible: true }).first();
+  await expect(tasksCard).toBeVisible();
+  await expect(tasksCard.getByText(/회차권 소진·만료 임박/)).toBeVisible();
   const programCard = page.getByTestId('program-alert-card').filter({ visible: true }).first();
   await expect(programCard).toContainText('잔여 1회');
   await programCard.getByRole('button', { name: '재구매 안내' }).first().click();
@@ -311,6 +315,12 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await programCard.getByRole('button', { name: `${acc.customer} 고객 보기` }).first().click();
   await expect(page).toHaveURL(/\/customers/);
   await expect(page.getByTestId('customers-desktop').getByRole('heading', { name: '결제 내역' })).toBeVisible();
+  // PC 상세 분석 패널 — 고객 구분(RFM)·방문 주기·실현 매출이 공식 설명과 함께 보인다 (135~138, 리뷰 #H2)
+  const analytics = page.getByTestId('customers-desktop').getByTestId('customer-analytics');
+  await expect(analytics).toBeVisible();
+  await expect(analytics.getByText('고객 구분')).toBeVisible();
+  await expect(analytics.getByText('실현 매출', { exact: true })).toBeVisible(); // 객단가 설명의 '실현 매출 ÷ 방문'과 구분
+  await expect(analytics.getByText(/매장 내 5분위/)).toBeVisible();
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
 

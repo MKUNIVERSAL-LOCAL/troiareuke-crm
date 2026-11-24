@@ -45,7 +45,7 @@ import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo, getCustomerVisitCycle, getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { getProgramAlerts } from '../../lib/programAlerts';
 import { buildSegmentIndex } from '../../lib/customerSegments';
-import { CHURN_LABEL } from '../../lib/churnRule';
+import { CHURN_LABEL, CHURN_HIGH_RATIO } from '../../lib/churnRule';
 import { getCustomerValue } from '../../lib/customerValue';
 import { recordPrivacyAction } from '../../lib/privacyLog';
 import { askConfirm } from '../../lib/confirmDialog';
@@ -329,7 +329,6 @@ export default function Customers() {
   const [selected, setSelected] = useState<Customer | null>(null);
   const [customerPrograms, setCustomerPrograms] = useState<CustomerProgram[]>([]);
   const selectedNoShows = selected ? noShowCount(selected.id) : 0;
-  const selectedCycle = selected ? getCustomerVisitCycle(selected.id) : null;
   // 빠른 메모 — 수정 모달 없이 날짜가 붙는 한 줄을 메모에 덧붙인다 (2026-11-18)
   const [quickMemo, setQuickMemo] = useState('');
   function handleQuickMemo() {
@@ -374,9 +373,10 @@ export default function Customers() {
   });
   useEffect(() => {
     // ?grade=는 첫 진입의 초기값으로만 쓰고 URL에서 지운다 — 남겨 두면 [필터 초기화] 뒤 보존기간 토글(URL 복사)·새로고침에 VIP로 되돌아간다 (리뷰 63)
-    if (!searchParams.get('grade')) return;
+    const keys = ['grade', 'churn', 'revisit', 'programAlert'].filter(k => searchParams.get(k)); // 대시보드 딥링크 3종도 초기값으로만 (139 #M1)
+    if (keys.length === 0) return;
     const next = new URLSearchParams(searchParams);
-    next.delete('grade');
+    for (const k of keys) next.delete(k);
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
   const [tagFilter, setTagFilter] = useState(''); // 태그 칩 필터 (2026-11-18)
@@ -397,10 +397,9 @@ export default function Customers() {
   // 목록·정렬·행 표기는 기록 재계산값 — 저장 증분값은 상세를 열어 heal 하기 전까지 어긋나 보였다 (10차 숫자 점검 #H1). customers 가 바뀔 때(loadAll)마다 다시 센다
   const statsIndex = useMemo(() => buildCustomerStatsIndex(), [customers]);
   const statsOf = (c: Customer) => statsFor(c, statsIndex);
-  const segmentIndex = useMemo(() => buildSegmentIndex(), [customers, statsIndex]); // RFM 구분·이탈 위험(개인 주기 대비) — 전수 1회 (136)
+  const segmentIndex = useMemo(() => buildSegmentIndex(statsIndex), [statsIndex]); // RFM 구분·이탈 위험(개인 주기 대비) — 전수 1회 (136)
   const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
   const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
-  const selectedValue = selected ? getCustomerValue(selected.id) : null; // 실현 매출·객단가·연간 기대(예측) (137) — detailTick 과 무관하게 렌더마다(기록 저장 뒤 바로 반영)
   const compareCustomers = (a: Customer, b: Customer): number => {
     switch (sortKey) {
       case 'name': return a.name.localeCompare(b.name, 'ko');
@@ -451,6 +450,8 @@ export default function Customers() {
   // 타임랩스가 NAS에서 사진을 받아오면 최근 시술 썸네일도 같은 데이터를 다시 읽도록 리렌더
   const [photoTick, setPhotoTick] = useState(0);
   const [detailTick, setDetailTick] = useState(0); // loadAll마다 증가 — 활동 타임라인 재계산 (2026-11-18)
+  const selectedCycle = useMemo(() => (selected ? getCustomerVisitCycle(selected.id) : null), [selected?.id, detailTick, customers]); // 글자 입력마다 전수 스캔하지 않게 (139 #M8)
+  const selectedValue = useMemo(() => (selected ? getCustomerValue(selected.id) : null), [selected?.id, detailTick, customers]); // 실현 매출·객단가·연간 기대(예측) (137) — detailTick 과 무관하게 렌더마다(기록 저장 뒤 바로 반영)
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시가 비동기로 채워지면 썸네일·상담 사진을 다시 읽는다
   const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '', tags: '', allergies: '' });
 
@@ -1577,15 +1578,15 @@ export default function Customers() {
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
             {revisitOnly && (
-              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
             )}
             {programAlertOnly && (
-              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
             )}
-            {churnHighCount > 0 && (
+            {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
                 className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${churnOnly ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
-                title="마지막 방문 뒤 지난 날이 이 고객의 방문 주기 2배를 넘고 다음 예약이 없는 고객">
+                title={`마지막 방문 뒤 지난 날이 이 고객의 방문 주기 ${CHURN_HIGH_RATIO}배를 넘고 다음 예약이 없는 고객`}>
                 이탈 위험 {churnHighCount}
               </button>
             )}
@@ -1627,7 +1628,7 @@ export default function Customers() {
                 </button>
               ) : (
                 // 검색 오타에 '첫 고객 등록'을 권하면 중복 고객이 생긴다 — 필터를 풀어 주는 길만 (3차 UX 점검 2026-11-19)
-                <button type="button" onClick={() => { setSearch(''); setGradeFilter('전체'); setTagFilter(''); setRetentionOnly(false); }} className="mt-3 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
+                <button type="button" onClick={() => { setSearch(''); setGradeFilter('전체'); setTagFilter(''); setRetentionOnly(false); setChurnOnly(false); setRevisitOnly(false); setProgramAlertOnly(false); }} className="mt-3 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
                   필터 초기화
                 </button>
               )}
@@ -1797,17 +1798,19 @@ export default function Customers() {
                   {selectedSeg && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">고객 구분</span>
-                      <span className="text-sm font-medium text-gray-900" data-testid="rfm-segment" title={`최근성 ${selectedSeg.rfm.r} · 빈도 ${selectedSeg.rfm.f} · 금액 ${selectedSeg.rfm.m} (매장 내 5분위, 최근 365일)`}>
+                      <span className="text-sm font-medium text-gray-900 text-right" data-testid="rfm-segment">
                         {selectedSeg.rfm.segment}
                         {selectedSeg.churn && <span className={`ml-1 text-xs ${selectedSeg.churn.level === 'high' ? 'text-rose-700 font-semibold' : selectedSeg.churn.level === 'medium' ? 'text-amber-700' : 'text-gray-500'}`}>· 이탈 위험 {CHURN_LABEL[selectedSeg.churn.level]}</span>}
+                        <span className="block text-xs text-gray-500 font-normal">최근성 {selectedSeg.rfm.r}·빈도 {selectedSeg.rfm.f}·금액 {selectedSeg.rfm.m} — 최근 1년, 매장 내 5분위</span>
                       </span>
                     </div>
                   )}
                   {selectedCycle && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">방문 주기</span>
-                      <span className="text-sm font-medium text-gray-900 tabular-nums" data-testid="visit-cycle" title={selectedCycle.basis === 'personal' ? `방문 간격 ${selectedCycle.intervals}개의 중앙값` : '방문 기록이 3회 미만이라 매장 기본 주기'}>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums text-right" data-testid="visit-cycle">
                         {selectedCycle.days}일 <span className="text-xs text-gray-500">{selectedCycle.basis === 'personal' ? '이 고객 기준' : '매장 기준'}</span>
+                        <span className="block text-xs text-gray-500 font-normal">{selectedCycle.basis === 'personal' ? `방문 간격 ${selectedCycle.intervals}개의 중앙값` : '방문 3회 미만이라 매장 기본 주기'}</span>
                       </span>
                     </div>
                   )}
@@ -1826,18 +1829,18 @@ export default function Customers() {
                     <>
                       <div className="flex justify-between">
                         <span className="text-xs text-gray-500">실현 매출</span>
-                        <span className="text-sm font-medium text-gray-900 tabular-nums" data-testid="realized-revenue" title="단건 시술·제품·기타 결제 + 회차권은 사용한 회차만큼(기간제는 전액)">{formatPrice(selectedValue.realizedRevenue)}</span>
+                        <span className="text-sm font-medium text-gray-900 tabular-nums text-right" data-testid="realized-revenue">{formatPrice(selectedValue.realizedRevenue)}<span className="block text-xs text-gray-500 font-normal">회차권은 사용한 회차만큼(기간제 전액)</span></span>
                       </div>
                       {selectedValue.avgTicket !== null && (
                         <div className="flex justify-between">
                           <span className="text-xs text-gray-500">객단가</span>
-                          <span className="text-sm font-medium text-gray-900 tabular-nums" title="실현 매출 ÷ 방문 횟수">{formatPrice(selectedValue.avgTicket)}</span>
+                          <span className="text-sm font-medium text-gray-900 tabular-nums text-right">{formatPrice(selectedValue.avgTicket)}<span className="block text-xs text-gray-500 font-normal">실현 매출 ÷ 방문 {statsOf(selected).totalVisits}회</span></span>
                         </div>
                       )}
-                      {selectedValue.annualForecast !== null && (
+                      {selectedValue.annualForecast !== null && canDo(user?.role, 'sales.view') && ( /* 매출 전망은 매출 화면·대시보드 금액 카드와 같은 권한 (139 #M7) */
                         <div className="flex justify-between">
-                          <span className="text-xs text-gray-500">연간 기대 매출 <span className="text-gray-400">(예측)</span></span>
-                          <span className="text-sm font-medium text-gray-700 tabular-nums" title="객단가 × (365 ÷ 방문 주기) — 지금 리듬이 1년 이어질 때의 추정값, 확정 아님">{formatPrice(selectedValue.annualForecast)}</span>
+                          <span className="text-xs text-gray-500">연간 기대 매출 <span className="text-gray-500">(예측)</span></span>
+                          <span className="text-sm font-medium text-gray-700 tabular-nums text-right">{formatPrice(selectedValue.annualForecast)}<span className="block text-xs text-gray-500 font-normal">객단가 × 365 ÷ 방문 주기 {selectedCycle?.days ?? '-'}일 — 지금 리듬이 1년 이어질 때</span></span>
                         </div>
                       )}
                     </>
@@ -2100,15 +2103,15 @@ export default function Customers() {
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
             {revisitOnly && (
-              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
             )}
             {programAlertOnly && (
-              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
             )}
-            {churnHighCount > 0 && (
+            {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
                 className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${churnOnly ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
-                title="마지막 방문 뒤 지난 날이 이 고객의 방문 주기 2배를 넘고 다음 예약이 없는 고객">
+                title={`마지막 방문 뒤 지난 날이 이 고객의 방문 주기 ${CHURN_HIGH_RATIO}배를 넘고 다음 예약이 없는 고객`}>
                 이탈 위험 {churnHighCount}
               </button>
             )}
@@ -2354,6 +2357,38 @@ export default function Customers() {
                 </div>
               </div>
 
+              {(selectedSeg || selectedCycle || selectedValue) && (
+                <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-gray-50" data-testid="customer-analytics">
+                  {selectedSeg && (
+                    <div>
+                      <p className="text-xs text-gray-500">고객 구분</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedSeg.rfm.segment}{selectedSeg.churn && <span className={`ml-1 text-xs font-medium ${selectedSeg.churn.level === 'high' ? 'text-rose-700' : selectedSeg.churn.level === 'medium' ? 'text-amber-700' : 'text-gray-500'}`}>· 이탈 위험 {CHURN_LABEL[selectedSeg.churn.level]}</span>}</p>
+                      <p className="text-xs text-gray-500">최근성 {selectedSeg.rfm.r}·빈도 {selectedSeg.rfm.f}·금액 {selectedSeg.rfm.m} (최근 1년, 매장 내 5분위)</p>
+                    </div>
+                  )}
+                  {selectedCycle && (
+                    <div>
+                      <p className="text-xs text-gray-500">방문 주기</p>
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums">{selectedCycle.days}일 <span className="text-xs font-normal text-gray-500">{selectedCycle.basis === 'personal' ? '이 고객 기준' : '매장 기준'}</span></p>
+                      <p className="text-xs text-gray-500">{selectedCycle.basis === 'personal' ? `방문 간격 ${selectedCycle.intervals}개의 중앙값` : '방문 3회 미만이라 매장 기본 주기'}</p>
+                    </div>
+                  )}
+                  {selectedValue && (
+                    <div>
+                      <p className="text-xs text-gray-500">실현 매출</p>
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatPrice(selectedValue.realizedRevenue)}</p>
+                      <p className="text-xs text-gray-500">회차권은 사용한 회차만큼(기간제 전액)</p>
+                    </div>
+                  )}
+                  {selectedValue && selectedValue.avgTicket !== null && (
+                    <div>
+                      <p className="text-xs text-gray-500">객단가</p>
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatPrice(selectedValue.avgTicket)}</p>
+                      <p className="text-xs text-gray-500">실현 매출 ÷ 방문 {statsOf(selected).totalVisits}회{selectedValue.annualForecast !== null && canDo(user?.role, 'sales.view') ? ` · 연간 기대 ${formatPrice(selectedValue.annualForecast)} (예측: × 365 ÷ 주기)` : ''}</p>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="mt-3 p-3 bg-gray-50 rounded-xl">
                 {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                 {quickMemoRow(false)}

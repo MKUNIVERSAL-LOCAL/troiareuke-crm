@@ -15,6 +15,8 @@ import { getPreference, setPreference, migrateLegacyPreference } from './shopPre
 import { toISO, daysBetween, computeRevisitDue } from './revisitRule';
 import { computeCustomerStats, buildCustomerStatsIndex, statsFor, collectVisitDates } from './customerStats';
 import { resolveVisitCycle, type VisitCycle } from './visitCycleRule';
+import { isUpcomingReservation } from './upcomingRule';
+import type { CustomerStatsIndex } from './customerStatsRule';
 import { isCountableCustomer } from './customerScope';
 
 const LEGACY_CYCLE_KEY = 'troiareuke_revisit_cycle_days';
@@ -67,7 +69,7 @@ export function getCustomerVisitCycle(customerId: string): VisitCycle {
 export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo | null {
   const todayStr = toISO(new Date());
   const upcoming = ReservationStore.getAll()
-    .filter(r => r.customerId === customerId && r.date >= todayStr && r.status !== 'cancelled')
+    .filter(r => r.customerId === customerId && isUpcomingReservation(r, todayStr)) // 재예약률·이탈 위험과 같은 정의 (139 #M3)
     .map(r => r.date)
     .sort()[0] ?? null;
   const lastLog = TreatmentLogStore.getByCustomer(customerId)[0];
@@ -84,14 +86,14 @@ export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo 
  * 재방문 권장일이 지난 고객 목록 (오래 지난 순 정렬).
  * @param minOverdueDays 최소 며칠 이상 지났을 때만 포함 (기본 0 = 오늘 포함)
  */
-export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
+export function getRevisitDueCustomers(minOverdueDays = 0, statsIndex: CustomerStatsIndex = buildCustomerStatsIndex()): DueCustomer[] {
   const cycle = getRevisitCycleDays();
   const todayISO = toISO(new Date());
   const customers = CustomerStore.getAll().filter(isCountableCustomer); // 샘플·익명화(보존기간 경과) 고객 제외 — 대시보드·생일과 같은 규칙
-  const statsIndex = buildCustomerStatsIndex(); // 기록 기준 마지막 방문일 (10차 숫자 점검 #H1)
+  // statsIndex: 기록 기준 마지막 방문일 (10차 숫자 점검 #H1) — 호출 쪽이 이미 만든 인덱스를 넘기면 재사용 (139 #M8)
   // 한 번에 버킷 — 고객 3,000명 × 예약 8,000·시술 15,000건을 고객마다 훑으면 폰에서 포커스 복귀 때마다 1초 이상 멈춘다 (성능 감사 2026-11-18)
   const upcoming = new Set<string>();
-  for (const r of ReservationStore.getAll()) if (r.date >= todayISO && r.status !== 'cancelled') upcoming.add(r.customerId);
+  for (const r of ReservationStore.getAll()) if (isUpcomingReservation(r, todayISO)) upcoming.add(r.customerId); // (139 #M3)
   const latestLog = new Map<string, TreatmentLog>();
   for (const t of TreatmentLogStore.getAll()) {
     const cur = latestLog.get(t.customerId);

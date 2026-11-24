@@ -47,9 +47,13 @@ export default function Products() {
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const id = searchParams.get('stock');
-    if (!id) return;
-    const p = ProductStore.getAll().find(x => x.id === id);
-    if (p) setStockProduct(p); else notify('제품을 찾을 수 없습니다. 삭제됐거나 다른 매장의 제품입니다.');
+    const tabParam = searchParams.get('tab'); // 고객 타임라인 제품 판매 → 판매 기록 탭 (139 #M9 — 링크만 있고 탭이 안 바뀌던 것)
+    if (!id && tabParam !== 'sales') return;
+    if (tabParam === 'sales') setTab('sales');
+    if (id) {
+      const p = ProductStore.getAll().find(x => x.id === id);
+      if (p) setStockProduct(p); else notify('제품을 찾을 수 없습니다. 삭제됐거나 다른 매장의 제품입니다.');
+    }
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
   const [showSaleModal, setShowSaleModal] = useState(false);

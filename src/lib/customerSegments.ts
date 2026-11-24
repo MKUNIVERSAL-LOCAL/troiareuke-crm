@@ -1,6 +1,7 @@
 import { CustomerStore, PaymentStore, ReservationStore } from './store';
-import type { Customer } from '../types';
 import { buildCustomerStatsIndex, statsFor } from './customerStats';
+import type { CustomerStatsIndex } from './customerStatsRule';
+import { isUpcomingReservation } from './upcomingRule';
 import { resolveVisitCycle } from './visitCycleRule';
 import { getRevisitCycleDays } from './reminderEngine';
 import { scoreRfm, type RfmScore } from './rfmRule';
@@ -15,22 +16,19 @@ import { toISO, daysBetween, addDays } from './revisitRule';
 export interface CustomerSegmentInfo {
   rfm: RfmScore;
   churn: ChurnRisk | null;
-  cycleDays: number;
-  spent365: number;
-  atRisk90: number; // 예측
-  daysSinceLastVisit: number | null;
+  atRisk90: number; // 예측 — 최근 365일 결제 ÷ 365 × 90
 }
 
-export function buildSegmentIndex(): Map<string, CustomerSegmentInfo> {
+/** stats 를 넘기면 통계 인덱스를 다시 만들지 않는다(고객 목록·오늘 할 일이 같은 인덱스를 공유, 139 #M8) */
+export function buildSegmentIndex(stats: CustomerStatsIndex = buildCustomerStatsIndex()): Map<string, CustomerSegmentInfo> {
   const today = toISO(new Date());
   const since = addDays(today, -365);
   const customers = CustomerStore.getAll().filter(isCountableCustomer);
-  const stats = buildCustomerStatsIndex();
   const shopCycle = getRevisitCycleDays();
   const spent365 = new Map<string, number>();
   for (const p of PaymentStore.getAll()) if (p.customerId && p.status === 'completed' && p.paymentDate >= since) spent365.set(p.customerId, (spent365.get(p.customerId) || 0) + (p.amount || 0));
   const upcoming = new Set<string>();
-  for (const r of ReservationStore.getAll()) if (r.date >= today && r.status !== 'cancelled' && r.status !== 'noshow') upcoming.add(r.customerId);
+  for (const r of ReservationStore.getAll()) if (isUpcomingReservation(r, today)) upcoming.add(r.customerId); // 오늘 완료된 예약은 "다음 예약"이 아니다 (139 #H3)
 
   const inputs = customers.map(c => {
     const s = statsFor(c, stats);
@@ -45,10 +43,7 @@ export function buildSegmentIndex(): Map<string, CustomerSegmentInfo> {
     out.set(i.id, {
       rfm: rfm.get(i.id)!,
       churn: churnRisk({ daysSinceLastVisit: i.recencyDays, cycleDays: cycle.days, hasUpcomingReservation: upcoming.has(i.id) }),
-      cycleDays: cycle.days,
-      spent365: i.monetary,
       atRisk90: atRiskRevenue90(i.monetary),
-      daysSinceLastVisit: i.recencyDays,
     });
   }
   return out;
@@ -61,5 +56,3 @@ export function segmentIdSets(): { churn: Set<string>; loyal: Set<string> } {
   for (const [id, v] of idx) { if (v.churn?.level === 'high') churn.add(id); if (v.rfm.segment === '충성') loyal.add(id); }
   return { churn, loyal };
 }
-
-export type { Customer };
