@@ -12,7 +12,7 @@
 | 파일 | 역할 |
 |---|---|
 | `src/lib/ai/types.ts` | `AiAdapter`(chat·testConnection), `ChatRequest/Result`, `TokenUsage(estimated)`, `AiAdapterError(code: no-key/cors/auth/rate/network/response)` |
-| `src/lib/ai/catalog.ts` | 모델 카탈로그(기본값 + 본사 원격 갱신 `setCatalogOverride`, 검증 `isAiModel`), 가격 참고값(`PRICING_AS_OF`) |
+| `src/lib/ai/catalog.ts` | 모델 카탈로그(기본값 + 본사 원격 갱신 `setCatalogOverride` — 기능 플래그 payload `global['ai.catalog']` 배열을 `featureFlags` 가 받을 때 적용, 검증 `isAiModel`), 가격 참고값(`PRICING_AS_OF`) |
 | `src/lib/ai/adapters.ts` | Claude(Electron IPC `call-claude-api` — 코어가 모델 고정, 브라우저는 CORS), OpenAI(`/v1/chat/completions`), Gemini(`generateContent`, 키는 헤더) |
 | `src/lib/ai/chat.ts` | `selectProvider`(Claude 우선) → `chatWithFallback`(키 있는 다른 제공사로 폴백) → 사용량 기록 |
 | `src/lib/ai/usage.ts` | 토큰 추정(한글 1.5자·기타 4자/토큰), USD 추정, 이 기기 일별 사용량(`crm_ai_usage_log`, 90일) |

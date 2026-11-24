@@ -16,9 +16,12 @@ export function estimateUsage(inputText: string, outputText: string): TokenUsage
 }
 
 /** USD 비용(참고값) — 카탈로그 단가 × 토큰 / 100만 */
-export function estimateCostUsd(provider: AiProvider, modelId: string, usage: TokenUsage): number {
+function costUsdRaw(provider: AiProvider, modelId: string, usage: TokenUsage): number {
   const m = findModel(provider, modelId);
-  return Math.round(((usage.input * m.inputPer1M + usage.output * m.outputPer1M) / 1_000_000) * 10000) / 10000;
+  return (usage.input * m.inputPer1M + usage.output * m.outputPer1M) / 1_000_000;
+}
+export function estimateCostUsd(provider: AiProvider, modelId: string, usage: TokenUsage): number {
+  return Math.round(costUsdRaw(provider, modelId, usage) * 10000) / 10000;
 }
 
 export interface UsageDay { date: string; calls: number; input: number; output: number; usd: number; byProvider: Partial<Record<AiProvider, number>> }
@@ -34,18 +37,21 @@ function write(list: UsageDay[]): void {
 }
 
 /** 호출 1건을 그날 합계에 더한다(이 기기 localStorage — 서버 크레딧 원장(PHASE 5)이 열리면 그쪽이 정본) */
-export function recordUsage(provider: AiProvider, modelId: string, usage: TokenUsage, date = new Date().toISOString().slice(0, 10)): UsageDay {
+function localDate(d = new Date()): string { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; } // UTC 로 전날에 기록되지 않게 (154 리뷰 L-1)
+
+export function recordUsage(provider: AiProvider, modelId: string, usage: TokenUsage, date = localDate()): UsageDay {
   const list = read();
   let day = list.find(d => d.date === date);
   if (!day) { day = { date, calls: 0, input: 0, output: 0, usd: 0, byProvider: {} }; list.push(day); list.sort((a, b) => a.date.localeCompare(b.date)); }
   day.calls += 1; day.input += usage.input; day.output += usage.output;
-  day.usd = Math.round((day.usd + estimateCostUsd(provider, modelId, usage)) * 10000) / 10000;
+  day.usd = day.usd + costUsdRaw(provider, modelId, usage); // 누적은 원값, 표시만 반올림 (154 리뷰 L-2)
   day.byProvider[provider] = (day.byProvider[provider] || 0) + 1;
   write(list);
   return day;
 }
 
 /** 이달 합계(추정) */
-export function usageThisMonth(month = new Date().toISOString().slice(0, 7)): { calls: number; input: number; output: number; usd: number } {
-  return read().filter(d => d.date.startsWith(month)).reduce((s, d) => ({ calls: s.calls + d.calls, input: s.input + d.input, output: s.output + d.output, usd: Math.round((s.usd + d.usd) * 10000) / 10000 }), { calls: 0, input: 0, output: 0, usd: 0 });
+export function usageThisMonth(month = localDate().slice(0, 7)): { calls: number; input: number; output: number; usd: number } {
+  const t = read().filter(d => d.date.startsWith(month)).reduce((s, d) => ({ calls: s.calls + d.calls, input: s.input + d.input, output: s.output + d.output, usd: s.usd + d.usd }), { calls: 0, input: 0, output: 0, usd: 0 });
+  return { ...t, usd: Math.round(t.usd * 10000) / 10000 };
 }

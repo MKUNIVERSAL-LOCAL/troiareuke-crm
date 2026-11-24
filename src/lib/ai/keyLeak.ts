@@ -2,8 +2,8 @@
 // 키가 밖으로 나가는 길(AI 컨텍스트·백업·로그·공유 문구)에서 마지막 방어선. 고객 메모에 누가 키를 붙여넣어도 제공사로 다시 나가지 않게 한다.
 // 탐지 패턴은 보수적(앞머리 + 길이) — 긴 영숫자 일반 문자열(주문번호 등)은 건드리지 않는다.
 const PATTERNS: RegExp[] = [
-  /\bsk-ant-[A-Za-z0-9_-]{16,}/g,          // Anthropic
-  /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{16,}/g, // OpenAI(신·구)
+  /\bsk-ant-[A-Za-z0-9_-]{24,}/g,          // Anthropic (실제 키는 90자 안팎)
+  /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{24,}/g, // OpenAI(신·구, 실제 키는 48자 이상) — 'sk-live-order-2026…' 같은 짧은 코드는 제외 (154 리뷰 L-6)
   /\bAIza[0-9A-Za-z_-]{30,}/g,             // Google API key
   /\bya29\.[0-9A-Za-z_-]{20,}/g,           // Google OAuth access token
   /\bxox[abp]-[0-9A-Za-z-]{10,}/g,         // Slack 류(붙여넣기 사고 대비)

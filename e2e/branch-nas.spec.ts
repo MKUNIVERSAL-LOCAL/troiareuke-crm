@@ -26,7 +26,8 @@ const state = { ...INITIAL };
 const unmocked: string[] = [];
 const created: Record<string, unknown>[] = [];
 const serverCustomers: Record<string, unknown>[] = []; // "다른 기기"가 서버에 넣은 고객 행 — GET /api/data/customers 가 돌려준다 (16차 #H3)
-test.beforeEach(() => { Object.assign(state, INITIAL); unmocked.length = 0; created.length = 0; serverCustomers.length = 0; });
+const aiChats: { messages: unknown; systemPrompt: string }[] = []; // 본사 AI 중계로 나간 요청 (154)
+test.beforeEach(() => { Object.assign(state, INITIAL); unmocked.length = 0; created.length = 0; serverCustomers.length = 0; aiChats.length = 0; });
 
 async function mockNas(page: Page, user: typeof BRANCH_ADMIN = BRANCH_ADMIN) {
   await page.route(`${API}/**`, route => { unmocked.push(new URL(route.request().url()).pathname); return json(route, { error: 'not mocked' }, 404); });
@@ -41,6 +42,8 @@ async function mockNas(page: Page, user: typeof BRANCH_ADMIN = BRANCH_ADMIN) {
   await page.route(`${API}/api/feature-flags**`, route => json(route, { global: { 'module.aiChat': true } })); // AI 챗은 본사가 켜 주는 모듈(기본 준비 중) — 서버 응답 모양 { global, branch }
   await page.route(`${API}/api/announcements**`, route => json(route, { announcements: [] }));
   await page.route(`${API}/api/ai/status**`, route => json(route, { enabled: true, providers: ['claude'], monthlyLimit: 100, usedThisMonth: 3, remaining: 97 }));
+  // 본사 중계 호출 — 요청 본문을 모아 둔다(자료 블록·키 미전송 검사, 154 리뷰 H-1)
+  await page.route(`${API}/api/ai/chat`, route => { aiChats.push(route.request().postDataJSON() as { messages: unknown; systemPrompt: string }); return json(route, { text: '중계 응답입니다.', provider: 'claude' }); });
   await page.route(`${API}/api/payments/pg-config`, route => json(route, { enabled: state.pgEnabled, methods: state.pgEnabled ? ['card', 'vbank'] : [] }));
   await page.route(`${API}/api/payments/requests`, route => {
     if (route.request().method() === 'POST') {
@@ -95,6 +98,18 @@ test('지점 앱(NAS 흉내): 가입 신청 대기, 재설정 안내, AI 중계 
   await expect(page.getByText('AI 답변은 참고용입니다')).toBeVisible();
   await page.getByRole('button', { name: 'API 키 설정' }).click();
   await expect(page.getByText('로그아웃하면 지워집니다')).toBeVisible();
+  // 중계 경로에도 CRM 자료 블록(가명)과 브리핑 엔진 숫자가 systemPrompt 로 간다 — 150 리팩터 때 빠졌던 회귀 방지 (154 리뷰 H-1)
+  await page.getByPlaceholder(/질문을 입력하세요/).fill('이번 달 매출 현황 요약해줘');
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('중계 응답입니다.').first()).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('ai-briefing-month').click();
+  await expect(page.getByText('중계 응답입니다.').nth(1)).toBeVisible({ timeout: 15_000 });
+  expect(aiChats.length).toBe(2);
+  expect(aiChats[0].systemPrompt).toContain('<data>');
+  expect(aiChats[0].systemPrompt).toContain('【고객 현황】');
+  expect(aiChats[1].systemPrompt).toContain('[확정]');
+  expect(aiChats[1].systemPrompt).toContain('[기준] 우리 매장');
+  expect(JSON.stringify(aiChats)).not.toContain('ai_key');
 
   // ── 매출 [결제 요청]: PG 계약 전 "(준비 중)" 라벨 + 모달 안내·생성 잠금 (107 #19, 106 #21) ──
   await page.goto('/sales');

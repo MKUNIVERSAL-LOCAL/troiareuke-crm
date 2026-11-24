@@ -738,6 +738,7 @@ test('AI 어댑터 계층 — 카탈로그·원격 갱신 검증·토큰/비용 
   expect(looksLikeKey('claude', 'sk-ant-api03-ABCDEFGHIJKLMNOP')).toBe(true);
   expect(looksLikeKey('claude', 'sk-proj-ABCDEFGHIJKLMNOPQRS')).toBe(false);
   expect(looksLikeKey('openai', 'sk-proj-ABCDEFGHIJKLMNOPQRS')).toBe(true);
+  expect(looksLikeKey('openai', 'sk-ant-api03-ABCDEFGHIJKLMNOP')).toBe(false); // Claude 키를 OpenAI 칸에 (154 L-3)
   expect(looksLikeKey('gemini', 'AIzaSyABCDEFGHIJKLMNOPQRSTUV')).toBe(true);
   expect(looksLikeKey('gemini', 'has space here')).toBe(false);
 });
@@ -749,11 +750,13 @@ test('키 꼴 탐지·스크럽 — 제공사 키·토큰은 가리고 일반 �
   expect(containsKeyLike('ya29.a0AfH6SMBabcdefghijklmnopqrstuv')).toBe(true);
   expect(containsKeyLike('주문번호 ORD-20261124-000123 / 예약 10:00')).toBe(false);
   expect(containsKeyLike('skin care sk-10 라인')).toBe(false);                     // 짧은 sk- 는 키가 아니다
+  expect(containsKeyLike('주문 sk-live-order-20261124-01')).toBe(false);            // 24자 미만 코드는 키가 아니다 (154 L-6)
+  expect(containsKeyLike('sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123')).toBe(true);
   expect(containsKeyLike('')).toBe(false);
   expect(scrubKeyLike('메모: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWX 끝')).toBe('메모: sk-a••••(가려진 키) 끝');
-  expect(scrubKeyLike('두 개 AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ012345 그리고 sk-proj-ABCDEFGHIJKLMNOPQRSTUV')).toBe('두 개 AIza••••(가려진 키) 그리고 sk-p••••(가려진 키)');
+  expect(scrubKeyLike('두 개 AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ012345 그리고 sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123')).toBe('두 개 AIza••••(가려진 키) 그리고 sk-p••••(가려진 키)');
   expect(scrubKeyLike('평범한 문장')).toBe('평범한 문장');
-  expect(findKeyLikeEntries({ a: '안전', crm_x_customers: '[{"memo":"sk-proj-ABCDEFGHIJKLMNOPQRSTUV"}]', ai_key_openai: 'sk-proj-ABCDEFGHIJKLMNOPQRSTUV' })).toEqual(['crm_x_customers', 'ai_key_openai']);
+  expect(findKeyLikeEntries({ a: '안전', crm_x_customers: '[{"memo":"sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123"}]', ai_key_openai: 'sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123' })).toEqual(['crm_x_customers', 'ai_key_openai']);
 });
 
 test('AI 경영 브리핑 컨텍스트 — 엔진 숫자에 [확정]/[예측] 라벨·근거 모듈, 직원 실명은 가명, 매출 권한 없으면 매출 줄 없음 (153)', () => {
@@ -774,6 +777,12 @@ test('AI 경영 브리핑 컨텍스트 — 엔진 숫자에 [확정]/[예측] �
   expect(text).toContain('직원A 7건 350,000원 / 직원B 3건 90,000원');
   expect(text).not.toContain('김수아'); expect(text).not.toContain('박지민');     // 직원 실명 없음
   expect(text).toContain('revenueMetricsRule'); expect(text).toContain('kpiRule'); // 근거 모듈
+  // 직원 계정: 객단가(매출 파생) 줄 생략, 위험 매출 null 이면 괄호 생략 (154 H-2·L-4)
+  const staffView = formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics: null, kpi: { ...kpi, avgTicket: null, monthRevenue: 0 }, tasks: [], segments: { total: 40, churnHigh: 3, churnMedium: 5, loyal: 10, dormant: 4, newThisMonth: 6, atRiskRevenue90: null }, lowStock: [], staff: [] });
+  expect(staffView).toContain('재예약률 42% (5명) (kpiRule)');
+  expect(staffView).not.toContain('객단가');
+  expect(staffView).toContain('이탈 위험 높음 3명 · 주의 5명');
+  expect(staffView).not.toContain('위험 매출');
   const noSales = formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics: null, kpi: null, tasks: [], segments: null, lowStock: [], staff: [] });
   expect(noSales).toContain('[권한] 매출 자료는 이 계정에 제공되지 않습니다.');
   expect(noSales).toContain('오늘 할 일: 없음');

@@ -7,7 +7,7 @@ import type { MonthMetrics } from '../revenueMetricsRule';
 import type { MonthlyKpis } from '../kpiRule';
 
 export interface BriefingTask { label: string; count: number; detail?: string }
-export interface BriefingSegments { total: number; churnHigh: number; churnMedium: number; loyal: number; dormant: number; newThisMonth: number; atRiskRevenue90: number }
+export interface BriefingSegments { total: number; churnHigh: number; churnMedium: number; loyal: number; dormant: number; newThisMonth: number; atRiskRevenue90: number | null }
 export interface BriefingStaffPerf { name: string; completed: number; revenue: number }
 export interface BriefingInput {
   shopLabel: string;            // 매장 이름 대신 "우리 매장" 등 — 실명 불필요
@@ -54,11 +54,11 @@ export function formatBriefing(i: BriefingInput): string {
   }
   if (i.kpi) {
     const k = i.kpi;
-    lines.push(`[확정] 이달 방문 고객 ${k.visitors}명 · 재방문율 ${k.revisitRate === null ? '산출 불가' : `${k.revisitRate}%`} (${k.returning}명) · 재예약률 ${k.rebookRate === null ? '산출 불가' : `${k.rebookRate}%`} (${k.rebooked}명) · 객단가 ${k.avgTicket === null ? '산출 불가' : won(k.avgTicket)} (kpiRule)`);
+    lines.push(`[확정] 이달 방문 고객 ${k.visitors}명 · 재방문율 ${k.revisitRate === null ? '산출 불가' : `${k.revisitRate}%`} (${k.returning}명) · 재예약률 ${k.rebookRate === null ? '산출 불가' : `${k.rebookRate}%`} (${k.rebooked}명)${k.avgTicket === null ? '' : ` · 객단가 ${won(k.avgTicket)}`} (kpiRule)`);
   }
   if (i.segments) {
     const s = i.segments;
-    lines.push(`[확정] 고객 ${s.total}명: 이탈 위험 높음 ${s.churnHigh}명(90일 위험 매출 [추정] ${won(s.atRiskRevenue90)}) · 주의 ${s.churnMedium}명 · 충성 ${s.loyal}명 · 휴면 ${s.dormant}명 · 이달 신규 ${s.newThisMonth}명 (churnRule·rfmRule: 개인 방문 주기 대비 경과 비율 ≥2.0 높음, ≥1.3 주의)`);
+    lines.push(`[확정] 고객 ${s.total}명: 이탈 위험 높음 ${s.churnHigh}명${s.atRiskRevenue90 === null ? '' : `(90일 위험 매출 [추정] ${won(s.atRiskRevenue90)})`} · 주의 ${s.churnMedium}명 · 충성 ${s.loyal}명 · 휴면 ${s.dormant}명 · 이달 신규 ${s.newThisMonth}명 (churnRule·rfmRule: 개인 방문 주기 대비 경과 비율 ≥2.0 높음, ≥1.3 주의)`);
   }
   if (i.tasks.length) {
     lines.push('[확정] 오늘 할 일(todayTasks): ' + i.tasks.map(t => `${t.label} ${t.count}건${t.detail ? `(${t.detail})` : ''}`).join(' / '));

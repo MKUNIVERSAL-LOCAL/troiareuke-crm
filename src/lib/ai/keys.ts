@@ -17,10 +17,6 @@ export function setAiKey(provider: AiProvider, key: string): boolean {
   } catch { return false; }
 }
 
-export function getAllAiKeys(): Record<AiProvider, string> {
-  return { claude: getAiKey('claude'), openai: getAiKey('openai'), gemini: getAiKey('gemini') };
-}
-
 /** 화면 표시용 — 앞 4·뒤 4 만 */
 export function maskAiKey(key: string): string {
   const k = key.trim();
@@ -34,7 +30,7 @@ export function looksLikeKey(provider: AiProvider, key: string): boolean {
   const k = key.trim();
   if (!k || /\s/.test(k)) return false;
   if (provider === 'claude') return k.startsWith('sk-ant-') && k.length > 20;
-  if (provider === 'openai') return k.startsWith('sk-') && k.length > 20;
+  if (provider === 'openai') return k.startsWith('sk-') && !k.startsWith('sk-ant-') && k.length > 20; // Claude 키를 OpenAI 칸에 넣는 실수 차단 (154 리뷰 L-3)
   return /^[A-Za-z0-9_-]{20,}$/.test(k);
 }
 

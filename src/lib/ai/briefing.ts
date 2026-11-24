@@ -14,17 +14,19 @@ import { localMonthOf } from '../revenueMetricsRule';
 import { formatBriefing, type BriefingInput } from './briefingRule';
 
 export interface BriefingPermissions { salesOn: boolean; staffOn: boolean }
+export type BriefingKind = 'month' | 'today';
 
-export function buildBriefingContext(perm: BriefingPermissions): string {
+export function buildBriefingContext(perm: BriefingPermissions, kind: BriefingKind = 'month'): string {
   const today = todayISO();
   const month = today.slice(0, 7);
   const customers = CustomerStore.getAll().filter(isCountableCustomer);
   const st = SettingsStore.get();
-  const metrics = perm.salesOn ? monthMetrics({
+  const metrics = perm.salesOn && kind === 'month' ? monthMetrics({ // 오늘 할 일 브리핑은 매출 지표를 싣지 않는다(토큰 절약) (154 리뷰 L-7)
     month, today, payments: PaymentStore.getAll(), expenses: ExpenseStore.getAll(), programs: CustomerProgramStore.getAll(), logs: TreatmentLogStore.getAll(),
     customers, target: monthlyTarget(month), businessHours: st.businessHours, holidays: st.holidays, cogsCategories: [...COGS_CATEGORIES],
   }) : null;
-  const kpi = getMonthlyKpis();
+  const kpiRaw = getMonthlyKpis();
+  const kpi = perm.salesOn ? kpiRaw : { ...kpiRaw, avgTicket: null, monthRevenue: 0 }; // 객단가 = 월매출 ÷ 방문 — 직원 계정에 매출이 복원되지 않게 (154 리뷰 H-2)
   const tasks = buildTodayTasks({ customersOn: true, reservationsOn: true, productsOn: true, salesOn: perm.salesOn }).map(t => ({ label: t.label, count: t.count, detail: perm.salesOn ? t.detail : undefined }));
   const seg = buildSegmentIndex(buildCustomerStatsIndex());
   let churnHigh = 0, churnMedium = 0, loyal = 0, dormant = 0, atRisk = 0;
@@ -36,7 +38,7 @@ export function buildBriefingContext(perm: BriefingPermissions): string {
     if (v.rfm.segment === '충성' || v.rfm.segment === '우수') loyal++;
     if (v.rfm.segment === '휴면') dormant++;
   }
-  const segments = { total: customers.length, churnHigh, churnMedium, loyal, dormant, newThisMonth: customers.filter(c => localMonthOf(c.registeredAt || '') === month).length, atRiskRevenue90: perm.salesOn ? atRisk : 0 };
+  const segments = { total: customers.length, churnHigh, churnMedium, loyal, dormant, newThisMonth: customers.filter(c => localMonthOf(c.registeredAt || '') === month).length, atRiskRevenue90: perm.salesOn ? atRisk : null }; // 매출 권한 없으면 위험 매출 줄 자체를 생략(0원 거짓 수치 방지) (154 리뷰 L-4)
   const lowStock = ProductStore.getAll().filter(isLowStock).map(p => ({ name: p.name, stock: p.stock, minStock: p.minStock, unit: p.unit || '개' }));
   // 직원별 이달 완료 예약·실결제 — 직원 권한(staff.manage)이 있을 때만, 실명은 briefingRule 이 가명으로
   let staff: BriefingInput['staff'] = [];
