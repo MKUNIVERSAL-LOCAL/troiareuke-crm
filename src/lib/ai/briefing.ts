@@ -5,7 +5,7 @@ import { todayISO } from '../format';
 import { COGS_CATEGORIES } from '../../types';
 import { monthMetrics } from '../revenueMetricsRule';
 import { monthlyTarget } from '../monthClose';
-import { buildTodayTasks, getMonthlyKpis } from '../todayTasks';
+import { buildTodayTasks, getMonthlyKpis, getMonthUtilization } from '../todayTasks';
 import { monthlyKpis } from '../kpiRule';
 import { buildSegmentIndex } from '../customerSegments';
 import { buildCustomerStatsIndex } from '../customerStats';
@@ -144,5 +144,6 @@ export function buildBriefingContext(perm: BriefingPermissions, kind: BriefingKi
   const target = kind === 'month' && metrics && metrics.target && metrics.target > 0 ? targetPace({ target: metrics.target, revenue: metrics.total, daysElapsed: metrics.daysElapsed, daysInMonth: metrics.daysInMonth }) : null;
   const causes = kind === 'month' ? monthCauses(month, shiftMonth(month, -1), perm.salesOn) : undefined;
   const recommendations = kind === 'month' ? campaignRecommendations(enabledCampaigns, year, now, triggerCtx) : undefined;
-  return formatBriefing({ shopLabel: '우리 매장', today, month, metrics, kpi, tasks, segments, lowStock, staff, contacts, freeSlots, target, causes, recommendations });
+  const utilizationMtd = kind === 'month' ? getMonthUtilization() : null; // 가동률은 월 브리핑에만 — 오늘 브리핑 토큰 절약 (181)
+  return formatBriefing({ shopLabel: '우리 매장', today, month, metrics, kpi, tasks, segments, lowStock, staff, contacts, freeSlots, target, causes, recommendations, utilization: utilizationMtd });
 }
