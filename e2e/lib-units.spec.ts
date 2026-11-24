@@ -43,6 +43,7 @@ import { DEFAULT_CATALOG as GW_CATALOG } from '../src/lib/ai/catalog';
 import type { AiProvider as GwProvider } from '../src/lib/ai/types';
 import { routeModel, tierFor } from '../src/lib/ai/modelRouterRule';
 import { applyEntry, ledgerState, creditsForCost, expireEntry, MONTHLY_GRANT, type LedgerEntry } from '../src/lib/ai/creditLedgerRule';
+import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
@@ -976,4 +977,23 @@ test('AI 게이트웨이 규칙 — 모델 라우터(티어·비전·크레딧 �
   const ex = expireEntry(led, 'e1', '2026-11-30T23:59:59Z'); expect(ex?.amount).toBe(800);
   add(ex!); expect(ledgerState(led).balance).toBe(0); expect(expireEntry(led, 'e2', '')).toBeNull();
   expect(MONTHLY_GRANT.pro).toBe(3000);
+});
+
+test('AI 원가·가격 시뮬레이터 — 호출 원가·플랜 원가·시나리오·목표 마진 요금·예산 상한(문서 AI-PRICING-AND-COST-ANALYSIS 표와 일치) (163)', () => {
+  const a: SimAssumptions = { usagePerShop: DEFAULT_USAGE, tokens: DEFAULT_TOKENS, fxKrwPerUsd: 1400, planPriceKrw: DEFAULT_PLAN_PRICE_KRW, catalog: GW_CATALOG, available: ['claude', 'openai', 'gemini'] };
+  const c = costPerCall('chat', 'trial', a);
+  expect(c.model).toBe('gpt-4o-mini'); expect(c.usd).toBeCloseTo(1500 / 1e6 * 0.15 + 400 / 1e6 * 0.6, 9); // 0.000465
+  expect(costPerCall('briefing', 'trial', a).model).toBe('claude-sonnet-4-20250514'); // 브리핑은 한 단계 위 티어
+  expect(costPerCall('skin-analysis', 'trial', a).model).toBe('gpt-4o-mini');          // economy 비전
+  const starter = simulatePlan('starter', a);
+  expect(starter.callsPerShop).toBe(60); expect(starter.costUsdPerShop).toBeCloseTo(0.214, 3); expect(Math.round(starter.costKrwPerShop)).toBe(300); expect(starter.marginPct).toBe(94);
+  const pro = simulatePlan('pro', a);
+  expect(pro.costUsdPerShop).toBeCloseTo(1.457, 3); expect(pro.marginPct).toBe(79);
+  expect(simulatePlan('trial', a).marginPct).toBeNull(); // 무료 플랜은 마진율 없음(값을 만들지 않는다)
+  const sc = simulate(100, DEFAULT_PLAN_MIX, a);
+  expect(sc.rows.map(r => r.shops)).toEqual([20, 40, 30, 10]);
+  expect(sc.totalCalls).toBe(9260); expect(Math.round(sc.totalCostKrw)).toBe(112599); expect(sc.totalRevenueKrw).toBe(692000); expect(sc.marginPct).toBe(84);
+  expect(budgetCapKrw(sc)).toBe(170000);
+  expect(priceForMargin('pro', 50, a)).toBe(4100); expect(priceForMargin('enterprise', 85, a)).toBe(24500); expect(priceForMargin('pro', 100, a)).toBe(Number.POSITIVE_INFINITY);
+  expect(simulate(1000, DEFAULT_PLAN_MIX, { ...a, available: ['openai'] }).marginPct).toBe(88); // Claude 없이 OpenAI 만 — 원가 ↓
 });
