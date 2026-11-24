@@ -13,7 +13,8 @@ import { CustomerStore, TreatmentLogStore, ReservationStore, SettingsStore } fro
 import type { Customer, TreatmentLog } from '../types';
 import { getPreference, setPreference, migrateLegacyPreference } from './shopPreferences';
 import { toISO, daysBetween, computeRevisitDue } from './revisitRule';
-import { computeCustomerStats, buildCustomerStatsIndex, statsFor } from './customerStats';
+import { computeCustomerStats, buildCustomerStatsIndex, statsFor, collectVisitDates } from './customerStats';
+import { resolveVisitCycle, type VisitCycle } from './visitCycleRule';
 import { isCountableCustomer } from './customerScope';
 
 const LEGACY_CYCLE_KEY = 'troiareuke_revisit_cycle_days';
@@ -44,6 +45,8 @@ export interface DueCustomer {
   dueDate: string;             // 권장 재방문일 (YYYY-MM-DD)
   overdueDays: number;         // 지난 일수 (오늘 - dueDate)
   basis: 'recommended' | 'cycle'; // 권장일 기반인지, 주기 추정인지
+  cycleDays: number;           // 주기 추정에 쓴 일수 (135)
+  cycleBasis: VisitCycle['basis']; // 'personal' 이 고객의 방문 간격 중앙값 / 'shop' 매장 기본
 }
 
 export interface CustomerRevisitInfo {
@@ -51,6 +54,13 @@ export interface CustomerRevisitInfo {
   daysLeft: number;                // 남은 일수 (음수 = 지남)
   basis: 'recommended' | 'cycle';  // 시술기록 권장일 / 주기 추정
   upcomingReservation: string | null; // 이미 잡힌 다음 예약일
+  cycleDays: number;               // (135)
+  cycleBasis: VisitCycle['basis'];
+}
+
+/** 고객별 방문 주기 — 방문 3회 이상이면 간격 중앙값, 아니면 매장 기본 주기 (135, docs/ANALYTICS-DEFINITIONS.md) */
+export function getCustomerVisitCycle(customerId: string): VisitCycle {
+  return resolveVisitCycle(collectVisitDates(customerId), getRevisitCycleDays());
 }
 
 /** 고객 상세용 — 다음 방문 권장일과 남은 일수 (방문 이력이 없으면 null). 리마인더 목록과 같은 규칙 (2026-11-17) */
@@ -64,9 +74,10 @@ export function getCustomerRevisitInfo(customerId: string): CustomerRevisitInfo 
   const customer = CustomerStore.getAll().find(c => c.id === customerId);
   // 마지막 방문일은 기록(완료 예약·시술) 기준 — 저장값은 과거 날짜 시술을 적어도 "오늘"로 찍혀 권장일이 늦게 잡혔다 (10차 숫자 점검 #H1)
   const recordLast = customer ? computeCustomerStats(customer.id).lastVisitDate : null;
-  const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: recordLast ?? customer?.lastVisitDate, cycleDays: getRevisitCycleDays() });
+  const cycle = getCustomerVisitCycle(customerId); // 매장 공통 주기 → 고객별 주기 (135)
+  const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: recordLast ?? customer?.lastVisitDate, cycleDays: cycle.days });
   if (!due) return null;
-  return { dueDate: due.dueDate, daysLeft: daysBetween(todayStr, due.dueDate), basis: due.basis, upcomingReservation: upcoming };
+  return { dueDate: due.dueDate, daysLeft: daysBetween(todayStr, due.dueDate), basis: due.basis, upcomingReservation: upcoming, cycleDays: cycle.days, cycleBasis: cycle.basis };
 }
 
 /**
@@ -94,12 +105,13 @@ export function getRevisitDueCustomers(minOverdueDays = 0): DueCustomer[] {
     if (upcoming.has(customer.id)) continue;
 
     const lastLog = latestLog.get(customer.id);
-    const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: statsFor(customer, statsIndex).lastVisitDate, cycleDays: cycle }); // 상세(getCustomerRevisitInfo)와 같은 규칙
+    const vc = resolveVisitCycle(statsIndex.visitDays?.get(customer.id) ?? [], cycle); // 고객별 주기, 없으면 매장 기본 (135)
+    const due = computeRevisitDue({ lastTreatmentDate: lastLog?.treatmentDate, nextAppointment: lastLog?.nextAppointment, lastVisitDate: statsFor(customer, statsIndex).lastVisitDate, cycleDays: vc.days }); // 상세(getCustomerRevisitInfo)와 같은 규칙
     if (!due) continue; // 방문 이력이 전혀 없는 고객은 리마인더 대상에서 제외
     const overdueDays = daysBetween(due.dueDate, todayISO);
     if (overdueDays < minOverdueDays) continue;
 
-    result.push({ customer, lastVisit: due.lastVisit, dueDate: due.dueDate, overdueDays, basis: due.basis });
+    result.push({ customer, lastVisit: due.lastVisit, dueDate: due.dueDate, overdueDays, basis: due.basis, cycleDays: vc.days, cycleBasis: vc.basis });
   }
 
   // 가장 오래 지난 고객 우선

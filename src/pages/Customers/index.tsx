@@ -42,7 +42,7 @@ import { parseTags, topTags } from '../../lib/customerTags';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
-import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
+import { getCustomerRevisitInfo, getCustomerVisitCycle } from '../../lib/reminderEngine';
 import { recordPrivacyAction } from '../../lib/privacyLog';
 import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
@@ -305,7 +305,7 @@ function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 
   }
   const late = info.daysLeft < 0;
   return (
-    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-700' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술 기록의 다음 방문 권장일' : '마지막 방문일 + 재방문 권장 주기'}>
+    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-700' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술 기록의 다음 방문 권장일' : `마지막 방문일 + ${info.cycleBasis === 'personal' ? '이 고객의 방문 주기' : '매장 기본 주기'} ${info.cycleDays}일`}>
       {formatDate(info.dueDate)} ({late ? `${-info.daysLeft}일 지남` : info.daysLeft === 0 ? '오늘' : `D-${info.daysLeft}`})
     </span>
   );
@@ -325,6 +325,7 @@ export default function Customers() {
   const [selected, setSelected] = useState<Customer | null>(null);
   const [customerPrograms, setCustomerPrograms] = useState<CustomerProgram[]>([]);
   const selectedNoShows = selected ? noShowCount(selected.id) : 0;
+  const selectedCycle = selected ? getCustomerVisitCycle(selected.id) : null; // 방문 3회 이상이면 개인 간격 중앙값, 아니면 매장 기본 (135)
   // 빠른 메모 — 수정 모달 없이 날짜가 붙는 한 줄을 메모에 덧붙인다 (2026-11-18)
   const [quickMemo, setQuickMemo] = useState('');
   function handleQuickMemo() {
@@ -1764,6 +1765,14 @@ export default function Customers() {
                     <span className="text-xs text-gray-500">총 방문</span>
                     <span className="text-sm font-medium text-gray-900 tabular-nums">{selected.totalVisits}회</span>
                   </div>
+                  {selectedCycle && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">방문 주기</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums" data-testid="visit-cycle" title={selectedCycle.basis === 'personal' ? `방문 간격 ${selectedCycle.intervals}개의 중앙값` : '방문 기록이 3회 미만이라 매장 기본 주기'}>
+                        {selectedCycle.days}일 <span className="text-xs text-gray-500">{selectedCycle.basis === 'personal' ? '이 고객 기준' : '매장 기준'}</span>
+                      </span>
+                    </div>
+                  )}
                   {selectedNoShows > 0 && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">노쇼</span>
@@ -2260,6 +2269,7 @@ export default function Customers() {
                 <div className="text-center">
                   <p className="text-xs text-gray-400">마지막 방문</p>
                   <p className="text-sm font-semibold text-gray-700">{formatDate(statsOf(selected).lastVisitDate || selected.lastVisitDate)}</p>
+                  {selectedCycle && <p className="text-xs text-gray-500">주기 {selectedCycle.days}일{selectedCycle.basis === 'shop' ? ' (매장 기준)' : ''}</p>}
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">등록일</p>
