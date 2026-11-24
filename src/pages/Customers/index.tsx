@@ -1,5 +1,6 @@
 import { isImeKey } from '../../lib/ime';
 ﻿import { useState, useEffect, useRef, useMemo } from 'react';
+import { monthCloseBlock } from '../../lib/monthClose';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
 import { healCustomerStatsWhenReady, buildCustomerStatsIndex, statsFor } from '../../lib/customerStats';
@@ -1456,6 +1457,8 @@ export default function Customers() {
 
     // 구매 날짜를 비우면 parseISODate('') 가 1900-01-01 이 되어 만료일 1900년(영구 차감 불가)·결제일 빈 값(매출 누락)이 됐다 (14차 #H1)
     if (!isISODate(progForm.purchaseDate)) { notify('구매 날짜를 선택해주세요.'); return; }
+    { const blocked = monthCloseBlock(progForm.purchaseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+
     // 결제금액: 빈칸이면 정가, 입력했으면 그 값(0원 이벤트도 유효). 공백·통화기호가 섞여도 자릿수를 잃지 않게 공용 규칙 (14차 #H6)
     let pricePaid = prog.price;
     if (progForm.pricePaid.trim() !== '') {

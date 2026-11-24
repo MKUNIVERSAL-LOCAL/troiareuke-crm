@@ -29,6 +29,7 @@ import { activeResources, allResources, resourceAssignments, resourceOf, assignR
 import { freeResources, resourceConflicts, RESOURCE_KIND_LABEL } from '../../lib/resourceRule';
 import BookingRequestsModal from '../../components/BookingRequestsModal';
 import { newRequests, ensureCustomerFor, acceptRequest, CHANNEL_SOURCE } from '../../lib/bookingRequests';
+import { monthCloseBlock } from '../../lib/monthClose';
 import type { BookingRequest } from '../../types';
 import type { Reservation, Staff } from '../../types';
 import {
@@ -1737,6 +1738,7 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
   };
 
   const handleSave = () => {
+    { const blocked = monthCloseBlock(basePayment.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     if (mode === 'single') {
       PaymentStore.save({ ...basePayment, amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
       rememberPaymentMethod(method);

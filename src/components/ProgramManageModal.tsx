@@ -6,6 +6,7 @@ import { CustomerProgramStore, PaymentStore, TreatmentLogStore } from '../lib/st
 import { usedSessionsFor } from '../lib/programSessions';
 import { buildProgramLedger, ledgerRemaining, PROGRAM_LEDGER_LABEL } from '../lib/programLedgerRule';
 import { programNoteLine } from '../lib/programNotes';
+import { monthCloseBlock } from '../lib/monthClose';
 import { todayISO, parseISODate, toISODate, formatDate, formatPrice } from '../lib/format';
 import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
@@ -81,6 +82,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   // 고객·프로그램을 잘못 골라 등록한 경우 — 아직 한 번도 쓰지 않았을 때만. 연결된 결제(referenceId)를 지우면 누적 결제액은 자동 차감된다 (정합성 감사 2026-11-19)
   const cancelable = used === 0 && !TreatmentLogStore.getAll().some(t => t.customerProgramId === cp.id);
   async function cancelRegistration() {
+    { const blocked = monthCloseBlock(cp.purchaseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     const linked = PaymentStore.getAll().filter(p => p.referenceId === cp.id);
     const paid = linked.reduce((sum, p) => sum + p.amount, 0);
     if (!(await askConfirm({ title: '회차권 등록 취소', confirmLabel: '등록 취소', cancelLabel: '닫기', danger: true, message: `${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${formatPrice(paid)})이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.` }))) return;

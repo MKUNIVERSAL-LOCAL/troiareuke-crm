@@ -30,6 +30,7 @@ import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
 import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
+import { monthMetrics, openHoursInMonth } from '../src/lib/revenueMetricsRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -590,4 +591,53 @@ test('회차권 원장 — 등록·시술·보정 순서와 잔여, 복원 줄�
   const timed = buildProgramLedger({ ...cp, totalSessions: null, notes: '' }, logs, won);
   expect(timed.map(r => r.remaining)).toEqual([null, null, null]);
   expect(ledgerRemaining(timed)).toBeNull();
+});
+
+test('월 매출 지표 — 전월/전년 대비·목표·신규 비중·할인·회원권 판매 vs 실현·미사용 잔액·BEP·영업시간·월말 예상 (147)', () => {
+  const payments = [
+    { paymentDate: '2026-11-03', type: 'program' as const, status: 'completed' as const, amount: 300000, discountAmount: 20000, customerId: 'c-new' },
+    { paymentDate: '2026-11-10', type: 'single_treatment' as const, status: 'completed' as const, amount: 100000, customerId: 'c-old' },
+    { paymentDate: '2026-11-12', type: 'product' as const, status: 'refunded' as const, amount: 50000, customerId: 'c-old' },   // 환불 제외
+    { paymentDate: '2026-10-20', type: 'single_treatment' as const, status: 'completed' as const, amount: 200000 },
+    { paymentDate: '2025-11-05', type: 'single_treatment' as const, status: 'completed' as const, amount: 800000 },
+  ];
+  const expenses = [
+    { expenseDate: '2026-11-05', category: '제품 매입', amount: 80000 },
+    { expenseDate: '2026-11-06', category: '임대료', amount: 150000 },
+    { expenseDate: '2026-10-06', category: '임대료', amount: 150000 },
+  ];
+  const programs = [
+    { id: 'p1', pricePaid: 300000, totalSessions: 10, usedSessions: 2 },
+    { id: 'p2', pricePaid: 100000, totalSessions: 4, usedSessions: 4, isCompleted: true },
+    { id: 'p3', pricePaid: 90000, totalSessions: null, usedSessions: 0 },
+  ];
+  const logs = [
+    { treatmentDate: '2026-11-04', customerProgramId: 'p1', sessionsUsed: 1 },
+    { treatmentDate: '2026-11-18', customerProgramId: 'p1', sessionsUsed: 1 },
+    { treatmentDate: '2026-10-30', customerProgramId: 'p1', sessionsUsed: 1 },
+  ];
+  const customers = [{ id: 'c-new', registeredAt: '2026-11-02T00:00:00.000Z' }, { id: 'c-old', registeredAt: '2026-05-01T00:00:00.000Z' }];
+  const hours = { '월': { open: '10:00', close: '19:00', isOff: false }, '화': { open: '10:00', close: '19:00', isOff: false }, '수': { open: '10:00', close: '19:00', isOff: false }, '목': { open: '10:00', close: '19:00', isOff: false }, '금': { open: '10:00', close: '19:00', isOff: false }, '토': { open: '10:00', close: '15:00', isOff: false }, '일': { open: '10:00', close: '19:00', isOff: true } };
+  const m = monthMetrics({ month: '2026-11', today: '2026-11-20', payments, expenses, programs, logs, customers, target: 800000, businessHours: hours, holidays: ['2026-11-03'] });
+  expect(m.total).toBe(400000);
+  expect(m.prevMonth).toBe(200000); expect(m.momPct).toBe(100);
+  expect(m.lastYear).toBe(800000); expect(m.yoyPct).toBe(-50);
+  expect(m.achievementPct).toBe(50);
+  expect(m.newCustomerRevenue).toBe(300000); expect(m.existingCustomerRevenue).toBe(100000); expect(m.newSharePct).toBe(75);
+  expect(m.discount).toBe(20000);
+  expect(m.programSold).toBe(300000);
+  expect(m.programRealized).toBe(60000);     // 11월 차감 2회 × 30,000
+  expect(m.unusedBalance).toBe(240000);      // p1 잔여 8회 × 30,000 (완료·기간제 제외)
+  expect(m.cogs).toBe(80000); expect(m.sga).toBe(150000);
+  expect(m.breakEven).toBe(187500);          // 150,000 ÷ (1 − 0.2)
+  // 11-01~11-20: 일요일(1·8·15) 휴무, 토요일(7·14) 5h, 11-03 지정 휴일 → 평일 14일 × 9h + 토 2일 × 5h = 126 + 10 = 136h
+  expect(m.openHours).toBe(136);
+  expect(m.perHour).toBe(Math.round(400000 / 136));
+  expect(m.isCurrentMonth).toBe(true); expect(m.daysElapsed).toBe(20); expect(m.daysInMonth).toBe(30);
+  expect(m.projected).toBe(600000);          // 400,000 ÷ 20 × 30
+  const past = monthMetrics({ month: '2026-10', today: '2026-11-20', payments, expenses, programs, logs, customers, target: null });
+  expect(past.total).toBe(200000); expect(past.momPct).toBeNull(); expect(past.achievementPct).toBeNull(); expect(past.projected).toBeNull(); expect(past.openHours).toBeNull();
+  expect(past.breakEven).toBe(150000);       // 원가 0 → 판관비 그대로
+  expect(openHoursInMonth('2026-11', '2026-12-01', hours, [])).toBe(9 * 21 + 5 * 4); // 꽉 찬 달: 평일 21·토 4·일 5 휴무
+  expect(monthMetrics({ month: '2026-11', today: '2026-11-20', payments: [], expenses: [], programs: [], logs: [], customers: [], target: null }).breakEven).toBe(0);
 });

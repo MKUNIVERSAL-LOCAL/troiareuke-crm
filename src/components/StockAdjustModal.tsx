@@ -3,6 +3,7 @@ import Modal from './ui/Modal';
 import { ProductStore } from '../lib/store';
 import { ExpenseStore } from '../lib/expenseStore';
 import { recordStockMovement } from '../lib/stockLedger';
+import { monthCloseBlock } from '../lib/monthClose';
 import { todayISO, formatPrice } from '../lib/format';
 import { getAllPaymentMethods } from '../lib/paymentMethods';
 import { notify } from '../lib/notify';
@@ -42,6 +43,7 @@ export default function StockAdjustModal({ product, actor, onClose, onDone }: { 
     if (mode === 'in' && n <= 0) { notify('입고 수량은 1 이상이어야 합니다.'); return; }
     if (mode === 'in' && logExpense && cost === null) { notify('매입 단가는 숫자만 입력해주세요(없으면 지출 기록을 끄세요).'); return; }
     if (mode === 'in' && logExpense && !/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) { notify('매입일을 선택해주세요.'); return; }
+    if (mode === 'in' && logExpense) { const blocked = monthCloseBlock(expenseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 — 매입 지출이 그 달에 들어간다 (147)
     const fresh = ProductStore.getAll().find(p => p.id === product.id);
     if (!fresh) { notify('제품을 찾을 수 없습니다.'); return; }
     if (fresh.stock !== product.stock) notify(`그 사이 재고가 ${product.stock}→${fresh.stock}${product.unit}로 바뀌어 최신 재고 기준으로 반영합니다.`);

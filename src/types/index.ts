@@ -221,6 +221,10 @@ export interface ShopPreferences {
   resources?: Resource[];
   /** 예약 id → 자원 id — 코어 Reservation 에 resourceId 가 없어(toDbReservation 이 버림, 코어 수정은 승인 A) 설정 행에 둔다. 60일 지난 배정은 저장 때 정리 (142) */
   reservationResources?: Record<string, string>;
+  /** 마감한 달(YYYY-MM) — 그 달의 결제·지출·판매는 등록·수정·삭제할 수 없다(저장 경로 가드) (147, GAP P-7) */
+  closedMonths?: string[];
+  /** 월 매출 목표 YYYY-MM → 원 (147, GAP P-6) */
+  monthlyTargets?: Record<string, number>;
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
   retentionPolicy?: { enabled: boolean; years: number };
 }

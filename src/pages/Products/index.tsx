@@ -15,6 +15,7 @@ import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil,
 import StockAdjustModal from '../../components/StockAdjustModal';
 import StockLedgerModal from '../../components/StockLedgerModal';
 import { recordStockMovement, removeStockEntries } from '../../lib/stockLedger';
+import { monthCloseBlock } from '../../lib/monthClose';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -87,6 +88,7 @@ export default function Products() {
   const isCanceled = (sale: ProductSale) => canceled.has(sale.id);
   const handleDeleteSale = async (sale: ProductSale) => {
     if (!(await askConfirm({ title: '판매 취소', danger: true, confirmLabel: '판매 취소', cancelLabel: '닫기', message: `${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.` }))) return;
+    { const blocked = monthCloseBlock(sale.saleDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     const before = sale.productId ? ProductStore.getById(sale.productId) : undefined; // 원장 행의 "이동 전 재고" (145)
     const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
     if (linked.length === 0) {
@@ -800,6 +802,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       notify(`재고가 부족합니다. (현재 재고: ${fresh.stock}${product.unit})`);
       return;
     }
+    { const blocked = monthCloseBlock(form.saleDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     setSaving(true);
     const sale = ProductSaleStore.save({
       customerId: form.customerId || undefined,

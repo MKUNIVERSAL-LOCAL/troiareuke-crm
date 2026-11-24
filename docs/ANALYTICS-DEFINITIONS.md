@@ -33,6 +33,17 @@
 ## 예정(마스터 로드맵 145)
 세그먼트 필터 조합(저장된 보기) · LTV(예측, 연간 기대 × 기대 유지 기간 — 유지율 자료가 쌓인 뒤) · 재방문율 · 첫 방문→두 번째 방문 전환율 · 예약 취소율·노쇼율 · 가동률(예약 분 / 가용 분) · 전기 대비(동일 길이 직전 기간) · 목표 달성률 · 월말 예상(예측). 각 지표는 추가되는 순서대로 이 표에 행을 더한다.
 
+| 월 매출 | 결제일이 그 달인 완료(completed) 결제 금액 합 | payments(status=completed) | 월 | 환불·대기 제외(매출 화면 "총 매출"과 같은 정의) | 확정 | revenueMetricsRule.monthMetrics.total | 147 |
+| 전월/전년 동월 대비 | (이달 − 비교달) ÷ 비교달 × 100, 반올림 | 월 매출 | 월 | 비교달 0 이면 산출 안 함(—) | 확정 | monthMetrics.momPct/yoyPct | 147 |
+| 목표 달성률 | 월 매출 ÷ 월 목표 × 100 | 설정 preferences.monthlyTargets | 월 | 목표 없으면 — | 확정 | monthMetrics.achievementPct | 147 |
+| 신규 고객 매출 비중 | 그 달에 등록(registeredAt)한 고객의 결제 합 ÷ 월 매출 | payments.customerId, customers.registeredAt | 월 | 고객 없는 결제는 기존으로, 매출 0 이면 — | 확정 | monthMetrics.newSharePct | 147 |
+| 할인 합계 | 완료 결제의 discountAmount 합 | payments | 월 | 음수는 0 | 확정 | monthMetrics.discount | 147 |
+| 회원권 판매 | type=program 완료 결제 합(현금 유입) | payments | 월 | — | 확정 | monthMetrics.programSold | 147 |
+| 회원권 실현(이달) | 그 달 시술 기록이 차감한 회차 × (결제액 ÷ 총 회차) | treatment_logs.customerProgramId·sessionsUsed, customer_programs | 월 | 기간제·총 회차 0 은 제외. 누적 실현은 customerValueRule(고객 가치) | 확정 | monthMetrics.programRealized | 147 |
+| 미사용 회원권 잔액 | 진행 중(미완료) 회차권의 잔여 회차 × 회당 가격 합 | customer_programs | 시점 | 기간제 제외, 달과 무관 | 확정(시점값) | monthMetrics.unusedBalance | 147 |
+| 손익분기 매출 | 판관비 ÷ (1 − 매출원가율), 원가율 = 매출원가(제품·소모품 매입) ÷ 월 매출 | expenses | 월 | 원가율 ≥ 1 이면 —, 매출 0·원가 0 이면 판관비 | 확정 | monthMetrics.breakEven | 147 |
+| 영업시간·시간당 매출 | 휴무·지정 휴일이 아닌 날의 (마감 − 오픈) 합(이달은 오늘까지), 매출 ÷ 영업시간 | 설정 businessHours·holidays | 월 | 영업시간 설정 없으면 — | 확정 | revenueMetricsRule.openHoursInMonth, monthMetrics.perHour | 147 |
+| 월말 예상 | 이달 매출 ÷ 지난 일수 × 그 달 일수 | 월 매출 | 이달 | 과거 달·매출 0 이면 — | **예측** | monthMetrics.projected | 147 |
 ## 원칙
 - 데이터가 부족하면 값을 만들지 않는다(null → 화면은 "-" 또는 "매장 기준").
 - 확정과 예측을 라벨로 구분한다("예상"·"추정").

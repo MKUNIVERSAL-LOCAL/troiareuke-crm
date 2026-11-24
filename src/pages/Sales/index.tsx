@@ -12,7 +12,11 @@ import {
 import ChartFallback from '../../components/charts/ChartFallback';
 const DailySalesChart = lazy(() => import('../../components/charts/DailySalesChart')); // recharts는 첫 화면 번들에서 분리 (2026-11-18)
 const PnlTrendChart = lazy(() => import('../../components/charts/PnlTrendChart'));
-import { PaymentStore, CustomerStore, CustomerProgramStore } from '../../lib/store';
+import { PaymentStore, CustomerStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
+import RevenueMetricsCard from '../../components/RevenueMetricsCard';
+import { monthMetrics } from '../../lib/revenueMetricsRule';
+import { monthCloseBlock, isMonthClosed, monthlyTarget } from '../../lib/monthClose';
+import { isAdminRole } from '../../lib/permissions';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import Header from '../../components/layout/Header';
@@ -379,6 +383,7 @@ export default function Sales() {
         : '회차권 결제는 여기서 지우면 회차권만 남아 계속 차감됩니다. 고객 상세의 해당 프로그램 [관리] > [등록 취소]로 결제와 회차권을 함께 지워주세요.');
       return;
     }
+    { const blocked = monthCloseBlock(p.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     if (!(await askConfirm({ title: '결제 삭제', message: `${formatDate(p.paymentDate)} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`, confirmLabel: '삭제', danger: true }))) return; // 앱 확인창 (15차 #H3)
     PaymentStore.delete(p.id);
     loadPayments();
@@ -450,6 +455,8 @@ export default function Sales() {
     // 환불 처리일 — Payment 에 환불일 필드가 없어 memo 태그로(이달 환불 처리 N원 표시의 근거) (10차 #M1)
     if (form.status === 'refunded' && editingPayment?.status !== 'refunded') payload.memo = tagRefund(payload.memo, today());
     else if (form.status === 'refunded' && editingPayment && refundedOn(editingPayment)) payload.memo = tagRefund(payload.memo, refundedOn(editingPayment)!); // 폼에서 숨긴 기존 태그 재부착
+    { const blocked = monthCloseBlock(form.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    { const blocked = monthCloseBlock(editingPayment?.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     if (editingId) {
       PaymentStore.update(editingId, payload);
       if (closeProgram) CustomerProgramStore.update(closeProgram.id, { isCompleted: true, notes: `${closeProgram.notes ? closeProgram.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
@@ -489,6 +496,7 @@ export default function Sales() {
 
   async function handleExpenseDelete(x: Expense) {
     if (!(await askConfirm({ title: '지출 삭제', message: `${x.expenseDate} · ${x.category} · ${formatPrice(x.amount)} 지출을 삭제할까요?`, confirmLabel: '삭제', danger: true }))) return;
+    { const blocked = monthCloseBlock(x.expenseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     ExpenseStore.delete(x.id);
     refreshExpenses();
   }
@@ -515,6 +523,8 @@ export default function Sales() {
       paymentMethod: expenseForm.paymentMethod,
       memo: expenseForm.memo.trim() || undefined,
     };
+    { const blocked = monthCloseBlock(expenseForm.expenseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    { const blocked = monthCloseBlock(editingExpenseId ? expenses.find(e => e.id === editingExpenseId)?.expenseDate : null); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     if (editingExpenseId) {
       ExpenseStore.update(editingExpenseId, payload);
     } else {
@@ -525,6 +535,13 @@ export default function Sales() {
   }
 
   const growthRate = growthPct(thisSummary.total, lastSummary.total); // 대시보드와 같은 규칙 — 지난달 0 이면 null(배지 없음), 같으면 0% (10차 #M9)
+  // 이달 지표 — 순수 revenueMetricsRule(정의 ANALYTICS-DEFINITIONS). 목표·마감은 설정 행 (147, GAP P-6·P-7)
+  const [metricsTick, setMetricsTick] = useState(0);
+  const metrics = useMemo(() => {
+    const st = SettingsStore.get();
+    return monthMetrics({ month: viewMonth, today: today(), payments, expenses, programs: CustomerProgramStore.getAll(), logs: TreatmentLogStore.getAll(), customers, target: monthlyTarget(viewMonth), businessHours: st.businessHours, holidays: st.holidays, cogsCategories: [...COGS_CATEGORIES] });
+  }, [viewMonth, payments, expenses, customers, metricsTick]);
+  const monthClosed = useMemo(() => isMonthClosed(viewMonth), [viewMonth, metricsTick]);
 
   const [viewDate] = viewMonth.split('-');
   const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
@@ -632,6 +649,8 @@ export default function Sales() {
               </p>
             </div>
           </div>
+
+          <RevenueMetricsCard key={viewMonth} m={metrics} closed={monthClosed} canLock={isAdminRole(authUser?.role)} onChanged={() => setMetricsTick(t => t + 1)} />
 
           {/* 일별 매출 차트 */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
