@@ -35,11 +35,12 @@ const USERS = [
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 /** 시나리오 스위치 — 테스트 중간에 바꿔 같은 라우트가 다른 응답을 낸다 */
-const INITIAL = { manifestDown: true, flagsDown: true, announcementsDown: true, loginError: '' };
+const INITIAL = { manifestDown: true, flagsDown: true, announcementsDown: true, loginError: '', aiDeployed: false, aiGranted: 0 };
 const state = { ...INITIAL };
 const unmocked: string[] = [];
+const aiGrants: { branchId: string; amount: number; note: string }[] = [];
 // 재시도(CI retries 1)는 새 테스트처럼 시작해야 한다 — 테스트 중간에 바꾼 스위치가 남으면 첫 실패 원인이 가려진다 (리뷰 2026-11-20)
-test.beforeEach(() => { Object.assign(state, INITIAL); unmocked.length = 0; });
+test.beforeEach(() => { Object.assign(state, INITIAL); unmocked.length = 0; aiGrants.length = 0; });
 
 async function mockNas(page: Page) {
   // 포괄: 두 호스트로 가는 모든 요청 — 아래 라우트가 받지 않으면 404 (실제 서버로는 절대 나가지 않는다)
@@ -55,6 +56,22 @@ async function mockNas(page: Page) {
   await page.route(`${API}/api/admin/announcements**`, route => state.announcementsDown ? json(route, { error: '서버 점검 중' }, 503) : json(route, { announcements: [] }));
   await page.route(`${API}/api/admin/feature-flags**`, route => state.flagsDown ? json(route, { error: '서버 점검 중' }, 503) : json(route, { scopes: {} }));
   await page.route(`${API}/api/feature-flags**`, route => json(route, { flags: {} }));
+  // AI 서비스 관리(162): 서버 모듈(161) 배포 전에는 404 → "미배포" 안내, 배포 뒤 요약·지점·크레딧 지급 계약(AI-GATEWAY-ARCHITECTURE 5절)
+  await page.route(`${API}/api/admin/ai/summary**`, route => state.aiDeployed
+    ? json(route, { month: '2026-11', calls: 123, inputTokens: 456000, outputTokens: 78000, usd: 1.23, credits: 3444, activeBranches: 2, failRate: 2, fallbackRate: 5, byModel: [{ provider: 'openai', model: 'gpt-4o-mini', calls: 100, usd: 0.5 }] })
+    : json(route, { error: 'Not found' }, 404));
+  await page.route(`${API}/api/admin/ai/branches**`, route => state.aiDeployed
+    ? json(route, { branches: [
+        { branchId: 'b-gn', branchName: '강남점', plan: 'pro', calls: 100, inputTokens: 400000, outputTokens: 70000, usd: 1.0, creditsUsed: 2800, creditsBalance: 200 + state.aiGranted, lastCallAt: '2026-11-24T10:00:00.000Z' },
+        { branchId: 'b-pg', branchName: '판교점', plan: 'starter', calls: 23, inputTokens: 56000, outputTokens: 8000, usd: 0.23, creditsUsed: 644, creditsBalance: 356, lastCallAt: '2026-11-23T09:00:00.000Z' },
+      ] })
+    : json(route, { error: 'Not found' }, 404));
+  await page.route(`${API}/api/admin/ai/credits/grant`, async route => {
+    const body = route.request().postDataJSON() as { branchId: string; amount: number; note: string };
+    aiGrants.push(body);
+    state.aiGranted += body.amount;
+    return json(route, { balance: 200 + state.aiGranted });
+  });
   await page.route(`${UPDATE}/portable/latest.json**`, route => state.manifestDown ? route.abort('connectionfailed') : json(route, { version: '1.0.60', releaseDate: '2026-11-20' }));
 }
 
@@ -132,6 +149,29 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
   await page.getByRole('button', { name: '다시 시도' }).click();
   await expect(page.getByText('등록된 공지사항이 없습니다')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('button', { name: '공지 작성' })).toBeEnabled();
+
+  // ── AI 서비스 관리(162): 서버 모듈 미배포(404)는 "미배포" 안내 — 숫자를 만들지 않는다; 배포 뒤 요약·지점 표·크레딧 지급 계약 ──
+  await page.goto('/admin/subscriptions?view=ai');
+  await expect(page.getByTestId('ai-not-deployed')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('ai-stat-이달 호출')).toHaveCount(0);
+  await expect(page.getByTestId('ai-catalog-editor')).toContainText('기본값 사용 중'); // 카탈로그 배포는 플래그 경로라 미배포에도 동작
+  state.aiDeployed = true;
+  await page.getByTestId('ai-not-deployed').getByRole('button', { name: '다시 시도' }).click();
+  await expect(page.getByTestId('ai-stat-이달 호출')).toContainText('123', { timeout: 15_000 });
+  await expect(page.getByTestId('ai-stat-이달 호출')).toContainText('활성 지점 2곳');
+  await expect(page.getByTestId('ai-stat-추정 원가')).toContainText('$1.23');
+  await expect(page.getByTestId('ai-stat-크레딧 차감 · 마진')).toContainText('[추정]'); // 마진은 추정 라벨
+  await expect(page.getByTestId('ai-branch-row')).toHaveCount(2);
+  await expect(page.getByTestId('ai-branch-row').filter({ hasText: '강남점' })).toContainText('2,800 / 200');
+  await page.getByRole('button', { name: '강남점 크레딧 지급' }).click();
+  await page.getByLabel('지급 크레딧').fill('500');
+  await page.getByTestId('grant-submit').click(); // 사유 없이 → 거절
+  await expect(page.getByText('지급 사유를 입력해주세요').first()).toBeVisible();
+  await page.getByLabel('사유').fill('파일럿 보상');
+  await page.getByTestId('grant-submit').click();
+  await expect(page.getByText('강남점에 500 크레딧을 지급했습니다').first()).toBeVisible({ timeout: 15_000 });
+  expect(aiGrants).toEqual([{ branchId: 'b-gn', amount: 500, note: '파일럿 보상' }]);
+  await expect(page.getByTestId('ai-branch-row').filter({ hasText: '강남점' })).toContainText('2,800 / 700'); // 지급 뒤 다시 읽어 잔액 반영
 
   // 실제 NAS 로 새어 나간 요청 없음 — 포괄 라우트가 받은(흉내 내지 않은) 경로는 기록만 남고 404 로 끝났다
   // 포괄 라우트가 받은(흉내 내지 않은) 경로는 지점 데이터 동기화(/api/data/*)뿐이어야 한다 — 어드민 화면이 새 서버 경로를 쓰기 시작하면 여기서 드러난다

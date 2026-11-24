@@ -11,7 +11,7 @@ const acc = makeAccount('RT');
 
 // 본사 어드민 콘솔 — 로컬 모드에는 슈퍼어드민 계정이 없어 세션 역할을 바꿔 진입한다 (화면 렌더 안전망 목적)
 const ADMIN_ROUTES = [
-  '/admin/dashboard', '/admin/branches', '/admin/users', '/admin/subscriptions',
+  '/admin/dashboard', '/admin/branches', '/admin/users', '/admin/subscriptions', '/admin/subscriptions?view=ai',
   '/admin/announcements', '/admin/statistics', '/admin/features', '/admin/login-logs',
 ];
 

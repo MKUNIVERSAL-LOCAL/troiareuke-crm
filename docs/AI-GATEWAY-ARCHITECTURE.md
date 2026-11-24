@@ -56,7 +56,7 @@
 | POST | `/api/admin/ai/credits/grant` | `{ branchId, amount, note }` → 원장 grant 행 | 어드민 162, 감사 로그 |
 | PUT | `/api/admin/ai/catalog` | 카탈로그 배열(검증 `isAiModel`) → 플래그 `ai.catalog` 로 배포 | 기존 플래그 경로 재사용 |
 
-## 6. 어드민 화면 설계(162)
+## 6. 어드민 화면 설계(162) — 구현됨 `src/pages/Admin/AiService.tsx`(`/admin/subscriptions?view=ai`), API 래퍼 `src/lib/adminAi.ts`
 `/admin/ai` "AI 서비스 관리" — 메뉴 `구독/플랜 관리` 아래.
 - 요약 카드(이달): 호출 수 · 입력/출력 토큰 · 추정 원가(USD·원) · 크레딧 차감 합 · 활성 지점 수 · **마진(크레딧 매출 − 원가, [추정])**.
 - 지점 표: 지점 · 플랜 · 호출 · 토큰 · 원가 · 크레딧 사용/잔액 · 마지막 호출 · [크레딧 지급] 버튼(금액·사유 → grant).
