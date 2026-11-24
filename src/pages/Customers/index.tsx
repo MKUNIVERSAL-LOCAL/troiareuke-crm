@@ -48,6 +48,9 @@ import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo, getCustomerVisitCycle, getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { getProgramAlerts } from '../../lib/programAlerts';
 import { buildSegmentIndex } from '../../lib/customerSegments';
+import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
+import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
+import SegmentEditorModal from '../../components/SegmentEditorModal';
 import { CHURN_LABEL, CHURN_HIGH_RATIO } from '../../lib/churnRule';
 import { getCustomerValue } from '../../lib/customerValue';
 import { recordPrivacyAction } from '../../lib/privacyLog';
@@ -383,6 +386,10 @@ export default function Customers() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
   const [tagFilter, setTagFilter] = useState(''); // 태그 칩 필터 (2026-11-18)
+  // 저장 세그먼트(조건 조합) — 칩으로 고르면 목록이 그 조건으로 좁혀진다 (166, GAP C-6·M-2)
+  const [savedSegments, setSavedSegments] = useState<SavedSegment[]>(() => listSavedSegments());
+  const [segmentFilterId, setSegmentFilterId] = useState('');
+  const [segmentEditor, setSegmentEditor] = useState<SavedSegment | null | 'new'>(null);
   const [churnOnly, setChurnOnly] = useState(() => searchParams.get('churn') === '1'); // 이탈 위험 높음만 (136) — 대시보드 "오늘 할 일" 딥링크 (138)
   const [revisitOnly, setRevisitOnly] = useState(() => searchParams.get('revisit') === '1'); // 재방문 권장일 지남 (138)
   const [programAlertOnly, setProgramAlertOnly] = useState(() => searchParams.get('programAlert') === '1'); // 회차권 소진·만료 임박 (138)
@@ -401,6 +408,9 @@ export default function Customers() {
   const statsIndex = useMemo(() => buildCustomerStatsIndex(), [customers]);
   const statsOf = (c: Customer) => statsFor(c, statsIndex);
   const segmentIndex = useMemo(() => buildSegmentIndex(statsIndex), [statsIndex]); // RFM 구분·이탈 위험(개인 주기 대비) — 전수 1회 (136)
+  const segmentFacts = useMemo(() => buildSegmentFacts(), [customers, statsIndex]); // 저장 세그먼트 평가 사실 (166) // eslint-disable-line react-hooks/exhaustive-deps
+  const activeSegment = savedSegments.find(sg => sg.id === segmentFilterId) ?? null;
+  const segmentFilterIds = useMemo(() => (activeSegment ? segmentIds(activeSegment.condition, segmentFacts) : null), [activeSegment, segmentFacts]);
   const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
   const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
   const compareCustomers = (a: Customer, b: Customer): number => {
@@ -1029,9 +1039,10 @@ export default function Customers() {
     const matchChurn = !churnOnly || segmentIndex.get(c.id)?.churn?.level === 'high';
     const matchRevisit = !revisitIds || revisitIds.has(c.id);
     const matchProgram = !programAlertIds || programAlertIds.has(c.id);
-    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram;
+    const matchSegment = !segmentFilterIds || segmentFilterIds.has(c.id); // 저장 세그먼트 (166)
+    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment;
   }).sort(compareCustomers),
-  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds]);
+  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -1089,6 +1100,23 @@ export default function Customers() {
       </div>
     );
   })();
+  // 저장 세그먼트 칩 행 — 선택하면 조건으로 좁히고, 선택된 칩 옆에 [편집]. 만들기는 관리자(customer.pii 와 같은 관리자 묶음) (166)
+  const savedSegmentRow = (savedSegments.length > 0 || canManage) ? (
+    <div className="flex flex-wrap items-center gap-1.5 pb-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">
+      {savedSegments.map(sg => {
+        const n = segmentIds(sg.condition, segmentFacts).size;
+        const on = segmentFilterId === sg.id;
+        return (
+          <button key={sg.id} type="button" aria-pressed={on} title={describeSegment(sg.condition)} onClick={() => setSegmentFilterId(on ? '' : sg.id)}
+            className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-[#1a3a8f] border-blue-200 hover:bg-blue-50'}`}>
+            {sg.name} <span className="font-normal">{n}</span>
+          </button>
+        );
+      })}
+      {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
+      {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
+    </div>
+  ) : null;
   const tagChips = selected && (selected.tags || []).length > 0 ? (
     <span className="flex flex-wrap gap-1 mt-1" data-testid="customer-tags">
       {(selected.tags || []).map(t => <span key={t} className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">#{t}</span>)}
@@ -1562,6 +1590,7 @@ export default function Customers() {
             </button>
           </div>
           {tagChipsRow}
+          {savedSegmentRow}
           <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar pr-6">
             {(['전체', ...GRADES] as const).map(g => (
               <button
@@ -2087,6 +2116,7 @@ export default function Customers() {
             />
           </div>
           {tagChipsRow}
+          {savedSegmentRow}
           <div className="flex gap-1 flex-wrap">
             {(['전체', ...GRADES] as const).map(g => (
               <button
@@ -2203,6 +2233,8 @@ export default function Customers() {
       </div>
 
       {/* 오른쪽: 고객 상세 — 모바일 폭에서는 위의 모바일 상세가 담당하므로 렌더하지 않는다 (CSS hidden만으로는 사진 스트립·결제 내역이 2중 실행, 리뷰 2026-11-17) */}
+      {/* 저장 세그먼트 편집 창 — lg:hidden 블록 안에 두면 PC 에서 함께 숨겨진다(Modal 은 포털이 아님) (166) */}
+      {segmentEditor !== null && <SegmentEditorModal segment={segmentEditor === 'new' ? null : segmentEditor} facts={segmentFacts} tagOptions={tagOptions.map(t => t.tag)} onClose={() => setSegmentEditor(null)} onSaved={() => { setSegmentEditor(null); const next = listSavedSegments(); setSavedSegments(next); if (!next.some(sg => sg.id === segmentFilterId)) setSegmentFilterId(''); }} />}
       {selected && !isMobileLayout ? (
         <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
           <div className="max-w-3xl mx-auto space-y-4">

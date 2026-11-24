@@ -1,4 +1,5 @@
 import type { Campaign } from '../lib/campaignRule'; // 캠페인 정의는 순수 규칙 모듈에 (156)
+import type { SavedSegment } from '../lib/segmentFilterRule'; // 저장 세그먼트 (166)
 // =============================================
 // 기존 타입
 // =============================================
@@ -230,6 +231,8 @@ export interface ShopPreferences {
   adsOptOutNumber?: string;
   /** 자동 발송 캠페인 정의(트리거·조건·채널·본문·반복·광고 여부) — 작고 적어 설정 행에 둔다. 발송 기록·멱등키는 기기별(서버 보관은 승인 B-4) (156) */
   campaigns?: Campaign[];
+  /** 저장 세그먼트(조건 조합) — 고객 목록 필터·발송 대상·캠페인 조건에 공용 (166, GAP C-6·M-2) */
+  savedSegments?: SavedSegment[];
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
   retentionPolicy?: { enabled: boolean; years: number };
 }

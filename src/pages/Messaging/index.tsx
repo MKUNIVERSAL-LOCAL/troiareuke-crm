@@ -11,6 +11,8 @@ import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
+import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
+import type { SavedSegment } from '../../lib/segmentFilterRule';
 import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../../lib/mobileBridge';
 import Header from '../../components/layout/Header';
@@ -29,7 +31,7 @@ import CampaignsCard from '../../components/campaigns/CampaignsCard';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | `tag:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18)
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | `tag:${string}` | `saved:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18) / saved:<id> — 저장 세그먼트 (166)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
 const SEGMENT_LABELS: Record<string, string> = {
@@ -42,13 +44,22 @@ const SEGMENT_LABELS: Record<string, string> = {
   loyal: '충성 고객', // RFM 최근성·빈도 상위 (136, rfmRule) // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
 };
 
-function segmentLabel(seg: Segment): string {
+function segmentLabel(seg: Segment, saved: SavedSegment[] = []): string {
+  if (seg.startsWith('saved:')) return saved.find(sg => sg.id === seg.slice(6))?.name ?? '삭제된 세그먼트';
   return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);
+}
+/** 저장 세그먼트 id → 해당 고객 id 집합 — 발송 창·빠른 발송 카드가 한 번 만들어 공유 (166) */
+function savedSegmentSets(): { list: SavedSegment[]; sets: Map<string, Set<string>> } {
+  const list = listSavedSegments();
+  if (list.length === 0) return { list, sets: new Map() };
+  const facts = buildSegmentFacts();
+  return { list, sets: new Map(list.map(sg => [sg.id, segmentIds(sg.condition, facts)])) };
 }
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 /** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
 function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
-function segmentFilter(seg: Segment, revisitIds?: Set<string>, segIds?: { churn: Set<string>; loyal: Set<string> }): (c: Customer) => boolean {
+function segmentFilter(seg: Segment, revisitIds?: Set<string>, segIds?: { churn: Set<string>; loyal: Set<string> }, savedSets?: Map<string, Set<string>>): (c: Customer) => boolean {
+  if (seg.startsWith('saved:')) { const ids = savedSets?.get(seg.slice(6)); return ids ? c => ids.has(c.id) : () => false; } // 삭제된 세그먼트는 아무에게도 (166)
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
   if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
   if (seg === 'churn' || seg === 'loyal') { const sets = segIds ?? segmentIdSets(); const ids = sets[seg]; return c => ids.has(c.id); }
@@ -98,7 +109,7 @@ export default function Messaging() {
   useEffect(() => {
     // 대시보드 재방문 리마인더 [단체 발송](?segment=revisit)·생일 카드(?segment=birthday) → 그 대상이 걸린 발송 모달 (3차·5차 UX 점검 2026-11-19)
     const seg = searchParams.get('segment');
-    if (seg && (seg === 'revisit' || seg === 'churn' || seg === 'loyal' || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // churn·loyal 도 딥링크 허용 (139 #L7) // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
+    if (seg && (seg === 'revisit' || seg === 'churn' || seg === 'loyal' || seg.startsWith('saved:') || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // saved:<id> 는 고객 목록 세그먼트 칩에서 (166) // churn·loyal 도 딥링크 허용 (139 #L7) // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
       setSendCustomerId(null);
       setSendSegment(seg as Segment);
       setShowSendModal(true);
@@ -212,6 +223,7 @@ function SendPanel({ onSend, onSent, reloadKey }: { onSend: (segment: Segment) =
     setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false));
   }, [reloadKey]);
   const revisitCount = useMemo(() => revisitIdSet().size, [reloadKey]); // 대시보드 재방문 카드와 같은 기준 (리뷰 63)
+  const saved = useMemo(() => savedSegmentSets(), [reloadKey]); // 저장 세그먼트 카드 (166)
 
   const birthdayCount = customers.filter(c => {
     if (!c.birthDate) return false;
@@ -228,6 +240,7 @@ function SendPanel({ onSend, onSent, reloadKey }: { onSend: (segment: Segment) =
           { key: 'birthday' as Segment, label: '이번달 생일', count: birthdayCount, color: 'pink' },
           { key: 'novisit' as Segment, label: '미방문 60일+', count: customers.filter(SEGMENT_FILTERS.novisit).length, color: 'orange' },
           { key: 'revisit' as Segment, label: '재방문 권장', count: revisitCount, color: 'amber' },
+          ...saved.list.map(sg => ({ key: `saved:${sg.id}` as Segment, label: sg.name, count: saved.sets.get(sg.id)?.size ?? 0, color: 'primary' })), // 저장 세그먼트 (166)
           ...topTags(customers, 4).map(t => ({ key: `tag:${t.tag}` as Segment, label: `#${t.tag}`, count: t.count, color: 'amber' })),
         ].map(t => (
           <button
@@ -790,9 +803,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준). 재방문 집합은 창이 열릴 때 한 번만 — 글자 입력마다 전수 스캔하지 않게 (리뷰 63)
   const revisitIds = useMemo(() => revisitIdSet(), []);
   const segIds = useMemo(() => segmentIdSets(), []); // 이탈 위험·충성 (136) — 전수 스캔 1회
+  const saved = useMemo(() => savedSegmentSets(), []); // 저장 세그먼트 (166)
   const targetCustomers = useMemo(
-    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds))),
-    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds],
+    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds, saved.sets))),
+    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds, saved],
   );
   const recipientCount = targetCustomers.length;
   // 광고성이면 수신 동의가 있고 이 채널을 거부하지 않은 고객만 (155)
@@ -832,7 +846,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       return;
     }
     // 발송은 되돌릴 수 없다 — 대상·인원을 한 번 더 확인 (전체 고객이 기본 대상이라 특히) (UX 점검 2026-11-19)
-    const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode)} ${recipientPhones.length}명`;
+    const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode, saved.list)} ${recipientPhones.length}명`;
     const action = scheduleMode === 'later' && isScheduleAvailable ? '예약 발송을 등록' : '지금 발송';
     if (!window.confirm(`${target}에게 ${sendType === 'sms' ? 'SMS' : sendType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(번호가 없거나 10~11자리가 아닌 ${excludedCount}명 제외)` : ''}`)) return;
     setSending(true);
@@ -1018,13 +1032,13 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             ) : (
             <div className="flex gap-2 flex-wrap">
               {(() => {
-                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
+                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
-                if (recipientMode.startsWith('tag:') && !keys.includes(recipientMode)) keys.push(recipientMode);
+                if ((recipientMode.startsWith('tag:') || recipientMode.startsWith('saved:')) && !keys.includes(recipientMode)) keys.push(recipientMode);
                 return keys;
               })().map(key => ({
                 key,
-                label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key, revisitIds, segIds)).length}명)`,
+                label: `${segmentLabel(key, saved.list)} (${customers.filter(segmentFilter(key, revisitIds, segIds, saved.sets)).length}명)`,
               })).map(r => (
                 <button
                   key={r.key}

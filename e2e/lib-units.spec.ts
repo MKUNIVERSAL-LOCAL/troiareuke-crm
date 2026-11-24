@@ -45,6 +45,7 @@ import { routeModel, tierFor } from '../src/lib/ai/modelRouterRule';
 import { applyEntry, ledgerState, creditsForCost, expireEntry, MONTHLY_GRANT, type LedgerEntry } from '../src/lib/ai/creditLedgerRule';
 import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, allocateShops, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
 import { setupChecks, setupCompletionPct, utilizationPct, activityLevel, pilotSummary, type BranchCounts } from '../src/lib/pilotMetricsRule';
+import { matchesSegment, validateSegment, describeSegment, isEmptyCondition, type CustomerFacts } from '../src/lib/segmentFilterRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
@@ -1033,4 +1034,26 @@ test('파일럿 지표 — 초기 설정 6단계·활용 7영역·활동 상태�
   expect(s.byActivity).toEqual({ active: 1, idle: 1, dormant: 0, none: 1 });
   expect(s.rows.map(r => r.name)).toEqual(['신규점', '판교점', '강남점']); // 덜 된 지점이 위
   expect(pilotSummary([], now).avgSetupPct).toBeNull(); // 지점 없으면 값을 만들지 않는다
+});
+
+test('저장 세그먼트 규칙 — AND 조건 평가·빈 조건 거절·설명 (166)', () => {
+  const f: CustomerFacts = { id: 'a', grade: 'VIP', tags: ['민감성', '재구매'], lastVisitDate: '2026-10-01', totalVisits: 7, totalSpent: 850000, rfmSegment: '충성', churnLevel: 'medium', birthMonth: 11, hasUpcoming: false, adConsent: 'consented' };
+  const today = '2026-11-24'; // 마지막 방문 54일 전
+  expect(matchesSegment(f, {}, today)).toBe(true);
+  expect(matchesSegment(f, { grades: ['VIP', '골드'], tagsAny: ['재구매'], lastVisitDaysMin: 30, lastVisitDaysMax: 60, visitsMin: 5, spentMin: 500000, rfmSegments: ['충성'], churnLevels: ['medium'], birthdayThisMonth: true, hasUpcoming: false, adConsent: 'consented' }, today)).toBe(true);
+  expect(matchesSegment(f, { grades: ['일반'] }, today)).toBe(false);
+  expect(matchesSegment(f, { tagsAny: ['신규'] }, today)).toBe(false);
+  expect(matchesSegment(f, { lastVisitDaysMin: 60 }, today)).toBe(false);   // 54 < 60
+  expect(matchesSegment(f, { lastVisitDaysMax: 30 }, today)).toBe(false);
+  expect(matchesSegment({ ...f, lastVisitDate: null }, { lastVisitDaysMin: 0 }, today)).toBe(false); // 미방문은 일수 조건에 안 걸린다
+  expect(matchesSegment(f, { visitsMax: 6 }, today)).toBe(false);
+  expect(matchesSegment(f, { hasUpcoming: true }, today)).toBe(false);
+  expect(matchesSegment(f, { birthdayThisMonth: true }, '2026-12-01')).toBe(false);
+  expect(matchesSegment(f, { adConsent: 'optout' }, today)).toBe(false);
+  expect(isEmptyCondition({})).toBe(true); expect(isEmptyCondition({ grades: [] })).toBe(true); expect(isEmptyCondition({ hasUpcoming: false })).toBe(false);
+  expect(validateSegment('', {})).toEqual(['세그먼트 이름을 입력해주세요.', '조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).']);
+  expect(validateSegment('x', { lastVisitDaysMin: 90, lastVisitDaysMax: 30 })).toEqual(['마지막 방문 일수의 최소가 최대보다 큽니다.']);
+  expect(validateSegment('x', { visitsMin: -1 })).toEqual(['최소 방문 횟수은 0 이상 정수로 입력해주세요.']);
+  expect(describeSegment({ grades: ['VIP'], lastVisitDaysMin: 60, hasUpcoming: false, adConsent: 'consented' })).toBe('등급 VIP · 마지막 방문 60일 이상 전 · 다음 예약 없음 · 광고 동의');
+  expect(describeSegment({})).toBe('전체');
 });

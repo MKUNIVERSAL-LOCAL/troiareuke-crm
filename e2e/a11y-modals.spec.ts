@@ -47,6 +47,11 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await expect(dialog('고객 추가')).toBeVisible();
   });
   await closeDialog('고객 추가');
+  await step('/customers 세그먼트 만들기', async () => { // 저장 세그먼트 편집 창 (166)
+    await page.getByRole('button', { name: '+ 세그먼트' }).filter({ visible: true }).first().click();
+    await expect(dialog('세그먼트 만들기')).toBeVisible();
+  });
+  await closeDialog('세그먼트 만들기');
   await step('/customers 상세 패널', async () => {
     await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
     await expect(desk.getByRole('button', { name: '회차권 등록' }).first()).toBeVisible();
