@@ -43,6 +43,8 @@ import { exportConsultationPdf } from '../../lib/consultReport';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo, getCustomerVisitCycle } from '../../lib/reminderEngine';
+import { buildSegmentIndex } from '../../lib/customerSegments';
+import { CHURN_LABEL } from '../../lib/churnRule';
 import { recordPrivacyAction } from '../../lib/privacyLog';
 import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
@@ -325,7 +327,7 @@ export default function Customers() {
   const [selected, setSelected] = useState<Customer | null>(null);
   const [customerPrograms, setCustomerPrograms] = useState<CustomerProgram[]>([]);
   const selectedNoShows = selected ? noShowCount(selected.id) : 0;
-  const selectedCycle = selected ? getCustomerVisitCycle(selected.id) : null; // 방문 3회 이상이면 개인 간격 중앙값, 아니면 매장 기본 (135)
+  const selectedCycle = selected ? getCustomerVisitCycle(selected.id) : null;
   // 빠른 메모 — 수정 모달 없이 날짜가 붙는 한 줄을 메모에 덧붙인다 (2026-11-18)
   const [quickMemo, setQuickMemo] = useState('');
   function handleQuickMemo() {
@@ -376,6 +378,7 @@ export default function Customers() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
   const [tagFilter, setTagFilter] = useState(''); // 태그 칩 필터 (2026-11-18)
+  const [churnOnly, setChurnOnly] = useState(false); // 이탈 위험 높음만 (136)
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
   type SortKey = 'recent' | 'name' | 'registered' | 'spent';
   const [sortKey, setSortKey] = useState<SortKey>('recent');
@@ -388,6 +391,9 @@ export default function Customers() {
   // 목록·정렬·행 표기는 기록 재계산값 — 저장 증분값은 상세를 열어 heal 하기 전까지 어긋나 보였다 (10차 숫자 점검 #H1). customers 가 바뀔 때(loadAll)마다 다시 센다
   const statsIndex = useMemo(() => buildCustomerStatsIndex(), [customers]);
   const statsOf = (c: Customer) => statsFor(c, statsIndex);
+  const segmentIndex = useMemo(() => buildSegmentIndex(), [customers, statsIndex]); // RFM 구분·이탈 위험(개인 주기 대비) — 전수 1회 (136)
+  const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
+  const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
   const compareCustomers = (a: Customer, b: Customer): number => {
     switch (sortKey) {
       case 'name': return a.name.localeCompare(b.name, 'ko');
@@ -1009,9 +1015,10 @@ export default function Customers() {
     const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
     const matchTag = !tagFilter || (c.tags || []).includes(tagFilter);
     const matchRetention = !retentionOnly || expiredIds.has(c.id);
-    return matchSearch && matchGrade && matchTag && matchRetention;
+    const matchChurn = !churnOnly || segmentIndex.get(c.id)?.churn?.level === 'high';
+    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn;
   }).sort(compareCustomers),
-  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey]);
+  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -1021,7 +1028,7 @@ export default function Customers() {
   }, [customers, detailTick]);
   // 목록은 100명씩 — 전부 마운트하면 수백 명부터 폰에서 버벅인다. 검색·필터·정렬이 바뀌면 처음부터
   const [listLimit, setListLimit] = useState(LIST_PAGE);
-  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey]);
+  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey, churnOnly]);
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
@@ -1560,6 +1567,13 @@ export default function Customers() {
             >
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
+            {churnHighCount > 0 && (
+              <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${churnOnly ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+                title="마지막 방문 뒤 지난 날이 이 고객의 방문 주기 2배를 넘고 다음 예약이 없는 고객">
+                이탈 위험 {churnHighCount}
+              </button>
+            )}
             {retentionPolicy.enabled && (
               <button
                 type="button"
@@ -1627,7 +1641,7 @@ export default function Customers() {
                         {phoneFor(user?.role, customer.phone)}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {statsOf(customer).totalVisits}회
+                        {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {statsOf(customer).totalVisits}회{segmentIndex.get(customer.id)?.churn?.level === 'high' && <span className="text-rose-700 font-medium"> · 이탈 위험</span>}
                       </p>
                     </div>
                     <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
@@ -1765,6 +1779,15 @@ export default function Customers() {
                     <span className="text-xs text-gray-500">총 방문</span>
                     <span className="text-sm font-medium text-gray-900 tabular-nums">{selected.totalVisits}회</span>
                   </div>
+                  {selectedSeg && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">고객 구분</span>
+                      <span className="text-sm font-medium text-gray-900" data-testid="rfm-segment" title={`최근성 ${selectedSeg.rfm.r} · 빈도 ${selectedSeg.rfm.f} · 금액 ${selectedSeg.rfm.m} (매장 내 5분위, 최근 365일)`}>
+                        {selectedSeg.rfm.segment}
+                        {selectedSeg.churn && <span className={`ml-1 text-xs ${selectedSeg.churn.level === 'high' ? 'text-rose-700 font-semibold' : selectedSeg.churn.level === 'medium' ? 'text-amber-700' : 'text-gray-500'}`}>· 이탈 위험 {CHURN_LABEL[selectedSeg.churn.level]}</span>}
+                      </span>
+                    </div>
+                  )}
                   {selectedCycle && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">방문 주기</span>
@@ -2041,6 +2064,13 @@ export default function Customers() {
             >
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
+            {churnHighCount > 0 && (
+              <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${churnOnly ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+                title="마지막 방문 뒤 지난 날이 이 고객의 방문 주기 2배를 넘고 다음 예약이 없는 고객">
+                이탈 위험 {churnHighCount}
+              </button>
+            )}
             {retentionPolicy.enabled && (
               <button
                 type="button"
@@ -2080,7 +2110,8 @@ export default function Customers() {
           ) : (
             visible.map(customer => {
               const daysSince = getDaysSince(statsOf(customer).lastVisitDate ?? undefined);
-              const isRisk = daysSince !== null && daysSince > 60;
+              const churn = segmentIndex.get(customer.id)?.churn ?? null; // 일괄 60일 대신 이 고객의 방문 주기 대비 (136)
+              const isRisk = churn?.level === 'high';
               const activeProgs = activeProgCount.get(customer.id) || 0;
               return (
                 <button
@@ -2107,7 +2138,7 @@ export default function Customers() {
                     {activeProgs > 0 && (
                       <span className="text-primary-600 font-medium">활성 {activeProgs}개</span>
                     )}
-                    {isRisk && <span className="inline-flex" title={`${daysSince}일 미방문`} aria-label={`${daysSince}일 미방문`}><AlertCircle size={11} className="text-orange-400" /></span>}
+                    {isRisk && churn && <span className="inline-flex items-center gap-0.5 text-rose-700 font-medium" title={`${daysSince}일 미방문 — 이 고객 방문 주기의 ${Math.round(churn.ratio * 100)}%`}><AlertCircle size={11} />이탈 위험</span>}
                   </div>
                 </button>
               );

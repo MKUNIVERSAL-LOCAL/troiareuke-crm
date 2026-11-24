@@ -18,6 +18,8 @@ import { canceledSaleIds } from '../src/lib/saleCancel';
 import { parseAmount, parseCount, normalizePhone, isISODate, coerceISODate, parseDurationMinutes } from '../src/lib/inputRules';
 import { josa } from '../src/lib/josa';
 import { personalCycleDays, resolveVisitCycle } from '../src/lib/visitCycleRule';
+import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
+import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -335,4 +337,43 @@ test('방문 주기 — 간격 중앙값, 방문 3회 미만이면 매장 기본
   // 통계 인덱스가 방문일을 그대로 넘긴다(완료 예약 ∪ 시술일, 서로 다른 날)
   const idx = buildStatsIndex({ payments: [], reservations: [{ customerId: 'c1', status: 'completed', date: '2026-01-01' }, { customerId: 'c1', status: 'cancelled', date: '2026-01-05' }], treatmentLogs: [{ customerId: 'c1', treatmentDate: '2026-01-01' }, { customerId: 'c1', treatmentDate: '2026-01-15' }] });
   expect(idx.visitDays?.get('c1')).toEqual(['2026-01-01', '2026-01-15']);
+});
+
+test('RFM 5분위·고객 구분 — 상대 순위, 동점, 소수 인원, 구분 규칙 (136, ANALYTICS-DEFINITIONS)', () => {
+  expect(quintileScores([10, 20, 30, 40, 50])).toEqual([1, 2, 3, 4, 5]);          // 클수록 높은 점수
+  expect(quintileScores([10, 20, 30, 40, 50], false)).toEqual([5, 4, 3, 2, 1]);   // 최근성: 작을수록 높은 점수
+  expect(quintileScores([7, 7, 7])).toEqual([3, 3, 3]);                           // 동점은 같은 점수(가운데)
+  expect(quintileScores([1, 2])).toEqual([2, 4]);                                 // 2명이어도 동작
+  expect(quintileScores([])).toEqual([]);
+  expect(segmentOf({ r: 5, f: 5, m: 5 }, true, 12)).toBe('충성');
+  expect(segmentOf({ r: 5, f: 1, m: 2 }, true, 1)).toBe('신규');                 // 최근 1회 방문
+  expect(segmentOf({ r: 3, f: 2, m: 5 }, true, 3)).toBe('우수');
+  expect(segmentOf({ r: 1, f: 4, m: 3 }, true, 8)).toBe('이탈 위험');             // 자주 오던 고객이 오래 안 옴
+  expect(segmentOf({ r: 1, f: 1, m: 1 }, true, 2)).toBe('휴면');
+  expect(segmentOf({ r: 3, f: 3, m: 3 }, true, 4)).toBe('일반');
+  expect(segmentOf({ r: 1, f: 1, m: 1 }, false, 0)).toBe('미방문');
+  const idx = scoreRfm([
+    { id: 'a', recencyDays: 3, frequency: 12, monetary: 2_000_000 },
+    { id: 'b', recencyDays: 40, frequency: 4, monetary: 600_000 },
+    { id: 'c', recencyDays: 120, frequency: 6, monetary: 900_000 },
+    { id: 'd', recencyDays: 200, frequency: 1, monetary: 50_000 },
+    { id: 'e', recencyDays: 10, frequency: 1, monetary: 100_000 },
+    { id: 'z', recencyDays: null, frequency: 0, monetary: 0 },
+  ]);
+  expect(idx.get('a')).toEqual({ r: 5, f: 5, m: 5, segment: '충성' });
+  expect(idx.get('d')?.segment).toBe('휴면');
+  expect(idx.get('c')?.segment).toBe('이탈 위험');
+  expect(idx.get('e')?.segment).toBe('신규');
+  expect(idx.get('z')).toEqual({ r: 1, f: 1, m: 1, segment: '미방문' }); // 미방문은 백분위 계산에서 빠진다
+});
+
+test('이탈 위험 — 개인 주기 대비 비율, 미래 예약 완화, 기록 없음 null, 90일 위험 매출(예측) (136)', () => {
+  expect(churnRisk({ daysSinceLastVisit: 20, cycleDays: 14, hasUpcomingReservation: false })).toEqual({ level: 'medium', ratio: 1.43 });
+  expect(churnRisk({ daysSinceLastVisit: 42, cycleDays: 14, hasUpcomingReservation: false })).toEqual({ level: 'high', ratio: 3 });
+  expect(churnRisk({ daysSinceLastVisit: 42, cycleDays: 90, hasUpcomingReservation: false })).toEqual({ level: 'low', ratio: 0.47 }); // 3개월 주기 고객은 아직 정상
+  expect(churnRisk({ daysSinceLastVisit: 42, cycleDays: 14, hasUpcomingReservation: true })).toEqual({ level: 'low', ratio: 3 });      // 다음 예약이 있으면 위험 아님
+  expect(churnRisk({ daysSinceLastVisit: null, cycleDays: 28, hasUpcomingReservation: false })).toBeNull();
+  expect(churnRisk({ daysSinceLastVisit: 10, cycleDays: 0, hasUpcomingReservation: false })).toBeNull();
+  expect(atRiskRevenue90(365_000)).toBe(90_000);
+  expect(atRiskRevenue90(-5)).toBe(0);
 });

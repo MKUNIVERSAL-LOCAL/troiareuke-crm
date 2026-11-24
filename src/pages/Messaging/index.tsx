@@ -10,6 +10,7 @@ import { formatDateTime, parseISODate, todayISO, formatPrice } from '../../lib/f
 import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
+import { segmentIdSets } from '../../lib/customerSegments';
 import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../../lib/mobileBridge';
 import Header from '../../components/layout/Header';
@@ -25,7 +26,7 @@ import { isAuthApiConfigured } from '../../lib/authApi';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | `tag:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18)
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | `tag:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
 const SEGMENT_LABELS: Record<string, string> = {
@@ -33,7 +34,9 @@ const SEGMENT_LABELS: Record<string, string> = {
   vip: 'VIP',
   birthday: '이번달 생일',
   novisit: '미방문 60일+',
-  revisit: '재방문 권장', // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
+  revisit: '재방문 권장',
+  churn: '이탈 위험', // 이 고객의 방문 주기 2배 이상 안 왔고 다음 예약 없음 (136, churnRule)
+  loyal: '충성 고객', // RFM 최근성·빈도 상위 (136, rfmRule) // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
 };
 
 function segmentLabel(seg: Segment): string {
@@ -42,9 +45,10 @@ function segmentLabel(seg: Segment): string {
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 /** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
 function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
-function segmentFilter(seg: Segment, revisitIds?: Set<string>): (c: Customer) => boolean {
+function segmentFilter(seg: Segment, revisitIds?: Set<string>, segIds?: { churn: Set<string>; loyal: Set<string> }): (c: Customer) => boolean {
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
   if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
+  if (seg === 'churn' || seg === 'loyal') { const sets = segIds ?? segmentIdSets(); const ids = sets[seg]; return c => ids.has(c.id); }
   return Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg) ? SEGMENT_FILTERS[seg] : () => false; // 모르는 세그먼트('constructor' 같은 프로토타입 키 포함)는 '아무에게도' — 전체 발송 사고 방지
 }
 
@@ -814,9 +818,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준). 재방문 집합은 창이 열릴 때 한 번만 — 글자 입력마다 전수 스캔하지 않게 (리뷰 63)
   const revisitIds = useMemo(() => revisitIdSet(), []);
+  const segIds = useMemo(() => segmentIdSets(), []); // 이탈 위험·충성 (136) — 전수 스캔 1회
   const targetCustomers = useMemo(
-    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds))),
-    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds],
+    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds))),
+    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds],
   );
   const recipientCount = targetCustomers.length;
 
@@ -1017,13 +1022,13 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             ) : (
             <div className="flex gap-2 flex-wrap">
               {(() => {
-                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
+                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
                 if (recipientMode.startsWith('tag:') && !keys.includes(recipientMode)) keys.push(recipientMode);
                 return keys;
               })().map(key => ({
                 key,
-                label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key, revisitIds)).length}명)`,
+                label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key, revisitIds, segIds)).length}명)`,
               })).map(r => (
                 <button
                   key={r.key}
