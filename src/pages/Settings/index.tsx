@@ -26,6 +26,7 @@ import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
 import ResourcesCard from '../../components/settings/ResourcesCard';
 import AiServiceCard from '../../components/settings/AiServiceCard';
 import AdOptOutCard from '../../components/settings/AdOptOutCard';
+import ReservationPolicyCard from '../../components/settings/ReservationPolicyCard';
 import AppLockCard from '../../components/settings/AppLockCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
 import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
@@ -801,6 +802,7 @@ export default function Settings() {
                 <ResourcesCard />
               </SettingCard>
             )}
+            {tab === 'hours' && <ReservationPolicyCard />}
 
             {tab === 'ai' && (
               <SettingCard title="AI 서비스">

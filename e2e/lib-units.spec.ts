@@ -48,6 +48,7 @@ import { setupChecks, setupCompletionPct, utilizationPct, activityLevel, pilotSu
 import { matchesSegment, validateSegment, describeSegment, isEmptyCondition, type CustomerFacts } from '../src/lib/segmentFilterRule';
 import { requestOtp, verifyOtp, isValidOtpCode, portalSummaryOf, EMPTY_OTP, OTP_TTL_MS, OTP_RESEND_GAP_MS, OTP_LOCK_MS, PORTAL_SESSION_MS, type OtpState } from '../src/lib/portalRule';
 import { duplicateCandidates, normalizeName, type DupInput } from '../src/lib/duplicateRule';
+import { decideOverlap } from '../src/lib/reservationPolicyRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
@@ -1121,4 +1122,10 @@ test('중복 고객 후보 — 전화·이메일·이름+생년월일·이름+�
   expect(r.find(x => x.customer.id === 'b')?.reasons).toEqual(['name+phone4']);
   expect(duplicateCandidates({ id: 'x', name: '홍길동', phone: '12' }, [{ id: 'y', name: '홍길동', phone: '12' }])).toEqual([]); // 8자리 미만 번호·생일 없음 → 사유 없음
   expect(normalizeName(' Kim, Min-Su ')).toBe('kimminsu');
+});
+
+test('예약 정책 — 겹침 판정: 정책 켬이면 막고, 꺼짐이면 확인, 겹침 없으면 허용 (173)', () => {
+  expect(decideOverlap({ blockOverlap: true }, true)).toBe('block');
+  expect(decideOverlap({ blockOverlap: false }, true)).toBe('confirm');
+  expect(decideOverlap({ blockOverlap: true }, false)).toBe('allow');
 });

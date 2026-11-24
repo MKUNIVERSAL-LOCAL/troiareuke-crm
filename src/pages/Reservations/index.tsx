@@ -24,6 +24,8 @@ import { checkBusinessHours } from '../../lib/businessHours';
 import { findConflicts, toInterval, overlaps, toMinutes as toMinOf, type Interval } from '../../lib/schedulingRule';
 import { nextAvailable } from '../../lib/availabilityRule';
 import { dayWindow, checkStaffWindow, offRanges, describeWindow, dayKeyOf } from '../../lib/staffScheduleRule';
+import { getReservationPolicy } from '../../lib/reservationPolicy';
+import { decideOverlap } from '../../lib/reservationPolicyRule';
 import { getStaffSchedule } from '../../lib/staffScheduleStore';
 import { activeResources, allResources, resourceAssignments, resourceOf, assignResource } from '../../lib/resourceStore';
 import { freeResources, resourceConflicts, RESOURCE_KIND_LABEL } from '../../lib/resourceRule';
@@ -1285,6 +1287,11 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
         const name = resources.find(r => r.id === resourceChoice)?.name ?? '선택한 자원';
         if (busyBy) warnings.push(`${josa(name, '은/는')} 그 시간(${busyBy.startTime}~${busyBy.endTime}${busyBy.customerName ? `, ${busyBy.customerName}` : ''})에 이미 쓰고 있습니다.${free.length ? ` 빈 자원: ${free.map(r => r.name).join(', ')}` : ''}`);
       }
+    }
+    // 예약 정책 "겹치는 예약 금지" — 같은 담당자 겹침은 강행 없이 막고 빈 시간만 안내 (173, GAP R-3 2단계). 버퍼·근무 외·휴무 경고는 정책과 무관하게 확인만
+    if (decideOverlap(getReservationPolicy(), !!overlap) === 'block') {
+      notify.error(`${warnings[0]} 설정 > 영업시간 > 예약 정책이 겹치는 예약을 막고 있습니다.${freeHint ? ` ${freeHint}` : ''}`);
+      return;
     }
     if (warnings.length > 0) {
       // 확인창은 하나로 — 모바일에서 네이티브 confirm 두 번은 답답하다
