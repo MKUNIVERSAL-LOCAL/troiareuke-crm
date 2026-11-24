@@ -45,6 +45,7 @@ import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo, getCustomerVisitCycle } from '../../lib/reminderEngine';
 import { buildSegmentIndex } from '../../lib/customerSegments';
 import { CHURN_LABEL } from '../../lib/churnRule';
+import { getCustomerValue } from '../../lib/customerValue';
 import { recordPrivacyAction } from '../../lib/privacyLog';
 import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
@@ -394,6 +395,7 @@ export default function Customers() {
   const segmentIndex = useMemo(() => buildSegmentIndex(), [customers, statsIndex]); // RFM 구분·이탈 위험(개인 주기 대비) — 전수 1회 (136)
   const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
   const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
+  const selectedValue = selected ? getCustomerValue(selected.id) : null; // 실현 매출·객단가·연간 기대(예측) (137) — detailTick 과 무관하게 렌더마다(기록 저장 뒤 바로 반영)
   const compareCustomers = (a: Customer, b: Customer): number => {
     switch (sortKey) {
       case 'name': return a.name.localeCompare(b.name, 'ko');
@@ -1805,8 +1807,28 @@ export default function Customers() {
                   {dupHint}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 결제</span>
-                    <span className="text-sm font-medium text-gray-900 tabular-nums">{formatPrice((selected.totalSpent || 0))}</span>
+                    <span className="text-sm font-medium text-gray-900 tabular-nums" title="완료된 결제 합 — 회차권 판매액 포함(현금 유입)">{formatPrice((selected.totalSpent || 0))}</span>
                   </div>
+                  {selectedValue && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-500">실현 매출</span>
+                        <span className="text-sm font-medium text-gray-900 tabular-nums" data-testid="realized-revenue" title="단건 시술·제품·기타 결제 + 회차권은 사용한 회차만큼(기간제는 전액)">{formatPrice(selectedValue.realizedRevenue)}</span>
+                      </div>
+                      {selectedValue.avgTicket !== null && (
+                        <div className="flex justify-between">
+                          <span className="text-xs text-gray-500">객단가</span>
+                          <span className="text-sm font-medium text-gray-900 tabular-nums" title="실현 매출 ÷ 방문 횟수">{formatPrice(selectedValue.avgTicket)}</span>
+                        </div>
+                      )}
+                      {selectedValue.annualForecast !== null && (
+                        <div className="flex justify-between">
+                          <span className="text-xs text-gray-500">연간 기대 매출 <span className="text-gray-400">(예측)</span></span>
+                          <span className="text-sm font-medium text-gray-700 tabular-nums" title="객단가 × (365 ÷ 방문 주기) — 지금 리듬이 1년 이어질 때의 추정값, 확정 아님">{formatPrice(selectedValue.annualForecast)}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                   {(statsOf(selected).lastVisitDate || selected.lastVisitDate) && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">마지막 방문</span>
@@ -2296,6 +2318,7 @@ export default function Customers() {
                 <div className="text-center">
                   <p className="text-xs text-gray-400">누적 결제</p>
                   <p className="text-lg font-bold text-gray-900" data-testid="customer-total-spent">{formatPrice(selected.totalSpent)}</p>
+                  {selectedValue && selectedValue.realizedRevenue !== (selected.totalSpent || 0) && <p className="text-xs text-gray-500" title="회차권은 사용한 회차만큼만">실현 {formatPrice(selectedValue.realizedRevenue)}</p>}
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">마지막 방문</p>

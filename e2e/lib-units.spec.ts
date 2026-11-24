@@ -20,6 +20,7 @@ import { josa } from '../src/lib/josa';
 import { personalCycleDays, resolveVisitCycle } from '../src/lib/visitCycleRule';
 import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
 import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
+import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -376,4 +377,27 @@ test('이탈 위험 — 개인 주기 대비 비율, 미래 예약 완화, 기�
   expect(churnRisk({ daysSinceLastVisit: 10, cycleDays: 0, hasUpcomingReservation: false })).toBeNull();
   expect(atRiskRevenue90(365_000)).toBe(90_000);
   expect(atRiskRevenue90(-5)).toBe(0);
+});
+
+test('고객 가치 — 현금 유입 vs 실현 매출(회차권은 사용 비율), 객단가, 연간 기대(예측) (137, ANALYTICS-DEFINITIONS)', () => {
+  expect(realizedProgramRevenue({ pricePaid: 300_000, totalSessions: 10, usedSessions: 3 })).toBe(90_000);
+  expect(realizedProgramRevenue({ pricePaid: 300_000, totalSessions: 10, usedSessions: 12 })).toBe(300_000); // 초과 차감은 전액까지만
+  expect(realizedProgramRevenue({ pricePaid: 500_000, totalSessions: null, usedSessions: 4 })).toBe(500_000); // 기간제는 판매 시 전액
+  const v = computeCustomerValue({
+    payments: [
+      { type: 'program', status: 'completed', amount: 300_000 },   // 회차권 판매 — 현금 유입에만
+      { type: 'single_treatment', status: 'completed', amount: 50_000 },
+      { type: 'product', status: 'completed', amount: 30_000 },
+      { type: 'other', status: 'refunded', amount: 20_000 },       // 환불 제외
+      { type: 'single_treatment', status: 'pending', amount: 10_000 }, // 대기 제외
+    ],
+    programs: [{ pricePaid: 300_000, totalSessions: 10, usedSessions: 3 }],
+    visits: 4, cycleDays: 28,
+  });
+  expect(v.cashCollected).toBe(380_000);
+  expect(v.realizedRevenue).toBe(170_000);     // 50,000 + 30,000 + 90,000 — 회차권 판매액 300,000 을 또 세지 않는다
+  expect(v.avgTicket).toBe(42_500);            // 170,000 / 4
+  expect(v.annualForecast).toBe(554_018);      // 42,500 × 365/28
+  expect(computeCustomerValue({ payments: [], programs: [], visits: 0, cycleDays: 28 })).toEqual({ cashCollected: 0, realizedRevenue: 0, avgTicket: null, annualForecast: null }); // 방문 0 → 없음
+  expect(computeCustomerValue({ payments: [{ type: 'other', status: 'completed', amount: 1000 }], programs: [], visits: 1, cycleDays: null }).annualForecast).toBeNull(); // 주기 없음 → 예측 없음
 });

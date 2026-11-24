@@ -6,12 +6,12 @@ import { formatDate } from './format';
 // 섹션을 오가지 않고 한눈에 보기 위한 읽기 전용 뷰. 저장소는 건드리지 않는다.
 // ═══════════════════════════════════════════════════════════════
 
-import { ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
+import { ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore, ProductSaleStore } from './store';
 import { ConsultationStore } from './consultationStore';
 import { formatPrice } from './format';
 import type { Reservation } from '../types';
 
-export type TimelineKind = 'reservation' | 'treatment' | 'consult' | 'program' | 'payment';
+export type TimelineKind = 'reservation' | 'treatment' | 'consult' | 'program' | 'payment' | 'product' | 'programNote';
 
 export interface TimelineItem {
   id: string;
@@ -35,7 +35,7 @@ const RESERVATION_LABEL: Record<Reservation['status'], string> = {
 };
 
 export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
-  reservation: '예약', treatment: '시술', consult: '상담', program: '프로그램', payment: '결제',
+  reservation: '예약', treatment: '시술', consult: '상담', program: '프로그램', payment: '결제', product: '제품 판매', programNote: '회차권 변경',
 };
 
 function dateOf(iso: string): string {
@@ -86,6 +86,25 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
         cp.pricePaid ? formatPrice(cp.pricePaid) : '',
       ].filter(Boolean).join(' · '),
     });
+  }
+
+  // 제품 판매 — 금액은 연결된 결제 행이 들고 있으므로 여기엔 수량·단가만(이중 표시 방지) (137, GAP C-4)
+  for (const ps of ProductSaleStore.getAll()) {
+    if (ps.customerId !== customerId) continue;
+    items.push({
+      id: `psl:${ps.id}`, kind: 'product', date: dateOf(ps.saleDate),
+      title: `${ps.productName} × ${ps.quantity}${ps.staffName ? ` · ${ps.staffName}` : ''}`,
+      detail: [ps.unitPrice ? `단가 ${formatPrice(ps.unitPrice)}` : '', ps.notes || ''].filter(Boolean).join(' · ') || undefined,
+      href: '/products?tab=sales',
+    });
+  }
+  // 회차권 변경 기록 — 관리 창이 notes 에 "[YYYY-MM-DD] 내용" 으로 남긴 줄(만료일·총 회차 보정, 완료/되돌림) (137)
+  for (const cp of CustomerProgramStore.getByCustomer(customerId)) {
+    for (const line of (cp.notes || '').split('\n')) {
+      const m = /^\[(\d{4}-\d{2}-\d{2})\]\s*(.+)$/.exec(line.trim());
+      if (!m) continue;
+      items.push({ id: `pnote:${cp.id}:${m[1]}:${m[2].slice(0, 20)}`, kind: 'programNote', date: m[1], title: `${cp.programName} 변경`, detail: m[2], tone: 'muted' });
+    }
   }
 
   for (const p of PaymentStore.getAll()) {
