@@ -38,7 +38,7 @@
 - 테스트: branch-nas E2E 의 online 단계에서 PUT 0건 단언 추가.
 
 ### S-7 컬렉션 화이트리스트 확장 (B-2, PHASE 2 선행)
-`staff_schedules`(근무표·휴게·휴가), `resources`(베드/룸), `stock_ledger`, `program_ledger`, `segments`, `campaigns`, `campaign_runs`, `consents`(마케팅 수신 동의·거부), `settings_audit`. 전부 `crm_records` 구조 그대로(스키마 변경 없음) — 추가는 `requireCollection` 배열 1줄.
+~~`staff_schedules`~~(141 에서 설정 행 `preferences.staffSchedules` 로 대체 — 불필요), `resources`(베드/룸), `stock_ledger`, `program_ledger`, `segments`, `campaigns`, `campaign_runs`, `consents`(마케팅 수신 동의·거부), `settings_audit`. 전부 `crm_records` 구조 그대로(스키마 변경 없음) — 추가는 `requireCollection` 배열 1줄.
 
 ### S-8 서버 측 PII 마스킹·접근 로그 (Q-2)
 - `GET /api/data/customers` 에서 세션 role 이 `staff` 면 phone/email/address/birth_date 를 마스킹해 반환(클라이언트 `pii.ts` 와 같은 규칙). 원문이 필요한 관리자 동작은 admin 세션만. 접근 로그 `data_access_log(user, collection, count, at)` 180일.

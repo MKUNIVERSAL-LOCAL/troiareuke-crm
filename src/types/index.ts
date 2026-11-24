@@ -159,6 +159,24 @@ export interface ShopSettings {
   preferences?: ShopPreferences;
 }
 
+/** 직원 근무표 — 요일 키는 businessHours 와 같은 '월'~'일' (141, GAP R-4) */
+export type DayKey = '월' | '화' | '수' | '목' | '금' | '토' | '일';
+export interface DayShift {
+  off: boolean;
+  start: string;       // 'HH:mm'
+  end: string;         // 'HH:mm' — start 이하면 자정 넘김
+  breakStart?: string; // 둘 다 있어야 휴게로 인정
+  breakEnd?: string;
+}
+export interface StaffSchedule {
+  staffId: string;
+  useShopHours: boolean;             // true 면 weekly 무시, 매장 영업시간 사용(버퍼는 적용)
+  weekly: Record<DayKey, DayShift>;
+  bufferBeforeMin: number;           // 시술 전 준비(분)
+  bufferAfterMin: number;            // 시술 뒤 정리(분)
+  updatedAt: string;
+}
+
 export interface ShopPreferences {
   /** 매장이 직접 추가한 결제수단 (기본 4종 제외) */
   customPaymentMethods?: string[];
@@ -174,6 +192,8 @@ export interface ShopPreferences {
   staffAliases?: Record<string, string[]>;
   /** 병합으로 사라진 고객 id → 남은 고객 id — 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 (11차 #M10) */
   mergedCustomerIds?: Record<string, string>;
+  /** 직원별 근무표·휴게·준비/정리 버퍼 staffId → 근무표 — 새 컬렉션(서버 화이트리스트 승인 B-2) 대신 설정 행으로 동기화 (141) */
+  staffSchedules?: Record<string, StaffSchedule>;
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
   retentionPolicy?: { enabled: boolean; years: number };
 }

@@ -7,18 +7,23 @@ import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import StaffPerformanceCard from '../../components/StaffPerformanceCard';
-import { StaffStore, ReservationStore, TreatmentLogStore } from '../../lib/store';
+import { StaffStore, ReservationStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
+import { DAY_KEYS, BUFFER_OPTIONS, defaultSchedule, dayWindow, describeWindow } from '../../lib/staffScheduleRule';
+import { getStaffSchedule, saveStaffSchedule, removeStaffSchedule } from '../../lib/staffScheduleStore';
 import { ConsultationStore } from '../../lib/consultationStore';
 import { recordStaffAlias } from '../../lib/staffAliases';
 import { resyncGcalEvents } from '../../lib/gcalEventMap';
 import { askConfirm } from '../../lib/confirmDialog';
 import { todayISO, thisYearMonthISO, formatPhoneInput, formatPrice } from '../../lib/format';
 import { josa } from '../../lib/josa';
-import type { Staff } from '../../types';
+import type { Staff, StaffSchedule, DayShift, DayKey } from '../../types';
 
 const SPECIALTY_OPTIONS = ['피부관리', '바디관리', '왁싱', '각질관리'];
 // 과거 저장 데이터의 '마사지' 전문분야는 '바디관리'로 표시 (2026-07-30 명칭 변경)
 const normalizeSpecialty = (s: string) => (s === '마사지' ? '바디관리' : s);
+// 근무표 시간 선택지 — 30분 단위 하루 (141)
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
+const SMALL_SELECT = 'w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:bg-gray-50 disabled:text-gray-400';
 const COLOR_OPTIONS = ['#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#6366F1', '#14B8A6'];
 // 색상 버튼의 읽는 이름 — 화면 낭독기가 hex를 글자 단위로 읽지 않게 (리뷰 2026-11-19)
 const COLOR_NAMES: Record<string, string> = { '#8B5CF6': '보라', '#EC4899': '분홍', '#F59E0B': '주황', '#10B981': '초록', '#3B82F6': '파랑', '#EF4444': '빨강', '#6366F1': '남보라', '#14B8A6': '청록' };
@@ -443,6 +448,13 @@ function StaffDetailModal({
   const [hireDate, setHireDate] = useState(staff.hireDate);
   const [specialty, setSpecialty] = useState<string[]>(staff.specialty.map(normalizeSpecialty));
   const [color, setColor] = useState(staff.color);
+  // 근무표·휴게·준비/정리 버퍼 — 설정 행(preferences.staffSchedules)에 저장돼 NAS 동기 (141, GAP R-4)
+  const [schedule, setSchedule] = useState<StaffSchedule>(() => getStaffSchedule(staff.id) ?? defaultSchedule(staff.id));
+  const setShift = (d: DayKey, patch: Partial<DayShift>) => setSchedule(sc => ({ ...sc, weekly: { ...sc.weekly, [d]: { ...sc.weekly[d], ...patch } } }));
+  const shopHours = SettingsStore.get().businessHours || {};
+  const scheduleSummary = schedule.useShopHours
+    ? [{ day: '', text: '매장 영업시간과 같음' }]
+    : DAY_KEYS.map(d => ({ day: d, text: describeWindow(dayWindow(schedule, d, shopHours[d])) }));
 
   const yearMonth = getYearMonth();
   // 통계는 취소/노쇼 제외
@@ -497,6 +509,7 @@ function StaffDetailModal({
       color,
       hireDate,
     });
+    saveStaffSchedule(schedule);
     onUpdate();
   };
 
@@ -525,6 +538,7 @@ function StaffDetailModal({
       : '';
     if (!(await askConfirm({ title: '직원 삭제', message: `'${staff.name}' 직원을 삭제할까요?${detail}\n복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
     StaffStore.delete(staff.id);
+    removeStaffSchedule(staff.id); // 설정 행에 고아 근무표를 남기지 않게 (141)
     onDelete();
   };
 
@@ -640,6 +654,53 @@ function StaffDetailModal({
             </div>
           </div>
 
+          <div className="space-y-2" data-testid="staff-schedule-editor">
+            <p className="text-xs font-medium text-gray-600">근무표</p>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={schedule.useShopHours} onChange={e => setSchedule(sc => ({ ...sc, useShopHours: e.target.checked }))} className="rounded" />
+              매장 영업시간과 같음
+            </label>
+            {!schedule.useShopHours && (
+              <div className="space-y-1.5">
+                {DAY_KEYS.map(d => {
+                  const sh = schedule.weekly[d];
+                  return (
+                    <div key={d} className="grid grid-cols-[1.5rem_auto_1fr_1fr] sm:grid-cols-[1.5rem_auto_1fr_1fr_1fr_1fr] items-center gap-1.5 text-xs">
+                      <span className="font-medium text-gray-700">{d}</span>
+                      <label className="flex items-center gap-1 text-gray-600"><input type="checkbox" aria-label={`${d}요일 휴무`} checked={sh.off} onChange={e => setShift(d, { off: e.target.checked })} className="rounded" />휴무</label>
+                      <select aria-label={`${d}요일 시작`} value={sh.start} disabled={sh.off} onChange={e => setShift(d, { start: e.target.value })} className={SMALL_SELECT}>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                      <select aria-label={`${d}요일 끝`} value={sh.end} disabled={sh.off} onChange={e => setShift(d, { end: e.target.value })} className={SMALL_SELECT}>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                      <select aria-label={`${d}요일 휴게 시작`} value={sh.breakStart ?? ''} disabled={sh.off} onChange={e => setShift(d, { breakStart: e.target.value || undefined })} className={`${SMALL_SELECT} col-start-3 sm:col-start-auto`}><option value="">휴게 없음</option>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                      <select aria-label={`${d}요일 휴게 끝`} value={sh.breakEnd ?? ''} disabled={sh.off || !sh.breakStart} onChange={e => setShift(d, { breakEnd: e.target.value || undefined })} className={SMALL_SELECT}><option value="">휴게 끝</option>{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setSchedule(sc => { const m = sc.weekly['월']; const w = { ...sc.weekly }; for (const d of DAY_KEYS) w[d] = { ...m }; return { ...sc, weekly: w }; })}
+                  className="text-xs font-medium text-[#1a3a8f] hover:underline"
+                >
+                  월요일과 같게 모두 채우기
+                </button>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 전 준비(분)</label>
+                <select aria-label="시술 전 준비" value={schedule.bufferBeforeMin} onChange={e => setSchedule(sc => ({ ...sc, bufferBeforeMin: Number(e.target.value) }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300">
+                  {BUFFER_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 뒤 정리(분)</label>
+                <select aria-label="시술 뒤 정리" value={schedule.bufferAfterMin} onChange={e => setSchedule(sc => ({ ...sc, bufferAfterMin: Number(e.target.value) }))} className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300">
+                  {BUFFER_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+            </div>
+            <p className="text-2xs text-gray-500">근무 시간 밖·휴게·준비/정리와 겹치는 예약은 저장 전에 확인을 묻습니다(막지 않음). 겹침 안내의 빈 시간 제안과 예약표 일간 "직원별 열"의 음영에도 반영됩니다.</p>
+          </div>
+
           <div className="flex gap-3 pt-2">
             <button onClick={() => setEditing(false)} className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
             <button onClick={handleUpdate} className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl transition-colors">저장</button>
@@ -686,6 +747,16 @@ function StaffDetailModal({
               <span key={s} className="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-sm font-medium">{normalizeSpecialty(s)}</span>
             ))}
           </div>
+        </div>
+
+        <div className="space-y-1" data-testid="staff-schedule-summary">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">근무표</p>
+          {scheduleSummary.map(line => (
+            <p key={line.day || 'shop'} className="text-sm text-gray-700">{line.day && <span className="inline-block w-5 text-gray-500">{line.day}</span>}{line.text}</p>
+          ))}
+          {(schedule.bufferBeforeMin > 0 || schedule.bufferAfterMin > 0) && (
+            <p className="text-xs text-gray-500">시술 전 준비 {schedule.bufferBeforeMin}분 · 뒤 정리 {schedule.bufferAfterMin}분</p>
+          )}
         </div>
 
         <div className="space-y-2 text-sm">

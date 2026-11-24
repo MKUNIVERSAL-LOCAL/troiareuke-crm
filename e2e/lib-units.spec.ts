@@ -25,6 +25,7 @@ import { monthlyKpis } from '../src/lib/kpiRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
 import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
+import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule } from '../src/lib/staffScheduleRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -476,4 +477,40 @@ test('가용 시작 시각 — 영업시간·기존 예약·간격·소요·버�
   expect(availableStarts({ ...base, durationMin: 0 })).toEqual([]);
   expect(availableStarts({ ...base, closeMin: 600 })).toEqual([]);
   expect(nextAvailable({ openMin: 540, closeMin: 1440, durationMin: 90, busy: [] }, 3)).toEqual(['09:00', '09:30', '10:00']);
+});
+
+test('직원 근무표 — 매장 영업시간 대체·휴무·자정 넘김·근무 밖 휴게 무시·경고·음영·버퍼 결합 (141)', () => {
+  const shop = { open: '10:00', close: '20:00', isOff: false };
+  const w0 = dayWindow(null, '월', shop);
+  expect(w0.work).toEqual({ startMin: 600, endMin: 1200 });
+  expect(w0.fromShopHours).toBe(true);
+  expect(checkStaffWindow(w0, '김', '월', 540, 60)).toEqual([]);                 // 매장 창은 businessHours 가 따로 경고
+  expect(dayWindow(null, '월', { ...shop, isOff: true }).work).toBeNull();
+  expect(dayWindow(null, '월', { ...shop, close: '00:00' }).work).toEqual({ startMin: 600, endMin: 1440 });
+  const s = defaultSchedule('s1');
+  s.useShopHours = false; s.bufferAfterMin = 15;
+  s.weekly['월'] = { off: false, start: '11:00', end: '18:00', breakStart: '13:00', breakEnd: '14:00' };
+  s.weekly['화'] = { off: true, start: '11:00', end: '18:00' };
+  s.weekly['수'] = { off: false, start: '20:00', end: '02:00' };
+  s.weekly['목'] = { off: false, start: '11:00', end: '18:00', breakStart: '19:00', breakEnd: '20:00' }; // 근무 밖 휴게는 무시
+  const mon = dayWindow(s, '월', shop);
+  expect(mon.work).toEqual({ startMin: 660, endMin: 1080 });
+  expect(mon.breaks).toEqual([{ startMin: 780, endMin: 840 }]);
+  expect(mon.bufferAfterMin).toBe(15);
+  expect(describeWindow(mon)).toBe('11:00~18:00 · 휴게 13:00~14:00');
+  expect(dayWindow(s, '화', shop).work).toBeNull();
+  expect(describeWindow(dayWindow(s, '화', shop))).toBe('휴무');
+  expect(dayWindow(s, '수', shop).work).toEqual({ startMin: 1200, endMin: 1560 });
+  expect(dayWindow(s, '목', shop).breaks).toEqual([]);
+  expect(checkStaffWindow(mon, '김', '월', 600, 60).map(w => w.kind)).toEqual(['outside']);
+  expect(checkStaffWindow(mon, '김', '월', 750, 60).map(w => w.kind)).toEqual(['break']);    // 12:30~13:30
+  expect(checkStaffWindow(mon, '김', '월', 1050, 60).map(w => w.kind)).toEqual(['outside']); // 17:30~18:30
+  expect(checkStaffWindow(mon, '김', '월', 840, 60)).toEqual([]);                             // 14:00 — 휴게와 맞닿음은 겹침 아님
+  expect(checkStaffWindow(dayWindow(s, '화', shop), '김', '화', 720, 60).map(w => w.kind)).toEqual(['off']);
+  expect(offRanges(mon, { startMin: 540, endMin: 1260 })).toEqual([{ startMin: 540, endMin: 660 }, { startMin: 1080, endMin: 1260 }]);
+  expect(offRanges(dayWindow(s, '화', shop), { startMin: 540, endMin: 1260 })).toEqual([{ startMin: 540, endMin: 1260 }]);
+  // 가용 계산과 결합: 휴게 busy + 정리 15 → 12:00·12:30·13:30 은 휴게에 걸려 빠진다
+  expect(nextAvailable({ openMin: mon.work!.startMin, closeMin: mon.work!.endMin, durationMin: 60, busy: mon.breaks, bufferAfterMin: mon.bufferAfterMin }, 3)).toEqual(['11:00', '11:30', '14:00']);
+  // 기존 예약 15:00~16:00 에 정리 15 를 붙이면 16:00 은 막히고 16:30 부터
+  expect(nextAvailable({ openMin: 660, closeMin: 1080, durationMin: 60, busy: [...mon.breaks, { startMin: 900, endMin: 975 }], bufferAfterMin: 15 }, 3)).toEqual(['11:00', '11:30', '16:30']);
 });

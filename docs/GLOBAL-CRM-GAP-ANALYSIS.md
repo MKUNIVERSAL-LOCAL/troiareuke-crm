@@ -30,9 +30,9 @@
 | # | 항목 | 상태 | 위치 | 문제점 | 참고 | 개선 방법 | 영향 | 가치 | 작업량 | 승인 | 완료 기준 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | R-1 | 주/일/목록, 모바일 오늘·주·월 | ✅ | `pages/Reservations` | PC 월간 그리드 없음 | — | 월간 그리드(선택) | 낮음 | 중 | 1 | — | — |
-| R-2 | 직원별 열(column) 뷰 | ✗ | 색상 구분만 | 다인 매장 운영 핵심 | OpenSalon·Fresha | 직원 열 레이아웃 옵션(기존 레인 분할 재사용) | 중 | 상 | 2 | — | PC·모바일 E2E |
+| R-2 | 직원별 열(column) 뷰 | ✅ 141 | 일간 "직원별 열"(근무 밖·휴게 음영) | 다인 매장 운영 핵심 | OpenSalon·Fresha | 직원 열 레이아웃 옵션(기존 레인 분할 재사용) | 중 | 상 | 2 | — | PC·모바일 E2E |
 | R-3 | 겹침 검사 | 🔧 | `Reservations:1025` | 경고 후 강행 가능, 클라이언트만 | OpenSalon scheduling.ts(A), Pronto 032(B) | `schedulingRule.ts`(A 이식) + 서버 측 겹침 409(B) | 중 | 상 | 1+서버 1 | B-2 | lib-units + NAS 흉내 409 E2E |
-| R-4 | 근무표·휴게·휴무·버퍼 | ✗ | `businessHours`+`holidays` 만 | 직원별 근무·점심·시술 전후 정리 시간 없음 | Easy!Appointments(B), Pronto availability(A) | `availabilityRule.ts` + 직원 근무표 컬렉션(비코어 신규 컬렉션 → 서버 `requireCollection` 화이트리스트 추가 필요) | 중 | 상 | 2 | B-2(컬렉션 추가) | 가용 슬롯 스펙 |
+| R-4 | 근무표·휴게·휴무·버퍼 | ✅ 141 | `staffScheduleRule`+설정 행 동기(컬렉션 승인 불필요), 예약 폼 경고·빈 시간·선택지 | 직원별 근무·점심·시술 전후 정리 시간 없음 | Easy!Appointments(B), Pronto availability(A) | `availabilityRule.ts` + 직원 근무표 컬렉션(비코어 신규 컬렉션 → 서버 `requireCollection` 화이트리스트 추가 필요) | 중 | 상 | 2 | B-2(컬렉션 추가) | 가용 슬롯 스펙 |
 | R-5 | 베드/룸 자원 배정 | ✗ | — | 처리량 상한이 모델에 없음 | Boulevard | 자원 컬렉션 + 예약에 resourceId + 충돌 검사 | 중 | 상 | 2 | B-2 | E2E |
 | R-6 | 고객 온라인 예약 페이지 | ✗ | 공개 라우트 없음 | 가용 슬롯 API·공개 페이지·확인·알림 | Fresha, EA CVE 교훈 | 서버 공개 라우트 `/book/:branch`(R-4 규칙 재사용) + 승인/자동 확정 정책 + 중복 방지 | 중 | 상 | 3 | B-2 | 보안 체크리스트 통과 |
 | R-7 | 리마인더 자동 발송 | ◐ | 내일 예약은 복사/공유, 재방문만 서버 자동 | 예약 24h/당일 자동 없음 | — | 서버 스케줄러에 예약 리마인더 추가(SOLAPI 뒤) | 낮음 | 상 | 1 | C-2 | NAS 흉내 |

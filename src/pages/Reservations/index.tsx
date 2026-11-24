@@ -21,8 +21,10 @@ import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import { remainingFor, healProgramSessionsWhenReady } from '../../lib/programSessions';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
-import { findConflicts, toInterval, toMinutes as toMinOf } from '../../lib/schedulingRule';
+import { findConflicts, toInterval, overlaps, toMinutes as toMinOf, type Interval } from '../../lib/schedulingRule';
 import { nextAvailable } from '../../lib/availabilityRule';
+import { dayWindow, checkStaffWindow, offRanges, describeWindow, dayKeyOf } from '../../lib/staffScheduleRule';
+import { getStaffSchedule } from '../../lib/staffScheduleStore';
 import type { Reservation, Staff } from '../../types';
 import {
   isGoogleCalendarConnected,
@@ -763,6 +765,106 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
   );
 }
 
+/** 일간 — 직원별 열 (141, GAP R-2·R-4): 열마다 그 직원의 예약만, 근무표의 근무 밖(회색)·휴게(노랑)는 음영. 재직 직원 + 그날 예약이 있는 퇴사 직원 */
+function StaffColumnsDay({ date, dayReservations, dayGoogleEvents, staffList, gridRange, timeSlots, onSelect }: {
+  date: Date; dayReservations: Reservation[]; dayGoogleEvents: GoogleEventLike[]; staffList: Staff[];
+  gridRange: { startMin: number; endMin: number }; timeSlots: string[]; onSelect: (r: Reservation) => void;
+}) {
+  const ROW_H = 60;
+  const dayKey = dayKeyOf(date);
+  const shopHours = SettingsStore.get().businessHours?.[dayKey];
+  const columns = staffList
+    .filter(s => s.isActive || dayReservations.some(r => r.staffId === s.id))
+    .map(s => {
+      const win = dayWindow(getStaffSchedule(s.id), dayKey, shopHours);
+      return {
+        staff: s,
+        label: describeWindow(win),
+        shade: [
+          ...offRanges(win, gridRange).map(iv => ({ ...iv, kind: 'off' as const })),
+          ...win.breaks.map(iv => ({ startMin: Math.max(iv.startMin, gridRange.startMin), endMin: Math.min(iv.endMin, gridRange.endMin), kind: 'break' as const })).filter(iv => iv.endMin > iv.startMin),
+        ],
+        events: layoutDayEvents<Reservation>(dayReservations.filter(r => r.staffId === s.id).map(r => ({ item: r, startMin: timeToMin(r.startTime), endMin: timeToMin(r.endTime) })), gridRange),
+      };
+    });
+  const googleLayout = layoutDayEvents<GoogleEventLike>(dayGoogleEvents.map(ge => ({ item: ge, startMin: timeToMin(ge.startTime), endMin: timeToMin(ge.endTime) })), gridRange);
+  const hasGoogle = dayGoogleEvents.length > 0;
+  const gridStyle: CSSProperties = { gridTemplateColumns: `5rem repeat(${Math.max(columns.length + (hasGoogle ? 1 : 0), 1)}, minmax(9rem, 1fr))` };
+  const shadeIn = (shade: { startMin: number; endMin: number; kind: 'off' | 'break' }[], slotStartMin: number) => shade
+    .filter(iv => iv.startMin < slotStartMin + 60 && iv.endMin > slotStartMin)
+    .map(iv => {
+      const top = Math.max(iv.startMin, slotStartMin), bottom = Math.min(iv.endMin, slotStartMin + 60);
+      return <div key={`${iv.kind}-${top}`} aria-hidden className={clsx('absolute inset-x-0 pointer-events-none', iv.kind === 'off' ? 'bg-gray-100' : 'bg-amber-50')} style={{ top: `${((top - slotStartMin) / 60) * ROW_H}px`, height: `${((bottom - top) / 60) * ROW_H}px` }} />;
+    });
+  return (
+    <div className="overflow-auto max-h-[600px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="직원별 시간표" tabIndex={0} data-testid="staff-columns">
+      <div className="grid border-b border-gray-100 min-w-max sticky top-0 bg-white z-20" style={gridStyle}>
+        <div className="py-2 px-3 text-xs text-gray-400 border-r border-gray-100">시간</div>
+        {columns.map(c => (
+          <div key={c.staff.id} data-testid="staff-column" className="py-2 px-3 border-r border-gray-100 last:border-r-0">
+            <p className="text-sm font-bold text-gray-800 flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.staff.color }} />{c.staff.name}</p>
+            <p className="text-2xs text-gray-500">{c.label}</p>
+          </div>
+        ))}
+        {hasGoogle && <div className="py-2 px-3"><p className="text-sm font-bold text-blue-700">Google</p><p className="text-2xs text-gray-500">{dayGoogleEvents.length}건</p></div>}
+      </div>
+      {columns.length === 0 && <p className="p-6 text-sm text-gray-500 text-center">재직 중인 직원이 없습니다. 직원 관리에서 직원을 추가하세요.</p>}
+      {timeSlots.map(time => {
+        const slotStartMin = timeToMin(time);
+        return (
+          <div key={time} className="grid border-b border-gray-50 h-[60px] min-w-max" style={gridStyle}>
+            <div className="py-3 px-4 text-xs text-gray-400 border-r border-gray-100 font-medium sticky left-0 bg-white">{time}</div>
+            {columns.map(c => (
+              <div key={c.staff.id} className="relative border-r border-gray-100 last:border-r-0">
+                {shadeIn(c.shade, slotStartMin)}
+                {c.events.filter(ev => ev.startMin >= slotStartMin && ev.startMin < slotStartMin + 60).map(ev => {
+                  const r = ev.item;
+                  const tall = ev.endMin - ev.startMin >= 90;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      data-testid="reservation-block"
+                      data-start={r.startTime}
+                      onClick={() => onSelect(r)}
+                      className="absolute z-10 text-left rounded-xl px-2.5 py-1.5 text-sm font-medium transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
+                      style={{ backgroundColor: c.staff.color, color: readableTextOn(c.staff.color), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
+                      title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
+                    >
+                      <p className="truncate"><span className="font-bold">{r.customerName}</span><span className="text-xs ml-2 font-normal">{r.services.map(sv => sv.serviceName).join(', ')}</span></p>
+                      {tall && <p className="text-xs mt-0.5 font-normal">{r.startTime}~{r.endTime}</p>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {hasGoogle && (
+              <div className="relative">
+                {googleLayout.filter(ev => ev.startMin >= slotStartMin && ev.startMin < slotStartMin + 60).map(ev => {
+                  const ge = ev.item;
+                  return (
+                    <a
+                      key={`g-${ge.id}`}
+                      href={ge.htmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={clsx('absolute z-10 text-left rounded-xl px-2.5 py-1.5 text-sm font-medium text-white bg-blue-600 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block', !ge.htmlLink && 'pointer-events-none')}
+                      style={eventBlockStyle(ev, slotStartMin, ROW_H)}
+                      title={`${ge.summary} · ${ge.startTime}~${ge.endTime}`}
+                    >
+                      <p className="truncate"><span className="font-bold">{ge.summary}</span><span className="text-xs ml-2 font-normal">{ge.startTime}~{ge.endTime}</span></p>
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }: {
   date: Date;
   reservations: Reservation[];
@@ -776,6 +878,9 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
   const ROW_H = 60; // h-[60px] — 슬롯 1시간의 픽셀 높이
   const gridRange = useMemo(() => gridRangeFromSettings(), []);
   const timeSlots = hourSlots(gridRange);
+  // 직원별 열 — 이 PC 의 보기 선택(기기 편의, 지점 데이터 아님) (141, GAP R-2)
+  const [byStaff, setByStaff] = useState(() => { try { return localStorage.getItem('crm_ui_day_by_staff') === '1'; } catch { return false; } });
+  const toggleByStaff = () => setByStaff(v => { const next = !v; try { localStorage.setItem('crm_ui_day_by_staff', next ? '1' : '0'); } catch { /* 저장 못 해도 이번 화면은 바뀐다 */ } return next; });
 
   // 시간 비례 배치 (겹침 레인 포함) — 주간 뷰와 동일한 방식
   const dayLayout = layoutDayEvents<
@@ -792,17 +897,28 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
           {dayReservations.length}건의 예약
           {dayGoogleEvents.length > 0 && <span className="text-primary-600 ml-2">+ Google {dayGoogleEvents.length}건</span>}
         </p>
-        <div className="flex items-center gap-3">
-          {staffList.map(s => (
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          {!byStaff && staffList.map(s => (
             <div key={s.id} className="flex items-center gap-1.5 text-xs text-gray-600">
               <span className="w-3 h-3 rounded-full" style={{ backgroundColor: s.color }}></span>
               {s.name}
             </div>
           ))}
+          <button
+            type="button"
+            aria-pressed={byStaff}
+            onClick={toggleByStaff}
+            className={clsx('px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors', byStaff ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50')}
+            title="직원마다 한 열씩 — 근무표의 근무 밖·휴게는 음영"
+          >
+            직원별 열
+          </button>
         </div>
       </div>
-      {/* 예약 블록은 관리시간에 비례한 높이로 표시 (1시간=1칸, 2시간=2칸) */}
-      <div className="overflow-y-auto max-h-[600px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="시간표" tabIndex={0}>
+      {byStaff ? (
+        <StaffColumnsDay date={date} dayReservations={dayReservations} dayGoogleEvents={dayGoogleEvents} staffList={staffList} gridRange={gridRange} timeSlots={timeSlots} onSelect={onSelect} />
+      ) : (
+      <div className="overflow-y-auto max-h-[600px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-label="시간표" tabIndex={0}>{/* 예약 블록은 관리시간에 비례한 높이로 표시 (1시간=1칸, 2시간=2칸) */}
         {timeSlots.map(time => {
           const slotStartMin = timeToMin(time);
           const slotEvents = dayLayout.filter(ev =>
@@ -863,6 +979,7 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
           );
         })}
       </div>
+      )}
     </div>
   );
 }
@@ -966,15 +1083,21 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   const [date, setDate] = useState(editing?.date ?? initialDate ?? todayKey);
   const startOptions = useMemo(() => halfHourSlots(gridRangeFromSettings()), []); // 설정 > 영업시간 범위, 30분 단위 (4차 UX 점검 2026-11-19)
   const [startTime, setStartTime] = useState(editing?.startTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot(startOptions) : (startOptions.includes('10:00') ? '10:00' : startOptions[0])));
-  // 선택한 담당자·날짜에 이미 예약이 걸린 시작 칸 — 고르기 전에 보이게 (140, GAP R-3)
-  const busyStarts = useMemo(() => {
-    const set = new Set<string>();
-    if (!staffId) return set;
+  // 선택한 담당자·날짜의 시작 칸 표시 — 예약 있음 > 휴게 > 근무 외(근무표가 있을 때만). 고르기 전에 보이게 (140·141, GAP R-3·R-4)
+  const startMarks = useMemo(() => {
+    const marks = new Map<string, string>();
+    if (!staffId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return marks;
     const items = ReservationStore.getAll().filter(r => r.id !== editing?.id && r.staffId === staffId && r.date === date && r.status !== 'cancelled' && r.status !== 'noshow');
-    if (items.length === 0) return set;
     const ivs = items.map(r => toInterval(r.startTime, r.endTime)).filter((v): v is NonNullable<typeof v> => v !== null);
-    for (const t of startOptions) { const m = toMinOf(t); if (m !== null && ivs.some(iv => m >= iv.startMin && m < iv.endMin)) set.add(t); }
-    return set;
+    const dayLabel = dayKeyOf(new Date(`${date}T00:00:00`));
+    const win = dayWindow(getStaffSchedule(staffId), dayLabel, SettingsStore.get().businessHours?.[dayLabel]);
+    for (const t of startOptions) {
+      const m = toMinOf(t); if (m === null) continue;
+      if (ivs.some(iv => m >= iv.startMin && m < iv.endMin)) marks.set(t, '예약 있음');
+      else if (win.breaks.some(b => m >= b.startMin && m < b.endMin)) marks.set(t, '휴게');
+      else if (!win.fromShopHours && (!win.work || m < win.work.startMin || m >= win.work.endMin)) marks.set(t, '근무 외');
+    }
+    return marks;
   }, [staffId, date, startOptions, editing?.id]);
   const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
   const [memo, setMemo] = useState(editing?.memo ?? '');
@@ -1037,19 +1160,31 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침(취소/노쇼·본인 제외). 규칙은 순수 schedulingRule(반개구간·자정 넘김·깨진 시간은 겹침) (12차 #H2, 14차 #M7, 140)
     const sameStaffDay = ReservationStore.getAll().filter(r => r.id !== editing?.id && r.staffId === staff.id && r.date === date && r.status !== 'cancelled' && r.status !== 'noshow');
     const newStart = toMinOf(startTime) ?? 0;
-    const overlap = findConflicts({ startMin: newStart, endMin: newStart + totalDuration }, sameStaffDay)[0];
-    // 겹치면 같은 담당자의 빈 시간 3개를 함께 알려 준다 — "안 된다"에서 끝나지 않게 (140, GAP R-4)
-    const freeHint = overlap ? (() => {
-      const range = gridRangeFromSettings();
-      const busy = sameStaffDay.map(r => toInterval(r.startTime, r.endTime)).filter((v): v is NonNullable<typeof v> => v !== null);
-      const free = nextAvailable({ openMin: range.startMin, closeMin: range.endMin, durationMin: totalDuration, busy, notBeforeMin: null }, 3);
+    const newEnd = newStart + totalDuration;
+    const overlap = findConflicts({ startMin: newStart, endMin: newEnd }, sameStaffDay)[0];
+    // 담당자 근무 창 — 근무표(직원 수정)가 없으면 매장 영업시간. 휴게는 busy, 준비/정리 버퍼는 양쪽 예약에 붙어 간격을 만든다 (141, GAP R-4)
+    const dayLabel = dayKeyOf(new Date(`${date}T00:00:00`));
+    const win = dayWindow(getStaffSchedule(staff.id), dayLabel, SettingsStore.get().businessHours?.[dayLabel]);
+    const pad = { b: win.bufferBeforeMin, a: win.bufferAfterMin };
+    const existing = sameStaffDay.map(r => ({ r, iv: toInterval(r.startTime, r.endTime) })).filter((x): x is { r: Reservation; iv: Interval } => x.iv !== null);
+    const bufferOverlap = !overlap && (pad.b > 0 || pad.a > 0)
+      ? existing.find(x => overlaps({ startMin: newStart - pad.b, endMin: newEnd + pad.a }, { startMin: x.iv.startMin - pad.b, endMin: x.iv.endMin + pad.a }))?.r
+      : undefined;
+    // 휴무일·지정 휴일·영업시간 밖 경고 — 예외 영업이 있으니 막지 않고 확인만. 시간이 안 바뀐 수정(메모만 등)은 다시 묻지 않는다 (2026-11-18)
+    const timeChanged = !editing || editing.date !== date || editing.startTime !== startTime || editing.endTime !== endTime || editing.staffId !== staff.id;
+    const hoursWarnings = timeChanged ? checkBusinessHours(date, startTime, totalDuration) : [];
+    const staffWarnings = timeChanged ? checkStaffWindow(win, staff.name, dayLabel, newStart, totalDuration).map(w => w.message) : [];
+    // 걸리는 게 있으면 같은 담당자의 빈 시간 3개를 함께 알려 준다 — "안 된다"에서 끝나지 않게 (140·141, GAP R-4). 휴무면 제안할 게 없다
+    const freeHint = (overlap || bufferOverlap || staffWarnings.length > 0) && win.work ? (() => {
+      const busy = [...existing.map(x => ({ startMin: x.iv.startMin - pad.b, endMin: x.iv.endMin + pad.a })), ...win.breaks];
+      const free = nextAvailable({ openMin: win.work.startMin, closeMin: win.work.endMin, durationMin: totalDuration, busy, bufferBeforeMin: pad.b, bufferAfterMin: pad.a, notBeforeMin: null }, 3);
       return free.length ? `${staff.name} 담당 빈 시간: ${free.join(', ')}` : `${staff.name} 담당은 이날 ${totalDuration}분짜리 빈 시간이 없습니다.`;
     })() : null;
-    // 휴무일·지정 휴일·영업시간 밖 경고 — 예외 영업이 있으니 막지 않고 확인만. 시간이 안 바뀐 수정(메모만 등)은 다시 묻지 않는다 (2026-11-18)
-    const timeChanged = !editing || editing.date !== date || editing.startTime !== startTime || editing.endTime !== endTime;
-    const hoursWarnings = timeChanged ? checkBusinessHours(date, startTime, totalDuration) : [];
     const warnings = [
-      ...(overlap ? [`${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.`, ...(freeHint ? [freeHint] : [])] : []),
+      ...(overlap ? [`${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.`] : []),
+      ...(bufferOverlap ? [`${staff.name} 담당자의 준비·정리 시간(앞 ${pad.b}분·뒤 ${pad.a}분)을 넣으면 ${bufferOverlap.startTime}~${bufferOverlap.endTime} 예약과 겹칩니다.`] : []),
+      ...staffWarnings,
+      ...(freeHint ? [freeHint] : []),
       ...hoursWarnings.map(w => w.message),
     ];
     if (warnings.length > 0) {
@@ -1161,7 +1296,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               {!startOptions.includes(startTime) && <option value={startTime}>{startTime}</option>}
-              {startOptions.map(t => <option key={t} value={t}>{t}{busyStarts.has(t) ? ' · 예약 있음' : ''}</option>)}
+              {startOptions.map(t => <option key={t} value={t}>{t}{startMarks.has(t) ? ` · ${startMarks.get(t)}` : ''}</option>)}
             </select>
           </div>
           <DateQuickChips value={date} onChange={setDate} className="col-span-2 sm:col-span-3 sm:order-last !-mt-2.5" />{/* 폰: 날짜·시간 줄 바로 아래, sm+: 날짜·시간·경로 한 줄 뒤(빈 칸 없이) */}
