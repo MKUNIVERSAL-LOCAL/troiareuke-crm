@@ -26,6 +26,7 @@ import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
 import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
 import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule } from '../src/lib/staffScheduleRule';
+import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -513,4 +514,26 @@ test('직원 근무표 — 매장 영업시간 대체·휴무·자정 넘김·�
   expect(nextAvailable({ openMin: mon.work!.startMin, closeMin: mon.work!.endMin, durationMin: 60, busy: mon.breaks, bufferAfterMin: mon.bufferAfterMin }, 3)).toEqual(['11:00', '11:30', '14:00']);
   // 기존 예약 15:00~16:00 에 정리 15 를 붙이면 16:00 은 막히고 16:30 부터
   expect(nextAvailable({ openMin: 660, closeMin: 1080, durationMin: 60, busy: [...mon.breaks, { startMin: 900, endMin: 975 }], bufferAfterMin: 15 }, 3)).toEqual(['11:00', '11:30', '16:30']);
+});
+
+test('베드·룸 자원 — 충돌·빈 자원·취소 제외·미사용 제외·깨진 시간·맞닿음 (142)', () => {
+  const resources = [
+    { id: 'b1', name: '베드1', kind: 'bed' as const, isActive: true },
+    { id: 'b2', name: '베드2', kind: 'bed' as const, isActive: true },
+    { id: 'r1', name: '룸', kind: 'room' as const, isActive: false },
+  ];
+  const assignments = { x1: 'b1', x2: 'b2', x3: 'b1', x4: 'b1' };
+  const rs = [
+    { id: 'x1', date: '2026-11-24', startTime: '10:00', endTime: '11:00', status: 'confirmed' },
+    { id: 'x2', date: '2026-11-24', startTime: '10:30', endTime: '11:30', status: 'cancelled' },
+    { id: 'x3', date: '2026-11-25', startTime: '10:00', endTime: '11:00', status: 'confirmed' },
+    { id: 'x4', date: '2026-11-24', startTime: '??', endTime: '', status: 'confirmed' },
+  ];
+  const c = { date: '2026-11-24', startMin: 630, endMin: 690 };
+  expect(resourceConflicts('b1', assignments, rs, c).map(r => r.id)).toEqual(['x1', 'x4']);      // 깨진 시간은 충돌로 보고 확인, 다른 날은 제외
+  expect(resourceConflicts('b2', assignments, rs, c)).toEqual([]);                              // 취소는 제외
+  expect(freeResources(resources, assignments, rs, c).map(r => r.id)).toEqual(['b2']);          // 미사용 룸 제외
+  expect(freeResources(resources, assignments, rs, { ...c, excludeId: 'x1' }).map(r => r.id)).toEqual(['b2']); // x4 가 여전히 b1
+  expect(freeResources(resources, { x1: 'b1' }, rs, { ...c, excludeId: 'x1' }).map(r => r.id)).toEqual(['b1', 'b2']); // 본인 제외
+  expect(resourceConflicts('b1', assignments, rs, { date: '2026-11-24', startMin: 660, endMin: 720 }).map(r => r.id)).toEqual(['x4']); // 11:00 맞닿음은 겹침 아님
 });

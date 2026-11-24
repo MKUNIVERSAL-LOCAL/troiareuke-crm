@@ -177,6 +177,9 @@ export interface StaffSchedule {
   updatedAt: string;
 }
 
+/** 베드/룸/장비 자원 — 한 번에 예약 하나(처리량 상한). 목록 순서 = 자동 배정 우선순위 (142, GAP R-5) */
+export interface Resource { id: string; name: string; kind: 'bed' | 'room' | 'device'; isActive: boolean }
+
 export interface ShopPreferences {
   /** 매장이 직접 추가한 결제수단 (기본 4종 제외) */
   customPaymentMethods?: string[];
@@ -194,6 +197,10 @@ export interface ShopPreferences {
   mergedCustomerIds?: Record<string, string>;
   /** 직원별 근무표·휴게·준비/정리 버퍼 staffId → 근무표 — 새 컬렉션(서버 화이트리스트 승인 B-2) 대신 설정 행으로 동기화 (141) */
   staffSchedules?: Record<string, StaffSchedule>;
+  /** 베드·룸·장비 자원 목록 (142) */
+  resources?: Resource[];
+  /** 예약 id → 자원 id — 코어 Reservation 에 resourceId 가 없어(toDbReservation 이 버림, 코어 수정은 승인 A) 설정 행에 둔다. 60일 지난 배정은 저장 때 정리 (142) */
+  reservationResources?: Record<string, string>;
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
   retentionPolicy?: { enabled: boolean; years: number };
 }

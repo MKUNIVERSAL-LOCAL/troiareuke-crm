@@ -16,6 +16,7 @@
 | 15-e | 서버 tombstone(삭제 기록) + PUT 409 | 다른 기기의 옛 PUT 이 삭제 기록을 되살림(16차 #M5) | 지출·상담 수정 경로에서 부활 가능 | 0원, 서버 1 PR | 낮음 | 수정 경로를 PATCH 로 | 승인 권장 | test:outbox | 대기 |
 | 15-f | 서버 전화번호 유일성(지점 내) 409 | 두 기기 동시 등록 → 중복 고객(16차 #M6) | 병합 모달로 수습 | 0원, 서버 1 PR | 기존 중복 데이터 마이그레이션 필요 | 저장 전 서버 재조회(128) | 2차 | E2E | 대기 |
 | 15-g | `electron/main.cjs` requestSingleInstanceLock | 포터블 2중 실행 시 같은 userData 공유 추정(16차 #M8) | 추정 단계 | 0원, 코어 3줄 | 낮음 | 2탭 storage 무효화(129) | 실측 후 결정 | 수동 실행 확인 | 대기 |
+| 16 | 코어 `Reservation` 에 `resourceId`(+ `toDbReservation`/`fromDbReservation` 1줄씩) | 142 의 베드·룸 배정이 설정 행 맵(`preferences.reservationResources`)에 있어 예약 행과 따로 산다 — 다른 기기의 설정 저장이 겹치면 배정이 마지막 저장 승으로 지워질 수 있고, 60일 지난 배정은 정리된다 | 현 우회 유지(실사용 가능, 과거 배정 이력은 60일) | 0원, 코어 4줄 + 이관 스크립트(맵 → 예약 행) | 낮음(선택 필드, 구버전은 무시) | 설정 행 맵 유지 | 2차(143 뒤) | reservations·resources E2E, revert | 대기(2026-11-24) |
 
 ## B. 운영 서버·배포 (NAS 변경, 전체 지점 배포)
 

@@ -25,6 +25,8 @@ import { findConflicts, toInterval, overlaps, toMinutes as toMinOf, type Interva
 import { nextAvailable } from '../../lib/availabilityRule';
 import { dayWindow, checkStaffWindow, offRanges, describeWindow, dayKeyOf } from '../../lib/staffScheduleRule';
 import { getStaffSchedule } from '../../lib/staffScheduleStore';
+import { activeResources, allResources, resourceAssignments, resourceOf, assignResource } from '../../lib/resourceStore';
+import { freeResources, resourceConflicts, RESOURCE_KIND_LABEL } from '../../lib/resourceRule';
 import type { Reservation, Staff } from '../../types';
 import {
   isGoogleCalendarConnected,
@@ -773,6 +775,8 @@ function StaffColumnsDay({ date, dayReservations, dayGoogleEvents, staffList, gr
   const ROW_H = 60;
   const dayKey = dayKeyOf(date);
   const shopHours = SettingsStore.get().businessHours?.[dayKey];
+  const assignments = resourceAssignments();
+  const resourceNames = new Map(allResources().map(x => [x.id, x.name] as const)); // 미사용으로 바꾼 자원도 과거 배정은 이름으로 (142)
   const columns = staffList
     .filter(s => s.isActive || dayReservations.some(r => r.staffId === s.id))
     .map(s => {
@@ -820,6 +824,7 @@ function StaffColumnsDay({ date, dayReservations, dayGoogleEvents, staffList, gr
                 {c.events.filter(ev => ev.startMin >= slotStartMin && ev.startMin < slotStartMin + 60).map(ev => {
                   const r = ev.item;
                   const tall = ev.endMin - ev.startMin >= 90;
+                  const resName = resourceNames.get(assignments[r.id] ?? '');
                   return (
                     <button
                       key={r.id}
@@ -831,7 +836,7 @@ function StaffColumnsDay({ date, dayReservations, dayGoogleEvents, staffList, gr
                       style={{ backgroundColor: c.staff.color, color: readableTextOn(c.staff.color), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
                       title={`${r.customerName} · ${r.startTime}~${r.endTime}`}
                     >
-                      <p className="truncate"><span className="font-bold">{r.customerName}</span><span className="text-xs ml-2 font-normal">{r.services.map(sv => sv.serviceName).join(', ')}</span></p>
+                      <p className="truncate"><span className="font-bold">{r.customerName}</span><span className="text-xs ml-2 font-normal">{r.services.map(sv => sv.serviceName).join(', ')}</span>{resName && <span className="text-xs ml-2 font-normal">· {resName}</span>}</p>
                       {tall && <p className="text-xs mt-0.5 font-normal">{r.startTime}~{r.endTime}</p>}
                     </button>
                   );
@@ -1078,6 +1083,9 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   const [customerId, setCustomerId] = useState(editing?.customerId ?? (initialCustomerId && customers.some(c => c.id === initialCustomerId) ? initialCustomerId : ''));
   // 입력 속도: 직원이 한 명이면 그 직원, 아니면 로그인한 직원 본인; 시술이 하나면 그 시술; 오늘이면 지금 이후 첫 시간대 (입력 속도 감사 2026-11-18)
   const [staffId, setStaffId] = useState(editing?.staffId ?? (staffList.length === 1 ? staffList[0].id : (staffList.find(s => s.name === authUser?.name)?.id ?? '')));
+  // 베드·룸 자원 — 신규는 자동 배정, 수정은 이미 붙은 자원(없으면 배정 안 함) (142, GAP R-5)
+  const resources = useMemo(() => activeResources(), []);
+  const [resourceChoice, setResourceChoice] = useState<string>(() => (editing ? (resourceOf(editing.id)?.id ?? 'none') : 'auto'));
   const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? (services.length === 1 ? services[0].id : ''));
   const todayKey = format(new Date(), 'yyyy-MM-dd');
   const [date, setDate] = useState(editing?.date ?? initialDate ?? todayKey);
@@ -1187,6 +1195,23 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       ...(freeHint ? [freeHint] : []),
       ...hoursWarnings.map(w => w.message),
     ];
+    // 베드·룸 자원 — 한 자원은 한 번에 예약 하나. 자동이면 목록 순서로 첫 빈 자원, 지정했는데 그 시간에 쓰고 있으면 확인(막지 않음) (142, GAP R-5)
+    let resourceId: string | null = null;
+    if (resources.length > 0 && resourceChoice !== 'none') {
+      const cand = { startMin: newStart, endMin: newEnd, date, excludeId: editing?.id };
+      const assignments = resourceAssignments();
+      const allReservations = ReservationStore.getAll();
+      const free = freeResources(resources, assignments, allReservations, cand);
+      if (resourceChoice === 'auto') {
+        resourceId = free[0]?.id ?? null;
+        if (!resourceId) warnings.push(`빈 베드·룸이 없습니다(${resources.map(r => r.name).join(', ')} 모두 사용 중). 자원 없이 저장됩니다.`);
+      } else {
+        resourceId = resourceChoice;
+        const busyBy = resourceConflicts(resourceChoice, assignments, allReservations, cand)[0];
+        const name = resources.find(r => r.id === resourceChoice)?.name ?? '선택한 자원';
+        if (busyBy) warnings.push(`${josa(name, '은/는')} 그 시간(${busyBy.startTime}~${busyBy.endTime}${busyBy.customerName ? `, ${busyBy.customerName}` : ''})에 이미 쓰고 있습니다.${free.length ? ` 빈 자원: ${free.map(r => r.name).join(', ')}` : ''}`);
+      }
+    }
     if (warnings.length > 0) {
       // 확인창은 하나로 — 모바일에서 네이티브 confirm 두 번은 답답하다
       const proceed = window.confirm(`${warnings.join('\n')}\n그래도 ${isEdit ? '저장' : '등록'}할까요?`);
@@ -1219,6 +1244,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     if (isEdit && editing) {
       // 수정: 기존 예약 갱신 — status 는 보내지 않는다. 폰에서 완료/노쇼 처리한 예약을 PC 의 옛 수정 창이 '확정'으로 되돌렸다 (16차 #H1)
       ReservationStore.update(editing.id, reservation);
+      assignResource(editing.id, resourceId); // 자원 배정은 설정 행에 (142)
       // Google 캘린더에 옛 정보가 남지 않도록 기존 이벤트 삭제 후 재생성
       const oldEventId = getGcalMap()[editing.id];
       if (oldEventId && isGoogleCalendarConnected()) {
@@ -1229,6 +1255,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       }
     } else {
       const saved = ReservationStore.save({ ...reservation, status: 'confirmed' });
+      if (saved && resourceId) assignResource(saved.id, resourceId); // 자원 배정은 설정 행에 (142)
       // Google Calendar에도 추가 — 이벤트 id를 기억해 취소/삭제 시 정리 가능하게
       if (addToGoogle && googleAvailable && saved) {
         createCalendarEvent(saved)
@@ -1261,6 +1288,20 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             </select>
             {staffList.length === 0 && <PrereqHint text="등록된 직원이 없습니다" action="직원 등록" onGo={() => { onClose(); goTo('/staff?new=1'); }} />}
           </div>
+          {resources.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">베드·룸</label>
+              <select aria-label="베드·룸"
+                value={resourceChoice}
+                onChange={e => setResourceChoice(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
+              >
+                <option value="auto">자동 배정(빈 자원)</option>
+                <option value="none">배정 안 함</option>
+                {resources.map(r => <option key={r.id} value={r.id}>{r.name} ({RESOURCE_KIND_LABEL[r.kind]})</option>)}
+              </select>
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 *</label>
@@ -1366,6 +1407,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 }) {
   const { user } = useAuth();
   const goTo = useNavigate();
+  const resource = resourceOf(r.id); // 베드·룸 배정 (142)
   // 예약 → 시술 기록(사진 첨부) 연계: 고객·시술일·담당자·시술 항목을 프리필해 시술 기록 화면을 연다 (2026-11-17)
   const openTreatmentLog = () => {
     const q = new URLSearchParams({ new: '1', customer: r.customerId, date: r.date, reservation: r.id });
@@ -1443,6 +1485,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     const cancelTip = isClosed ? '' : ' 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.';
     if (await askConfirm({ title: '예약 삭제', message: `이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`, confirmLabel: '삭제', danger: true })) {
       ReservationStore.delete(r.id);
+      assignResource(r.id, null); // 자원 배정도 함께 정리 (142)
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();
     }
@@ -1480,6 +1523,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           <InfoItem label="날짜" value={formatDate(r.date)} />
           <InfoItem label="시간" value={`${r.startTime} ~ ${r.endTime}`} />
           <InfoItem label="담당자" value={r.staffName} />
+          {resource && <InfoItem label="베드·룸" value={resource.name} />}
           <InfoItem label="금액" value={formatPrice(r.totalPrice)} />
         </div>
         <ProgramBalance customerId={r.customerId} />

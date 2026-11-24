@@ -23,6 +23,7 @@ import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFla
 import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
+import ResourcesCard from '../../components/settings/ResourcesCard';
 import AppLockCard from '../../components/settings/AppLockCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
 import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
@@ -802,6 +803,11 @@ export default function Settings() {
                     </button>
                   </div>
                 </div>
+              </SettingCard>
+            )}
+            {tab === 'hours' && (
+              <SettingCard title="베드·룸 자원">
+                <ResourcesCard />
               </SettingCard>
             )}
 
