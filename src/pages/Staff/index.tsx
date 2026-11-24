@@ -698,7 +698,7 @@ function StaffDetailModal({
                 </select>
               </div>
             </div>
-            <p className="text-2xs text-gray-500">근무 시간 밖·휴게·준비/정리와 겹치는 예약은 저장 전에 확인을 묻습니다(막지 않음). 겹침 안내의 빈 시간 제안과 예약표 일간 "직원별 열"의 음영에도 반영됩니다.</p>
+            <p className="text-2xs text-gray-500">근무 시간 밖·휴게·준비/정리와 겹치는 예약은 저장 전에 확인을 묻습니다(막지 않음). 겹침 안내의 빈 시간 제안과 PC 예약표 일간 "직원별 열"의 음영에도 반영됩니다.</p>
           </div>
 
           <div className="flex gap-3 pt-2">

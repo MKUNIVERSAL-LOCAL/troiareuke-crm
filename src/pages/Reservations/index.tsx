@@ -284,15 +284,25 @@ export default function Reservations() {
   };
   // 예약 요청함 — 요청을 예약으로 등록하면 폼을 요청 내용으로 채우고, 저장되면 요청을 처리됨으로 (143, GAP R-6·R-10)
   const [showRequests, setShowRequests] = useState(false);
-  const [requestCount, setRequestCount] = useState(() => newRequests().length);
-  const [fromRequest, setFromRequest] = useState<BookingRequest | null>(null);
+  const [requestCount, setRequestCount] = useState(0);
+  const refreshRequestCount = () => { void newRequests().then(l => setRequestCount(l.length)); }; // 어댑터는 비동기(서버 어댑터 대비) (144 리뷰 L-3)
+  useEffect(() => { refreshRequestCount(); }, []);
+  const [fromRequest, setFromRequest] = useState<{ req: BookingRequest; createdCustomerId?: string } | null>(null);
   const registerFromRequest = (req: BookingRequest) => {
     setShowRequests(false);
-    const customer = ensureCustomerFor(req); // 전화번호가 같은 고객이면 그 고객, 없으면 신규 등록(접수 때 받은 동의 기록)
+    const { customer, created } = ensureCustomerFor(req); // 전화번호가 같은 고객이면 그 고객, 없으면 신규 등록(접수 때 받은 동의 기록)
     setNewCustomerId(customer.id);
     setNewDate(req.date);
-    setFromRequest(req);
+    setFromRequest({ req, createdCustomerId: created ? customer.id : undefined });
     setShowAddModal(true);
+  };
+  // 예약 없이 폼을 닫으면 이번에 새로 만든 고객은 되돌린다 — 요청은 처리 전으로 남는다 (144 리뷰 M-3)
+  const cancelFromRequest = () => {
+    if (fromRequest?.createdCustomerId) {
+      CustomerStore.delete(fromRequest.createdCustomerId);
+      notify.info('예약을 등록하지 않아 요청의 신규 고객 등록을 되돌렸습니다. 요청은 요청함에 그대로 있습니다.');
+    }
+    setFromRequest(null);
   };
 
   const handleUpdateReservation = () => {
@@ -353,6 +363,7 @@ export default function Reservations() {
           <button
             type="button"
             onClick={() => setShowRequests(true)}
+            aria-label={requestCount > 0 ? `예약 요청함 ${requestCount}건` : '예약 요청함'}
             className={clsx('inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl border transition-colors', requestCount > 0 ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50')}
             title="전화·카톡·네이버로 받은 예약 요청을 적어 두고 확인 뒤 예약으로 등록"
           >
@@ -640,17 +651,17 @@ export default function Reservations() {
         <AddReservationModal
           initialCustomerId={newCustomerId}
           initialDate={newDate}
-          initialStartTime={fromRequest?.startTime}
-          initialServiceId={fromRequest?.serviceId}
-          initialMemo={fromRequest?.memo}
-          initialSource={fromRequest ? CHANNEL_SOURCE[fromRequest.channel] : undefined}
-          onClose={() => { setShowAddModal(false); setNewCustomerId(undefined); setNewDate(undefined); setFromRequest(null); }}
+          initialStartTime={fromRequest?.req.startTime}
+          initialServiceId={fromRequest?.req.serviceId}
+          initialMemo={fromRequest?.req.memo}
+          initialSource={fromRequest ? CHANNEL_SOURCE[fromRequest.req.channel] : undefined}
+          onClose={() => { setShowAddModal(false); setNewCustomerId(undefined); setNewDate(undefined); cancelFromRequest(); }}
           onSave={() => { setNewCustomerId(undefined); setNewDate(undefined); handleSaveReservation(); }}
-          onSaved={id => { if (fromRequest) { acceptRequest(fromRequest.id, id); setFromRequest(null); setRequestCount(newRequests().length); } }}
+          onSaved={id => { if (fromRequest) { const reqId = fromRequest.req.id; setFromRequest(null); void acceptRequest(reqId, id).then(refreshRequestCount, () => notify.error('예약은 저장했지만 요청을 처리됨으로 바꾸지 못했습니다. 요청함에서 다시 확인해주세요.')); } }}
         />
       )}
       {showRequests && (
-        <BookingRequestsModal onClose={() => { setShowRequests(false); setRequestCount(newRequests().length); }} onRegister={registerFromRequest} />
+        <BookingRequestsModal onClose={() => { setShowRequests(false); refreshRequestCount(); }} onRegister={registerFromRequest} />
       )}
       {editReservation && (
         <AddReservationModal
@@ -1129,12 +1140,27 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   // 입력 속도: 직원이 한 명이면 그 직원, 아니면 로그인한 직원 본인; 시술이 하나면 그 시술; 오늘이면 지금 이후 첫 시간대 (입력 속도 감사 2026-11-18)
   const [staffId, setStaffId] = useState(editing?.staffId ?? (staffList.length === 1 ? staffList[0].id : (staffList.find(s => s.name === authUser?.name)?.id ?? '')));
   // 베드·룸 자원 — 신규는 자동 배정, 수정은 이미 붙은 자원(없으면 배정 안 함) (142, GAP R-5)
-  const resources = useMemo(() => activeResources(), []);
+  const resources = useMemo(() => {
+    const act = activeResources();
+    const cur = editing ? resourceOf(editing.id) : null;
+    return cur && !cur.isActive ? [...act, cur] : act; // 미사용으로 바꾼 자원에 붙은 예약을 수정해도 배정이 조용히 지워지지 않게 (144 리뷰 M-1)
+  }, []);
   const [resourceChoice, setResourceChoice] = useState<string>(() => (editing ? (resourceOf(editing.id)?.id ?? 'none') : 'auto'));
   const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? (initialServiceId && services.some(s => s.id === initialServiceId) ? initialServiceId : (services.length === 1 ? services[0].id : '')));
   const todayKey = format(new Date(), 'yyyy-MM-dd');
   const [date, setDate] = useState(editing?.date ?? initialDate ?? todayKey);
-  const startOptions = useMemo(() => halfHourSlots(gridRangeFromSettings()), []); // 설정 > 영업시간 범위, 30분 단위 (4차 UX 점검 2026-11-19)
+  const startOptions = useMemo(() => { // 설정 > 영업시간 범위, 30분 단위 (4차 UX 점검 2026-11-19). 직원 근무가 그 밖(심야 등)이면 그만큼 넓힌다 (144 리뷰 L-6)
+    const range = gridRangeFromSettings();
+    if (staffId && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const dayLabel = dayKeyOf(new Date(`${date}T00:00:00`));
+      const win = dayWindow(getStaffSchedule(staffId), dayLabel, SettingsStore.get().businessHours?.[dayLabel]);
+      if (!win.fromShopHours && win.work) {
+        range.startMin = Math.min(range.startMin, Math.floor(win.work.startMin / 60) * 60);
+        range.endMin = Math.max(range.endMin, Math.min(24 * 60, Math.ceil(win.work.endMin / 60) * 60));
+      }
+    }
+    return halfHourSlots(range);
+  }, [staffId, date]);
   const [startTime, setStartTime] = useState(editing?.startTime ?? initialStartTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot(startOptions) : (startOptions.includes('10:00') ? '10:00' : startOptions[0])));
   // 선택한 담당자·날짜의 시작 칸 표시 — 예약 있음 > 휴게 > 근무 외(근무표가 있을 때만). 고르기 전에 보이게 (140·141, GAP R-3·R-4)
   const startMarks = useMemo(() => {
@@ -1230,7 +1256,9 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     // 걸리는 게 있으면 같은 담당자의 빈 시간 3개를 함께 알려 준다 — "안 된다"에서 끝나지 않게 (140·141, GAP R-4). 휴무면 제안할 게 없다
     const freeHint = (overlap || bufferOverlap || staffWarnings.length > 0) && win.work ? (() => {
       const busy = [...existing.map(x => ({ startMin: x.iv.startMin - pad.b, endMin: x.iv.endMin + pad.a })), ...win.breaks];
-      const free = nextAvailable({ openMin: win.work.startMin, closeMin: win.work.endMin, durationMin: totalDuration, busy, bufferBeforeMin: pad.b, bufferAfterMin: pad.a, notBeforeMin: null }, 3);
+      const now = new Date();
+      const notBeforeMin = date === todayKey ? now.getHours() * 60 + now.getMinutes() : null; // 오늘은 이미 지난 시각을 제안하지 않는다 (144 리뷰 M-5)
+      const free = nextAvailable({ openMin: win.work.startMin, closeMin: win.work.endMin, durationMin: totalDuration, busy, bufferBeforeMin: pad.b, bufferAfterMin: pad.a, notBeforeMin }, 3);
       return free.length ? `${staff.name} 담당 빈 시간: ${free.join(', ')}` : `${staff.name} 담당은 이날 ${totalDuration}분짜리 빈 시간이 없습니다.`;
     })() : null;
     const warnings = [
@@ -1289,7 +1317,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     if (isEdit && editing) {
       // 수정: 기존 예약 갱신 — status 는 보내지 않는다. 폰에서 완료/노쇼 처리한 예약을 PC 의 옛 수정 창이 '확정'으로 되돌렸다 (16차 #H1)
       ReservationStore.update(editing.id, reservation);
-      assignResource(editing.id, resourceId); // 자원 배정은 설정 행에 (142)
+      if (resources.length > 0) assignResource(editing.id, resourceId); // 자원 배정은 설정 행에 (142). 자원이 없으면 기존 배정은 그대로 (144 리뷰 M-1)
       // Google 캘린더에 옛 정보가 남지 않도록 기존 이벤트 삭제 후 재생성
       const oldEventId = getGcalMap()[editing.id];
       if (oldEventId && isGoogleCalendarConnected()) {
@@ -1344,7 +1372,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               >
                 <option value="auto">자동 배정(빈 자원)</option>
                 <option value="none">배정 안 함</option>
-                {resources.map(r => <option key={r.id} value={r.id}>{r.name} ({RESOURCE_KIND_LABEL[r.kind]})</option>)}
+                {resources.map(r => <option key={r.id} value={r.id}>{r.name} ({RESOURCE_KIND_LABEL[r.kind]}{r.isActive ? '' : ', 미사용'})</option>)}
               </select>
             </div>
           )}

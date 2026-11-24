@@ -1,5 +1,5 @@
-// BookingRequestsModal — 예약 요청함: 전화·카톡·네이버 요청 접수 + 처리 전 목록 → 예약으로 등록 / 거절 (비코어, 143, GAP R-6·R-10)
-import { useState } from 'react';
+// BookingRequestsModal — 예약 요청함: 전화·카톡·네이버 요청 접수 + 처리 전 목록 → 예약으로 등록 / 거절 (비코어, 143·144, GAP R-6·R-10)
+import { useEffect, useState } from 'react';
 import { Inbox } from 'lucide-react';
 import Modal from './ui/Modal';
 import { notify } from '../lib/notify';
@@ -7,6 +7,8 @@ import { askConfirm } from '../lib/confirmDialog';
 import { ServiceStore } from '../lib/store';
 import { todayISO, formatPhoneInput } from '../lib/format';
 import { isISODate } from '../lib/inputRules';
+import { maskPhone } from '../lib/masking';
+import { useAuth } from '../contexts/AuthContext';
 import { bookingRequests, newRequests, rejectRequest, findCustomerByPhone, CHANNEL_LABEL } from '../lib/bookingRequests';
 import type { BookingRequest, BookingChannel } from '../types';
 
@@ -14,8 +16,10 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i
 const INPUT = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300';
 
 export default function BookingRequestsModal({ onClose, onRegister }: { onClose: () => void; onRegister: (req: BookingRequest) => void }) {
+  const { user } = useAuth();
+  const maskRole = user?.role ?? 'staff'; // 요청 목록의 전화번호도 고객 목록과 같은 규칙으로 가린다 (144 리뷰 M-4)
   const services = ServiceStore.getAll().filter(s => s.isActive);
-  const [list, setList] = useState<BookingRequest[]>(() => newRequests());
+  const [list, setList] = useState<BookingRequest[]>([]);
   const [channel, setChannel] = useState<BookingChannel>('phone');
   const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
@@ -25,25 +29,40 @@ export default function BookingRequestsModal({ onClose, onRegister }: { onClose:
   const [memo, setMemo] = useState('');
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const submit = () => {
+  const reload = async () => setList(await newRequests());
+  useEffect(() => { void reload(); }, []);
+
+  const submit = async () => {
     const service = services.find(s => s.id === serviceId);
     const missing = [!customerName.trim() && '이름', !phone.trim() && '전화번호', !service && '시술', !isISODate(date) && '날짜'].filter(Boolean).join(', ');
     if (missing) { setError(`${missing}을(를) 입력해주세요.`); return; }
     const known = findCustomerByPhone(phone);
     if (!known && !consent) { setError('처음 오는 고객은 개인정보 수집·이용 동의를 받은 뒤 접수해주세요.'); return; }
     setError('');
-    bookingRequests.add({ channel, customerName: customerName.trim(), phone: phone.trim(), serviceId: service!.id, serviceName: service!.name, durationMin: service!.duration, date, startTime, memo: memo.trim() || undefined, privacyConsent: known ? (known.privacyConsent ?? false) : consent });
-    setList(newRequests());
-    setCustomerName(''); setPhone(''); setMemo(''); setConsent(false);
-    notify.success('요청을 접수했습니다. 확인 뒤 [예약으로 등록]을 누르세요.');
+    setBusy(true);
+    try {
+      await bookingRequests.add({ channel, customerName: customerName.trim(), phone: phone.trim(), serviceId: service!.id, serviceName: service!.name, durationMin: service!.duration, date, startTime, memo: memo.trim() || undefined, privacyConsent: known ? (known.privacyConsent ?? false) : consent });
+      await reload();
+      setCustomerName(''); setPhone(''); setMemo(''); setConsent(false);
+      notify.success('요청을 접수했습니다. 확인 뒤 [예약으로 등록]을 누르세요.');
+    } catch {
+      notify.error('요청을 저장하지 못했습니다. 다시 시도해주세요.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const reject = async (req: BookingRequest) => {
-    if (!(await askConfirm({ title: '요청 거절', confirmLabel: '거절', cancelLabel: '닫기', message: `${req.customerName} 고객의 ${req.date} ${req.startTime} ${req.serviceName} 요청을 거절할까요? 고객에게는 직접 연락해주세요.` }))) return;
-    rejectRequest(req.id);
-    setList(newRequests());
-    notify.info('요청을 거절로 처리했습니다.');
+    if (!(await askConfirm({ title: '요청 거절', confirmLabel: '거절', cancelLabel: '닫기', message: `${req.customerName} 고객의 ${req.date} ${req.startTime} ${req.serviceName} 요청을 거절할까요? 고객에게는 직접 연락해주세요. 거절한 요청의 이름·전화는 7일 뒤 지워집니다.` }))) return;
+    try {
+      await rejectRequest(req.id);
+      await reload();
+      notify.info('요청을 거절로 처리했습니다.');
+    } catch {
+      notify.error('요청을 처리하지 못했습니다. 다시 시도해주세요.');
+    }
   };
 
   return (
@@ -93,7 +112,7 @@ export default function BookingRequestsModal({ onClose, onRegister }: { onClose:
             <span>개인정보 수집·이용 동의를 받았습니다 (처음 오는 고객은 필수 — 예약으로 등록할 때 고객으로 함께 등록됩니다)</span>
           </label>
           {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
-          <button type="button" onClick={submit} className="w-full py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e]">요청 접수</button>
+          <button type="button" onClick={() => void submit()} disabled={busy} className="w-full py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e] disabled:opacity-60">{busy ? '접수 중…' : '요청 접수'}</button>
         </div>
 
         <div className="space-y-2">
@@ -106,7 +125,7 @@ export default function BookingRequestsModal({ onClose, onRegister }: { onClose:
                 <li key={req.id} data-testid="booking-request-item" className="px-3 py-2.5 text-sm">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-gray-900">{req.customerName}</span>
-                    <span className="text-xs text-gray-500">{req.phone}</span>
+                    <span className="text-xs text-gray-500">{maskPhone(req.phone, maskRole)}</span>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{CHANNEL_LABEL[req.channel]}</span>
                     {!findCustomerByPhone(req.phone) && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">신규 고객</span>}
                   </div>

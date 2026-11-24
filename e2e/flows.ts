@@ -286,7 +286,7 @@ export async function cancelFirstSale(page: Page) {
  * 예약 추가 — 담당 직원은 staff(label)가 있으면 그 직원, 없으면 첫 항목; 시술은 첫 항목.
  * expectRejected: 겹침(이중예약) confirm을 스펙 핸들러가 거절했을 때 — 창이 그대로 남아야 하고 Esc로 닫는다.
  */
-export async function addReservation(page: Page, acc: E2EAccount, startTime: string, opts: { staff?: string; expectRejected?: boolean } = {}) {
+export async function addReservation(page: Page, acc: E2EAccount, startTime: string, opts: { staff?: string; expectRejected?: boolean; date?: string } = {}) {
   await visibleButton(page, '예약 추가').click();
   const d = dialog(page, '예약 추가');
   await expect(d).toBeVisible();
@@ -294,6 +294,7 @@ export async function addReservation(page: Page, acc: E2EAccount, startTime: str
   if (opts.staff) await d.getByLabel('담당 직원').selectOption({ label: opts.staff });
   else await d.getByLabel('담당 직원').selectOption({ index: 1 });
   await d.getByLabel('시술', { exact: true }).selectOption({ index: 1 });
+  if (opts.date) await d.getByLabel('예약 날짜').fill(opts.date);
   await d.getByLabel('시작 시간').selectOption(startTime);
   await d.getByRole('button', { name: '예약 저장' }).click(); // 휴무일 confirm은 스펙의 dialog 핸들러가 수락
   if (opts.expectRejected) {

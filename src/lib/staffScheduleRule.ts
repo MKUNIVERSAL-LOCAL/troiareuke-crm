@@ -44,7 +44,7 @@ function spanOf(start: string | undefined, end: string | undefined): Interval | 
   return { startMin: s, endMin: e };
 }
 
-export function shopDayWindow(hours: ShopDayHours | undefined, bufferBeforeMin = 0, bufferAfterMin = 0): DayWindow {
+function shopDayWindow(hours: ShopDayHours | undefined, bufferBeforeMin = 0, bufferAfterMin = 0): DayWindow {
   const work = hours && !hours.isOff ? spanOf(hours.open, hours.close) : null;
   return { work, breaks: [], bufferBeforeMin, bufferAfterMin, fromShopHours: true };
 }

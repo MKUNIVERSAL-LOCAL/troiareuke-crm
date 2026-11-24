@@ -471,10 +471,10 @@ test('가용 시작 시각 — 영업시간·기존 예약·간격·소요·버�
   expect(availableStarts(base)).toEqual([600, 720]);                                         // 10:00, 12:00 (10:30 은 11:00 과 겹침)
   expect(availableStarts({ ...base, stepMin: 15 })).toEqual([600, 720]);
   expect(availableStarts({ ...base, durationMin: 30 })).toEqual([600, 630, 720, 750]);
-  expect(availableStarts({ ...base, bufferAfterMin: 15 })).toEqual([]);                      // 10:00 은 정리 11:15 가 예약과 겹침, 12:00 은 정리 13:15 가 마감 뒤
-  expect(availableStarts({ ...base, bufferAfterMin: 15, closeMin: 795 })).toEqual([720]);     // 마감 13:15 면 12:00 가능
-  expect(availableStarts({ ...base, bufferBeforeMin: 15 })).toEqual([]);                     // 10:00 은 09:45 준비가 영업 전, 12:00 은 11:45 준비가 예약과 겹침
-  expect(availableStarts({ ...base, bufferBeforeMin: 15, openMin: 570 })).toEqual([600]);    // 영업 09:30 이면 10:00 가능
+  expect(availableStarts({ ...base, bufferAfterMin: 15 })).toEqual([720]);                   // 10:00 은 정리 11:15 가 예약과 겹침, 12:00 의 정리 13:15 는 마감 뒤라도 허용 (144 M-6)
+  expect(availableStarts({ ...base, bufferAfterMin: 15, busy: [{ startMin: 660, endMin: 720 }, { startMin: 780, endMin: 800 }] })).toEqual([]); // 마감 뒤 다른 예약(13:00~)과 정리가 겹치면 제외
+  expect(availableStarts({ ...base, bufferBeforeMin: 15 })).toEqual([600]);                  // 10:00 의 준비 09:45 는 영업 전이라도 허용, 12:00 은 11:45 준비가 예약과 겹침
+  expect(availableStarts({ ...base, bufferBeforeMin: 15, busy: [{ startMin: 585, endMin: 600 }, { startMin: 660, endMin: 720 }] })).toEqual([]); // 영업 전 다른 일정(09:45~10:00)과 준비가 겹치면 제외
   expect(availableStarts({ ...base, notBeforeMin: 650 })).toEqual([720]);                    // 지금 10:50 이후
   expect(availableStarts({ ...base, durationMin: 0 })).toEqual([]);
   expect(availableStarts({ ...base, closeMin: 600 })).toEqual([]);

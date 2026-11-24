@@ -9,6 +9,8 @@ import { dialog, addReservation } from './flows';
  */
 
 const acc = makeAccount('SS');
+/** 내일(로컬) — 오늘은 지난 시각을 제안하지 않으므로(144 M-5) 빈 시간 기대값이 시각에 따라 달라지지 않게 내일 날짜로 예약한다 */
+const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
 
 test('직원 근무표·휴게·정리 버퍼가 직원 상세·직원별 열·예약 폼 경고에 반영된다', async ({ page }) => {
   test.slow();
@@ -53,14 +55,15 @@ test('직원 근무표·휴게·정리 버퍼가 직원 상세·직원별 열·�
   await expect(column).toContainText('11:00~18:00 · 휴게 13:00~14:00');
 
   // 3) 예약 폼 — 휴게(13:00) → 거절, 근무 밖(10:00) → 거절, 15:00 → 저장, 16:00 → 정리 15분 겹침 → 거절
-  await addReservation(page, acc, '13:00', { expectRejected: true });
+  await addReservation(page, acc, '13:00', { expectRejected: true, date: tomorrow });
   expect(confirms.at(-1)).toContain('휴게 시간(13:00~14:00)과 겹칩니다');
   expect(confirms.at(-1)).toContain('김테스트 담당 빈 시간: 11:00, 11:30, 14:00');
-  await addReservation(page, acc, '10:00', { expectRejected: true });
+  await addReservation(page, acc, '10:00', { expectRejected: true, date: tomorrow });
   expect(confirms.at(-1)).toContain('근무 시간(11:00~18:00) 밖입니다');
-  await addReservation(page, acc, '15:00');
+  await addReservation(page, acc, '15:00', { date: tomorrow });
+  await page.keyboard.press('ArrowRight'); // 일간 뷰 → 내일
   await expect(page.getByTestId('staff-columns').getByTestId('reservation-block')).toHaveCount(1);
-  await addReservation(page, acc, '16:00', { expectRejected: true });
+  await addReservation(page, acc, '16:00', { expectRejected: true, date: tomorrow });
   expect(confirms.at(-1)).toContain('준비·정리 시간(앞 0분·뒤 15분)을 넣으면 15:00~16:00 예약과 겹칩니다');
   expect(confirms.at(-1)).toContain('빈 시간: 11:00, 11:30, 16:30');
   await expect(page.getByTestId('staff-columns').getByTestId('reservation-block')).toHaveCount(1);
@@ -69,6 +72,7 @@ test('직원 근무표·휴게·정리 버퍼가 직원 상세·직원별 열·�
   await visibleButton(page, '예약 추가').click();
   const form = dialog(page, '예약 추가');
   await form.getByLabel('담당 직원').selectOption({ index: 1 });
+  await form.getByLabel('예약 날짜').fill(tomorrow);
   const start = form.getByLabel('시작 시간');
   await expect(start.locator('option[value="13:00"]')).toHaveText('13:00 · 휴게');
   await expect(start.locator('option[value="10:00"]')).toHaveText('10:00 · 근무 외');

@@ -46,7 +46,7 @@ function pruned(map: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [rid, res] of Object.entries(map)) {
     const d = dates.get(rid);
-    if (d && d >= keepFrom) out[rid] = res;
+    if (!d || d >= keepFrom) out[rid] = res; // 이 기기 캐시에 없는 예약(다른 기기 것·아직 안 받은 것)은 지우지 않는다 — 날짜를 알고 60일 지난 것만 (144 리뷰 M-2)
   }
   return out;
 }

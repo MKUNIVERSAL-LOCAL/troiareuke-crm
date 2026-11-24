@@ -15,6 +15,8 @@
 5. PHASE 2 첫 묶음: 고객 360 프로필 보강(기존 상세 화면 확장 — 평균 방문 주기·다음 추천 관리일·세그먼트·이탈 위험 표시, 순수 분석 모듈 `src/lib/analytics/*` + lib-units 스펙).
 6. PHASE 3 첫 묶음: AI Provider Adapter 인터페이스(비코어 `src/lib/ai/`), 기존 `aiProxy.ts` 호출을 어댑터 뒤로, 키 보관 개선 설계(승인 대기열 D-13).
 
+- (11-24 144) `src/lib/publicSlotsRule.ts` 는 고객 온라인 예약 공개 라우트(승인 B-2)가 열릴 때 서버가 쓸 순수 규칙 — 지금은 lib-units 스펙만 호출한다. 서버 어댑터·공개 라우트 묶음에서 연결하기 전까지 보류 항목으로 둔다(리뷰 L-1).
+
 ## 재개 방법
 ```
 git status && git log --oneline -3          # 미커밋 변경 확인(보존)

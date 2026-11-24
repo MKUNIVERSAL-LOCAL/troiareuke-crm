@@ -16,7 +16,7 @@ export interface AvailabilityInput {
   notBeforeMin?: number | null; // 이 시각 이전은 제외(오늘이면 지금)
 }
 
-/** 가능한 시작 시각(분) — 준비·정리 시간을 포함한 구간이 영업시간 안에 들어가고 busy 와 겹치지 않는 칸 */
+/** 가능한 시작 시각(분) — 시술 구간이 영업(근무)시간 안에 들어가고, 준비·정리를 붙인 구간이 busy 와 겹치지 않는 칸 */
 export function availableStarts(i: AvailabilityInput): number[] {
   const step = i.stepMin && i.stepMin > 0 ? i.stepMin : 30;
   const before = Math.max(0, i.bufferBeforeMin || 0), after = Math.max(0, i.bufferAfterMin || 0);
@@ -26,8 +26,9 @@ export function availableStarts(i: AvailabilityInput): number[] {
   const first = Math.ceil(i.openMin / step) * step;
   for (let t = first; t + dur <= i.closeMin; t += step) {
     if (i.notBeforeMin != null && t < i.notBeforeMin) continue;
+    if (t < i.openMin) continue;
+    // 준비·정리 버퍼는 기존 예약·휴게와의 간격에만 쓴다 — 근무 시작 전 준비·마감 뒤 정리는 허용(경고 규칙 checkStaffWindow 와 같은 기준) (144 리뷰 M-6)
     const block: Interval = { startMin: t - before, endMin: t + dur + after };
-    if (block.startMin < i.openMin || block.endMin > i.closeMin) continue;
     if (i.busy.some(b => overlaps(block, b))) continue;
     out.push(t);
   }
