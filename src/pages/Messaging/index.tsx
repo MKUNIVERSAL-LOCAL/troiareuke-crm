@@ -22,6 +22,8 @@ import {
 } from '../../lib/messagingGateway';
 import type { MessageType, MessageTemplate, MessageHistory, Customer } from '../../types';
 import { topTags } from '../../lib/customerTags';
+import { consentOf, getOptOutNumber } from '../../lib/marketingConsent';
+import { canReceiveAd, decorateAdMessage, checkAdSend, type AdChannel } from '../../lib/adComplianceRule';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import clsx from 'clsx';
 
@@ -785,6 +787,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [resultMessage, setResultMessage] = useState('');
   const [sendPartial, setSendPartial] = useState(false); // 일부 실패 — 초록 "발송 완료!" 로 가짜 성공처럼 보이지 않게 (15차 #H5)
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
+  const [isAd, setIsAd] = useState(false); // 광고성이면 동의 고객만·(광고)·080·시간대 (155, GAP C-8·M-4)
   const [scheduleAt, setScheduleAt] = useState('');
   const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
   const contentBytes = smsBytes(content);
@@ -824,22 +827,32 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds],
   );
   const recipientCount = targetCustomers.length;
+  // 광고성이면 수신 동의가 있고 이 채널을 거부하지 않은 고객만 (155)
+  const adChannel: AdChannel = msgType.startsWith('kakao') ? 'kakao' : 'sms';
+  const adEligible = useMemo(() => (isAd ? targetCustomers.filter(c => canReceiveAd(consentOf(c), adChannel)) : targetCustomers), [isAd, targetCustomers, adChannel]);
+  const adExcluded = targetCustomers.length - adEligible.length;
+  const optOutNumber = getOptOutNumber();
+  const adPreview = isAd && content.trim() ? decorateAdMessage(content, optOutNumber || '(080 번호 미등록)') : null;
 
   // 수신 대상의 실제 전화번호 목록 — 번호가 없거나 10~11자리가 아닌 것('010-1', 내선 포함)은 발송·비용 추정에서 뺀다(게이트웨이 실패를 발송 뒤에 알던 것, 14차 #M8)
-  const recipientPhones = targetCustomers
+  const recipientPhones = adEligible
     .map(c => c.phone)
     .filter((p): p is string => { const k = normalizePhone(p); return k.length === 10 || k.length === 11; });
 
   // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
   const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;
   const estimatedCost = effectiveType === 'sms' ? recipientPhones.length * 11 : effectiveType === 'lms' ? recipientPhones.length * 25 : recipientPhones.length * 5;
-  const excludedCount = recipientCount - recipientPhones.length;
+  const excludedCount = adEligible.length - recipientPhones.length; // 번호 문제로 빠진 수(광고 동의 제외는 ad-recipients 에 따로 표시, 155)
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
     if (recipientPhones.length === 0) { notify('발송할 수 있는 전화번호가 없습니다(10~11자리 휴대폰 번호만). 고객 정보의 전화번호를 확인해주세요.'); return; }
     // 개별 발송(고객 상세에서 열었을 때)은 {고객명}을 그 고객 이름으로 바꾼다 — 단체 발송은 수신자별 치환이 없으므로 그대로 두지 않고 막는다 (UX 점검 2026-11-19)
-    const finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
+    let finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
+    // 광고성: 080 번호·시간대 점검 뒤 (광고) 머리말·무료수신거부 꼬리말을 붙인다 (155, 정보통신망법)
+    const adCheck = checkAdSend({ isAd, channel: adChannel, now: new Date(), optOutNumber, scheduledAt: scheduleMode === 'later' && scheduleAt ? new Date(scheduleAt) : null });
+    if (!adCheck.ok) { setSendResult('error'); setResultMessage(adCheck.reasons.join(' ')); return; }
+    if (isAd) finalContent = decorateAdMessage(finalContent, optOutNumber);
     // 종류는 실제로 나가는 문자열 기준 — 이름 치환으로 길어지거나 공백 정리로 짧아질 수 있다 (리뷰 60)
     const sendType: MessageType = msgType === 'sms' && smsBytes(finalContent) > SMS_BYTE_LIMIT ? 'lms' : msgType;
     // 치환 안 된 변수({고객명} 등)가 그대로 나가는 사고 방지 — 예약/즉시 발송 공통
@@ -929,7 +942,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       setResultMessage(
         `${result.sent}명 발송 성공` +
         (result.failed > 0 ? `, ${result.failed}명 실패` : '') +
-        (recipientCount > recipientPhones.length ? ` (번호가 없거나 10~11자리가 아닌 ${recipientCount - recipientPhones.length}명 제외)` : '') // 사유 표기 통일 (15차 #L11)
+        (adEligible.length > recipientPhones.length ? ` (번호가 없거나 10~11자리가 아닌 ${adEligible.length - recipientPhones.length}명 제외)` : '') // 사유 표기 통일 (15차 #L11)
       );
       onSent();
       if (result.failed === 0) setTimeout(() => { onClose(); }, 1800); // 일부 실패는 실패 인원을 읽을 수 있게 [닫기]로만 (123~126 리뷰 #M2)
@@ -984,6 +997,20 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         </div>
       ) : (
         <div className="space-y-5">
+          {/* 광고성 메시지 — 정보통신망법 표기·동의·시간대 (155) */}
+          <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-1.5">
+            <label className="flex items-center gap-2 text-sm text-gray-800">
+              <input type="checkbox" checked={isAd} onChange={e => setIsAd(e.target.checked)} className="rounded" aria-label="광고성 메시지" />
+              광고성 메시지(이벤트·할인·홍보)
+            </label>
+            {isAd && (
+              <>
+                <p className="text-xs text-gray-700" data-testid="ad-recipients">광고 대상 {adEligible.length}명{adExcluded > 0 ? ` · 동의 없음·거부 ${adExcluded}명 제외` : ''} · (광고) 머리말과 무료수신거부 {optOutNumber || '080 번호(설정 > 알림 설정에서 등록 — 미등록)'} 꼬리말이 자동으로 붙고, 21시~익일 8시에는 보낼 수 없습니다. 예약 확인·회차권 안내 같은 거래 안내는 광고가 아닙니다.</p>
+                {adPreview && <pre className="text-xs text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-2 border border-gray-100 font-sans" data-testid="ad-preview">{adPreview}</pre>}
+              </>
+            )}
+          </div>
+
           {/* Message Type */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">발송 채널</label>

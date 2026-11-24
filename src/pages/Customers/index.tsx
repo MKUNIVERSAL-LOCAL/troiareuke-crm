@@ -40,6 +40,7 @@ import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgram
 import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../lib/customerMerge';
 import { propagateCustomerIdentity, countIdentityCopies, IDENTITY_PROPAGATION_CONFIRM_AT, scrubCustomerBeforeDelete, DELETED_CUSTOMER_NAME } from '../../lib/customerIdentity';
 import { parseTags, topTags } from '../../lib/customerTags';
+import ConsentControl from '../../components/ConsentControl';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
@@ -1859,7 +1860,7 @@ export default function Customers() {
                     <RevisitBadge customerId={selected.id} size="sm" />
                   </div>
                 </div>
-                {tagChips}
+                {tagChips}{selected && <ConsentControl customer={selected} onChanged={() => { loadAll(); setSelected(prev => (prev ? CustomerStore.getAll().find(c => c.id === prev.id) ?? prev : prev)); }} />}
                 <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">메모</p>
                   {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
@@ -2242,7 +2243,7 @@ export default function Customers() {
                     {selectedNoShows > 0 && (
                       <p className="text-xs mt-0.5 text-rose-600 font-medium" data-testid="noshow-badge">노쇼 {selectedNoShows}회 — 예약 확인 연락을 권장합니다</p>
                     )}
-                    {tagChips}{dupHint}
+                    {tagChips}{selected && <ConsentControl customer={selected} onChanged={() => { loadAll(); setSelected(prev => (prev ? CustomerStore.getAll().find(c => c.id === prev.id) ?? prev : prev)); }} />}{dupHint}
                   </div>
                 </div>
                 {/* 1366px 폭에서 버튼 글자가 세로로 깨지지 않도록 — 줄바꿈은 버튼 단위로 (2026-11-17) */}

@@ -39,6 +39,8 @@ import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
 import { formatBriefing, pseudonymizeStaff, BRIEFING_SYSTEM } from '../src/lib/ai/briefingRule';
+import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend } from '../src/lib/adComplianceRule';
+import { consentFromTags, tagsWithConsent } from '../src/lib/consentRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -790,4 +792,36 @@ test('AI 경영 브리핑 컨텍스트 — 엔진 숫자에 [확정]/[예측] �
   expect(pseudonymizeStaff(['a', 'b', 'a', 'c']).get('a')).toBe('직원A');
   expect(pseudonymizeStaff(['a', 'b', 'a', 'c']).get('c')).toBe('직원C');
   expect(BRIEFING_SYSTEM).toContain('숫자를 새로 계산하거나 추정하지 말고');
+});
+
+test('광고 메시지 규칙 — (광고)·080 표기, 21~08시 차단과 다음 허용 시각, 동의·채널 거부, 태그 왕복 (155)', () => {
+  expect(isQuietHours(new Date(2026, 10, 24, 21, 0))).toBe(true);
+  expect(isQuietHours(new Date(2026, 10, 24, 7, 59))).toBe(true);
+  expect(isQuietHours(new Date(2026, 10, 24, 8, 0))).toBe(false);
+  expect(isQuietHours(new Date(2026, 10, 24, 20, 59))).toBe(false);
+  expect(nextAllowedTime(new Date(2026, 10, 24, 22, 30)).toISOString()).toBe(new Date(2026, 10, 25, 8, 0).toISOString()); // 밤 → 다음 날 08:00
+  expect(nextAllowedTime(new Date(2026, 10, 24, 3, 0)).toISOString()).toBe(new Date(2026, 10, 24, 8, 0).toISOString());   // 새벽 → 같은 날 08:00
+  expect(nextAllowedTime(new Date(2026, 10, 24, 14, 0)).toISOString()).toBe(new Date(2026, 10, 24, 14, 0).toISOString()); // 낮은 그대로
+  expect(isValidOptOutNumber('080-123-4567')).toBe(true);
+  expect(isValidOptOutNumber('080-1234-5678')).toBe(true);
+  expect(isValidOptOutNumber('02-123-4567')).toBe(false);
+  expect(decorateAdMessage('11월 이벤트', '080-123-4567')).toBe('(광고) 11월 이벤트\n무료수신거부 080-123-4567');
+  expect(decorateAdMessage('(광고) 이미 붙음\n무료수신거부 080-123-4567', '080-123-4567')).toBe('(광고) 이미 붙음\n무료수신거부 080-123-4567'); // 중복 없음
+  const consented = { ad: 'consented' as const, sms: true, kakao: false };
+  expect(canReceiveAd(consented, 'sms')).toBe(true);
+  expect(canReceiveAd(consented, 'kakao')).toBe(false);
+  expect(canReceiveAd({ ad: 'unknown', sms: true, kakao: true }, 'sms')).toBe(false);   // 동의 없음 = 광고 불가
+  expect(canReceiveAd({ ad: 'optout', sms: true, kakao: true }, 'sms')).toBe(false);
+  expect(checkAdSend({ isAd: false, channel: 'sms', now: new Date(2026, 10, 24, 23, 0), optOutNumber: '' }).ok).toBe(true); // 거래 안내는 규칙 밖
+  const night = checkAdSend({ isAd: true, channel: 'sms', now: new Date(2026, 10, 24, 23, 0), optOutNumber: '' });
+  expect(night.ok).toBe(false);
+  expect(night.reasons.length).toBe(2);
+  expect(night.reasons[1]).toContain('08:00 이후로 예약 발송');
+  expect(checkAdSend({ isAd: true, channel: 'sms', now: new Date(2026, 10, 24, 23, 0), optOutNumber: '080-123-4567', scheduledAt: new Date(2026, 10, 25, 9, 0) }).ok).toBe(true); // 예약 시각이 허용 시간이면 OK
+  // 태그 왕복
+  expect(consentFromTags(['VIP'])).toEqual({ ad: 'unknown', sms: true, kakao: true, consentAt: undefined });
+  expect(consentFromTags(['광고수신동의', '광고동의:2026-11-24', '카카오수신거부'])).toEqual({ ad: 'consented', sms: true, kakao: false, consentAt: '2026-11-24' });
+  expect(consentFromTags(['광고수신거부'])).toEqual({ ad: 'optout', sms: true, kakao: true, consentAt: undefined });
+  expect(tagsWithConsent(['VIP', '광고수신거부'], { ad: 'consented', sms: false, kakao: true }, '2026-11-24')).toEqual(['VIP', '광고수신동의', '광고동의:2026-11-24', '문자수신거부']);
+  expect(tagsWithConsent(['광고수신동의', '광고동의:2026-11-01'], { ad: 'optout', sms: true, kakao: true }, '2026-11-24')).toEqual(['광고수신거부']);
 });

@@ -25,6 +25,7 @@ import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
 import ResourcesCard from '../../components/settings/ResourcesCard';
 import AiServiceCard from '../../components/settings/AiServiceCard';
+import AdOptOutCard from '../../components/settings/AdOptOutCard';
 import AppLockCard from '../../components/settings/AppLockCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
 import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
@@ -1060,6 +1061,7 @@ export default function Settings() {
             {tab === 'notifications' && (
               <div className="space-y-6">
               <RevisitCycleCard />
+              <AdOptOutCard />
               <RetentionPolicyCard />
 
               <SettingCard title="자동 알림 설정">
