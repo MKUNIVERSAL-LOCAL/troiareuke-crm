@@ -17,6 +17,7 @@ function tomorrowISO(): string {
 
 test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이력에 남고, 광고 캠페인은 080 없이 막힌다', async ({ page }) => {
   test.slow();
+  test.skip(new Date().getHours() === 23 && new Date().getMinutes() >= 55, '자정을 넘기면 "내일 예약" 기준이 바뀐다 — 5분 뒤 다시'); // (178 리뷰 L-7)
   page.on('dialog', d => d.accept());
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
@@ -38,7 +39,9 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
 
   // 대시보드 "오늘 할 일"에 캠페인 대상 1명 (177)
   await page.goto('/');
-  await expect(page.getByTestId('today-tasks-card').filter({ visible: true }).first()).toContainText('캠페인 발송 대상 확인·승인');
+  const taskLine = page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByRole('button', { name: /캠페인 발송 대상 확인·승인/ });
+  await expect(taskLine).toContainText('1'); // 대상 1명
+  await expect(taskLine).toContainText('1개 캠페인');
   await page.goto('/messaging');
 
   // 대상 확인 → 치환된 본문 → 승인

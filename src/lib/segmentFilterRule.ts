@@ -31,8 +31,8 @@ export interface CustomerFacts {
   lastVisitDate: string | null;        // YYYY-MM-DD
   totalVisits: number;
   totalSpent: number;
-  recentPayments: { date: string; amount: number }[]; // 완료 결제(날짜·금액) — 최근 N일 합은 여기서 (175)
-  activePrograms: number;              // 진행 중(미완료) 회차권 수 (175)
+  recentPayments: { date: string; amount: number }[]; // 완료 결제(날짜·금액, 환불 행은 음수) — 최근 N일 합은 여기서 (175·178)
+  activePrograms: number;              // 진행 중(미완료·만료 전) 회차권 수 (175·178)
   rfmSegment: RfmSegment | null;
   churnLevel: ChurnLevel | null;
   birthMonth: number | null;           // 1~12
@@ -88,7 +88,8 @@ export function validateSegment(name: string, c: SegmentCondition): string[] {
   if (!name.trim()) errs.push('세그먼트 이름을 입력해주세요.');
   if (isEmptyCondition(c)) errs.push('조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).');
   const nonneg = (v: number | undefined, label: string) => { if (v !== undefined && (!Number.isInteger(v) || v < 0)) errs.push(`${label}: 0 이상 정수로 입력해주세요.`); };
-  nonneg(c.lastVisitDaysMin, '마지막 방문 뒤 최소 일수'); nonneg(c.lastVisitDaysMax, '마지막 방문 뒤 최대 일수'); nonneg(c.visitsMin, '최소 방문 횟수'); nonneg(c.visitsMax, '최대 방문 횟수'); nonneg(c.spentMin, '최소 누적 결제'); nonneg(c.recentSpendMin, '최근 결제 최소 금액');
+  const pos = (v: number | undefined, label: string) => { if (v !== undefined && (!Number.isInteger(v) || v < 1)) errs.push(`${label}: 1 이상 정수로 입력해주세요.`); }; // 0 은 항상 참이라 조건이 아니다 — 빈 조건 거절 우회 방지 (178 리뷰 L-1)
+  nonneg(c.lastVisitDaysMin, '마지막 방문 뒤 최소 일수'); nonneg(c.lastVisitDaysMax, '마지막 방문 뒤 최대 일수'); pos(c.visitsMin, '최소 방문 횟수'); nonneg(c.visitsMax, '최대 방문 횟수'); pos(c.spentMin, '최소 누적 결제'); pos(c.recentSpendMin, '최근 결제 최소 금액');
   if (c.recentSpendDays !== undefined && (!Number.isInteger(c.recentSpendDays) || c.recentSpendDays < 1 || c.recentSpendDays > 365)) errs.push('최근 결제 기간: 1~365일로 입력해주세요.');
   if (c.recentSpendDays !== undefined && c.recentSpendMin === undefined) errs.push('최근 결제 기간을 쓰려면 최소 금액도 입력해주세요.');
   if (c.lastVisitDaysMin !== undefined && c.lastVisitDaysMax !== undefined && c.lastVisitDaysMin > c.lastVisitDaysMax) errs.push('마지막 방문 일수의 최소가 최대보다 큽니다.');

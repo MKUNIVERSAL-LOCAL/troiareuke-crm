@@ -9,10 +9,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MessageHistoryStore } from '../../lib/store';
 import { sendMessages } from '../../lib/messagingGateway';
 import { smsBytes, SMS_BYTE_LIMIT, MESSAGE_UNIT_COST } from '../../lib/smsBytes';
-import { collectRawCandidates } from '../../lib/campaignTriggers';
-import { sentKeysOf, markSent } from '../../lib/campaignStore';
-import { segmentIdsFor } from '../../lib/savedSegments';
-import { selectCandidates, describeTrigger, SKIP_LABELS, type Campaign, type SkipReason } from '../../lib/campaignRule';
+import { markSent } from '../../lib/campaignStore';
+import { selectCampaign } from '../../lib/campaignCandidates';
+import { describeTrigger, SKIP_LABELS, type Campaign, type SkipReason } from '../../lib/campaignRule';
 import { checkAdSend, decorateAdMessage } from '../../lib/adComplianceRule';
 import { getOptOutNumber } from '../../lib/marketingConsent';
 import type { MessageType } from '../../types';
@@ -21,7 +20,7 @@ const FAIL_STREAK_STOP = 3;
 
 export default function CampaignRunModal({ campaign, onClose, onSent }: { campaign: Campaign; onClose: () => void; onSent: () => void }) {
   const { user } = useAuth();
-  const selection = useMemo(() => selectCandidates(campaign, collectRawCandidates(campaign), sentKeysOf(campaign.id), String(new Date().getFullYear()), segmentIdsFor(campaign.segmentId)), [campaign]); // 저장 세그먼트로 좁힘 (167)
+  const selection = useMemo(() => selectCampaign(campaign), [campaign]); // 대시보드·브리핑과 같은 공용 선별(저장 세그먼트 좁힘 포함) (167, 178 리뷰 M-3)
   const [checked, setChecked] = useState<Set<string>>(() => new Set(selection.ready.map(r => r.key)));
   const [phase, setPhase] = useState<'review' | 'sending' | 'done'>('review');
   const [result, setResult] = useState<{ sent: number; failed: number; pending: boolean; reason?: string } | null>(null);
@@ -85,7 +84,7 @@ export default function CampaignRunModal({ campaign, onClose, onSent }: { campai
           {skipSummary.length > 0 && (
             <div className="text-xs text-gray-500">
               <button type="button" onClick={() => setShowSkipped(v => !v)} aria-expanded={showSkipped} className="underline decoration-dotted hover:text-gray-700" data-testid="campaign-skipped-toggle">
-                제외: {skipSummary.map(([why, n]) => `${SKIP_LABELS[why]} ${n}명`).join(' · ')} {showSkipped ? '▲ 접기' : '▼ 누가 빠졌는지 보기'}
+                제외: {skipSummary.map(([why, n]) => `${SKIP_LABELS[why]} ${n}명`).join(' · ')} <span aria-hidden="true">{showSkipped ? '▲' : '▼'}</span> {showSkipped ? '접기' : '누가 빠졌는지 보기'}
               </button>
               {showSkipped && (
                 <ul className="mt-1.5 max-h-40 overflow-y-auto divide-y divide-gray-50 border border-gray-100 rounded-lg" data-testid="campaign-skipped">

@@ -4,7 +4,7 @@ import { CustomerStore, ReservationStore, SettingsStore, PaymentStore } from './
 import { addDays, daysBetween, toISO } from './revisitRule';
 import { getRevisitDueCustomers } from './reminderEngine';
 import { getProgramAlerts } from './programAlerts';
-import { buildCustomerStatsIndex, statsFor, collectVisitDates } from './customerStats';
+import { buildCustomerStatsIndex, statsFor, type CustomerStatsIndex } from './customerStats';
 import { isUpcomingReservation } from './upcomingRule';
 import { isCountableCustomer } from './customerScope';
 import { consentOf } from './marketingConsent';
@@ -19,8 +19,15 @@ function base(c: Customer, reason: string, eventId: string, vars: Record<string,
   return { customerId: c.id, customerName: c.name, phone: c.phone || '', consent: consentOf(c), reason, eventId, vars: { '{매장명}': SettingsStore.get().name || '', ...vars } };
 }
 
+/** 트리거 산출에 쓰는 전수 인덱스를 첫 사용 때 한 번만 만들어 캠페인 여럿이 나눠 쓴다 (178 리뷰 M-2) */
+export interface TriggerContext { stats(): CustomerStatsIndex }
+export function triggerContext(): TriggerContext {
+  let stats: CustomerStatsIndex | undefined;
+  return { stats: () => (stats ??= buildCustomerStatsIndex()) };
+}
+
 /** 오늘 기준 캠페인의 원 후보 — 멱등키·동의·번호 걸러내기는 selectCandidates 가 한다 */
-export function collectRawCandidates(c: Pick<Campaign, 'trigger' | 'days'>, today = new Date()): RawCandidate[] {
+export function collectRawCandidates(c: Pick<Campaign, 'trigger' | 'days'>, today = new Date(), ctx: TriggerContext = triggerContext()): RawCandidate[] {
   const todayISO = toISO(today);
   const customers = CustomerStore.getAll().filter(isCountableCustomer);
   const byId = new Map(customers.map(x => [x.id, x]));
@@ -46,7 +53,7 @@ export function collectRawCandidates(c: Pick<Campaign, 'trigger' | 'days'>, toda
       });
     }
     case 'novisit': {
-      const stats = buildCustomerStatsIndex();
+      const stats = ctx.stats();
       const upcoming = new Set(ReservationStore.getAll().filter(r => isUpcomingReservation(r, todayISO)).map(r => r.customerId));
       return customers.flatMap(cu => {
         const last = statsFor(cu, stats).lastVisitDate ?? cu.lastVisitDate;
@@ -56,9 +63,9 @@ export function collectRawCandidates(c: Pick<Campaign, 'trigger' | 'days'>, toda
       });
     }
     case 'revisit_due':
-      return getRevisitDueCustomers().flatMap(d => (byId.has(d.customer.id) ? [base(d.customer, `권장일 ${d.overdueDays}일 지남`, d.dueDate, { '{마지막방문일}': d.lastVisit ? formatDate(d.lastVisit) : '' })] : []));
+      return getRevisitDueCustomers(0, ctx.stats()).flatMap(d => (byId.has(d.customer.id) ? [base(d.customer, `권장일 ${d.overdueDays}일 지남`, d.dueDate, { '{마지막방문일}': d.lastVisit ? formatDate(d.lastVisit) : '' })] : []));
     case 'first_visit_followup': {
-      const stats = buildCustomerStatsIndex();
+      const stats = ctx.stats();
       return customers.flatMap(cu => {
         const s = statsFor(cu, stats);
         if (s.totalVisits !== 1 || !s.lastVisitDate) return [];
@@ -76,7 +83,8 @@ export function collectRawCandidates(c: Pick<Campaign, 'trigger' | 'days'>, toda
         .flatMap(r => { const cu = byId.get(r.customerId); return cu ? [base(cu, `오늘 ${r.startTime} 예약`, r.id, { '{예약일시}': `${formatDate(r.date)} ${r.startTime}`, '{시술명}': r.services.map(s => s.serviceName).join(', ') })] : []; });
     case 'after_visit': {
       const target = addDays(todayISO, -c.days);
-      return customers.flatMap(cu => (collectVisitDates(cu.id).includes(target) ? [base(cu, `${c.days}일 전 방문`, target, { '{마지막방문일}': formatDate(target) })] : []));
+      const visitDays = ctx.stats().visitDays; // 고객마다 예약·시술 기록 전수를 다시 훑지 않는다 — 인덱스의 방문일(완료 예약 ∪ 시술 기록, 같은 정의) (178 리뷰 M-2)
+      return customers.flatMap(cu => ((visitDays?.get(cu.id) ?? []).includes(target) ? [base(cu, `${c.days}일 전 방문`, target, { '{마지막방문일}': formatDate(target) })] : []));
     }
     case 'noshow_followup': {
       const yesterday = addDays(todayISO, -1);

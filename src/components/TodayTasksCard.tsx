@@ -4,21 +4,31 @@ import { ListChecks, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useFeature } from '../hooks/useFeature';
 import { canDo } from '../lib/permissions';
-import { buildTodayTasks, getMonthlyKpis } from '../lib/todayTasks';
+import { buildTodayTasks, getMonthlyKpis, type TodayTask } from '../lib/todayTasks';
+import type { MonthlyKpis } from '../lib/kpiRule';
 
 /**
  * 대시보드 "오늘 할 일" + 이달 운영 지표 (138, GAP D-1 — 숫자 나열이 아니라 행동으로 연결되는 대시보드).
  * 각 줄을 누르면 그 고객 목록·화면으로 간다. 지표는 공식을 툴팁으로 보여 "왜 이 숫자인지" 알 수 있게(벤치마크 TOP 20 #15).
  */
-export default function TodayTasksCard({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
-  const navigate = useNavigate();
+export interface TodayTasksData { tasks: TodayTask[]; kpi: MonthlyKpis | null; salesOn: boolean }
+
+/** 오늘 할 일·이달 지표를 한 번 계산 — Dashboard 가 모바일·PC 카드 둘에 같은 결과를 내려 전수 스캔을 두 번 돌리지 않는다 (178 리뷰 M-2) */
+export function useTodayTasks(refreshKey: number): TodayTasksData {
   const { user } = useAuth();
   const customersOn = useFeature('module.customers');
   const reservationsOn = useFeature('module.reservations');
   const productsOn = useFeature('module.products');
+  const messagingOn = useFeature('module.messaging');
   const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view');
-  const tasks = useMemo(() => buildTodayTasks({ customersOn, reservationsOn, productsOn, salesOn }), [refreshKey, customersOn, reservationsOn, productsOn, salesOn]);
+  const tasks = useMemo(() => buildTodayTasks({ customersOn, reservationsOn, productsOn, salesOn, messagingOn }), [refreshKey, customersOn, reservationsOn, productsOn, salesOn, messagingOn]);
   const kpi = useMemo(() => (customersOn ? getMonthlyKpis() : null), [refreshKey, customersOn]);
+  return { tasks, kpi, salesOn };
+}
+
+export default function TodayTasksCard({ compact = false, data }: { compact?: boolean; data: TodayTasksData }) {
+  const navigate = useNavigate();
+  const { tasks, kpi, salesOn } = data;
   const showKpi = !!kpi && kpi.visitors > 0; // 이달 방문이 없으면 "- 0/0명" 칸을 띄우지 않는다 (139 #L8)
   if (tasks.length === 0 && !showKpi) return null;
   const pct = (v: number | null) => (v === null ? '-' : `${v}%`);

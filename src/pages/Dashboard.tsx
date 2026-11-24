@@ -11,7 +11,7 @@ const WeeklySalesChart = lazy(() => import('../components/charts/WeeklySalesChar
 import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
-import TodayTasksCard from '../components/TodayTasksCard';
+import TodayTasksCard, { useTodayTasks } from '../components/TodayTasksCard';
 import { useDataRefreshed } from '../hooks/useDataRefreshed';
 import StatCard from '../components/ui/StatCard';
 import { formatDate, formatWon, formatPrice, toManwon, todayISO } from '../lib/format';
@@ -142,6 +142,7 @@ export default function Dashboard() {
 
   // 다른 페이지에서 CRUD 후 돌아오거나 창에 포커스가 돌아오면 최신 데이터로 재계산 (stale 방지)
   const [refreshKey, setRefreshKey] = useState(0); // 포커스/가시성 복귀 때 알림 카드(회차권·내일 예약)도 다시 계산
+  const todayTasks = useTodayTasks(refreshKey); // 모바일·PC 카드가 한 결과를 나눠 쓴다 (178 리뷰 M-2)
   const refresh = () => { setData(getDashboardData()); setRefreshKey(k => k + 1); };
   useEffect(() => {
     refresh(); // 마운트 시 최신화
@@ -189,7 +190,7 @@ export default function Dashboard() {
         {/* 첫 설정 체크리스트 — 할 일이 남은 새 매장에만 보인다 */}
         <SetupChecklistCard refreshKey={refreshKey} />
         {/* 오늘 할 일 + 이달 운영 지표 — 알림 카드들을 행동 목록으로 (138) */}
-        <TodayTasksCard compact refreshKey={refreshKey} />
+        <TodayTasksCard compact data={todayTasks} />
         {/* StatCards 2열 */}
         <div className="grid grid-cols-2 gap-3 [&>:last-child:nth-child(odd)]:col-span-2"> {/* 직원은 카드 3장 — 마지막 반 칸 공백 대신 전폭 (15차 #M12) */}
           {salesOn && (
@@ -319,7 +320,7 @@ export default function Dashboard() {
         {/* 첫 설정 체크리스트 — 할 일이 남은 새 매장에만 보인다 */}
         <SetupChecklistCard refreshKey={refreshKey} />
         {/* 오늘 할 일 + 이달 운영 지표 — 알림 카드들을 행동 목록으로 (138) */}
-        <TodayTasksCard refreshKey={refreshKey} />
+        <TodayTasksCard data={todayTasks} />
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 [&:has(>:last-child:nth-child(3))]:lg:grid-cols-3 [&>:last-child:nth-child(odd)]:col-span-2 lg:[&>:last-child:nth-child(odd)]:col-span-1">
           {salesOn && (

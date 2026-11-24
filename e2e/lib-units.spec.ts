@@ -864,6 +864,9 @@ test('캠페인 규칙 — 멱등키 버킷, 변수 치환, 후보 선별(중복
   const tx = selectCandidates({ ...camp, isAd: false, repeat: 'once', content: '{고객명} {잔여회차}' }, [raw('b', { consent: { ad: 'unknown', sms: true, kakao: true }, vars: { '{잔여회차}': '1' } }), raw('b', { eventId: 'e2', vars: { '{잔여회차}': '1' } }), raw('f', { vars: {} })], new Set(), '2026');
   expect(tx.ready.map(r => r.key)).toEqual(['c1|b|once']);
   expect(tx.skipped.map(s => s.why)).toEqual(['unresolved_vars']);
+  // 같은 고객이 사건 둘로 빠지면 제외 목록엔 사람 1명 (178 리뷰 M-4)
+  const dup = selectCandidates(camp, [raw('b', { consent: { ad: 'unknown', sms: true, kakao: true } }), raw('b', { consent: { ad: 'unknown', sms: true, kakao: true }, eventId: 'e2' })], new Set(), '2026');
+  expect(dup.skipped).toEqual([{ customerId: 'b', customerName: 'b', why: 'no_consent' }]);
   expect(validateCampaign({ name: '', content: '{고객명} {없는변수}', trigger: 'novisit', days: 3 })).toEqual(['캠페인 이름을 입력해주세요.', '마지막 방문 뒤 며칠 이상: 7~365 사이 정수로 입력해주세요.', '쓸 수 없는 변수: {없는변수}']);
   expect(validateCampaign({ name: 'x', content: 'y', trigger: 'reservation_tomorrow', days: 0 })).toEqual([]);
   expect(describeTrigger({ trigger: 'birthday', days: 3 })).toBe('생일 3일 전부터 생일까지');
@@ -1059,6 +1062,9 @@ test('저장 세그먼트 규칙 — AND 조건 평가·빈 조건 거절·설�
   expect(matchesSegment(f, { recentSpendDays: 30, recentSpendMin: 250000 }, today)).toBe(true);   // 10-25~: 250,000
   expect(matchesSegment(f, { recentSpendDays: 7, recentSpendMin: 100000 }, today)).toBe(false);   // 11-17~: 50,000
   expect(matchesSegment(f, { recentSpendDays: 120, recentSpendMin: 550000 }, today)).toBe(true);  // 07-27~: 전부
+  const fr = { ...f, recentPayments: [...f.recentPayments, { date: '2026-11-15', amount: -200000 }] }; // 11-10 결제를 11-15 에 전액 환불 (178 리뷰 M-1)
+  expect(matchesSegment(fr, { recentSpendMin: 250000 }, today)).toBe(false); expect(matchesSegment(fr, { recentSpendMin: 50000 }, today)).toBe(true); // 90일 합 50,000
+  expect(matchesSegment(fr, { recentSpendDays: 7, recentSpendMin: 50000 }, today)).toBe(true); // 환불일이 창 밖이면 차감도 없다
   expect(matchesSegment(f, { hasActiveProgram: true }, today)).toBe(true); expect(matchesSegment({ ...f, activePrograms: 0 }, { hasActiveProgram: true }, today)).toBe(false);
   expect(isEmptyCondition({ hasActiveProgram: false })).toBe(false); expect(isEmptyCondition({ recentSpendDays: 30 })).toBe(true); // 기간만으론 조건이 아니다
   expect(validateSegment('x', { recentSpendDays: 30 })).toEqual(['조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).', '최근 결제 기간을 쓰려면 최소 금액도 입력해주세요.']);
@@ -1067,7 +1073,9 @@ test('저장 세그먼트 규칙 — AND 조건 평가·빈 조건 거절·설�
   expect(isEmptyCondition({})).toBe(true); expect(isEmptyCondition({ grades: [] })).toBe(true); expect(isEmptyCondition({ hasUpcoming: false })).toBe(false);
   expect(validateSegment('', {})).toEqual(['세그먼트 이름을 입력해주세요.', '조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).']);
   expect(validateSegment('x', { lastVisitDaysMin: 90, lastVisitDaysMax: 30 })).toEqual(['마지막 방문 일수의 최소가 최대보다 큽니다.']);
-  expect(validateSegment('x', { visitsMin: -1 })).toEqual(['최소 방문 횟수: 0 이상 정수로 입력해주세요.']);
+  expect(validateSegment('x', { visitsMin: -1 })).toEqual(['최소 방문 횟수: 1 이상 정수로 입력해주세요.']);
+  expect(validateSegment('x', { spentMin: 0 })).toEqual(['최소 누적 결제: 1 이상 정수로 입력해주세요.']); // 0 원 이상은 조건이 아니다 (178 리뷰 L-1)
+  expect(validateSegment('x', { lastVisitDaysMin: 0 })).toEqual([]); // 방문 뒤 0일 이상은 "방문 기록 있음" 이라 조건
   expect(describeSegment({ grades: ['VIP'], lastVisitDaysMin: 60, hasUpcoming: false, adConsent: 'consented' })).toBe('등급 VIP · 마지막 방문 60일 이상 전 · 다음 예약 없음 · 광고 동의');
   expect(describeSegment({})).toBe('전체');
 });

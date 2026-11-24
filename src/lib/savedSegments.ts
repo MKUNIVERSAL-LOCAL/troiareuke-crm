@@ -38,9 +38,10 @@ export function buildSegmentFacts(): Map<string, CustomerFacts> {
   for (const r of ReservationStore.getAll()) if (isUpcomingReservation(r, today)) upcoming.add(r.customerId);
   // 최근 결제·진행 중 회차권 — 고객별로 한 번에 묶어 둔다 (175)
   const payByCustomer = new Map<string, { date: string; amount: number }[]>();
-  for (const p of PaymentStore.getAll()) if (p.customerId && p.status === 'completed' && p.amount > 0) { const l = payByCustomer.get(p.customerId); const row = { date: p.paymentDate, amount: p.amount }; if (l) l.push(row); else payByCustomer.set(p.customerId, [row]); }
-  const activeProgramCount = new Map<string, number>();
-  for (const cp of CustomerProgramStore.getAll()) if (!cp.isCompleted) activeProgramCount.set(cp.customerId, (activeProgramCount.get(cp.customerId) || 0) + 1);
+  // 환불 행(B 모델: status completed·금액 음수)은 환불일에 차감 — 누적 결제(순액)·월 매출과 같은 기준, 전액 환불 고객이 "최근 결제 N원 이상" 에 남지 않게 (178 리뷰 M-1)
+  for (const p of PaymentStore.getAll()) if (p.customerId && p.status === 'completed' && p.amount) { const l = payByCustomer.get(p.customerId); const row = { date: p.paymentDate, amount: p.amount }; if (l) l.push(row); else payByCustomer.set(p.customerId, [row]); }
+  const activeProgramCount = new Map<string, number>(); // 만료일이 지난 미완료 회차권은 "진행 중" 이 아니다 (178 리뷰 L-2)
+  for (const cp of CustomerProgramStore.getAll()) if (!cp.isCompleted && !(cp.expiryDate && cp.expiryDate < today)) activeProgramCount.set(cp.customerId, (activeProgramCount.get(cp.customerId) || 0) + 1);
   const out = new Map<string, CustomerFacts>();
   for (const c of CustomerStore.getAll().filter(isCountableCustomer)) {
     const s = statsFor(c, stats);

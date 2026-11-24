@@ -68,6 +68,13 @@ export function sentKeysOf(campaignId: string): Set<string> {
   return new Set(readSends().filter(s => s.campaignId === campaignId).map(s => s.key));
 }
 
+/** 캠페인별 멱등키 — 기록(최대 5만 건)을 한 번만 파싱해 켜진 캠페인 전부에 (178 리뷰 M-2) */
+export function sentKeysByCampaign(): Map<string, Set<string>> {
+  const m = new Map<string, Set<string>>();
+  for (const s of readSends()) { const set = m.get(s.campaignId); if (set) set.add(s.key); else m.set(s.campaignId, new Set([s.key])); }
+  return m;
+}
+
 /** 실제로 나간(성공) 건만 기록한다 — 미연동·실패는 다음 실행에 다시 잡혀야 한다 */
 export function markSent(records: Omit<CampaignSendRecord, 'at'>[]): void {
   if (!records.length) return;

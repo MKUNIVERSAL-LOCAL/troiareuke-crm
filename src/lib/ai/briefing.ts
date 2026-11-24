@@ -13,11 +13,10 @@ import { isCountableCustomer } from '../customerScope';
 import { isUpcomingReservation } from '../upcomingRule';
 import { isLowStock } from '../stockRule';
 import { localMonthOf } from '../revenueMetricsRule';
-import { listCampaigns, sentKeysOf } from '../campaignStore';
-import { buildSegmentFacts, segmentIdsFor } from '../savedSegments';
-import type { CustomerFacts } from '../segmentFilterRule';
-import { collectRawCandidates } from '../campaignTriggers';
+import { listCampaigns } from '../campaignStore';
+import { collectRawCandidates, triggerContext, type TriggerContext } from '../campaignTriggers';
 import { selectCandidates, type Campaign } from '../campaignRule';
+import { selectEnabledCampaigns, type CampaignSelection } from '../campaignCandidates';
 import { CAMPAIGN_PRESETS } from '../campaignPresets';
 import { getStaffSchedule } from '../staffScheduleStore';
 import { dayWindow, dayKeyOf } from '../staffScheduleRule';
@@ -32,32 +31,20 @@ const FREE_SLOT_DURATION_MIN = 60; // 빈 시간 기준 시술 길이
 const FREE_SLOT_SHOW = 4;          // 직원당 보여줄 시작 시각 수
 const RECOMMEND_MAX = 5;
 
-/** 캠페인별 오늘 대상 수 — 켜진 캠페인만, 승인 전 수치 (158) */
-/** 세그먼트를 쓰는 캠페인이 하나라도 켜져 있을 때만 사실을 1회 계산 — 아니면 전수 스캔 0회 (170 리뷰 M-2) */
-function segmentFactsIfNeeded(campaigns: Campaign[]): Map<string, CustomerFacts> | undefined {
-  return campaigns.some(c => c.enabled && c.segmentId) ? buildSegmentFacts() : undefined;
-}
-
-function campaignContacts(year: string, facts: Map<string, CustomerFacts> | undefined): BriefingContacts[] {
-  return listCampaigns().filter(c => c.enabled).map(c => {
-    const sel = selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year, segmentIdsFor(c.segmentId, facts));
-    return { campaign: c.name, ready: sel.ready.length, skipped: sel.skipped.length };
-  }).filter(c => c.ready > 0 || c.skipped > 0);
+/** 캠페인별 오늘 대상 수 — 켜진 캠페인만, 승인 전 수치. 선별은 campaignCandidates 가 1회 (158, 178 리뷰 M-3) */
+function campaignContacts(enabled: CampaignSelection[]): BriefingContacts[] {
+  return enabled.map(({ campaign, selection }) => ({ campaign: campaign.name, ready: selection.ready.length, skipped: selection.skipped.length })).filter(c => c.ready > 0 || c.skipped > 0);
 }
 
 /** 이번 주 캠페인 추천 — 켜진 캠페인 + 아직 안 만든 기본 시나리오를 "지금 대상 수"로 줄 세운다(결정적, AI 는 문장만) (158) */
-function campaignRecommendations(year: string, facts: Map<string, CustomerFacts> | undefined): BriefingRecommendation[] {
-  const existing = listCampaigns();
-  const names = new Set(existing.map(c => c.name));
+function campaignRecommendations(enabled: CampaignSelection[], year: string, now: Date, ctx: TriggerContext): BriefingRecommendation[] {
+  const names = new Set(listCampaigns().map(c => c.name)); // 꺼진 캠페인도 "이미 만든 것"
   const out: BriefingRecommendation[] = [];
-  for (const c of existing.filter(x => x.enabled)) {
-    const n = selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year, segmentIdsFor(c.segmentId, facts)).ready.length;
-    if (n > 0) out.push({ campaign: c.name, ready: n, exists: true });
-  }
+  for (const { campaign, selection } of enabled) if (selection.ready.length > 0) out.push({ campaign: campaign.name, ready: selection.ready.length, exists: true });
   for (const p of CAMPAIGN_PRESETS.filter(p => !names.has(p.name))) {
     const { key, group: _group, ...rest } = p;
     const virtual: Campaign = { ...rest, id: `preset:${key}`, createdAt: '', updatedAt: '' };
-    const n = selectCandidates(virtual, collectRawCandidates(virtual), new Set(), year).ready.length;
+    const n = selectCandidates(virtual, collectRawCandidates(virtual, now, ctx), new Set(), year).ready.length; // 가상 시나리오도 같은 통계 인덱스 재사용
     if (n > 0) out.push({ campaign: p.name, ready: n, exists: false });
   }
   return out.sort((a, b) => b.ready - a.ready).slice(0, RECOMMEND_MAX);
@@ -122,7 +109,11 @@ export function buildBriefingContext(perm: BriefingPermissions, kind: BriefingKi
   }) : null;
   const kpiRaw = getMonthlyKpis();
   const kpi = perm.salesOn ? kpiRaw : { ...kpiRaw, avgTicket: null, monthRevenue: 0 }; // 객단가 = 월매출 ÷ 방문 — 직원 계정에 매출이 복원되지 않게 (154 리뷰 H-2)
-  const tasks = buildTodayTasks({ customersOn: true, reservationsOn: true, productsOn: true, salesOn: perm.salesOn }).map(t => ({ label: t.label, count: t.count, detail: perm.salesOn ? t.detail : undefined }));
+  const triggerCtx = triggerContext();
+  const enabledCampaigns = selectEnabledCampaigns(now, triggerCtx); // 오늘 할 일·연락할 고객·추천이 한 결과를 나눠 쓴다 (178 리뷰 M-3)
+  const tasks = buildTodayTasks({ customersOn: true, reservationsOn: true, productsOn: true, salesOn: perm.salesOn, messagingOn: true }, enabledCampaigns)
+    .filter(t => t.key !== 'campaign') // 캠페인 합계는 아래 "연락할 고객" 줄이 캠페인별로 싣는다 — 같은 숫자를 두 줄로 보내지 않는다
+    .map(t => ({ label: t.label, count: t.count, detail: perm.salesOn ? t.detail : undefined }));
   const seg = buildSegmentIndex(buildCustomerStatsIndex());
   let churnHigh = 0, churnMedium = 0, loyal = 0, dormant = 0, atRisk = 0;
   for (const c of customers) {
@@ -148,11 +139,10 @@ export function buildBriefingContext(perm: BriefingPermissions, kind: BriefingKi
     }).filter(s => s.completed > 0);
   }
   // ── 158 경영비서 2차: 오늘 브리핑 = 연락할 고객·빈 시간 / 월 브리핑 = 목표 페이스·원인 후보·캠페인 추천(+연락할 고객)
-  const segFacts = segmentFactsIfNeeded(listCampaigns());
-  const contacts = campaignContacts(year, segFacts);
+  const contacts = campaignContacts(enabledCampaigns);
   const freeSlots = kind === 'today' ? freeSlotsToday(today, now) : undefined;
   const target = kind === 'month' && metrics && metrics.target && metrics.target > 0 ? targetPace({ target: metrics.target, revenue: metrics.total, daysElapsed: metrics.daysElapsed, daysInMonth: metrics.daysInMonth }) : null;
   const causes = kind === 'month' ? monthCauses(month, shiftMonth(month, -1), perm.salesOn) : undefined;
-  const recommendations = kind === 'month' ? campaignRecommendations(year, segFacts) : undefined;
+  const recommendations = kind === 'month' ? campaignRecommendations(enabledCampaigns, year, now, triggerCtx) : undefined;
   return formatBriefing({ shopLabel: '우리 매장', today, month, metrics, kpi, tasks, segments, lowStock, staff, contacts, freeSlots, target, causes, recommendations });
 }

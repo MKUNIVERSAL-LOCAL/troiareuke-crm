@@ -149,13 +149,14 @@ export interface Selection { ready: CampaignCandidate[]; skipped: { customerId: 
 export function selectCandidates(c: Pick<Campaign, 'id' | 'repeat' | 'isAd' | 'channel' | 'content'>, raw: RawCandidate[], sentKeys: Set<string>, year: string, segmentIds?: Set<string> | null): Selection {
   const ready: CampaignCandidate[] = [];
   const skipped: Selection['skipped'] = [];
+  const skippedSeen = new Set<string>();
   const adChannel: AdChannel = c.channel === 'sms' ? 'sms' : 'kakao';
   const seen = new Set<string>();
   for (const r of raw) {
     const key = idempotencyKey(c.id, r.customerId, c.repeat, { year: r.yearBucket ?? year, eventId: r.eventId });
     if (seen.has(key)) continue; // 같은 고객이 사건 둘로 두 번 잡혀도 한 회차엔 한 번
     seen.add(key);
-    const skip = (why: SkipReason) => skipped.push({ customerId: r.customerId, customerName: r.customerName, why });
+    const skip = (why: SkipReason) => { const k = `${r.customerId}:${why}`; if (!skippedSeen.has(k)) { skippedSeen.add(k); skipped.push({ customerId: r.customerId, customerName: r.customerName, why }); } }; // 제외는 사람 수 — 같은 고객이 사건 둘로 빠져도 1행(요약·목록·브리핑 모두) (178 리뷰 M-4)
     if (sentKeys.has(key)) { skip('already_sent'); continue; }
     if (segmentIds && !segmentIds.has(r.customerId)) { skip('not_in_segment'); continue; } // 저장 세그먼트로 좁힘 (167)
     if (c.isAd && !canReceiveAd(r.consent, adChannel)) { skip(r.consent.ad === 'consented' ? 'channel_optout' : 'no_consent'); continue; }
