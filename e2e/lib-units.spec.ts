@@ -31,6 +31,7 @@ import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth } from '../src/lib/revenueMetricsRule';
+import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -640,4 +641,35 @@ test('월 매출 지표 — 전월/전년 대비·목표·신규 비중·할인�
   expect(past.breakEven).toBe(150000);       // 원가 0 → 판관비 그대로
   expect(openHoursInMonth('2026-11', '2026-12-01', hours, [])).toBe(9 * 21 + 5 * 4); // 꽉 찬 달: 평일 21·토 4·일 5 휴무
   expect(monthMetrics({ month: '2026-11', today: '2026-11-20', payments: [], expenses: [], programs: [], logs: [], customers: [], target: null }).breakEven).toBe(0);
+});
+
+test('환불 규칙(결정 #9 대기, B 모델 준비) — 환불 행·검증·부분 환불 한도·회차권 제안액·월 순매출 (148)', () => {
+  const orig = { id: 'pay1', paymentDate: '2026-10-05', type: 'program' as const, typeLabel: '회차권', amount: 500000, status: 'completed' as const, customerId: 'c1', customerName: '김고객', referenceId: 'cp1', paymentMethod: '카드' };
+  const r1 = buildRefundRow(orig, { amount: 300000, date: '2026-11-15', reason: '잔여 6회 환불', actor: '원장' });
+  expect(r1.amount).toBe(-300000);
+  expect(r1.paymentDate).toBe('2026-11-15');
+  expect(r1.status).toBe('completed');
+  expect(r1.referenceId).toBe('cp1');
+  expect(r1.typeLabel).toBe('회차권 환불');
+  expect(r1.memo).toBe('[환불 2026-11-15 ← 2026-10-05 pay1] 잔여 6회 환불 · 처리 원장');
+  const row1 = { ...r1, id: 'ref1' };
+  expect(isRefundRow(row1)).toBe(true);
+  expect(isRefundRow(orig)).toBe(false);
+  expect(refundOriginalId(row1)).toBe('pay1');
+  const all = [orig, row1];
+  expect(refundedSoFar(orig, all)).toBe(300000);
+  expect(validateRefund(orig, all, { amount: 200000, date: '2026-11-20' })).toBeNull();
+  expect(validateRefund(orig, all, { amount: 200001, date: '2026-11-20' })).toContain('200,000원까지');
+  expect(validateRefund(orig, all, { amount: 0, date: '2026-11-20' })).toContain('1원 이상');
+  expect(validateRefund(orig, all, { amount: 1000, date: '2026-09-01' })).toContain('원 결제일보다');
+  expect(validateRefund({ ...orig, status: 'refunded' }, all, { amount: 1000, date: '2026-11-20' })).toContain('완료된 결제만');
+  expect(validateRefund(row1, all, { amount: 1000, date: '2026-11-20' })).toContain('환불 행은');
+  // 10월 매출은 그대로, 11월은 −300,000 (B 모델의 핵심)
+  expect(netRevenue(all, '2026-10')).toBe(500000);
+  expect(netRevenue(all, '2026-11')).toBe(-300000);
+  // 회차권 제안액: 10회 500,000 중 4회 사용 → 잔여 6회 × 50,000 = 300,000, 위약금 10% → 270,000
+  expect(suggestedProgramRefund({ pricePaid: 500000, totalSessions: 10, usedSessions: 4 })).toBe(300000);
+  expect(suggestedProgramRefund({ pricePaid: 500000, totalSessions: 10, usedSessions: 4 }, 10)).toBe(270000);
+  expect(suggestedProgramRefund({ pricePaid: 500000, totalSessions: 10, usedSessions: 12 })).toBe(0);
+  expect(suggestedProgramRefund({ pricePaid: 90000, totalSessions: null, usedSessions: 0 })).toBeNull();
 });
