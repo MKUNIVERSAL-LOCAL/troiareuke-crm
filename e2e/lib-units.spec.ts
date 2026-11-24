@@ -29,6 +29,7 @@ import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule
 import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
 import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
+import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -567,4 +568,26 @@ test('재고 원장 — Σ 행 = 재고, 대조 차이, 기간 합계, 최신순
   expect(summarize(es, 'p')).toEqual({ received: 5, sold: 1, canceled: 1, adjusted: -2, receivedCost: 25000 });
   expect(summarize(es, 'p', '2026-11-03', '2026-11-04')).toEqual({ received: 0, sold: 1, canceled: 0, adjusted: -2, receivedCost: 0 });
   expect(entriesOf(es, 'p').map(e => e.id)).toEqual(['5', '4', '3', '2', '1']);
+});
+
+test('회차권 원장 — 등록·시술·보정 순서와 잔여, 복원 줄은 잔여를 바꾸지 않음, 기간제 (146)', () => {
+  const won = (n: number) => n.toLocaleString('ko-KR') + '원';
+  const cp = { id: 'cp1', programName: '수분 10회', totalSessions: 12, pricePaid: 300000, purchaseDate: '2026-11-01', createdAt: '2026-11-01T01:00:00.000Z',
+    notes: '[2026-11-05] 총 회차 10회 → 12회 — 서비스 2회\n[2026-11-06] 만료일 없음 → 2027-01-01\n[2026-11-07] 시술 기록 삭제 → 1회 복원 (2026-11-03 시술)\n메모 줄은 무시' };
+  const logs = [
+    { id: 't1', treatmentDate: '2026-11-02', treatmentTime: '10:00', createdAt: '2026-11-02T01:00:00.000Z', sessionsUsed: 1, staffName: '김' },
+    { id: 't2', treatmentDate: '2026-11-04', treatmentTime: '11:00', createdAt: '2026-11-04T02:00:00.000Z', sessionsUsed: 2 },
+  ];
+  const rows = buildProgramLedger(cp, logs, won);
+  expect(rows.map(r => r.kind)).toEqual(['purchase', 'use', 'use', 'total', 'expiry', 'restore']);
+  expect(rows.map(r => r.remaining)).toEqual([10, 9, 7, 9, 9, 9]);           // 등록은 보정 전 10 에서 출발, 만료·복원 줄은 잔여 유지
+  expect(rows[0].text).toBe('수분 10회 등록 · 총 10회 · 300,000원');
+  expect(rows[3].delta).toBe(2);
+  expect(ledgerRemaining(rows)).toBe(9);                                      // = 총 12 − 기록 3
+  expect(parseNoteLine('[2026-11-08] 완료 처리 (잔여 9회 소멸)', 0)?.kind).toBe('complete');
+  expect(parseNoteLine('[2026-11-09] 완료 → 진행중으로 되돌림', 1)?.kind).toBe('reopen');
+  expect(parseNoteLine('그냥 메모', 2)).toBeNull();
+  const timed = buildProgramLedger({ ...cp, totalSessions: null, notes: '' }, logs, won);
+  expect(timed.map(r => r.remaining)).toEqual([null, null, null]);
+  expect(ledgerRemaining(timed)).toBeNull();
 });

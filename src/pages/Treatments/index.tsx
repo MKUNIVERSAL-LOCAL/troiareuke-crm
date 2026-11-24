@@ -17,6 +17,7 @@ import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerPro
 import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import { usedSessionsFor, healProgramSessionsWhenReady } from '../../lib/programSessions';
 import { remainingSessions } from '../../lib/programSessionsRule';
+import { appendProgramNote } from '../../lib/programNotes';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -130,8 +131,11 @@ export default function Treatments() {
   );
 
   const handleDelete = (id: string) => {
+    const log = TreatmentLogStore.getAll().find(t => t.id === id);
     TreatmentLogStore.delete(id);
     clearPhotos(`treatment:${id}`); // 연결된 사진도 정리
+    // 회차권 원장 — 기록이 사라지면 차감 행도 사라지므로, 복원된 회차를 기록 줄로 남긴다 (146, GAP P-1)
+    if (log?.customerProgramId && (log.sessionsUsed || 0) > 0) appendProgramNote(log.customerProgramId, `시술 기록 삭제 → ${log.sessionsUsed}회 복원 (${formatDate(log.treatmentDate)} 시술)`);
     setSelected(null);
     loadLogs();
   };
@@ -523,6 +527,13 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         staffNotes: staffNotes || '',
         nextAppointment: nextAppointment || '',
       });
+      // 회차권 연결을 바꾸면 양쪽 원장에 줄을 남긴다 — 풀린 쪽은 복원, 새로 연결된 쪽은 차감 행(시술 기록)이 생기므로 정보 줄만 (146)
+      const prevProg = editing.customerProgramId || '';
+      if (prevProg !== (customerProgramId || '')) {
+        const n = editing.sessionsUsed || 1;
+        if (prevProg) appendProgramNote(prevProg, `시술 기록 수정으로 연결 해제 → ${n}회 복원 (${formatDate(treatmentDate)} 시술)`);
+        if (customerProgramId) appendProgramNote(customerProgramId, `시술 기록 수정으로 연결 (${formatDate(treatmentDate)} 시술, ${n}회 차감)`);
+      }
       if (photosReady) {
         try { savePhotos(`treatment:${editing.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
       }

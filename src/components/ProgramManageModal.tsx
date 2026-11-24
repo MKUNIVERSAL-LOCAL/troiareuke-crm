@@ -4,6 +4,8 @@ import { createPortal } from 'react-dom';
 import Modal from './ui/Modal';
 import { CustomerProgramStore, PaymentStore, TreatmentLogStore } from '../lib/store';
 import { usedSessionsFor } from '../lib/programSessions';
+import { buildProgramLedger, ledgerRemaining, PROGRAM_LEDGER_LABEL } from '../lib/programLedgerRule';
+import { programNoteLine } from '../lib/programNotes';
 import { todayISO, parseISODate, toISODate, formatDate, formatPrice } from '../lib/format';
 import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
@@ -25,7 +27,9 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   const manuallyCompleted = cp.isCompleted && isSessionBased && used < (cp.totalSessions as number);
   const totalInput = totalSessions.replace(/[,\s]/g, '');
   const dirty = expiryDate !== (cp.expiryDate || '') || (isSessionBased && totalInput !== String(cp.totalSessions));
-  const changeLog = (cp.notes || '').split('\n').filter(l => /^\[\d{4}-\d{2}-\d{2}\]/.test(l));
+  // 회차 이력 — 시술 기록(차감 정본) + notes 기록 줄(보정·연장·완료·복원)을 날짜순으로, 행마다 잔여 (146, GAP P-1)
+  const ledgerRows = buildProgramLedger(cp, TreatmentLogStore.getAll().filter(t => t.customerProgramId === cp.id), formatPrice);
+  const ledgerLeft = ledgerRemaining(ledgerRows);
 
   const shift = (days: number) => {
     // 이미 지난 만료일에서 더하면 여전히 과거 — 연장은 오늘과 만료일 중 늦은 날부터
@@ -37,7 +41,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   };
 
   function appendNote(existing: string | undefined, line: string): string {
-    const entry = `[${todayISO()}] ${line}${reason.trim() ? ` — ${reason.trim()}` : ''}`;
+    const entry = programNoteLine(line, reason); // 시술 기록 삭제/수정이 남기는 줄과 같은 형식 (146)
     return existing ? `${existing}\n${entry}` : entry;
   }
 
@@ -133,12 +137,27 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
           <label className="block text-xs font-medium text-gray-600 mb-1">사유 (기록에 남음)</label>
           <input value={reason} onChange={e => setReason(e.target.value)} aria-label="사유" placeholder="예: 휴가로 1개월 연장 요청" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl" />
         </div>
-        {changeLog.length > 0 && (
-          <div className="p-3 bg-slate-50 rounded-xl">
-            <p className="text-xs font-medium text-gray-400 mb-1">변경 기록</p>
-            <p className="text-xs text-gray-600 whitespace-pre-line max-h-28 overflow-y-auto">{changeLog.slice(-10).join('\n')}</p>
-          </div>
-        )}
+        <div className="p-3 bg-slate-50 rounded-xl" data-testid="program-ledger">
+          <p className="text-xs font-medium text-gray-500 mb-1.5">
+            회차 이력
+            {isSessionBased && ledgerLeft !== null && (
+              <span className={`ml-2 font-normal ${ledgerLeft === remaining ? 'text-gray-400' : 'text-amber-700'}`}>
+                원장 잔여 {ledgerLeft}회 · 기록 기준 {remaining}회{ledgerLeft === remaining ? ' · 일치' : ' · 불일치 — 옛 수기 조정이 기록 줄 없이 들어간 회차권'}
+              </span>
+            )}
+          </p>
+          <ul className="text-xs text-gray-700 space-y-1 max-h-40 overflow-y-auto">
+            {ledgerRows.slice().reverse().map(r => (
+              <li key={r.id} data-testid="program-ledger-row" className="flex items-baseline gap-2">
+                <span className="text-gray-400 whitespace-nowrap">{formatDate(r.date)}</span>
+                <span className="font-medium whitespace-nowrap">{PROGRAM_LEDGER_LABEL[r.kind]}</span>
+                {r.delta !== null && <span className={`whitespace-nowrap font-semibold ${r.delta < 0 ? 'text-pink-700' : 'text-blue-700'}`}>{r.delta > 0 ? '+' : ''}{r.delta}회</span>}
+                {r.remaining !== null && <span className="text-gray-500 whitespace-nowrap">잔여 {r.remaining}회</span>}
+                <span className="text-gray-600 min-w-0 truncate" title={r.text}>{r.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
         <div className="flex flex-wrap gap-2 pt-1">
           <button type="button" onClick={toggleCompleted} disabled={dirty} title={dirty ? '변경 내용을 먼저 저장하세요' : undefined}
             className={`py-2.5 px-4 rounded-xl text-sm font-medium border disabled:opacity-40 ${cp.isCompleted ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-600 bg-white'}`}>
