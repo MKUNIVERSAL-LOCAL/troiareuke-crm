@@ -46,6 +46,7 @@ import { applyEntry, ledgerState, creditsForCost, expireEntry, MONTHLY_GRANT, ty
 import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, allocateShops, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
 import { setupChecks, setupCompletionPct, utilizationPct, activityLevel, pilotSummary, type BranchCounts } from '../src/lib/pilotMetricsRule';
 import { matchesSegment, validateSegment, describeSegment, isEmptyCondition, type CustomerFacts } from '../src/lib/segmentFilterRule';
+import { requestOtp, verifyOtp, isValidOtpCode, portalSummaryOf, EMPTY_OTP, OTP_TTL_MS, OTP_RESEND_GAP_MS, OTP_LOCK_MS, PORTAL_SESSION_MS, type OtpState } from '../src/lib/portalRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
@@ -1066,4 +1067,38 @@ test('캠페인 대상을 저장 세그먼트로 좁힌다 — 세그먼트 밖�
   expect(sel.ready.map(r => r.customerId)).toEqual(['b']); expect(sel.skipped).toEqual([{ customerId: 'a', customerName: 'a', why: 'not_in_segment' }]);
   expect(selectCandidates(camp, [raw('a'), raw('b')], new Set(), '2026', null).ready.length).toBe(2);
   expect(selectCandidates(camp, [raw('a')], new Set(), '2026', new Set()).ready.length).toBe(0); // 삭제된 세그먼트 → 아무에게도
+});
+
+test('고객 포털 규칙 — OTP 재요청 간격·만료·5회 잠금·세션, 노출 항목은 내 예약·회차권·동의만 (169)', () => {
+  const t0 = 1_700_000_000_000;
+  const r1 = requestOtp(EMPTY_OTP, t0, 'h1'); expect(r1.ok).toBe(true);
+  let st: OtpState = r1.ok ? r1.state : EMPTY_OTP;
+  expect(requestOtp(st, t0 + 30_000, 'h2')).toEqual({ ok: false, reason: 'too-soon', retryAfterMs: OTP_RESEND_GAP_MS - 30_000 });
+  expect(requestOtp(st, t0 + OTP_RESEND_GAP_MS, 'h2').ok).toBe(true);
+  expect(verifyOtp(st, t0 + OTP_TTL_MS + 1, h => h === 'h1').ok).toBe(false); // 만료
+  expect((verifyOtp(st, t0 + OTP_TTL_MS + 1, h => h === 'h1') as { reason: string }).reason).toBe('expired');
+  for (let i = 1; i <= 4; i++) { const v = verifyOtp(st, t0 + 1000 * i, () => false); expect(v.ok).toBe(false); st = v.state; expect(st.fails).toBe(i); expect(st.lockedUntil).toBeNull(); }
+  const fifth = verifyOtp(st, t0 + 5000, () => false); expect(fifth.ok).toBe(false); st = fifth.state;
+  expect(st.lockedUntil).toBe(t0 + 5000 + OTP_LOCK_MS); expect(st.codeHash).toBeNull(); // 5회 → 15분 잠금, 코드 폐기
+  expect(requestOtp(st, t0 + 6000, 'h3')).toEqual({ ok: false, reason: 'locked', retryAfterMs: OTP_LOCK_MS - 1000 });
+  const again = requestOtp(st, t0 + 5000 + OTP_LOCK_MS, 'h3'); expect(again.ok).toBe(true); if (again.ok) { expect(again.state.fails).toBe(0); st = again.state; } // 잠금 해제 뒤 실패 수 초기화
+  const okv = verifyOtp(st, t0 + 5000 + OTP_LOCK_MS + 10, h => h === 'h3');
+  expect(okv.ok).toBe(true); if (okv.ok) { expect(okv.sessionExpiresAt).toBe(t0 + 5000 + OTP_LOCK_MS + 10 + PORTAL_SESSION_MS); expect(okv.state).toEqual(EMPTY_OTP); }
+  expect(verifyOtp(EMPTY_OTP, t0, () => true)).toEqual({ ok: false, reason: 'none', state: EMPTY_OTP });
+  expect(isValidOtpCode('123456')).toBe(true); expect(isValidOtpCode('12345')).toBe(false); expect(isValidOtpCode('12345a')).toBe(false);
+  const sum = portalSummaryOf({
+    name: '김고객',
+    reservations: [
+      { date: '2026-11-30', startTime: '14:00', serviceNames: ['수분 관리'], status: 'confirmed' },
+      { date: '2026-11-25', startTime: '10:00', serviceNames: ['진정'], status: 'pending' },
+      { date: '2026-11-26', startTime: '11:00', serviceNames: ['x'], status: 'cancelled' },
+      { date: '2026-11-20', startTime: '11:00', serviceNames: ['지난'], status: 'completed' },
+      { date: '2027-01-10', startTime: '11:00', serviceNames: ['먼 미래'], status: 'confirmed' },
+    ],
+    programs: [{ programName: '수분 10회', remaining: 3, expiryDate: '2027-01-31', isCompleted: false }, { programName: '끝난 것', remaining: 0, isCompleted: true }],
+    consent: { ad: 'consented', sms: true, kakao: false },
+  }, '2026-11-24');
+  expect(sum.upcoming).toEqual([{ date: '2026-11-25', startTime: '10:00', services: '진정' }, { date: '2026-11-30', startTime: '14:00', services: '수분 관리' }]); // 30일 안·취소/완료 제외·시간순
+  expect(sum.programs).toEqual([{ programName: '수분 10회', remaining: 3, expiryDate: '2027-01-31' }]);
+  expect(Object.keys(sum).sort()).toEqual(['consent', 'name', 'programs', 'upcoming']); // 주소·메모·결제·직원 없음
 });
