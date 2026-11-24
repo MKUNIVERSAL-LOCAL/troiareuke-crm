@@ -5,7 +5,7 @@ import Modal from './ui/Modal';
 import { CustomerProgramStore, PaymentStore, TreatmentLogStore } from '../lib/store';
 import { usedSessionsFor } from '../lib/programSessions';
 import { buildProgramLedger, ledgerRemaining, PROGRAM_LEDGER_LABEL } from '../lib/programLedgerRule';
-import { programNoteLine } from '../lib/programNotes';
+import { programNoteLine, totalChangeLine } from '../lib/programNotes';
 import { monthCloseBlock } from '../lib/monthClose';
 import { todayISO, parseISODate, toISODate, formatDate, formatPrice } from '../lib/format';
 import { josa } from '../lib/josa';
@@ -62,7 +62,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
       if (next < 1) { notify('총 회차는 1 이상이어야 합니다.'); return; }
       if (next < used) { notify(`이미 ${used}회를 사용해 총 회차를 그보다 적게 둘 수 없습니다.`); return; }
       updates.totalSessions = next;
-      changes.push(`총 회차 ${cp.totalSessions}회 → ${next}회`);
+      changes.push(totalChangeLine(cp.totalSessions as number, next)); // 회차 이력 파서와 같은 형식 (149 리뷰 M-4)
       // 사람이 직접 완료 처리한 프로그램은 회차를 바꿔도 그대로 완료. 그 외엔 사용 회차 기준으로 다시 계산하고 상태가 바뀌면 기록
       if (!manuallyCompleted) {
         const nextCompleted = used >= next;
@@ -84,6 +84,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   async function cancelRegistration() {
     { const blocked = monthCloseBlock(cp.purchaseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     const linked = PaymentStore.getAll().filter(p => p.referenceId === cp.id);
+    for (const p of linked) { const blocked = monthCloseBlock(p.paymentDate); if (blocked) { notify.error(blocked); return; } } // 결제일이 구매일과 다를 수 있다 (149 리뷰 L-1)
     const paid = linked.reduce((sum, p) => sum + p.amount, 0);
     if (!(await askConfirm({ title: '회차권 등록 취소', confirmLabel: '등록 취소', cancelLabel: '닫기', danger: true, message: `${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${formatPrice(paid)})이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.` }))) return;
     for (const p of linked) PaymentStore.delete(p.id);
@@ -144,7 +145,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
             회차 이력
             {isSessionBased && ledgerLeft !== null && (
               <span className={`ml-2 font-normal ${ledgerLeft === remaining ? 'text-gray-400' : 'text-amber-700'}`}>
-                원장 잔여 {ledgerLeft}회 · 기록 기준 {remaining}회{ledgerLeft === remaining ? ' · 일치' : ' · 불일치 — 옛 수기 조정이 기록 줄 없이 들어간 회차권'}
+                원장 잔여 {ledgerLeft}회 · 기록 기준 {remaining}회{ledgerLeft === remaining ? ' · 일치' : ' · 불일치 — 옛 수기 조정, 다른 기기 동시 수정, 구매일 이전 소급 기록 중 하나'}
               </span>
             )}
           </p>

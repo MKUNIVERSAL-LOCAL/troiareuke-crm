@@ -26,12 +26,12 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await card.getByRole('button', { name: '목표 저장' }).click();
   await expect(card.getByTestId('metric-achievement')).toHaveText('50%');
   await expect(card.getByTestId('metric-projected')).not.toHaveText('—'); // 이달 월말 예상(예측)
-  await expect(card.getByTestId('metric-bep')).toHaveText('0원'); // 지출 없음 → 판관비 0
+  await expect(card.getByTestId('metric-bep')).toHaveText('—'); // 판관비 없음 → 계산하지 않음 (149 L-8)
 
-  // 지출 20,000(판관비 기본 분류 '제품 매입'은 원가) → BEP = 0 ÷ (1 − 0.4) = 0 — 원가만 있으면 판관비 0
+  // 지출 20,000(기본 분류 '제품 매입'은 원가) → 판관비는 여전히 0 → —
   await registerExpense(page, '앰플 매입', 20000);
   await visibleButton(page, '매출 현황').click();
-  await expect(card.getByTestId('metric-bep')).toHaveText('0원');
+  await expect(card.getByTestId('metric-bep')).toHaveText('—');
 
   // 월 마감 → 결제 등록 거부
   await card.getByRole('button', { name: '월 마감' }).click();

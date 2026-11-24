@@ -30,7 +30,8 @@ import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
 import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
-import { monthMetrics, openHoursInMonth } from '../src/lib/revenueMetricsRule';
+import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
+import { foldOldest } from '../src/lib/stockLedgerRule';
 import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -589,6 +590,7 @@ test('회차권 원장 — 등록·시술·보정 순서와 잔여, 복원 줄�
   expect(parseNoteLine('[2026-11-08] 완료 처리 (잔여 9회 소멸)', 0)?.kind).toBe('complete');
   expect(parseNoteLine('[2026-11-09] 완료 → 진행중으로 되돌림', 1)?.kind).toBe('reopen');
   expect(parseNoteLine('그냥 메모', 2)).toBeNull();
+  expect(parseNoteLine('[2026-11-10] 완료 처리 (잔여 3회 소멸) — 만료일 지나서 복원 요청 거절', 3)?.kind).toBe('complete'); // 사유의 단어로 종류를 바꾸지 않는다 (149 M-4)
   const timed = buildProgramLedger({ ...cp, totalSessions: null, notes: '' }, logs, won);
   expect(timed.map(r => r.remaining)).toEqual([null, null, null]);
   expect(ledgerRemaining(timed)).toBeNull();
@@ -618,6 +620,10 @@ test('월 매출 지표 — 전월/전년 대비·목표·신규 비중·할인�
     { treatmentDate: '2026-10-30', customerProgramId: 'p1', sessionsUsed: 1 },
   ];
   const customers = [{ id: 'c-new', registeredAt: '2026-11-02T00:00:00.000Z' }, { id: 'c-old', registeredAt: '2026-05-01T00:00:00.000Z' }];
+  // 등록 일시는 UTC 로 저장된다 — 로컬(KST) 달로 판정해야 1일 새벽 등록이 전월로 밀리지 않는다 (149 M-2)
+  const edge = new Date('2026-11-30T23:30:00.000Z');
+  expect(localMonthOf('2026-11-30T23:30:00.000Z')).toBe(`${edge.getFullYear()}-${String(edge.getMonth() + 1).padStart(2, '0')}`);
+  expect(localMonthOf('이상한값')).toBe('이상한값'.slice(0, 7));
   const hours = { '월': { open: '10:00', close: '19:00', isOff: false }, '화': { open: '10:00', close: '19:00', isOff: false }, '수': { open: '10:00', close: '19:00', isOff: false }, '목': { open: '10:00', close: '19:00', isOff: false }, '금': { open: '10:00', close: '19:00', isOff: false }, '토': { open: '10:00', close: '15:00', isOff: false }, '일': { open: '10:00', close: '19:00', isOff: true } };
   const m = monthMetrics({ month: '2026-11', today: '2026-11-20', payments, expenses, programs, logs, customers, target: 800000, businessHours: hours, holidays: ['2026-11-03'] });
   expect(m.total).toBe(400000);
@@ -672,4 +678,16 @@ test('환불 규칙(결정 #9 대기, B 모델 준비) — 환불 행·검증·�
   expect(suggestedProgramRefund({ pricePaid: 500000, totalSessions: 10, usedSessions: 4 }, 10)).toBe(270000);
   expect(suggestedProgramRefund({ pricePaid: 500000, totalSessions: 10, usedSessions: 12 })).toBe(0);
   expect(suggestedProgramRefund({ pricePaid: 90000, totalSessions: null, usedSessions: 0 })).toBeNull();
+});
+
+test('재고 원장 상한 잘림 — 잘린 행의 Σ 를 제품별 시작 재고 행으로 접어 Σ 불변 (149 M-1)', () => {
+  const e = (id: string, productId: string, kind: 'open' | 'in' | 'sale', qty: number, day: number) => ({ id, productId, kind, qty, resultStock: 0, at: `2026-11-${String(day).padStart(2, '0')}T09:00:00.000Z`, date: `2026-11-${String(day).padStart(2, '0')}` });
+  const list = [e('1', 'p', 'open', 10, 1), e('2', 'p', 'in', 5, 2), e('3', 'q', 'open', 3, 2), e('4', 'p', 'sale', -1, 3), e('5', 'q', 'sale', -1, 4)];
+  const folded = foldOldest(list, 3);
+  expect(folded.map(x => x.id).slice(2)).toEqual(['4', '5']);
+  const carried = folded.slice(0, 2);
+  expect(carried.every(x => x.kind === 'open')).toBe(true);
+  expect(carried.find(x => x.productId === 'p')?.qty).toBe(15);
+  expect(carried.find(x => x.productId === 'q')?.qty).toBe(3);
+  expect(folded.filter(x => x.productId === 'p').reduce((s2, x) => s2 + x.qty, 0)).toBe(14); // 10 + 5 − 1
 });

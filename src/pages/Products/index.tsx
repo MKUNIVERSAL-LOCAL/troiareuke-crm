@@ -91,6 +91,7 @@ export default function Products() {
     { const blocked = monthCloseBlock(sale.saleDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     const before = sale.productId ? ProductStore.getById(sale.productId) : undefined; // 원장 행의 "이동 전 재고" (145)
     const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
+    for (const p of linked) { const blocked = monthCloseBlock(p.paymentDate); if (blocked) { notify.error(blocked); return; } } // 결제일이 판매일과 다를 수 있다 (149 리뷰 L-1)
     if (linked.length === 0) {
       // 연결 결제가 없는 옛 판매 — 예전처럼 행 삭제(코어: 재고 복구 포함)
       ProductSaleStore.delete(sale.id);

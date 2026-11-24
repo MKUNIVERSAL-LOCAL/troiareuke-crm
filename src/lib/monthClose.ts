@@ -3,7 +3,7 @@
 // 코어 저장소는 못 막으므로(코어 잠금) 사용자가 거치는 저장 경로(결제·지출·제품 판매/취소·예약 완료 결제·회차권 등록/취소·입고 지출)에서 막는다.
 import { getPreference, setPreference } from './shopPreferences';
 
-export function closedMonths(): string[] {
+function closedMonths(): string[] {
   const v = getPreference('closedMonths');
   return Array.isArray(v) ? v : [];
 }

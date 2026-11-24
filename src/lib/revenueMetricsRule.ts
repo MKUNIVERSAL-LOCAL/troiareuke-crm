@@ -7,14 +7,15 @@
  *  - 신규 고객 매출 = 그 달에 등록된 고객의 결제 합, 기존 = 나머지(고객 없는 결제 포함).
  *  - 할인 합 = 완료 결제의 discountAmount 합.
  *  - 회차권 판매 = type=program 완료 결제 합(현금 유입), 회차권 실현 = 그 달 시술 기록이 차감한 회차 × 회당 가격(pricePaid ÷ 총 회차), 기간제·회차 0 은 제외.
- *  - 미사용 잔액 = 진행 중(미완료) 회차권의 잔여 회차 × 회당 가격 합(시점값, 달과 무관).
+ *  - 미사용 잔액 = 진행 중(미완료·미만료) 회차권의 잔여 회차 × 회당 가격 합(시점값, 달과 무관).
+ *  - 회원권 실현은 "결제액 ÷ 총 회차"를 쓰므로 총 회차를 보정하면 과거 달의 실현값도 함께 바뀐다(정의상 — 마감 달은 지표 카드에서만 보이고 저장되지 않는다).
  *  - 매출원가 = '제품 매입'·'소모품 매입' 지출, 판관비 = 나머지 지출(그 달). 손익분기 매출 = 판관비 ÷ (1 − 매출원가율), 원가율 ≥ 1 이면 없음.
  *  - 영업시간 = 그 달(이달이면 오늘까지) 휴무·지정 휴일이 아닌 날의 (마감 − 오픈) 합(시간). 시간당 매출 = 매출 ÷ 영업시간.
  *  - 월말 예상(예측) = 이달에만: 매출 ÷ 지난 일수 × 그 달 일수.
  */
 export interface MetricPayment { paymentDate: string; type: 'program' | 'product' | 'single_treatment' | 'other'; status: 'completed' | 'refunded' | 'pending'; amount: number; discountAmount?: number; customerId?: string }
 export interface MetricExpense { expenseDate: string; category: string; amount: number }
-export interface MetricProgram { id: string; pricePaid: number; totalSessions: number | null; usedSessions: number; isCompleted?: boolean }
+export interface MetricProgram { id: string; pricePaid: number; totalSessions: number | null; usedSessions: number; isCompleted?: boolean; expiryDate?: string }
 export interface MetricLog { treatmentDate: string; customerProgramId?: string; sessionsUsed?: number }
 export interface MetricCustomer { id: string; registeredAt: string }
 export interface MetricHours { open: string; close: string; isOff: boolean }
@@ -58,6 +59,12 @@ function shiftMonth(month: string, delta: number): string {
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+/** ISO 일시(UTC 저장) → 로컬 YYYY-MM — 매월 1일 00:00~09:00(KST) 등록이 전월로 잘리지 않게 (149 리뷰 M-2) */
+export function localMonthOf(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return (iso || '').slice(0, 7);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 function toMin(hhmm: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
@@ -91,7 +98,7 @@ export function monthMetrics(i: MonthMetricsInput): MonthMetrics {
   const total = inMonth.reduce((s, p) => s + p.amount, 0);
   const prevMonth = sum(shiftMonth(i.month, -1));
   const lastYear = sum(shiftMonth(i.month, -12));
-  const newIds = new Set(i.customers.filter(c => (c.registeredAt || '').startsWith(i.month)).map(c => c.id));
+  const newIds = new Set(i.customers.filter(c => localMonthOf(c.registeredAt || '') === i.month).map(c => c.id));
   const newCustomerRevenue = inMonth.filter(p => p.customerId && newIds.has(p.customerId)).reduce((s, p) => s + p.amount, 0);
   const discount = inMonth.reduce((s, p) => s + Math.max(0, p.discountAmount || 0), 0);
   const programSold = inMonth.filter(p => p.type === 'program').reduce((s, p) => s + p.amount, 0);
@@ -99,7 +106,7 @@ export function monthMetrics(i: MonthMetricsInput): MonthMetrics {
   for (const p of i.programs) if (p.totalSessions && p.totalSessions > 0) perSession.set(p.id, p.pricePaid / p.totalSessions);
   const programRealized = Math.round(i.logs.filter(l => l.customerProgramId && l.treatmentDate.startsWith(i.month))
     .reduce((s, l) => s + (perSession.get(l.customerProgramId as string) || 0) * Math.max(0, Number(l.sessionsUsed) || 0), 0));
-  const unusedBalance = Math.round(i.programs.filter(p => !p.isCompleted && p.totalSessions && p.totalSessions > 0)
+  const unusedBalance = Math.round(i.programs.filter(p => !p.isCompleted && p.totalSessions && p.totalSessions > 0 && !(p.expiryDate && p.expiryDate < i.today)) // 만료된 회차권은 더 이상 서비스할 몫이 아니다 (149 리뷰 L-4)
     .reduce((s, p) => s + Math.max(0, (p.totalSessions as number) - Math.max(0, p.usedSessions || 0)) * (perSession.get(p.id) || 0), 0));
   const cogsCats = i.cogsCategories ?? DEFAULT_COGS;
   const monthExpenses = i.expenses.filter(e => e.expenseDate.startsWith(i.month));

@@ -6,6 +6,8 @@
  *    (복원은 그 시술 기록 자체가 사라져 use 행이 빠지므로, 다시 더하면 이중 계산).
  *  - 원장 끝 잔여 = 총 회차(보정 반영) − 기록 합 = programSessionsRule 의 파생 잔여와 같아야 한다(다르면 drift).
  */
+import { TOTAL_CHANGE_RE } from './programNoteFormat'; // programNotes 는 store 를 import 한다 — 순수 규칙은 형식 모듈만 (커밋 체인 가드)
+
 export type ProgramLedgerKind = 'purchase' | 'use' | 'restore' | 'total' | 'expiry' | 'complete' | 'reopen' | 'note';
 
 export interface ProgramLedgerRow {
@@ -25,7 +27,6 @@ export interface LedgerProgram {
   totalSessions: number | null;
   pricePaid: number;
   purchaseDate: string;
-  createdAt: string;
   notes?: string;
 }
 export interface LedgerLog {
@@ -49,14 +50,15 @@ export function parseNoteLine(line: string, idx: number): ProgramLedgerRow | nul
   const m = NOTE_LINE.exec(line.trim());
   if (!m) return null;
   const [, date, text] = m;
-  const total = /총 회차 (\d+)회 → (\d+)회/.exec(text);
+  const body = text.split(' — ')[0]; // " — 사유" 뒤의 자유 텍스트는 종류 판정에 쓰지 않는다 (149 리뷰 M-4)
+  const total = TOTAL_CHANGE_RE.exec(body);
   let kind: ProgramLedgerKind = 'note';
   let delta: number | null = null;
   if (total) { kind = 'total'; delta = Number(total[2]) - Number(total[1]); }
-  else if (/복원/.test(text)) kind = 'restore';
-  else if (/만료일/.test(text)) kind = 'expiry';
-  else if (/완료 → 진행중/.test(text)) kind = 'reopen';
-  else if (/완료 처리|진행중 → 완료/.test(text)) kind = 'complete';
+  else if (/복원/.test(body)) kind = 'restore';
+  else if (/만료일/.test(body)) kind = 'expiry';
+  else if (/완료 → 진행중/.test(body)) kind = 'reopen';
+  else if (/완료 처리|진행중 → 완료/.test(body)) kind = 'complete';
   return { id: `note-${idx}`, date, sort: `${date}T99:${String(idx).padStart(4, '0')}`, kind, delta, remaining: null, text };
 }
 

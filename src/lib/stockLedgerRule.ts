@@ -55,3 +55,15 @@ export function entriesOf(entries: StockEntry[], productId: string): StockEntry[
   // 같은 순간에 기록된 행(시작 재고 + 첫 이동)은 저장 순서(뒤가 최신)로 — at 만으로는 순서가 뒤집힌다
   return entries.map((e, i) => ({ e, i })).filter(x => x.e.productId === productId).sort((a, b) => b.e.at.localeCompare(a.e.at) || b.i - a.i).map(x => x.e);
 }
+
+/** 오래된 행 n개를 잘라내되 제품별 Σ 를 "시작 재고" 행으로 접어 넣어 Σ = 재고가 깨지지 않게 한다 (149 리뷰 M-1) */
+export function foldOldest(list: StockEntry[], n: number, genId: () => string = () => Math.random().toString(36).slice(2)): StockEntry[] {
+  const cut = list.slice(0, n), rest = list.slice(n);
+  const sum = new Map<string, { qty: number; at: string; date: string }>();
+  for (const e of cut) {
+    const cur = sum.get(e.productId) ?? { qty: 0, at: e.at, date: e.date };
+    sum.set(e.productId, { qty: cur.qty + e.qty, at: e.at, date: e.date });
+  }
+  const carried: StockEntry[] = [...sum.entries()].map(([productId, v]) => ({ id: genId(), productId, kind: 'open', qty: v.qty, resultStock: v.qty, at: v.at, date: v.date, note: '오래된 행 합침(저장소 상한) — 그 시점까지의 재고' }));
+  return [...carried, ...rest];
+}

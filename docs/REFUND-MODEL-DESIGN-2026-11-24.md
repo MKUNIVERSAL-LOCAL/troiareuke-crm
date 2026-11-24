@@ -31,6 +31,11 @@
 | `customerValueRule`(누적 결제액 Σ completed) | 고객 가치 | 환불이 자동 차감(의도) |
 | `dailyCloseSummary` | 마감 요약 | 환불한 날의 매출에서 차감, "환불 N원" 줄은 환불 행 합으로 바꾸면 됨 |
 | 엑셀 내보내기 합계(완료만) | 세무 | 음수 행 포함 Σ — 신고분과 일치 |
+| `Products/index.tsx` 판매 취소 `linked = referenceId === sale.id && completed` | 연결 결제를 환불로 뒤집음 | **B 환불 행도 같은 referenceId·completed 라 함께 뒤집힌다** → 4절 3단계에서 "환불 행 생성"으로 교체할 때 `isRefundRow` 제외(149 리뷰 M-5 ①) |
+| `Sales/index.tsx` 회차권 결제 수정이 `pricePaid: amount` 덮어씀 | 회차권 카드 금액 | 환불 행을 수정하면 pricePaid 가 음수 → 환불 행은 수정 불가로(아래 ③)·pricePaid 갱신은 원 결제만(M-5 ②) |
+| `Sales/index.tsx` 저장 검증 `amount < 0` 거부 | 수기 음수 차단 | 환불 행은 **수정 불가, 삭제만**(되돌리기 = 행 삭제) — 의도 명시(M-5 ③) |
+| `revenueMetricsRule` 실현·미사용 잔액이 `pricePaid` 기반 | 지표 | 환불 뒤에도 회당 가격·잔액이 줄지 않음 → B 구현 때 회차권의 유효 결제액 = pricePaid − 환불 행 합으로(M-5 ④) |
+| `refundDate.tagRefund` 의 `REFUND_TAG_RE` | 옛 A 태그 | B 태그(`[환불 날짜 ← …]`)를 못 알아봐 이중 태그 가능 → B 구현 때 A 태그 함수는 옛 행 읽기 전용으로 격리(M-5 ⑤) |
 
 ## 4. 구현 순서(결정 뒤, 1 묶음)
 1. `refundRule.ts`(148 에서 준비, 순수·스펙 고정) 를 매출 > 결제 수정 > [환불] 에 연결 — 금액(기본 전액, 회차권은 제안액)·환불일(기본 오늘, 마감된 달이면 거부)·사유 입력 → `validateRefund` → `PaymentStore.save(buildRefundRow(...))`.

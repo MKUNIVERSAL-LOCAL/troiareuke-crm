@@ -6,7 +6,7 @@
 import { getShopId, safeSetItem } from './store';
 import { todayISO } from './format';
 import type { Product } from '../types';
-import type { StockEntry, StockEntryKind } from './stockLedgerRule';
+import { foldOldest, type StockEntry, type StockEntryKind } from './stockLedgerRule';
 
 const KEY = () => `crm_${getShopId()}_stock_ledger`;
 const MAX_ENTRIES = 20000; // 오래된 행부터 잘라 저장소를 지킨다(한 제품 하루 수십 건이어도 수년치)
@@ -15,8 +15,10 @@ function read(): StockEntry[] {
   try { const raw = localStorage.getItem(KEY()); return raw ? JSON.parse(raw) : []; } catch { return []; }
 }
 function write(list: StockEntry[]): void {
-  safeSetItem(KEY(), JSON.stringify(list.length > MAX_ENTRIES ? list.slice(list.length - MAX_ENTRIES) : list));
+  safeSetItem(KEY(), JSON.stringify(list.length > MAX_ENTRIES ? foldOldest(list, list.length - MAX_ENTRIES, genId) : list)); // 잘린 행의 Σ 는 시작 재고 행으로 (149 리뷰 M-1)
 }
+
+
 function genId(): string {
   return globalThis.crypto?.randomUUID?.() || Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
@@ -37,7 +39,8 @@ export interface StockMovement {
 }
 
 /** 이동 한 건을 기록한다. 그 제품의 첫 기록이면 이동 전 재고를 "시작 재고" 행으로 먼저 남겨 Σ 가 현재고와 맞게 한다 */
-export function recordStockMovement(m: StockMovement): StockEntry {
+export function recordStockMovement(m: StockMovement): StockEntry | null {
+  if (m.product.id.startsWith('sample_')) return null; // 샘플 제품은 코어 adjustStock 이 no-op — 원장도 남기지 않는다 (149 리뷰 L-7)
   const list = read();
   const at = new Date().toISOString();
   const date = m.date && /^\d{4}-\d{2}-\d{2}$/.test(m.date) ? m.date : todayISO();

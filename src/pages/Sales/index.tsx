@@ -174,7 +174,7 @@ export default function Sales() {
   function refreshExpenses() {
     setExpenses(ExpenseStore.getAll());
   }
-  useDataRefreshed(() => { loadPayments(); refreshExpenses(); }); // (16차 #H3)
+  useDataRefreshed(() => { loadPayments(); refreshExpenses(); setMetricsTick(t => t + 1); }); // (16차 #H3) 다른 기기의 마감·목표·고객도 반영 (149 리뷰 L-2)
 
   // 현재 보는 월 데이터
   const monthPayments = useMemo(

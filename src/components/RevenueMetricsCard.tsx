@@ -51,7 +51,7 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged }: { 
     <div className="bg-slate-50 rounded-2xl border border-gray-100 p-4 space-y-3" data-testid="revenue-metrics">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-bold text-gray-900">{label} 지표</h3>
-        <span className="text-2xs text-gray-400">정의: docs/ANALYTICS-DEFINITIONS.md · 확정값, "예상"만 예측</span>
+        <span className="text-2xs text-gray-400">각 칸에 마우스를 올리면 계산 공식이 보입니다 · 확정값, "예상"만 예측</span>
         <div className="flex-1" />
         {closed && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-800 text-white text-xs font-medium" data-testid="month-closed-badge"><Lock size={11} />마감됨</span>}
         {canLock && (
@@ -68,16 +68,18 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged }: { 
         <Item label="할인 합계" value={formatPrice(m.discount)} tip="완료 결제의 할인 금액 합" />
         <Item label="회원권 판매" value={formatPrice(m.programSold)} sub={`실현 ${formatPrice(m.programRealized)} (이달 시술로 소진된 회차 × 회당 가격)`} tip="판매 = 회차권 결제(현금 유입), 실현 = 이달 차감 회차 × (결제액 ÷ 총 회차)" testId="metric-program" />
         <Item label="미사용 회원권 잔액" value={formatPrice(m.unusedBalance)} sub="진행 중 회차권의 잔여 회차 × 회당 가격" tip="고객이 이미 낸 돈 중 아직 서비스하지 않은 몫(시점값)" tone={m.unusedBalance > 0 ? 'warn' : undefined} />
-        <Item label="손익분기 매출" value={m.breakEven === null ? '—' : formatPrice(m.breakEven)} sub={`원가 ${formatPrice(m.cogs)} · 판관비 ${formatPrice(m.sga)}`} tip="판관비 ÷ (1 − 매출원가율). 원가가 매출 이상이면 —" testId="metric-bep" />
+        <Item label="손익분기 매출" value={m.breakEven === null || m.sga === 0 ? '—' : formatPrice(m.breakEven)} sub={m.sga === 0 ? '판관비(임대료·인건비 등) 지출이 없으면 계산하지 않습니다' : `원가 ${formatPrice(m.cogs)} · 판관비 ${formatPrice(m.sga)}`} tip="판관비 ÷ (1 − 매출원가율). 판관비 0 또는 원가가 매출 이상이면 —" testId="metric-bep" />
         <Item label="시간당 매출" value={m.perHour === null ? '—' : formatPrice(m.perHour)} sub={m.openHours === null ? '영업시간 설정 필요' : `영업 ${m.openHours}시간`} tip="매출 ÷ 영업시간(설정 > 영업시간, 휴무·지정 휴일 제외, 이달은 오늘까지)" />
         <Item label={m.isCurrentMonth ? '월말 예상(예측)' : '월 매출'} value={m.isCurrentMonth ? (m.projected === null ? '—' : formatPrice(m.projected)) : formatPrice(m.total)} sub={m.isCurrentMonth ? `${m.daysElapsed}/${m.daysInMonth}일 경과 · 일평균 × 일수` : undefined} tip="이달에만: 지금까지 매출 ÷ 지난 일수 × 그 달 일수 — 예측값" testId="metric-projected" />
       </div>
+      {canLock && (
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-xs font-medium text-gray-600" htmlFor="monthly-target">{label} 매출 목표</label>
         <input id="monthly-target" inputMode="numeric" value={targetInput} onChange={e => setTargetInput(e.target.value)} placeholder="예: 10,000,000" className="w-40 px-3 py-1.5 text-sm border border-gray-200 rounded-lg" />
         <button type="button" onClick={saveTarget} className="px-3 py-1.5 text-xs font-medium text-white bg-[#1a3a8f] rounded-lg hover:bg-[#15306e]">목표 저장</button>
         <span className="text-2xs text-gray-400">목표는 지점 설정에 저장돼 모든 기기에서 같습니다</span>
       </div>
+      )}
     </div>
   );
 }
