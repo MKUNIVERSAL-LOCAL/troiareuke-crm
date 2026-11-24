@@ -39,6 +39,10 @@ import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
 import { formatBriefing, pseudonymizeStaff, BRIEFING_SYSTEM, targetPace, describeCause } from '../src/lib/ai/briefingRule';
+import { DEFAULT_CATALOG as GW_CATALOG } from '../src/lib/ai/catalog';
+import type { AiProvider as GwProvider } from '../src/lib/ai/types';
+import { routeModel, tierFor } from '../src/lib/ai/modelRouterRule';
+import { applyEntry, ledgerState, creditsForCost, expireEntry, MONTHLY_GRANT, type LedgerEntry } from '../src/lib/ai/creditLedgerRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
@@ -930,4 +934,46 @@ test('리뷰 반영 — 동의 태그 보존·판별, 080 번호 기준 꼬리�
   const p = estimatePerformance([{ customerId: 'a', at }], [{ customerId: 'a', date: '2026-11-24', status: 'completed' }, { customerId: 'a', date: '2026-11-25', status: 'confirmed' }], []);
   expect(p.reserved).toBe(1);
   expect(estimatePerformance([{ customerId: 'a', at }], [{ customerId: 'a', date: '2026-11-24', status: 'completed' }], []).reserved).toBe(0);
+});
+
+test('AI 게이트웨이 규칙 — 모델 라우터(티어·비전·크레딧 보호·폴백 순서)와 크레딧 원장(불변식·멱등·만료) (160)', () => {
+  const cat = GW_CATALOG; const all: GwProvider[] = ['claude', 'openai', 'gemini'];
+  expect(tierFor('chat', 'trial')).toBe('economy'); expect(tierFor('briefing', 'starter')).toBe('standard'); expect(tierFor('campaign-copy', 'enterprise')).toBe('premium'); expect(tierFor('chat', 'pro')).toBe('standard');
+  const eco = routeModel({ kind: 'chat', plan: 'trial', needsVision: false, available: all, catalog: cat, creditsAvailable: 1000 });
+  expect(eco.tier).toBe('economy'); expect(eco.primary?.id).toBe('gpt-4o-mini'); // economy 밴드(≤1 USD/1M) 중 가장 비싼 것(품질 우선)
+  expect(eco.fallbacks.map(m => m.id)).toEqual(['gemini-1.5-flash']);
+  const std = routeModel({ kind: 'chat', plan: 'pro', needsVision: false, available: all, catalog: cat, creditsAvailable: 1000 });
+  expect(std.primary?.id).toBe('claude-sonnet-4-20250514'); // standard ≤20: claude 18 > gpt-4o 12.5 > gemini pro 6.25 > …
+  expect(std.fallbacks.map(m => m.id)).toEqual(['gpt-4o', 'gemini-1.5-pro', 'gpt-4o-mini', 'gemini-1.5-flash']);
+  const vis = routeModel({ kind: 'skin-analysis', plan: 'pro', needsVision: true, available: ['openai', 'gemini'], catalog: cat, creditsAvailable: 1000 });
+  expect(vis.primary?.id).toBe('gpt-4o'); expect(vis.fallbacks.map(m => m.id)).toEqual(['gemini-1.5-pro', 'gpt-4o-mini', 'gemini-1.5-flash']); // 키 없는 claude 제외
+  const low = routeModel({ kind: 'briefing', plan: 'enterprise', needsVision: false, available: all, catalog: cat, creditsAvailable: 150 });
+  expect(low.tier).toBe('economy'); expect(low.reason).toBe('low-credits'); expect(low.primary?.id).toBe('gpt-4o-mini'); // 크레딧 보호
+  expect(routeModel({ kind: 'chat', plan: 'pro', needsVision: false, available: all, catalog: cat, creditsAvailable: 0 }).reason).toBe('no-credits');
+  expect(routeModel({ kind: 'chat', plan: 'pro', needsVision: false, available: [], catalog: cat, creditsAvailable: 10 }).reason).toBe('no-model');
+  const pricey = cat.filter(m => m.id === 'claude-sonnet-4-20250514' || m.id === 'gpt-4o');
+  const forced = routeModel({ kind: 'chat', plan: 'trial', needsVision: false, available: all, catalog: cat.length ? pricey : cat, creditsAvailable: 1000 });
+  expect(forced.primary?.id).toBe('gpt-4o'); expect(forced.fallbacks).toEqual([]); // 밴드 안 후보가 없으면 가장 싼 것 하나
+  // 크레딧 원장
+  expect(creditsForCost(0.0123)).toBe(35); // 0.0123 × 1,400 × 2.0 = 34.44 → 35
+  expect(creditsForCost(0)).toBe(0);
+  let led: LedgerEntry[] = [];
+  const add = (e: LedgerEntry) => { const r = applyEntry(led, e); expect(r.ok, JSON.stringify(e)).toBe(true); if (r.ok) led = r.entries; };
+  add({ id: 'g1', kind: 'grant', amount: 1000, at: '2026-11-01T00:00:00Z', note: '월 지급' });
+  add({ id: 'h1', kind: 'hold', amount: 300, at: '2026-11-02T00:00:00Z', requestId: 'r1' });
+  expect(ledgerState(led)).toEqual({ balance: 1000, holds: 300, available: 700 });
+  expect(applyEntry(led, { id: 'h2', kind: 'hold', amount: 701, at: '', requestId: 'r2' }).ok).toBe(false); // 가용 초과
+  add({ id: 'c1', kind: 'consume', amount: 250, at: '2026-11-02T00:01:00Z', requestId: 'r1' }); // 홀드 300 → 실제 250
+  expect(ledgerState(led)).toEqual({ balance: 750, holds: 0, available: 750 });
+  const dup = applyEntry(led, { id: 'c1b', kind: 'consume', amount: 250, at: '', requestId: 'r1' });
+  expect(dup.ok && dup.entries.length).toBe(led.length); // 멱등 — 같은 requestId 는 무시
+  expect(applyEntry(led, { id: 'x', kind: 'consume', amount: 0, at: '', requestId: 'r9' }).ok).toBe(false);
+  expect(applyEntry(led, { id: 'x', kind: 'hold', amount: 10, at: '' }).ok).toBe(false); // requestId 없음
+  add({ id: 'h3', kind: 'hold', amount: 100, at: '', requestId: 'r3' }); add({ id: 'rl3', kind: 'release', amount: 100, at: '', requestId: 'r3' });
+  expect(ledgerState(led).holds).toBe(0);
+  add({ id: 'rf1', kind: 'refund', amount: 50, at: '' });
+  expect(ledgerState(led).balance).toBe(800);
+  const ex = expireEntry(led, 'e1', '2026-11-30T23:59:59Z'); expect(ex?.amount).toBe(800);
+  add(ex!); expect(ledgerState(led).balance).toBe(0); expect(expireEntry(led, 'e2', '')).toBeNull();
+  expect(MONTHLY_GRANT.pro).toBe(3000);
 });

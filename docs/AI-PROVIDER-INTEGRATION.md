@@ -36,6 +36,7 @@
 - 서버 크레딧 원장(PHASE 5)이 생기면 `recordUsage` 를 서버 기록으로 교체(이 기기 기록은 보조).
 
 ## 6. 다음 묶음
+- 본사 Managed AI(게이트웨이·모델 라우터·크레딧 원장): `AI-GATEWAY-ARCHITECTURE.md`(160). 순수 규칙 `ai/modelRouterRule.ts`·`ai/creditLedgerRule.ts`.
 - 151 설정 → AI 서비스 탭(이용 방식 4종·제공사·모델·키·연결 테스트·한국어 마법사·FAQ) + `AI-USER-CONNECTION-GUIDE.md`
 - 152 키 보관 개선 설계(D-13) + 평문 저장 0 테스트 + `AI-SECURITY-POLICY.md`
 - 153 AI 경영 브리핑 1차(내부 엔진 결과 → 컨텍스트, 근거·기간·불확실성 표시)
