@@ -11,6 +11,8 @@ export interface ConfirmOptions {
   confirmLabel?: string;      // 기본 '확인'
   cancelLabel?: string;       // 기본 '취소'
   danger?: boolean;           // 되돌릴 수 없는 동작 — 빨간 확인 버튼
+  /** 창을 닫은 뒤 포커스를 돌려줄 요소 — 메뉴 항목에서 연 경우 메뉴가 먼저 사라져 열었던 버튼이 DOM 에 없으므로 ⋯ 버튼 같은 남는 요소를 넘긴다 (15차 #M2) */
+  returnFocusTo?: HTMLElement | null;
 }
 
 export interface PendingConfirm extends ConfirmOptions { id: number; resolve: (ok: boolean) => void }
@@ -31,7 +33,14 @@ export function askConfirm(opts: ConfirmOptions): Promise<boolean> {
   if (!listener) return Promise.resolve(window.confirm(`${opts.title}\n${opts.message}`)); // 호스트 없는 화면(테스트·예외) — 예전 동작
   if (current) current.resolve(false); // 겹치면 앞 창은 취소로
   return new Promise<boolean>(resolve => {
-    current = { ...opts, id: ++seq, resolve: ok => { current = null; listener?.(null); resolve(ok); } };
+    current = {
+      ...opts, id: ++seq,
+      resolve: ok => {
+        current = null; listener?.(null); resolve(ok);
+        const back = opts.returnFocusTo;
+        if (back) window.setTimeout(() => { if (document.contains(back)) back.focus({ preventScroll: true }); }, 0); // 포커스 트랩의 opener(body) 복귀 뒤에 덮어쓴다
+      },
+    };
     listener?.(current);
   });
 }

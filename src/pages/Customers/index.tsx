@@ -53,7 +53,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { formatPrice, formatDate, todayISO as today, formatPhoneInput, matchesSearch, toISODate, parseISODate, localISODate, formatLocalDate } from '../../lib/format';
 import { daysBetween as calendarDaysBetween } from '../../lib/revisitRule';
 import { canDo, canOpenRoute, ADMIN_REQUIRED_MESSAGE } from '../../lib/permissions';
-import { canSeePii, emailFor, birthDateFor } from '../../lib/pii';
+import { canSeePii, emailFor, birthDateFor, phoneFor } from '../../lib/pii';
 import { parseAmount, normalizePhone, isISODate, coerceISODate } from '../../lib/inputRules'; // beforeAfter.daysBetween(사진 D+N)과 이름이 겹친다
 
 // 피부 고민 체크리스트 (한국 에스테틱 상담 실무 기준)
@@ -314,6 +314,8 @@ export default function Customers() {
   const canManage = canDo(user?.role, 'customer.delete'); // 삭제·익명화·병합 — 메뉴 항목과 핸들러 양쪽에서 본다 (13차 #H4)
   const piiOk = canSeePii(user?.role);                     // 전화·이메일·주소·생년월일 원문 (13차 #H5·H6)
   const canSales = canOpenRoute(user?.role, '/sales');   // [결제 추가] 는 매출 화면으로 가므로 직원에게는 안내만 (117~119 리뷰 #H4)
+  /** 확인창을 닫은 뒤 포커스를 돌려줄 ⋯ 버튼 — 메뉴 항목은 메뉴가 닫히며 사라지므로 보이는 쪽 ⋯ (15차 #M2) */
+  const menuAnchor = () => (moreBtnRef.current?.offsetParent ? moreBtnRef.current : mobileMoreBtnRef.current?.offsetParent ? mobileMoreBtnRef.current : null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
@@ -441,6 +443,8 @@ export default function Customers() {
   const [showGradeMenu, setShowGradeMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false); // PC 상세 [⋯] — 병합·익명화·삭제 (파괴적 동작은 주 버튼 줄에서 분리, 2026-11-18)
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);       // PC ⋯ — 확인창을 닫은 뒤 포커스 복귀 (15차 #M2)
+  const mobileMoreBtnRef = useRef<HTMLButtonElement>(null); // 모바일 ⋯
   const [showMobileMore, setShowMobileMore] = useState(false); // 모바일 상세 헤더 [⋯] — 수정·병합·익명화·삭제 (7차 UX 점검 2026-11-20)
   const mobileMoreRef = useRef<HTMLDivElement>(null);
 
@@ -1365,7 +1369,7 @@ export default function Customers() {
   async function handleAnonymizeOne() {
     if (!selected || isAnonymized(selected)) return;
     if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
-    if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`, confirmLabel: '익명화', danger: true }))) return;
+    if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`, confirmLabel: '익명화', danger: true, returnFocusTo: menuAnchor() }))) return;
     const n = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
     recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
@@ -1393,7 +1397,7 @@ export default function Customers() {
       notify(`삭제할 수 없습니다 — ${blockers}이(가) 있습니다. ${guide} 뒤 삭제해주세요. 중복 고객이면 [병합]이 맞습니다.`);
       return;
     }
-    if (!(await askConfirm({ title: '고객 삭제', message: `'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
+    if (!(await askConfirm({ title: '고객 삭제', message: `'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`, confirmLabel: '삭제', danger: true, returnFocusTo: menuAnchor() }))) return;
     const scrubbed = scrubCustomerBeforeDelete(selected.id); // 얼굴 사진이 접근 불가 상태로 영구 잔류하고 상담 기록이 실명으로 엑셀에 나가던 것 (11차 #H3·H6)
     CustomerStore.delete(selected.id);
     notify(scrubbed > 0 ? `고객을 삭제했습니다 — 기록 ${scrubbed}건의 이름·연락처를 정리하고 시술·상담 사진을 삭제했습니다.` : '고객을 삭제했습니다.');
@@ -1548,7 +1552,7 @@ export default function Customers() {
                 type="button"
                 onClick={handleAnonymizeExpired}
                 disabled={filtered.length === 0}
-                className="flex-shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
               >
                 {filtered.length}명 익명화
               </button>
@@ -1594,7 +1598,7 @@ export default function Customers() {
                         </span>
                       </div>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {maskPhone(customer.phone, user?.role ?? 'staff')}
+                        {phoneFor(user?.role, customer.phone)}
                       </p>
                       <p className="text-xs text-gray-500">
                         {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {statsOf(customer).totalVisits}회
@@ -1637,6 +1641,7 @@ export default function Customers() {
                 <button
                   type="button"
                   onClick={() => setShowMobileMore(v => !v)}
+                  ref={mobileMoreBtnRef}
                   aria-label="고객 관리 더보기"
                   title="수정·병합·익명화·삭제"
                   aria-haspopup="menu"
@@ -1687,7 +1692,7 @@ export default function Customers() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">전화번호</span>
-                    <PhoneLink phone={selected.phone} role={user?.role ?? 'staff'} className="text-sm font-medium text-gray-900 tabular-nums" />
+                    <PhoneLink phone={selected.phone} role={piiOk ? 'admin' : 'staff'} className="text-sm font-medium text-gray-900 tabular-nums" />
                   </div>
                   {selected.email && (
                     <div className="flex justify-between">
@@ -2013,7 +2018,7 @@ export default function Customers() {
                 type="button"
                 onClick={handleAnonymizeExpired}
                 disabled={filtered.length === 0}
-                className="flex-shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
               >
                 {filtered.length}명 익명화
               </button>
@@ -2053,7 +2058,7 @@ export default function Customers() {
                           {customer.grade}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-600 truncate">{maskPhone(customer.phone, user?.role ?? 'staff')}</p>
+                      <p className="text-xs text-slate-600 truncate">{phoneFor(user?.role, customer.phone)}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-xs text-slate-600 pl-10">
@@ -2092,7 +2097,7 @@ export default function Customers() {
                       <h2 className="text-xl font-bold text-gray-900 whitespace-nowrap">{selected.name}</h2>
                       {gradeChip(selected, false)}
                     </div>
-                    <p className="text-sm text-gray-500"><PhoneLink phone={selected.phone} role={user?.role ?? 'staff'} /></p>
+                    <p className="text-sm text-gray-500"><PhoneLink phone={selected.phone} role={piiOk ? 'admin' : 'staff'} /></p>
                     {selected.skinType && <p className="text-xs text-gray-400 mt-0.5">피부 유형: {selected.skinType}</p>}
                     {(() => {
                       // 폼에서 받는 정보를 상세에서도 보이게 — 이메일·주소는 목록 내보내기(이 화면)와 같은 규칙으로 staff 역할에게 숨김, 역할을 모르면 숨김 (2026-11-18)
@@ -2170,6 +2175,7 @@ export default function Customers() {
                     <button
                       type="button"
                       onClick={() => setShowMoreMenu(v => !v)}
+                      ref={moreBtnRef}
                       aria-label="더보기"
                       title="병합·익명화·삭제"
                       aria-haspopup="menu"
@@ -2648,8 +2654,9 @@ export default function Customers() {
                 </div>
                 ) : (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">전화번호</label>
-                  <p className="px-3 py-2 text-sm text-gray-500 bg-gray-50 rounded-xl tabular-nums" title="전화·이메일·주소·생년월일은 매장 관리자만 수정할 수 있습니다">{maskPhone(selected.phone, 'staff')}</p>
+                  <p className="text-xs font-medium text-gray-600 mb-1">전화번호</p>
+                  <p className="px-3 py-2 text-sm text-gray-500 bg-gray-50 rounded-xl tabular-nums">{maskPhone(selected.phone, 'staff')}</p>
+                  <p className="mt-1 text-xs text-gray-500">전화·이메일·주소·생년월일은 매장 관리자만 수정할 수 있습니다.</p>{/* 툴팁은 폰에서 볼 수 없다 (15차 #M9) */}
                 </div>
                 )}
               </div>

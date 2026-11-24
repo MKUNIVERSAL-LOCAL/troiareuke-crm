@@ -776,6 +776,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
   const [resultMessage, setResultMessage] = useState('');
+  const [sendPartial, setSendPartial] = useState(false); // 일부 실패 — 초록 "발송 완료!" 로 가짜 성공처럼 보이지 않게 (15차 #H5)
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
   const [scheduleAt, setScheduleAt] = useState('');
   const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
@@ -916,10 +917,11 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       });
       setSending(false);
       setSendResult('success');
+      setSendPartial(result.failed > 0);
       setResultMessage(
         `${result.sent}명 발송 성공` +
         (result.failed > 0 ? `, ${result.failed}명 실패` : '') +
-        (recipientCount > recipientPhones.length ? ` (전화번호 없는 ${recipientCount - recipientPhones.length}명 제외)` : '')
+        (recipientCount > recipientPhones.length ? ` (번호가 없거나 10~11자리가 아닌 ${recipientCount - recipientPhones.length}명 제외)` : '') // 사유 표기 통일 (15차 #L11)
       );
       onSent();
       setTimeout(() => { onClose(); }, 1800);
@@ -949,8 +951,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     <Modal isOpen={true} onClose={onClose} title="메시지 발송" size="lg">
       {sendResult === 'success' ? (
         <div className="flex flex-col items-center justify-center py-12">
-          <CheckCircle size={48} className="text-green-700 mb-3" />
-          <p className="text-lg font-bold text-gray-900">발송 완료!</p>
+          {sendPartial ? <AlertCircle size={48} className="text-amber-600 mb-3" /> : <CheckCircle size={48} className="text-green-700 mb-3" />}
+          <p className="text-lg font-bold text-gray-900">{sendPartial ? '일부만 발송됐습니다' : '발송 완료!'}</p>
           <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다`}</p>
         </div>
       ) : sendResult === 'pending' ? (
@@ -1148,7 +1150,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-500">발송 대상 (전화번호 있는 고객)</p>
-              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientPhones.length}명{excludedCount > 0 && <span className="ml-1.5 text-xs font-normal text-amber-700">번호 없음·자릿수 불가 {excludedCount}명 제외 제외</span>}</p>
+              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientPhones.length}명{excludedCount > 0 && <span className="ml-1.5 text-xs font-normal text-amber-700">번호 없음·자릿수 불가 {excludedCount}명 제외</span>}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">예상 발송 비용</p>

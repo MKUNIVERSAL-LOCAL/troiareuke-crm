@@ -67,6 +67,7 @@ export default function Products() {
       : '\n재고 항목은 복구할 수 없습니다.';
     if (!(await askConfirm({ title: '제품 삭제', message: `'${product.name}' 제품을 삭제할까요?${detail}`, confirmLabel: '삭제', danger: true }))) return;
     ProductStore.delete(product.id);
+    notify('제품을 삭제했습니다.'); // (15차 #M10)
     refresh();
   };
 
@@ -74,7 +75,7 @@ export default function Products() {
   const canceled = useMemo(() => canceledSaleIds(payments), [payments]);
   const isCanceled = (sale: ProductSale) => canceled.has(sale.id);
   const handleDeleteSale = async (sale: ProductSale) => {
-    if (!(await askConfirm({ title: '판매 취소', danger: true, confirmLabel: '판매 취소', message: `${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.` }))) return;
+    if (!(await askConfirm({ title: '판매 취소', danger: true, confirmLabel: '판매 취소', cancelLabel: '닫기', message: `${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.` }))) return;
     const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
     if (linked.length === 0) {
       // 연결 결제가 없는 옛 판매 — 예전처럼 행 삭제(코어: 재고 복구 포함)
@@ -84,6 +85,7 @@ export default function Products() {
       if (sale.productId) ProductStore.adjustStock(sale.productId, -sale.quantity); // 제품이 지워진 옛 판매는 재고 복구 대상이 없다
       for (const p of linked) PaymentStore.update(p.id, { status: 'refunded', memo: tagRefund(p.memo, todayISO()) });
     }
+    notify(`판매를 취소했습니다. 재고 ${sale.quantity}${(sale.productId && ProductStore.getById(sale.productId)?.unit) || '개'}를 복구했습니다.`); // 파괴적 동작 뒤 피드백 (15차 #M10)
     refresh();
   };
 
@@ -440,7 +442,7 @@ export default function Products() {
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className={`text-sm font-bold ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatPrice(sale.totalPrice)}</span>
                         {isCanceled(sale) ? <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
-                        <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>)}
+                        <button onClick={() => handleDeleteSale(sale)} className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>)}
                       </div>
                     </div>
                   </li>
@@ -761,11 +763,11 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       return;
     }
     if (!(unitPrice > 0)) {
-      notify('단가는 1원 이상 정수여야 합니다. 무상 제공이면 메모에 남기고 단가는 실제 가격으로 적어주세요.');
+      notify.error('단가는 1원 이상 정수여야 합니다. 무상 제공이면 메모에 남기고 단가는 실제 가격으로 적어주세요.'); // 검증 오류는 빨간 토스트 (15차 #M7)
       return;
     }
     if (qty < 1) {
-      notify('수량은 1 이상 정수여야 합니다');
+      notify.error('수량은 1 이상 정수여야 합니다.');
       return;
     }
     const fresh = ProductStore.getById(product.id) ?? product; // 모달을 열어 둔 사이 다른 판매가 있었을 수 있다 — 저장 직전 재고로 (정합성 감사 2026-11-19)

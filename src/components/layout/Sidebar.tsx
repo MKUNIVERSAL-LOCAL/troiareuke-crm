@@ -120,7 +120,7 @@ export default function Sidebar() {
         {user?.plan === 'trial' && trialDaysLeft !== null && trialDaysLeft >= 0 && (
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl px-4 py-3">
             <p className="text-xs font-bold text-blue-700">무료 체험 중</p>
-            <p className="text-xs text-blue-400 mt-0.5">남은 기간: {trialDaysLeft}일</p>
+            <p className="text-xs text-blue-700 mt-0.5">남은 기간: {trialDaysLeft}일</p>
             <div className="mt-2 bg-blue-200 rounded-full h-1">
               <div className="bg-blue-500 rounded-full h-1" style={{ width: `${Math.max(5, ((14 - trialDaysLeft) / 14) * 100)}%` }} />
             </div>

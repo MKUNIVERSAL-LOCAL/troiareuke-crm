@@ -23,5 +23,7 @@ export function maskBirthDate(v: string | undefined | null): string {
   return s.length >= 4 ? `${s.slice(0, 4)}-**-**` : (s ? '****' : '');
 }
 
+/** 목록·상세의 전화 표시 — canSeePii 와 같은 판정(role 없는 로컬 세션은 관리자) (15차 #M19) */
+export function phoneFor(role: string | undefined | null, v: string | undefined | null): string { return canSeePii(role) ? (v || '') : maskPhone(v || '', 'staff'); }
 export function emailFor(role: string | undefined | null, v: string | undefined | null): string { return canSeePii(role) ? (v || '') : maskEmail(v); }
 export function birthDateFor(role: string | undefined | null, v: string | undefined | null): string { return canSeePii(role) ? (v || '') : maskBirthDate(v); }
