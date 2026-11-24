@@ -5,6 +5,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import type { Customer } from '../types';
+import { isConsentDateTag } from './consentRule';
 
 const MAX_TAG_LEN = 20;
 const MAX_TAGS = 10;
@@ -26,7 +27,7 @@ export function topTags(customers: Customer[], limit = 12): { tag: string; count
   const counts = new Map<string, number>();
   for (const c of customers) {
     if (c.isActive === false) continue;
-    for (const t of c.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+    for (const t of c.tags || []) if (!isConsentDateTag(t)) counts.set(t, (counts.get(t) || 0) + 1); // 광고동의:날짜 는 칩으로 안 세운다 (159 리뷰 L-13)
   }
   return [...counts.entries()].map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'ko'))

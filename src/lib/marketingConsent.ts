@@ -11,7 +11,7 @@ export function consentOf(c: Pick<Customer, 'tags'>): ConsentState {
   return consentFromTags(c.tags);
 }
 
-export interface ConsentPatch { ad?: 'consented' | 'optout' | 'unknown'; sms?: boolean; kakao?: boolean }
+interface ConsentPatch { ad?: 'consented' | 'optout' | 'unknown'; sms?: boolean; kakao?: boolean }
 
 /** 고객의 동의 상태를 바꿔 저장한다(태그 갱신 — 코어 CustomerStore.update, 고객 행 단위 동기) */
 export function setConsent(customerId: string, patch: ConsentPatch): ConsentState | null {

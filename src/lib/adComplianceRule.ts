@@ -5,7 +5,7 @@
  *  - 수신 동의가 없거나 수신거부한 고객은 광고 대상에서 뺀다(채널별). 거래 안내(예약 확인·회차권 만료 등 영업성 아닌 안내)는 광고가 아니라 이 규칙을 적용하지 않는다.
  * 동의·거부는 고객 태그(코어 Customer.tags — 고객 행마다 서버 동기)에 적어 두 기기 동시 저장에도 안전하다: 태그 사전은 marketingConsent.ts.
  */
-export const AD_PREFIX = '(광고)';
+const AD_PREFIX = '(광고)';
 export const QUIET_START_HOUR = 21; // 21:00 부터
 export const QUIET_END_HOUR = 8;    // 08:00 전까지
 
@@ -33,7 +33,7 @@ export function decorateAdMessage(content: string, optOutNumber: string): string
   let body = content.trim();
   if (!body.startsWith(AD_PREFIX)) body = `${AD_PREFIX} ${body}`;
   const tail = `무료수신거부 ${optOutNumber.trim()}`;
-  if (!body.includes('무료수신거부')) body = `${body}\n${tail}`;
+  if (!body.includes(optOutNumber.trim())) body = `${body}\n${tail}`; // 문구만 보면 "무료수신거부는 매장으로…" 같은 본문에 번호가 빠진다 (159 리뷰 M-4)
   return body;
 }
 

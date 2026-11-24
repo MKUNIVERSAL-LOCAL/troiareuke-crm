@@ -40,7 +40,7 @@ import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
 import { formatBriefing, pseudonymizeStaff, BRIEFING_SYSTEM, targetPace, describeCause } from '../src/lib/ai/briefingRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
-import { consentFromTags, tagsWithConsent } from '../src/lib/consentRule';
+import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
@@ -911,4 +911,23 @@ test('경영비서 2차 — 목표 페이스·원인 후보 증감률·연락할
   expect(empty).not.toContain('목표 대비'); expect(empty).not.toContain('전월 대비 변화');
   expect(empty).toContain('캠페인 추천: 지금 대상이 있는 시나리오 없음');
   expect(BRIEFING_SYSTEM).toContain('6) 캠페인 추천은');
+});
+
+test('리뷰 반영 — 동의 태그 보존·판별, 080 번호 기준 꼬리말, 생일 연도 버킷, 성과 추정 로컬 날짜 (159)', () => {
+  // H-1: 편집 폼 저장은 일반 태그만 바꾸고 동의 태그는 그대로 — 타이핑한 동의 예약어는 버린다
+  expect(isConsentTag('광고수신거부')).toBe(true); expect(isConsentTag('광고동의:2026-11-24')).toBe(true); expect(isConsentTag('VIP')).toBe(false);
+  expect(mergeGeneralTags(['VIP', '광고수신동의', '민감성'], ['재구매', '광고수신거부', '문자수신거부'])).toEqual(['VIP', '민감성', '광고수신거부', '문자수신거부']);
+  // M-4: 문구가 있어도 번호가 없으면 꼬리말을 붙인다
+  expect(decorateAdMessage('무료수신거부는 매장으로 연락주세요', '080-123-4567')).toBe('(광고) 무료수신거부는 매장으로 연락주세요\n무료수신거부 080-123-4567');
+  // M-2: yearly 는 후보의 연도 버킷(생일 연도) 우선 — 12월 말 실행과 1월 초 실행이 같은 키
+  const consented = { ad: 'consented' as const, sms: true, kakao: true };
+  const r = { customerId: 'u', customerName: 'u', phone: '01012345678', consent: consented, reason: 'r', vars: {}, eventId: '2027-01-03', yearBucket: '2027' };
+  const dec = selectCandidates({ id: 'c', repeat: 'yearly', isAd: false, channel: 'sms', content: 'x' }, [r], new Set(), '2026');
+  expect(dec.ready[0].key).toBe('c|u|2027');
+  expect(selectCandidates({ id: 'c', repeat: 'yearly', isAd: false, channel: 'sms', content: 'x' }, [r], new Set(['c|u|2027']), '2027').ready.length).toBe(0);
+  // M-1: 발송 시각은 로컬 날짜로 — 로컬 08:30 발송(UTC 전날)에 전날 예약이 "발송 뒤"로 잡히지 않는다
+  const at = new Date(2026, 10, 25, 8, 30).toISOString();
+  const p = estimatePerformance([{ customerId: 'a', at }], [{ customerId: 'a', date: '2026-11-24', status: 'completed' }, { customerId: 'a', date: '2026-11-25', status: 'confirmed' }], []);
+  expect(p.reserved).toBe(1);
+  expect(estimatePerformance([{ customerId: 'a', at }], [{ customerId: 'a', date: '2026-11-24', status: 'completed' }], []).reserved).toBe(0);
 });

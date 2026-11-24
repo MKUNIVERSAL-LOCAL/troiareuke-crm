@@ -759,7 +759,6 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [isAd, setIsAd] = useState(false); // 광고성이면 동의 고객만·(광고)·080·시간대 (155, GAP C-8·M-4)
   const [scheduleAt, setScheduleAt] = useState('');
   const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
-  const contentBytes = smsBytes(content);
 
   const customers = useMemo(() => CustomerStore.getAll().filter(c => c.isActive !== false), []);
   // 개별 고객 발송 — 고객 상세에서 열었을 때. [대상 바꾸기]로 세그먼트 발송으로 되돌릴 수 있다.
@@ -802,6 +801,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const adExcluded = targetCustomers.length - adEligible.length;
   const optOutNumber = getOptOutNumber();
   const adPreview = isAd && content.trim() ? decorateAdMessage(content, optOutNumber || '(080 번호 미등록)') : null;
+  const contentBytes = smsBytes(isAd ? decorateAdMessage(content, optOutNumber || '080-000-0000') : content); // 광고면 (광고)·080 꼬리말이 붙은 실제 본문 기준으로 바이트·종류·비용 (159 리뷰 M-3)
 
   // 수신 대상의 실제 전화번호 목록 — 번호가 없거나 10~11자리가 아닌 것('010-1', 내선 포함)은 발송·비용 추정에서 뺀다(게이트웨이 실패를 발송 뒤에 알던 것, 14차 #M8)
   const recipientPhones = adEligible
@@ -974,7 +974,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             </label>
             {isAd && (
               <>
-                <p className="text-xs text-gray-700" data-testid="ad-recipients">광고 대상 {adEligible.length}명{adExcluded > 0 ? ` · 동의 없음·거부 ${adExcluded}명 제외` : ''} · (광고) 머리말과 무료수신거부 {optOutNumber || '080 번호(설정 > 알림 설정에서 등록 — 미등록)'} 꼬리말이 자동으로 붙고, 21시~익일 8시에는 보낼 수 없습니다. 예약 확인·회차권 안내 같은 거래 안내는 광고가 아닙니다.</p>
+                <p className="text-xs text-gray-700" data-testid="ad-recipients">광고 대상 {adEligible.length}명{adExcluded > 0 ? ` · 동의 없음·거부 ${adExcluded}명 제외` : ''} · (광고) 머리말과 무료수신거부 {optOutNumber || '080 번호(설정 > 알림 설정에서 등록 — 미등록)'} 꼬리말이 자동으로 붙고, 21시~익일 8시에는 보낼 수 없습니다. 예약 확인·회차권 안내 같은 거래 안내는 광고가 아닙니다. 법은 보내는 곳(매장 이름·연락처)도 본문에 적게 하니 꼭 넣어주세요.</p>
                 {adPreview && <pre className="text-xs text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-2 border border-gray-100 font-sans" data-testid="ad-preview">{adPreview}</pre>}
               </>
             )}

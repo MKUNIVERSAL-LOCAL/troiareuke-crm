@@ -1,5 +1,5 @@
 // CampaignsCard — 문자/카카오 발송 > 자동 발송(캠페인) 목록 (비코어, 156, GAP M-3). 옛 "자동 발송 준비 중" 장식 블록을 대체
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Zap, Pencil, Trash2, Plus, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,7 +17,7 @@ import CampaignRunModal from './CampaignRunModal';
 
 export default function CampaignsCard({ onSent }: { onSent: () => void }) {
   const { user } = useAuth();
-  const canManage = canDo(user?.role, 'customer.pii');
+  const canManage = canDo(user?.role, 'campaign.manage');
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => listCampaigns());
   const [editing, setEditing] = useState<Campaign | null | 'new'>(null);
   const [running, setRunning] = useState<Campaign | null>(null);
@@ -28,8 +28,11 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
     refresh();
     notify.success(n ? `기본 시나리오 ${n}개를 추가했습니다. 문구와 일수는 수정에서 바꿀 수 있어요.` : '기본 시나리오가 모두 들어 있습니다.');
   };
-  // 성과 추정 — 이 기기의 발송 성공 기록 기준, 14일 창 (157, GAP M-6, ANALYTICS-DEFINITIONS)
-  const perfOf = (id: string) => describePerformance(estimatePerformance(sendsOf(id), ReservationStore.getAll(), PaymentStore.getAll()), formatPrice);
+  // 성과 추정 — 이 기기의 발송 성공 기록 기준, 14일 창 (157, GAP M-6, ANALYTICS-DEFINITIONS). 목록이 바뀔 때만 다시 계산 (159 리뷰 L-7)
+  const perfs = useMemo(() => {
+    const resv = ReservationStore.getAll(), pays = PaymentStore.getAll();
+    return new Map(campaigns.map(c => [c.id, describePerformance(estimatePerformance(sendsOf(c.id), resv, pays), formatPrice)]));
+  }, [campaigns]);
 
   const remove = async (c: Campaign) => {
     if (!(await askConfirm({ title: '캠페인 삭제', message: `"${c.name}" 캠페인을 삭제할까요? 발송 기록은 남습니다.`, confirmLabel: '삭제', danger: true }))) return;
@@ -41,7 +44,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="text-sm font-bold text-gray-900">자동 발송(캠페인)</h3>
-          <p className="text-xs text-gray-400 mt-0.5">조건에 맞는 고객을 모아 보여주고, 직원이 확인한 뒤 발송합니다. 같은 고객·같은 회차에 두 번 나가지 않습니다.</p>
+          <p className="text-xs text-gray-400 mt-0.5">조건에 맞는 고객을 모아 보여주고, 직원이 확인한 뒤 발송합니다. 같은 고객·같은 회차에 두 번 나가지 않습니다(이 PC 의 발송 기록 기준 — 다른 PC 와 공유는 서버 보관 승인 뒤).</p>
         </div>
         {canManage && (
           <div className="flex items-center gap-2 flex-wrap">
@@ -60,7 +63,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
         {campaigns.length === 0 && <p className="px-6 py-8 text-sm text-gray-500 text-center">아직 캠페인이 없습니다. "기본 시나리오 {CAMPAIGN_PRESETS.length} 추가"로 예약·케어·리텐션·회차권·이벤트 시나리오를 한 번에 넣거나, "캠페인 추가"로 직접 만들어보세요.</p>}
         {campaigns.map(c => {
           const last = lastRunOf(c.id);
-          const perf = perfOf(c.id);
+          const perf = perfs.get(c.id) ?? null;
           return (
             <div key={c.id} className="flex items-center justify-between gap-3 px-6 py-4 flex-wrap" data-testid="campaign-row">
               <div className="flex items-start gap-3 min-w-0">

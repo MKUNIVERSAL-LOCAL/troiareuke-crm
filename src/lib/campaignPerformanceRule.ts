@@ -1,7 +1,7 @@
 // campaignPerformanceRule — 캠페인 성과 추정(발송 → N일 내 예약 → 결제) (순수, 157, GAP M-6)
 // 어트리뷰션은 추정이다: 발송 뒤 창 안에 생긴 예약·결제를 캠페인 덕으로 "본다"는 뜻이지 인과가 아니다 → 화면은 항상 [추정] 라벨.
 // 숫자는 여기서만 계산하고 AI 는 해석만 한다.
-export const PERFORMANCE_WINDOW_DAYS = 14;
+const PERFORMANCE_WINDOW_DAYS = 14;
 
 export interface SendRef { customerId: string; at: string }               // 발송 성공 기록(기기별, campaignStore)
 export interface ReservationRef { customerId: string; date: string; status: string }
@@ -14,7 +14,12 @@ export interface CampaignPerformance {
   windowDays: number;
 }
 
-function dateOf(iso: string): string { return iso.slice(0, 10); }
+/** 발송 시각(ISO, UTC)을 로컬 YYYY-MM-DD 로 — UTC 를 그대로 자르면 KST 00~09시 발송이 전날로 잡힌다 (159 리뷰 M-1) */
+function dateOf(iso: string): string {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return iso.slice(0, 10);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
 function addDaysISO(date: string, n: number): string {
   const [y, m, d] = date.split('-').map(Number);
   const t = new Date(y, m - 1, d + n);

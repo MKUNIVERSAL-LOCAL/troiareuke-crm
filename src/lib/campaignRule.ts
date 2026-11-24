@@ -79,14 +79,14 @@ export const CAMPAIGN_VARS = ['{고객명}', '{매장명}', '{예약일시}', '{
 /** 사람이 읽는 트리거 설명 */
 export function describeTrigger(c: Pick<Campaign, 'trigger' | 'days'>): string {
   switch (c.trigger) {
-    case 'reservation_tomorrow': return '내일 예약이 있는 고객에게';
+    case 'reservation_tomorrow': return '내일 예약(확정·대기)이 있는 고객에게';
     case 'birthday': return c.days > 0 ? `생일 ${c.days}일 전부터 생일까지` : '생일 당일에';
     case 'novisit': return `마지막 방문 뒤 ${c.days}일 이상 지나고 다음 예약이 없는 고객에게`;
     case 'revisit_due': return '재방문 권장일이 지났고 다음 예약이 없는 고객에게';
     case 'first_visit_followup': return `첫 방문 ${c.days}일 뒤에`;
     case 'program_expiring': return `회차권 만료 ${c.days}일 전부터(만료 뒤 포함)`;
     case 'program_low': return '회차권이 1회 남았거나 소진된 고객에게';
-    case 'reservation_today': return '오늘 예약이 있는 고객에게(아침 안내)';
+    case 'reservation_today': return '오늘 예약(확정·대기)이 있는 고객에게(아침 안내)';
     case 'after_visit': return `방문 ${c.days}일 뒤에`;
     case 'noshow_followup': return '어제 예약에 오지 않은(노쇼) 고객에게';
     case 'after_payment': return '어제 결제한 고객에게';
@@ -104,7 +104,7 @@ export function renderCampaignContent(content: string, vars: Record<string, stri
   return content.replace(/\{[^{}]+\}/g, m => (vars[m] !== undefined && vars[m] !== '' ? vars[m] : m));
 }
 
-export function hasUnresolvedVars(s: string): boolean {
+function hasUnresolvedVars(s: string): boolean {
   return /\{[^{}]+\}/.test(s);
 }
 
@@ -128,6 +128,8 @@ export interface RawCandidate {
   reason: string;
   vars: Record<string, string>;
   eventId: string;
+  /** yearly 반복의 연도 버킷(생일이면 그 생일의 연도) — 없으면 실행 연도. 12월 말·1월 초 두 번 나가지 않게 (159 리뷰 M-2) */
+  yearBucket?: string;
 }
 export type SkipReason = 'already_sent' | 'no_consent' | 'channel_optout' | 'no_phone' | 'unresolved_vars';
 export const SKIP_LABELS: Record<SkipReason, string> = {
@@ -147,7 +149,7 @@ export function selectCandidates(c: Pick<Campaign, 'id' | 'repeat' | 'isAd' | 'c
   const adChannel: AdChannel = c.channel === 'sms' ? 'sms' : 'kakao';
   const seen = new Set<string>();
   for (const r of raw) {
-    const key = idempotencyKey(c.id, r.customerId, c.repeat, { year, eventId: r.eventId });
+    const key = idempotencyKey(c.id, r.customerId, c.repeat, { year: r.yearBucket ?? year, eventId: r.eventId });
     if (seen.has(key)) continue; // 같은 고객이 사건 둘로 두 번 잡혀도 한 회차엔 한 번
     seen.add(key);
     const skip = (why: SkipReason) => skipped.push({ customerId: r.customerId, customerName: r.customerName, why });

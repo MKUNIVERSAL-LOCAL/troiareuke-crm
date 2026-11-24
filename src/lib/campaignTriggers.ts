@@ -12,6 +12,9 @@ import { formatDate, formatPrice } from './format';
 import type { Customer } from '../types';
 import type { Campaign, RawCandidate } from './campaignRule';
 
+const EXPIRED_GRACE_DAYS = 7;
+function isLeap(y: number): boolean { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+
 function base(c: Customer, reason: string, eventId: string, vars: Record<string, string> = {}): RawCandidate {
   return { customerId: c.id, customerName: c.name, phone: c.phone || '', consent: consentOf(c), reason, eventId, vars: { '{매장명}': SettingsStore.get().name || '', ...vars } };
 }
@@ -35,11 +38,11 @@ export function collectRawCandidates(c: Pick<Campaign, 'trigger' | 'days'>, toda
       const y = today.getFullYear();
       return customers.flatMap(cu => {
         if (!cu.birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(cu.birthDate)) return [];
-        const mmdd = cu.birthDate.slice(5);
-        const thisYear = `${y}-${mmdd}`;
-        const bday = thisYear >= todayISO ? thisYear : `${y + 1}-${mmdd}`; // 올해 생일이 지났으면 내년
+        const bdayIn = (yy: number) => { const mmdd = cu.birthDate!.slice(5); return mmdd === '02-29' && !isLeap(yy) ? `${yy}-02-28` : `${yy}-${mmdd}`; }; // 2/29 는 평년에 2/28 로 (159 리뷰 L-9)
+        const thisYear = bdayIn(y);
+        const bday = thisYear >= todayISO ? thisYear : bdayIn(y + 1); // 올해 생일이 지났으면 내년
         const left = daysBetween(todayISO, bday);
-        return left >= 0 && left <= c.days ? [base(cu, left === 0 ? '오늘 생일' : `${left}일 뒤 생일`, bday.slice(0, 4))] : [];
+        return left >= 0 && left <= c.days ? [{ ...base(cu, left === 0 ? '오늘 생일' : `${left}일 뒤 생일`, bday), yearBucket: bday.slice(0, 4) }] : []; // 연도 버킷 = 생일 연도 (159 리뷰 M-2)
       });
     }
     case 'novisit': {
@@ -65,7 +68,7 @@ export function collectRawCandidates(c: Pick<Campaign, 'trigger' | 'days'>, toda
     }
     case 'program_expiring':
       return getProgramAlerts(today)
-        .filter(a => (a.reason === 'expiring' && a.daysToExpiry !== null && a.daysToExpiry <= c.days) || a.reason === 'expired')
+        .filter(a => a.daysToExpiry !== null && ((a.reason === 'expiring' && a.daysToExpiry <= c.days) || (a.reason === 'expired' && a.daysToExpiry >= -EXPIRED_GRACE_DAYS))) // 만료 뒤는 7일까지만 — 몇 달 전 만료에 "곧 끝나요" 가 나가지 않게 (159 리뷰 L-1)
         .flatMap(a => (byId.has(a.customer.id) ? [base(a.customer, a.reason === 'expired' ? '회차권 만료' : `만료 ${a.daysToExpiry}일 전`, a.program.id, { '{프로그램명}': a.programLabel, '{만료일}': a.program.expiryDate ? formatDate(a.program.expiryDate) : '', '{잔여회차}': a.remaining === null ? '' : String(a.remaining) })] : []));
     case 'reservation_today':
       return ReservationStore.getAll()

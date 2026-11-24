@@ -34,7 +34,7 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await edit.getByRole('button', { name: '추가', exact: true }).click();
   await expect(edit).toHaveCount(0);
   const row = card.getByTestId('campaign-row').filter({ hasText: '예약 전날 안내' });
-  await expect(row).toContainText('내일 예약이 있는 고객에게 · 사건마다 1회');
+  await expect(row).toContainText('내일 예약(확정·대기)이 있는 고객에게 · 사건마다 1회');
 
   // 대상 확인 → 치환된 본문 → 승인
   await row.getByRole('button', { name: '대상 확인·발송' }).click();

@@ -41,6 +41,7 @@ import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../li
 import { propagateCustomerIdentity, countIdentityCopies, IDENTITY_PROPAGATION_CONFIRM_AT, scrubCustomerBeforeDelete, DELETED_CUSTOMER_NAME } from '../../lib/customerIdentity';
 import { parseTags, topTags } from '../../lib/customerTags';
 import ConsentControl from '../../components/ConsentControl';
+import { isConsentTag, mergeGeneralTags } from '../../lib/consentRule';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
@@ -1327,7 +1328,7 @@ export default function Customers() {
       referralSource: addForm.referralSource || undefined,
       email: addForm.email.trim() || undefined, allergies: addForm.allergies.trim() || undefined,
       address: addForm.address.trim() || undefined,
-      tags: parseTags(addForm.tags), isActive: true,
+      tags: parseTags(addForm.tags).filter(t => !isConsentTag(t)), isActive: true, // 동의는 고객 상세의 동의 컨트롤로만 — 입력란 타이핑으로 못 만든다 (159 리뷰 H-1)
       privacyConsent: true, privacyConsentAt: new Date().toISOString(),
     });
     notify.success('고객을 등록했습니다.'); // 창만 닫히고 피드백이 없었다 (15차 #L10)
@@ -1348,7 +1349,7 @@ export default function Customers() {
       grade: selected.grade, skinType: selected.skinType ?? '',
       memo: selected.memo ?? '', birthDate: selected.birthDate ?? '',
       referralSource: selected.referralSource ?? '',
-      tags: (selected.tags || []).join(', '),
+      tags: (selected.tags || []).filter(t => !isConsentTag(t)).join(', '), // 동의 태그는 폼에 보이지 않는다 — 10개 제한에 잘려 수신거부가 사라지던 것 (159 리뷰 H-1)
       allergies: selected.allergies ?? '',
     });
     setShowEditModal(true);
@@ -1378,7 +1379,7 @@ export default function Customers() {
       referralSource: editForm.referralSource || '',
       email: piiOk ? (editForm.email.trim() || '') : (selected.email || ''),
       address: piiOk ? (editForm.address.trim() || '') : (selected.address || ''),
-      tags: parseTags(editForm.tags),
+      tags: mergeGeneralTags(parseTags(editForm.tags), selected.tags), // 일반 태그만 바꾸고 동의 태그는 항상 보존 (159 리뷰 H-1)
       allergies: editForm.allergies.trim() || '',
     };
     const base = editBaseRef.current && editBaseRef.current.id === selected.id ? editBaseRef.current : selected; // 재조회로 selected 가 바뀌어도 폼이 본 값과 비교

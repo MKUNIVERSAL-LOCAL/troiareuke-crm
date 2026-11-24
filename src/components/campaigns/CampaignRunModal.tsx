@@ -16,12 +16,15 @@ import { checkAdSend, decorateAdMessage } from '../../lib/adComplianceRule';
 import { getOptOutNumber } from '../../lib/marketingConsent';
 import type { MessageType } from '../../types';
 
+const FAIL_STREAK_STOP = 3;
+
 export default function CampaignRunModal({ campaign, onClose, onSent }: { campaign: Campaign; onClose: () => void; onSent: () => void }) {
   const { user } = useAuth();
   const selection = useMemo(() => selectCandidates(campaign, collectRawCandidates(campaign), sentKeysOf(campaign.id), String(new Date().getFullYear())), [campaign]);
   const [checked, setChecked] = useState<Set<string>>(() => new Set(selection.ready.map(r => r.key)));
   const [phase, setPhase] = useState<'review' | 'sending' | 'done'>('review');
   const [result, setResult] = useState<{ sent: number; failed: number; pending: boolean; reason?: string } | null>(null);
+  const [progress, setProgress] = useState(0); // 발송 진행 n/N (159 리뷰 M-5)
   const optOutNumber = getOptOutNumber();
   const adCheck = checkAdSend({ isAd: campaign.isAd, channel: campaign.channel === 'sms' ? 'sms' : 'kakao', now: new Date(), optOutNumber });
   const picked = selection.ready.filter(r => checked.has(r.key));
@@ -37,24 +40,27 @@ export default function CampaignRunModal({ campaign, onClose, onSent }: { campai
     if (!adCheck.ok) { notify.error(adCheck.reasons.join(' ')); return; }
     if (picked.length === 0) return;
     setPhase('sending');
-    let sent = 0, failed = 0, pending = false, reason: string | undefined;
+    let sent = 0, pending = false, reason: string | undefined, cost = 0, streak = 0;
     const okKeys: { key: string; customerId: string }[] = [];
     const base: MessageType = campaign.channel;
-    for (const r of picked) {
+    for (let i = 0; i < picked.length; i++) {
+      const r = picked[i];
+      setProgress(i + 1);
       const content = campaign.isAd ? decorateAdMessage(r.message, optOutNumber) : r.message;
       const type: MessageType = base === 'sms' && smsBytes(content) > SMS_BYTE_LIMIT ? 'lms' : base;
       const res = await sendMessages({ type, content, recipients: 1, phones: [r.phone] });
-      if (res.pending) { pending = true; reason = res.reason; failed += 1; continue; }
-      if (res.sent > 0) { sent += 1; okKeys.push({ key: r.key, customerId: r.customerId }); }
-      else { failed += 1; reason = reason || res.reason; }
+      if (res.pending) { pending = true; reason = res.reason; break; } // 미연동은 전부 같다 — 첫 건에서 멈춘다 (159 리뷰 M-5)
+      if (res.sent > 0) { sent += 1; streak = 0; cost += type === 'sms' ? 11 : type === 'lms' ? 25 : 5; okKeys.push({ key: r.key, customerId: r.customerId }); }
+      else { streak += 1; reason = reason || res.reason; if (streak >= FAIL_STREAK_STOP) { reason = `${reason || '발송 실패'} — 연속 ${FAIL_STREAK_STOP}건 실패로 중단`; break; } } // 서버 장애에 N건 전부 타임아웃을 기다리지 않게
     }
+    const failed = picked.length - sent; // 시도 못 한 건도 실패로 — 다음 실행에 다시 잡힌다(멱등키 미기록)
     markSent(okKeys.map(k => ({ ...k, campaignId: campaign.id })));
-    // 이력은 실행 1건으로 — 캠페인 이름을 템플릿명 자리에 적어 성과 추정(157)이 캠페인별로 묶을 수 있게
+    // 이력은 실행 1건으로(캠페인 이름을 템플릿명 자리에). 성과 추정은 이 이력이 아니라 campaign_sends 발송 기록을 쓴다 (159 리뷰 L-6)
     MessageHistoryStore.save({
       type: base, templateId: `campaign:${campaign.id}`, templateName: `캠페인: ${campaign.name}`,
       content: picked[0] ? (campaign.isAd ? decorateAdMessage(picked[0].message, optOutNumber) : picked[0].message) : campaign.content,
       recipients: picked.length, successCount: sent, failCount: failed, sentAt: new Date().toISOString(),
-      status: sent > 0 ? 'sent' : 'failed', cost: 0,
+      status: sent > 0 ? 'sent' : 'failed', cost, // 성공 건의 추정 비용(SMS 11·LMS 25·카카오 5) — 이력 화면의 미연동 판정(cost 0)과 구분 (159 리뷰 L-5)
     });
     setResult({ sent, failed, pending, reason });
     setPhase('done');
@@ -62,7 +68,7 @@ export default function CampaignRunModal({ campaign, onClose, onSent }: { campai
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={`캠페인 실행 — ${campaign.name}`} size="lg">
+    <Modal isOpen={true} onClose={phase === 'sending' ? () => undefined : onClose} title={`캠페인 실행 — ${campaign.name}`} size="lg">{/* 발송 중에는 닫히지 않는다 — 결과를 못 보는 일이 없게 (159 리뷰 M-5) */}
       {phase === 'done' && result ? (
         <div className="flex flex-col items-center justify-center py-10 text-center" data-testid="campaign-result">
           {result.pending ? <AlertCircle size={44} className="text-amber-600 mb-3" /> : result.sent > 0 ? <CheckCircle size={44} className="text-green-700 mb-3" /> : <AlertCircle size={44} className="text-red-600 mb-3" />}
@@ -90,9 +96,9 @@ export default function CampaignRunModal({ campaign, onClose, onSent }: { campai
             ))}
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200">닫기</button>
+            <button type="button" onClick={onClose} disabled={phase === 'sending'} className="flex-1 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50">닫기</button>
             <button type="button" onClick={run} disabled={phase === 'sending' || picked.length === 0 || !adCheck.ok} className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl disabled:opacity-50 disabled:cursor-not-allowed" data-testid="campaign-approve">
-              {phase === 'sending' ? '발송 중…' : `승인하고 ${picked.length}명에게 발송`}
+              {phase === 'sending' ? `발송 중… ${progress}/${picked.length}` : `승인하고 ${picked.length}명에게 발송`}
             </button>
           </div>
         </div>
