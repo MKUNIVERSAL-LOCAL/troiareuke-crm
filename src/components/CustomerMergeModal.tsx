@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GitMerge, X, AlertTriangle } from 'lucide-react';
 import { CustomerStore } from '../lib/store';
-import { previewMerge, mergeCustomers, mergeBlockReason } from '../lib/customerMerge';
+import { previewMerge, mergeCustomers, mergeBlockReason, findDuplicateCandidates } from '../lib/customerMerge';
+import { DUP_REASON_LABEL } from '../lib/duplicateRule';
 import { isPaymentLinkAvailable, listPaymentRequests } from '../lib/paymentLinks';
 import { loadConsultations } from '../lib/consultationStore';
 import { isNasDataConfigured } from '../lib/nasData';
@@ -57,10 +58,12 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
   }, []);
 
   const all = useMemo(() => CustomerStore.getAll().filter(c => c.id !== target.id && !mergeBlockReason(c)), [target.id]);
-  const matched = useMemo(
-    () => all.filter(c => !query.trim() || matchesSearch(query, [c.name, c.phone, c.email])),
-    [all, query],
-  );
+  const suspects = useMemo(() => findDuplicateCandidates(target, all), [target, all]); // 중복 의심 후보 — 검색 전에 먼저 보여 준다 (171, GAP C-9)
+  const suspectReason = useMemo(() => new Map(suspects.map(d => [d.customer.id, d.reasons.map(r => DUP_REASON_LABEL[r]).join('·')])), [suspects]);
+  const matched = useMemo(() => {
+    if (!query.trim()) return [...suspects.map(d => d.customer), ...all.filter(c => !suspectReason.has(c.id))]; // 검색 전: 의심 후보 → 나머지
+    return all.filter(c => matchesSearch(query, [c.name, c.phone, c.email]));
+  }, [all, query, suspects, suspectReason]);
   const candidates = matched.slice(0, MAX_CANDIDATES);
   const source = sourceId ? CustomerStore.getById(sourceId) : undefined;
   const preview = source ? previewMerge(source.id) : null;
@@ -114,6 +117,7 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
                   <span className="flex-1 min-w-0 truncate">
                     <span className="font-medium text-gray-900">{c.name}</span>
                     <span className="text-gray-500"> · {maskPhone(c.phone, user?.role ?? 'staff')} · 방문 {c.totalVisits}회</span>
+                    {suspectReason.has(c.id) && <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100" data-testid="dup-reason">{suspectReason.get(c.id)}</span>}
                   </span>
                 </label>
               ))}

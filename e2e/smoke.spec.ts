@@ -422,9 +422,10 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(kbMenu.getByRole('menuitem', { name: '고객 삭제' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(kbMenu).toHaveCount(0);
-  await desk.getByTestId('dup-hint').click(); // "같은 전화번호 고객 1명 — 병합하기" → 전화번호가 검색칸에 미리 입력된다
+  await desk.getByTestId('dup-hint').click(); // "중복 의심 고객 1명 — 병합하기" → 병합 창이 의심 후보를 사유 배지와 함께 먼저 보여 준다 (171)
   const mergeDialog = page.getByRole('dialog', { name: '고객 병합', exact: true }); // 확인창 '고객 병합 확인'과 부분일치하지 않게 (114)
-  await expect(mergeDialog.getByLabel('병합할 고객 검색')).toHaveValue(acc.customerPhone);
+  await expect(mergeDialog.getByLabel('병합할 고객 검색')).toHaveValue('');
+  await expect(mergeDialog.getByTestId('dup-reason').first()).toContainText('같은 전화번호'); // 다중 키 사유 (171, GAP C-9)
   const dupOption = mergeDialog.getByRole('radio', { name: new RegExp(dupName) });
   await expect(dupOption).toHaveCount(1);
   await dupOption.check();

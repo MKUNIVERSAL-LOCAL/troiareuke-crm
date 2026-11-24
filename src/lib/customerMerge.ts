@@ -15,6 +15,7 @@ import { isAnonymized } from './retentionPolicy';
 import { recordMergedCustomer } from './customerIdentity';
 import { consentFromTags, tagsWithConsent } from './consentRule';
 import { todayISO } from './format';
+import { duplicateCandidates, type DupCandidate } from './duplicateRule';
 import type { Customer, CustomerGrade } from '../types';
 
 export interface MergePreview {
@@ -49,11 +50,10 @@ export function mergeBlockReason(c: Customer): string | null {
   return null;
 }
 
-/** 같은 전화번호(숫자 8자리 이상 기준)를 쓰는 다른 고객 — 상세 화면의 "중복 의심" 안내용. 샘플·익명화 고객은 제외 */
-export function findSamePhoneCustomers(customer: Customer, customers: Customer[] = CustomerStore.getAll()): Customer[] {
-  const digits = (customer.phone || '').replace(/\D/g, '');
-  if (digits.length < 8 || mergeBlockReason(customer)) return [];
-  return customers.filter(c => c.id !== customer.id && !mergeBlockReason(c) && c.phone.replace(/\D/g, '') === digits);
+/** 같은 사람일 수 있는 다른 고객 — 같은 전화번호·이메일·이름+생년월일·이름+전화 뒷 4자리(duplicateRule). 상세 "중복 의심" 안내·병합 창 제안용. 샘플·익명화 고객 제외 (171, GAP C-9) */
+export function findDuplicateCandidates(customer: Customer, customers: Customer[] = CustomerStore.getAll()): DupCandidate<Customer>[] {
+  if (mergeBlockReason(customer)) return [];
+  return duplicateCandidates(customer, customers.filter(c => !mergeBlockReason(c)));
 }
 
 function later(a?: string, b?: string): string | undefined {

@@ -22,7 +22,7 @@
 | C-6 | 세그먼트·이탈 위험·RFM | ✅ 136·166 | rfmRule·churnRule·segmentFilterRule·savedSegments | 저장 세그먼트(조건 11종 AND) 칩·발송 대상 | Mautic 필터 스키마(B), Zenoti | `analytics/rfm.ts`(5분위, 매장 기준 조정), `segments/` 필터 타입+평가기, 이탈 위험 = 고객별 주기 대비 초과율 | 낮음(신규) | 상 | 3 | — | lib-units 공식 고정, 고객 목록 필터·상세 배지 |
 | C-7 | 누적 실현 매출·객단가·LTV | ◐ | `customerStats.ts` | 누적결제(현금 유입)만 — 회차권 사용 기준 실현 매출·객단가·LTV 추정 없음 | ERPNext 원장 개념(B) | `analytics/customerValue.ts`: 실현 매출(회차 사용 × 단가 + 단건 + 제품), 객단가, LTV(평균 주기·유지율 기반, 예측 표시) | 낮음 | 상 | 2 | — | 확정/예측 구분 표시, 스펙 |
 | C-8 | 마케팅 수신 동의·거부 | ✅ 155 | 고객 태그(consentRule)·ConsentControl·광고 대상 제외 | 광고 수신 동의·채널별 거부·080 없음 → 정통망법 | Mautic DNC(B) | 비코어 `preferences`/별도 컬렉션 `consents`(코어 필드 불가) + 발송 대상에서 제외 + 수신거부 처리 UI | 중(발송 경로) | 상(법규) | 2 | 정책(D) | 거부 고객이 광고 세그먼트에서 빠지는 E2E |
-| C-9 | 중복 탐지 다중 키 | 🔧 | `customerMerge.findSamePhoneCustomers` | 전화 단일 키 | — | 이름+생년월일 퍼지 후보 제안 | 낮음 | 중 | 1 | — | 스펙 |
+| C-9 | 중복 탐지 다중 키 | ✅ 171 | `duplicateRule`·`customerMerge.findDuplicateCandidates` | 전화·이메일·이름+생년월일·이름+뒷 4자리, 병합 창 사유 배지 | — | 이름+생년월일 퍼지 후보 제안 | 낮음 | 중 | 1 | — | 스펙 |
 | C-10 | 고객 포털(본인 예약·잔여 조회) | ◐ 169 설계 | `CUSTOMER-PORTAL-DESIGN-2026-11-24.md` + 순수 portalRule(OTP·노출 항목) | 화면·서버는 B-2·C-2 뒤(170~171) | Fresha/Boulevard(공개 UX) | 온라인 예약 페이지(R-6)와 함께 설계, 2차 | 중 | 중 | 3+ | B-2 서버 | — |
 
 ## 2. 예약 (P1 예약 고도화)

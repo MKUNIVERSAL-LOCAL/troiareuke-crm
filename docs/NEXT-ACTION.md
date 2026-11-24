@@ -5,7 +5,7 @@
 ## 지금 상태 (11-24 밤)
 - 브랜치 `feat/commercialization-restart-2026-11-17` → PR #56(main 기준 +80커밋). 최신 릴리스 v1.0.61(GitHub, 11-24 09:29). NAS 채널은 1.0.59(승인 B-7 대기).
 - 11-24 하루에 묶음 **132~169** 완료: PHASE 1 설계(133), PHASE 2 축 A/B/C(135~149), PHASE 3 BYOK(150~154), PHASE 4 마케팅·경영비서(155~159), PHASE 5 본사 AI 설계·어드민·원가(160·162·163·165 리뷰; 161 서버는 승인 뒤), PHASE 6 파일럿 준비 1/2(164), 저장 세그먼트·캠페인 좁힘(166·167), 모바일 접근성(168), 고객 포털 설계(169). 다음 170 = 164~169 독립 리뷰 반영(에이전트 가동 중).
-- 테스트 exe(바탕화면 바로가기) 169 포함 재빌드 22:41/22:42(asar NAS 3·Supabase 0, CDP 지점 false·어드민 true, 글꼴 Pretendard). 170 뒤 재빌드.
+- 테스트 exe(바탕화면 바로가기) 170 포함 재빌드 23:03/23:04(asar NAS 3·Supabase 0, CDP 지점 false·어드민 true, 글꼴 Pretendard). 171 이후 묶음은 아침 전 마지막 재빌드에 포함.
 - **전체 Playwright 는 20:50 시스템 메모리 부족으로 중단된 뒤 자동 재실행 금지 규칙에 따라 돌리지 않았다** — 156 이후 묶음은 경량 게이트(tsc·build·build:e2e·distribution·routes·updater·outbox·mobile) + 대상 스펙(lib-units·campaigns·marketing-consent·messaging·ai-briefing·admin-nas·routes·a11y) 통과로 커밋. 오너 지시 뒤 `npx playwright test --workers=3` 전체 재실행 필요.
 
 ## 오너 결정·승인 대기(코드가 멈춘 곳)

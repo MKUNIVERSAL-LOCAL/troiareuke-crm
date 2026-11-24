@@ -37,7 +37,7 @@ import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import ProgramManageModal from '../../components/ProgramManageModal';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
-import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../lib/customerMerge';
+import { mergeBlockReason, findDuplicateCandidates, previewMerge } from '../../lib/customerMerge';
 import { propagateCustomerIdentity, countIdentityCopies, IDENTITY_PROPAGATION_CONFIRM_AT, scrubCustomerBeforeDelete, DELETED_CUSTOMER_NAME } from '../../lib/customerIdentity';
 import { parseTags, topTags } from '../../lib/customerTags';
 import ConsentControl from '../../components/ConsentControl';
@@ -509,12 +509,12 @@ export default function Customers() {
     loadAll();
   };
   const [mergeQuery, setMergeQuery] = useState(''); // 중복 의심 안내에서 열면 전화번호가 미리 입력된다
-  const samePhone = useMemo(() => (selected ? findSamePhoneCustomers(selected, customers) : []), [selected, customers]);
-  const openMergeFromHint = () => { setMergeQuery(selected?.phone ?? ''); setShowMergeModal(true); };
-  const dupHint = samePhone.length > 0 && (
+  const dupCandidates = useMemo(() => (selected ? findDuplicateCandidates(selected, customers) : []), [selected, customers]); // 전화·이메일·이름+생년월일·이름+뒷 4자리 (171, GAP C-9)
+  const openMergeFromHint = () => { setMergeQuery(''); setShowMergeModal(true); }; // 병합 창이 중복 의심 후보를 먼저 보여준다 — 검색어로 좁히지 않는다
+  const dupHint = dupCandidates.length > 0 && (
     <button type="button" onClick={openMergeFromHint} data-testid="dup-hint"
       className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 hover:bg-amber-100">
-      <GitMerge size={12} />같은 전화번호 고객 {samePhone.length}명 — 병합하기
+      <GitMerge size={12} />중복 의심 고객 {dupCandidates.length}명 — 병합하기
     </button>
   );
   const [progForm, setProgForm] = useState({ programId: '', pricePaid: '', paymentMethod: '카드' as PaymentMethod, purchaseDate: today(), notes: '' });

@@ -47,6 +47,7 @@ import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, allo
 import { setupChecks, setupCompletionPct, utilizationPct, activityLevel, pilotSummary, type BranchCounts } from '../src/lib/pilotMetricsRule';
 import { matchesSegment, validateSegment, describeSegment, isEmptyCondition, type CustomerFacts } from '../src/lib/segmentFilterRule';
 import { requestOtp, verifyOtp, isValidOtpCode, portalSummaryOf, EMPTY_OTP, OTP_TTL_MS, OTP_RESEND_GAP_MS, OTP_LOCK_MS, PORTAL_SESSION_MS, type OtpState } from '../src/lib/portalRule';
+import { duplicateCandidates, normalizeName, type DupInput } from '../src/lib/duplicateRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
@@ -1101,4 +1102,23 @@ test('고객 포털 규칙 — OTP 재요청 간격·만료·5회 잠금·세션
   expect(sum.upcoming).toEqual([{ date: '2026-11-25', startTime: '10:00', services: '진정' }, { date: '2026-11-30', startTime: '14:00', services: '수분 관리' }]); // 30일 안·취소/완료 제외·시간순
   expect(sum.programs).toEqual([{ programName: '수분 10회', remaining: 3, expiryDate: '2027-01-31' }]);
   expect(Object.keys(sum).sort()).toEqual(['consent', 'name', 'programs', 'upcoming']); // 주소·메모·결제·직원 없음
+});
+
+test('중복 고객 후보 — 전화·이메일·이름+생년월일·이름+전화 뒷 4자리, 점수 정렬, 샘플 입력 정규화 (171)', () => {
+  const t: DupInput = { id: 't', name: '김 민수', phone: '010-1234-5678', birthDate: '1990-05-05', email: 'Kim@Example.com' };
+  const others: DupInput[] = [
+    { id: 'a', name: '박영희', phone: '01012345678' },                         // 전화 같음
+    { id: 'b', name: '김민수', phone: '010-9999-5678' },                       // 이름 + 뒷 4자리
+    { id: 'c', name: '김민수', phone: '010-0000-0000', birthDate: '1990-05-05' }, // 이름 + 생년월일
+    { id: 'd', name: '이지은', phone: '010-0000-1111', email: 'kim@example.com' }, // 이메일(대소문자 무시)
+    { id: 'e', name: '김민수', phone: '010-1234-5678', birthDate: '1990-05-05' }, // 전화+이름+생일 → 최고점(뒷 4자리는 번호가 같아 생략)
+    { id: 'f', name: '최수', phone: '010-5555-5678' },                         // 뒷 4자리만 같고 이름 다름 → 후보 아님
+    { id: 't', name: '김 민수', phone: '010-1234-5678' },                      // 자기 자신 제외
+  ];
+  const r = duplicateCandidates(t, others);
+  expect(r.map(x => x.customer.id)).toEqual(['e', 'a', 'd', 'c', 'b']);
+  expect(r[0].reasons).toEqual(['phone', 'name+birth']); expect(r[0].score).toBe(170);
+  expect(r.find(x => x.customer.id === 'b')?.reasons).toEqual(['name+phone4']);
+  expect(duplicateCandidates({ id: 'x', name: '홍길동', phone: '12' }, [{ id: 'y', name: '홍길동', phone: '12' }])).toEqual([]); // 8자리 미만 번호·생일 없음 → 사유 없음
+  expect(normalizeName(' Kim, Min-Su ')).toBe('kimminsu');
 });
