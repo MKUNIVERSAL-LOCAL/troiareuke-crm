@@ -63,8 +63,9 @@ async function mockNas(page: Page) {
   await page.route(`${API}/api/admin/feature-flags**`, route => state.flagsDown ? json(route, { error: '서버 점검 중' }, 503) : json(route, { scopes: {} }));
   await page.route(`${API}/api/feature-flags**`, route => json(route, { flags: {} }));
   // AI 서비스 관리(162): 서버 모듈(161) 배포 전에는 404 → "미배포" 안내, 배포 뒤 요약·지점·크레딧 지급 계약(AI-GATEWAY-ARCHITECTURE 5절)
+  // 요약의 usd·credits 는 문자열 — pg numeric 이 문자열로 오는 계약을 adminAi 가 숫자로 강제하는지 고정 (165 L-8·170 L-13)
   await page.route(`${API}/api/admin/ai/summary**`, route => state.aiDeployed
-    ? json(route, { month: '2026-11', calls: 123, inputTokens: 456000, outputTokens: 78000, usd: 1.23, credits: 3444, activeBranches: 2, failRate: 2, fallbackRate: 5, byModel: [{ provider: 'openai', model: 'gpt-4o-mini', calls: 100, usd: 0.5 }] })
+    ? json(route, { month: '2026-11', calls: 123, inputTokens: 456000, outputTokens: 78000, usd: '1.23', credits: '3444', activeBranches: 2, failRate: 2, fallbackRate: 5, byModel: [{ provider: 'openai', model: 'gpt-4o-mini', calls: 100, usd: 0.5 }] })
     : json(route, { error: 'Not found' }, 404));
   await page.route(`${API}/api/admin/ai/branches**`, route => state.aiDeployed
     ? json(route, { branches: [

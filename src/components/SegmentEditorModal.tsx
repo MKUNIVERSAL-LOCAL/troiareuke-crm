@@ -22,7 +22,7 @@ export default function SegmentEditorModal({ segment, facts, tagOptions, onClose
     const next = cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v];
     return { ...prev, [key]: next.length ? next : undefined };
   });
-  const setNum = (key: keyof SegmentCondition, raw: string) => setC(prev => ({ ...prev, [key]: raw.trim() === '' ? undefined : Number(raw.replace(/[^\d]/g, '')) }));
+  const setNum = (key: keyof SegmentCondition, raw: string) => setC(prev => { const digits = raw.replace(/[^\d]/g, ''); return { ...prev, [key]: digits === '' ? undefined : Number(digits) }; }); // 'a' → 0 이 되어 빈 조건 거절을 우회하던 것 (170 리뷰 L-3)
   const numVal = (v: number | undefined) => (v === undefined ? '' : String(v));
   const submit = () => {
     const errs = validateSegment(name, c);

@@ -1019,7 +1019,7 @@ test('AI 원가·가격 시뮬레이터 — 호출 원가·플랜 원가·시나
   expect(allocateShops(5, DEFAULT_PLAN_MIX)).toEqual({ trial: 1, starter: 2, pro: 2, enterprise: 0 }); // 1.0/2.0/1.5/0.5 → 바닥 1/2/1/0, 잔여 1 은 소수 큰 pro(동률 enterprise 보다 앞 순서)
 });
 
-test('파일럿 지표 — 초기 설정 6단계·활용 7영역·활동 상태·요약 정렬 (166)', () => {
+test('파일럿 지표 — 초기 설정 6단계·활용 7영역·활동 상태·요약 정렬 (164)', () => {
   const full: BranchCounts = { recordCounts: { shop_settings: 1, staff: 2, services: 5, customers: 40, reservations: 30, payments: 20, treatment_logs: 10, customer_programs: 3 }, photoCount: 4, messageCount: 2, lastActivity: '2026-11-23T10:00:00.000Z' };
   const half: BranchCounts = { recordCounts: { shop_settings: 1, programs: 1, customers: 3 }, photoCount: 0, messageCount: 0, lastActivity: '2026-11-01T10:00:00.000Z' };
   const empty: BranchCounts = { recordCounts: {}, photoCount: 0, messageCount: 0, lastActivity: null };
@@ -1054,7 +1054,7 @@ test('저장 세그먼트 규칙 — AND 조건 평가·빈 조건 거절·설�
   expect(isEmptyCondition({})).toBe(true); expect(isEmptyCondition({ grades: [] })).toBe(true); expect(isEmptyCondition({ hasUpcoming: false })).toBe(false);
   expect(validateSegment('', {})).toEqual(['세그먼트 이름을 입력해주세요.', '조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).']);
   expect(validateSegment('x', { lastVisitDaysMin: 90, lastVisitDaysMax: 30 })).toEqual(['마지막 방문 일수의 최소가 최대보다 큽니다.']);
-  expect(validateSegment('x', { visitsMin: -1 })).toEqual(['최소 방문 횟수은 0 이상 정수로 입력해주세요.']);
+  expect(validateSegment('x', { visitsMin: -1 })).toEqual(['최소 방문 횟수: 0 이상 정수로 입력해주세요.']);
   expect(describeSegment({ grades: ['VIP'], lastVisitDaysMin: 60, hasUpcoming: false, adConsent: 'consented' })).toBe('등급 VIP · 마지막 방문 60일 이상 전 · 다음 예약 없음 · 광고 동의');
   expect(describeSegment({})).toBe('전체');
 });

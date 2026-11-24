@@ -1,4 +1,4 @@
-// PilotMetricsPanel — 어드민 대시보드 "파일럿 지표"(초기 설정 완료율·활용률·활동 상태) (비코어, 166, PHASE 6, docs/PILOT-CHECKLIST.md 7절)
+// PilotMetricsPanel — 어드민 대시보드 "파일럿 지표"(초기 설정 완료율·활용률·활동 상태) (비코어, 164, PHASE 6, docs/PILOT-CHECKLIST.md 7절)
 // 자료는 서버 /api/admin/overview 의 지점별 컬렉션 건수(서버 집계), 비율·등급은 순수 pilotMetricsRule. 승인 대기·거부 신청자 지점은 뺀다(어드민 다른 화면과 같은 기준).
 import { useEffect, useState } from 'react';
 import { ClipboardCheck, RefreshCw } from 'lucide-react';
@@ -59,7 +59,7 @@ export default function PilotMetricsPanel() {
               { label: '지점', value: String(summary.branches) },
               { label: '평균 초기 설정 완료율', value: summary.avgSetupPct === null ? '-' : `${summary.avgSetupPct}%` },
               { label: '평균 활용률', value: summary.avgUtilizationPct === null ? '-' : `${summary.avgUtilizationPct}%` },
-              { label: '활동 중 / 뜸함 / 휴면', value: `${summary.byActivity.active} / ${summary.byActivity.idle} / ${summary.byActivity.dormant + summary.byActivity.none}` },
+              { label: '활동 중 / 뜸함 / 휴면·기록 없음', value: `${summary.byActivity.active} / ${summary.byActivity.idle} / ${summary.byActivity.dormant + summary.byActivity.none}` }, // 기록 없는 신규 지점을 휴면으로 읽지 않게 (170 리뷰 L-7)
             ].map(c => (
               <div key={c.label} data-testid={`pilot-stat-${c.label}`} className="bg-slate-800/60 rounded-xl px-4 py-3">
                 <p className="text-lg font-bold text-white">{c.value}</p>

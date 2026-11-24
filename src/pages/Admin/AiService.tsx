@@ -28,7 +28,7 @@ export default function AdminAiService() {
 
   async function load() {
     if (!NAS_MODE) { setLoading(false); return; }
-    if (!MONTH_RE.test(month)) { setLoadError('기준 월을 YYYY-MM 으로 선택해주세요.'); return; } // type=month 를 지우면 '' 가 온다 (165 리뷰 L-13)
+    if (!MONTH_RE.test(month)) { setSummary(null); setBranches([]); setLoadError('기준 월을 YYYY-MM 으로 선택해주세요.'); return; } // 이전 달 숫자가 오류 문구와 함께 남지 않게 (170 리뷰 L-12) // type=month 를 지우면 '' 가 온다 (165 리뷰 L-13)
     setLoading(true); setLoadError(''); setNotDeployed(false);
     try {
       const [s, b] = await Promise.all([fetchAdminAiSummary(month), fetchAdminAiBranches(month)]);

@@ -26,7 +26,7 @@
 | GET | `/api/public/:branchSlug/slots?date=&serviceId=` | 가용 시작 시각 — `publicSlotsRule` + 직원 근무표(141) + 자원(142) | rate limit 60/분/IP, 캐시 30초 |
 | POST | `/api/public/:branchSlug/booking-requests` | 예약 요청(이름·전화·시술·희망 시각·메모) → `booking_requests` 컬렉션 | rate limit 5/시간/전화, 캡차 없음(문자 OTP 가 대체) |
 | POST | `/api/portal/:branchSlug/otp` · `/verify` | OTP 발송·검증 → 세션 토큰 | `portalRule` 정책, 잠금 테이블 |
-| GET | `/api/portal/me` | 내 예약(앞으로 30일)·회차권 잔여·동의 상태 | 세션 토큰 |
+| GET | `/api/portal/me` | 내 예약(오늘부터 30일 뒤까지, 양끝 포함)·회차권 잔여·동의 상태 | 세션 토큰 |
 | POST | `/api/portal/me/consent` | 동의/철회(채널) → 고객 태그 갱신(서버가 `tagsWithConsent` 로) | 세션 토큰 |
 | POST | `/api/portal/me/requests` | 변경·취소·삭제 요청 → 요청함 | 세션 토큰 |
 서버 컬렉션: `booking_requests`(143 어댑터 계약 그대로), `portal_otp`(해시·만료·실패 수), `portal_sessions`. 고객 PII 는 세션 범위 밖으로 나가지 않는다(지점 전체 목록 API 없음).
@@ -46,5 +46,5 @@
 - 비용: SOLAPI 건당 발송료(OTP 1건 + 확정 1건/예약). 미승인 시: 포털 없음, 요청함은 수기 접수(143)로 유지.
 
 ## 7. 코드로 들어간 것(169)
-- `src/lib/portalRule.ts`(순수): OTP 정책 상수, `otpState`(발송·검증·잠금 전이), `canRequestOtp`, `verifyOtp`, `portalSummaryOf`(고객 사실 → 포털에 보일 항목만 — 이름·다가오는 예약·회차권 잔여·동의 상태, 주소·메모·매출 제외). lib-units 스펙.
+- `src/lib/portalRule.ts`(순수): OTP 정책 상수, `requestOtp`/`verifyOtp`(발송·검증·잠금 전이), `isValidOtpCode`, `portalSummaryOf`(고객 사실 → 포털에 보일 항목만 — 이름·다가오는 예약·회차권 잔여·동의 상태, 주소·메모·매출 제외). lib-units 스펙.
 - 화면·서버는 승인 뒤: 170(공개 예약 페이지 + 슬롯 API) → 171(포털 OTP·내 예약·동의).

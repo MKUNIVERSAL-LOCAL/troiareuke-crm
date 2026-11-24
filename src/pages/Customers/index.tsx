@@ -411,6 +411,7 @@ export default function Customers() {
   const segmentFacts = useMemo(() => buildSegmentFacts(), [customers, statsIndex]); // 저장 세그먼트 평가 사실 (166) // eslint-disable-line react-hooks/exhaustive-deps
   const activeSegment = savedSegments.find(sg => sg.id === segmentFilterId) ?? null;
   const segmentFilterIds = useMemo(() => (activeSegment ? segmentIds(activeSegment.condition, segmentFacts) : null), [activeSegment, segmentFacts]);
+  const segmentCounts = useMemo(() => new Map(savedSegments.map(sg => [sg.id, segmentIds(sg.condition, segmentFacts).size])), [savedSegments, segmentFacts]); // 칩 인원은 검색 글자마다 다시 세지 않게 (170 리뷰 L-1)
   const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
   const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
   const compareCustomers = (a: Customer, b: Customer): number => {
@@ -1018,6 +1019,7 @@ export default function Customers() {
   }
   useDataRefreshed(() => { // 다른 기기의 변경이 서버에서 다시 읽혔을 때 — 열어 둔 상세도 최신 기록으로 (16차 #H3)
     loadAll();
+    setSavedSegments(listSavedSegments()); // 다른 기기가 만든 세그먼트 칩 (170 리뷰 L-5)
     setSelected(prev => (prev ? CustomerStore.getById(prev.id) ?? prev : prev));
     if (selected) { // 열어 둔 상세의 회차권 목록도 서버 기준으로, 사용 회차는 기록 기준으로 (16차 #H2)
       setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
@@ -1052,7 +1054,7 @@ export default function Customers() {
   }, [customers, detailTick]);
   // 목록은 100명씩 — 전부 마운트하면 수백 명부터 폰에서 버벅인다. 검색·필터·정렬이 바뀌면 처음부터
   const [listLimit, setListLimit] = useState(LIST_PAGE);
-  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey, churnOnly, revisitOnly, programAlertOnly]);
+  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey, churnOnly, revisitOnly, programAlertOnly, segmentFilterId]); // (170 리뷰 L-6)
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
@@ -1104,7 +1106,7 @@ export default function Customers() {
   const savedSegmentRow = (savedSegments.length > 0 || canManage) ? (
     <div className="flex flex-wrap items-center gap-1.5 pb-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">
       {savedSegments.map(sg => {
-        const n = segmentIds(sg.condition, segmentFacts).size;
+        const n = segmentCounts.get(sg.id) ?? 0;
         const on = segmentFilterId === sg.id;
         return (
           <button key={sg.id} type="button" aria-pressed={on} title={describeSegment(sg.condition)} onClick={() => setSegmentFilterId(on ? '' : sg.id)}
@@ -1113,6 +1115,7 @@ export default function Customers() {
           </button>
         );
       })}
+      {activeSegment && <button type="button" onClick={() => navigate(`/messaging?segment=saved:${activeSegment.id}`)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label={`${activeSegment.name} 세그먼트에 발송`}>이 세그먼트에 발송</button>}{/* 발송 창 딥링크 saved:<id> 의 생산자 (170 리뷰 L-2) */}
       {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
       {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
     </div>
@@ -1565,7 +1568,7 @@ export default function Customers() {
   return (
     <div className="flex flex-col h-full">
       {/* 저장 세그먼트 편집 창 — 데스크톱(hidden lg:flex)·모바일(lg:hidden) 블록 어느 쪽에 두어도 반대 폭에서 숨겨진다(Modal 은 포털이 아님) → 루트 바로 아래 (166·168) */}
-      {segmentEditor !== null && <SegmentEditorModal segment={segmentEditor === 'new' ? null : segmentEditor} facts={segmentFacts} tagOptions={tagOptions.map(t => t.tag)} onClose={() => setSegmentEditor(null)} onSaved={() => { setSegmentEditor(null); const next = listSavedSegments(); setSavedSegments(next); if (!next.some(sg => sg.id === segmentFilterId)) setSegmentFilterId(''); }} />}
+      {segmentEditor !== null && <SegmentEditorModal segment={segmentEditor === 'new' ? null : segmentEditor} facts={segmentFacts} tagOptions={[...new Set([...tagOptions.map(t => t.tag), ...((segmentEditor !== 'new' && segmentEditor?.condition.tagsAny) || [])])]} onClose={() => setSegmentEditor(null)} onSaved={() => { setSegmentEditor(null); const next = listSavedSegments(); setSavedSegments(next); if (!next.some(sg => sg.id === segmentFilterId)) setSegmentFilterId(''); }} />}
 
       {/* ── 모바일 뷰 (< lg) ── 카드 리스트 */}
       <div className="flex flex-col lg:hidden flex-1">

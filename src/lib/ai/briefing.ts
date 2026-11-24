@@ -15,6 +15,7 @@ import { isLowStock } from '../stockRule';
 import { localMonthOf } from '../revenueMetricsRule';
 import { listCampaigns, sentKeysOf } from '../campaignStore';
 import { buildSegmentFacts, segmentIdsFor } from '../savedSegments';
+import type { CustomerFacts } from '../segmentFilterRule';
 import { collectRawCandidates } from '../campaignTriggers';
 import { selectCandidates, type Campaign } from '../campaignRule';
 import { CAMPAIGN_PRESETS } from '../campaignPresets';
@@ -32,8 +33,12 @@ const FREE_SLOT_SHOW = 4;          // 직원당 보여줄 시작 시각 수
 const RECOMMEND_MAX = 5;
 
 /** 캠페인별 오늘 대상 수 — 켜진 캠페인만, 승인 전 수치 (158) */
-function campaignContacts(year: string): BriefingContacts[] {
-  const facts = buildSegmentFacts(); // 세그먼트 좁힘용 사실은 한 번만 (167)
+/** 세그먼트를 쓰는 캠페인이 하나라도 켜져 있을 때만 사실을 1회 계산 — 아니면 전수 스캔 0회 (170 리뷰 M-2) */
+function segmentFactsIfNeeded(campaigns: Campaign[]): Map<string, CustomerFacts> | undefined {
+  return campaigns.some(c => c.enabled && c.segmentId) ? buildSegmentFacts() : undefined;
+}
+
+function campaignContacts(year: string, facts: Map<string, CustomerFacts> | undefined): BriefingContacts[] {
   return listCampaigns().filter(c => c.enabled).map(c => {
     const sel = selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year, segmentIdsFor(c.segmentId, facts));
     return { campaign: c.name, ready: sel.ready.length, skipped: sel.skipped.length };
@@ -41,11 +46,10 @@ function campaignContacts(year: string): BriefingContacts[] {
 }
 
 /** 이번 주 캠페인 추천 — 켜진 캠페인 + 아직 안 만든 기본 시나리오를 "지금 대상 수"로 줄 세운다(결정적, AI 는 문장만) (158) */
-function campaignRecommendations(year: string): BriefingRecommendation[] {
+function campaignRecommendations(year: string, facts: Map<string, CustomerFacts> | undefined): BriefingRecommendation[] {
   const existing = listCampaigns();
   const names = new Set(existing.map(c => c.name));
   const out: BriefingRecommendation[] = [];
-  const facts = buildSegmentFacts();
   for (const c of existing.filter(x => x.enabled)) {
     const n = selectCandidates(c, collectRawCandidates(c), sentKeysOf(c.id), year, segmentIdsFor(c.segmentId, facts)).ready.length;
     if (n > 0) out.push({ campaign: c.name, ready: n, exists: true });
@@ -144,10 +148,11 @@ export function buildBriefingContext(perm: BriefingPermissions, kind: BriefingKi
     }).filter(s => s.completed > 0);
   }
   // ── 158 경영비서 2차: 오늘 브리핑 = 연락할 고객·빈 시간 / 월 브리핑 = 목표 페이스·원인 후보·캠페인 추천(+연락할 고객)
-  const contacts = campaignContacts(year);
+  const segFacts = segmentFactsIfNeeded(listCampaigns());
+  const contacts = campaignContacts(year, segFacts);
   const freeSlots = kind === 'today' ? freeSlotsToday(today, now) : undefined;
   const target = kind === 'month' && metrics && metrics.target && metrics.target > 0 ? targetPace({ target: metrics.target, revenue: metrics.total, daysElapsed: metrics.daysElapsed, daysInMonth: metrics.daysInMonth }) : null;
   const causes = kind === 'month' ? monthCauses(month, shiftMonth(month, -1), perm.salesOn) : undefined;
-  const recommendations = kind === 'month' ? campaignRecommendations(year) : undefined;
+  const recommendations = kind === 'month' ? campaignRecommendations(year, segFacts) : undefined;
   return formatBriefing({ shopLabel: '우리 매장', today, month, metrics, kpi, tasks, segments, lowStock, staff, contacts, freeSlots, target, causes, recommendations });
 }

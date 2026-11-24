@@ -58,8 +58,8 @@ export function segmentIds(condition: SegmentCondition, facts: Map<string, Custo
 }
 
 /** 캠페인 등이 가리키는 저장 세그먼트의 고객 id 집합 — segmentId 없음 → null(제한 없음), 삭제된 세그먼트 → 빈 집합(아무에게도) (167) */
-export function segmentIdsFor(segmentId: string | undefined, facts: Map<string, CustomerFacts> = buildSegmentFacts()): Set<string> | null {
-  if (!segmentId) return null;
+export function segmentIdsFor(segmentId: string | undefined, facts?: Map<string, CustomerFacts>): Set<string> | null {
+  if (!segmentId) return null; // 기본 매개변수로 두면 segmentId 가 없어도 전수 스캔이 먼저 돈다 (170 리뷰 M-1)
   const seg = listSavedSegments().find(x => x.id === segmentId);
-  return seg ? segmentIds(seg.condition, facts) : new Set();
+  return seg ? segmentIds(seg.condition, facts ?? buildSegmentFacts()) : new Set();
 }

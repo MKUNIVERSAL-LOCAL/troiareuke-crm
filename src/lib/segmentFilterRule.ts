@@ -70,7 +70,7 @@ export function validateSegment(name: string, c: SegmentCondition): string[] {
   const errs: string[] = [];
   if (!name.trim()) errs.push('세그먼트 이름을 입력해주세요.');
   if (isEmptyCondition(c)) errs.push('조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).');
-  const nonneg = (v: number | undefined, label: string) => { if (v !== undefined && (!Number.isInteger(v) || v < 0)) errs.push(`${label}은 0 이상 정수로 입력해주세요.`); };
+  const nonneg = (v: number | undefined, label: string) => { if (v !== undefined && (!Number.isInteger(v) || v < 0)) errs.push(`${label}: 0 이상 정수로 입력해주세요.`); };
   nonneg(c.lastVisitDaysMin, '마지막 방문 뒤 최소 일수'); nonneg(c.lastVisitDaysMax, '마지막 방문 뒤 최대 일수'); nonneg(c.visitsMin, '최소 방문 횟수'); nonneg(c.visitsMax, '최대 방문 횟수'); nonneg(c.spentMin, '최소 누적 결제');
   if (c.lastVisitDaysMin !== undefined && c.lastVisitDaysMax !== undefined && c.lastVisitDaysMin > c.lastVisitDaysMax) errs.push('마지막 방문 일수의 최소가 최대보다 큽니다.');
   if (c.visitsMin !== undefined && c.visitsMax !== undefined && c.visitsMin > c.visitsMax) errs.push('방문 횟수의 최소가 최대보다 큽니다.');

@@ -1,4 +1,4 @@
-// pilotMetricsRule — 파일럿 지표(초기 설정 완료율·활용률·활동 상태) (순수, 166, PHASE 6, docs/PILOT-CHECKLIST.md 6절)
+// pilotMetricsRule — 파일럿 지표(초기 설정 완료율·활용률·활동 상태) (순수, 164, PHASE 6, docs/PILOT-CHECKLIST.md 6절)
 // 입력은 어드민 /api/admin/overview 의 지점별 컬렉션 건수(서버 집계) — 여기서는 비율·등급만 정한다. 숫자를 만들지 않는다(자료 없으면 none).
 export interface BranchCounts {
   recordCounts: Record<string, number>; // 컬렉션명 → 건수 (customers·reservations·payments·staff·services·programs·treatment_logs·customer_programs·shop_settings·…)
@@ -38,7 +38,7 @@ const AREAS: { key: string; label: string; test: (c: BranchCounts) => boolean }[
   { key: 'photos', label: '사진', test: c => c.photoCount >= 1 },
   { key: 'messages', label: '문자/카카오', test: c => c.messageCount >= 1 },
 ];
-export function areasUsed(c: BranchCounts): { key: string; label: string; used: boolean }[] {
+function areasUsed(c: BranchCounts): { key: string; label: string; used: boolean }[] {
   return AREAS.map(a => ({ key: a.key, label: a.label, used: a.test(c) }));
 }
 export function utilizationPct(c: BranchCounts): number {
