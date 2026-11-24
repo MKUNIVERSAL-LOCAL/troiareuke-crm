@@ -17,6 +17,7 @@
 | 15-f | 서버 전화번호 유일성(지점 내) 409 | 두 기기 동시 등록 → 중복 고객(16차 #M6) | 병합 모달로 수습 | 0원, 서버 1 PR | 기존 중복 데이터 마이그레이션 필요 | 저장 전 서버 재조회(128) | 2차 | E2E | 대기 |
 | 15-g | `electron/main.cjs` requestSingleInstanceLock | 포터블 2중 실행 시 같은 userData 공유 추정(16차 #M8) | 추정 단계 | 0원, 코어 3줄 | 낮음 | 2탭 storage 무효화(129) | 실측 후 결정 | 수동 실행 확인 | 대기 |
 | 16 | 코어 `Reservation` 에 `resourceId`(+ `toDbReservation`/`fromDbReservation` 1줄씩) | 142 의 베드·룸 배정이 설정 행 맵(`preferences.reservationResources`)에 있어 예약 행과 따로 산다 — 다른 기기의 설정 저장이 겹치면 배정이 마지막 저장 승으로 지워질 수 있고, 60일 지난 배정은 정리된다 | 현 우회 유지(실사용 가능, 과거 배정 이력은 60일) | 0원, 코어 4줄 + 이관 스크립트(맵 → 예약 행) | 낮음(선택 필드, 구버전은 무시) | 설정 행 맵 유지 | 2차(143 뒤) | reservations·resources E2E, revert | 대기(2026-11-24) |
+| 17 | `electron/main.cjs`·`preload.cjs` 에 AI 키 보관 IPC(`ai-key:get/set/delete`, safeStorage 암호화 → userData) | 지점 AI 키가 localStorage 평문(21절 위반). 152 설계서 `AI-SECURITY-POLICY.md` 3절 A안 | 평문 보관 지속(새는 길은 152 정책·탐지로 차단) | 0원, 코어 3곳 각 20줄 안팎 + keys.ts 비동기 볼트 | 낮음 — IPC 없으면 localStorage 폴백, 포터블 PC 교체 시 재입력 안내 | B(서버 암호화 보관, B-2+동의) | **D-13 결정과 함께 승인 권장** | 평문 0 검사(findKeyLikeEntries)·백업 E2E, revert | 대기(2026-11-24) |
 
 ## B. 운영 서버·배포 (NAS 변경, 전체 지점 배포)
 
@@ -48,7 +49,7 @@
 | 10 | 예약표 직원 색 블록 글자색 | 대기 |
 | 11 | "1회 시술 = 기간제 프로그램" 복제 항목 처리 | 대기 |
 | 12 | xlsx(SheetJS 0.18.5) 교체 여부 | 대기 |
-| 13 | 지점 AI API 키 보관 위치(현재 PC localStorage `ai_key_*`) — **마스터 프롬프트 21절에 따라 개인 키는 Electron safeStorage/OS 키체인 또는 서버 측 암호화 보관으로 이전해야 함** | 대기 → PHASE 3 설계 제출 예정 |
+| 13 | 지점 AI API 키 보관 위치(현재 PC localStorage `ai_key_*`) — **설계 제출(152, `AI-SECURITY-POLICY.md` 3절)**: A Electron safeStorage(권장, 코어 A-17) / B 서버 암호화 보관(NAS 매장 선택, B-2+동의) / C 모바일 보안 저장소(의존성). 결정 전에도 키 꼴 탐지·스크럽으로 새는 길은 막음 | 대기(설계 제출 2026-11-24) |
 | 14 | 직원 계정 권한 범위(가정 적용 중) | 대기 |
 | D-15 | 서비스명 표기: 앱 내 "트로이아르케 CRM" → "DERMASOLUTION" 전환 시점·범위(설치 파일명·appId 는 배포 불변 원칙상 불변) | 대기 |
 

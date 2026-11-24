@@ -37,6 +37,7 @@ import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalog
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
+import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -118,6 +119,10 @@ test('Electron 백업 스냅샷 — AI 키·토큰·게이트웨이 키·앱 잠
   expect(out.crm_shop1_customers).toBe('[{"name":"홍길동"}]');
   expect(out.crm_shop1_broken_settings).toBe('not-json'); // JSON이 아니면 원문 유지
   expect(JSON.stringify(out)).not.toContain('SECRET'); // 비밀값 9개 어느 것도 남지 않는다
+  // 고객 메모에 붙여넣은 키 꼴 문자열도 백업으로 새지 않는다 (152)
+  const leaked = sanitizeStorageSnapshot({ crm_shop1_customers: '[{"name":"홍길동","memo":"키 sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWX 메모"}]' });
+  expect(leaked.crm_shop1_customers).toContain('sk-a••••(가려진 키)');
+  expect(leaked.crm_shop1_customers).not.toContain('ABCDEFGHIJKLMNOP');
 });
 
 test('재방문 기준일 — 권장일 우선, 권장일 뒤 방문은 소화, 시술일·방문일 중 나중 + 주기, 이력 없으면 없음', () => {
@@ -734,4 +739,18 @@ test('AI 어댑터 계층 — 카탈로그·원격 갱신 검증·토큰/비용 
   expect(looksLikeKey('openai', 'sk-proj-ABCDEFGHIJKLMNOPQRS')).toBe(true);
   expect(looksLikeKey('gemini', 'AIzaSyABCDEFGHIJKLMNOPQRSTUV')).toBe(true);
   expect(looksLikeKey('gemini', 'has space here')).toBe(false);
+});
+
+test('키 꼴 탐지·스크럽 — 제공사 키·토큰은 가리고 일반 문자열은 건드리지 않는다 (152)', () => {
+  expect(containsKeyLike('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWX')).toBe(true);
+  expect(containsKeyLike('키: sk-proj-ABCDEFGHIJKLMNOPQRSTUV 입니다')).toBe(true);
+  expect(containsKeyLike('AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ012345')).toBe(true);
+  expect(containsKeyLike('ya29.a0AfH6SMBabcdefghijklmnopqrstuv')).toBe(true);
+  expect(containsKeyLike('주문번호 ORD-20261124-000123 / 예약 10:00')).toBe(false);
+  expect(containsKeyLike('skin care sk-10 라인')).toBe(false);                     // 짧은 sk- 는 키가 아니다
+  expect(containsKeyLike('')).toBe(false);
+  expect(scrubKeyLike('메모: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWX 끝')).toBe('메모: sk-a••••(가려진 키) 끝');
+  expect(scrubKeyLike('두 개 AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ012345 그리고 sk-proj-ABCDEFGHIJKLMNOPQRSTUV')).toBe('두 개 AIza••••(가려진 키) 그리고 sk-p••••(가려진 키)');
+  expect(scrubKeyLike('평범한 문장')).toBe('평범한 문장');
+  expect(findKeyLikeEntries({ a: '안전', crm_x_customers: '[{"memo":"sk-proj-ABCDEFGHIJKLMNOPQRSTUV"}]', ai_key_openai: 'sk-proj-ABCDEFGHIJKLMNOPQRSTUV' })).toEqual(['crm_x_customers', 'ai_key_openai']);
 });
