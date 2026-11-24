@@ -6,7 +6,7 @@ import { useFeature } from '../hooks/useFeature';
 import { canDo } from '../lib/permissions';
 import { buildTodayTasks, getMonthlyKpis, getMonthUtilization, type TodayTask } from '../lib/todayTasks';
 import type { MonthlyKpis } from '../lib/kpiRule';
-import type { Utilization } from '../lib/utilizationRule';
+import { formatHours, type Utilization } from '../lib/utilizationRule';
 
 /**
  * 대시보드 "오늘 할 일" + 이달 운영 지표 (138, GAP D-1 — 숫자 나열이 아니라 행동으로 연결되는 대시보드).
@@ -59,7 +59,7 @@ export default function TodayTasksCard({ compact = false, data }: { compact?: bo
           ))}
         </ul>
       )}
-      {showKpi && kpi && (
+      {showKpi && ( /* 고객 모듈이 꺼져 kpi 가 없어도 가동률 타일은 보인다 (182 리뷰 M-1) */
         <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 ${tasks.length > 0 ? 'mt-3 pt-3 border-t border-gray-100' : ''}`} aria-label="이달 운영 지표">
           {showVisitKpi && kpi && (<>
           <div title="이달 방문 고객 중 이달 이전에도 방문 기록이 있는 고객 비율" className="text-center">
@@ -84,7 +84,7 @@ export default function TodayTasksCard({ compact = false, data }: { compact?: bo
             <div title="이달 오늘까지 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간(근무표 또는 영업시간, 매장 휴일·휴게 제외) — 근무 외 예약도 세므로 100% 를 넘을 수 있음" className="text-center">
               <p className="text-xs text-gray-500">가동률</p>
               <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-util">{util.rate}%</p>
-              <p className="text-xs text-gray-500">{Math.round(util.bookedMin / 60)}/{Math.round(util.availableMin / 60)}시간</p>
+              <p className="text-xs text-gray-500">{formatHours(util.bookedMin)}/{formatHours(util.availableMin)}시간</p>
             </div>
           )}
         </div>

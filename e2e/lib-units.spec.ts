@@ -22,7 +22,7 @@ import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
 import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
 import { monthlyKpis } from '../src/lib/kpiRule';
-import { utilization } from '../src/lib/utilizationRule';
+import { utilization, formatHours } from '../src/lib/utilizationRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
 import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
@@ -496,8 +496,9 @@ test('가동률 — 근무 창 − 휴게 대비 확정·완료 예약 분, 휴�
       { date: '2026-11-05', status: 'completed', startTime: '10:00', endTime: '12:00' },  // 기간 밖
     ],
   });
-  expect(u).toEqual({ bookedMin: 270, availableMin: 1020, rate: 26, days: 3 });
-  expect(utilization({ days: [{ date: '2026-11-02', windows: [] }], reservations: [{ date: '2026-11-02', status: 'confirmed', startTime: '10:00', endTime: '11:00' }] })).toEqual({ bookedMin: 60, availableMin: 0, rate: null, days: 1 });
+  expect(u).toEqual({ bookedMin: 270, availableMin: 1020, rate: 26 });
+  expect([formatHours(270), formatHours(1020), formatHours(30), formatHours(20), formatHours(0)]).toEqual(['4.5', '17', '0.5', '0.3', '0']); // 타일·브리핑 공용 시간 표기 (182 리뷰 L-1)
+  expect(utilization({ days: [{ date: '2026-11-02', windows: [] }], reservations: [{ date: '2026-11-02', status: 'confirmed', startTime: '10:00', endTime: '11:00' }] })).toEqual({ bookedMin: 60, availableMin: 0, rate: null });
   expect(utilization({ days: [{ date: '2026-11-02', windows: [w(540, 600)] }], reservations: [{ date: '2026-11-02', status: 'confirmed', startTime: '09:00', endTime: '11:00' }] }).rate).toBe(200); // 근무 외 예약 → 100% 초과 그대로
 });
 
@@ -801,7 +802,7 @@ test('키 꼴 탐지·스크럽 — 제공사 키·토큰은 가리고 일반 �
 test('AI 경영 브리핑 컨텍스트 — 엔진 숫자에 [확정]/[예측] 라벨·근거 모듈, 직원 실명은 가명, 매출 권한 없으면 매출 줄 없음 (153)', () => {
   const metrics = { month: '2026-11', total: 400000, prevMonth: 200000, lastYear: 800000, momPct: 100, yoyPct: -50, target: 800000, achievementPct: 50, newCustomerRevenue: 300000, existingCustomerRevenue: 100000, newSharePct: 75, discount: 20000, programSold: 300000, programRealized: 60000, unusedBalance: 240000, cogs: 80000, sga: 150000, breakEven: 187500, openHours: 136, perHour: 2941, daysElapsed: 20, daysInMonth: 30, isCurrentMonth: true, projected: 600000 };
   const kpi = { visitors: 12, returning: 8, rebooked: 5, revisitRate: 67, rebookRate: 42, avgTicket: 33333, monthRevenue: 400000 };
-  const text = formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics, kpi, utilization: { bookedMin: 270, availableMin: 1020, rate: 26, days: 3 },
+  const text = formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics, kpi, utilization: { bookedMin: 270, availableMin: 1020, rate: 26 },
     tasks: [{ label: '이탈 위험 고객 연락', count: 3, detail: '90일 위험 매출 약 120,000원' }],
     segments: { total: 40, churnHigh: 3, churnMedium: 5, loyal: 10, dormant: 4, newThisMonth: 6, atRiskRevenue90: 120000 },
     lowStock: [{ name: '앰플', stock: 2, minStock: 5, unit: '개' }],
@@ -817,7 +818,7 @@ test('AI 경영 브리핑 컨텍스트 — 엔진 숫자에 [확정]/[예측] �
   expect(text).not.toContain('김수아'); expect(text).not.toContain('박지민');     // 직원 실명 없음
   expect(text).toContain('revenueMetricsRule'); expect(text).toContain('kpiRule'); // 근거 모듈
   expect(text).toContain('[확정] 이달 가동률 26% (오늘까지 확정·완료 예약 4.5시간 ÷ 직원 근무 가용 17시간'); expect(text).toContain('(utilizationRule)'); // 181
-  expect(formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics: null, kpi: null, tasks: [], segments: null, lowStock: [], staff: [], utilization: { bookedMin: 60, availableMin: 0, rate: null, days: 1 } })).not.toContain('가동률'); // 가용 0 이면 줄 없음
+  expect(formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics: null, kpi: null, tasks: [], segments: null, lowStock: [], staff: [], utilization: { bookedMin: 60, availableMin: 0, rate: null } })).not.toContain('가동률'); // 가용 0 이면 줄 없음
   // 직원 계정: 객단가(매출 파생) 줄 생략, 위험 매출 null 이면 괄호 생략 (154 H-2·L-4)
   const staffView = formatBriefing({ shopLabel: '우리 매장', today: '2026-11-20', month: '2026-11', metrics: null, kpi: { ...kpi, avgTicket: null, monthRevenue: 0 }, tasks: [], segments: { total: 40, churnHigh: 3, churnMedium: 5, loyal: 10, dormant: 4, newThisMonth: 6, atRiskRevenue90: null }, lowStock: [], staff: [] });
   expect(staffView).toContain('재예약률 42% (5명) (kpiRule)');

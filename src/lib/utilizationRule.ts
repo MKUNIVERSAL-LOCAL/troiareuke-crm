@@ -11,7 +11,12 @@ export interface UtilizationInput {
   days: UtilizationDay[];
   reservations: { date: string; status: string; startTime: string; endTime: string }[];
 }
-export interface Utilization { bookedMin: number; availableMin: number; rate: number | null; days: number }
+export interface Utilization { bookedMin: number; availableMin: number; rate: number | null }
+
+/** 분 → 시간 표기(소수 1자리, .0 은 생략: 270 → "4.5", 1020 → "17") — 타일·브리핑이 같은 숫자를 보이게 (182 리뷰 L-1) */
+export function formatHours(min: number): string {
+  return (min / 60).toFixed(1).replace(/\.0$/, '');
+}
 
 const len = (iv: Interval) => Math.max(0, iv.endMin - iv.startMin);
 
@@ -28,5 +33,5 @@ export function utilization(i: UtilizationInput): Utilization {
     const iv = toInterval(r.startTime, r.endTime);
     if (iv) bookedMin += len(iv);
   }
-  return { bookedMin, availableMin, rate: availableMin > 0 ? Math.round((bookedMin / availableMin) * 100) : null, days: i.days.length };
+  return { bookedMin, availableMin, rate: availableMin > 0 ? Math.round((bookedMin / availableMin) * 100) : null };
 }

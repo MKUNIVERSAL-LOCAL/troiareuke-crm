@@ -5,7 +5,7 @@
  */
 import type { MonthMetrics } from '../revenueMetricsRule';
 import type { MonthlyKpis } from '../kpiRule';
-import type { Utilization } from '../utilizationRule';
+import { formatHours, type Utilization } from '../utilizationRule';
 
 export interface BriefingTask { label: string; count: number; detail?: string }
 export interface BriefingSegments { total: number; churnHigh: number; churnMedium: number; loyal: number; dormant: number; newThisMonth: number; atRiskRevenue90: number | null }
@@ -89,8 +89,7 @@ export function formatBriefing(i: BriefingInput): string {
     lines.push(`[확정] 이달 방문 고객 ${k.visitors}명 · 재방문율 ${k.revisitRate === null ? '산출 불가' : `${k.revisitRate}%`} (${k.returning}명) · 재예약률 ${k.rebookRate === null ? '산출 불가' : `${k.rebookRate}%`} (${k.rebooked}명)${k.avgTicket === null ? '' : ` · 객단가 ${won(k.avgTicket)}`} (kpiRule)`);
   }
   if (i.utilization && i.utilization.rate !== null) {
-    const h = (m: number) => (m / 60).toFixed(1).replace(/\.0$/, ''); // 분 → 시간(소수 1자리, .0 은 생략)
-    lines.push(`[확정] 이달 가동률 ${i.utilization.rate}% (오늘까지 확정·완료 예약 ${h(i.utilization.bookedMin)}시간 ÷ 직원 근무 가용 ${h(i.utilization.availableMin)}시간 — 근무표·영업시간 기준, 휴일·휴게 제외, 근무 외 예약도 세서 100% 초과 가능) (utilizationRule)`);
+    lines.push(`[확정] 이달 가동률 ${i.utilization.rate}% (오늘까지 확정·완료 예약 ${formatHours(i.utilization.bookedMin)}시간 ÷ 직원 근무 가용 ${formatHours(i.utilization.availableMin)}시간 — 근무표·영업시간 기준, 휴일·휴게 제외, 근무 외 예약도 세서 100% 초과 가능) (utilizationRule)`);
   }
   if (i.segments) {
     const s = i.segments;
