@@ -27,6 +27,9 @@ import { dayWindow, checkStaffWindow, offRanges, describeWindow, dayKeyOf } from
 import { getStaffSchedule } from '../../lib/staffScheduleStore';
 import { activeResources, allResources, resourceAssignments, resourceOf, assignResource } from '../../lib/resourceStore';
 import { freeResources, resourceConflicts, RESOURCE_KIND_LABEL } from '../../lib/resourceRule';
+import BookingRequestsModal from '../../components/BookingRequestsModal';
+import { newRequests, ensureCustomerFor, acceptRequest, CHANNEL_SOURCE } from '../../lib/bookingRequests';
+import type { BookingRequest } from '../../types';
 import type { Reservation, Staff } from '../../types';
 import {
   isGoogleCalendarConnected,
@@ -279,6 +282,18 @@ export default function Reservations() {
     reloadReservations();
     setShowAddModal(false);
   };
+  // 예약 요청함 — 요청을 예약으로 등록하면 폼을 요청 내용으로 채우고, 저장되면 요청을 처리됨으로 (143, GAP R-6·R-10)
+  const [showRequests, setShowRequests] = useState(false);
+  const [requestCount, setRequestCount] = useState(() => newRequests().length);
+  const [fromRequest, setFromRequest] = useState<BookingRequest | null>(null);
+  const registerFromRequest = (req: BookingRequest) => {
+    setShowRequests(false);
+    const customer = ensureCustomerFor(req); // 전화번호가 같은 고객이면 그 고객, 없으면 신규 등록(접수 때 받은 동의 기록)
+    setNewCustomerId(customer.id);
+    setNewDate(req.date);
+    setFromRequest(req);
+    setShowAddModal(true);
+  };
 
   const handleUpdateReservation = () => {
     reloadReservations();
@@ -334,6 +349,16 @@ export default function Reservations() {
         title="예약 관리"
         subtitle="예약 현황 및 일정 관리"
         action={{ label: '예약 추가', onClick: () => setShowAddModal(true) }}
+        actions={(
+          <button
+            type="button"
+            onClick={() => setShowRequests(true)}
+            className={clsx('inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl border transition-colors', requestCount > 0 ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50')}
+            title="전화·카톡·네이버로 받은 예약 요청을 적어 두고 확인 뒤 예약으로 등록"
+          >
+            예약 요청함{requestCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold">{requestCount}</span>}
+          </button>
+        )}
       />
 
       {/* ── 모바일 뷰 (< lg) ── 일별 리스트 */}
@@ -612,7 +637,20 @@ export default function Reservations() {
       </div>
 
       {showAddModal && (
-        <AddReservationModal initialCustomerId={newCustomerId} initialDate={newDate} onClose={() => { setShowAddModal(false); setNewCustomerId(undefined); setNewDate(undefined); }} onSave={() => { setNewCustomerId(undefined); setNewDate(undefined); handleSaveReservation(); }} />
+        <AddReservationModal
+          initialCustomerId={newCustomerId}
+          initialDate={newDate}
+          initialStartTime={fromRequest?.startTime}
+          initialServiceId={fromRequest?.serviceId}
+          initialMemo={fromRequest?.memo}
+          initialSource={fromRequest ? CHANNEL_SOURCE[fromRequest.channel] : undefined}
+          onClose={() => { setShowAddModal(false); setNewCustomerId(undefined); setNewDate(undefined); setFromRequest(null); }}
+          onSave={() => { setNewCustomerId(undefined); setNewDate(undefined); handleSaveReservation(); }}
+          onSaved={id => { if (fromRequest) { acceptRequest(fromRequest.id, id); setFromRequest(null); setRequestCount(newRequests().length); } }}
+        />
+      )}
+      {showRequests && (
+        <BookingRequestsModal onClose={() => { setShowRequests(false); setRequestCount(newRequests().length); }} onRegister={registerFromRequest} />
       )}
       {editReservation && (
         <AddReservationModal
@@ -1069,7 +1107,14 @@ function ListView({ reservations, onSelect, googleEvents = [], filterKey }: { re
   );
 }
 
-function AddReservationModal({ reservation: editing, initialCustomerId, initialDate, onClose, onSave }: { reservation?: Reservation | null; initialCustomerId?: string; initialDate?: string; onClose: () => void; onSave: () => void }) {
+function AddReservationModal({ reservation: editing, initialCustomerId, initialDate, initialStartTime, initialServiceId, initialMemo, initialSource, onClose, onSave, onSaved }: {
+  reservation?: Reservation | null; initialCustomerId?: string; initialDate?: string;
+  /** 예약 요청함에서 넘어온 프리필 (143) */
+  initialStartTime?: string; initialServiceId?: string; initialMemo?: string; initialSource?: Reservation['source'];
+  onClose: () => void; onSave: () => void;
+  /** 신규 저장 뒤 예약 id (요청 처리용) */
+  onSaved?: (id: string) => void;
+}) {
   const { user: authUser } = useAuth();
   const goTo = useNavigate();
   const isEdit = !!editing;
@@ -1086,11 +1131,11 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   // 베드·룸 자원 — 신규는 자동 배정, 수정은 이미 붙은 자원(없으면 배정 안 함) (142, GAP R-5)
   const resources = useMemo(() => activeResources(), []);
   const [resourceChoice, setResourceChoice] = useState<string>(() => (editing ? (resourceOf(editing.id)?.id ?? 'none') : 'auto'));
-  const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? (services.length === 1 ? services[0].id : ''));
+  const [serviceId, setServiceId] = useState(editing?.services?.[0]?.serviceId ?? (initialServiceId && services.some(s => s.id === initialServiceId) ? initialServiceId : (services.length === 1 ? services[0].id : '')));
   const todayKey = format(new Date(), 'yyyy-MM-dd');
   const [date, setDate] = useState(editing?.date ?? initialDate ?? todayKey);
   const startOptions = useMemo(() => halfHourSlots(gridRangeFromSettings()), []); // 설정 > 영업시간 범위, 30분 단위 (4차 UX 점검 2026-11-19)
-  const [startTime, setStartTime] = useState(editing?.startTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot(startOptions) : (startOptions.includes('10:00') ? '10:00' : startOptions[0])));
+  const [startTime, setStartTime] = useState(editing?.startTime ?? initialStartTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot(startOptions) : (startOptions.includes('10:00') ? '10:00' : startOptions[0])));
   // 선택한 담당자·날짜의 시작 칸 표시 — 예약 있음 > 휴게 > 근무 외(근무표가 있을 때만). 고르기 전에 보이게 (140·141, GAP R-3·R-4)
   const startMarks = useMemo(() => {
     const marks = new Map<string, string>();
@@ -1107,8 +1152,8 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     }
     return marks;
   }, [staffId, date, startOptions, editing?.id]);
-  const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
-  const [memo, setMemo] = useState(editing?.memo ?? '');
+  const [source, setSource] = useState<Reservation['source']>(editing?.source ?? initialSource ?? 'manual');
+  const [memo, setMemo] = useState(editing?.memo ?? initialMemo ?? '');
   const [addToGoogle, setAddToGoogle] = useState(!isEdit && isGoogleCalendarConnected());
   const googleAvailable = isGoogleCalendarConnected();
   const [formError, setFormError] = useState('');
@@ -1256,6 +1301,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     } else {
       const saved = ReservationStore.save({ ...reservation, status: 'confirmed' });
       if (saved && resourceId) assignResource(saved.id, resourceId); // 자원 배정은 설정 행에 (142)
+      if (saved) onSaved?.(saved.id);
       // Google Calendar에도 추가 — 이벤트 id를 기억해 취소/삭제 시 정리 가능하게
       if (addToGoogle && googleAvailable && saved) {
         createCalendarEvent(saved)

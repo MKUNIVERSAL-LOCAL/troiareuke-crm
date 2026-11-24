@@ -177,6 +177,26 @@ export interface StaffSchedule {
   updatedAt: string;
 }
 
+/** 예약 요청(요청함) — 전화·카톡·네이버·온라인으로 온 요청을 예약으로 등록하기 전 대기 목록. 예약이 아니다 (143, GAP R-6·R-10) */
+export type BookingChannel = 'phone' | 'kakao' | 'naver' | 'web';
+export interface BookingRequest {
+  id: string;
+  channel: BookingChannel;
+  customerName: string;
+  phone: string;
+  serviceId: string;
+  serviceName: string;
+  durationMin: number;
+  date: string;        // YYYY-MM-DD
+  startTime: string;   // HH:mm 희망 시간
+  memo?: string;
+  privacyConsent: boolean; // 처음 고객은 접수 때 동의 필수 → 예약으로 등록할 때 고객 등록에 기록
+  createdAt: string;
+  status: 'new' | 'accepted' | 'rejected';
+  reservationId?: string;
+  decidedAt?: string;
+}
+
 /** 베드/룸/장비 자원 — 한 번에 예약 하나(처리량 상한). 목록 순서 = 자동 배정 우선순위 (142, GAP R-5) */
 export interface Resource { id: string; name: string; kind: 'bed' | 'room' | 'device'; isActive: boolean }
 

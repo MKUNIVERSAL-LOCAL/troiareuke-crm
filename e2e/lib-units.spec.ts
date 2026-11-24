@@ -27,6 +27,7 @@ import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromM
 import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
 import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule } from '../src/lib/staffScheduleRule';
 import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
+import { publicSlots } from '../src/lib/publicSlotsRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -536,4 +537,14 @@ test('베드·룸 자원 — 충돌·빈 자원·취소 제외·미사용 제외
   expect(freeResources(resources, assignments, rs, { ...c, excludeId: 'x1' }).map(r => r.id)).toEqual(['b2']); // x4 가 여전히 b1
   expect(freeResources(resources, { x1: 'b1' }, rs, { ...c, excludeId: 'x1' }).map(r => r.id)).toEqual(['b1', 'b2']); // 본인 제외
   expect(resourceConflicts('b1', assignments, rs, { date: '2026-11-24', startMin: 660, endMin: 720 }).map(r => r.id)).toEqual(['x4']); // 11:00 맞닿음은 겹침 아님
+});
+
+test('공개 예약 슬롯 — 직원 가용 합집합 ∩ 베드 상한 (143)', () => {
+  const a = [600, 630, 720], b = [630, 660, 720, 750];
+  expect(publicSlots([a, b], 60, null)).toEqual([600, 630, 660, 720, 750]);                 // 자원 없으면 합집합
+  const cap = { total: 1, busy: [{ startMin: 600, endMin: 660 }] };                        // 베드 1개, 10:00~11:00 사용 중
+  expect(publicSlots([a, b], 60, cap)).toEqual([660, 720, 750]);                           // 10:00·10:30 은 베드 없음
+  expect(publicSlots([a, b], 60, { total: 2, busy: [{ startMin: 600, endMin: 660 }] })).toEqual([600, 630, 660, 720, 750]);
+  expect(publicSlots([a, b], 60, { total: 0, busy: [] })).toEqual([]);                      // 사용 중 자원 0 이면 받을 수 없음
+  expect(publicSlots([[], []], 60, null)).toEqual([]);
 });
