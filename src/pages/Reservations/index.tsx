@@ -28,7 +28,8 @@ import {
 import { registeredPaymentsFor } from '../../lib/pendingCompletion';
 import { readableTextOn } from '../../lib/color';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent, localizeGcalEventDates } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
-import { todayISO, formatDate } from '../../lib/format';
+import { todayISO, formatDate, formatPrice } from '../../lib/format';
+import { josa } from '../../lib/josa';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -426,7 +427,7 @@ export default function Reservations() {
                     <p className="text-xs text-gray-500 mt-0.5 truncate">
                       {r.services.map(s => s.serviceName).join(', ')} · {r.staffName}
                     </p>
-                    <p className="text-sm font-semibold text-gray-900 mt-0.5 tabular-nums">{r.totalPrice.toLocaleString()}원</p>
+                    <p className="text-sm font-semibold text-gray-900 mt-0.5 tabular-nums">{formatPrice(r.totalPrice)}</p>
                   </div>
                 </div>
               </button>
@@ -888,7 +889,7 @@ function ListView({ reservations, onSelect, googleEvents = [], filterKey }: { re
               <p className="text-xs text-gray-400 mt-0.5">{r.services.map(s => s.serviceName).join(', ')} · {r.staffName}</p>
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="text-sm font-bold text-gray-800">{r.totalPrice.toLocaleString()}원</p>
+              <p className="text-sm font-bold text-gray-800">{formatPrice(r.totalPrice)}</p>
               <p className="text-xs text-gray-400 mt-0.5">{r.startTime} ~ {r.endTime}</p>
             </div>
             <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
@@ -976,7 +977,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
         staffList.length === 0 && !staffId ? '등록된 직원이 없습니다 — 직원 관리에서 먼저 등록해주세요.' : '',
         services.length === 0 && !serviceId ? '등록된 시술이 없습니다 — 설정 > 시술 관리에서 먼저 등록해주세요.' : '',
       ].filter(Boolean).join(' ');
-      setFormError(`${missing}을(를) 선택해주세요. ${guide}`.trim());
+      setFormError(`${josa(missing, '을/를')} 선택해주세요. ${guide}`.trim());
       return;
     }
     setFormError('');
@@ -1057,7 +1058,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       const paid = registeredPaymentsFor(editing.id).reduce((sum, p) => sum + p.amount, 0);
       const customerChanged = customer.id !== editing.customerId;
       if (paid > 0 && (customerChanged || totalPrice !== editing.totalPrice)) {
-        if (!window.confirm(`이 예약에는 등록된 결제 ${paid.toLocaleString('ko-KR')}원이 있습니다. 예약의 ${customerChanged ? '고객' : '금액'}을 바꿔도 결제는 바뀌지 않습니다 — 매출 화면에서 결제를 따로 수정해주세요.\n그래도 저장할까요?`)) return;
+        if (!window.confirm(`이 예약에는 등록된 결제 ${formatPrice(paid)}이 있습니다. 예약의 ${customerChanged ? '고객' : '금액'}을 바꿔도 결제는 바뀌지 않습니다 — 매출 화면에서 결제를 따로 수정해주세요.\n그래도 저장할까요?`)) return;
       }
     }
     if (isEdit && editing) {
@@ -1114,7 +1115,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           >
             <option value="">시술 선택</option>
-            {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {s.price.toLocaleString()}원)</option>)}
+            {services.map(s => <option key={s.id} value={s.id}>{s.name} ({s.duration}분 / {formatPrice(s.price)})</option>)}
           </select>
           {services.length === 0 && (canOpenRoute(authUser?.role, '/settings')
             ? <PrereqHint text="등록된 시술 항목이 없습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />
@@ -1229,7 +1230,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const handleCancel = async () => {
     // Google 캘린더 이벤트 삭제가 비가역이므로 확인 후 진행. 결제가 붙은 완료 예약은 취소해도 결제가 남는다는 걸 분명히 한다
     const warn = r.status === 'completed' && paidForThis.length > 0
-      ? `\n\n이 예약은 완료 처리됐고 등록된 결제 ${paidAmount.toLocaleString('ko-KR')}원은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.`
+      ? `\n\n이 예약은 완료 처리됐고 등록된 결제 ${formatPrice(paidAmount)}은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.`
       : '';
     if (!(await askConfirm({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기' }))) return; // 앱 확인창 (15차 #H3)
     ReservationStore.updateStatus(r.id, 'cancelled');
@@ -1282,7 +1283,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 
   const handleDelete = async () => {
     // 삭제해도 이 예약 id로 등록된 결제는 남는다(취소처리와 같은 안내). [취소처리] 권유는 그 버튼이 있을 때만 (리뷰 2026-11-19)
-    const payWarn = paidForThis.length > 0 ? `\n\n등록된 결제 ${paidAmount.toLocaleString('ko-KR')}원은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.` : '';
+    const payWarn = paidForThis.length > 0 ? `\n\n등록된 결제 ${formatPrice(paidAmount)}은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.` : '';
     const cancelTip = isClosed ? '' : ' 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.';
     if (await askConfirm({ title: '예약 삭제', message: `이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`, confirmLabel: '삭제', danger: true })) {
       ReservationStore.delete(r.id);
@@ -1323,7 +1324,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           <InfoItem label="날짜" value={formatDate(r.date)} />
           <InfoItem label="시간" value={`${r.startTime} ~ ${r.endTime}`} />
           <InfoItem label="담당자" value={r.staffName} />
-          <InfoItem label="금액" value={`${r.totalPrice.toLocaleString()}원`} />
+          <InfoItem label="금액" value={formatPrice(r.totalPrice)} />
         </div>
         <ProgramBalance customerId={r.customerId} />
 
@@ -1332,7 +1333,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           {r.services.map((s, i) => (
             <div key={i} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
               <span className="text-sm text-gray-700">{s.serviceName}</span>
-              <span className="text-sm font-semibold text-gray-800">{s.price.toLocaleString()}원</span>
+              <span className="text-sm font-semibold text-gray-800">{formatPrice(s.price)}</span>
             </div>
           ))}
         </div>
@@ -1469,14 +1470,14 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
       const a = Math.max(0, Number(amountA.replace(/\D/g, '')) || 0);
       const b = Math.max(0, Number(amountB.replace(/\D/g, '')) || 0);
       if (a + b !== r.totalPrice) {
-        notify(`분할 금액 합계(${(a + b).toLocaleString()}원)가 결제 금액(${r.totalPrice.toLocaleString()}원)과 다릅니다.`);
+        notify(`분할 금액 합계(${formatPrice((a + b))})가 결제 금액(${formatPrice(r.totalPrice)})과 다릅니다.`);
         return;
       }
       if (methodA === methodB) {
         notify('두 결제수단이 같습니다. 단일 결제를 사용해주세요.');
         return;
       }
-      const splitMemo = `복합결제 (${methodA} ${a.toLocaleString()}원 + ${methodB} ${b.toLocaleString()}원)`;
+      const splitMemo = `복합결제 (${methodA} ${formatPrice(a)} + ${methodB} ${formatPrice(b)})`;
       if (a > 0) PaymentStore.save({ ...basePayment, amount: a, paymentMethod: methodA, memo: splitMemo });
       if (b > 0) PaymentStore.save({ ...basePayment, amount: b, paymentMethod: methodB, memo: splitMemo });
     }
@@ -1487,7 +1488,7 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
     <Modal isOpen={true} onClose={onDone} title="결제 등록" size="md">
       <div className="space-y-4">
         <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 text-sm text-gray-700">
-          {late ? '완료 처리된 예약입니다. 아직 등록되지 않은 결제 ' : '완료 처리됐습니다. 결제 '}<span className="font-bold">{r.totalPrice.toLocaleString()}원</span>을 매출에 등록하세요.
+          {late ? '완료 처리된 예약입니다. 아직 등록되지 않은 결제 ' : '완료 처리됐습니다. 결제 '}<span className="font-bold">{formatPrice(r.totalPrice)}</span>을 매출에 등록하세요.
         </div>
 
         <div className="flex gap-2">
@@ -1525,7 +1526,7 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
               </div>
             ))}
             <p className="text-xs text-gray-400 text-right">
-              합계 {((Number(amountA) || 0) + (Number(amountB) || 0)).toLocaleString()}원 / 결제 금액 {r.totalPrice.toLocaleString()}원
+              합계 {formatPrice((Number(amountA) || 0) + (Number(amountB) || 0))} / 결제 금액 {formatPrice(r.totalPrice)}
             </p>
           </div>
         )}

@@ -1250,7 +1250,7 @@ export default function Customers() {
           added++;
         }
         loadAll();
-        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 이미 있는 전화번호${masked > 0 ? `, 가린 전화번호 ${masked}건` : ''}).${badBirth > 0 ? ` 생년월일 형식을 읽지 못해 비운 고객 ${badBirth}명(YYYY-MM-DD 로 적어주세요).` : ''} 기존 고객 정보는 바뀌지 않습니다(신규 추가 전용).`);
+        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀${masked > 0 ? ` · 가린 전화번호 ${masked}건 포함` : ''}${badBirth > 0 ? ` · 생년월일을 읽지 못해 비운 고객 ${badBirth}명` : ''}.`); // 토스트는 한 문장 — 건너뜀 사유·형식 안내는 업로드 안내 패널에 (15차 #M4)
       } catch (err) {
         notify('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
       } finally {
@@ -1297,6 +1297,7 @@ export default function Customers() {
       tags: parseTags(addForm.tags), isActive: true,
       privacyConsent: true, privacyConsentAt: new Date().toISOString(),
     });
+    notify.success('고객을 등록했습니다.'); // 창만 닫히고 피드백이 없었다 (15차 #L10)
     setShowAddModal(false);
     resetAddForm();
     loadAll();
@@ -1344,6 +1345,7 @@ export default function Customers() {
       tags: parseTags(editForm.tags),
       allergies: editForm.allergies.trim() || '',
     });
+    notify.success('고객 정보를 저장했습니다.'); // 전파 토스트보다 먼저 — 저장 자체를 알린다 (15차 #L10)
     if (identityChanged) {
       // 예약·시술·회차권·결제·상담에 복사된 이름(예약은 전화번호도) — 빠뜨리면 개명한 고객이 다른 화면 검색에서 사라지고 예약 카드가 옛 번호로 전화한다 (11차 #H1·H2)
       const n = propagateCustomerIdentity(selected.id, { name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone });
@@ -1394,7 +1396,7 @@ export default function Customers() {
     if (futureRes > 0 || activeProgs > 0) {
       const blockers = [futureRes > 0 ? `앞으로의 예약 ${futureRes}건` : '', activeProgs > 0 ? `진행 중 회차권 ${activeProgs}개` : ''].filter(Boolean).join(', ');
       const guide = [futureRes > 0 ? '예약은 취소하고' : '', activeProgs > 0 ? '회차권은 [관리]에서 완료 처리(또는 등록 취소)한' : ''].filter(Boolean).join(' ');
-      notify(`삭제할 수 없습니다 — ${blockers}이(가) 있습니다. ${guide} 뒤 삭제해주세요. 중복 고객이면 [병합]이 맞습니다.`);
+      notify(`삭제할 수 없습니다 — ${blockers}이 남아 있습니다. ${guide} 뒤 삭제해주세요.`); // '건'·'개'로 끝나 조사는 늘 '이' (15차 #M5·#L1)
       return;
     }
     if (!(await askConfirm({ title: '고객 삭제', message: `'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`, confirmLabel: '삭제', danger: true, returnFocusTo: menuAnchor() }))) return;
@@ -1637,6 +1639,7 @@ export default function Customers() {
                   {gradeChip(selected, true)}
                 </div>
               </div>
+              {canManage ? ( /* 직원은 수정만 남아 1항목 메뉴가 되므로 [수정] 버튼을 바로 (15차 #M8) */
               <div className="relative">
                 <button
                   type="button"
@@ -1682,6 +1685,12 @@ export default function Customers() {
                   </>
                 )}
               </div>
+              ) : (
+              <button type="button" onClick={openEditModal} aria-label="고객 정보 수정" title="고객 정보 수정"
+                className="w-11 h-11 flex items-center justify-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200">
+                <Pencil size={18} />
+              </button>
+              )}
             </div>
 
             {/* 상세 콘텐츠 스크롤 */}
@@ -1792,7 +1801,7 @@ export default function Customers() {
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
                         {c.recommendedSolution && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
                         {c.recommendedProducts.length > 0 && <p className="text-xs text-gray-500 mt-0.5">🧴 {c.recommendedProducts.join(', ')}</p>}
-                        {c.managerNote && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">📝 {c.managerNote}</p>}
+                        {c.managerNote && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{c.managerNote}</p>}
                         {c.nextConsultDate && <p className="text-xs text-indigo-600 mt-0.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>}
                         <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
                         <button
@@ -2240,7 +2249,7 @@ export default function Customers() {
               </div>
 
               <div className="mt-3 p-3 bg-gray-50 rounded-xl">
-                {selected.memo ? <p className="text-xs text-amber-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">📝 {selected.memo}</p> : <p className="text-xs text-gray-400">📝 메모 없음</p>}
+                {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                 {quickMemoRow(false)}
               </div>
             </div>
@@ -2323,7 +2332,7 @@ export default function Customers() {
                           <p className="text-xs text-gray-500 mt-1.5">🧴 {c.recommendedProducts.join(', ')}</p>
                         )}
                         {c.managerNote && (
-                          <p className="text-xs text-gray-500 mt-1.5">📝 {c.managerNote}</p>
+                          <p className="text-xs text-gray-500 mt-1.5">{c.managerNote}</p>
                         )}
                         {c.nextConsultDate && (
                           <p className="text-xs text-indigo-600 mt-1.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>
@@ -2504,7 +2513,8 @@ export default function Customers() {
                 <p>• <strong className="text-red-600">필수</strong>: <strong>이름</strong>, <strong>전화번호</strong> — 둘 중 하나라도 없으면 그 줄은 건너뜁니다</p>
                 <p>• 선택: 성별(남성/여성), 등급(신규·VIP 등), 생년월일(1990-01-15 형식), 피부유형, 유입경로, 이메일, 주소, 메모</p>
                 <p>• 첫 번째 줄은 반드시 <strong>항목 이름(헤더)</strong>이어야 하고, 첫 번째 시트만 읽습니다</p>
-                <p>• 이미 등록된 고객과 <strong>전화번호가 같으면 자동으로 건너뜁니다</strong> (중복 걱정 없음)</p>
+                <p>• 이미 등록된 고객과 <strong>전화번호가 같으면 자동으로 건너뜁니다</strong> (중복 걱정 없음) — 기존 고객 정보는 바뀌지 않는 신규 추가 전용입니다</p>
+                <p>• 생년월일을 읽지 못한 줄은 생년월일만 비우고 등록합니다 (YYYY-MM-DD 로 적어주세요)</p>
                 <p>• 엑셀(.xlsx, .xls)과 CSV 모두 지원</p>
               </div>
               <div className="flex gap-2">

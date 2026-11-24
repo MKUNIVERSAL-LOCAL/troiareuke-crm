@@ -5,7 +5,7 @@ import { maskPhone } from '../../lib/pii';
 import { normalizePhone } from '../../lib/inputRules';
 import { notify } from '../../lib/notify';
 import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
-import { formatDateTime, parseISODate, todayISO } from '../../lib/format';
+import { formatDateTime, parseISODate, todayISO, formatPrice } from '../../lib/format';
 import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
@@ -753,7 +753,7 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
                   }
                   {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-600">실패 {h.failCount}명</p>}
                   {h.status === 'sent' && h.cost !== undefined && h.cost > 0 && (
-                    <p className="text-xs text-gray-400 mt-1">예상 비용 {h.cost.toLocaleString()}원</p>
+                    <p className="text-xs text-gray-400 mt-1">예상 비용 {formatPrice(h.cost)}</p>
                   )}
                 </div>
               </div>
@@ -954,7 +954,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         <div className="flex flex-col items-center justify-center py-12">
           {sendPartial ? <AlertCircle size={48} className="text-amber-600 mb-3" /> : <CheckCircle size={48} className="text-green-700 mb-3" />}
           <p className="text-lg font-bold text-gray-900">{sendPartial ? '일부만 발송됐습니다' : '발송 완료!'}</p>
-          <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다`}</p>
+          <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다.`}</p>
         </div>
       ) : sendResult === 'pending' ? (
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -1155,7 +1155,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">예상 발송 비용</p>
-              <p className="text-base font-bold text-primary-600 mt-0.5">약 {estimatedCost.toLocaleString()}원</p>
+              <p className="text-base font-bold text-primary-600 mt-0.5">약 {formatPrice(estimatedCost)}</p>
             </div>
           </div>
 

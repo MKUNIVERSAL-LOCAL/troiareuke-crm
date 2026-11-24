@@ -153,7 +153,7 @@ export default function Products() {
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 [&:has(>:last-child:nth-child(3))]:lg:grid-cols-3 [&>:last-child:nth-child(odd)]:col-span-2 lg:[&>:last-child:nth-child(odd)]:col-span-1"> {/* 직원은 매출 카드가 빠져 3장 — 빈 칸 대신 3열·전폭 (15차 #M13) */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">전체 제품</p>
             <p className="text-2xl font-bold text-gray-900">{products.length}<span className="text-sm font-medium ml-1">종</span></p>
@@ -170,11 +170,11 @@ export default function Products() {
           </div>
           {canDo(user?.role, 'sales.view') && ( /* 매출 금액은 매출 화면·대시보드와 같은 권한 (117~119 리뷰 #M6) */
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간 · 취소 제외)</p>
+            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출</p>
             <p className="text-2xl font-bold text-[#1a3a8f]">
               {formatPrice(totalSalesRevenue)}
             </p>
-            <p className="text-xs text-gray-400 mt-1">이달 {formatPrice(monthSalesRevenue)} — 매출 화면 '제품 매출'과 같은 기준</p>
+            <p className="text-xs text-gray-400 mt-1">이달 {formatPrice(monthSalesRevenue)} · 전체 기간, 취소 제외 — 매출 화면과 같은 기준</p>
           </div>
           )}
         </div>
@@ -240,7 +240,7 @@ export default function Products() {
                   <Package size={32} className="mx-auto mb-3 text-gray-300" />
                   {products.length === 0 ? (
                     <>
-                      <p className="text-sm text-gray-400">아직 제품이 없습니다 — 판매하고 재고를 관리할 홈케어 제품을 등록하세요</p>
+                      <p className="text-sm text-gray-400">아직 제품이 없습니다 — 판매하고 재고를 관리할 홈케어 제품을 등록해주세요</p>
                       <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">제품 추가</button>
                     </>
                   ) : (
@@ -422,7 +422,7 @@ export default function Products() {
               <div className="py-16 text-center">
                 <TrendingUp size={32} className="mx-auto mb-3 text-gray-300" />
                 <p className="text-sm text-gray-400 mb-1">판매 기록이 없습니다</p>
-                <p className="text-xs text-gray-500">제품 목록에서 [판매]를 눌러 기록하세요</p>
+                <p className="text-xs text-gray-500">제품 목록에서 [판매]를 눌러 기록해주세요</p>
               </div>
             ) : (
               <>
@@ -672,7 +672,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
               title={isEdit ? '재고는 목록의 [입고]·조정으로 바꿉니다 (매입 지출·사유가 함께 남도록)' : undefined}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30 disabled:bg-gray-50 disabled:text-gray-500"
             />
-            {isEdit && <p className="text-2xs text-gray-500 mt-1">재고는 [입고]·조정으로 바꿉니다</p>}
+            {isEdit && <p className="text-xs text-gray-500 mt-1">재고는 [입고]·조정으로 바꿉니다</p>}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">최소 재고</label>

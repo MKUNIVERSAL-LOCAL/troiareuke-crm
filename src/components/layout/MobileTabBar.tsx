@@ -25,6 +25,23 @@ export default function MobileTabBar() {
   useOverlayClose(moreOpen, () => setMoreOpen(false)); // Android 뒤로가기·Esc로 더보기 시트 닫기
   const sheetRef = useRef<HTMLDivElement>(null);
   useFocusTrap(moreOpen, sheetRef); // 시트 안에서 Tab 순환, 닫히면 더보기 탭으로 (55)
+  // 핸들을 아래로 80px 이상 끌면 닫힌다 — 공용 Modal 과 같은 제스처(장식 핸들이던 것, 15차 #M20)
+  const dragY = useRef<number | null>(null);
+  const onHandleTouchStart = (e: React.TouchEvent) => { dragY.current = e.touches[0].clientY; };
+  const onHandleTouchMove = (e: React.TouchEvent) => {
+    if (dragY.current === null || !sheetRef.current) return;
+    const dy = Math.max(0, e.touches[0].clientY - dragY.current);
+    sheetRef.current.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+    sheetRef.current.style.transition = 'none';
+  };
+  const onHandleTouchEnd = (e: React.TouchEvent) => {
+    if (dragY.current === null || !sheetRef.current) return;
+    const dy = e.changedTouches[0].clientY - dragY.current;
+    dragY.current = null;
+    sheetRef.current.style.transition = 'transform 0.18s ease-out';
+    sheetRef.current.style.transform = '';
+    if (dy > 80) setMoreOpen(false);
+  };
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   useFeatureFlagsTick();
@@ -123,8 +140,10 @@ export default function MobileTabBar() {
             className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl lg:hidden outline-none"
             style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))' }}
           >
-            {/* 드래그 핸들 */}
-            <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mt-3 mb-2" />
+            {/* 드래그 핸들 — 실제 제스처 */}
+            <div className="pt-3 pb-2 cursor-grab touch-none" onTouchStart={onHandleTouchStart} onTouchMove={onHandleTouchMove} onTouchEnd={onHandleTouchEnd} aria-hidden="true">
+              <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto" />
+            </div>
 
             {/* 헤더 */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
@@ -196,7 +215,7 @@ export default function MobileTabBar() {
                   <span className="text-white text-sm font-bold">{(user?.name ?? 'U')[0]}</span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{user?.shopName || '샵 정보 미설정'}</p>
+                  <p className="text-sm font-semibold text-gray-900 truncate">{user?.shopName || '매장 이름 미설정'}</p>
                   <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                 </div>
                 {user?.role && (

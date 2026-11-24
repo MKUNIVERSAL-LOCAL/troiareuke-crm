@@ -363,7 +363,7 @@ export default function Sales() {
   // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생). 연결 없는 옛 제품 결제는 일반 결제처럼 지운다 (UX 점검 2026-11-19)
   async function handleDelete(p: Payment) {
     if (p.type === 'product' && p.referenceId) {
-      notify('제품 결제는 여기서 삭제하면 재고·판매기록과 어긋납니다. 제품/재고 페이지의 판매 취소를 사용해주세요.');
+      notify('제품 결제는 여기서 삭제하면 재고·판매 기록과 어긋납니다. [제품/재고 > 판매 기록]에서 판매 취소를 사용해주세요.');
       return;
     }
     // 회차권 결제도 같은 이유 — 지우면 회차권만 남아 계속 차감된다. 고객 상세 [관리] > [등록 취소]가 결제와 회차권을 함께 지운다 (정합성 감사 2026-11-19)
@@ -1180,7 +1180,7 @@ export default function Sales() {
                   ))}
                 </div>
                 {form.status === 'refunded' && (
-                  <p className="text-xs text-red-600 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
+                  <p className="text-xs text-red-600 mt-1">환불로 저장하면 매출 통계와 고객 누적 결제액에서 제외됩니다.</p>
                 )}
                 {form.status === 'pending' && (
                   <p className="text-xs text-amber-700 mt-1">입금 확인 전 기록 — 매출·고객 누적 결제액에 포함되지 않습니다. 입금이 확인되면 '완료'로 바꿔주세요.</p>

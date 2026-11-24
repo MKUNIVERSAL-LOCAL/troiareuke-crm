@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, becomeStaff } from './helpers';
 import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
 
 /**
@@ -184,6 +184,13 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await page.getByRole('button', { name: '시술 관리', exact: true }).filter({ visible: true }).first().click();
     await page.getByRole('button', { name: '시술 추가' }).first().click();
     await expect(dialog('시술 추가')).toBeVisible();
+  });
+
+  // ── 직원 계정이 주소로 들어온 관리자 전용 화면 — 역할 게이트 패널은 가시성만 보고 axe 를 돌리지 않았다 (15차 #M21) ──
+  await becomeStaff(page);
+  await step('/settings 역할 게이트(직원)', async () => {
+    await page.goto('/settings');
+    await expect(page.getByTestId('role-gate')).toBeVisible();
   });
 
   assertNoBlocking(rows);

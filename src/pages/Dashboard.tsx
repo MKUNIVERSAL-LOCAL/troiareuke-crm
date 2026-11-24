@@ -181,7 +181,7 @@ export default function Dashboard() {
         {/* 첫 설정 체크리스트 — 할 일이 남은 새 매장에만 보인다 */}
         <SetupChecklistCard refreshKey={refreshKey} />
         {/* StatCards 2열 */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 [&>:last-child:nth-child(odd)]:col-span-2"> {/* 직원은 카드 3장 — 마지막 반 칸 공백 대신 전폭 (15차 #M12) */}
           {salesOn && (
             <button type="button" onClick={() => navigate('/sales')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">이번 달 총 매출</p>
@@ -309,7 +309,7 @@ export default function Dashboard() {
         {/* 첫 설정 체크리스트 — 할 일이 남은 새 매장에만 보인다 */}
         <SetupChecklistCard refreshKey={refreshKey} />
         {/* Stat Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 [&:has(>:last-child:nth-child(3))]:lg:grid-cols-3 [&>:last-child:nth-child(odd)]:col-span-2 lg:[&>:last-child:nth-child(odd)]:col-span-1">
           {salesOn && (
           <button type="button" className="text-left w-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate('/sales')}>
             <StatCard
@@ -477,10 +477,10 @@ export default function Dashboard() {
         </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="dash-grid grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* Today's Reservations — items-start: 예약 1건일 때 오른쪽 열 높이만큼 카드가 늘어나 빈 공간이 생기지 않게 (2026-11-18 시각 QA) */}
           {reservationsOn && (
-          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="lg:col-span-2 [.dash-grid:has(>.dash-alerts:empty)_&]:lg:col-span-3 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"> {/* 알림 카드가 하나도 없으면(직원·조용한 날) 오른쪽 1/3 이 비는 대신 전폭 (15차 #M11) */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
               <h3 className="text-sm font-bold text-gray-900">오늘 예약 현황</h3>
               <button onClick={() => navigate('/reservations')} className="flex items-center gap-1 text-xs text-[#1a3a8f] hover:text-[#152d6e] font-medium">
@@ -521,8 +521,8 @@ export default function Dashboard() {
           </div>
           )}
 
-          {/* Alerts */}
-          <div className="space-y-4">
+          {/* Alerts — 카드가 전부 null 이면 열 자체를 숨긴다 */}
+          <div className="dash-alerts space-y-4 empty:hidden">
             {/* 오늘 마감 요약 — 복사/공유 (2026-11-17) */}
             <DailyCloseCard refreshKey={refreshKey} />
             {/* 완료 처리 누락 예약 — 방문 통계·실적 누수 방지 (2026-11-18) */}

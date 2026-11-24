@@ -11,6 +11,7 @@ import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
 import { recordPrivacyAction, maskNameForLog } from '../lib/privacyLog';
 import { askConfirm } from '../lib/confirmDialog';
+import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
 import { useFocusTrap, useOverlayClose } from '../lib/overlayStack';
 import type { Customer } from '../types';
@@ -71,7 +72,7 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
 
   async function handleMerge() {
     if (!source || busy || pendingRequests > 0 || serverCheckFailed || serverChecking) return;
-    if (!(await askConfirm({ title: '고객 병합 확인', message: `'${source.name}' 고객의 기록 ${total}건을 '${target.name}' 고객으로 옮기고 '${source.name}'을(를) 삭제할까요?\n되돌릴 수 없습니다.`, confirmLabel: '병합', danger: true }))) return;
+    if (!(await askConfirm({ title: '고객 병합 확인', message: `'${source.name}' 고객의 기록 ${total}건을 '${target.name}' 고객으로 옮기고 ${josa(`'${source.name}'`, '을/를')} 삭제할까요?\n되돌릴 수 없습니다.`, confirmLabel: '병합', danger: true }))) return;
     setBusy(true);
     try {
       const moved = mergeCustomers(target.id, source.id);

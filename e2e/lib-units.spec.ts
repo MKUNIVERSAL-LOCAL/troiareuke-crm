@@ -16,6 +16,7 @@ import { isCountableCustomer } from '../src/lib/customerScope';
 import { growthPct } from '../src/lib/growth';
 import { canceledSaleIds } from '../src/lib/saleCancel';
 import { parseAmount, parseCount, normalizePhone, isISODate, coerceISODate, parseDurationMinutes } from '../src/lib/inputRules';
+import { josa } from '../src/lib/josa';
 
 // 저장소·DOM 의존이 없는 순수 helper를 브라우저 없이 직접 검증 (95, 2026-11-20 — 커버리지 감사 B).
 // 날짜 입력은 로컬 Date로 만들어 러너 시간대와 무관하게 같은 답이 나오게 한다.
@@ -275,4 +276,20 @@ test('입력 규칙 — 금액·수량·전화 키·날짜 (14차 점검)', () =
   expect(parseDurationMinutes('')).toBeNull();
   // 이모지 SMS 바이트 (14차 #M9)
   expect(smsBytes('😀')).toBe(4);
+});
+
+test('조사 자동 선택 — 받침·숫자·영문·닫는 인용부호 (15차 #L1)', () => {
+  expect(josa('회차권', '을/를')).toBe('회차권을');
+  expect(josa('프로그램', '을/를')).toBe('프로그램을');
+  expect(josa('김수아', '이/가')).toBe('김수아가');
+  expect(josa('홍길동', '이/가')).toBe('홍길동이');
+  expect(josa("'김수아'", '을/를')).toBe("'김수아'를");       // 닫는 인용부호는 건너뛰고 본 글자로
+  expect(josa('"수아B"', '은/는')).toBe('"수아B"는');          // 영문 B → 받침 없음
+  expect(josa('서울', '으로/로')).toBe('서울로');              // ㄹ 받침은 '로'
+  expect(josa('부산', '으로/로')).toBe('부산으로');
+  expect(josa('2026-11-24', '은/는')).toBe('2026-11-24는');    // 4(사) 받침 없음
+  expect(josa('2026-11-23', '은/는')).toBe('2026-11-23은');    // 3(삼)
+  expect(josa('2026-11-20', '은/는')).toBe('2026-11-20은');    // 0(영)
+  expect(josa('mkclub21', '을/를')).toBe('mkclub21을');        // 1(일)
+  expect(josa('', '을/를')).toBe('를');                         // 빈 값도 플레이스홀더를 남기지 않는다
 });

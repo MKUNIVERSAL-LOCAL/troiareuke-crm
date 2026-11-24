@@ -136,7 +136,6 @@ export default function Settings() {
   // 원격 플래그가 마운트 이후 도착해도 토글 표시가 실제 값과 어긋나지 않게 구독
   useEffect(() => onFeatureFlagsChanged(() => setBeaconOn(isBeaconConsultationEnabled())), []);
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
-  const [saved, setSaved] = useState<string | null>(null);
 
   // Subscription state
   const [currentSubscription, setCurrentSubscription] = useState<Subscription | null>(null);
@@ -323,7 +322,7 @@ export default function Settings() {
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
         await loadSubscription();
-        flash('플랜이 변경되었습니다');
+        notify.success('플랜을 변경했습니다.');
       } catch {
         setPlanChangeError('플랜 변경에 실패했습니다.');
       } finally {
@@ -368,7 +367,7 @@ export default function Settings() {
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
         await loadSubscription();
-        flash('플랜이 변경되었습니다');
+        notify.success('플랜을 변경했습니다.');
       } else {
         setPlanChangeError(result.error || '결제에 실패했습니다.');
       }
@@ -399,12 +398,6 @@ export default function Settings() {
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceForm, setServiceForm] = useState(emptyServiceForm);
 
-  // Flash save feedback
-  const flash = (msg = '저장 완료') => {
-    setSaved(msg);
-    setTimeout(() => setSaved(null), 1500);
-  };
-
   // ─── Shop Info ────────────────────────────────────────────
   // 서버 프로필 갱신(await)이 끝나기 전 연타로 두 번 저장되는 것 방지 (2026-11-18)
   const [shopSaving, setShopSaving] = useState(false);
@@ -416,7 +409,7 @@ export default function Settings() {
   const doShopSave = async () => {
     const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
     if (!shopName) {
-      notify('샵 이름을 입력해주세요');
+      notify('샵 이름을 입력해주세요.');
       return;
     }
 
@@ -459,7 +452,7 @@ export default function Settings() {
       }
     } catch { /* 세션 갱신 실패는 샵 설정 저장을 막지 않음 */ }
 
-    flash(`${shopName} CRM으로 설정했습니다`);
+    notify.success(`${shopName} CRM으로 설정했습니다.`);
     if (remoteFailed) notify('서버 반영 실패 — 이 PC에는 저장됐지만 네트워크 확인 후 다시 저장해주세요.'); // 실패는 성공 토스트에 섞지 않는다 (UX 점검 2026-11-19)
   };
 
@@ -486,7 +479,7 @@ export default function Settings() {
     }
     SettingsStore.save({ businessHours: settings.businessHours, holidays: settings.holidays || [] });
     setHoursDirty(false);
-    flash();
+    notify.success('영업시간을 저장했습니다.');
   };
 
   // 지정 휴일(명절·임시 휴무) — 예약 저장 전 경고에 쓰인다. 날짜 추가/삭제 후 [저장하기] (2026-11-18)
@@ -507,17 +500,17 @@ export default function Settings() {
   // ─── Integrations ─────────────────────────────────────────
   const handleNaverSave = () => {
     SettingsStore.save({ naverBooking: settings.naverBooking });
-    flash();
+    notify.success('네이버 예약 연동 설정을 저장했습니다.');
   };
 
   const handleKakaoSave = () => {
     SettingsStore.save({ kakao: settings.kakao });
-    flash();
+    notify.success('카카오 연동 설정을 저장했습니다.');
   };
 
   const handleSmsSave = () => {
     SettingsStore.save({ smsCallerId: settings.smsCallerId }); // 발송사 API 키는 본사 서버에만 — 지점 입력란 제거 (보안 감사 2026-11-19)
-    flash();
+    notify.success('문자 발신번호를 저장했습니다.');
   };
 
   // ─── 기존 계정 데이터 이관 (베타 → NAS 컷오버) ───────────────
@@ -547,9 +540,9 @@ export default function Settings() {
     try {
       localStorage.setItem('ai_key_openai', aiKeys.openai.trim());
       localStorage.setItem('ai_key_gemini', aiKeys.gemini.trim());
-      flash('AI 분석 키를 저장했습니다');
+      notify.success('AI 분석 키를 저장했습니다.');
     } catch {
-      notify('키 저장 실패 — 브라우저 저장소를 확인해주세요');
+      notify('키 저장 실패 — 브라우저 저장소를 확인해주세요.');
     }
   };
 
@@ -598,7 +591,7 @@ export default function Settings() {
     }
     setServices(ServiceStore.getAll());
     setShowServiceModal(false);
-    flash(editingService ? '수정 완료' : '추가 완료');
+    notify.success(editingService ? '시술 메뉴를 수정했습니다.' : '시술 메뉴를 추가했습니다.');
   };
 
   const handleDeleteService = async (id: string) => {
@@ -611,7 +604,7 @@ export default function Settings() {
     if (!(await askConfirm({ title: '시술 메뉴 삭제', message: `${svc ? `'${svc.name}' 시술` : '이 시술'}을 삭제할까요?${detail}`, confirmLabel: '삭제', danger: true }))) return;
     ServiceStore.delete(id);
     setServices(ServiceStore.getAll());
-    flash('삭제 완료');
+    notify.success('시술 메뉴를 삭제했습니다.');
   };
 
   // Group services by category
@@ -623,14 +616,7 @@ export default function Settings() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header title="설정" subtitle="샵 운영 환경을 설정하세요" />
-
-      {/* Save feedback toast */}
-      {saved && (
-        <div className="fixed top-6 right-6 z-50 px-5 py-3 bg-green-700 text-white text-sm font-medium rounded-xl shadow-lg animate-fade-in">
-          {saved}
-        </div>
-      )}
+      <Header title="설정" subtitle="매장 운영 환경을 설정해주세요" />
 
       <div className="p-4 lg:p-8 flex-1">
         {/* 모바일(lg 미만): 탭을 가로 스크롤 칩으로 쌓고 본문은 전체 폭 — 2단 고정 폭은 412px에서 입력란이 화면 밖으로 밀렸다 (2026-11-17) */}
@@ -980,7 +966,7 @@ export default function Settings() {
                       </div>
                       {googleConnected ? (
                         <button
-                          onClick={() => { clearGoogleTokens(); setGoogleConnected(false); flash('Google 캘린더 연결이 해제되었습니다'); }}
+                          onClick={() => { clearGoogleTokens(); setGoogleConnected(false); notify('Google 캘린더 연결을 해제했습니다.'); }}
                           className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200"
                         >
                           연결 해제

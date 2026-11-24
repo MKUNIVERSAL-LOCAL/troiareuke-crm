@@ -3,7 +3,8 @@ import { askConfirm } from '../lib/confirmDialog';
 import { createPortal } from 'react-dom';
 import Modal from './ui/Modal';
 import { CustomerProgramStore, PaymentStore, TreatmentLogStore } from '../lib/store';
-import { todayISO, parseISODate, toISODate, formatDate } from '../lib/format';
+import { todayISO, parseISODate, toISODate, formatDate, formatPrice } from '../lib/format';
+import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
 import type { CustomerProgram } from '../types';
 
@@ -76,7 +77,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   async function cancelRegistration() {
     const linked = PaymentStore.getAll().filter(p => p.referenceId === cp.id);
     const paid = linked.reduce((sum, p) => sum + p.amount, 0);
-    if (!(await askConfirm({ title: '회차권 등록 취소', confirmLabel: '등록 취소', cancelLabel: '닫기', danger: true, message: `${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${paid.toLocaleString('ko-KR')}원)이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.` }))) return;
+    if (!(await askConfirm({ title: '회차권 등록 취소', confirmLabel: '등록 취소', cancelLabel: '닫기', danger: true, message: `${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${formatPrice(paid)})이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.` }))) return;
     for (const p of linked) PaymentStore.delete(p.id);
     CustomerProgramStore.delete(cp.id);
     notify.success(`${cp.programName} 등록을 취소했습니다.${linked.length ? ` 결제 ${linked.length}건 삭제.` : ''}`);
@@ -88,12 +89,12 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
     if (cp.isCompleted) {
       if (isSessionBased && cp.usedSessions >= (cp.totalSessions as number)) { notify('회차를 모두 사용한 프로그램은 되돌릴 수 없습니다. 총 회차를 늘려주세요.'); return; }
       CustomerProgramStore.update(cp.id, { isCompleted: false, notes: appendNote(cp.notes, '완료 → 진행중으로 되돌림') });
-      notify(`${cp.programName}을(를) 진행중으로 되돌렸습니다.`);
+      notify(`${josa(cp.programName, '을/를')} 진행중으로 되돌렸습니다.`);
     } else {
       const left = remaining !== null && remaining > 0 ? `\n잔여 ${remaining}회는 더 이상 쓸 수 없게 됩니다.` : '';
-      if (!(await askConfirm({ title: '회차권 완료 처리', message: `${cp.programName}을(를) 완료 처리할까요?${left}`, confirmLabel: '완료 처리' }))) return;
+      if (!(await askConfirm({ title: '회차권 완료 처리', message: `${josa(cp.programName, '을/를')} 완료 처리할까요?${left}`, confirmLabel: '완료 처리' }))) return;
       CustomerProgramStore.update(cp.id, { isCompleted: true, notes: appendNote(cp.notes, `완료 처리${remaining ? ` (잔여 ${remaining}회 소멸)` : ''}`) });
-      notify(`${cp.programName}을(를) 완료 처리했습니다.`);
+      notify(`${josa(cp.programName, '을/를')} 완료 처리했습니다.`);
     }
     onDone();
   }

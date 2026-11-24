@@ -1,5 +1,6 @@
 import { isImeKey } from '../lib/ime';
 import { notify } from '../lib/notify';
+import { josa } from '../lib/josa';
 import { useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { getAllPaymentMethods, getCustomPaymentMethods, addCustomPaymentMethod, removeCustomPaymentMethod } from '../lib/paymentMethods';
@@ -50,7 +51,7 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
                 type="button"
                 aria-label={`${m} 삭제`}
                 onClick={() => {
-                  if (!confirm(`결제수단 '${m}'을(를) 목록에서 삭제할까요? (기존 결제 기록은 유지됩니다)`)) return;
+                  if (!confirm(`결제수단 ${josa(`'${m}'`, '을/를')} 목록에서 삭제할까요? (기존 결제 기록은 유지됩니다)`)) return;
                   removeCustomPaymentMethod(m);
                   setMethods(getAllPaymentMethods());
                   if (value === m) onChange('카드');

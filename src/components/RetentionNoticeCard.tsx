@@ -25,7 +25,7 @@ export default function RetentionNoticeCard({ compact }: { compact?: boolean }) 
       <ShieldAlert size={compact ? 18 : 20} className="text-amber-700 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className={`${compact ? 'text-sm' : 'text-sm'} font-semibold text-amber-900`}>개인정보 보존기간 경과 고객 {expired.length}명</p>
-        <p className="text-xs text-amber-700 mt-0.5">마지막 방문 후 {policy.years}년이 지났습니다. 확인 후 익명화하세요.</p>
+        <p className="text-xs text-amber-700 mt-0.5">마지막 방문 후 {policy.years}년이 지났습니다. 확인 후 익명화해주세요.</p>
       </div>
       <ChevronRight size={16} className="text-amber-700 flex-shrink-0" />
     </button>
