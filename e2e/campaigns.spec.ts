@@ -70,6 +70,9 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await expect(adRun.getByTestId('campaign-ad-block')).toContainText('무료수신거부 080 번호가 없습니다');
   await expect(adRun.getByTestId('campaign-approve')).toBeDisabled();
   await expect(adRun).toContainText('광고 수신 동의 없음·거부 1명'); // 동의 없는 고객은 광고 대상에서 제외
+  await adRun.getByTestId('campaign-skipped-toggle').click(); // 누가 빠졌는지 (176)
+  await expect(adRun.getByTestId('campaign-skipped')).toContainText(acc.customer);
+  await expect(adRun.getByTestId('campaign-skipped')).toContainText('광고 수신 동의 없음·거부');
   await page.keyboard.press('Escape');
   await expect(adRun).toHaveCount(0);
 

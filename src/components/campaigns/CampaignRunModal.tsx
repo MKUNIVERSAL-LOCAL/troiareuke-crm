@@ -26,6 +26,7 @@ export default function CampaignRunModal({ campaign, onClose, onSent }: { campai
   const [phase, setPhase] = useState<'review' | 'sending' | 'done'>('review');
   const [result, setResult] = useState<{ sent: number; failed: number; pending: boolean; reason?: string } | null>(null);
   const [progress, setProgress] = useState(0); // 발송 진행 n/N (159 리뷰 M-5)
+  const [showSkipped, setShowSkipped] = useState(false); // 제외 고객 목록 펼치기 (176)
   const optOutNumber = getOptOutNumber();
   const adCheck = checkAdSend({ isAd: campaign.isAd, channel: campaign.channel === 'sms' ? 'sms' : 'kakao', now: new Date(), optOutNumber });
   const picked = selection.ready.filter(r => checked.has(r.key));
@@ -82,7 +83,18 @@ export default function CampaignRunModal({ campaign, onClose, onSent }: { campai
           <p className="text-xs text-gray-600">{describeTrigger(campaign)} · 오늘 대상 <b data-testid="campaign-ready-count">{selection.ready.length}</b>명{selection.skipped.length ? ` · 제외 ${selection.skipped.length}명` : ''}. 체크한 고객에게만 나갑니다. 성공한 발송은 이 PC 에 기록되어 같은 회차에 다시 잡히지 않습니다(다른 PC 의 발송 기록은 서버 보관 승인 뒤 공유).</p>
           {!adCheck.ok && <p className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2" data-testid="campaign-ad-block">{adCheck.reasons.join(' ')}</p>}
           {skipSummary.length > 0 && (
-            <p className="text-xs text-gray-500">제외: {skipSummary.map(([why, n]) => `${SKIP_LABELS[why]} ${n}명`).join(' · ')}</p>
+            <div className="text-xs text-gray-500">
+              <button type="button" onClick={() => setShowSkipped(v => !v)} aria-expanded={showSkipped} className="underline decoration-dotted hover:text-gray-700" data-testid="campaign-skipped-toggle">
+                제외: {skipSummary.map(([why, n]) => `${SKIP_LABELS[why]} ${n}명`).join(' · ')} {showSkipped ? '▲ 접기' : '▼ 누가 빠졌는지 보기'}
+              </button>
+              {showSkipped && (
+                <ul className="mt-1.5 max-h-40 overflow-y-auto divide-y divide-gray-50 border border-gray-100 rounded-lg" data-testid="campaign-skipped">
+                  {selection.skipped.map(sk => (
+                    <li key={`${sk.customerId}:${sk.why}`} className="flex items-center justify-between gap-2 px-3 py-1.5"><span className="text-gray-800">{sk.customerName}</span><span className="text-gray-500">{SKIP_LABELS[sk.why]}</span></li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           <div className="max-h-80 overflow-y-auto divide-y divide-gray-50 border border-gray-100 rounded-xl" data-testid="campaign-candidates">
             {selection.ready.length === 0 && <p className="p-6 text-sm text-gray-500 text-center">오늘 보낼 대상이 없습니다.</p>}
