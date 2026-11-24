@@ -18,6 +18,7 @@ import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { refreshFromServer } from '../../lib/liveRefresh';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
 import { healCustomerStatsWhenReady } from '../../lib/customerStats';
+import { remainingFor, healProgramSessionsWhenReady } from '../../lib/programSessions';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
 import type { Reservation, Staff } from '../../types';
@@ -80,7 +81,7 @@ function ProgramBalance({ customerId }: { customerId: string }) {
     <div className="mt-1.5 flex flex-wrap gap-1" aria-label="회차권 잔여">
       {active.map(cp => (
         <span key={cp.id} className={`text-xs px-2 py-0.5 rounded-full border ${isProgramExpired(cp) ? 'bg-red-50 text-red-700 border-red-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
-          {cp.programName}{cp.totalSessions != null ? ` · 잔여 ${Math.max(0, cp.totalSessions - (cp.usedSessions || 0))}회` : ' · 기간제'}{isProgramExpired(cp) ? ' · 만료' : ''}
+          {cp.programName}{cp.totalSessions != null ? ` · 잔여 ${remainingFor(cp)}회` : ' · 기간제'}{isProgramExpired(cp) ? ' · 만료' : ''}
         </span>
       ))}
     </div>
@@ -1268,6 +1269,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 
   const handleComplete = () => {
     ReservationStore.updateStatus(r.id, 'completed');
+    healProgramSessionsWhenReady(r.customerId); // 회차권 사용 회차도 기록 기준으로 (16차 #H2)
     healCustomerStatsWhenReady(r.customerId); // 코어 +1이 같은 날 시술 기록과 겹치면 두 번 세진다 — 기록(다녀간 날 수)으로 바로 맞춤, 하이드레이션 뒤 (리뷰 2026-11-19)
     // 완료 → 결제 브리지: 기존엔 상태만 바뀌고 매출에 잡히지 않아 Sales에서 수기 재입력이 필요했음
     if (r.totalPrice > 0) {

@@ -289,9 +289,18 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
 
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
   await page.evaluate(() => {
+    // 사용 회차는 시술 기록이 정본(130, 16차 #H2) — 저장값만 올리면 기록 기준으로 되돌아간다. 총 회차를 "기록 합 + 1" 로 맞춰 잔여 1회를 만든다
     const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;
+    const logKey = Object.keys(localStorage).find(k => /^crm_.*_treatment_logs$/.test(k));
+    const logs: { customerProgramId?: string; sessionsUsed?: number }[] = logKey ? JSON.parse(localStorage.getItem(logKey) || '[]') : [];
     const list = JSON.parse(localStorage.getItem(key) || '[]');
-    for (const cp of list) if (cp.totalSessions) cp.usedSessions = cp.totalSessions - 1;
+    for (const cp of list) {
+      if (!cp.totalSessions) continue;
+      const fromLogs = logs.filter(t => t.customerProgramId === cp.id).reduce((n, t) => n + Math.max(0, t.sessionsUsed || 0), 0);
+      const used = logs.some(t => t.customerProgramId === cp.id) ? fromLogs : cp.usedSessions;
+      cp.usedSessions = used;
+      cp.totalSessions = used + 1;
+    }
     localStorage.setItem(key, JSON.stringify(list));
   });
   await page.goto('/');

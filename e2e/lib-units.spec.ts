@@ -17,6 +17,7 @@ import { growthPct } from '../src/lib/growth';
 import { canceledSaleIds } from '../src/lib/saleCancel';
 import { parseAmount, parseCount, normalizePhone, isISODate, coerceISODate, parseDurationMinutes } from '../src/lib/inputRules';
 import { josa } from '../src/lib/josa';
+import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
 // 저장소·DOM 의존이 없는 순수 helper를 브라우저 없이 직접 검증 (95, 2026-11-20 — 커버리지 감사 B).
 // 날짜 입력은 로컬 Date로 만들어 러너 시간대와 무관하게 같은 답이 나오게 한다.
@@ -297,4 +298,24 @@ test('조사 자동 선택 — 받침·숫자·영문·닫는 인용부호 (15�
   expect(josa("'홍길동'", '으로/로')).toBe("'홍길동'으로");       // 개명 토스트 (#M4)
   expect(josa('재고 1병', '을/를')).toBe('재고 1병을');            // 판매 취소 토스트 (#M3)
   expect(josa('재고 2개', '을/를')).toBe('재고 2개를');
+});
+
+test('회차권 사용 회차 파생 — 기록 합이 정본, 근거 없으면 저장값 유지 (16차 #H2)', () => {
+  const logs = [
+    { customerProgramId: 'cp1', sessionsUsed: 1 }, { customerProgramId: 'cp1', sessionsUsed: 1 }, { customerProgramId: 'cp1', sessionsUsed: 1 }, // 다른 기기 2대가 각각 기록
+    { customerProgramId: 'cp2', sessionsUsed: 2 }, { customerProgramId: undefined, sessionsUsed: 1 }, { customerProgramId: 'cp2', sessionsUsed: -5 }, // 연결 없음·음수는 무시
+  ];
+  const idx = buildUsedSessionsIndex(logs);
+  expect(idx.get('cp1')).toBe(3);
+  expect(idx.get('cp2')).toBe(2);
+  const cp1 = { id: 'cp1', usedSessions: 2, totalSessions: 10 };   // 두 기기가 "1→2" 를 각각 보내 서버는 2, 기록은 3
+  expect(derivedUsedSessions(cp1, idx)).toBe(3);
+  expect(remainingSessions(cp1, derivedUsedSessions(cp1, idx))).toBe(7);
+  expect(sessionsDrift(cp1, idx)).toBe(3);
+  const legacy = { id: 'cp9', usedSessions: 4, totalSessions: 10 };  // 기록이 하나도 없는 옛 회차권 — 내리지 않는다
+  expect(derivedUsedSessions(legacy, idx)).toBe(4);
+  expect(sessionsDrift(legacy, idx)).toBeNull();
+  expect(sessionsDrift({ id: 'cp2', usedSessions: 2, totalSessions: 5 }, idx)).toBeNull(); // 일치하면 손대지 않음
+  expect(remainingSessions({ totalSessions: null }, 7)).toBeNull();     // 기간제
+  expect(remainingSessions({ totalSessions: 3 }, 5)).toBe(0);          // 초과 차감도 0 아래로는 안 내려간다
 });

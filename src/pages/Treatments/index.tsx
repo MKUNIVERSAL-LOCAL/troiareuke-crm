@@ -15,6 +15,8 @@ import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { refreshFromServer } from '../../lib/liveRefresh';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, ReservationStore } from '../../lib/store';
 import { healCustomerStatsWhenReady } from '../../lib/customerStats';
+import { usedSessionsFor, healProgramSessionsWhenReady } from '../../lib/programSessions';
+import { remainingSessions } from '../../lib/programSessionsRule';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -543,7 +545,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         try { savePhotos(`treatment:${saved.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
       }
       // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로, 방문 횟수를 같은 날 예약 완료와 별도로 +1 한다 — 기록에서 다시 세어 바로 맞춘다(모달이 든 customer 스냅샷이 아닌 저장소 기준) (정합성 감사·리뷰 2026-11-19)
-      if (saved) healCustomerStatsWhenReady(customerId);
+      if (saved) { healProgramSessionsWhenReady(customerId); healCustomerStatsWhenReady(customerId); } // 회차권 사용 회차도 기록 기준으로 (16차 #H2)
       // 결제 연계: 회차권 차감이 아닌 단건 시술이고 선택한 시술 항목에 금액이 있으면 결제 등록으로 이어준다 (2026-11-17)
       const amount = linkedProgram ? 0 : selectedServices.reduce((sum, name) => sum + (services.find(s => s.name === name)?.price ?? 0), 0);
       if (saved && amount > 0) {
@@ -605,11 +607,11 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="">연결 안 함 (단건 시술)</option>
-              {activePrograms.map(cp => (
+              {activePrograms.map(cp => { const used = usedSessionsFor(cp); return ( // 기록에서 센 사용 회차 (16차 #H2)
                 <option key={cp.id} value={cp.id}>
-                  {cp.totalSessions != null ? `${cp.programName} · 잔여 ${cp.totalSessions - cp.usedSessions}회 (${cp.usedSessions}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${cp.usedSessions}회 이용)`}
+                  {cp.totalSessions != null ? `${cp.programName} · 잔여 ${remainingSessions(cp, used)}회 (${used}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${used}회 이용)`}
                 </option>
-              ))}
+              ); })}
             </select>
           </div>
         )}

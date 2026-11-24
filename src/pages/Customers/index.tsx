@@ -3,6 +3,8 @@ import { isImeKey } from '../../lib/ime';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
 import { healCustomerStatsWhenReady, buildCustomerStatsIndex, statsFor } from '../../lib/customerStats';
+import { usedSessionsFor, remainingFor, healProgramSessionsWhenReady } from '../../lib/programSessions';
+import { remainingSessions } from '../../lib/programSessionsRule';
 import { countPaymentUnits } from '../../lib/paymentCount';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -989,6 +991,10 @@ export default function Customers() {
   useDataRefreshed(() => { // 다른 기기의 변경이 서버에서 다시 읽혔을 때 — 열어 둔 상세도 최신 기록으로 (16차 #H3)
     loadAll();
     setSelected(prev => (prev ? CustomerStore.getById(prev.id) ?? prev : prev));
+    if (selected) { // 열어 둔 상세의 회차권 목록도 서버 기준으로, 사용 회차는 기록 기준으로 (16차 #H2)
+      setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
+      healProgramSessionsWhenReady(selected.id, () => setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id)));
+    }
   });
 
   // 보존기간 경과 고객 id — 고객 목록이나 정책이 바뀔 때만 재계산
@@ -1029,6 +1035,7 @@ export default function Customers() {
     setSelected(c);
     setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id));
     healCustomerStatsWhenReady(c.id, applyHealed);
+    healProgramSessionsWhenReady(c.id, () => setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id))); // 사용 회차를 기록 기준으로 (16차 #H2)
   };
   const openFirstMatch = () => { if (filtered.length > 0) openCustomer(filtered[0]); };
   const qHandled = useRef<string | null>(null); // 같은 q로는 1회만 — 검색어를 더 치거나 목록이 갱신될 때 다시 열리지 않게 (리뷰 2026-11-18)
@@ -1486,6 +1493,7 @@ export default function Customers() {
     });
     // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로, 방문 횟수를 같은 날 예약 완료와 별도로 +1 한다 — 기록에서 다시 세어 바로 맞춘다(하이드레이션 뒤) (정합성 감사·리뷰 2026-11-19)
     healCustomerStatsWhenReady(selected.id, applyHealed);
+    healProgramSessionsWhenReady(selected.id, () => setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id))); // (16차 #H2)
 
     setShowTreatmentModal(false);
     setTreatForm({ customerProgramId: '', staffName: '', treatmentDate: today(), treatmentTime: '', treatmentDetails: '', skinCondition: '', staffNotes: '', nextAppointment: '' });
@@ -1866,11 +1874,11 @@ export default function Customers() {
                         {cp.totalSessions != null && (
                           <>
                             <p className="text-xs text-gray-500">
-                              사용 {cp.usedSessions || 0}회 / 총 {cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
+                              사용 {usedSessionsFor(cp)}회 / 총 {cp.totalSessions}회 · 잔여 {remainingFor(cp)}회
                             </p>
                             <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1" aria-hidden="true">
-                              <div className={`h-1.5 rounded-full ${(cp.usedSessions || 0) / cp.totalSessions >= 0.8 ? 'bg-orange-400' : 'bg-blue-400'}`}
-                                style={{ width: `${Math.min(((cp.usedSessions || 0) / cp.totalSessions) * 100, 100)}%` }} />
+                              <div className={`h-1.5 rounded-full ${usedSessionsFor(cp) / cp.totalSessions >= 0.8 ? 'bg-orange-400' : 'bg-blue-400'}`}
+                                style={{ width: `${Math.min((usedSessionsFor(cp) / cp.totalSessions) * 100, 100)}%` }} />
                             </div>
                           </>
                         )}
@@ -2397,8 +2405,9 @@ export default function Customers() {
               ) : (
                 <div className="space-y-3">
                   {customerPrograms.map(cp => {
-                    const remaining = cp.totalSessions !== null ? cp.totalSessions - cp.usedSessions : null;
-                    const progress = cp.totalSessions ? (cp.usedSessions / cp.totalSessions) * 100 : 0;
+                    const used = usedSessionsFor(cp); // 기록에서 센 사용 회차 (16차 #H2)
+                    const remaining = remainingFor(cp);
+                    const progress = cp.totalSessions ? (used / cp.totalSessions) * 100 : 0;
                     const isExpired = isProgramExpired(cp);
                     return (
                       <div
@@ -2428,7 +2437,7 @@ export default function Customers() {
                         {cp.totalSessions !== null ? (
                           <>
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                              <span>사용 {cp.usedSessions}회 / 총 {cp.totalSessions}회</span>
+                              <span>사용 {used}회 / 총 {cp.totalSessions}회</span>
                               <span className="font-bold text-blue-600">잔여 {remaining}회</span>
                             </div>
                             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -2878,11 +2887,11 @@ export default function Customers() {
                   onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">연결 안 함 (단건 시술)</option>
-                  {treatUsable.map(cp => (
+                  {treatUsable.map(cp => { const used = usedSessionsFor(cp); return ( // 기록에서 센 사용 회차 (16차 #H2)
                     <option key={cp.id} value={cp.id}>
-                      {cp.totalSessions !== null ? `${cp.programName} · 잔여 ${cp.totalSessions - cp.usedSessions}회 (${cp.usedSessions}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${cp.usedSessions}회 이용)`}
+                      {cp.totalSessions !== null ? `${cp.programName} · 잔여 ${remainingSessions(cp, used)}회 (${used}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${used}회 이용)`}
                     </option>
-                  ))}
+                  ); })}
                 </select>
                 {treatExpired.length > 0 && (
                   <div id="expired-program-hint" data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2">

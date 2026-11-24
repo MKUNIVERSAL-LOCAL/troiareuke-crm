@@ -3,6 +3,7 @@ import { askConfirm } from '../lib/confirmDialog';
 import { createPortal } from 'react-dom';
 import Modal from './ui/Modal';
 import { CustomerProgramStore, PaymentStore, TreatmentLogStore } from '../lib/store';
+import { usedSessionsFor } from '../lib/programSessions';
 import { todayISO, parseISODate, toISODate, formatDate, formatPrice } from '../lib/format';
 import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
@@ -19,8 +20,9 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   const [totalSessions, setTotalSessions] = useState(cp.totalSessions === null ? '' : String(cp.totalSessions));
   const [reason, setReason] = useState('');
   const isSessionBased = cp.totalSessions !== null;
-  const remaining = isSessionBased ? Math.max(0, (cp.totalSessions as number) - cp.usedSessions) : null;
-  const manuallyCompleted = cp.isCompleted && isSessionBased && cp.usedSessions < (cp.totalSessions as number);
+  const used = usedSessionsFor(cp); // 시술 기록에서 센 사용 회차 — 저장값은 다기기 동시 차감 때 어긋날 수 있다 (16차 #H2)
+  const remaining = isSessionBased ? Math.max(0, (cp.totalSessions as number) - used) : null;
+  const manuallyCompleted = cp.isCompleted && isSessionBased && used < (cp.totalSessions as number);
   const totalInput = totalSessions.replace(/[,\s]/g, '');
   const dirty = expiryDate !== (cp.expiryDate || '') || (isSessionBased && totalInput !== String(cp.totalSessions));
   const changeLog = (cp.notes || '').split('\n').filter(l => /^\[\d{4}-\d{2}-\d{2}\]/.test(l));
@@ -53,12 +55,12 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
       if (!/^\d+$/.test(totalInput)) { notify('총 회차는 숫자만 입력해주세요.'); return; }
       const next = Number(totalInput);
       if (next < 1) { notify('총 회차는 1 이상이어야 합니다.'); return; }
-      if (next < cp.usedSessions) { notify(`이미 ${cp.usedSessions}회를 사용해 총 회차를 그보다 적게 둘 수 없습니다.`); return; }
+      if (next < used) { notify(`이미 ${used}회를 사용해 총 회차를 그보다 적게 둘 수 없습니다.`); return; }
       updates.totalSessions = next;
       changes.push(`총 회차 ${cp.totalSessions}회 → ${next}회`);
       // 사람이 직접 완료 처리한 프로그램은 회차를 바꿔도 그대로 완료. 그 외엔 사용 회차 기준으로 다시 계산하고 상태가 바뀌면 기록
       if (!manuallyCompleted) {
-        const nextCompleted = cp.usedSessions >= next;
+        const nextCompleted = used >= next;
         if (nextCompleted !== cp.isCompleted) {
           updates.isCompleted = nextCompleted;
           changes.push(nextCompleted ? '진행중 → 완료' : '완료 → 진행중');
@@ -73,7 +75,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   }
 
   // 고객·프로그램을 잘못 골라 등록한 경우 — 아직 한 번도 쓰지 않았을 때만. 연결된 결제(referenceId)를 지우면 누적 결제액은 자동 차감된다 (정합성 감사 2026-11-19)
-  const cancelable = cp.usedSessions === 0 && !TreatmentLogStore.getAll().some(t => t.customerProgramId === cp.id);
+  const cancelable = used === 0 && !TreatmentLogStore.getAll().some(t => t.customerProgramId === cp.id);
   async function cancelRegistration() {
     const linked = PaymentStore.getAll().filter(p => p.referenceId === cp.id);
     const paid = linked.reduce((sum, p) => sum + p.amount, 0);
@@ -87,7 +89,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   async function toggleCompleted() {
     if (dirty) { notify('만료일·총 회차 변경을 먼저 [저장]하거나 취소한 뒤 완료 상태를 바꿔주세요.'); return; }
     if (cp.isCompleted) {
-      if (isSessionBased && cp.usedSessions >= (cp.totalSessions as number)) { notify('회차를 모두 사용한 프로그램은 되돌릴 수 없습니다. 총 회차를 늘려주세요.'); return; }
+      if (isSessionBased && used >= (cp.totalSessions as number)) { notify('회차를 모두 사용한 프로그램은 되돌릴 수 없습니다. 총 회차를 늘려주세요.'); return; }
       CustomerProgramStore.update(cp.id, { isCompleted: false, notes: appendNote(cp.notes, '완료 → 진행중으로 되돌림') });
       notify(`${josa(cp.programName, '을/를')} 진행중으로 되돌렸습니다.`);
     } else {
@@ -106,7 +108,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
         <div>
           <p className="font-semibold text-sm text-gray-900">{cp.programName}</p>
           <p className="text-xs text-gray-500">
-            {isSessionBased ? `사용 ${cp.usedSessions}회 / 총 ${cp.totalSessions}회 · 잔여 ${remaining}회` : '기간제'} · 등록 {formatDate(cp.purchaseDate)}
+            {isSessionBased ? `사용 ${used}회 / 총 ${cp.totalSessions}회 · 잔여 ${remaining}회` : '기간제'} · 등록 {formatDate(cp.purchaseDate)}
             {cp.isCompleted ? ' · 완료' : ''}
           </p>
         </div>
