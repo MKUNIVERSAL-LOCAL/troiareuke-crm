@@ -574,19 +574,22 @@ export default function Settings() {
   };
 
   const handleServiceSubmit = () => {
-    if (!serviceForm.name || !serviceForm.category) { notify('시술명과 카테고리를 입력해주세요.'); return; }
+    if (!serviceForm.name.trim() || !serviceForm.category.trim()) { notify('시술명과 카테고리를 입력해주세요.'); return; }
+    // 소요시간 0·음수는 예약 종료 시각을 역전시켜 이중예약 검사를 무력화하고, 가격 비움(0)은 결제 연계를 조용히 건너뛴다 (14차 #H7)
+    if (!Number.isInteger(serviceForm.duration) || serviceForm.duration < 5 || serviceForm.duration > 600) { notify(editingService ? '소요시간은 5분 이상 600분 이하로 입력해주세요. 기존 값이 범위를 벗어나 있어 먼저 고쳐야 저장됩니다.' : '소요시간은 5분 이상 600분 이하로 입력해주세요.'); return; }
+    if (!Number.isFinite(serviceForm.price) || serviceForm.price < 0) { notify('가격은 0 이상 숫자로 입력해주세요.'); return; }
     if (editingService) {
       ServiceStore.update(editingService.id, {
-        name: serviceForm.name,
-        category: serviceForm.category,
+        name: serviceForm.name.trim(),
+        category: serviceForm.category.trim(),
         duration: serviceForm.duration,
         price: serviceForm.price,
         description: serviceForm.description || undefined,
       });
     } else {
       ServiceStore.save({
-        name: serviceForm.name,
-        category: serviceForm.category,
+        name: serviceForm.name.trim(),
+        category: serviceForm.category.trim(),
         duration: serviceForm.duration,
         price: serviceForm.price,
         description: serviceForm.description || undefined,
@@ -1351,7 +1354,7 @@ export default function Settings() {
                     </p>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => setExportSelection(new Set(EXPORT_DATASETS.map(d => d.key)))}
+                        onClick={() => setExportSelection(new Set(EXPORT_DATASETS.filter(d => isAdmin || !d.adminOnly).map(d => d.key)))}
                         className="px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
                       >
                         전체 선택
@@ -1364,7 +1367,7 @@ export default function Settings() {
                       </button>
                     </div>
                     <div className="grid sm:grid-cols-2 gap-2">
-                      {EXPORT_DATASETS.map(d => (
+                      {EXPORT_DATASETS.filter(d => isAdmin || !d.adminOnly).map(d => (
                         <label
                           key={d.key}
                           className={`flex items-start gap-2.5 px-3 py-2.5 border rounded-xl cursor-pointer transition-colors ${

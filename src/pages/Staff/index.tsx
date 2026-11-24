@@ -361,7 +361,7 @@ function AddStaffModal({ onClose, onSave }: { onClose: () => void; onSave: () =>
           <input
             type="date"
             aria-label="입사일"
-            value={hireDate}
+            value={hireDate} max={todayISO()}
             onChange={e => setHireDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
           />
@@ -472,11 +472,13 @@ function StaffDetailModal({
       // 상담 기록의 담당자도 이름 사본 (11차 #M3)
       const consults = sameName ? [] : ConsultationStore.getAll().filter(c => c.staffName === staff.name);
       consults.forEach(c => ConsultationStore.update(c.id, { staffName: newName }));
-      if (sameName) notify('같은 이름의 다른 직원이 있어 과거 시술·상담 기록의 담당자 이름은 바꾸지 않았습니다(기록은 그 직원 이름으로 남습니다).');
       // 예약도 담당자 이름을 비정규화해 들고 있다(타임라인·완료 누락 카드·예약 카드 표시) (정합성 감사 2026-11-19)
       const resv = ReservationStore.getAll().filter(r => r.staffId === staff.id && r.staffName !== newName);
       resv.forEach(r => ReservationStore.update(r.id, { staffName: newName }));
-      if (logs.length > 0 || resv.length > 0 || consults.length > 0) notify(`시술 기록 ${logs.length}건·예약 ${resv.length}건${consults.length > 0 ? `·상담 ${consults.length}건` : ''}의 담당자 이름도 '${newName}'(으)로 바꿨습니다.`);
+      // 한 문장으로, 0건 항목은 빼고 (15차 #H4)
+      const changed = [logs.length > 0 && `시술 기록 ${logs.length}건`, resv.length > 0 && `예약 ${resv.length}건`, consults.length > 0 && `상담 ${consults.length}건`].filter(Boolean).join('·');
+      const kept = sameName ? ' 같은 이름의 다른 직원이 있어 과거 시술·상담 기록의 담당자는 그대로 두었습니다.' : '';
+      if (changed || kept) notify(`${changed ? `${changed}의 담당자 이름을 '${newName}' 로 바꿨습니다.` : ''}${kept}`.trim());
       // 제품 판매 행은 옛 이름으로 남으므로(코어) 실적 집계가 되짚을 별칭을 남긴다 (11차 #M2)
       if (!sameName) recordStaffAlias(staff.id, staff.name);
       // 공유 Google 캘린더의 앞으로의 일정도 새 담당자 이름으로 (11차 #M8)
@@ -586,7 +588,7 @@ function StaffDetailModal({
             <input
               type="date"
               aria-label="입사일"
-              value={hireDate}
+              value={hireDate} max={todayISO()}
               onChange={e => setHireDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             />

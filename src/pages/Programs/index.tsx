@@ -93,6 +93,7 @@ export default function Programs() {
       notify('유효기간은 1일 이상이어야 합니다. 회차권을 무제한으로 두려면 칸을 비워주세요.');
       return;
     }
+    if (validityDays > 3650) { notify('유효기간은 3,650일(10년) 이하로 입력해주세요. 기한 없는 상품은 칸을 비워주세요.'); return; } // 너무 큰 값은 만료일 계산이 Invalid Date 가 됐다 (14차 #M7)
     if (form.isTimed && !(validityDays >= 1)) {
       notify('기간제 프로그램은 유효기간(일)이 필요합니다. 횟수도 기간도 없는 상품은 만들 수 없습니다.');
       return;

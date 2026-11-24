@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
+import { canOpenRoute } from '../../lib/permissions';
 import { featureForPath } from '../../lib/featureRegistry';
 import { isFeatureEnabled, resetFeatureFlags } from '../../lib/featureFlags';
 import { clearLocalPhotoCacheForLogout, keepLocalLogoutWarning } from '../../lib/photoStore';
@@ -42,7 +43,7 @@ export default function MobileTabBar() {
     { to: '/messaging', label: '문자/카카오 발송', icon: MessageSquare, bg: 'bg-emerald-50', fg: 'text-emerald-700' },
     { to: '/ai-chat', label: 'AI 분석 챗봇', icon: Bot, bg: 'bg-violet-50', fg: 'text-violet-700' },
     { to: '/api-guide', label: 'API 연동 가이드', icon: Link2, bg: 'bg-slate-100', fg: 'text-slate-700' },
-  ].filter(l => { const def = featureForPath(l.to); return !def || isFeatureEnabled(def.id); });
+  ].filter(l => { const def = featureForPath(l.to); return (!def || isFeatureEnabled(def.id)) && canOpenRoute(user?.role, l.to); }); // 직원 계정은 직원 관리 제외 — PC 사이드바와 같은 규칙 (13차 점검)
 
   const handleLogout = () => {
     const warning = keepLocalLogoutWarning(); // 이 기기 보관 사진은 로그아웃하면 사라진다 — 한 확인창에 같은 문장으로 (리뷰 2026-11-19)
@@ -140,7 +141,7 @@ export default function MobileTabBar() {
             {/* 메뉴 목록 */}
             <div className="py-2">
               {/* 매출 — admin 이상 + 어드민 허용 시만 */}
-              {user?.role !== 'staff' && salesEnabled && (
+              {canOpenRoute(user?.role, '/sales') && salesEnabled && (
                 <button
                   onClick={() => handleNavigate('/sales')}
                   className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors text-left"
@@ -165,6 +166,7 @@ export default function MobileTabBar() {
                 </button>
               ))}
 
+              {canOpenRoute(user?.role, '/settings') && (
               <button
                 onClick={() => handleNavigate('/settings')}
                 className="w-full flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors text-left"
@@ -174,6 +176,7 @@ export default function MobileTabBar() {
                 </div>
                 <span className="text-sm font-medium text-gray-800">설정</span>
               </button>
+              )}
 
               <button
                 onClick={handleLogout}

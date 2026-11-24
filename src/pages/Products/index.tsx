@@ -3,6 +3,8 @@ import { tagRefund } from '../../lib/refundDate';
 import { canceledSaleIds } from '../../lib/saleCancel';
 import { saleCustomerNameResolver } from '../../lib/customerIdentity';
 import { askConfirm } from '../../lib/confirmDialog';
+import { canDo } from '../../lib/permissions';
+import { parseAmount, parseCount, isISODate } from '../../lib/inputRules';
 import { thisYearMonthISO } from '../../lib/format';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
@@ -27,6 +29,7 @@ type Tab = 'inventory' | 'sales';
 
 // ─── 메인 컴포넌트 ──────────────────────────────────────────────
 export default function Products() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('inventory');
   const [search, setSearch] = useState('');
   const [salesSearch, setSalesSearch] = useState('');
@@ -64,6 +67,7 @@ export default function Products() {
       : '\n재고 항목은 복구할 수 없습니다.';
     if (!(await askConfirm({ title: '제품 삭제', message: `'${product.name}' 제품을 삭제할까요?${detail}`, confirmLabel: '삭제', danger: true }))) return;
     ProductStore.delete(product.id);
+    notify('제품을 삭제했습니다.'); // (15차 #M10)
     refresh();
   };
 
@@ -71,7 +75,7 @@ export default function Products() {
   const canceled = useMemo(() => canceledSaleIds(payments), [payments]);
   const isCanceled = (sale: ProductSale) => canceled.has(sale.id);
   const handleDeleteSale = async (sale: ProductSale) => {
-    if (!(await askConfirm({ title: '판매 취소', danger: true, confirmLabel: '판매 취소', message: `${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.` }))) return;
+    if (!(await askConfirm({ title: '판매 취소', danger: true, confirmLabel: '판매 취소', cancelLabel: '닫기', message: `${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.` }))) return;
     const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
     if (linked.length === 0) {
       // 연결 결제가 없는 옛 판매 — 예전처럼 행 삭제(코어: 재고 복구 포함)
@@ -81,6 +85,7 @@ export default function Products() {
       if (sale.productId) ProductStore.adjustStock(sale.productId, -sale.quantity); // 제품이 지워진 옛 판매는 재고 복구 대상이 없다
       for (const p of linked) PaymentStore.update(p.id, { status: 'refunded', memo: tagRefund(p.memo, todayISO()) });
     }
+    notify(`판매를 취소했습니다. 재고 ${sale.quantity}${(sale.productId && ProductStore.getById(sale.productId)?.unit) || '개'}를 복구했습니다.`); // 파괴적 동작 뒤 피드백 (15차 #M10)
     refresh();
   };
 
@@ -163,6 +168,7 @@ export default function Products() {
             <p className="text-xs text-gray-500 mb-1">총 판매건수</p>
             <p className="text-2xl font-bold text-gray-900">{sales.length}<span className="text-sm font-medium ml-1">건</span></p>
           </div>
+          {canDo(user?.role, 'sales.view') && ( /* 매출 금액은 매출 화면·대시보드와 같은 권한 (117~119 리뷰 #M6) */
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간 · 취소 제외)</p>
             <p className="text-2xl font-bold text-[#1a3a8f]">
@@ -170,6 +176,7 @@ export default function Products() {
             </p>
             <p className="text-xs text-gray-400 mt-1">이달 {formatPrice(monthSalesRevenue)} — 매출 화면 '제품 매출'과 같은 기준</p>
           </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -435,7 +442,7 @@ export default function Products() {
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className={`text-sm font-bold ${isCanceled(sale) ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{formatPrice(sale.totalPrice)}</span>
                         {isCanceled(sale) ? <span className="text-xs px-1.5 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
-                        <button onClick={() => handleDeleteSale(sale)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>)}
+                        <button onClick={() => handleDeleteSale(sale)} className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center text-gray-400 hover:text-red-600 rounded-lg" aria-label="판매 취소" title="판매 취소 및 재고 복구"><Trash2 size={14} /></button>)}
                       </div>
                     </div>
                   </li>
@@ -556,12 +563,10 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
       notify('제품명, 판매가, 재고는 필수 입력 항목입니다.');
       return;
     }
-    const price = parseInt(form.price, 10);
-    const cost = parseInt(form.cost, 10) || 0;
-    const stock = parseInt(form.stock, 10);
-    const minStock = form.minStock ? parseInt(form.minStock, 10) : 5;
-    if ([price, cost, stock, minStock].some(n => Number.isNaN(n) || n < 0)) {
-      notify('판매가·원가·재고·최소재고는 0 이상 숫자로 입력해주세요.');
+    // "1e5"→1원, "1500.9"→1500 처럼 parseInt 가 조용히 바꾸던 값을 거부한다 (14차 #H6)
+    const price = parseAmount(form.price), cost = form.cost.trim() ? parseAmount(form.cost) : 0, stock = parseAmount(form.stock), minStock = form.minStock.trim() ? parseAmount(form.minStock) : 5;
+    if (price === null || cost === null || stock === null || minStock === null) {
+      notify('판매가·원가·재고·최소재고는 0 이상 정수로 입력해주세요. (소수·지수 표기는 받지 않습니다)');
       return;
     }
     setSaving(true);
@@ -745,24 +750,24 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
 
   const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
-  const qty = Math.max(1, parseInt(form.quantity) || 1);
-  const unitPrice = parseInt(form.unitPrice) || 0;
+  const qty = parseCount(form.quantity) ?? 0;      // 0·소수·문자는 0 으로 보여 합계가 거짓 1개 기준이 되지 않게 (14차 #M6)
+  const unitPrice = parseAmount(form.unitPrice) ?? 0;
   const totalPrice = qty * unitPrice;
 
   const selectedCustomer = customers.find(c => c.id === form.customerId);
 
   const handleSubmit = () => {
+    if (!isISODate(form.saleDate)) { notify('판매일을 선택해주세요(YYYY-MM-DD).'); return; } // 빈 판매일은 월 매출·목록에서 사라지는 유령 판매 (120~122 리뷰 #M8)
     if (!form.unitPrice || !form.quantity) {
       notify('수량과 단가를 입력해주세요.');
       return;
     }
-    if (!(parseInt(form.unitPrice, 10) > 0)) {
-      notify('단가는 1원 이상이어야 합니다. 무상 제공이면 메모에 남기고 단가는 실제 가격으로 적어주세요.');
+    if (!(unitPrice > 0)) {
+      notify.error('단가는 1원 이상 정수여야 합니다. 무상 제공이면 메모에 남기고 단가는 실제 가격으로 적어주세요.'); // 검증 오류는 빨간 토스트 (15차 #M7)
       return;
     }
-    const rawQty = parseInt(form.quantity, 10);
-    if (Number.isNaN(rawQty) || rawQty < 1) {
-      notify('수량은 1 이상이어야 합니다');
+    if (qty < 1) {
+      notify.error('수량은 1 이상 정수여야 합니다.');
       return;
     }
     const fresh = ProductStore.getById(product.id) ?? product; // 모달을 열어 둔 사이 다른 판매가 있었을 수 있다 — 저장 직전 재고로 (정합성 감사 2026-11-19)
@@ -872,8 +877,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             <label className="block text-xs font-medium text-gray-600 mb-1.5">판매일</label>
             <input
               type="date"
-              aria-label="판매일"
-              value={form.saleDate}
+              aria-label="판매일" required value={form.saleDate}
               onChange={e => set('saleDate', e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
             />

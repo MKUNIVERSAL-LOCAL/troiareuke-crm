@@ -51,6 +51,14 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
     await expect(desk.getByRole('button', { name: '회차권 등록' }).first()).toBeVisible();
   });
+  await step('/customers 고객 삭제 확인창', async () => { // 공용 확인창(askConfirm) — 어떤 스펙도 axe 로 보지 않았다 (15차 #M21)
+    await desk.getByRole('button', { name: '더보기', exact: true }).click();
+    await desk.getByRole('menuitem', { name: '고객 삭제' }).click();
+    await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: '고객 삭제' }).getByRole('button', { name: '취소', exact: true })).toBeFocused(); // 위험 동작은 [취소]에 기본 포커스 (15차 #H2 회귀 방지)
+  });
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
   await step('/customers 회차권 등록', async () => {
     await desk.getByRole('button', { name: '회차권 등록' }).first().click();
     await expect(dialog('회차권 등록')).toBeVisible();

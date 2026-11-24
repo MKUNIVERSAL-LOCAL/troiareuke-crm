@@ -16,6 +16,8 @@ import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
+import { canOpenRoute } from '../../lib/permissions';
+import { isISODate } from '../../lib/inputRules';
 import { getPhotos, getPhotosAsync, getPhotoCount, setPhotos as savePhotos, clearPhotos, resizeImageFile, makePhotoId, syncPhotosFromNas, PHOTO_ANGLES, PHOTO_LABELS, type PhotoEntry, type PhotoAngle, type PhotoLabel } from '../../lib/photoStore';
 import { findReferencePhotos, angleLabel } from '../../lib/beforeAfter';
 import CameraOverlay, { isCameraPreviewSupported } from '../../components/CameraOverlay';
@@ -487,6 +489,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
   const handleSave = () => {
     if (!customerId) return;
+    if (!isISODate(treatmentDate)) { notify('시술일을 선택해주세요.'); return; } // 고객 상세의 빠른 기록은 required 인데 이 화면은 비어도 저장돼 목록에서 사라졌다 (14차 #H5)
 
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return;
@@ -579,6 +582,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <input
             type="date"
             aria-label="시술일"
+            required
             value={treatmentDate}
             onChange={e => changeTreatmentDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -617,7 +621,9 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
 
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 항목</label>
-          {services.length === 0 && <PrereqHint text="등록된 시술 항목이 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />}
+          {services.length === 0 && (canOpenRoute(authUser?.role, '/settings')
+            ? <PrereqHint text="등록된 시술 항목이 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />
+            : <p className="mt-1.5 text-xs text-amber-700">등록된 시술 항목이 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다(시술 항목 등록은 매장 관리자).</p>)} {/* 117~119 리뷰 #H4 */}
           <div className="space-y-2">
             {services.map(s => (
               <label key={s.id} className="flex items-center gap-3 p-2.5 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">

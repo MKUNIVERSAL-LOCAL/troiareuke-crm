@@ -1,4 +1,6 @@
 import { isImeKey } from '../../lib/ime';
+import { useAuth } from '../../contexts/AuthContext';
+import { canDo, ADMIN_REQUIRED_MESSAGE } from '../../lib/permissions';
 import { localISODate } from '../../lib/format';
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2, Settings, ChevronDown, Trash2, Copy, Check, Zap, AlertTriangle, Monitor } from 'lucide-react';
@@ -48,7 +50,7 @@ function selectProvider(claudeKey: string, openaiKey: string, geminiKey: string)
 }
 
 /** @param aliasNumbers 세션 동안 고객 id → 가명 번호 고정(buildAliasBook 참조) */
-function buildCrmContext(aliasNumbers: Map<string, number>): { context: string; alias: AliasBook } {
+function buildCrmContext(aliasNumbers: Map<string, number>, includeRevenue: boolean, includeStaff: boolean): { context: string; alias: AliasBook } {
   const today = new Date();
   const todayStr = format(today, 'yyyy-MM-dd');
   const customers = CustomerStore.getAll();
@@ -89,7 +91,7 @@ ${duplicates.length > 0 ? `※ 동명이인(질문의 이름은 첫 번호로 �
 - 이탈 위험 고객 (3개월 이상 미방문): ${churned.length}명
 
 【전체 고객 목록】
-${customers.map(c => `- ${alias(c.id)} | 등급:${c.grade} | 피부타입:${c.skinType || '-'} | 총방문:${c.totalVisits}회 | 총결제:${c.totalSpent.toLocaleString()}원 | 마지막방문:${c.lastVisitDate || '없음'} | 가입:${c.registeredAt} | 유입경로:${c.referralSource || '-'}`).join('\n')}
+${customers.map(c => `- ${alias(c.id)} | 등급:${c.grade} | 피부타입:${c.skinType || '-'} | 총방문:${c.totalVisits}회 | ${includeRevenue ? `총결제:${c.totalSpent.toLocaleString()}원 | ` : ''}마지막방문:${c.lastVisitDate || '없음'} | 가입:${c.registeredAt} | 유입경로:${c.referralSource || '-'}`).join('\n')}
 
 【이탈 고객 상세 (3개월 이상 미방문)】
 ${churned.length === 0 ? '해당 없음' : churned.map(c => {
@@ -97,15 +99,15 @@ ${churned.length === 0 ? '해당 없음' : churned.map(c => {
     return `- ${alias(c.id)} | ${days}일 미방문 | 등급:${c.grade} | 총방문:${c.totalVisits}회 | 마지막방문:${c.lastVisitDate}`;
   }).join('\n')}
 
-【이번 달 매출】
+${includeRevenue ? `【이번 달 매출】
 - 총 매출: ${thisMonthRevenue.toLocaleString()}원
 - 결제 건수: ${thisMonthPayments.length}건
 
 【전체 결제 내역 (최근 12개월)】
-${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${alias(p.customerId)} | ${p.amount.toLocaleString()}원 | ${p.paymentMethod} | ${p.status}`).join('\n')}
+${payments.slice(0, 30).map(p => `- ${p.paymentDate} | ${alias(p.customerId)} | ${p.amount.toLocaleString()}원 | ${p.paymentMethod} | ${p.status}`).join('\n')}` : '【매출】 직원 계정에는 매출·결제 내역이 제공되지 않습니다. 매출 질문에는 "매장 관리자 계정에서 확인"이라고 안내하세요.'}
 
-【직원 현황】
-${staff.map((s: any) => `- ${s.name} (${s.role}) | 전문: ${Array.isArray(s.specialty) ? s.specialty.join(', ') : s.specialty || '-'}`).join('\n')}
+${includeStaff ? `【직원 현황】
+${staff.map((s: any) => `- ${s.name} (${s.role}) | 전문: ${Array.isArray(s.specialty) ? s.specialty.join(', ') : s.specialty || '-'}`).join('\n')}` : '【직원 현황】 직원 계정에는 제공되지 않습니다.'}
 
 【시술 항목】
 ${services.map((s: any) => `- ${s.name} | ${s.category} | ${s.duration}분 | ${s.price.toLocaleString()}원`).join('\n')}
@@ -235,6 +237,7 @@ export default function AiChat() {
 }
 
 function AiChatInner() {
+  const { user } = useAuth(); // 매출 블록·키 저장 권한 (13차 #M23·M15)
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '0',
@@ -263,6 +266,7 @@ function AiChatInner() {
   }, [messages]);
 
   const saveKeys = () => {
+    if (!canDo(user?.role, 'ai.key')) { notify(ADMIN_REQUIRED_MESSAGE); return; } // 키 덮어쓰기·삭제는 관리자만 (13차 #M15)
     localStorage.setItem('ai_key_claude', claudeKey);
     localStorage.setItem('ai_key_openai', openaiKey);
     localStorage.setItem('ai_key_gemini', geminiKey);
@@ -282,7 +286,7 @@ function AiChatInner() {
     setIsLoading(true);
 
     try {
-      const { context: crmContext, alias } = buildCrmContext(aliasNumbers.current);
+      const { context: crmContext, alias } = buildCrmContext(aliasNumbers.current, canDo(user?.role, 'sales.view'), canDo(user?.role, 'staff.manage')); // 직원 계정은 매출 블록 제외 (13차 #M23)
       // 화면의 메시지는 이름으로 보이지만 모델에는 질문·이전 답변까지 가명으로 — 양방향 (리뷰 2026-11-19)
       const history = [...messages, userMsg]
         .filter(m => m.id !== '0')

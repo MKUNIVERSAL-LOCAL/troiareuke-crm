@@ -1,4 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { maskPhone } from '../../lib/pii';
+import { normalizePhone } from '../../lib/inputRules';
 import { notify } from '../../lib/notify';
 import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
 import { formatDateTime, parseISODate, todayISO } from '../../lib/format';
@@ -764,6 +767,7 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
 }
 
 function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; onSent: () => void }) {
+  const { user: authUser } = useAuth(); // 수신 대상 미리보기 전화번호 마스킹 기준 (13차 #M12)
   const [msgType, setMsgType] = useState<MessageType>('sms');
   const [recipientMode, setRecipientMode] = useState<Segment>(initialSegment ?? 'all');
   const [content, setContent] = useState('');
@@ -772,6 +776,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
   const [resultMessage, setResultMessage] = useState('');
+  const [sendPartial, setSendPartial] = useState(false); // 일부 실패 — 초록 "발송 완료!" 로 가짜 성공처럼 보이지 않게 (15차 #H5)
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
   const [scheduleAt, setScheduleAt] = useState('');
   const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
@@ -812,10 +817,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   );
   const recipientCount = targetCustomers.length;
 
-  // 수신 대상의 실제 전화번호 목록 (번호 없는 고객은 발송 대상에서 제외됨)
+  // 수신 대상의 실제 전화번호 목록 — 번호가 없거나 10~11자리가 아닌 것('010-1', 내선 포함)은 발송·비용 추정에서 뺀다(게이트웨이 실패를 발송 뒤에 알던 것, 14차 #M8)
   const recipientPhones = targetCustomers
     .map(c => c.phone)
-    .filter((p): p is string => Boolean(p && p.trim()));
+    .filter((p): p is string => { const k = normalizePhone(p); return k.length === 10 || k.length === 11; });
 
   // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
   const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;
@@ -824,7 +829,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
-    if (recipientPhones.length === 0) { notify('전화번호가 있는 수신 대상이 없습니다. 고객 정보의 전화번호를 확인해주세요.'); return; }
+    if (recipientPhones.length === 0) { notify('발송할 수 있는 전화번호가 없습니다(10~11자리 휴대폰 번호만). 고객 정보의 전화번호를 확인해주세요.'); return; }
     // 개별 발송(고객 상세에서 열었을 때)은 {고객명}을 그 고객 이름으로 바꾼다 — 단체 발송은 수신자별 치환이 없으므로 그대로 두지 않고 막는다 (UX 점검 2026-11-19)
     const finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
     // 종류는 실제로 나가는 문자열 기준 — 이름 치환으로 길어지거나 공백 정리로 짧아질 수 있다 (리뷰 60)
@@ -839,7 +844,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     // 발송은 되돌릴 수 없다 — 대상·인원을 한 번 더 확인 (전체 고객이 기본 대상이라 특히) (UX 점검 2026-11-19)
     const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode)} ${recipientPhones.length}명`;
     const action = scheduleMode === 'later' && isScheduleAvailable ? '예약 발송을 등록' : '지금 발송';
-    if (!window.confirm(`${target}에게 ${sendType === 'sms' ? 'SMS' : sendType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(전화번호 없는 ${excludedCount}명 제외)` : ''}`)) return;
+    if (!window.confirm(`${target}에게 ${sendType === 'sms' ? 'SMS' : sendType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(번호가 없거나 10~11자리가 아닌 ${excludedCount}명 제외)` : ''}`)) return;
     setSending(true);
 
     const selectedTemplate = selectedTemplateId ? templates.find(t => t.id === selectedTemplateId) : null;
@@ -912,10 +917,11 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       });
       setSending(false);
       setSendResult('success');
+      setSendPartial(result.failed > 0);
       setResultMessage(
         `${result.sent}명 발송 성공` +
         (result.failed > 0 ? `, ${result.failed}명 실패` : '') +
-        (recipientCount > recipientPhones.length ? ` (전화번호 없는 ${recipientCount - recipientPhones.length}명 제외)` : '')
+        (recipientCount > recipientPhones.length ? ` (번호가 없거나 10~11자리가 아닌 ${recipientCount - recipientPhones.length}명 제외)` : '') // 사유 표기 통일 (15차 #L11)
       );
       onSent();
       setTimeout(() => { onClose(); }, 1800);
@@ -945,8 +951,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
     <Modal isOpen={true} onClose={onClose} title="메시지 발송" size="lg">
       {sendResult === 'success' ? (
         <div className="flex flex-col items-center justify-center py-12">
-          <CheckCircle size={48} className="text-green-700 mb-3" />
-          <p className="text-lg font-bold text-gray-900">발송 완료!</p>
+          {sendPartial ? <AlertCircle size={48} className="text-amber-600 mb-3" /> : <CheckCircle size={48} className="text-green-700 mb-3" />}
+          <p className="text-lg font-bold text-gray-900">{sendPartial ? '일부만 발송됐습니다' : '발송 완료!'}</p>
           <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다`}</p>
         </div>
       ) : sendResult === 'pending' ? (
@@ -1002,7 +1008,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               </p>
             ) : onlyCustomer ? (
               <div className="flex items-center gap-2 flex-wrap" data-testid="recipient-single">
-                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-primary-600 text-white">개별 발송: {onlyCustomer.name} ({onlyCustomer.phone || '전화번호 없음'})</span>
+                <span className="px-3 py-2 text-sm font-medium rounded-xl bg-primary-600 text-white">개별 발송: {onlyCustomer.name} ({onlyCustomer.phone ? maskPhone(onlyCustomer.phone, authUser?.role ?? 'staff') : '전화번호 없음'})</span>
                 <button type="button" onClick={() => setOnlyCustomer(null)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">대상 바꾸기</button>
               </div>
             ) : (
@@ -1144,7 +1150,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-500">발송 대상 (전화번호 있는 고객)</p>
-              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientPhones.length}명{excludedCount > 0 && <span className="ml-1.5 text-xs font-normal text-amber-700">전화번호 없는 {excludedCount}명 제외</span>}</p>
+              <p className="text-base font-bold text-gray-800 mt-0.5">{recipientPhones.length}명{excludedCount > 0 && <span className="ml-1.5 text-xs font-normal text-amber-700">번호 없음·자릿수 불가 {excludedCount}명 제외</span>}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">예상 발송 비용</p>

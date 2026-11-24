@@ -86,16 +86,9 @@ test('고객 양식 다운로드 → 업로드 왕복, 설정 데이터 내보�
   const totalShown = Number((await page.getByText(/개 항목, 총 [\d,]+행/).textContent())!.match(/총 ([\d,]+)행/)![1].replace(/,/g, ''));
   expect(totalShown).toBe(countDataRows(admin.wb));
 
-  // ── 직원 계정으로 같은 내보내기: 전화번호는 가리고 메모·이메일·주소·생년월일은 비운다 (88·93) ──
+  // ── 직원 계정: 설정(내보내기 포함)은 관리자 전용 — 주소로 들어가도 역할 게이트 (13차 점검 119; 88·93 의 직원 내보내기 마스킹은 buildExportSheets 의 role='staff' 경로로 남아 있지만 화면에서는 닿지 않는다) ──
   await becomeStaff(page);
-  await page.goto('/settings');
-  await page.getByRole('button', { name: '백업·보안' }).click();
-  await page.getByRole('button', { name: '전체 선택' }).click();
-  const staffDownload = page.waitForEvent('download');
-  await page.getByRole('button', { name: /선택 항목 다운로드/ }).click();
-  const staff = readCustomerPhones((await (await staffDownload).path())!);
-  expect(staff.phones).toHaveLength(3);
-  for (const p of staff.phones) expect(p).toMatch(/^010-\*\*\*\*-\d{4}$/);
-  const staffRows = XLSX.utils.sheet_to_json<Record<string, string | number>>(staff.wb.Sheets['고객'], { range: 1, defval: '' });
-  for (const r of staffRows) { expect(String(r['메모'])).toBe(''); expect(String(r['이메일'])).toBe(''); expect(String(r['생년월일'])).toBe(''); }
+  await page.goto('/settings?tab=backup');
+  await expect(page.getByTestId('role-gate')).toBeVisible();
+  await expect(page.getByRole('button', { name: '백업·보안' })).toHaveCount(0);
 });

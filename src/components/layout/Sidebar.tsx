@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
+import { canOpenRoute } from '../../lib/permissions';
 import { parseISO } from 'date-fns';
 import { formatLocalDate } from '../../lib/format';
 import { useCrmBrand } from '../../hooks/useCrmBrand';
@@ -35,8 +36,9 @@ export default function Sidebar() {
   const { shopName, programName } = useCrmBrand(user?.shopName);
   useFeatureFlagsTick();
 
-  // 어드민이 끈 모듈은 메뉴에서 제외. selfGated(AI 챗봇)는 남기되 SOON 배지 표시.
+  // 어드민이 끈 모듈은 메뉴에서 제외. selfGated(AI 챗봇)는 남기되 SOON 배지 표시. 역할상 열 수 없는 화면(설정·직원·매출, 직원 계정)은 모바일 더보기와 같은 규칙으로 제외 (13차 점검)
   const visibleNavItems = navItems
+    .filter(item => canOpenRoute(user?.role, item.to))
     .map((item) => {
       const def = featureForPath(item.to);
       if (!def) return { ...item, badge: null as string | null };
@@ -118,7 +120,7 @@ export default function Sidebar() {
         {user?.plan === 'trial' && trialDaysLeft !== null && trialDaysLeft >= 0 && (
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl px-4 py-3">
             <p className="text-xs font-bold text-blue-700">무료 체험 중</p>
-            <p className="text-xs text-blue-400 mt-0.5">남은 기간: {trialDaysLeft}일</p>
+            <p className="text-xs text-blue-700 mt-0.5">남은 기간: {trialDaysLeft}일</p>
             <div className="mt-2 bg-blue-200 rounded-full h-1">
               <div className="bg-blue-500 rounded-full h-1" style={{ width: `${Math.max(5, ((14 - trialDaysLeft) / 14) * 100)}%` }} />
             </div>

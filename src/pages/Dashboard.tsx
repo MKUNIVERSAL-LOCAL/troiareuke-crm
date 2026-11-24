@@ -1,4 +1,6 @@
 ﻿import { HIDE_ON_MOBILE } from '../lib/platform';
+import { useAuth } from '../contexts/AuthContext';
+import { canDo } from '../lib/permissions';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserPlus, CalendarPlus, ClipboardPlus } from 'lucide-react';
@@ -123,7 +125,8 @@ export default function Dashboard() {
   const [data, setData] = useState(() => getDashboardData());
 
   // 어드민이 끈 모듈의 데이터·링크는 대시보드에서도 숨긴다 (게이트 화면 dead-end 방지)
-  const salesOn = useFeature('module.sales');
+  const { user } = useAuth();
+  const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view'); // 직원 계정은 매출 화면과 함께 금액 카드도 보지 않는다 (13차 #M14)
   const reservationsOn = useFeature('module.reservations');
   const customersOn = useFeature('module.customers');
   const productsOn = useFeature('module.products');

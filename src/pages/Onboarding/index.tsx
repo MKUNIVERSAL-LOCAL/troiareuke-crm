@@ -1,6 +1,8 @@
 import { notify } from '../../lib/notify';
+import { useNavigate } from 'react-router-dom';
 import { readJson } from '../../lib/safeJson';
 import { todayISO, formatPhoneInput } from '../../lib/format';
+import { parseAmount, parseDurationMinutes } from '../../lib/inputRules';
 import { useState, useRef, useEffect } from 'react';
 import { readDraft, writeDraft, clearDraft } from '../../lib/formDraft';
 import { Store, Users, Scissors, Link2, CheckCircle, ChevronRight, Sparkles, CreditCard, Crown, Zap, Star, Plus, X, Upload, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
@@ -87,6 +89,10 @@ interface OnboardingDraft {
 
 export default function Onboarding() {
   const { completeOnboarding, user } = useAuth();
+  // 비로그인 상태로 /onboarding 에 직접 들어와 finish() 가 세션 객체를 써 넣던 길 차단 — 새로고침 직후엔 user 가 잠시 비므로 저장된 세션 id 로 판단 (13차 #M18)
+  const hasSession = !!(user || readJson<{ id?: string }>('troiareuke_auth_user', {}).id);
+  const navigateGuard = useNavigate();
+  useEffect(() => { if (!hasSession) navigateGuard('/login', { replace: true }); }, [hasSession, navigateGuard]);
   // 키는 첫 렌더에 동기적으로 정해져야 한다 — 새로고침 직후 AuthContext의 user는 잠시 비어 있어 거기서 id를 가져오면 초안을 못 찾는다(E2E 발견)
   const [draftKey] = useState(() => `onboarding-draft:${readJson<{ id?: string }>('troiareuke_auth_user', {}).id || user?.id || 'anon'}`);
   const [draft] = useState(() => readDraft<OnboardingDraft | null>(draftKey, null));
@@ -106,8 +112,9 @@ export default function Onboarding() {
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(draft?.selectedPlan ?? 'trial');
   useEffect(() => {
+    if (!hasSession) return; // 비로그인 직접 진입은 로그인으로 보내는 중 — anon 초안 키를 남기지 않는다 (117~119 리뷰 #M9)
     writeDraft(draftKey, { step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms: [...selectedTroiPrograms], excelServices, excelFileName, selectedPlan } satisfies OnboardingDraft);
-  }, [draftKey, step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms, excelServices, excelFileName, selectedPlan]);
+  }, [hasSession, draftKey, step, shopName, shopType, shopPhone, shopAddress, staffList, customServices, selectedTroiPrograms, excelServices, excelFileName, selectedPlan]);
 
   const addStaff = () => setStaffList(p => [...p, { name: '', role: '피부관리사' }]);
   const updateStaff = (i: number, k: string, v: string) =>
@@ -150,17 +157,22 @@ export default function Onboarding() {
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, blankrows: false });
       const parsed: { name: string; duration: number; price: number }[] = [];
+      let badRows = 0;
 
-      // 첫 줄 헤더 스킵
+      // 첫 줄 헤더 스킵. 숫자는 단위를 이해해서 읽는다 — '1.5시간'이 15분, '-30'이 30 으로 저장되던 것 (14차 #M12)
       for (let i = 1; i < rows.length; i++) {
         const cols = rows[i] || [];
         const name = String(cols[0] ?? '').trim();
-        const duration = parseInt(String(cols[1] ?? '60').replace(/[^\d]/g, ''), 10) || 60;
-        const price = parseInt(String(cols[2] ?? '0').replace(/[^\d]/g, ''), 10) || 0;
-        if (name) parsed.push({ name, duration, price });
+        if (!name) continue;
+        const duration = String(cols[1] ?? '').trim() === '' ? 60 : parseDurationMinutes(cols[1]);
+        const price = String(cols[2] ?? '').trim() === '' ? 0 : parseAmount(String(cols[2]).replace(/만원$/, '0000'));
+        if (duration === null || price === null || duration > 600) { badRows++; continue; } // 600분 초과('600시간')는 설정 화면이 받지 않는 값 (120~122 리뷰 #M5)
+        parsed.push({ name, duration: Math.max(5, duration), price });
       }
       if (parsed.length === 0) {
         notify('시술 데이터를 찾지 못했습니다. 1행은 헤더, 2행부터 [시술명, 소요시간(분), 가격] 순으로 입력해주세요.');
+      } else if (badRows > 0) {
+        notify(`${parsed.length}개 시술을 읽었고, 소요시간·가격을 읽지 못한 ${badRows}행은 건너뛰었습니다(예: 60, 90분, 1.5시간 / 50000, 50,000원).`);
       }
       setExcelServices(parsed);
       // 파일명은 파싱 성공 후에만 표시 (실패한 파일명이 화면에 남는 문제 방지)
@@ -263,7 +275,7 @@ export default function Onboarding() {
       .filter(s => s.name.trim() !== '' && !existingStaffNames.has(s.name.trim()))
       .forEach(s => {
         StaffStore.save({
-          name: s.name,
+          name: s.name.trim(), // 중복 판정은 trim 값, 저장은 원문이던 불일치 (14차 #M11)
           role: s.role,
           phone: '',
           specialty: [],
@@ -275,11 +287,14 @@ export default function Onboarding() {
 
     // 직접 입력한 시술 항목 저장
     customServices.filter(s => s.name.trim()).forEach(s => {
+      // 엑셀 경로와 같은 해석 + 설정 화면의 5~600분 범위 (120~122 리뷰 #M5)
+      const dur = s.duration.trim() === '' ? 60 : parseDurationMinutes(s.duration);
+      const price = s.price.trim() === '' ? 0 : parseAmount(s.price);
       saveServiceOnce({
         name: s.name.trim(),
         category: '직접 입력',
-        duration: parseInt(s.duration, 10) || 60,
-        price: parseInt(s.price.replace(/,/g, ''), 10) || 0,
+        duration: Math.min(600, Math.max(5, dur ?? 60)),
+        price: price ?? 0,
       });
     });
 

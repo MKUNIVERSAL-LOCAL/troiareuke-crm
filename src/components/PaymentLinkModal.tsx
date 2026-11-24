@@ -136,7 +136,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
   }
 
   async function handleCancel(r: PaymentRequestRow) {
-    if (!(await askConfirm({ title: '결제 요청 취소', message: `${r.orderName} · ${formatPrice(r.amount)} 결제 요청을 취소할까요?\n고객이 링크를 열어도 결제할 수 없게 됩니다.`, confirmLabel: '요청 취소', danger: true }))) return;
+    if (!(await askConfirm({ title: '결제 요청 취소', message: `${r.orderName} · ${formatPrice(r.amount)} 결제 요청을 취소할까요?\n고객이 링크를 열어도 결제할 수 없게 됩니다.`, confirmLabel: '요청 취소', cancelLabel: '닫기', danger: true }))) return;
     try {
       await cancelPaymentRequest(r.id);
       refresh();

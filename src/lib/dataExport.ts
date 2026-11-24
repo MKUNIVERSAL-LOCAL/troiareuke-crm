@@ -47,11 +47,13 @@ export interface ExportDataset {
   description: string;
   /** 민감정보(건강정보 소지) 포함 여부 — UI에서 경고 표시 */
   sensitive?: boolean;
+  /** 직원 계정에는 목록에도 없고 buildExportSheets 도 건너뛴다 — 상담 소견·직원 연락처·로그인 이메일 (13차 #M11) */
+  adminOnly?: boolean;
 }
 
 export const EXPORT_DATASETS: ExportDataset[] = [
   { key: 'customers', label: '고객 데이터', description: '이름·전화·이메일·주소·피부타입·등급·방문/누적결제', sensitive: true },
-  { key: 'consultations', label: '고객 상담 내역', description: '피부 고민·비컨 측정값·피부타입 판정·소견·추천 솔루션', sensitive: true },
+  { key: 'consultations', label: '고객 상담 내역', description: '피부 고민·비컨 측정값·피부타입 판정·소견·추천 솔루션', sensitive: true, adminOnly: true },
   { key: 'payments', label: '매출(결제·환불) 데이터', description: '결제일·고객·구분·금액·할인·결제수단·상태' },
   { key: 'sales_by_method', label: '결제수단별 매출 집계', description: '일자별 카드/현금/계좌이체/카카오페이 합계 — 부가세 신고용' },
   { key: 'expenses', label: '지출(매입·비용) 데이터', description: '지출일·분류·거래처·내용·금액·지불수단 — 손익계산서 원장' },
@@ -62,10 +64,10 @@ export const EXPORT_DATASETS: ExportDataset[] = [
   { key: 'treatment_logs', label: '시술 기록', description: '시술일·고객·담당·내용·회차 차감·피부상태 메모', sensitive: true },
   { key: 'programs', label: '프로그램(정액권 상품) 목록', description: '판매 중인 회권/패키지 정의 — 가격·회차·유효기간' },
   { key: 'services', label: '시술 메뉴', description: '시술명·카테고리·가격·소요시간 마스터' },
-  { key: 'staff', label: '직원 목록', description: '이름·직급·연락처·재직 여부 (급여 등 미포함)' },
+  { key: 'staff', label: '직원 목록', description: '이름·직급·연락처·재직 여부 (급여 등 미포함)', adminOnly: true },
   { key: 'message_history', label: '메시지 발송 이력', description: '발송일·유형·대상수·성공/실패' },
   { key: 'dormant_customers', label: '휴면 고객 리스트', description: '60일 이상 미방문 고객 — 재방문 마케팅용', sensitive: true },
-  { key: 'login_logs', label: '로그인 기록', description: '이 기기의 로그인 성공/실패 이력 (최근 500건) — 보안 감사용' },
+  { key: 'login_logs', label: '로그인 기록', description: '이 기기의 로그인 성공/실패 이력 (최근 500건) — 보안 감사용', adminOnly: true },
 ];
 
 export interface ExportSheet {
@@ -355,6 +357,7 @@ export function buildExportSheets(keys: string[], role: ExportRole): ExportSheet
   try {
     const sheets: ExportSheet[] = [];
     for (const key of keys) {
+      if (role === 'staff' && EXPORT_DATASETS.find(d => d.key === key)?.adminOnly) continue; // 목록에서 숨겨도 키를 직접 넘기는 길이 남지 않게 (13차 #M11)
       const sheet = buildSheet(key);
       if (!sheet) continue;
       // 세무·정산용 시트의 합계 행은 여기서 붙여 엑셀·PDF가 같은 표를 낸다 (리뷰 2026-11-20)

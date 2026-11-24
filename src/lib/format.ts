@@ -90,7 +90,7 @@ function toChosung(text: string): string {
 export function matchesSearch(query: string, fields: Array<string | undefined | null>): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const digitsOnly = /^[\d-]+$/.test(q);
+  const digitsOnly = /^[\d\s-]+$/.test(q); // '010 1234' 붙여넣기도 숫자 검색으로 (14차 #L3)
   const chosungOnly = /^[ㄱ-ㅎ]+$/.test(q);
   const qDigits = q.replace(/\D/g, '');
   for (const raw of fields) {
@@ -105,6 +105,7 @@ export function matchesSearch(query: string, fields: Array<string | undefined | 
 
 /** Date → "YYYY-MM-DD" 로컬 기준. toISOString()은 UTC라 한국 새벽 0~9시에 전날로 잡힌다 — 날짜 기본값·기간 계산은 이것을 쓴다 (2026-11-18) */
 export function toISODate(d: Date): string {
+  if (Number.isNaN(d.getTime())) return ''; // Invalid Date 가 "NaN-NaN-NaN" 으로 저장되지 않게 (14차 #H2)
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -117,6 +118,7 @@ export function todayISO(): string {
 
 /** "YYYY-MM-DD" → 로컬 자정 Date. new Date('YYYY-MM-DD')는 UTC 자정으로 해석돼 시간대에 따라 하루 어긋난다 */
 export function parseISODate(s: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s || '')) return new Date(NaN); // '' 는 1900-01-01, '2026/11/23' 은 NaN 연도가 되던 것 — 호출자가 isNaN 으로 판별 (14차 #H2)
   const [y, m, d] = s.slice(0, 10).split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
 }

@@ -3,7 +3,7 @@ export default function PrereqHint({ text, action, onGo }: { text: string; actio
   return (
     <p className="mt-1.5 text-xs text-amber-700 flex items-center gap-2 flex-wrap">
       {text}
-      <button type="button" onClick={onGo} className="px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 font-medium hover:bg-amber-100">{action} →</button>
+      <button type="button" onClick={onGo} className="min-h-[44px] px-3 inline-flex items-center rounded-lg bg-amber-50 border border-amber-200 font-medium hover:bg-amber-100">{action} →</button>
     </p>
   );
 }
