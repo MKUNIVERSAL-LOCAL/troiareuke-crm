@@ -76,8 +76,8 @@
 
 | # | 항목 | 상태 | 위치 | 문제점 | 개선 방법 | 승인 | 완료 기준 |
 |---|---|---|---|---|---|---|---|
-| A-1 | 멀티 제공사 어댑터 | ✗ | `AiChat` 3함수 | 공통 인터페이스·카탈로그·토큰/비용 회계 없음 | `src/lib/ai/{provider.ts, openai.ts, anthropic.ts, gemini.ts, catalog.ts, usage.ts}` | — | 연결 테스트·오류·사용량 스펙 |
-| A-2 | 키 보관 | 🔧(위반) | localStorage `ai_key_*` | 21절 위반 | Electron safeStorage IPC(코어 electron/* → 승인) 또는 서버 암호화 보관(동의) | A(electron) 또는 B-2 | 평문 0, 백업·로그 검사 |
+| A-1 | 멀티 제공사 어댑터 | ✅ 150 | `src/lib/ai/`(types·catalog·adapters·chat·usage·keys), AiChat 어댑터 뒤로 | 공통 인터페이스·카탈로그·토큰/비용 회계 없음 | `src/lib/ai/{provider.ts, openai.ts, anthropic.ts, gemini.ts, catalog.ts, usage.ts}` | — | 연결 테스트·오류·사용량 스펙 |
+| A-2 | 키 보관 | 🔧(위반, 150 에서 접근점 `ai/keys.ts` 한 곳으로) | localStorage `ai_key_*` 평문 | 21절 위반 | Electron safeStorage IPC(코어 electron/* → 승인) 또는 서버 암호화 보관(동의) | A(electron) 또는 B-2 | 평문 0, 백업·로그 검사 |
 | A-3 | 설정 마법사 | ✗ | 키 입력란만 | 단계·링크·FAQ 없음 | `pages/Settings` AI 탭 신설(Feature Flag) | — | E2E |
 | A-4 | 사용량·비용 | ◐ | 서버 ai_usage 횟수 | 토큰·비용 없음 | 어댑터 usage + 서버 테이블 확장 | B-2 | — |
 | A-5 | Gateway·Router·크레딧·어드민 | ✗ | /api/ai 중계 | — | PHASE 5 설계 문서 → 서버 모듈 | B-2, C-7 | — |

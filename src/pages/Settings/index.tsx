@@ -24,6 +24,7 @@ import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
 import ResourcesCard from '../../components/settings/ResourcesCard';
+import { getAiKey, setAiKey } from '../../lib/ai/keys';
 import AppLockCard from '../../components/settings/AppLockCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
 import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
@@ -549,18 +550,10 @@ export default function Settings() {
 
   // ─── AI 분석 키 (피부분석·AI챗봇 공유) ──────────────────────
   // AiChat이 Coming Soon 게이트로 막혀 있어도 피부분석이 쓸 키를 여기서 입력 가능하게 한다.
-  const [aiKeys, setAiKeys] = useState(() => ({
-    openai: localStorage.getItem('ai_key_openai') || '',
-    gemini: localStorage.getItem('ai_key_gemini') || '',
-  }));
+  const [aiKeys, setAiKeys] = useState(() => ({ openai: getAiKey('openai'), gemini: getAiKey('gemini') })); // 키 접근은 lib/ai/keys 한 곳 (150, GAP A-2)
   const handleAiKeysSave = () => {
-    try {
-      localStorage.setItem('ai_key_openai', aiKeys.openai.trim());
-      localStorage.setItem('ai_key_gemini', aiKeys.gemini.trim());
-      notify.success('AI 분석 키를 저장했습니다.');
-    } catch {
-      notify('키 저장 실패 — 브라우저 저장소를 확인해주세요.');
-    }
+    if (setAiKey('openai', aiKeys.openai) && setAiKey('gemini', aiKeys.gemini)) notify.success('AI 분석 키를 저장했습니다.');
+    else notify('키 저장 실패 — 브라우저 저장소를 확인해주세요.');
   };
 
   // ─── Notifications ────────────────────────────────────────

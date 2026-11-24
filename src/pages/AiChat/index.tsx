@@ -12,6 +12,8 @@ const IS_ELECTRON =
   !!(window as any).electronAPI;
 import Header from '../../components/layout/Header';
 import { buildAliasBook, type AliasBook } from '../../lib/aiAlias';
+import { chatWithFallback } from '../../lib/ai/chat';
+import { getAiKey, setAiKey } from '../../lib/ai/keys';
 import { copyText } from '../../lib/clipboard';
 import { notify } from '../../lib/notify';
 import { useFeature } from '../../hooks/useFeature';
@@ -41,13 +43,6 @@ const QUICK_QUESTIONS = [
   '이번 달 신규 고객은 몇 명이야?',
 ];
 
-// AI 자동 선택: Claude 우선
-function selectProvider(claudeKey: string, openaiKey: string, geminiKey: string): 'claude' | 'openai' | 'gemini' {
-  if (claudeKey) return 'claude'; // Claude 우선
-  if (openaiKey) return 'openai';
-  if (geminiKey) return 'gemini';
-  return 'claude'; // 기본값
-}
 
 /** @param aliasNumbers 세션 동안 고객 id → 가명 번호 고정(buildAliasBook 참조) */
 function buildCrmContext(aliasNumbers: Map<string, number>, includeRevenue: boolean, includeStaff: boolean): { context: string; alias: AliasBook } {
@@ -133,77 +128,11 @@ ${book.forwardAlias(context)}
   return { context: guarded, alias: book };
 }
 
-async function callClaude(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
-  const systemPrompt = `당신은 더마솔루션의 AI 분석 어시스턴트입니다.
+/** 모든 제공사에 같은 역할·규칙 — AI 는 해석·추천만, 숫자는 자료가 정본 (150, AI-PROVIDER-INTEGRATION) */
+const CHAT_SYSTEM = `당신은 더마솔루션의 AI 분석 어시스턴트입니다.
 아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요.
 데이터에 없는 내용은 추측하지 말고, 있는 데이터만으로 답변해주세요.
-숫자는 정확하게, 금액은 천 단위 쉼표를 사용해주세요.
-
-${crmContext}`;
-
-  // Electron IPC 경로 (CORS 우회)
-  if (window.electronAPI?.callClaudeApi) {
-    return window.electronAPI.callClaudeApi({
-      apiKey,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
-      systemPrompt,
-    });
-  }
-
-  // 웹 환경에서는 Anthropic API가 CORS 정책으로 차단됨
-  // OpenAI / Gemini는 CORS 허용이므로 해당 키로 폴백 가능
-  throw new Error(
-    'CLAUDE_CORS_BLOCKED: 브라우저에서 Claude API를 직접 호출할 수 없습니다 (CORS 정책).\n' +
-    'OpenAI 또는 Gemini API 키를 설정하면 웹에서도 AI 분석이 가능합니다.\n' +
-    'Claude를 사용하려면 데스크탑 앱에서 접속해주세요.'
-  );
-}
-
-async function callOpenAI(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: `당신은 더마솔루션의 AI 분석 어시스턴트입니다. 아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요.\n\n${crmContext}` },
-        ...messages,
-      ],
-      temperature: 0.7,
-      max_tokens: 2000,
-    }),
-  });
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error?.message || 'OpenAI 오류');
-  }
-  return (await response.json()).choices[0].message.content;
-}
-
-async function callGemini(apiKey: string, messages: { role: string; content: string }[], crmContext: string): Promise<string> {
-  const contents = messages.map((m, i) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: i === 0 && m.role === 'user' ? `[CRM 데이터]\n${crmContext}\n\n[질문]\n${m.content}` : m.content }],
-  }));
-
-  const response = await fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, // 키는 URL이 아니라 헤더로 — skinAnalysis와 같은 방식 (보안 감사 2026-11-19)
-      body: JSON.stringify({
-        contents,
-        systemInstruction: { parts: [{ text: '당신은 더마솔루션 AI 어시스턴트입니다. CRM 데이터를 바탕으로 한국어로 친절하고 정확하게 답변해주세요.' }] },
-        generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
-      }),
-    }
-  );
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error?.message || 'Gemini 오류');
-  }
-  return (await response.json()).candidates[0].content.parts[0].text;
-}
+숫자는 정확하게, 금액은 천 단위 쉼표를 사용해주세요.`;
 
 function AiChatComingSoon() {
   return (
@@ -249,9 +178,9 @@ function AiChatInner() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [claudeKey, setClaudeKey] = useState(() => localStorage.getItem('ai_key_claude') || '');
-  const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem('ai_key_openai') || '');
-  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('ai_key_gemini') || '');
+  const [claudeKey, setClaudeKey] = useState(() => getAiKey('claude')); // 키 접근은 lib/ai/keys 한 곳 (150, GAP A-2)
+  const [openaiKey, setOpenaiKey] = useState(() => getAiKey('openai'));
+  const [geminiKey, setGeminiKey] = useState(() => getAiKey('gemini'));
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const aliasNumbers = useRef(new Map<string, number>()); // 세션 동안 고객 id → 가명 번호 고정 (리뷰 2026-11-19)
@@ -267,9 +196,9 @@ function AiChatInner() {
 
   const saveKeys = () => {
     if (!canDo(user?.role, 'ai.key')) { notify(ADMIN_REQUIRED_MESSAGE); return; } // 키 덮어쓰기·삭제는 관리자만 (13차 #M15)
-    localStorage.setItem('ai_key_claude', claudeKey);
-    localStorage.setItem('ai_key_openai', openaiKey);
-    localStorage.setItem('ai_key_gemini', geminiKey);
+    setAiKey('claude', claudeKey);
+    setAiKey('openai', openaiKey);
+    setAiKey('gemini', geminiKey);
     setShowSettings(false);
   };
 
@@ -296,7 +225,7 @@ function AiChatInner() {
       let proxyText: string | null = null;
       if (proxyEnabled) {
         try {
-          const r = await aiProxyChat(history, `당신은 더마솔루션의 AI 분석 어시스턴트입니다.\n아래 CRM 데이터를 바탕으로 원장님의 질문에 친절하고 정확하게 한국어로 답변해주세요.\n데이터에 없는 내용은 추측하지 말고, 있는 데이터만으로 답변해주세요.\n숫자는 정확하게, 금액은 천 단위 쉼표를 사용해주세요.\n\n${crmContext}`);
+          const r = await aiProxyChat(history, CHAT_SYSTEM);
           proxyText = r.text;
         } catch (e: any) {
           if (!(claudeKey || openaiKey || geminiKey)) throw new Error(e?.message || '본사 AI 호출에 실패했습니다.');
@@ -307,51 +236,14 @@ function AiChatInner() {
         return;
       }
 
-      // AI 선택 (Claude 우선)
-      const provider = selectProvider(claudeKey, openaiKey, geminiKey);
-      let responseText: string;
-      let usedProvider: 'claude' | 'openai' | 'gemini' | 'server' = provider;
-
-      try {
-        if (provider === 'claude') {
-          responseText = await callClaude(claudeKey, history, crmContext);
-        } else if (provider === 'openai') {
-          responseText = await callOpenAI(openaiKey, history, crmContext);
-        } else {
-          responseText = await callGemini(geminiKey, history, crmContext);
-        }
-      } catch {
-        // 선택된 AI 실패 시 다른 AI로 자동 폴백
-        const fallbackOrder: ('claude' | 'openai' | 'gemini')[] = ['claude', 'openai', 'gemini'].filter(p => p !== provider) as any;
-        let fallbackSuccess = false;
-        for (const fb of fallbackOrder) {
-          const fbKey = fb === 'claude' ? claudeKey : fb === 'openai' ? openaiKey : geminiKey;
-          if (!fbKey) continue;
-          try {
-            if (fb === 'claude') {
-              responseText = await callClaude(fbKey, history, crmContext);
-            } else if (fb === 'openai') {
-              responseText = await callOpenAI(fbKey, history, crmContext);
-            } else {
-              responseText = await callGemini(fbKey, history, crmContext);
-            }
-            usedProvider = fb;
-            fallbackSuccess = true;
-            break;
-          } catch {
-            continue;
-          }
-        }
-        if (!fallbackSuccess) throw new Error('모든 AI API 호출에 실패했습니다. API 키를 확인해주세요.');
-        responseText = responseText!;
-      }
-
+      // 지점 키 경로 — 어댑터 층이 Claude 우선 선택·폴백·사용량 기록을 맡는다 (150, GAP A-1). 동작은 종전과 같다
+      const r = await chatWithFallback({ keys: { claude: claudeKey, openai: openaiKey, gemini: geminiKey }, system: CHAT_SYSTEM, context: crmContext, messages: history });
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: alias.deAlias(responseText),
+        content: alias.deAlias(r.text),
         timestamp: new Date(),
-        usedProvider,
+        usedProvider: r.provider,
       }]);
     } catch (err: any) {
       const rawMsg: string = err?.message || '';

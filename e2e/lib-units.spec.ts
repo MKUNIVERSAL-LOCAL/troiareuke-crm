@@ -33,6 +33,10 @@ import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/p
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
 import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
+import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
+import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
+import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
+import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -690,4 +694,44 @@ test('재고 원장 상한 잘림 — 잘린 행의 Σ 를 제품별 시작 재�
   expect(carried.find(x => x.productId === 'p')?.qty).toBe(15);
   expect(carried.find(x => x.productId === 'q')?.qty).toBe(3);
   expect(folded.filter(x => x.productId === 'p').reduce((s2, x) => s2 + x.qty, 0)).toBe(14); // 10 + 5 − 1
+});
+
+test('AI 어댑터 계층 — 카탈로그·원격 갱신 검증·토큰/비용 추정·제공사 선택과 폴백·키 마스킹 (150)', () => {
+  expect(defaultModel('claude').id).toBe('claude-sonnet-4-20250514');   // AiChat 이 쓰던 모델 그대로(코어 IPC 고정)
+  expect(defaultModel('openai').id).toBe('gpt-4o-mini');
+  expect(defaultModel('gemini').id).toBe('gemini-1.5-flash');
+  expect(findModel('openai', 'gpt-4o').id).toBe('gpt-4o');
+  expect(findModel('openai', '없는모델').id).toBe('gpt-4o-mini');          // 모르는 id 는 기본값
+  expect(modelsOf('gemini').length).toBeGreaterThanOrEqual(2);
+  expect(isAiModel({ provider: 'openai', id: 'x', label: 'X', inputPer1M: 1, outputPer1M: 2, contextK: 8, vision: false })).toBe(true);
+  expect(isAiModel({ provider: 'meta', id: 'x', label: 'X', inputPer1M: 1, outputPer1M: 2, contextK: 8, vision: false })).toBe(false);
+  expect(setCatalogOverride('잘못된 값')).toBe(false);
+  expect(setCatalogOverride([{ provider: 'openai', id: 'gpt-5-mini', label: 'GPT-5 mini', inputPer1M: 0.2, outputPer1M: 0.8, contextK: 256, vision: true, default: true }, { bad: true }])).toBe(true);
+  expect(catalog().length).toBe(1);
+  expect(defaultModel('openai').id).toBe('gpt-5-mini');
+  expect(defaultModel('claude').id).toBe('claude-sonnet-4-20250514');   // 원격 카탈로그에 없는 제공사는 기본 카탈로그로
+  expect(setCatalogOverride(null)).toBe(true);
+  expect(catalog()).toBe(DEFAULT_CATALOG);
+  // 토큰·비용: 한글 1.5자/토큰, 기타 4자/토큰(보수적), 비용 = 단가 × 토큰 / 100만
+  expect(estimateTokens('')).toBe(0);
+  expect(estimateTokens('가나다')).toBe(2);
+  expect(estimateTokens('abcdefgh')).toBe(2);
+  expect(estimateUsage('가나다', 'abcd')).toEqual({ input: 2, output: 1, estimated: true });
+  expect(estimateCostUsd('openai', 'gpt-4o-mini', { input: 1_000_000, output: 1_000_000, estimated: false })).toBe(0.75);
+  expect(estimateCostUsd('gemini', 'gemini-1.5-flash', { input: 0, output: 0, estimated: true })).toBe(0);
+  // 선택·폴백: Claude 우선, 키 있는 것만
+  expect(selectProvider({ claude: '', openai: 'k', gemini: 'k' })).toBe('openai');
+  expect(selectProvider({ claude: 'k', openai: 'k', gemini: '' })).toBe('claude');
+  expect(selectProvider({ claude: '', openai: '', gemini: '' })).toBeNull();
+  expect(fallbackOrder('claude', { claude: 'k', openai: '', gemini: 'k' })).toEqual(['gemini']);
+  expect(fallbackOrder('openai', { claude: 'k', openai: 'k', gemini: 'k' })).toEqual(['claude', 'gemini']);
+  // 키 마스킹·형식
+  expect(maskAiKey('')).toBe('');
+  expect(maskAiKey('sk-short')).toBe('sk••••');
+  expect(maskAiKey('sk-ant-api03-ABCDEFGHIJKLMNOP')).toBe('sk-a••••MNOP');
+  expect(looksLikeKey('claude', 'sk-ant-api03-ABCDEFGHIJKLMNOP')).toBe(true);
+  expect(looksLikeKey('claude', 'sk-proj-ABCDEFGHIJKLMNOPQRS')).toBe(false);
+  expect(looksLikeKey('openai', 'sk-proj-ABCDEFGHIJKLMNOPQRS')).toBe(true);
+  expect(looksLikeKey('gemini', 'AIzaSyABCDEFGHIJKLMNOPQRSTUV')).toBe(true);
+  expect(looksLikeKey('gemini', 'has space here')).toBe(false);
 });
