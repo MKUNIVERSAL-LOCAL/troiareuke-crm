@@ -4,6 +4,7 @@ import { askConfirm } from '../../lib/confirmDialog';
 import { maskPhone } from '../../lib/pii';
 import { normalizePhone } from '../../lib/inputRules';
 import { notify } from '../../lib/notify';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
 import { formatDateTime, parseISODate, todayISO, formatPrice } from '../../lib/format';
 import { daysBetween } from '../../lib/revisitRule';
@@ -198,6 +199,7 @@ function StatusChip({ label, connected }: { label: string; connected: boolean })
 
 function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; reloadKey: number }) {
   const [customers, setCustomers] = useState(() => CustomerStore.getAll().filter(c => c.isActive !== false)); // 익명화 고객 제외
+  useDataRefreshed(() => setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false))); // 발송 대상 인원이 다른 기기 등록분을 반영 (16차 #H3)
 
   useEffect(() => {
     setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false));

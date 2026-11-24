@@ -10,6 +10,7 @@ import { josa } from '../../lib/josa';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus } from 'lucide-react';
 import StockAdjustModal from '../../components/StockAdjustModal';
 import Header from '../../components/layout/Header';
@@ -59,6 +60,7 @@ export default function Products() {
     setSales(ProductSaleStore.getAll());
     setPayments(PaymentStore.getAll());
   }, []);
+  useDataRefreshed(refresh); // (16차 #H3)
 
   const handleDeleteProduct = async (product: Product) => {
     // 제품을 지우면 그 판매를 나중에 [판매 취소]해도 재고를 돌려줄 대상이 없다 — 판매만 멈추려면 비활성 (11차 #M9)
@@ -577,16 +579,15 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
       brand: form.brand.trim() || undefined,
       price,
       cost,
-      stock,
       minStock,
       unit: form.unit || '개',
       description: form.description.trim() || undefined,
       isActive: form.isActive,
     };
     if (isEdit && product) {
-      ProductStore.update(product.id, payload);
+      ProductStore.update(product.id, payload); // stock 제외 — 다른 기기의 판매·입고로 바뀐 재고를 되돌리지 않는다 (16차 #H1)
     } else {
-      ProductStore.save(payload);
+      ProductStore.save({ ...payload, stock });
     }
     onSaved();
   };

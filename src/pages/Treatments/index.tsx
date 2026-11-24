@@ -11,6 +11,8 @@ import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
+import { refreshFromServer } from '../../lib/liveRefresh';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, ReservationStore } from '../../lib/store';
 import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import type { TreatmentLog } from '../../types';
@@ -61,7 +63,8 @@ export default function Treatments() {
   const loadLogs = () => {
     setTreatmentLogs(TreatmentLogStore.getAll());
   };
-  const pull = usePullToRefresh(() => { loadLogs(); }); // 모바일: 맨 위에서 당겨서 새로고침
+  useDataRefreshed(loadLogs); // (16차 #H3)
+  const pull = usePullToRefresh(async () => { await refreshFromServer({ force: true }); loadLogs(); }); // 모바일: 맨 위에서 당겨서 새로고침 — 서버부터
   // 목록 표시용 사진 장수 — base64 캐시를 매 렌더·매 키 입력마다 파싱하지 않도록 목록이 바뀔 때만 계산
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시 적재·동기화 후 장수 갱신
 

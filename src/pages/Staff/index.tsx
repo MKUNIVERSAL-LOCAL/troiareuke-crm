@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { readableTextOn } from '../../lib/color';
 import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
 import Header from '../../components/layout/Header';
@@ -48,6 +49,7 @@ export default function StaffPage() {
     setStaffList(StaffStore.getAll());
     setReloadTick(t => t + 1);
   };
+  useDataRefreshed(reload); // (16차 #H3)
 
   useEffect(() => {
     reload();

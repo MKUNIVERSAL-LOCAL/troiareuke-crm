@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { askConfirm } from '../../lib/confirmDialog';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
@@ -168,6 +169,7 @@ export default function Sales() {
   function refreshExpenses() {
     setExpenses(ExpenseStore.getAll());
   }
+  useDataRefreshed(() => { loadPayments(); refreshExpenses(); }); // (16차 #H3)
 
   // 현재 보는 월 데이터
   const monthPayments = useMemo(

@@ -11,8 +11,9 @@ const WeeklySalesChart = lazy(() => import('../components/charts/WeeklySalesChar
 import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
+import { useDataRefreshed } from '../hooks/useDataRefreshed';
 import StatCard from '../components/ui/StatCard';
-import { formatDate, formatWon, formatPrice, toManwon } from '../lib/format';
+import { formatDate, formatWon, formatPrice, toManwon, todayISO } from '../lib/format';
 import { countPaymentUnits } from '../lib/paymentCount';
 import { growthPct } from '../lib/growth';
 import { isCountableCustomer } from '../lib/customerScope';
@@ -150,6 +151,12 @@ export default function Dashboard() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVisible);
     };
+  }, []);
+  useDataRefreshed(refresh); // 다른 기기의 변경이 서버에서 다시 읽혔을 때 (16차 #H3)
+  useEffect(() => { // 포커스를 잃지 않는 PC 가 자정을 넘기면 "오늘 예약"·마감 요약·완료 누락이 어제 기준으로 남았다 (16차 #L1)
+    let day = todayISO();
+    const timer = window.setInterval(() => { if (todayISO() !== day) { day = todayISO(); refresh(); } }, 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const {

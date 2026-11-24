@@ -173,7 +173,7 @@ export function flushNasOutbox(): Promise<void> {
   flushPromise = (async () => {
     for (;;) {
       const next = readOutbox(key)[0];
-      if (!next) return;
+      if (!next) { try { localStorage.setItem('crm_last_sync_at', String(Date.now())); } catch { /* noop */ } return; } // 전송 성공으로 큐가 비면 동기화 시각 갱신 (16차 #L2)
       try {
         await apiRequest(next.path, {
           method: next.method,

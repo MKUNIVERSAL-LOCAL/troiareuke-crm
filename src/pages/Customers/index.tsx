@@ -26,6 +26,8 @@ import { useOverlayClose, useFocusTrap, useMenuKeys } from '../../lib/overlaySta
 import PhoneLink from '../../components/ui/PhoneLink';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
+import { refreshFromServer } from '../../lib/liveRefresh';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
@@ -633,7 +635,7 @@ export default function Customers() {
   const [showAllMobileConsults, setShowAllMobileConsults] = useState(false);
   useEffect(() => { setShowAllMobileConsults(false); }, [selected?.id]);
 
-  const pull = usePullToRefresh(() => { loadAll(); }, { enabled: !(selected && isMobileLayout) }); // 모바일: 목록에서만 당겨서 새로고침(풀스크린 상세 안에서는 무시)
+  const pull = usePullToRefresh(async () => { await refreshFromServer({ force: true }); loadAll(); }, { enabled: !(selected && isMobileLayout) }); // 모바일: 목록에서만 당겨서 새로고침(풀스크린 상세 안에서는 무시)
   // Android 뒤로가기 — 열린 것 중 가장 위부터 하나씩 닫는다(상세 → 목록). 폼 모달은 Esc로는 닫지 않는다(입력 유실 방지, 취소 버튼으로)
   useOverlayClose(!!selected && isMobileLayout, () => setSelected(null), { escape: false });
   useOverlayClose(showAddModal, () => setShowAddModal(false), { escape: false });
@@ -984,6 +986,10 @@ export default function Customers() {
     // 활성 프로그램만 — 0건일 때 시술 메뉴를 프로그램처럼 보여 주던 폴백은 제거: 총회차 null(무제한)·만료 없는 회차권이 Service id 로 만들어졌다 (11차 #M6)
     setPrograms(ProgramStore.getAll().filter(p => p.isActive));
   }
+  useDataRefreshed(() => { // 다른 기기의 변경이 서버에서 다시 읽혔을 때 — 열어 둔 상세도 최신 기록으로 (16차 #H3)
+    loadAll();
+    setSelected(prev => (prev ? CustomerStore.getById(prev.id) ?? prev : prev));
+  });
 
   // 보존기간 경과 고객 id — 고객 목록이나 정책이 바뀔 때만 재계산
   const expiredIds = useMemo(
@@ -1333,7 +1339,8 @@ export default function Customers() {
     const copies = identityChanged ? countIdentityCopies(selected.id, { name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone }) : 0;
     if (copies > IDENTITY_PROPAGATION_CONFIRM_AT && !(await askConfirm({ title: '기록 일괄 수정', message: `이름·연락처가 바뀌어 연결된 기록 ${copies}건도 함께 고칩니다. 서버 동기화에 시간이 걸릴 수 있습니다. 계속할까요?`, confirmLabel: '함께 수정' }))) return;
     // 직원 계정은 PII 입력칸이 없으므로 기존 값을 그대로 둔다 (13차 #H5)
-    CustomerStore.update(selected.id, {
+    // 바뀐 칸만 보낸다 — 서버 PATCH 가 병합이라, 폰에서 바꾼 전화번호를 PC 의 옛 수정 창이 메모만 고치며 되돌리던 것 (16차 #H1)
+    const next: Partial<Customer> = {
       name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone,
       gender: editForm.gender, grade: editForm.grade,
       skinType: editForm.skinType, memo: editForm.memo,
@@ -1344,7 +1351,12 @@ export default function Customers() {
       address: piiOk ? (editForm.address.trim() || '') : (selected.address || ''),
       tags: parseTags(editForm.tags),
       allergies: editForm.allergies.trim() || '',
-    });
+    };
+    const changed = Object.fromEntries(Object.entries(next).filter(([k, v]) => {
+      const before = (selected as unknown as Record<string, unknown>)[k];
+      return JSON.stringify(v ?? '') !== JSON.stringify(before ?? (Array.isArray(v) ? [] : '')); // 비운 값 '' 과 저장 안 된 undefined 는 같은 뜻
+    })) as Partial<Customer>;
+    if (Object.keys(changed).length > 0) CustomerStore.update(selected.id, changed);
     notify.success('고객 정보를 저장했습니다.'); // 전파 토스트보다 먼저 — 저장 자체를 알린다 (15차 #L10)
     if (identityChanged) {
       // 예약·시술·회차권·결제·상담에 복사된 이름(예약은 전화번호도) — 빠뜨리면 개명한 고객이 다른 화면 검색에서 사라지고 예약 카드가 옛 번호로 전화한다 (11차 #H1·H2)

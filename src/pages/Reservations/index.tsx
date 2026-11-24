@@ -14,6 +14,8 @@ import PhoneLink from '../../components/ui/PhoneLink';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
+import { refreshFromServer } from '../../lib/liveRefresh';
 import { ReservationStore, StaffStore, ServiceStore, CustomerStore, PaymentStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
 import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
@@ -203,6 +205,7 @@ export default function Reservations() {
   const reloadReservations = useCallback(() => {
     setReservations(ReservationStore.getAll());
   }, []);
+  useDataRefreshed(reloadReservations); // 다른 기기가 잡은 예약이 재시작 없이 보이게 (16차 #H3)
 
   const [mobileTab, setMobileTab] = useState<'today' | 'week' | 'month'>('today');
   const [mobileMonthOffset, setMobileMonthOffset] = useState(0); // '이번달' 탭에서 ‹ › 로 다른 달 보기 (2026-11-18) — 다음 달 예약을 모바일에서도 찾을 수 있게
@@ -233,7 +236,7 @@ export default function Reservations() {
 
   useEffect(() => { loadGoogleEvents(); }, [loadGoogleEvents]);
   // 모바일: 맨 위에서 당겨서 새로고침(이 기기 저장분 + Google 일정 다시 읽기)
-  const pull = usePullToRefresh(async () => { reloadReservations(); await loadGoogleEvents(); });
+  const pull = usePullToRefresh(async () => { await refreshFromServer({ force: true }); reloadReservations(); await loadGoogleEvents(); }); // 서버부터 다시 읽는다 — 캐시만 다시 읽던 "동작하는 척" 새로고침 (16차 #H3)
   // PC 키보드: ← → 주/일 이동, T 오늘, N 새 예약 — 입력 중이거나 모달이 열려 있으면 무시 (UI 품질 기준 2026-11-18)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1037,7 +1040,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       if (!proceed) return;
     }
 
-    const reservation: Omit<Reservation, 'id'> = {
+    const reservation: Omit<Reservation, 'id' | 'status'> = { // status 는 저장 경로에서 따로 — 수정은 보내지 않고, 신규만 '확정' (16차 #H1)
       customerId: customer.id,
       customerName: customer.name,
       customerPhone: customer.phone,
@@ -1047,7 +1050,6 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       date,
       startTime,
       endTime,
-      status: editing?.status ?? 'confirmed',
       source,
       memo: memo || undefined,
       totalPrice,
@@ -1062,21 +1064,21 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       }
     }
     if (isEdit && editing) {
-      // 수정: 기존 예약 갱신 (상태·네이버ID 등 보존)
+      // 수정: 기존 예약 갱신 — status 는 보내지 않는다. 폰에서 완료/노쇼 처리한 예약을 PC 의 옛 수정 창이 '확정'으로 되돌렸다 (16차 #H1)
       ReservationStore.update(editing.id, reservation);
       // Google 캘린더에 옛 정보가 남지 않도록 기존 이벤트 삭제 후 재생성
       const oldEventId = getGcalMap()[editing.id];
       if (oldEventId && isGoogleCalendarConnected()) {
         deleteCalendarEvent(oldEventId).catch(() => { /* best-effort */ });
-        createCalendarEvent({ ...reservation, id: editing.id } as Reservation)
+        createCalendarEvent({ ...reservation, status: editing.status, id: editing.id })
           .then(ev => rememberGcalEvent(editing.id, ev.id))
           .catch(() => notify('예약은 저장했지만 Google 캘린더 일정은 만들지 못했습니다. 캘린더에서 직접 추가해주세요.')); // 조용히 어긋나지 않게 (6차 UX 감사 2026-11-20)
       }
     } else {
-      const saved = ReservationStore.save(reservation);
+      const saved = ReservationStore.save({ ...reservation, status: 'confirmed' });
       // Google Calendar에도 추가 — 이벤트 id를 기억해 취소/삭제 시 정리 가능하게
       if (addToGoogle && googleAvailable && saved) {
-        createCalendarEvent({ ...reservation, id: saved.id })
+        createCalendarEvent(saved)
           .then(ev => rememberGcalEvent(saved.id, ev.id))
           .catch(() => notify('예약은 저장했지만 Google 캘린더 일정은 만들지 못했습니다. 캘린더에서 직접 추가해주세요.'));
       }
