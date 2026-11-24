@@ -28,6 +28,7 @@ import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
 import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule } from '../src/lib/staffScheduleRule';
 import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
 import { publicSlots } from '../src/lib/publicSlotsRule';
+import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -547,4 +548,23 @@ test('공개 예약 슬롯 — 직원 가용 합집합 ∩ 베드 상한 (143)',
   expect(publicSlots([a, b], 60, { total: 2, busy: [{ startMin: 600, endMin: 660 }] })).toEqual([600, 630, 660, 720, 750]);
   expect(publicSlots([a, b], 60, { total: 0, busy: [] })).toEqual([]);                      // 사용 중 자원 0 이면 받을 수 없음
   expect(publicSlots([[], []], 60, null)).toEqual([]);
+});
+
+test('재고 원장 — Σ 행 = 재고, 대조 차이, 기간 합계, 최신순 (145)', () => {
+  const es = [
+    { id: '1', productId: 'p', kind: 'open' as const, qty: 10, resultStock: 10, at: '2026-11-01T09:00:00.000Z', date: '2026-11-01' },
+    { id: '2', productId: 'p', kind: 'in' as const, qty: 5, resultStock: 15, at: '2026-11-02T09:00:00.000Z', date: '2026-11-02', unitCost: 5000 },
+    { id: '3', productId: 'p', kind: 'sale' as const, qty: -1, resultStock: 14, at: '2026-11-03T09:00:00.000Z', date: '2026-11-03' },
+    { id: '4', productId: 'p', kind: 'count' as const, qty: -2, resultStock: 12, at: '2026-11-04T09:00:00.000Z', date: '2026-11-04' },
+    { id: '5', productId: 'p', kind: 'cancel' as const, qty: 1, resultStock: 13, at: '2026-11-05T09:00:00.000Z', date: '2026-11-05' },
+    { id: '6', productId: 'q', kind: 'open' as const, qty: 3, resultStock: 3, at: '2026-11-01T09:00:00.000Z', date: '2026-11-01' },
+  ];
+  expect(ledgerStock(es, 'p')).toBe(13);
+  expect(ledgerStock(es, 'q')).toBe(3);
+  expect(ledgerStock(es, 'none')).toBe(0);
+  expect(reconcile(es, 'p', 13)).toEqual({ ledger: 13, current: 13, diff: 0 });
+  expect(reconcile(es, 'p', 11)).toEqual({ ledger: 13, current: 11, diff: -2 }); // 기록 없는 이동(다른 기기 판매) → 원장에 -2 조정을 남긴다
+  expect(summarize(es, 'p')).toEqual({ received: 5, sold: 1, canceled: 1, adjusted: -2, receivedCost: 25000 });
+  expect(summarize(es, 'p', '2026-11-03', '2026-11-04')).toEqual({ received: 0, sold: 1, canceled: 0, adjusted: -2, receivedCost: 0 });
+  expect(entriesOf(es, 'p').map(e => e.id)).toEqual(['5', '4', '3', '2', '1']);
 });

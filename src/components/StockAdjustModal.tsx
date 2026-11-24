@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Modal from './ui/Modal';
 import { ProductStore } from '../lib/store';
 import { ExpenseStore } from '../lib/expenseStore';
+import { recordStockMovement } from '../lib/stockLedger';
 import { todayISO, formatPrice } from '../lib/format';
 import { getAllPaymentMethods } from '../lib/paymentMethods';
 import { notify } from '../lib/notify';
@@ -10,13 +11,13 @@ import type { Product, PaymentMethod } from '../types';
 type Mode = 'in' | 'set';
 
 /**
- * 재고 입고·조정 모달 (2026-11-18) — 제품 화면 PC·모바일 공용(공용 Modal: Escape·스크롤 잠금).
+ * 재고 입고·조정 모달 (2026-11-18, 원장 145) — 제품 화면 PC·모바일 공용(공용 Modal: Escape·스크롤 잠금).
  * 입고: 수량을 더하고, 매입 단가를 넣으면 지출 원장에 '제품 매입'으로 같이 기록한다(손익계산서 원가 반영). 원가 갱신은 지출을 기록할 때만.
- * 조정: 실사 결과로 재고 수를 맞춘다(폐기·분실·오기록). 이유를 메모로 남긴다.
- * 재고 이동 원장은 아직 없어(코어 스토어 미지원) 결과 수량만 저장된다 — 입고는 지출 원장으로 추적 가능.
+ * 조정: 실사 결과로 재고 수를 맞춘다(폐기·분실·오기록). 이유를 원장 행에 남긴다.
+ * 모든 이동은 재고 원장(stockLedger)에 한 줄씩 남아 "왜 바뀌었는지"를 설명한다 — 입고 행은 지출 id 로 매입과 연결 (145, GAP P-5).
  * 저장 시점에 스토어를 다시 읽어 그 사이 판매로 바뀐 재고 위에 더한다(다른 기기와는 last-writer-wins — 서버 델타 API 없음).
  */
-export default function StockAdjustModal({ product, onClose, onDone }: { product: Product; onClose: () => void; onDone: () => void }) {
+export default function StockAdjustModal({ product, actor, onClose, onDone }: { product: Product; actor?: string; onClose: () => void; onDone: () => void }) {
   const [mode, setMode] = useState<Mode>('in');
   const [qty, setQty] = useState('');
   const [unitCost, setUnitCost] = useState(product.cost ? String(product.cost) : '');
@@ -50,8 +51,9 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
     const updateCost = mode === 'in' && logExpense && cost !== null && cost > 0 && cost !== fresh.cost;
     const updated = ProductStore.update(product.id, { stock: nextStock, ...(updateCost ? { cost: cost! } : {}) });
     if (!updated) { notify('제품을 찾을 수 없습니다.'); return; }
+    let expenseId: string | undefined;
     if (mode === 'in' && logExpense && total > 0) {
-      ExpenseStore.save({
+      expenseId = ExpenseStore.save({
         expenseDate,
         category: '제품 매입',
         vendor: vendor.trim() || undefined,
@@ -59,8 +61,12 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
         amount: total,
         paymentMethod,
         memo: memo.trim() || undefined,
-      });
+      }).id;
     }
+    // 원장 행 — 입고는 단가·지출 id, 실사는 실제 수량과 이유 (145)
+    recordStockMovement(mode === 'in'
+      ? { product: fresh, kind: 'in', qty: n, date: logExpense ? expenseDate : undefined, unitCost: logExpense && cost ? cost : undefined, refId: expenseId, note: [vendor.trim() || '', memo.trim() || ''].filter(Boolean).join(' · ') || undefined, actor }
+      : { product: fresh, kind: 'count', qty: nextStock - fresh.stock, note: `실사 ${nextStock}${product.unit}${memo.trim() ? ` · ${memo.trim()}` : ''}`, actor });
     notify(mode === 'in'
       ? `${product.name} ${n}${product.unit} 입고 → 재고 ${nextStock}${product.unit}${logExpense && total > 0 ? ` · 지출 ${formatPrice(total)} 기록` : ''}`
       : `${product.name} 재고를 ${fresh.stock}${product.unit} → ${nextStock}${product.unit}로 조정했습니다.`);
@@ -126,16 +132,13 @@ export default function StockAdjustModal({ product, onClose, onDone }: { product
             )}
           </div>
         )}
-        {/* 메모는 지출 기록(ExpenseStore)에만 저장된다 — 저장되지 않는 상황(조정·지출 기록 OFF)에서는 입력란 대신 그 사실을 알린다 (UX 점검 2026-11-19) */}
-        {mode === 'in' && logExpense ? (
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">메모 (지출 기록에 남음)</label>
-            <input value={memo} onChange={e => setMemo(e.target.value)} aria-label="메모" placeholder="예: 11월 정기 발주"
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl" />
-          </div>
-        ) : (
-          <p className="text-xs text-gray-500">{mode === 'set' ? '조정 이유는 따로 저장되지 않습니다 — 폐기·분실로 비용이 생기면 매출·손익 > [지출 등록]에 남겨주세요.' : '지출 기록을 끄면 메모도 남지 않습니다.'}</p>
-        )}
+        {/* 메모·이유는 재고 원장 행에 남는다(입고는 지출 기록에도) (145) */}
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{mode === 'in' ? '메모 (재고 이력·지출 기록에 남음)' : '조정 이유 (재고 이력에 남음)'}</label>
+          <input value={memo} onChange={e => setMemo(e.target.value)} aria-label={mode === 'in' ? '메모' : '조정 이유'} placeholder={mode === 'in' ? '예: 11월 정기 발주' : '예: 파손 2개 폐기'}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl" />
+          {mode === 'set' && <p className="text-xs text-gray-500 mt-1">폐기·분실로 비용이 생기면 매출·손익 &gt; [지출 등록]에도 남겨주세요.</p>}
+        </div>
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
           <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-[#1a3a8f] hover:bg-[#15306e] text-white rounded-xl text-sm font-semibold">

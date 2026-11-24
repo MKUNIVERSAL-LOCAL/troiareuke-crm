@@ -11,8 +11,10 @@ import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
 import { useDataRefreshed } from '../../hooks/useDataRefreshed';
-import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus } from 'lucide-react';
+import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus, History } from 'lucide-react';
 import StockAdjustModal from '../../components/StockAdjustModal';
+import StockLedgerModal from '../../components/StockLedgerModal';
+import { recordStockMovement, removeStockEntries } from '../../lib/stockLedger';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -43,6 +45,7 @@ export default function Products() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
+  const [ledgerProduct, setLedgerProduct] = useState<Product | null>(null); // 재고 이동 이력·대조 (145)
   // 대시보드 재고 부족 알림(?stock=<id>) → 입고 모달 바로 열기. 1회 캡처 후 URL 비움(프리필 관례)
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -74,6 +77,7 @@ export default function Products() {
       : '\n재고 항목은 복구할 수 없습니다.';
     if (!(await askConfirm({ title: '제품 삭제', message: `'${product.name}' 제품을 삭제할까요?${detail}`, confirmLabel: '삭제', danger: true }))) return;
     ProductStore.delete(product.id);
+    removeStockEntries(product.id); // 재고 원장도 함께 (145)
     notify('제품을 삭제했습니다.'); // (15차 #M10)
     refresh();
   };
@@ -83,6 +87,7 @@ export default function Products() {
   const isCanceled = (sale: ProductSale) => canceled.has(sale.id);
   const handleDeleteSale = async (sale: ProductSale) => {
     if (!(await askConfirm({ title: '판매 취소', danger: true, confirmLabel: '판매 취소', cancelLabel: '닫기', message: `${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.` }))) return;
+    const before = sale.productId ? ProductStore.getById(sale.productId) : undefined; // 원장 행의 "이동 전 재고" (145)
     const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
     if (linked.length === 0) {
       // 연결 결제가 없는 옛 판매 — 예전처럼 행 삭제(코어: 재고 복구 포함)
@@ -92,6 +97,7 @@ export default function Products() {
       if (sale.productId) ProductStore.adjustStock(sale.productId, -sale.quantity); // 제품이 지워진 옛 판매는 재고 복구 대상이 없다
       for (const p of linked) PaymentStore.update(p.id, { status: 'refunded', memo: tagRefund(p.memo, todayISO()) });
     }
+    if (before) recordStockMovement({ product: before, kind: 'cancel', qty: sale.quantity, refId: sale.id, note: `${formatDate(sale.saleDate)} 판매 취소`, actor: user?.name }); // 재고 원장 (145)
     notify(`판매를 취소했습니다. ${josa(`재고 ${sale.quantity}${(sale.productId && ProductStore.getById(sale.productId)?.unit) || '개'}`, '을/를')} 복구했습니다.`); // '1병를' 이 되던 것 (123~126 리뷰 #M3) // 파괴적 동작 뒤 피드백 (15차 #M10)
     refresh();
   };
@@ -285,6 +291,7 @@ export default function Products() {
                             <span className="flex items-center gap-1">
                               <button onClick={() => handleSell(p)} disabled={!p.isActive} title={p.isActive ? undefined : '판매 중지 제품 — [수정]에서 판매 활성을 켜세요'} className="inline-flex items-center gap-1 px-3 py-2 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed"><ShoppingCart size={11} />판매</button>
                               <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
+                              <button onClick={() => setLedgerProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 재고 이력`}><History size={11} />이력</button>
                               <button onClick={() => setEditProduct(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={16} /></button>
                               <button onClick={() => handleDeleteProduct(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="제품 삭제"><Trash2 size={16} /></button>
                             </span>
@@ -382,6 +389,15 @@ export default function Products() {
                               >
                                 <PackagePlus size={11} />
                                 입고
+                              </button>
+                              <button
+                                onClick={() => setLedgerProduct(p)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                                aria-label={`${p.name} 재고 이력`}
+                                title="입고·판매·실사 이력과 원장 대조"
+                              >
+                                <History size={11} />
+                                이력
                               </button>
                               <button
                                 onClick={() => setEditProduct(p)}
@@ -526,7 +542,10 @@ export default function Products() {
         />
       )}
       {stockProduct && (
-        <StockAdjustModal product={stockProduct} onClose={() => setStockProduct(null)} onDone={() => { setStockProduct(null); refresh(); }} />
+        <StockAdjustModal product={stockProduct} actor={user?.name} onClose={() => setStockProduct(null)} onDone={() => { setStockProduct(null); refresh(); }} />
+      )}
+      {ledgerProduct && (
+        <StockLedgerModal product={ledgerProduct} actor={user?.name} onClose={() => setLedgerProduct(null)} onChanged={refresh} />
       )}
       {editProduct && (
         <AddProductModal
@@ -782,7 +801,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       return;
     }
     setSaving(true);
-    ProductSaleStore.save({
+    const sale = ProductSaleStore.save({
       customerId: form.customerId || undefined,
       customerName: selectedCustomer?.name || undefined,
       productId: product.id,
@@ -796,6 +815,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       notes: form.notes.trim() || undefined,
     });
     rememberPaymentMethod(form.paymentMethod); // 다음 판매·결제 등록의 기본값 (리뷰 60)
+    recordStockMovement({ product: fresh, kind: 'sale', qty: -qty, date: form.saleDate, refId: sale.id, note: selectedCustomer?.name ? `${selectedCustomer.name} 판매` : undefined, actor: form.staffName.trim() || undefined }); // 재고 원장 (145)
     onSaved();
   };
 
