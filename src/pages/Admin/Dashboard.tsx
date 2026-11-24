@@ -7,6 +7,7 @@ import {
   INSTALL_SITE_URL, INSTALL_GUIDE_MESSAGE, fetchLatestChannelVersion, isOutdated, appModeLabel, type ChannelManifest,
 } from '../../lib/updateChannel';
 import { adminListLoginLogs } from '../../lib/adminApi';
+import PilotMetricsPanel from '../../components/admin/PilotMetricsPanel';
 import { approvedBranchUsers, branchKey, groupByBranch, branchVersionInfo, fetchManifestDirect } from '../../lib/adminBranches';
 import { getLocalLogs } from '../../lib/loginLog';
 import { format, parseISO } from 'date-fns';
@@ -226,6 +227,9 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
+
+          {/* 파일럿 지표 — 초기 설정 완료율·활용률·활동 상태 (166, PHASE 6) */}
+          <PilotMetricsPanel />
 
           {/* 배포 불변 원칙 패널 — 지점 프로그램 버전 현황 + 설치 안내 (재다운로드 안내 없이 운영) */}
           {isAuthApiConfigured && (

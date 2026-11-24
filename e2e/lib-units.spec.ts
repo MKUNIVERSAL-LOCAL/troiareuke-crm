@@ -44,6 +44,7 @@ import type { AiProvider as GwProvider } from '../src/lib/ai/types';
 import { routeModel, tierFor } from '../src/lib/ai/modelRouterRule';
 import { applyEntry, ledgerState, creditsForCost, expireEntry, MONTHLY_GRANT, type LedgerEntry } from '../src/lib/ai/creditLedgerRule';
 import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
+import { setupChecks, setupCompletionPct, utilizationPct, activityLevel, pilotSummary, type BranchCounts } from '../src/lib/pilotMetricsRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
@@ -996,4 +997,22 @@ test('AI 원가·가격 시뮬레이터 — 호출 원가·플랜 원가·시나
   expect(budgetCapKrw(sc)).toBe(170000);
   expect(priceForMargin('pro', 50, a)).toBe(4100); expect(priceForMargin('enterprise', 85, a)).toBe(24500); expect(priceForMargin('pro', 100, a)).toBe(Number.POSITIVE_INFINITY);
   expect(simulate(1000, DEFAULT_PLAN_MIX, { ...a, available: ['openai'] }).marginPct).toBe(88); // Claude 없이 OpenAI 만 — 원가 ↓
+});
+
+test('파일럿 지표 — 초기 설정 6단계·활용 7영역·활동 상태·요약 정렬 (166)', () => {
+  const full: BranchCounts = { recordCounts: { shop_settings: 1, staff: 2, services: 5, customers: 40, reservations: 30, payments: 20, treatment_logs: 10, customer_programs: 3 }, photoCount: 4, messageCount: 2, lastActivity: '2026-11-23T10:00:00.000Z' };
+  const half: BranchCounts = { recordCounts: { shop_settings: 1, programs: 1, customers: 3 }, photoCount: 0, messageCount: 0, lastActivity: '2026-11-01T10:00:00.000Z' };
+  const empty: BranchCounts = { recordCounts: {}, photoCount: 0, messageCount: 0, lastActivity: null };
+  expect(setupCompletionPct(full)).toBe(100); expect(utilizationPct(full)).toBe(100);
+  expect(setupChecks(half).filter(x => !x.done).map(x => x.label)).toEqual(['직원 1명 이상', '고객 5명 이상', '첫 예약', '첫 결제']); // 프로그램 1개는 메뉴 단계 충족
+  expect(setupCompletionPct(half)).toBe(33); expect(utilizationPct(half)).toBe(14); // 고객만 사용(1/7)
+  expect(setupCompletionPct(empty)).toBe(0);
+  const now = new Date('2026-11-24T12:00:00.000Z');
+  expect(activityLevel(full.lastActivity, now)).toBe('active'); expect(activityLevel(half.lastActivity, now)).toBe('idle');
+  expect(activityLevel('2026-09-01T00:00:00.000Z', now)).toBe('dormant'); expect(activityLevel(null, now)).toBe('none'); expect(activityLevel('bad', now)).toBe('none');
+  const s = pilotSummary([{ branchId: 'a', name: '강남점', counts: full }, { branchId: 'b', name: '판교점', counts: half }, { branchId: 'c', name: '신규점', counts: empty }], now);
+  expect(s.branches).toBe(3); expect(s.avgSetupPct).toBe(44); expect(s.avgUtilizationPct).toBe(38);
+  expect(s.byActivity).toEqual({ active: 1, idle: 1, dormant: 0, none: 1 });
+  expect(s.rows.map(r => r.name)).toEqual(['신규점', '판교점', '강남점']); // 덜 된 지점이 위
+  expect(pilotSummary([], now).avgSetupPct).toBeNull(); // 지점 없으면 값을 만들지 않는다
 });

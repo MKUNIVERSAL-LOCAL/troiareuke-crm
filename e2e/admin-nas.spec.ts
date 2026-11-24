@@ -51,6 +51,12 @@ async function mockNas(page: Page) {
   await page.route(`${API}/api/auth/me`, route => json(route, { user: SUPERADMIN }));
   await page.route(`${API}/api/auth/logout`, route => route.fulfill({ status: 204 }));
   await page.route(`${API}/api/admin/users`, route => json(route, { users: USERS }));
+  // 파일럿 지표(166): 강남 전부 완료·활동 중, 판교 절반·뜸함, 승인 대기 지점은 집계에 없어야 한다
+  await page.route(`${API}/api/admin/overview`, route => json(route, { branches: [
+    { branchId: 'b-gn', branchName: '강남점', userCount: 2, recordCounts: { shop_settings: 1, staff: 2, services: 5, customers: 40, reservations: 30, payments: 20, treatment_logs: 10, customer_programs: 3 }, photoCount: 4, messageCount: 2, lastActivity: new Date(Date.now() - 2 * 86_400_000).toISOString() },
+    { branchId: 'b-pg', branchName: '판교점', userCount: 1, recordCounts: { shop_settings: 1, programs: 1, customers: 3 }, photoCount: 0, messageCount: 0, lastActivity: new Date(Date.now() - 20 * 86_400_000).toISOString() },
+    { branchId: 'b-pending', branchName: '신청만한점', userCount: 1, recordCounts: { customers: 1 }, photoCount: 0, messageCount: 0, lastActivity: null },
+  ] }));
   await page.route(`${API}/api/admin/login-logs**`, route => json(route, { logs: [] }));
   await page.route(`${API}/api/announcements**`, route => json(route, { announcements: [] }));
   await page.route(`${API}/api/admin/announcements**`, route => state.announcementsDown ? json(route, { error: '서버 점검 중' }, 503) : json(route, { announcements: [] }));
@@ -109,6 +115,18 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
   await expect(page.getByText('강남점').first()).toBeVisible(); // 직원 PC v1.0.55 가 지점 대표 버전(가장 낮은 버전)
   await expect(page.getByText('v1.0.55')).toBeVisible();
   await expect(page.getByText('신청만한점')).toHaveCount(0);
+
+  // ── 파일럿 지표(166): 승인 2지점만, 덜 된 지점이 위, 남은 단계·활동 등급 ──
+  const pilot = page.getByTestId('pilot-metrics');
+  await expect(pilot.getByTestId('pilot-row')).toHaveCount(2, { timeout: 15_000 });
+  await expect(pilot.getByTestId('pilot-stat-평균 초기 설정 완료율')).toContainText('67%'); // (33 + 100) / 2
+  await expect(pilot.getByTestId('pilot-row').first()).toContainText('판교점');
+  await expect(pilot.getByTestId('pilot-row').first()).toContainText('직원 1명 이상 · 고객 5명 이상 · 첫 예약 · 첫 결제');
+  await expect(pilot.getByTestId('pilot-row').first()).toContainText('뜸함(30일)');
+  await expect(pilot.getByTestId('pilot-row').nth(1)).toContainText('강남점');
+  await expect(pilot.getByTestId('pilot-row').nth(1)).toContainText('완료');
+  await expect(pilot.getByTestId('pilot-row').nth(1)).toContainText('활동 중(7일)');
+  await expect(pilot.getByText('신청만한점')).toHaveCount(0);
 
   // ── 지점 관리: 표에 승인된 2지점만 ──
   await page.goto('/admin/branches');
