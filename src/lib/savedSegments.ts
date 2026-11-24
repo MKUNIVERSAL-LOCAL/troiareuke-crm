@@ -1,5 +1,5 @@
 // savedSegments — 저장 세그먼트의 보관(지점 설정 행, 기기 동기)과 고객 사실 수집 (비코어, 166, GAP C-6·M-2). 규칙은 segmentFilterRule.ts
-import { CustomerStore, ReservationStore } from './store';
+import { CustomerStore, ReservationStore, PaymentStore, CustomerProgramStore } from './store';
 import { getPreference, setPreference } from './shopPreferences';
 import { buildCustomerStatsIndex, statsFor } from './customerStats';
 import { buildSegmentIndex } from './customerSegments';
@@ -36,12 +36,18 @@ export function buildSegmentFacts(): Map<string, CustomerFacts> {
   const seg = buildSegmentIndex(stats);
   const upcoming = new Set<string>();
   for (const r of ReservationStore.getAll()) if (isUpcomingReservation(r, today)) upcoming.add(r.customerId);
+  // 최근 결제·진행 중 회차권 — 고객별로 한 번에 묶어 둔다 (175)
+  const payByCustomer = new Map<string, { date: string; amount: number }[]>();
+  for (const p of PaymentStore.getAll()) if (p.customerId && p.status === 'completed' && p.amount > 0) { const l = payByCustomer.get(p.customerId); const row = { date: p.paymentDate, amount: p.amount }; if (l) l.push(row); else payByCustomer.set(p.customerId, [row]); }
+  const activeProgramCount = new Map<string, number>();
+  for (const cp of CustomerProgramStore.getAll()) if (!cp.isCompleted) activeProgramCount.set(cp.customerId, (activeProgramCount.get(cp.customerId) || 0) + 1);
   const out = new Map<string, CustomerFacts>();
   for (const c of CustomerStore.getAll().filter(isCountableCustomer)) {
     const s = statsFor(c, stats);
     const v = seg.get(c.id);
     out.set(c.id, {
       id: c.id, grade: c.grade, tags: c.tags || [], lastVisitDate: s.lastVisitDate, totalVisits: s.totalVisits, totalSpent: s.totalSpent,
+      recentPayments: payByCustomer.get(c.id) || [], activePrograms: activeProgramCount.get(c.id) || 0,
       rfmSegment: v?.rfm.segment ?? null, churnLevel: v?.churn?.level ?? null,
       birthMonth: c.birthDate && /^\d{4}-\d{2}-\d{2}$/.test(c.birthDate) ? Number(c.birthDate.slice(5, 7)) : null,
       hasUpcoming: upcoming.has(c.id), adConsent: consentOf(c).ad,

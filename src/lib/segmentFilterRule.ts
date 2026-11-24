@@ -12,6 +12,9 @@ export interface SegmentCondition {
   visitsMin?: number;                  // 방문 횟수 이상
   visitsMax?: number;
   spentMin?: number;                   // 누적 결제(원) 이상
+  recentSpendDays?: number;            // 최근 N일 결제 합을 볼 때의 N(기본 90) — recentSpendMin 과 함께 (175)
+  recentSpendMin?: number;             // 최근 N일 완료 결제 합(원) 이상 (175)
+  hasActiveProgram?: boolean;          // true = 진행 중 회차권 있음, false = 없음 (175)
   rfmSegments?: RfmSegment[];          // RFM 구분 중 하나
   churnLevels?: ChurnLevel[];          // 이탈 위험 등급 중 하나
   birthdayThisMonth?: boolean;         // 이달 생일
@@ -28,6 +31,8 @@ export interface CustomerFacts {
   lastVisitDate: string | null;        // YYYY-MM-DD
   totalVisits: number;
   totalSpent: number;
+  recentPayments: { date: string; amount: number }[]; // 완료 결제(날짜·금액) — 최근 N일 합은 여기서 (175)
+  activePrograms: number;              // 진행 중(미완료) 회차권 수 (175)
   rfmSegment: RfmSegment | null;
   churnLevel: ChurnLevel | null;
   birthMonth: number | null;           // 1~12
@@ -35,6 +40,12 @@ export interface CustomerFacts {
   adConsent: 'consented' | 'optout' | 'unknown';
 }
 
+export const DEFAULT_RECENT_SPEND_DAYS = 90;
+function addDaysISO(date: string, n: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const t = new Date(y, m - 1, d + n);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
 function daysBetweenISO(from: string, to: string): number {
   const [fy, fm, fd] = from.split('-').map(Number); const [ty, tm, td] = to.split('-').map(Number);
   return Math.round((new Date(ty, tm - 1, td).getTime() - new Date(fy, fm - 1, fd).getTime()) / 86_400_000);
@@ -52,6 +63,12 @@ export function matchesSegment(f: CustomerFacts, c: SegmentCondition, today: str
   if (c.visitsMin !== undefined && f.totalVisits < c.visitsMin) return false;
   if (c.visitsMax !== undefined && f.totalVisits > c.visitsMax) return false;
   if (c.spentMin !== undefined && f.totalSpent < c.spentMin) return false;
+  if (c.recentSpendMin !== undefined) {
+    const since = addDaysISO(today, -(c.recentSpendDays ?? DEFAULT_RECENT_SPEND_DAYS));
+    const sum = f.recentPayments.filter(p => p.date >= since && p.date <= today).reduce((a, p) => a + p.amount, 0);
+    if (sum < c.recentSpendMin) return false;
+  }
+  if (c.hasActiveProgram !== undefined && (f.activePrograms > 0) !== c.hasActiveProgram) return false;
   if (c.rfmSegments?.length && (!f.rfmSegment || !c.rfmSegments.includes(f.rfmSegment))) return false;
   if (c.churnLevels?.length && (!f.churnLevel || !c.churnLevels.includes(f.churnLevel))) return false;
   if (c.birthdayThisMonth && f.birthMonth !== Number(today.slice(5, 7))) return false;
@@ -63,7 +80,7 @@ export function matchesSegment(f: CustomerFacts, c: SegmentCondition, today: str
 /** 조건이 하나라도 있는가 — 빈 조건은 전체 고객이므로 저장을 막는다 */
 export function isEmptyCondition(c: SegmentCondition): boolean {
   return !(c.grades?.length || c.tagsAny?.length || c.lastVisitDaysMin !== undefined || c.lastVisitDaysMax !== undefined || c.visitsMin !== undefined || c.visitsMax !== undefined
-    || c.spentMin !== undefined || c.rfmSegments?.length || c.churnLevels?.length || c.birthdayThisMonth || c.hasUpcoming !== undefined || c.adConsent);
+    || c.spentMin !== undefined || c.recentSpendMin !== undefined || c.hasActiveProgram !== undefined || c.rfmSegments?.length || c.churnLevels?.length || c.birthdayThisMonth || c.hasUpcoming !== undefined || c.adConsent);
 }
 
 export function validateSegment(name: string, c: SegmentCondition): string[] {
@@ -71,7 +88,9 @@ export function validateSegment(name: string, c: SegmentCondition): string[] {
   if (!name.trim()) errs.push('세그먼트 이름을 입력해주세요.');
   if (isEmptyCondition(c)) errs.push('조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).');
   const nonneg = (v: number | undefined, label: string) => { if (v !== undefined && (!Number.isInteger(v) || v < 0)) errs.push(`${label}: 0 이상 정수로 입력해주세요.`); };
-  nonneg(c.lastVisitDaysMin, '마지막 방문 뒤 최소 일수'); nonneg(c.lastVisitDaysMax, '마지막 방문 뒤 최대 일수'); nonneg(c.visitsMin, '최소 방문 횟수'); nonneg(c.visitsMax, '최대 방문 횟수'); nonneg(c.spentMin, '최소 누적 결제');
+  nonneg(c.lastVisitDaysMin, '마지막 방문 뒤 최소 일수'); nonneg(c.lastVisitDaysMax, '마지막 방문 뒤 최대 일수'); nonneg(c.visitsMin, '최소 방문 횟수'); nonneg(c.visitsMax, '최대 방문 횟수'); nonneg(c.spentMin, '최소 누적 결제'); nonneg(c.recentSpendMin, '최근 결제 최소 금액');
+  if (c.recentSpendDays !== undefined && (!Number.isInteger(c.recentSpendDays) || c.recentSpendDays < 1 || c.recentSpendDays > 365)) errs.push('최근 결제 기간: 1~365일로 입력해주세요.');
+  if (c.recentSpendDays !== undefined && c.recentSpendMin === undefined) errs.push('최근 결제 기간을 쓰려면 최소 금액도 입력해주세요.');
   if (c.lastVisitDaysMin !== undefined && c.lastVisitDaysMax !== undefined && c.lastVisitDaysMin > c.lastVisitDaysMax) errs.push('마지막 방문 일수의 최소가 최대보다 큽니다.');
   if (c.visitsMin !== undefined && c.visitsMax !== undefined && c.visitsMin > c.visitsMax) errs.push('방문 횟수의 최소가 최대보다 큽니다.');
   return errs;
@@ -92,6 +111,8 @@ export function describeSegment(c: SegmentCondition): string {
   else if (c.visitsMin !== undefined) parts.push(`방문 ${c.visitsMin}회 이상`);
   else if (c.visitsMax !== undefined) parts.push(`방문 ${c.visitsMax}회 이하`);
   if (c.spentMin !== undefined) parts.push(`누적 결제 ${c.spentMin.toLocaleString('ko-KR')}원 이상`);
+  if (c.recentSpendMin !== undefined) parts.push(`최근 ${c.recentSpendDays ?? DEFAULT_RECENT_SPEND_DAYS}일 결제 ${c.recentSpendMin.toLocaleString('ko-KR')}원 이상`);
+  if (c.hasActiveProgram === true) parts.push('진행 중 회차권 있음'); else if (c.hasActiveProgram === false) parts.push('진행 중 회차권 없음');
   if (c.rfmSegments?.length) parts.push(`RFM ${c.rfmSegments.join('/')}`);
   if (c.churnLevels?.length) parts.push(`이탈 위험 ${c.churnLevels.map(l => CHURN_LABEL[l]).join('/')}`);
   if (c.birthdayThisMonth) parts.push('이달 생일');

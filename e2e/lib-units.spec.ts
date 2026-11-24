@@ -1040,7 +1040,7 @@ test('파일럿 지표 — 초기 설정 6단계·활용 7영역·활동 상태�
 });
 
 test('저장 세그먼트 규칙 — AND 조건 평가·빈 조건 거절·설명 (166)', () => {
-  const f: CustomerFacts = { id: 'a', grade: 'VIP', tags: ['민감성', '재구매'], lastVisitDate: '2026-10-01', totalVisits: 7, totalSpent: 850000, rfmSegment: '충성', churnLevel: 'medium', birthMonth: 11, hasUpcoming: false, adConsent: 'consented' };
+  const f: CustomerFacts = { id: 'a', grade: 'VIP', tags: ['민감성', '재구매'], lastVisitDate: '2026-10-01', totalVisits: 7, totalSpent: 850000, recentPayments: [{ date: '2026-11-10', amount: 200000 }, { date: '2026-08-01', amount: 300000 }, { date: '2026-11-24', amount: 50000 }], activePrograms: 1, rfmSegment: '충성', churnLevel: 'medium', birthMonth: 11, hasUpcoming: false, adConsent: 'consented' };
   const today = '2026-11-24'; // 마지막 방문 54일 전
   expect(matchesSegment(f, {}, today)).toBe(true);
   expect(matchesSegment(f, { grades: ['VIP', '골드'], tagsAny: ['재구매'], lastVisitDaysMin: 30, lastVisitDaysMax: 60, visitsMin: 5, spentMin: 500000, rfmSegments: ['충성'], churnLevels: ['medium'], birthdayThisMonth: true, hasUpcoming: false, adConsent: 'consented' }, today)).toBe(true);
@@ -1053,6 +1053,17 @@ test('저장 세그먼트 규칙 — AND 조건 평가·빈 조건 거절·설�
   expect(matchesSegment(f, { hasUpcoming: true }, today)).toBe(false);
   expect(matchesSegment(f, { birthdayThisMonth: true }, '2026-12-01')).toBe(false);
   expect(matchesSegment(f, { adConsent: 'optout' }, today)).toBe(false);
+  // 175: 최근 N일 결제 합(양끝 포함)·진행 중 회차권
+  expect(matchesSegment(f, { recentSpendMin: 250000 }, today)).toBe(true);                       // 기본 90일(08-26~): 200,000 + 50,000 = 250,000 (08-01 은 밖)
+  expect(matchesSegment(f, { recentSpendMin: 250001 }, today)).toBe(false);
+  expect(matchesSegment(f, { recentSpendDays: 30, recentSpendMin: 250000 }, today)).toBe(true);   // 10-25~: 250,000
+  expect(matchesSegment(f, { recentSpendDays: 7, recentSpendMin: 100000 }, today)).toBe(false);   // 11-17~: 50,000
+  expect(matchesSegment(f, { recentSpendDays: 120, recentSpendMin: 550000 }, today)).toBe(true);  // 07-27~: 전부
+  expect(matchesSegment(f, { hasActiveProgram: true }, today)).toBe(true); expect(matchesSegment({ ...f, activePrograms: 0 }, { hasActiveProgram: true }, today)).toBe(false);
+  expect(isEmptyCondition({ hasActiveProgram: false })).toBe(false); expect(isEmptyCondition({ recentSpendDays: 30 })).toBe(true); // 기간만으론 조건이 아니다
+  expect(validateSegment('x', { recentSpendDays: 30 })).toEqual(['조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).', '최근 결제 기간을 쓰려면 최소 금액도 입력해주세요.']);
+  expect(validateSegment('x', { recentSpendDays: 400, recentSpendMin: 1 })).toEqual(['최근 결제 기간: 1~365일로 입력해주세요.']);
+  expect(describeSegment({ recentSpendMin: 100000, hasActiveProgram: true })).toBe('최근 90일 결제 100,000원 이상 · 진행 중 회차권 있음');
   expect(isEmptyCondition({})).toBe(true); expect(isEmptyCondition({ grades: [] })).toBe(true); expect(isEmptyCondition({ hasUpcoming: false })).toBe(false);
   expect(validateSegment('', {})).toEqual(['세그먼트 이름을 입력해주세요.', '조건을 하나 이상 넣어주세요(비어 있으면 전체 고객).']);
   expect(validateSegment('x', { lastVisitDaysMin: 90, lastVisitDaysMax: 30 })).toEqual(['마지막 방문 일수의 최소가 최대보다 큽니다.']);
