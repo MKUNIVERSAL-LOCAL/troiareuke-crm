@@ -22,6 +22,7 @@ import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
 import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
 import { monthlyKpis } from '../src/lib/kpiRule';
+import { utilization } from '../src/lib/utilizationRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
 import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
@@ -475,6 +476,29 @@ test('이달 운영 지표 — 방문 고객·재방문율·재예약률·객단
   expect(k.avgTicket).toBe(50_000);
   const empty = monthlyKpis({ month: '2026-11', visitDays: new Map(), payments: [], upcomingByCustomer: new Set() });
   expect(empty).toEqual({ visitors: 0, returning: 0, rebooked: 0, revisitRate: null, rebookRate: null, avgTicket: null, monthRevenue: 0 });
+});
+
+test('가동률 — 근무 창 − 휴게 대비 확정·완료 예약 분, 휴일은 가용 0, 대기·취소·기간 밖 제외, 종료 없으면 60분, 가용 0 은 없음 (180, ANALYTICS-DEFINITIONS)', () => {
+  const w = (s: number, e: number, br?: [number, number]) => ({ work: { startMin: s, endMin: e }, breaks: br ? [{ startMin: br[0], endMin: br[1] }] : [] });
+  const u = utilization({
+    days: [
+      { date: '2026-11-02', windows: [w(540, 1080, [720, 780]), { work: null, breaks: [] }] }, // 09~18 휴게 1h = 480, 휴무 직원 0
+      { date: '2026-11-03', windows: [] },                                                      // 매장 휴일
+      { date: '2026-11-04', windows: [w(600, 1140)] },                                          // 10~19 = 540
+    ],
+    reservations: [
+      { date: '2026-11-02', status: 'confirmed', startTime: '10:00', endTime: '11:30' },  // 90
+      { date: '2026-11-02', status: 'completed', startTime: '14:00', endTime: '15:00' },  // 60
+      { date: '2026-11-02', status: 'cancelled', startTime: '15:00', endTime: '16:00' },  // 제외
+      { date: '2026-11-03', status: 'confirmed', startTime: '11:00', endTime: '12:00' },  // 휴일 예약도 예약 분엔 들어간다(60)
+      { date: '2026-11-04', status: 'pending', startTime: '11:00', endTime: '12:00' },    // 대기 제외
+      { date: '2026-11-04', status: 'completed', startTime: '16:00', endTime: '' },       // 종료 없음 → 60
+      { date: '2026-11-05', status: 'completed', startTime: '10:00', endTime: '12:00' },  // 기간 밖
+    ],
+  });
+  expect(u).toEqual({ bookedMin: 270, availableMin: 1020, rate: 26, days: 3 });
+  expect(utilization({ days: [{ date: '2026-11-02', windows: [] }], reservations: [{ date: '2026-11-02', status: 'confirmed', startTime: '10:00', endTime: '11:00' }] })).toEqual({ bookedMin: 60, availableMin: 0, rate: null, days: 1 });
+  expect(utilization({ days: [{ date: '2026-11-02', windows: [w(540, 600)] }], reservations: [{ date: '2026-11-02', status: 'confirmed', startTime: '09:00', endTime: '11:00' }] }).rate).toBe(200); // 근무 외 예약 → 100% 초과 그대로
 });
 
 test('예약 겹침 규칙 — 반개구간, 맞닿음은 겹침 아님, 자정 넘김, 깨진 시간은 겹침 (140)', () => {

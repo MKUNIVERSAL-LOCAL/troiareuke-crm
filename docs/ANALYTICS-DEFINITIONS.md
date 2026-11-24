@@ -25,6 +25,7 @@
 | **이달 방문 고객** | 이달에 방문일이 하나라도 있는 **집계 대상 고객**(샘플·익명화·삭제 제외) 수 | 방문일 | 이번 달 | todayTasks.getMonthlyKpis 가 isCountableCustomer 로 거른다(139) | 확정 | kpiRule.monthlyKpis | 138, 139 |
 | **재방문율(이달)** | 이달 방문 고객 중 이달 이전에도 방문 기록이 있는 고객 비율(%) | 방문일 | 이번 달 | 방문 고객 0 → 없음 | 확정 | kpiRule | **138** |
 | **재예약률(이달)** | 이달 방문 고객 중 **다음 예약**(위 정의)이 있는 고객 비율(%) | 방문일·reservations | 이번 달 | 방문 고객 0 → 없음. 오늘 완료된 예약은 분자에 안 들어간다(139) | 확정 | kpiRule | 138, 139 |
+| **가동률(이달)** | 오늘까지의 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간(근무표 또는 영업시간, 매장 휴일·휴게 제외) × 100(%) | reservations·staffSchedules·businessHours·holidays | 이번 달(오늘까지) | 가용 0 → 없음. 대기·취소·노쇼 제외, 종료 없는 예약은 60분, 근무 외·휴일 예약도 예약 분에 들어가 100% 초과 가능(그대로 표시). 겹친 예약은 각각 센다 | 확정 | utilizationRule | 180 |
 | **이달 객단가(현금)** | 이달 완료 결제 합 ÷ 이달 방문 고객 수 | payments(completed, 이달)·방문일 | 이번 달 | 회차권 판매액 포함(현금 기준) — 고객 상세 객단가(실현)와 다름, 라벨 "(현금)" | 확정 | kpiRule | **138** |
 | 월 매출 | 결제일이 그 달인 완료(completed) 결제 금액 합 | payments(status=completed) | 월 | 환불·대기 제외(매출 화면 "총 매출"과 같은 정의) | 확정 | revenueMetricsRule.monthMetrics.total | 147 |
 | 전월/전년 동월 대비 | (이달 − 비교달) ÷ 비교달 × 100, 반올림 | 월 매출 | 월 | 비교달 0 이면 산출 안 함(—) | 확정 | monthMetrics.momPct/yoyPct | 147 |
@@ -47,10 +48,10 @@
 ## 예정
 LTV(예측, 연간 기대 × 기대 유지 기간 — 유지율 자료가 쌓인 뒤) · 첫 방문→두 번째 방문 전환율 · 캠페인 성과의 지점 전체 집계(서버 발송 기록 B-4 뒤) · AI 사용·원가 실측(161 뒤, `AI-PRICING-AND-COST-ANALYSIS.md` 2판). 세그먼트 필터 조합(저장 세그먼트)은 166 에서 구현됨.
 
-## 규칙 모듈 색인(순수 `src/lib/*Rule.ts`·`src/lib/ai/*Rule.ts` 33개 + 보안 유틸 1개, store 미참조 — 공식은 위 표 또는 각 설계서)
+## 규칙 모듈 색인(순수 `src/lib/*Rule.ts`·`src/lib/ai/*Rule.ts` 34개 + 보안 유틸 1개, store 미참조 — 공식은 위 표 또는 각 설계서)
 | 모듈 | 무엇을 정하나 | 정의 문서 |
 |---|---|---|
-| customerStatsRule·visitCycleRule·revisitRule·upcomingRule·rfmRule·churnRule·customerValueRule·kpiRule·revenueMetricsRule·programSessionsRule·campaignPerformanceRule·segmentFilterRule·pilotMetricsRule·ai/briefingRule(지표 서식·targetPace·describeCause) | 분석 지표·브리핑 라벨 서식 | 이 문서 표, `AI-TEST-REPORT.md` |
+| customerStatsRule·visitCycleRule·revisitRule·upcomingRule·rfmRule·churnRule·customerValueRule·kpiRule·utilizationRule·revenueMetricsRule·programSessionsRule·campaignPerformanceRule·segmentFilterRule·pilotMetricsRule·ai/briefingRule(지표 서식·targetPace·describeCause) | 분석 지표·브리핑 라벨 서식 | 이 문서 표, `AI-TEST-REPORT.md` |
 | schedulingRule·availabilityRule·staffScheduleRule·resourceRule·publicSlotsRule·reservationPolicyRule | 예약 겹침·가용 시각·근무 창·자원 상한·공개 슬롯·겹침 정책(allow/confirm/block) | `COMMERCIALIZATION-ROADMAP` 140~143 기록, `CUSTOMER-PORTAL-DESIGN-2026-11-24.md` |
 | stockLedgerRule·stockRule·programLedgerRule·refundRule | 재고 원장·안전 재고·회차 원장·환불 모델(결정 #9) | 로드맵 145~148, `REFUND-MODEL-DESIGN-2026-11-24.md` |
 | adComplianceRule·consentRule·campaignRule·duplicateRule·birthdayRule | 광고 표기·법정 시간·동의 태그·캠페인 대상/멱등키·중복 후보(한계: 국가번호 +82 표기와 010 표기는 다른 번호로 봄 — 뒷 4자리 사유로만 잡힘)·생일 | 로드맵 155~157·171, `AI-SECURITY-POLICY.md`(동의 관련 PII) |

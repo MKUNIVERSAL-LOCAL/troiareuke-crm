@@ -4,14 +4,15 @@ import { ListChecks, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useFeature } from '../hooks/useFeature';
 import { canDo } from '../lib/permissions';
-import { buildTodayTasks, getMonthlyKpis, type TodayTask } from '../lib/todayTasks';
+import { buildTodayTasks, getMonthlyKpis, getMonthUtilization, type TodayTask } from '../lib/todayTasks';
 import type { MonthlyKpis } from '../lib/kpiRule';
+import type { Utilization } from '../lib/utilizationRule';
 
 /**
  * 대시보드 "오늘 할 일" + 이달 운영 지표 (138, GAP D-1 — 숫자 나열이 아니라 행동으로 연결되는 대시보드).
  * 각 줄을 누르면 그 고객 목록·화면으로 간다. 지표는 공식을 툴팁으로 보여 "왜 이 숫자인지" 알 수 있게(벤치마크 TOP 20 #15).
  */
-export interface TodayTasksData { tasks: TodayTask[]; kpi: MonthlyKpis | null; salesOn: boolean }
+export interface TodayTasksData { tasks: TodayTask[]; kpi: MonthlyKpis | null; util: Utilization | null; salesOn: boolean }
 
 /** 오늘 할 일·이달 지표를 한 번 계산 — Dashboard 가 모바일·PC 카드 둘에 같은 결과를 내려 전수 스캔을 두 번 돌리지 않는다 (178 리뷰 M-2) */
 export function useTodayTasks(refreshKey: number): TodayTasksData {
@@ -23,13 +24,16 @@ export function useTodayTasks(refreshKey: number): TodayTasksData {
   const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view');
   const tasks = useMemo(() => buildTodayTasks({ customersOn, reservationsOn, productsOn, salesOn, messagingOn }), [refreshKey, customersOn, reservationsOn, productsOn, salesOn, messagingOn]);
   const kpi = useMemo(() => (customersOn ? getMonthlyKpis() : null), [refreshKey, customersOn]);
-  return { tasks, kpi, salesOn };
+  const util = useMemo(() => (reservationsOn ? getMonthUtilization() : null), [refreshKey, reservationsOn]); // 가동률 (180)
+  return { tasks, kpi, util, salesOn };
 }
 
 export default function TodayTasksCard({ compact = false, data }: { compact?: boolean; data: TodayTasksData }) {
   const navigate = useNavigate();
-  const { tasks, kpi, salesOn } = data;
-  const showKpi = !!kpi && kpi.visitors > 0; // 이달 방문이 없으면 "- 0/0명" 칸을 띄우지 않는다 (139 #L8)
+  const { tasks, kpi, util, salesOn } = data;
+  const showVisitKpi = !!kpi && kpi.visitors > 0; // 이달 방문이 없으면 "- 0/0명" 칸을 띄우지 않는다 (139 #L8)
+  const showUtil = !!util && util.rate !== null && util.bookedMin > 0; // 예약이 하나도 없는 달 초엔 0% 칸을 띄우지 않는다 (180)
+  const showKpi = showVisitKpi || showUtil;
   if (tasks.length === 0 && !showKpi) return null;
   const pct = (v: number | null) => (v === null ? '-' : `${v}%`);
   return (
@@ -56,7 +60,8 @@ export default function TodayTasksCard({ compact = false, data }: { compact?: bo
         </ul>
       )}
       {showKpi && kpi && (
-        <div className={`grid grid-cols-3 gap-2 ${tasks.length > 0 ? 'mt-3 pt-3 border-t border-gray-100' : ''}`} aria-label="이달 운영 지표">
+        <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 ${tasks.length > 0 ? 'mt-3 pt-3 border-t border-gray-100' : ''}`} aria-label="이달 운영 지표">
+          {showVisitKpi && kpi && (<>
           <div title="이달 방문 고객 중 이달 이전에도 방문 기록이 있는 고객 비율" className="text-center">
             <p className="text-xs text-gray-500">재방문율</p>
             <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-revisit">{pct(kpi.revisitRate)}</p>
@@ -72,6 +77,14 @@ export default function TodayTasksCard({ compact = false, data }: { compact?: bo
               <p className="text-xs text-gray-500">객단가 <span className="text-gray-400">(현금)</span></p>
               <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-ticket">{kpi.avgTicket === null ? '-' : `${kpi.avgTicket.toLocaleString('ko-KR')}원`}</p>
               <p className="text-xs text-gray-500">방문 {kpi.visitors}명</p>
+            </div>
+          )}
+          </>)}
+          {showUtil && util && (
+            <div title="이달 오늘까지 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간(근무표 또는 영업시간, 매장 휴일·휴게 제외) — 근무 외 예약도 세므로 100% 를 넘을 수 있음" className="text-center">
+              <p className="text-xs text-gray-500">가동률</p>
+              <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-util">{util.rate}%</p>
+              <p className="text-xs text-gray-500">{Math.round(util.bookedMin / 60)}/{Math.round(util.availableMin / 60)}시간</p>
             </div>
           )}
         </div>

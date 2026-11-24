@@ -1,4 +1,4 @@
-import { ProductStore, ReservationStore, PaymentStore } from './store';
+import { ProductStore, ReservationStore, PaymentStore, StaffStore, SettingsStore } from './store';
 import { buildSegmentIndex } from './customerSegments';
 import { getRevisitDueCustomers } from './reminderEngine';
 import { getProgramAlerts } from './programAlerts';
@@ -13,6 +13,9 @@ import { buildCustomerStatsIndex } from './customerStats';
 import { monthlyKpis, type MonthlyKpis } from './kpiRule';
 import { toISO } from './revisitRule';
 import { selectEnabledCampaigns, type CampaignSelection } from './campaignCandidates';
+import { utilization, type Utilization, type UtilizationDay } from './utilizationRule';
+import { getStaffSchedule } from './staffScheduleStore';
+import { dayWindow, dayKeyOf } from './staffScheduleRule';
 
 /**
  * 대시보드 "오늘 할 일" — 흩어진 알림 카드(회차권·생일·재방문·완료 누락·내일 예약·재고)와 136 의 이탈 위험을 **행동 목록**으로 모은다 (138, GAP D-1).
@@ -73,4 +76,21 @@ export function getMonthlyKpis(): MonthlyKpis {
   const visitDays = new Map<string, string[]>();
   for (const [id, days] of stats.visitDays ?? new Map<string, string[]>()) if (countable.has(id)) visitDays.set(id, days);
   return monthlyKpis({ month, visitDays, payments: PaymentStore.getAll().filter(p => p.customerId && countable.has(p.customerId)), upcomingByCustomer: upcoming });
+}
+
+/** 이달(오늘까지) 가동률 — 날마다 활성 직원의 근무 창(근무표 또는 영업시간, 매장 휴일은 창 없음) 대비 확정·완료 예약 시간. 규칙은 utilizationRule(순수) (180, GAP R-10) */
+export function getMonthUtilization(): Utilization {
+  const now = new Date();
+  const todayStr = toISO(now);
+  const st = SettingsStore.get();
+  const holidays = new Set(st.holidays || []);
+  const staff = StaffStore.getAll().filter(s => s.isActive);
+  const days: UtilizationDay[] = [];
+  for (let d = new Date(now.getFullYear(), now.getMonth(), 1); ; d.setDate(d.getDate() + 1)) {
+    const date = toISO(d);
+    if (date > todayStr) break;
+    const key = dayKeyOf(d);
+    days.push({ date, windows: holidays.has(date) ? [] : staff.map(s => { const w = dayWindow(getStaffSchedule(s.id), key, st.businessHours?.[key]); return { work: w.work, breaks: w.breaks }; }) });
+  }
+  return utilization({ days, reservations: ReservationStore.getAll() });
 }

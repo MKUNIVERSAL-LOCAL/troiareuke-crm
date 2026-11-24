@@ -286,6 +286,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   expect(pendingAfter).toEqual({ status: 'completed', linked: 1, amount: 30000 }); // 예약 id로 연결된 결제 1건
   await page.goto('/');
   await expect(page.getByTestId('pending-completion-card')).toHaveCount(0);
+  // 가동률 (180): 이달 완료·확정 예약 시간 ÷ 직원 근무 가용 시간 — 오늘 완료 예약이 있으니 "이달 운영 지표"에 %로 뜬다
+  await expect(page.getByTestId('kpi-util').filter({ visible: true }).first()).toHaveText(/^\d+%$/);
 
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
   await page.evaluate(() => {
