@@ -30,8 +30,8 @@
 
 | ID | 출처(URL·커밋·파일) | 라이선스·고지 | 목적 | 우리 위치 | 수정 내용 | 검증 | 상태 |
 |---|---|---|---|---|---|---|---|
-| TP-1 | clawnify/OpenSalon `src/server/scheduling.ts`(+ `scheduling.test.ts`) — 커밋 해시는 반영 시 기록 | MIT, "Copyright (c) 2026 Clawnify" 고지 유지 | 반개구간 겹침 판정·충돌 목록·설명 문구(순수 함수 ~60줄) | `src/lib/schedulingRule.ts`(신설 예정) | TS 타입·한국어 문구·분 단위 정규화 | lib-units 스펙으로 원 테스트 케이스 이식 | 예정(PHASE 2 예약 묶음) |
-| TP-2 | SGrappelli/pronto `lib/booking-availability.ts` | MIT, "Copyright (c) 2026 Pronto Contributors" | 요일별 open/close/break 를 minutes-of-day 로 환산해 슬롯이 영업시간 안·휴게 밖인지 판정 | `src/lib/availabilityRule.ts`(신설 예정) | 우리 `businessHours`/`holidays` 모델에 맞춤, 직원 근무표·버퍼 확장 | lib-units | 예정(PHASE 2 예약·온라인 예약 묶음) |
+| TP-1 | clawnify/OpenSalon `src/server/scheduling.ts` | MIT | 반개구간 겹침 판정·충돌 목록 | `src/lib/schedulingRule.ts` | **B 로 전환(140, 11-24)** — 외부 코드를 복사하지 않고 규칙(반개구간·맞닿음 비겹침·자정 넘김)만 참고해 자체 구현. 고지 의무 없음 | lib-units 스펙 자체 작성 | 완료(B) |
+| TP-2 | SGrappelli/pronto `lib/booking-availability.ts`, Easy!Appointments `Availability.php`(GPL) | MIT / GPL-3.0 | 가용 슬롯 계산 규칙 순서 | `src/lib/availabilityRule.ts` | **B 로 전환(140, 11-24)** — 규칙 순서(영업시간 → busy 제거 → 간격 분할 → 소요·버퍼 → 사전 마감)만 참고해 자체 구현, 코드 복사 없음 | lib-units 스펙 | 완료(B) |
 
 ## 3. B 분류 — 개념 참고(복사 금지) 적용 계획
 

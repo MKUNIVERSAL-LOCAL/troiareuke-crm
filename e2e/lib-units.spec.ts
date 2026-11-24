@@ -23,6 +23,8 @@ import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
 import { monthlyKpis } from '../src/lib/kpiRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
+import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
+import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
 
@@ -440,4 +442,38 @@ test('이달 운영 지표 — 방문 고객·재방문율·재예약률·객단
   expect(k.avgTicket).toBe(50_000);
   const empty = monthlyKpis({ month: '2026-11', visitDays: new Map(), payments: [], upcomingByCustomer: new Set() });
   expect(empty).toEqual({ visitors: 0, returning: 0, rebooked: 0, revisitRate: null, rebookRate: null, avgTicket: null, monthRevenue: 0 });
+});
+
+test('예약 겹침 규칙 — 반개구간, 맞닿음은 겹침 아님, 자정 넘김, 깨진 시간은 겹침 (140)', () => {
+  expect(schedToMinutes('09:30')).toBe(570);
+  expect(schedToMinutes('9:05')).toBe(545);
+  expect(schedToMinutes('25:00')).toBeNull();
+  expect(schedToMinutes('')).toBeNull();
+  expect(schedFromMinutes(1500)).toBe('01:00');
+  expect(toInterval('23:30', '00:30')).toEqual({ startMin: 1410, endMin: 1470 });   // 자정 넘김
+  expect(toInterval('10:00', undefined, 60)).toEqual({ startMin: 600, endMin: 660 }); // 끝 없으면 기본 소요
+  expect(overlaps({ startMin: 600, endMin: 660 }, { startMin: 660, endMin: 720 })).toBe(false); // 맞닿음
+  expect(overlaps({ startMin: 600, endMin: 661 }, { startMin: 660, endMin: 720 })).toBe(true);
+  const items = [
+    { id: 'a', startTime: '10:00', endTime: '11:00' },
+    { id: 'b', startTime: '11:00', endTime: '12:00' },
+    { id: 'c', startTime: '??', endTime: '' },                 // 깨진 시간 → 겹침으로 보고 확인
+  ];
+  expect(findConflicts({ startMin: 630, endMin: 690 }, items).map(i => i.id)).toEqual(['a', 'b', 'c']);
+  expect(findConflicts({ startMin: 720, endMin: 780 }, items).map(i => i.id)).toEqual(['c']);
+});
+
+test('가용 시작 시각 — 영업시간·기존 예약·간격·소요·버퍼·지금 이후 (140)', () => {
+  const base = { openMin: 600, closeMin: 780, durationMin: 60, busy: [{ startMin: 660, endMin: 720 }] }; // 10:00~13:00, 11~12 예약
+  expect(availableStarts(base)).toEqual([600, 720]);                                         // 10:00, 12:00 (10:30 은 11:00 과 겹침)
+  expect(availableStarts({ ...base, stepMin: 15 })).toEqual([600, 720]);
+  expect(availableStarts({ ...base, durationMin: 30 })).toEqual([600, 630, 720, 750]);
+  expect(availableStarts({ ...base, bufferAfterMin: 15 })).toEqual([]);                      // 10:00 은 정리 11:15 가 예약과 겹침, 12:00 은 정리 13:15 가 마감 뒤
+  expect(availableStarts({ ...base, bufferAfterMin: 15, closeMin: 795 })).toEqual([720]);     // 마감 13:15 면 12:00 가능
+  expect(availableStarts({ ...base, bufferBeforeMin: 15 })).toEqual([]);                     // 10:00 은 09:45 준비가 영업 전, 12:00 은 11:45 준비가 예약과 겹침
+  expect(availableStarts({ ...base, bufferBeforeMin: 15, openMin: 570 })).toEqual([600]);    // 영업 09:30 이면 10:00 가능
+  expect(availableStarts({ ...base, notBeforeMin: 650 })).toEqual([720]);                    // 지금 10:50 이후
+  expect(availableStarts({ ...base, durationMin: 0 })).toEqual([]);
+  expect(availableStarts({ ...base, closeMin: 600 })).toEqual([]);
+  expect(nextAvailable({ openMin: 540, closeMin: 1440, durationMin: 90, busy: [] }, 3)).toEqual(['09:00', '09:30', '10:00']);
 });

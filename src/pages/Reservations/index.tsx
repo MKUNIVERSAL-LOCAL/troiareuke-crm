@@ -21,6 +21,8 @@ import { healCustomerStatsWhenReady } from '../../lib/customerStats';
 import { remainingFor, healProgramSessionsWhenReady } from '../../lib/programSessions';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import { checkBusinessHours } from '../../lib/businessHours';
+import { findConflicts, toInterval, toMinutes as toMinOf } from '../../lib/schedulingRule';
+import { nextAvailable } from '../../lib/availabilityRule';
 import type { Reservation, Staff } from '../../types';
 import {
   isGoogleCalendarConnected,
@@ -964,6 +966,16 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
   const [date, setDate] = useState(editing?.date ?? initialDate ?? todayKey);
   const startOptions = useMemo(() => halfHourSlots(gridRangeFromSettings()), []); // 설정 > 영업시간 범위, 30분 단위 (4차 UX 점검 2026-11-19)
   const [startTime, setStartTime] = useState(editing?.startTime ?? ((initialDate ?? todayKey) === todayKey ? nextTimeSlot(startOptions) : (startOptions.includes('10:00') ? '10:00' : startOptions[0])));
+  // 선택한 담당자·날짜에 이미 예약이 걸린 시작 칸 — 고르기 전에 보이게 (140, GAP R-3)
+  const busyStarts = useMemo(() => {
+    const set = new Set<string>();
+    if (!staffId) return set;
+    const items = ReservationStore.getAll().filter(r => r.id !== editing?.id && r.staffId === staffId && r.date === date && r.status !== 'cancelled' && r.status !== 'noshow');
+    if (items.length === 0) return set;
+    const ivs = items.map(r => toInterval(r.startTime, r.endTime)).filter((v): v is NonNullable<typeof v> => v !== null);
+    for (const t of startOptions) { const m = toMinOf(t); if (m !== null && ivs.some(iv => m >= iv.startMin && m < iv.endMin)) set.add(t); }
+    return set;
+  }, [staffId, date, startOptions, editing?.id]);
   const [source, setSource] = useState<Reservation['source']>(editing?.source ?? 'manual');
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [addToGoogle, setAddToGoogle] = useState(!isEdit && isGoogleCalendarConnected());
@@ -1022,20 +1034,22 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     const endDate = addMinutes(startDate, totalDuration);
     const endTime = format(endDate, 'HH:mm');
 
-    // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침 검사 (취소/노쇼·본인 제외). 분 단위로 — 'HH:mm' 문자열 비교는 자정을 넘는 예약(23:30+60분 → "00:30")에서 역전돼 겹침을 놓쳤다 (12차 #H2)
-    const toMin = (t: string): number | null => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }; // 'HH:mm' 이 아니면 null — NaN 비교는 전부 false 라 겹침을 조용히 놓쳤다 (117~119 리뷰 #M10)
-    const newStart = toMin(startTime) ?? 0, newEnd = newStart + totalDuration;
-    const overlap = ReservationStore.getAll().find(r => {
-      if (r.id === editing?.id || r.staffId !== staff.id || r.date !== date || r.status === 'cancelled' || r.status === 'noshow') return false;
-      const rs = toMin(r.startTime); if (rs === null) return true; // 시간이 깨진 기존 예약은 겹침으로 보고 확인을 받는다
-      let re = toMin(r.endTime) ?? rs + 60; if (re <= rs) re += 24 * 60; // 자정 넘김
-      return newStart < re && newEnd > rs;
-    });
+    // 이중예약 방지 — 같은 담당자·같은 날 시간대 겹침(취소/노쇼·본인 제외). 규칙은 순수 schedulingRule(반개구간·자정 넘김·깨진 시간은 겹침) (12차 #H2, 14차 #M7, 140)
+    const sameStaffDay = ReservationStore.getAll().filter(r => r.id !== editing?.id && r.staffId === staff.id && r.date === date && r.status !== 'cancelled' && r.status !== 'noshow');
+    const newStart = toMinOf(startTime) ?? 0;
+    const overlap = findConflicts({ startMin: newStart, endMin: newStart + totalDuration }, sameStaffDay)[0];
+    // 겹치면 같은 담당자의 빈 시간 3개를 함께 알려 준다 — "안 된다"에서 끝나지 않게 (140, GAP R-4)
+    const freeHint = overlap ? (() => {
+      const range = gridRangeFromSettings();
+      const busy = sameStaffDay.map(r => toInterval(r.startTime, r.endTime)).filter((v): v is NonNullable<typeof v> => v !== null);
+      const free = nextAvailable({ openMin: range.startMin, closeMin: range.endMin, durationMin: totalDuration, busy, notBeforeMin: null }, 3);
+      return free.length ? `${staff.name} 담당 빈 시간: ${free.join(', ')}` : `${staff.name} 담당은 이날 ${totalDuration}분짜리 빈 시간이 없습니다.`;
+    })() : null;
     // 휴무일·지정 휴일·영업시간 밖 경고 — 예외 영업이 있으니 막지 않고 확인만. 시간이 안 바뀐 수정(메모만 등)은 다시 묻지 않는다 (2026-11-18)
     const timeChanged = !editing || editing.date !== date || editing.startTime !== startTime || editing.endTime !== endTime;
     const hoursWarnings = timeChanged ? checkBusinessHours(date, startTime, totalDuration) : [];
     const warnings = [
-      ...(overlap ? [`${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.`] : []),
+      ...(overlap ? [`${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.`, ...(freeHint ? [freeHint] : [])] : []),
       ...hoursWarnings.map(w => w.message),
     ];
     if (warnings.length > 0) {
@@ -1147,7 +1161,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               {!startOptions.includes(startTime) && <option value={startTime}>{startTime}</option>}
-              {startOptions.map(t => <option key={t} value={t}>{t}</option>)}
+              {startOptions.map(t => <option key={t} value={t}>{t}{busyStarts.has(t) ? ' · 예약 있음' : ''}</option>)}
             </select>
           </div>
           <DateQuickChips value={date} onChange={setDate} className="col-span-2 sm:col-span-3 sm:order-last !-mt-2.5" />{/* 폰: 날짜·시간 줄 바로 아래, sm+: 날짜·시간·경로 한 줄 뒤(빈 칸 없이) */}
