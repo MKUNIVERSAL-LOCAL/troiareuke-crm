@@ -37,6 +37,12 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     await expect(dialog('고객 추가')).toBeVisible();
   });
   await cancel();
+  await step('m/customers 세그먼트 만들기', async () => { // 저장 세그먼트 편집 창 — 모바일 폭 (166·168)
+    await vis('+ 세그먼트').click();
+    await expect(dialog('세그먼트 만들기')).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(dialog('세그먼트 만들기')).toHaveCount(0);
   await step('m/customers 상세 오버레이', async () => {
     await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
     await expect(page.getByText('기본 정보').filter({ visible: true }).first()).toBeVisible();
@@ -136,6 +142,12 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
   });
   await page.keyboard.press('Escape');
   await expect(dialog('메시지 발송')).toHaveCount(0);
+  await step('m/messaging 캠페인 추가', async () => { // 자동 발송 캠페인 정의 창 — 모바일 폭 (156·168)
+    await vis('캠페인 추가').click();
+    await expect(dialog('캠페인 추가')).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(dialog('캠페인 추가')).toHaveCount(0);
   await step('m/messaging 템플릿 추가', async () => {
     await vis('템플릿 관리').click();
     await vis('템플릿 추가').click();

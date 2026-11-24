@@ -1564,6 +1564,8 @@ export default function Customers() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* 저장 세그먼트 편집 창 — 데스크톱(hidden lg:flex)·모바일(lg:hidden) 블록 어느 쪽에 두어도 반대 폭에서 숨겨진다(Modal 은 포털이 아님) → 루트 바로 아래 (166·168) */}
+      {segmentEditor !== null && <SegmentEditorModal segment={segmentEditor === 'new' ? null : segmentEditor} facts={segmentFacts} tagOptions={tagOptions.map(t => t.tag)} onClose={() => setSegmentEditor(null)} onSaved={() => { setSegmentEditor(null); const next = listSavedSegments(); setSavedSegments(next); if (!next.some(sg => sg.id === segmentFilterId)) setSegmentFilterId(''); }} />}
 
       {/* ── 모바일 뷰 (< lg) ── 카드 리스트 */}
       <div className="flex flex-col lg:hidden flex-1">
@@ -2233,8 +2235,6 @@ export default function Customers() {
       </div>
 
       {/* 오른쪽: 고객 상세 — 모바일 폭에서는 위의 모바일 상세가 담당하므로 렌더하지 않는다 (CSS hidden만으로는 사진 스트립·결제 내역이 2중 실행, 리뷰 2026-11-17) */}
-      {/* 저장 세그먼트 편집 창 — lg:hidden 블록 안에 두면 PC 에서 함께 숨겨진다(Modal 은 포털이 아님) (166) */}
-      {segmentEditor !== null && <SegmentEditorModal segment={segmentEditor === 'new' ? null : segmentEditor} facts={segmentFacts} tagOptions={tagOptions.map(t => t.tag)} onClose={() => setSegmentEditor(null)} onSaved={() => { setSegmentEditor(null); const next = listSavedSegments(); setSavedSegments(next); if (!next.some(sg => sg.id === segmentFilterId)) setSegmentFilterId(''); }} />}
       {selected && !isMobileLayout ? (
         <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
           <div className="max-w-3xl mx-auto space-y-4">
