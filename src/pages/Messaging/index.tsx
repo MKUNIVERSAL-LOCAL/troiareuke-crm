@@ -658,6 +658,17 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
   const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
+  // 이력 id → 받는 사람 이름 — 목록에서 "누구에게 간 문자" 인지 바로 보이게. 고객 목록을 한 번만 색인한다 (212)
+  const recipientNames = useMemo(() => {
+    if (recipients.size === 0) return new Map<string, string[]>();
+    const byId = new Map(CustomerStore.getAll().map(c => [c.id, c.name]));
+    return new Map([...recipients].map(([hid, ids]) => [hid, ids.map(id => byId.get(id) ?? '삭제된 고객')]));
+  }, [recipients]);
+  const describeRecipients = (hid: string): string | null => {
+    const names = recipientNames.get(hid);
+    if (!names || names.length === 0) return null;
+    return names.length === 1 ? names[0] : `${names[0]} 외 ${names.length - 1}명`;
+  };
   const [perf, setPerf] = useState<Record<string, string>>({}); // 누른 행만 성과 추정 — 행마다 예약·결제 전수 스캔을 하지 않게 (211)
   useEffect(() => { setPerf({}); }, [reloadKey]); // 발송이 생기면 옛 추정치를 지운다
   const customerOnlyCount = customerId ? history.filter(h => recipients.get(h.id)?.includes(customerId)).length : 0; // 칩 건수는 고객 필터만 적용한 수 — 상태·검색과 섞이지 않게 (리뷰 L-2)
@@ -678,6 +689,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
       item.content,
       formatSentAt(item.sentAt),
       MSG_TYPE_LABELS[item.type] || item.type,
+      ...(recipientNames.get(item.id) ?? []), // 받는 사람 이름으로도 찾는다 (212)
     ].some(value => value.toLowerCase().includes(normalizedSearch));
     return statusMatches && searchMatches;
   });
@@ -716,7 +728,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="템플릿명, 내용, 발송일 검색"
+            placeholder="템플릿명, 내용, 받는 사람, 발송일 검색"
             className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
             aria-label="발송 이력 검색"
           />
@@ -767,6 +779,9 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
                       )}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{formatSentAt(h.sentAt)}</p>
+                    {describeRecipients(h.id) && ( /* 받는 사람 — 이 PC 사이드맵에 남은 건만(204·206 부터) (212) */
+                      <p className="text-xs text-gray-500 mt-0.5" data-testid="history-recipients">받는 사람 {describeRecipients(h.id)}</p>
+                    )}
                     {isGatewayPending && (
                       <p className="text-xs text-amber-700 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
                     )}

@@ -92,6 +92,13 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
   });
   await page.goto('/messaging?tab=history');
   await expect(page.getByText('성과 테스트').first()).toBeVisible();
+  // 받는 사람 표시·이름 검색 (212)
+  await expect(page.getByTestId('history-recipients').first()).toContainText(`받는 사람 ${acc.customer}`);
+  await page.getByLabel('발송 이력 검색').fill(acc.customer);
+  await expect(page.getByText('성과 테스트').first()).toBeVisible(); // 수신 고객 이름으로 찾힌다
+  await page.getByLabel('발송 이력 검색').fill('없는이름zz');
+  await expect(page.getByText('조건에 맞는 발송 이력이 없어요')).toBeVisible();
+  await page.getByLabel('발송 이력 검색').fill('');
   await page.getByTestId('history-perf').click(); // 실제로 나간 건에만 있는 버튼
   await expect(page.getByTestId('history-perf-line')).toContainText('[추정] 발송 1명 → 14일 내 예약 1명');
 });
