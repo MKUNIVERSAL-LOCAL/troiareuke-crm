@@ -42,6 +42,7 @@ import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
 import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
 import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
 import { buildReceipt, receiptFileName } from '../src/lib/receiptRule';
+import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT } from '../src/lib/gradeSuggestRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1630,4 +1631,37 @@ test('영수증 파일 이름 — 매장·고객·날짜, 경로 금지 문자 �
   expect(receiptFileName('아르케스파', '김고객', '2026-11-25')).toBe('아르케스파_김고객_영수증_2026-11-25.pdf');
   expect(receiptFileName('아르케 / 스파', '김 고객', '2026-11-25', true)).toBe('아르케  스파_김고객_환불영수증_2026-11-25.pdf');
   expect(receiptFileName(undefined, undefined, '2026-11-25')).toBe('CRM_고객_영수증_2026-11-25.pdf');
+});
+
+// ── 고객 등급 자동 제안 (236, GAP C-1) ───────────────────────────
+// 등급은 매장이 고객에게 약속한 것이라 조용히 바뀌면 안 된다 → 올릴 후보만 제안하고 적용은 사람이 한다.
+
+test('등급 제안 — VIP·골드 기준(방문·누적) 경계 (236)', () => {
+  expect(suggestGrade({ current: '일반', visits: VIP_VISITS, spent: VIP_SPENT })).toEqual({ grade: 'VIP', reason: `방문 ${VIP_VISITS}회 · 누적 200만원` });
+  expect(suggestGrade({ current: '일반', visits: VIP_VISITS - 1, spent: VIP_SPENT })?.grade).toBe('골드');   // 방문 한 번 모자라면 골드
+  expect(suggestGrade({ current: '일반', visits: VIP_VISITS, spent: VIP_SPENT - 1 })?.grade).toBe('골드');   // 금액 1원 모자라면 골드
+  expect(suggestGrade({ current: '신규', visits: GOLD_VISITS, spent: GOLD_SPENT })?.grade).toBe('골드');
+  expect(suggestGrade({ current: '신규', visits: GOLD_VISITS - 1, spent: GOLD_SPENT })?.grade).toBe('일반');  // 방문 2회 이상이면 신규는 지났다
+  expect(suggestGrade({ current: '신규', visits: 1, spent: 50_000 })).toBeNull();                             // 첫 방문은 그대로 신규
+});
+
+test('등급 제안 — RFM 충성·우수는 금액 기준을 못 넘어도 올린다 (236)', () => {
+  expect(suggestGrade({ current: '일반', visits: 5, spent: 300_000, segment: '충성' })?.grade).toBe('VIP');
+  expect(suggestGrade({ current: '일반', visits: 5, spent: 300_000, segment: '충성' })?.reason).toMatch(/RFM 충성/);
+  expect(suggestGrade({ current: '신규', visits: 3, spent: 200_000, segment: '우수' })?.grade).toBe('골드');
+  expect(suggestGrade({ current: '신규', visits: 2, spent: 10_000, segment: '휴면' })?.grade).toBe('일반');   // 구분이 낮아도 방문 2회는 일반
+});
+
+test('등급 제안 — 내리는 제안은 하지 않는다(휴면 VIP 를 강등하지 않는다) (236)', () => {
+  expect(suggestGrade({ current: 'VIP', visits: 2, spent: 50_000 })).toBeNull();
+  expect(suggestGrade({ current: '골드', visits: 2, spent: 50_000 })).toBeNull();
+  expect(suggestGrade({ current: 'VIP', visits: VIP_VISITS, spent: VIP_SPENT })).toBeNull();                 // 이미 최고 등급이면 제안 없음
+  expect(suggestGrade({ current: '골드', visits: VIP_VISITS, spent: VIP_SPENT })?.grade).toBe('VIP');        // 올리는 것만
+});
+
+test('등급 제안 — 방문 기록이 없거나 값이 깨지면 제안하지 않는다 (236)', () => {
+  expect(suggestGrade({ current: '신규', visits: 0, spent: 5_000_000 })).toBeNull();   // 결제만 있고 방문 기록이 없으면 근거가 없다
+  expect(suggestGrade({ current: '신규', visits: NaN as unknown as number, spent: 0 })).toBeNull();
+  // 모르는 등급 값(옛 데이터)은 가장 낮게 보고 제안이 막히지 않게 한다
+  expect(suggestGrade({ current: '브론즈', visits: GOLD_VISITS, spent: GOLD_SPENT })?.grade).toBe('골드');
 });

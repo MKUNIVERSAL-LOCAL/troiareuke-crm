@@ -52,6 +52,9 @@ import { rememberRecipients } from '../../lib/messageRecipients';
 import { countAnonymizeResidue } from '../../lib/anonymizeResidueCount';
 import { describeAnonymizeResidue } from '../../lib/anonymizeResidue';
 import { buildSegmentIndex } from '../../lib/customerSegments';
+import { isCountableCustomer } from '../../lib/customerScope'; // 익명화·샘플 고객 제외 (236)
+// 등급 자동 제안 (236, GAP C-1) — 규칙은 순수 모듈, 적용은 사람이 고른 것만
+import { suggestGrade, GRADE_RULE_TEXT, GRADE_SUGGEST_NOTE, type SuggestGrade } from '../../lib/gradeSuggestRule';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
 import SegmentEditorModal from '../../components/SegmentEditorModal';
@@ -419,6 +422,28 @@ export default function Customers() {
   const segmentFilterIds = useMemo(() => (activeSegment ? segmentIds(activeSegment.condition, segmentFacts) : null), [activeSegment, segmentFacts]);
   const segmentCounts = useMemo(() => new Map(savedSegments.map(sg => [sg.id, segmentIds(sg.condition, segmentFacts).size])), [savedSegments, segmentFacts]); // 칩 인원은 검색 글자마다 다시 세지 않게 (170 리뷰 L-1)
   const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
+  // 등급 올릴 후보 — 전수 1회(기록 재계산값 기준). 자동 적용은 하지 않는다 (236, GAP C-1)
+  const gradeSuggestions = useMemo(() => {
+    const out: { id: string; name: string; current: string; suggested: SuggestGrade; reason: string }[] = [];
+    for (const c of customers) {
+      if (!isCountableCustomer(c)) continue; // 익명화·삭제 고객은 대상이 아니다
+      const st = statsFor(c, statsIndex);
+      const sug = suggestGrade({ current: c.grade, visits: st.totalVisits, spent: st.totalSpent, segment: segmentIndex.get(c.id)?.rfm.segment });
+      if (sug) out.push({ id: c.id, name: c.name, current: c.grade, suggested: sug.grade, reason: sug.reason });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }, [customers, statsIndex, segmentIndex]);
+  const [gradePanel, setGradePanel] = useState(false);
+  const [gradePicked, setGradePicked] = useState<Set<string>>(new Set());
+  const openGradePanel = () => { setGradePicked(new Set(gradeSuggestions.map(g => g.id))); setGradePanel(true); };
+  function applyGradeSuggestions() {
+    const picked = gradeSuggestions.filter(g => gradePicked.has(g.id));
+    if (picked.length === 0) { notify('적용할 고객을 하나 이상 선택해주세요.'); return; }
+    for (const g of picked) CustomerStore.update(g.id, { grade: g.suggested });
+    notify(`${picked.length}명의 등급을 올렸습니다.`);
+    setGradePanel(false);
+    loadAll();
+  }
   const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
   const compareCustomers = (a: Customer, b: Customer): number => {
     switch (sortKey) {
@@ -1124,6 +1149,12 @@ export default function Customers() {
       {activeSegment && <button type="button" onClick={() => navigate(`/messaging?segment=saved:${activeSegment.id}`)} className="flex-shrink-0 px-2 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label={`${activeSegment.name} 세그먼트에 발송`}>이 세그먼트에 발송</button>}{/* 발송 창 딥링크 saved:<id> 의 생산자 (170 리뷰 L-2) */}
       {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
       {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
+      {canManage && gradeSuggestions.length > 0 && (
+        <button type="button" onClick={openGradePanel} data-testid="grade-suggest-open"
+          className="flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium text-emerald-800 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100">
+          등급 올릴 후보 {gradeSuggestions.length}명
+        </button>
+      )}
     </div>
   ) : null;
   const tagChips = selected && (selected.tags || []).length > 0 ? (
@@ -1575,6 +1606,37 @@ export default function Customers() {
   return (
     <div className="flex flex-col h-full">
       {/* 저장 세그먼트 편집 창 — 데스크톱(hidden lg:flex)·모바일(lg:hidden) 블록 어느 쪽에 두어도 반대 폭에서 숨겨진다(Modal 은 포털이 아님) → 루트 바로 아래 (166·168) */}
+      {gradePanel && (
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div role="dialog" aria-modal="true" aria-label="등급 올릴 후보" className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" data-testid="grade-suggest-panel">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">등급 올릴 후보 {gradeSuggestions.length}명</h2>
+              <p className="mt-1 text-xs text-gray-500">{GRADE_RULE_TEXT}</p>
+              <p className="mt-1 text-xs text-gray-400">{GRADE_SUGGEST_NOTE}</p>
+            </div>
+            <ul className="flex-1 overflow-y-auto divide-y divide-gray-50">
+              {gradeSuggestions.map(g => (
+                <li key={g.id} className="px-5 py-3 flex items-center gap-3">
+                  <input type="checkbox" checked={gradePicked.has(g.id)} aria-label={`${g.name} 등급 올리기`}
+                    onChange={e => setGradePicked(prev => { const next = new Set(prev); if (e.target.checked) next.add(g.id); else next.delete(g.id); return next; })}
+                    className="w-4 h-4 accent-[#1a3a8f]" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">{g.name}</p>
+                    <p className="text-xs text-gray-500">{g.reason}</p>
+                  </div>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{g.current} → <b className="text-emerald-700">{g.suggested}</b></span>
+                </li>
+              ))}
+            </ul>
+            <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
+              <button type="button" onClick={() => setGradePanel(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">닫기</button>
+              <button type="button" onClick={applyGradeSuggestions} className="flex-1 py-2.5 bg-[#1a3a8f] text-white text-sm font-semibold rounded-xl hover:bg-[#15306e]">
+                선택한 {gradePicked.size}명 등급 올리기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {segmentEditor !== null && <SegmentEditorModal segment={segmentEditor === 'new' ? null : segmentEditor} facts={segmentFacts} tagOptions={[...new Set([...tagOptions.map(t => t.tag), ...((segmentEditor !== 'new' && segmentEditor?.condition.tagsAny) || [])])]} onClose={() => setSegmentEditor(null)} onSaved={() => { setSegmentEditor(null); const next = listSavedSegments(); setSavedSegments(next); if (!next.some(sg => sg.id === segmentFilterId)) setSegmentFilterId(''); }} />}
 
       {/* ── 모바일 뷰 (< lg) ── 카드 리스트 */}
