@@ -76,6 +76,22 @@
     - 무인 경로(정본): DSM `CRM-publish-update` / `CRM-server-update` **매일 00:00** — 오너가 반복 설정을 "매일"로 바꿔야 유효. **실사고 2026-11-23~25**: 두 작업이 비활성(체크 해제) 상태여서 v1.0.60·v1.0.61 이 채널에 안 올라가 지점이 1.0.59 에 48시간 멈춤 → 11-25 09:41 오너 DSM 로그인 뒤 `CRM-publish-update` 활성·즉시 실행으로 복구. 릴리스 체크리스트에 "DSM 작업 활성 상태 확인(`verify:nas` 채널 버전)"을 릴리스 직후 필수로. 확인은 SSH에서 `grep synoschedtask /etc/crontab` 의 두 작업 줄이 `0 0 * * *`인지.
     - 즉시 경로(보조): `release:all` 마지막에 `publish-nas-channel.mjs`(SSH, 해시 검증 후 원자적 교체)와 `deploy-nas-server.mjs`가 실행된다. 빌드 때문에 PC가 켜져 있는 순간이므로 채널이 즉시 최신이 된다. 서버 재배포는 root가 필요해 오너가 1회 `scripts/nas-tasks/grant-deploy-sudo.sh`를 DSM(root)에서 실행해 주면 이후 자동, 아니면 안내만 출력하고 릴리스는 성공 처리.
 
+## 릴리스 실행 (220, 2026-11-25)
+
+```
+npm run release:run -- --list        # 단계 목록
+npm run release:run -- --dry-run     # 무엇을 할지만 (아무것도 바꾸지 않음)
+npm run release:run                  # main 에서 전체 실행
+npm run release:run -- --from=build  # 실패한 단계부터 이어서
+```
+
+- 단계: `preflight → checks → build → markers → portable → mobile → github → channel → server → verify`.
+- **선행 조건을 먼저 막는다**: main 브랜치, 작업 트리 깨끗, `.env.local` 없음(v1.0.34 실사고), 노트 첫 줄 버전 = package.json, 같은 버전 태그가 이미 있으면 중단.
+- **마커 검사는 `release/win-unpacked/resources/app.asar`** 에서 본다(포터블 exe 는 7z 압축이라 항상 오탐). NAS 주소 1개 이상·Supabase 0·버전 문자열 1개 이상.
+- **server 단계는 `server/` 변경이 있을 때만** 재배포를 시도한다(지난 태그와 비교). sudo 규칙이 없으면 NO_SUDO 로 끝나므로 오너가 DSM 작업을 한 번 등록해야 한다.
+- 버전 올리기·노트 분리·PR 머지는 **사람이 판단**하므로 스크립트에 넣지 않았다(선행 조건으로 검사만 한다).
+- 끝난 뒤 남는 일: 릴리스 기록 커밋(로드맵·브리핑·노션), **48시간 내 구버전 지점 0곳 확인**.
+
 ## 릴리스 노트 (214, 2026-11-25)
 
 - 업데이트 배너는 `docs/RELEASE-NOTES-CURRENT.md` **앞 2000자**를 프로그램을 쓰는 사람(원장, 직원 계정을 쓰는 매장이면 직원도)에게 그대로 보여준다(`prepare-portable-update.mjs`·`prepare-mobile-update.mjs` 가 매니페스트에 그만큼 넣는다).
