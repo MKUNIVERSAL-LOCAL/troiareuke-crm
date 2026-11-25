@@ -145,6 +145,11 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await expect(dialog('제품 판매 기록')).toBeVisible();
   });
   await closeDialog('제품 판매 기록');
+  await step('/products 발주 제안 (248)', async () => {
+    await page.getByTestId('reorder-open').click();
+    await expect(dialog('발주 제안')).toBeVisible();
+  });
+  await closeDialog('발주 제안');
   await step('/products 재고 실사 (245)', async () => {
     await page.getByTestId('stock-count-open').click();
     await expect(dialog('재고 실사')).toBeVisible();

@@ -117,6 +117,12 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
   });
   await dialog('재고 입고·조정').getByRole('button', { name: '닫기', exact: true }).click();
   await expect(dialog('재고 입고·조정')).toHaveCount(0);
+  await step('m/products 발주 제안 (248)', async () => {
+    await page.getByTestId('reorder-open').click();
+    await expect(dialog('발주 제안')).toBeVisible();
+  });
+  await dialog('발주 제안').getByRole('button', { name: '닫기', exact: true }).first().click();
+  await expect(dialog('발주 제안')).toHaveCount(0);
   await step('m/products 재고 실사 (245)', async () => {
     await page.getByTestId('stock-count-open').click();
     await expect(dialog('재고 실사')).toBeVisible();

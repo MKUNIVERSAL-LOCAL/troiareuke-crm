@@ -6,6 +6,7 @@ import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookL
 import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
 import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows } from '../src/lib/stockCountRule';
 import { diffReservation, statusChange, describeChange, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
+import { reorderSuggestions, reorderListText, describeReorderRow } from '../src/lib/reorderRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -2141,4 +2142,68 @@ test('예약 변경 이력 — 모양이 깨진 기록은 버리고, 예약당·
   // 그 예약 것만, 최근 것이 위로
   const mixed = [entry('a', 'r1', '2026-11-26T01:00:00.000Z'), entry('b', 'r2', '2026-11-26T02:00:00.000Z'), entry('c', 'r1', '2026-11-26T03:00:00.000Z')];
   expect(historyFor(mixed, 'r1').map(e => e.id)).toEqual(['c', 'a']);
+});
+
+// ── 248: 발주 제안 (GAP P-5 계열) ──
+
+const reorderProducts = [
+  { id: 'r1', name: '앰플', unit: '개', stock: 2, minStock: 3 },
+  { id: 'r2', name: '마스크팩', unit: '장', stock: 100, minStock: 10 },
+  { id: 'r3', name: '신제품', unit: '개', stock: 1, minStock: 5 },   // 판매 기록 없음
+  { id: 'r4', name: '넉넉한제품', unit: '개', stock: 50, minStock: 5 }, // 판매도 없고 재고도 넉넉
+];
+
+test('발주 제안 — 판매 속도로 수량·남은 일수를 내고, 급한 것부터 (248)', () => {
+  const sales = [
+    ...Array.from({ length: 18 }, (_, i) => ({ id: 's' + i, productId: 'r1', quantity: 1, saleDate: '2026-11-10' })),
+    { id: 'm1', productId: 'r2', quantity: 10, saleDate: '2026-11-20' },
+  ];
+  const rows = reorderSuggestions({ products: reorderProducts, sales, today: '2026-11-26' });
+  const ampoule = rows.find(r => r.id === 'r1');
+  expect(ampoule?.sold).toBe(18);
+  expect(ampoule?.dailyRate).toBe(0.6);           // 18 ÷ 30
+  expect(ampoule?.daysLeft).toBe(3);              // 2 ÷ 0.6 = 3.33 → 3일분
+  expect(ampoule?.suggestQty).toBe(19);           // 0.6×30 + 3 − 2 = 19
+  expect(ampoule?.reason).toContain('최근 30일 18개 판매');
+  // 재고가 넉넉하면 줄을 만들지 않는다(0건 줄 금지)
+  expect(rows.some(r => r.id === 'r2')).toBe(false);
+  expect(rows.some(r => r.id === 'r4')).toBe(false);
+  // 판매 기록이 없으면 속도를 지어내지 않고 안전재고까지만
+  const fresh = rows.find(r => r.id === 'r3');
+  expect(fresh?.suggestQty).toBe(4);
+  expect(fresh?.daysLeft).toBeNull();
+  expect(fresh?.reason).toContain('판매 기록 없음');
+  // 급한 것(남은 일수 적은 것)이 먼저, 모르는 것은 뒤로
+  expect(rows.map(r => r.id)).toEqual(['r1', 'r3']);
+});
+
+test('발주 제안 — 취소된 판매·기간 밖·미래 날짜는 세지 않는다 (248)', () => {
+  const sales = [
+    { id: 'ok', productId: 'r1', quantity: 10, saleDate: '2026-11-20' },
+    { id: 'cancelled', productId: 'r1', quantity: 10, saleDate: '2026-11-21' },
+    { id: 'old', productId: 'r1', quantity: 50, saleDate: '2026-09-01' },   // 기간 밖
+    { id: 'future', productId: 'r1', quantity: 50, saleDate: '2026-12-31' }, // 미래
+    { id: 'noProduct', productName: '연결없음', quantity: 30, saleDate: '2026-11-22' },
+  ];
+  const rows = reorderSuggestions({
+    products: [reorderProducts[0]], sales, canceledSaleIds: new Set(['cancelled']), today: '2026-11-26', coverDays: 30,
+  });
+  expect(rows[0].sold).toBe(10);
+  expect(rows[0].dailyRate).toBe(0.3);
+  expect(rows[0].suggestQty).toBe(10); // 0.3×30 + 3 − 2 = 10
+});
+
+test('발주 제안 — 복사 글은 수량 중심이고 추정이라고 적는다 (248)', () => {
+  const rows = reorderSuggestions({
+    products: [reorderProducts[0], reorderProducts[2]],
+    sales: [{ id: 's', productId: 'r1', quantity: 30, saleDate: '2026-11-20' }],
+    today: '2026-11-26',
+  });
+  const text = reorderListText(rows, '2026-11-26');
+  expect(text).toContain('[발주 요청] 2026-11-26');
+  expect(text).toContain('- 앰플 31개 (현재고 2개, 약 2일분)');
+  expect(text).toContain('- 신제품 4개 (현재고 1개)');
+  expect(text).toContain('수량은 매장이 확인 후 확정합니다');
+  expect(describeReorderRow(rows[0])).toContain('앰플 31개 주문 권장');
+  expect(reorderListText([], '2026-11-26')).toBe(''); // 제안이 없으면 복사할 글도 없다
 });
