@@ -72,4 +72,26 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
   await expect(page.getByLabel('발송 상태 필터')).toHaveValue('failed');
   await expect(page.getByText(/내일 방문 예정입니다/).first()).toBeVisible();
   await expect(page).not.toHaveURL(/tab=history/); // 딥링크 파라미터는 초기값으로만 쓰고 지운다
+
+  // ── 성과 추정 (211): 실제로 나간 발송 1건 + 그 고객의 오늘 예약을 심으면 "[추정] 발송 1명 → 14일 내 예약 1명" ──
+  await page.evaluate(() => {
+    const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
+    const customers = JSON.parse(localStorage.getItem(key(/^crm_.*_customers$/)) || '[]') as { id: string; name: string; shopId?: string }[];
+    const c = customers[0];
+    const t = new Date();
+    const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    const histKey = key(/^crm_.*_msg_history$/);
+    const hist = JSON.parse(localStorage.getItem(histKey) || '[]');
+    hist.push({ id: 'perfhist', type: 'sms', templateName: '성과 테스트', content: '이번 주 예약 안내입니다.', recipients: 1, successCount: 1, failCount: 0, sentAt: new Date().toISOString(), status: 'sent', cost: 11 });
+    localStorage.setItem(histKey, JSON.stringify(hist));
+    localStorage.setItem(histKey.replace(/_msg_history$/, '_msg_history_recipients'), JSON.stringify([{ historyId: 'perfhist', customerIds: [c.id], at: new Date().toISOString() }]));
+    const resvKey = histKey.replace(/_msg_history$/, '_reservations');
+    const resv = JSON.parse(localStorage.getItem(resvKey) || '[]');
+    resv.push({ id: 'perfresv', shopId: c.shopId, customerId: c.id, customerName: c.name, date: today, startTime: '10:00', endTime: '11:00', status: 'confirmed', serviceName: '기본 관리', totalPrice: 0 });
+    localStorage.setItem(resvKey, JSON.stringify(resv));
+  });
+  await page.goto('/messaging?tab=history');
+  await expect(page.getByText('성과 테스트').first()).toBeVisible();
+  await page.getByTestId('history-perf').click(); // 실제로 나간 건에만 있는 버튼
+  await expect(page.getByTestId('history-perf-line')).toContainText('[추정] 발송 1명 → 14일 내 예약 1명');
 });

@@ -15,6 +15,8 @@ import { buildCustomerStatsIndex } from '../../lib/customerStats';
 import { getNoRebookCustomerIds } from '../../lib/todayTasks';
 import { rememberRecipients, recipientIndex, recipientsOf } from '../../lib/messageRecipients';
 import { isGatewayPendingHistory } from '../../lib/messageHistoryRule';
+import { estimateHistoryPerformance } from '../../lib/messagePerformance';
+import { describePerformance } from '../../lib/campaignPerformanceRule';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import type { SavedSegment } from '../../lib/segmentFilterRule';
 import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -656,6 +658,8 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
   const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
+  const [perf, setPerf] = useState<Record<string, string>>({}); // 누른 행만 성과 추정 — 행마다 예약·결제 전수 스캔을 하지 않게 (211)
+  useEffect(() => { setPerf({}); }, [reloadKey]); // 발송이 생기면 옛 추정치를 지운다
   const customerOnlyCount = customerId ? history.filter(h => recipients.get(h.id)?.includes(customerId)).length : 0; // 칩 건수는 고객 필터만 적용한 수 — 상태·검색과 섞이지 않게 (리뷰 L-2)
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>(initialStatus); // 딥링크 초기값 (208)
@@ -784,9 +788,15 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
               </div>
               <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{h.content}</p>
               {(recipients.get(h.id)?.length ?? 0) > 0 && ( /* 수신 고객이 사이드맵에 남은 건(204·206 부터, 이 PC)만 — 같은 대상·본문으로 발송 창을 연다. 미연동으로 못 나간 건을 발송사 연결 뒤 다시 보낼 때 (207) */
-                <div className="mt-2 ml-11">
+                <div className="mt-2 ml-11 flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => onResend(h)} className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" aria-label={`${h.templateName || '직접 작성'} 같은 대상에게 다시 보내기`} data-testid="history-resend">같은 대상에게 다시 보내기</button>
+                  {h.status === 'sent' && !perf[h.id] && ( /* 실제로 나간 건만 — 미연동·실패 건은 성과를 물을 대상이 아니다 (211) */
+                    <button type="button" onClick={() => { const p = estimateHistoryPerformance(h.id, h.sentAt); const line = p && describePerformance(p, formatPrice); if (line) setPerf(prev => ({ ...prev, [h.id]: line })); }} className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" aria-label={`${h.templateName || '직접 작성'} 성과 추정 보기`} data-testid="history-perf">성과 보기</button>
+                  )}
                 </div>
+              )}
+              {perf[h.id] && ( /* 발송 뒤 14일 창 예약·결제 — 추정이지 인과가 아니라 [추정] 라벨을 붙인 그대로 보여 준다 (211, GAP M-6, ANALYTICS-DEFINITIONS) */
+                <p className="mt-2 ml-11 text-xs text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" data-testid="history-perf-line">{perf[h.id]}</p>
               )}
             </div>
           );
