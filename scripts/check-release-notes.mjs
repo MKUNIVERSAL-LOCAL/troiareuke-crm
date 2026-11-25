@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 릴리스 노트 가드 (214) — 업데이트 배너는 docs/RELEASE-NOTES-CURRENT.md 의 앞 2000자를 매장 직원에게 그대로 보여준다
+ * 릴리스 노트 가드 (214) — 업데이트 배너는 docs/RELEASE-NOTES-CURRENT.md 의 앞 2000자를 프로그램을 쓰는 사람(원장·직원 계정)에게 그대로 보여준다
  * (scripts/prepare-portable-update.mjs · prepare-mobile-update.mjs 가 매니페스트에 그만큼 넣는다).
  * v1.0.62 뒤 추가분이 옛 섹션에 섞여 들어가 배너가 "이미 적용된 내용" 만 보여줄 상태였던 일(214)을 막는다:
  *   1) 첫 줄은 "v<버전> 업데이트 내용" — package.json 버전이거나 아직 올리지 않은 다음 패치 버전(릴리스 준비 전)

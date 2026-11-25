@@ -78,7 +78,7 @@
 
 ## 릴리스 노트 (214, 2026-11-25)
 
-- 업데이트 배너는 `docs/RELEASE-NOTES-CURRENT.md` **앞 2000자**를 매장 직원에게 그대로 보여준다(`prepare-portable-update.mjs`·`prepare-mobile-update.mjs` 가 매니페스트에 그만큼 넣는다).
+- 업데이트 배너는 `docs/RELEASE-NOTES-CURRENT.md` **앞 2000자**를 프로그램을 쓰는 사람(원장, 직원 계정을 쓰는 매장이면 직원도)에게 그대로 보여준다(`prepare-portable-update.mjs`·`prepare-mobile-update.mjs` 가 매니페스트에 그만큼 넣는다).
 - 그래서 **새 릴리스 항목은 반드시 맨 위 섹션**에 모은다. 지난 버전 내용이 배너에 걸리면 그 앞에 "— 아래는 이미 적용된 지난 업데이트 내용입니다 —" 구분선을 둔다.
 - 자동 점검: `npm run check:notes`(= `node scripts/check-release-notes.mjs`, `release:all` 게이트 포함). 규칙 자체 점검은 `node scripts/check-release-notes.mjs --selftest`.
 - 실사고: v1.0.62 뒤 묶음 17개의 노트가 옛 섹션에 섞여 들어가, 그대로 릴리스하면 배너에 이미 적용된 내용만 보일 상태였다(214 에서 정정).
