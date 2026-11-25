@@ -115,6 +115,14 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     await page.getByRole('button', { name: '모바일세럼 입고·조정' }).click();
     await expect(page.getByLabel('입고 수량')).toBeVisible();
   });
+  await dialog('재고 입고·조정').getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(dialog('재고 입고·조정')).toHaveCount(0);
+  await step('m/products 재고 실사 (245)', async () => {
+    await page.getByTestId('stock-count-open').click();
+    await expect(dialog('재고 실사')).toBeVisible();
+  });
+  await dialog('재고 실사').getByRole('button', { name: '닫기', exact: true }).first().click(); // X 버튼과 바닥 [닫기] 둘 다 있다
+  await expect(dialog('재고 실사')).toHaveCount(0);
 
   // ── 매출: 결제 등록·지출 등록 창 ──
   await page.goto('/sales');

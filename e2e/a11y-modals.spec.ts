@@ -144,6 +144,12 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await row.getByRole('button', { name: '판매', exact: true }).click();
     await expect(dialog('제품 판매 기록')).toBeVisible();
   });
+  await closeDialog('제품 판매 기록');
+  await step('/products 재고 실사 (245)', async () => {
+    await page.getByTestId('stock-count-open').click();
+    await expect(dialog('재고 실사')).toBeVisible();
+  });
+  await closeDialog('재고 실사');
 
   // ── 매출: 결제 등록 창, 지출 등록 창 ──
   await page.goto('/sales');

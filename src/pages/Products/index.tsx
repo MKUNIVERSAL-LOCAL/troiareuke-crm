@@ -15,6 +15,7 @@ import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus, History } from 'lucide-react';
 import StockAdjustModal from '../../components/StockAdjustModal';
 import StockLedgerModal from '../../components/StockLedgerModal';
+import StockCountModal from '../../components/StockCountModal'; // 전 제품 재고 실사 (245, GAP P-5 후속)
 import { recordStockMovement, removeStockEntries } from '../../lib/stockLedger';
 import { monthCloseBlock } from '../../lib/monthClose';
 import Header from '../../components/layout/Header';
@@ -48,6 +49,7 @@ export default function Products() {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
   const [ledgerProduct, setLedgerProduct] = useState<Product | null>(null); // 재고 이동 이력·대조 (145)
+  const [showCount, setShowCount] = useState(false); // 전 제품 실사 (245)
   // 대시보드 재고 부족 알림(?stock=<id>) → 입고 모달 바로 열기. 1회 캡처 후 URL 비움(프리필 관례)
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -167,6 +169,17 @@ export default function Products() {
               {lowStockOnly ? '전체 보기 ↩' : '재고 부족만 보기 →'}
             </span>
           </button>
+        )}
+
+        {/* 전 제품 실사 — 제품이 없으면 버튼도 없다 (245, GAP P-5 후속) */}
+        {tab === 'inventory' && products.some(p => !p.id.startsWith('sample_')) && (
+          <div className="flex justify-end mb-3">
+            <button type="button" onClick={() => setShowCount(true)} data-testid="stock-count-open"
+              className="px-4 py-2 min-h-[40px] text-sm font-medium text-[#1a3a8f] bg-white border border-[#1a3a8f]/30 rounded-xl hover:bg-blue-50"
+              title="제품을 직접 세어 재고를 한 번에 맞춥니다(원장에 실사 행이 남습니다)">
+              재고 실사
+            </button>
+          </div>
         )}
 
         {/* Summary Cards */}
@@ -551,6 +564,9 @@ export default function Products() {
       )}
       {ledgerProduct && (
         <StockLedgerModal product={ledgerProduct} actor={user?.name} onClose={() => setLedgerProduct(null)} onChanged={refresh} />
+      )}
+      {showCount && (
+        <StockCountModal products={products} actor={user?.name} onClose={() => setShowCount(false)} onDone={() => { setShowCount(false); refresh(); }} />
       )}
       {editProduct && (
         <AddProductModal

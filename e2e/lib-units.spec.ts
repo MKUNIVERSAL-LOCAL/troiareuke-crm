@@ -4,6 +4,7 @@ import { splitPercent } from '../src/lib/percent';
 import { renameTagInSegments } from '../src/lib/segmentFilterRule';
 import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
 import { reasonOptions, labelFor, normalizeReasonText, summarizeReasons, describeReasonSummary, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
+import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote } from '../src/lib/stockCountRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -1980,4 +1981,55 @@ test('취소 사유 집계 — 취소가 없으면 아무 말도 하지 않고, 
   // 사유가 하나도 안 적힌 달은 "사유 미기록" 만 말한다
   const none = summarizeReasons({ cancelled: 3, noshow: 1 }, []);
   expect(describeReasonSummary(none)).toBe('이달 취소 3건 · 노쇼 1건 — 사유 미기록 4건');
+});
+
+// ── 245: 전 제품 재고 실사 (GAP P-5 후속) ──
+
+const countItems = [
+  { id: 'p1', name: '앰플', unit: '개', stock: 10 },
+  { id: 'p2', name: '마스크팩', unit: '장', stock: 40 },
+  { id: 'p3', name: '토너', unit: '개', stock: 5 },
+  { id: 'p4', name: '크림', unit: '개', stock: 7 },
+];
+
+test('재고 실사 — 빈칸은 세지 않은 제품으로 두고 건드리지 않는다 (245)', () => {
+  expect(parseCountedQty('')).toBeNull();
+  expect(parseCountedQty('  ')).toBeNull();
+  expect(parseCountedQty('12')).toBe(12);
+  expect(parseCountedQty('1,200')).toBe(1200);
+  expect(parseCountedQty('0')).toBe(0);
+  expect(parseCountedQty('-3')).toBeUndefined();   // 음수는 거절 — "0 으로 맞췄다" 가 되지 않게
+  expect(parseCountedQty('3.5')).toBeUndefined();
+  expect(parseCountedQty('열개')).toBeUndefined();
+
+  const rows = buildCountRows(countItems, { p1: '8', p2: '40', p3: '세 개' });
+  expect(rows[0]).toMatchObject({ counted: 8, diff: -2 });
+  expect(rows[1]).toMatchObject({ counted: 40, diff: 0 });    // 일치
+  expect(rows[2].error).toBeTruthy();                          // 잘못 적은 칸
+  expect(rows[3]).toMatchObject({ counted: null, diff: 0 });   // 빈칸 — 세지 않음
+  expect(rowsToSave(rows).map(r => r.id)).toEqual(['p1']);     // 차이 있고 올바른 것만 저장
+});
+
+test('재고 실사 요약 — 일치·미입력·오류·증감 합을 숨기지 않는다 (245)', () => {
+  const rows = buildCountRows(countItems, { p1: '12', p2: '38', p3: '5', p4: '' });
+  const s = countSummary(rows);
+  expect(s).toEqual({ entered: 3, matched: 1, changed: 2, untouched: 1, invalid: 0, plus: 2, minus: -2 });
+  const line = describeCountSummary(s);
+  expect(line).toContain('맞출 제품 2종');
+  expect(line).toContain('일치 1종');
+  expect(line).toContain('아직 안 센 제품 1종');
+  expect(line).toContain('+2');
+  expect(line).toContain('-2');
+  // 아무것도 적지 않은 상태
+  const empty = countSummary(buildCountRows(countItems, {}));
+  expect(empty).toMatchObject({ entered: 0, changed: 0, untouched: 4 });
+  expect(rowsToSave(buildCountRows(countItems, {}))).toEqual([]);
+  // 잘못 적은 칸은 따로 센다
+  expect(countSummary(buildCountRows(countItems, { p1: 'x' })).invalid).toBe(1);
+  expect(describeCountSummary(countSummary(buildCountRows(countItems, { p1: 'x' })))).toContain('잘못 적은 칸 1개');
+});
+
+test('재고 실사 원장 설명 — 실제 수량·날짜·메모가 남는다 (245)', () => {
+  expect(countNote({ counted: 8, unit: '개' }, '2026-11-26')).toBe('실사 8개 (2026-11-26)');
+  expect(countNote({ counted: 0, unit: '장' }, '2026-11-26', '  월말   실사 ')).toBe('실사 0장 (2026-11-26) · 월말 실사');
 });
