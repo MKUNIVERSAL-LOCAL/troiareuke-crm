@@ -2,7 +2,7 @@
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { askConfirm, askConfirmWithChoice } from '../../lib/confirmDialog';
 // 취소·노쇼 사유 (244, GAP R-10 후속) — 규칙은 순수 cancelReasonRule, 저장은 설정 행(cancelReasons)
-import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary } from '../../lib/cancelReasonRule';
+import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, previousMonth } from '../../lib/cancelReasonRule';
 import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons';
 // 예약 변경 이력 (247) — 코어 Reservation 에 수정 시각·수정자 칸이 없어 이 기기 기록으로 남긴다
 import { logReservationEdit, logReservationStatus, logReservationCreate, logReservationDelete, reservationHistory } from '../../lib/reservationHistory';
@@ -343,7 +343,13 @@ export default function Reservations() {
       const facts = monthCancelFacts(month);
       // "이달" 대신 보고 있는 달을 적는다 — 주간 보기가 달을 넘나들면 어느 달인지 알 수 없었다 (246 리뷰 L-10)
       const label = `${Number(month.slice(5, 7))}월`;
-      return describeReasonSummary(summarizeReasons(facts.totals, facts.records), label);
+      const summary = summarizeReasons(facts.totals, facts.records);
+      const head = describeReasonSummary(summary, label);
+      if (!head) return null;
+      // 숫자 하나로는 많은 건지 알 수 없다 — 지난달과 비교해 꼬리말로 붙인다(지난달 자료가 없으면 비교하지 않는다) (253)
+      const prevFacts = monthCancelFacts(previousMonth(month));
+      const trend = describeReasonTrend(compareReasonMonths(summary, summarizeReasons(prevFacts.totals, prevFacts.records)));
+      return trend ? `${head} · ${trend}` : head;
     };
     return {
       pc: line(format(viewMode === 'week' ? startOfWeek(currentDate, { weekStartsOn: 1 }) : currentDate, 'yyyy-MM')),

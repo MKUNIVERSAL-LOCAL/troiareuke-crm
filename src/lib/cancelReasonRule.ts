@@ -128,3 +128,47 @@ export function describeReasonSummary(s: ReasonSummary, monthLabel?: string, top
   const tail = s.missing > 0 ? ` · 사유 미기록 ${s.missing}건` : '';
   return `${head} — ${list}${tail}${shop}`;
 }
+
+/**
+ * 지난달과 비교 (253) — 숫자 하나로는 "많은 건지" 알 수 없다. 매장이 손 쓸 수 있는 몫(매장 쪽 사유)이
+ * 늘었는지가 핵심이라 그 변화를 따로 돌려준다.
+ * 정직성: 지난달 자료가 아예 없으면(기록 시작 전) 비교하지 않는다 — 0 에서 늘었다고 말하지 않는다.
+ */
+export interface ReasonTrend {
+  /** 지난달 자료가 있는가(취소·노쇼가 한 건이라도 있었는가) */
+  comparable: boolean;
+  cancelDelta: number;
+  noshowDelta: number;
+  shopSideDelta: number;
+}
+
+export function compareReasonMonths(current: ReasonSummary, previous: ReasonSummary): ReasonTrend {
+  const comparable = previous.cancelled + previous.noshow > 0;
+  return {
+    comparable,
+    cancelDelta: current.cancelled - previous.cancelled,
+    noshowDelta: current.noshow - previous.noshow,
+    shopSideDelta: current.shopSide - previous.shopSide,
+  };
+}
+
+const signed = (n: number): string => (n > 0 ? `+${n}` : `${n}`);
+
+/** 한 줄 꼬리말 — 비교할 수 없거나 변화가 없으면 아무것도 적지 않는다 */
+export function describeReasonTrend(t: ReasonTrend): string | null {
+  if (!t.comparable) return null;
+  const parts: string[] = [];
+  if (t.cancelDelta !== 0) parts.push(`취소 ${signed(t.cancelDelta)}`);
+  if (t.noshowDelta !== 0) parts.push(`노쇼 ${signed(t.noshowDelta)}`);
+  if (t.shopSideDelta !== 0) parts.push(`매장 쪽 사유 ${signed(t.shopSideDelta)}`);
+  if (parts.length === 0) return '지난달과 같습니다';
+  return `지난달 대비 ${parts.join(' · ')}`;
+}
+
+/** 지난달(YYYY-MM) */
+export function previousMonth(yearMonth: string): string {
+  const [y, m] = yearMonth.split('-').map(Number);
+  if (!y || !m) return yearMonth;
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}

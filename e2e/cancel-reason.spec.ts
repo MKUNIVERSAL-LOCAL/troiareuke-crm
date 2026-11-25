@@ -79,6 +79,8 @@ test('취소·노쇼에 사유를 남기면 예약 상세와 이달 집계에 �
   await expect(summary).toContainText('취소 2건 · 노쇼 1건'); // 앞에는 보고 있는 달(예: 11월)이 붙는다
   await expect(summary).toContainText('고객 일정 변경 1건');
   await expect(summary).toContainText('사유 미기록 1건');
+  // 지난달 자료가 없으면 비교 꼬리말을 붙이지 않는다 — 0 에서 늘었다고 말하지 않는다 (253)
+  await expect(summary).not.toContainText('지난달 대비');
 
   // ── 복구하면 그 예약의 사유도 사라지고 집계에서 빠진다 ──
   await statusFilter(page).selectOption('cancelled');

@@ -3,7 +3,7 @@ import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, 
 import { splitPercent } from '../src/lib/percent';
 import { renameTagInSegments } from '../src/lib/segmentFilterRule';
 import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
-import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
+import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, previousMonth, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
 import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows } from '../src/lib/stockCountRule';
 import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
 import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
@@ -2413,4 +2413,30 @@ test('고객 변경 이력 — 모양이 깨진 기록·상한·고객별 조회
   expect(trimCustomerHistory([entry('old', 'c1', '2026-01-02T00:00:00.000Z')], '2026-06-01')).toEqual([]);
   const mixed = [entry('a', 'c1', '2026-11-26T01:00:00.000Z'), entry('b', 'c2', '2026-11-26T02:00:00.000Z'), entry('c', 'c1', '2026-11-26T03:00:00.000Z')];
   expect(customerHistoryFor(mixed, 'c1').map(e => e.id)).toEqual(['c', 'a']);
+});
+
+// ── 253: 취소·노쇼 사유 지난달 비교 ──
+
+test('취소 사유 추세 — 지난달 자료가 없으면 비교하지 않는다 (253)', () => {
+  const cur = summarizeReasons({ cancelled: 5, noshow: 2 }, [{ kind: 'cancelled', reason: 'shop-schedule' }]);
+  const emptyPrev = summarizeReasons({ cancelled: 0, noshow: 0 }, []);
+  const t0 = compareReasonMonths(cur, emptyPrev);
+  expect(t0.comparable).toBe(false);
+  expect(describeReasonTrend(t0)).toBeNull(); // 0 에서 늘었다고 말하지 않는다
+  // 지난달 자료가 있으면 변화만 적는다
+  const prev = summarizeReasons({ cancelled: 3, noshow: 2 }, [{ kind: 'cancelled', reason: 'customer-schedule' }]);
+  const t1 = compareReasonMonths(cur, prev);
+  expect(t1).toEqual({ comparable: true, cancelDelta: 2, noshowDelta: 0, shopSideDelta: 1 });
+  expect(describeReasonTrend(t1)).toBe('지난달 대비 취소 +2 · 매장 쪽 사유 +1');
+  // 줄어든 것도 그대로
+  const t2 = compareReasonMonths(prev, cur);
+  expect(describeReasonTrend(t2)).toBe('지난달 대비 취소 -2 · 매장 쪽 사유 -1');
+  // 변화가 없으면 그 사실을 말한다
+  expect(describeReasonTrend(compareReasonMonths(prev, prev))).toBe('지난달과 같습니다');
+});
+
+test('지난달 계산 — 연말 경계 (253)', () => {
+  expect(previousMonth('2026-11')).toBe('2026-10');
+  expect(previousMonth('2026-01')).toBe('2025-12');
+  expect(previousMonth('엉망')).toBe('엉망');
 });
