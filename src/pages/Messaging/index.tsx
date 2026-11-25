@@ -1105,7 +1105,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                 <button type="button" onClick={() => setOnlyCustomer(null)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">대상 바꾸기</button>
               </div>
             ) : (
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible py-1 -my-1 -mx-1 px-1" data-testid="recipient-chips">
               {(() => {
                 const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal', 'norebook'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
@@ -1120,7 +1120,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                   key={r.key}
                   onClick={() => setRecipientMode(r.key as typeof recipientMode)}
                   className={clsx(
-                    'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
+                    'flex-shrink-0 whitespace-nowrap min-h-[36px] lg:min-h-0 px-3 py-2 text-sm font-medium rounded-xl border transition-all', // 폰 터치 36px·줄바꿈 금지 (213)
                     recipientMode === r.key
                       ? 'bg-primary-600 text-white border-primary-600'
                       : 'bg-white text-gray-600 border-gray-200'

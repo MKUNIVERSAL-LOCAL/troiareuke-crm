@@ -291,6 +291,22 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(mobileTimeline.getByRole('listitem').first()).toBeVisible();
   await page.getByRole('button', { name: '뒤로가기' }).click();
 
+  // 문자 발송 창: 폰에서 수신 대상 칩이 한 줄 가로 스크롤이라 본문 입력이 화면 안에 남는다 (213)
+  await page.goto('/messaging');
+  await page.getByRole('button', { name: '메시지 보내기' }).click();
+  const sendDialog = page.getByRole('dialog', { name: '메시지 발송' });
+  await expect(sendDialog).toBeVisible();
+  const chips = sendDialog.getByTestId('recipient-chips');
+  const chipBox = await chips.boundingBox();
+  expect(chipBox && chipBox.width <= vw, '수신 대상 칩 줄이 화면보다 넓다').toBeTruthy();
+  const allChip = chips.getByRole('button', { name: /^전체 \(/ });
+  const allBox = await allChip.boundingBox();
+  expect(allBox && allBox.height >= 36, '수신 대상 칩이 터치 기준(36px)보다 작다').toBeTruthy();
+  await expect(sendDialog.locator('textarea')).toBeVisible(); // 칩 줄이 본문을 화면 밖으로 밀어내지 않는다
+  await expectNoHorizontalOverflow(page, '문자 발송 창');
+  await page.keyboard.press('Escape');
+  await expect(sendDialog).toHaveCount(0);
+
   // 설정 화면: 모바일에서 탭 칩이 가로로 쌓이고 입력란이 화면 안에 있다
   await page.goto('/settings');
   const saveBtn = page.getByRole('button', { name: '저장하기' }).filter({ visible: true }).first();
