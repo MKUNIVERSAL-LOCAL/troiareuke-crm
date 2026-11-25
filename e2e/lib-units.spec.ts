@@ -55,6 +55,7 @@ import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, 
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
+import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -905,6 +906,7 @@ test('기본 시나리오 16개는 모두 유효하고 트리거 11종을 덮으
   expect(CAMPAIGN_PRESETS.length).toBe(16);
   expect(new Set(CAMPAIGN_PRESETS.map(p => p.name)).size).toBe(16);
   for (const p of CAMPAIGN_PRESETS) expect(validateCampaign(p), p.name).toEqual([]);
+  for (const p of CAMPAIGN_PRESETS) expect(renderCampaignContent(p.content, CAMPAIGN_SAMPLE_VARS), p.name).not.toMatch(/\{[^}]+\}/); // 샘플 값이 변수 9종을 전부 덮어 미리보기에 {변수} 가 남지 않는다 (201)
   expect(new Set(CAMPAIGN_PRESETS.map(p => p.trigger)).size).toBe(Object.keys(TRIGGER_LABELS).length); // 트리거 전부에 시나리오 하나 이상
   expect(CAMPAIGN_PRESETS.filter(p => p.isAd).map(p => p.name)).toEqual(['미방문 90일 복귀 혜택', '생일 주간 혜택']); // 혜택만 광고, 거래 안내는 비광고
   expect(missingPresets(['예약 전날 안내', '생일 축하']).length).toBe(14);

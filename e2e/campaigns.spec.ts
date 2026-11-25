@@ -32,6 +32,8 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await edit.getByLabel('캠페인 이름').fill('예약 전날 안내');
   await edit.getByLabel('언제(트리거)').selectOption('reservation_tomorrow');
   await edit.getByLabel('메시지 내용').fill('{고객명}님, 내일 {예약일시} 예약을 기다리고 있어요. — {매장명}');
+  await expect(edit.getByTestId('campaign-preview')).toContainText('홍길동님, 내일 11.26 14:00 예약을 기다리고 있어요.'); // 샘플 치환 미리보기 (201)
+  await expect(edit.getByTestId('campaign-preview')).toContainText(/SMS \d+\/90바이트/);
   await edit.getByRole('button', { name: '추가', exact: true }).click();
   await expect(edit).toHaveCount(0);
   const row = card.getByTestId('campaign-row').filter({ hasText: '예약 전날 안내' });
