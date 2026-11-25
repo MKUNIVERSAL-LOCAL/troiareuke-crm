@@ -47,6 +47,7 @@ import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo, getCustomerVisitCycle, getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { getProgramAlerts } from '../../lib/programAlerts';
+import { getNoRebookCustomerIds } from '../../lib/todayTasks';
 import { buildSegmentIndex } from '../../lib/customerSegments';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
@@ -395,6 +396,8 @@ export default function Customers() {
   const [programAlertOnly, setProgramAlertOnly] = useState(() => searchParams.get('programAlert') === '1'); // 회차권 소진·만료 임박 (138)
   const revisitIds = useMemo(() => (revisitOnly ? new Set(getRevisitDueCustomers(0).map(d => d.customer.id)) : null), [revisitOnly, customers]);
   const programAlertIds = useMemo(() => (programAlertOnly ? new Set(getProgramAlerts().map(a => a.customer.id)) : null), [programAlertOnly, customers]);
+  const [norebookOnly, setNorebookOnly] = useState(() => searchParams.get('norebook') === '1'); // 이달 방문·다음 예약 없음 — 대시보드 재예약률 타일·오늘 할 일 딥링크 (184)
+  const norebookIds = useMemo(() => (norebookOnly ? getNoRebookCustomerIds() : null), [norebookOnly, customers]);
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
   type SortKey = 'recent' | 'name' | 'registered' | 'spent';
   const [sortKey, setSortKey] = useState<SortKey>('recent');
@@ -1041,9 +1044,10 @@ export default function Customers() {
     const matchRevisit = !revisitIds || revisitIds.has(c.id);
     const matchProgram = !programAlertIds || programAlertIds.has(c.id);
     const matchSegment = !segmentFilterIds || segmentFilterIds.has(c.id); // 저장 세그먼트 (166)
-    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment;
+    const matchNoRebook = !norebookIds || norebookIds.has(c.id); // (184)
+    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment && matchNoRebook;
   }).sort(compareCustomers),
-  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds]);
+  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds, norebookIds]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -1053,7 +1057,7 @@ export default function Customers() {
   }, [customers, detailTick]);
   // 목록은 100명씩 — 전부 마운트하면 수백 명부터 폰에서 버벅인다. 검색·필터·정렬이 바뀌면 처음부터
   const [listLimit, setListLimit] = useState(LIST_PAGE);
-  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey, churnOnly, revisitOnly, programAlertOnly, segmentFilterId]); // (170 리뷰 L-6)
+  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey, churnOnly, revisitOnly, programAlertOnly, segmentFilterId, norebookOnly]); // (170 리뷰 L-6)
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
@@ -1620,6 +1624,9 @@ export default function Customers() {
             {programAlertOnly && (
               <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
             )}
+            {norebookOnly && (
+              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {norebookIds?.size ?? 0} ✕</button>
+            )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
                 className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${churnOnly ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
@@ -2145,6 +2152,9 @@ export default function Customers() {
             )}
             {programAlertOnly && (
               <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+            )}
+            {norebookOnly && (
+              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {norebookIds?.size ?? 0} ✕</button>
             )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}

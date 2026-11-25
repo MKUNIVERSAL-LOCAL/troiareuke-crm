@@ -21,7 +21,7 @@ import { personalCycleDays, resolveVisitCycle } from '../src/lib/visitCycleRule'
 import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
 import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
-import { monthlyKpis } from '../src/lib/kpiRule';
+import { monthlyKpis, noRebookIds } from '../src/lib/kpiRule';
 import { utilization, formatHours } from '../src/lib/utilizationRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
@@ -476,6 +476,7 @@ test('이달 운영 지표 — 방문 고객·재방문율·재예약률·객단
   expect(k.avgTicket).toBe(50_000);
   const empty = monthlyKpis({ month: '2026-11', visitDays: new Map(), payments: [], upcomingByCustomer: new Set() });
   expect(empty).toEqual({ visitors: 0, returning: 0, rebooked: 0, revisitRate: null, rebookRate: null, avgTicket: null, monthRevenue: 0 });
+  expect(noRebookIds({ month: '2026-11', visitDays, upcomingByCustomer: new Set(['a', 'c']) })).toEqual(['b', 'd']); // 분모(3) − 분자(1) = 2명, c 는 이달 방문 아님 (184)
 });
 
 test('가동률 — 근무 창 − 휴게 대비 확정·완료 예약 분, 휴일은 가용 0, 대기·취소·기간 밖 제외, 종료 없으면 60분, 가용 0 은 없음 (180, ANALYTICS-DEFINITIONS)', () => {

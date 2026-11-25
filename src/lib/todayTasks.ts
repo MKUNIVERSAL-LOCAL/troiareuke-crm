@@ -10,7 +10,7 @@ import { getPendingCompletionReservations } from './pendingCompletion';
 import { getTomorrowReservations } from './reservationReminder';
 import { isLowStock } from './stockRule';
 import { buildCustomerStatsIndex } from './customerStats';
-import { monthlyKpis, type MonthlyKpis } from './kpiRule';
+import { monthlyKpis, noRebookIds, type KpiInput, type MonthlyKpis } from './kpiRule';
 import { toISO } from './revisitRule';
 import { selectEnabledCampaigns, type CampaignSelection } from './campaignCandidates';
 import { utilization, type Utilization, type UtilizationDay } from './utilizationRule';
@@ -51,6 +51,11 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
     const tomorrow = getTomorrowReservations().length;
     if (tomorrow > 0) out.push({ key: 'tomorrow', label: '내일 예약 확인 안내', count: tomorrow, href: '/reservations', tone: 'normal' });
   }
+  if (opts.customersOn && opts.reservationsOn) {
+    // 이달 방문했지만 다음 예약이 없는 고객 — 재예약률 타일의 "빠진 사람"에게 바로 연락 (184, GAP D-1)
+    const noRebook = getNoRebookCustomerIds().size;
+    if (noRebook > 0) out.push({ key: 'norebook', label: '이달 방문 뒤 다음 예약 없는 고객 재예약 권유', count: noRebook, href: '/customers?norebook=1', tone: 'normal' });
+  }
   if (opts.productsOn) {
     const low = ProductStore.getAll().filter(isLowStock).length;
     if (low > 0) out.push({ key: 'stock', label: '재고 부족 제품 입고', count: low, href: '/products', tone: 'normal' });
@@ -64,8 +69,8 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
   return out;
 }
 
-/** 이달 운영 지표 — 규칙은 kpiRule(순수) */
-export function getMonthlyKpis(): MonthlyKpis {
+/** 이달 지표 입력 — 지표·재예약 권유 목록이 같은 분모(집계 대상 고객·방문일·다음 예약)를 쓴다 (184) */
+function kpiInput(): KpiInput {
   const today = toISO(new Date());
   const month = today.slice(0, 7);
   const stats = buildCustomerStatsIndex();
@@ -75,7 +80,17 @@ export function getMonthlyKpis(): MonthlyKpis {
   const countable = new Set(CustomerStore.getAll().filter(isCountableCustomer).map(c => c.id));
   const visitDays = new Map<string, string[]>();
   for (const [id, days] of stats.visitDays ?? new Map<string, string[]>()) if (countable.has(id)) visitDays.set(id, days);
-  return monthlyKpis({ month, visitDays, payments: PaymentStore.getAll().filter(p => p.customerId && countable.has(p.customerId)), upcomingByCustomer: upcoming });
+  return { month, visitDays, payments: PaymentStore.getAll().filter(p => p.customerId && countable.has(p.customerId)), upcomingByCustomer: upcoming };
+}
+
+/** 이달 운영 지표 — 규칙은 kpiRule(순수) */
+export function getMonthlyKpis(): MonthlyKpis {
+  return monthlyKpis(kpiInput());
+}
+
+/** 이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률 타일·오늘 할 일에서 고객 목록(?norebook=1)으로 (184) */
+export function getNoRebookCustomerIds(): Set<string> {
+  return new Set(noRebookIds(kpiInput()));
 }
 
 /** 이달(오늘까지) 가동률 — 날마다 활성 직원의 근무 창(근무표 또는 영업시간, 매장 휴일은 창 없음) 대비 확정·완료 예약 시간. 규칙은 utilizationRule(순수) (180, GAP R-10) */
