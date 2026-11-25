@@ -111,6 +111,7 @@ const MSG_TYPE_COLORS: Record<string, string> = {
 export default function Messaging() {
   const [tab, setTab] = useState<Tab>('send');
   const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null); // 고객 활동 타임라인 메시지 줄 → 그 고객 발송만 (205)
+  const [historyStatus, setHistoryStatus] = useState<'all' | 'failed'>('all'); // 대시보드 "다시 보내기" 할 일 → 실패·미연동만 (208)
   const [resendSource, setResendSource] = useState<MessageHistory | null>(null); // 발송 이력 "다시 보내기" 원본 — 같은 대상·본문·유형으로 발송 창 (207)
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendSegment, setSendSegment] = useState<Segment>('all');
@@ -125,6 +126,12 @@ export default function Messaging() {
       setSendCustomerId(null);
       setSendSegment(seg as Segment);
       setShowSendModal(true);
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    if (searchParams.get('tab') === 'history') { // 대시보드 오늘 할 일 "다시 보내기" → 발송 이력 탭, status=failed 면 실패·미연동만 (208)
+      setHistoryStatus(searchParams.get('status') === 'failed' ? 'failed' : 'all');
+      setTab('history');
       setSearchParams({}, { replace: true });
       return;
     }
@@ -205,7 +212,7 @@ export default function Messaging() {
 
         {tab === 'send' && <SendPanel onSend={openSendModal} onSent={reload} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
-        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} customerId={historyCustomerId} onClearCustomer={() => setHistoryCustomerId(null)} onResend={h => { setResendSource(h); setSendCustomerId(null); openSendModal(`resend:${h.id}`); }} />}
+        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} customerId={historyCustomerId} onClearCustomer={() => setHistoryCustomerId(null)} initialStatus={historyStatus} onResend={h => { setResendSource(h); setSendCustomerId(null); openSendModal(`resend:${h.id}`); }} />}
       </div>
 
       {showSendModal && (
@@ -645,13 +652,13 @@ function formatSentAt(value: string): string {
   return isNaN(d.getTime()) ? value : formatDateTime(value);
 }
 
-function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, onResend }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void; onResend: (h: MessageHistory) => void }) {
+function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialStatus = 'all', onResend }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void; initialStatus?: 'all' | 'failed'; onResend: (h: MessageHistory) => void }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
   const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
   const customerOnlyCount = customerId ? history.filter(h => recipients.get(h.id)?.includes(customerId)).length : 0; // 칩 건수는 고객 필터만 적용한 수 — 상태·검색과 섞이지 않게 (리뷰 L-2)
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>(initialStatus); // 딥링크 초기값 — 탭이 열릴 때만 (208)
 
   useEffect(() => {
     setHistory(MessageHistoryStore.getAll());

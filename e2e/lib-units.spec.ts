@@ -56,7 +56,7 @@ import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
 import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
-import { isGatewayPendingHistory } from '../src/lib/messageHistoryRule';
+import { isGatewayPendingHistory, countResendable } from '../src/lib/messageHistoryRule';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -1213,4 +1213,16 @@ test('발송 이력 미연동 판정 — 실패·성공 0·비용 0/없음/null 
   expect(isGatewayPendingHistory({ status: 'failed', successCount: 0, cost: 11 })).toBe(false);
   expect(isGatewayPendingHistory({ status: 'failed', successCount: 1, cost: 0 })).toBe(false);
   expect(isGatewayPendingHistory({ status: 'sent', successCount: 0, cost: 0 })).toBe(false);
+});
+
+test('다시 보낼 미연동 건 — 그 뒤 성공 건이 있을 때만, 수신 고객 기록·30일 안의 것만 (208)', () => {
+  const now = new Date('2026-11-25T12:00:00');
+  const pend = (id: string, day: string) => ({ id, status: 'failed', successCount: 0, cost: 0, sentAt: `2026-11-${day}T10:00:00` });
+  const ok = (id: string, day: string) => ({ id, status: 'sent', successCount: 1, cost: 11, sentAt: `2026-11-${day}T10:00:00` });
+  const all = () => true;
+  expect(countResendable([pend('a', '20'), pend('b', '21')], all, now)).toBe(0); // 성공 건이 없으면 발송사가 살아난 증거가 없다 — 권하지 않음
+  expect(countResendable([pend('a', '20'), ok('s', '22'), pend('b', '23')], all, now)).toBe(1); // 성공(22일) 전의 미연동(20일)만, 그 뒤 미연동(23일)은 아직
+  expect(countResendable([pend('a', '20'), ok('s', '22')], id => id !== 'a', now)).toBe(0); // 수신 고객 기록이 없는 건은 다시 보낼 대상을 모른다
+  expect(countResendable([{ ...pend('old', '01'), sentAt: '2026-10-01T10:00:00' }, ok('s', '22')], all, now)).toBe(0); // 30일 밖
+  expect(countResendable([{ ...pend('x', '20'), cost: 11 }, ok('s', '22')], all, now)).toBe(0); // 비용이 있는 실패는 미연동이 아니라 실제 실패
 });

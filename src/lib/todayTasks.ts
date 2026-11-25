@@ -1,4 +1,6 @@
-import { ProductStore, ReservationStore, PaymentStore, StaffStore, SettingsStore } from './store';
+import { ProductStore, ReservationStore, PaymentStore, StaffStore, SettingsStore, MessageHistoryStore } from './store';
+import { recipientIndex } from './messageRecipients';
+import { countResendable } from './messageHistoryRule';
 import { buildSegmentIndex } from './customerSegments';
 import { getRevisitDueCustomers } from './reminderEngine';
 import { getProgramAlerts } from './programAlerts';
@@ -63,6 +65,12 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
   if (opts.productsOn) {
     const low = ProductStore.getAll().filter(isLowStock).length;
     if (low > 0) out.push({ key: 'stock', label: '재고 부족 제품 입고', count: low, href: '/products', tone: 'normal' });
+  }
+  if (opts.messagingOn) {
+    // 발송사 미연동으로 나가지 않았던 문자 — 그 뒤 성공 건이 생겨 발송사가 살아난 것이 확인된 매장에만, 수신 고객이 기록된 건(이 PC)만. 누르면 발송 이력이 실패·미연동만으로 열린다 (208, 207 다시 보내기)
+    const recipients = recipientIndex();
+    const resend = countResendable(MessageHistoryStore.getAll(), id => (recipients.get(id)?.length ?? 0) > 0, new Date());
+    if (resend > 0) out.push({ key: 'resend', label: '미연동으로 나가지 않았던 문자 다시 보내기', count: resend, href: '/messaging?tab=history&status=failed', tone: 'normal' });
   }
   if (opts.customersOn && opts.messagingOn) {
     // 켜진 캠페인의 오늘 승인 전 대상 합계 — 브리핑 "연락할 고객"·실행 창과 같은 공용 선별(campaignCandidates) (177, 178 리뷰 M-2·M-3)

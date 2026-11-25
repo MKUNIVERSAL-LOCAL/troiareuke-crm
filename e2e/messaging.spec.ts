@@ -66,4 +66,10 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
   await expect(resend.locator('textarea')).toHaveValue(/내일 방문 예정입니다/);
   await page.keyboard.press('Escape');
   await expect(resend).toHaveCount(0);
+
+  // ── 대시보드 할 일 딥링크(?tab=history&status=failed) → 발송 이력 탭이 실패·미연동 필터로 열린다 (208) ──
+  await page.goto('/messaging?tab=history&status=failed');
+  await expect(page.getByLabel('발송 상태 필터')).toHaveValue('failed');
+  await expect(page.getByText(/내일 방문 예정입니다/).first()).toBeVisible();
+  await expect(page).not.toHaveURL(/tab=history/); // 딥링크 파라미터는 초기값으로만 쓰고 지운다
 });
