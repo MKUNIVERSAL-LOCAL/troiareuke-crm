@@ -19,6 +19,35 @@ export const APP_LOCK_AVAILABLE: boolean = isAuthApiConfigured || import.meta.en
 export interface AppLockConfig {
   hash: string;       // PIN 해시 (SHA-256 hex, SubtleCrypto 불가 시 폴백 해시)
   timeoutMin: number; // 0 = 화면을 떠나면 즉시
+  /** PIN 을 물을 민감 화면 키 목록 (218) — 비면 화면 잠금 없음 */
+  screens?: ScreenKey[];
+  /**
+   * 앱 시작·자리 비움 복귀에 **전체 화면**을 잠글지 (218b). 기본 true(2026-11-18 부터의 기존 동작).
+   * 샵 계정 하나로 쓰면서 민감 화면만 막고 싶을 때는 false — 직원이 프로그램은 쓰고, 고른 화면에서만 PIN 을 묻는다.
+   */
+  awayLock?: boolean;
+}
+
+/**
+ * 민감 화면 (218) — 샵은 보통 계정 하나로 운영해서(가입 1계정, 지점 앱에 계정 추가 화면 없음) 역할 분리가 작동하지 않는다.
+ * 그래서 같은 계정 안에서 "이 화면은 PIN을 묻기" 로 차등을 둔다. 매일 쓰는 예약·시술은 목록에 두지 않는다.
+ */
+export const SENSITIVE_SCREENS = [
+  { key: 'sales', label: '매출·손익', path: '/sales' },
+  { key: 'settings', label: '설정', path: '/settings' },
+  { key: 'messaging', label: '문자/카카오', path: '/messaging' },
+  { key: 'customers', label: '고객 목록', path: '/customers' },
+  { key: 'staff', label: '직원 관리', path: '/staff' },
+] as const;
+export type ScreenKey = typeof SENSITIVE_SCREENS[number]['key'];
+
+/** 경로 → 민감 화면 키 (하위 경로 포함) */
+export function screenKeyForPath(pathname: string): ScreenKey | null {
+  for (const s of SENSITIVE_SCREENS) if (pathname === s.path || pathname.startsWith(s.path + '/')) return s.key;
+  return null;
+}
+export function screenLabel(key: ScreenKey): string {
+  return SENSITIVE_SCREENS.find(s => s.key === key)?.label ?? key;
 }
 
 export const LOCK_TIMEOUTS: { value: number; label: string }[] = [
@@ -33,7 +62,10 @@ export function getAppLock(): AppLockConfig | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed.hash === 'string' ? { hash: parsed.hash, timeoutMin: Number(parsed.timeoutMin) || 0 } : null;
+    if (!parsed || typeof parsed.hash !== 'string') return null;
+    const keys = new Set<string>(SENSITIVE_SCREENS.map(s => s.key));
+    const screens = Array.isArray(parsed.screens) ? parsed.screens.filter((k: unknown): k is ScreenKey => typeof k === 'string' && keys.has(k)) : [];
+    return { hash: parsed.hash, timeoutMin: Number(parsed.timeoutMin) || 0, screens, awayLock: parsed.awayLock !== false };
   } catch {
     return null;
   }
@@ -59,12 +91,44 @@ function emit(): void {
   try { window.dispatchEvent(new Event(APP_LOCK_CHANGED_EVENT)); } catch { /* noop */ }
 }
 
-export async function enableAppLock(pin: string, timeoutMin: number): Promise<void> {
+export async function enableAppLock(pin: string, timeoutMin: number, screens: ScreenKey[] = [], awayLock = true): Promise<void> {
   if (!isValidPin(pin)) throw new Error('PIN은 숫자 4~6자리여야 합니다.');
-  const cfg: AppLockConfig = { hash: await hashPin(pin), timeoutMin: Math.max(0, timeoutMin) };
+  const cfg: AppLockConfig = { hash: await hashPin(pin), timeoutMin: Math.max(0, timeoutMin), screens, awayLock };
   localStorage.setItem(KEY, JSON.stringify(cfg));
   emit();
 }
+
+/** 전체 잠금(앱 시작·자리 비움) 스위치만 바꾼다 — PIN·화면 목록은 그대로 (218b) */
+export function setAwayLock(on: boolean): void {
+  const cfg = getAppLock();
+  if (!cfg) return;
+  localStorage.setItem(KEY, JSON.stringify({ ...cfg, awayLock: on }));
+  emit();
+}
+
+/** 잠글 화면 목록만 바꾼다 — PIN 을 다시 묻지 않는다(설정 화면 자체를 잠갔다면 이미 PIN 을 통과해 들어왔다) (218) */
+export function setLockedScreens(screens: ScreenKey[]): void {
+  const cfg = getAppLock();
+  if (!cfg) return;
+  localStorage.setItem(KEY, JSON.stringify({ ...cfg, screens }));
+  unlocked.clear(); // 방금 잠근 화면이 바로 막히게
+  emit();
+}
+
+// ── 이번 실행 동안 풀어 둔 화면 (메모리만 — 새로고침·재시작하면 다시 묻는다) ──
+const unlocked = new Set<ScreenKey>();
+/** 그 화면이 지금 PIN 을 물어야 하는가 */
+export function screenNeedsPin(pathname: string): ScreenKey | null {
+  if (!APP_LOCK_AVAILABLE) return null;
+  const cfg = getAppLock();
+  if (!cfg || !cfg.screens?.length) return null;
+  const key = screenKeyForPath(pathname);
+  if (!key || !cfg.screens.includes(key) || unlocked.has(key)) return null;
+  return key;
+}
+export function markScreenUnlocked(key: ScreenKey): void { unlocked.add(key); emit(); }
+/** 앱 잠금이 걸릴 때(자리 비움 복귀)·로그아웃 때 — 민감 화면도 다시 묻게 (218) */
+export function clearScreenUnlocks(): void { unlocked.clear(); }
 
 export function disableAppLock(): void {
   localStorage.removeItem(KEY);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Lock, LogOut } from 'lucide-react';
-import { getAppLock, verifyPin, disableAppLock, APP_LOCK_AVAILABLE, APP_LOCK_CHANGED_EVENT } from '../lib/appLock';
+import { getAppLock, verifyPin, disableAppLock, clearScreenUnlocks, APP_LOCK_AVAILABLE, APP_LOCK_CHANGED_EVENT } from '../lib/appLock';
 import { useAuth } from '../contexts/AuthContext';
 import { isAuthApiConfigured } from '../lib/authApi';
 import { IS_MOBILE_APP } from '../lib/platform';
@@ -21,7 +21,7 @@ const COOLDOWN_MS = 30_000;
  */
 export default function AppLockOverlay() {
   const { logout } = useAuth();
-  const [locked, setLocked] = useState(() => APP_LOCK_AVAILABLE && !!getAppLock());
+  const [locked, setLocked] = useState(() => APP_LOCK_AVAILABLE && getAppLock()?.awayLock === true); // 전체 잠금을 끈 매장은 시작 때 잠그지 않는다 — 민감 화면 PIN 만 쓴다 (218b)
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -36,18 +36,18 @@ export default function AppLockOverlay() {
   // 모바일 앱은 Capacitor appStateChange도 함께 듣는다(WebView visibilitychange가 OS마다 달라서).
   useEffect(() => {
     if (!APP_LOCK_AVAILABLE) return;
-    const markHidden = () => { if (getAppLock() && hiddenAtRef.current === null) hiddenAtRef.current = Date.now(); };
+    const markHidden = () => { if (getAppLock()?.awayLock && hiddenAtRef.current === null) hiddenAtRef.current = Date.now(); };
     const checkReturn = (minTimeoutMin: number) => {
       const cfg = getAppLock();
-      if (!cfg) { hiddenAtRef.current = null; return; }
+      if (!cfg || !cfg.awayLock) { hiddenAtRef.current = null; return; }
       if (cfg.timeoutMin < minTimeoutMin) return; // 이 신호가 듣지 않는 설정이면 표식을 소비하지 않는다(이벤트 순서 무관)
       if (hiddenAtRef.current === null) return;
       const away = Date.now() - hiddenAtRef.current;
       hiddenAtRef.current = null;
-      if (away >= cfg.timeoutMin * 60_000) setLocked(true);
+      if (away >= cfg.timeoutMin * 60_000) { clearScreenUnlocks(); setLocked(true); } // 민감 화면도 다시 묻게 (218)
     };
     const onVisibility = () => { if (document.visibilityState === 'hidden') markHidden(); else checkReturn(0); };
-    const onBlur = () => { if ((getAppLock()?.timeoutMin ?? 0) >= 1) markHidden(); };
+    const onBlur = () => { const c = getAppLock(); if (c?.awayLock && c.timeoutMin >= 1) markHidden(); };
     const onFocus = () => checkReturn(1);
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('blur', onBlur);

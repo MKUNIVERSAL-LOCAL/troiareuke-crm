@@ -10,6 +10,7 @@ import AnnouncementBanner from '../ui/AnnouncementBanner';
 import OfflineBanner from '../ui/OfflineBanner';
 import AppLockOverlay from '../AppLockOverlay';
 import FeatureRouteGate from '../FeatureGate';
+import ScreenLockGate from '../ScreenLockGate';
 import ErrorBoundary from '../ui/ErrorBoundary';
 import { usePreloadReload } from '../../hooks/usePreloadReload';
 import { useAuth } from '../../contexts/AuthContext';
@@ -127,7 +128,9 @@ export default function Layout() {
         {/* 화면 렌더 예외 → 흰 화면 대신 복구 UI. 라우트가 바뀌면 자동 초기화 (2026-11-17) */}
         <ErrorBoundary resetKey={location.pathname}>
           <FeatureRouteGate>
-            <Outlet />
+            <ScreenLockGate>
+              <Outlet />
+            </ScreenLockGate>
           </FeatureRouteGate>
         </ErrorBoundary>
       </main>

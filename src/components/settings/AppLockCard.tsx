@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Lock } from 'lucide-react';
-import { getAppLock, enableAppLock, disableAppLock, verifyPin, isValidPin, LOCK_TIMEOUTS, APP_LOCK_AVAILABLE } from '../../lib/appLock';
+import { getAppLock, enableAppLock, disableAppLock, verifyPin, isValidPin, setLockedScreens, setAwayLock, SENSITIVE_SCREENS, LOCK_TIMEOUTS, APP_LOCK_AVAILABLE, type ScreenKey } from '../../lib/appLock';
 import { notify } from '../../lib/notify';
 
 /**
@@ -64,6 +64,36 @@ export default function AppLockCard() {
         </span>
       </div>
       <div className="px-6 py-5 space-y-3">
+        {cfg && ( /* 전체 잠금 스위치 (218b) — 끄면 프로그램은 바로 쓰고 아래에서 고른 화면에서만 PIN 을 묻는다 */
+          <label className="flex items-start gap-2 text-sm text-gray-700 border border-gray-100 rounded-xl p-3" data-testid="app-lock-away">
+            <input type="checkbox" className="mt-0.5 rounded" checked={cfg.awayLock !== false}
+              onChange={e => { setAwayLock(e.target.checked); setCfg(getAppLock()); }} />
+            <span>
+              자리를 비웠다가 돌아오면 <strong>전체 화면</strong>을 잠근다
+              <span className="block text-xs text-gray-400">끄면 프로그램은 바로 쓰고, 아래에서 고른 화면에서만 PIN을 묻습니다(샵 계정 하나로 쓰면서 원장만 여는 화면을 둘 때).</span>
+            </span>
+          </label>
+        )}
+        {cfg && ( /* 민감 화면 차등 (218) — 샵 계정 하나로 운영할 때 원장만 여는 화면을 고른다 */
+          <fieldset className="border border-gray-100 rounded-xl p-3" data-testid="app-lock-screens">
+            <legend className="text-xs font-bold text-gray-700 px-1">PIN을 물을 화면</legend>
+            <p className="text-xs text-gray-400 mb-2">고른 화면은 들어갈 때마다(이 기기 기준 실행마다 한 번) PIN을 묻습니다. 예약·시술 입력은 막지 않습니다.</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {SENSITIVE_SCREENS.map(sc => (
+                <label key={sc.key} className="flex items-center gap-1.5 text-sm text-gray-700 min-h-[32px]">
+                  <input type="checkbox" className="rounded" checked={(cfg.screens ?? []).includes(sc.key)}
+                    onChange={e => {
+                      const next = new Set<ScreenKey>(cfg.screens ?? []);
+                      if (e.target.checked) next.add(sc.key); else next.delete(sc.key);
+                      setLockedScreens([...next]);
+                      setCfg(getAppLock());
+                    }} />
+                  {sc.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
         <p className="text-sm text-gray-500 leading-relaxed">
           자리를 비운 사이 고객 정보가 보이지 않도록, 이 기기에서 화면을 떠났다가(다른 앱·탭·창) 돌아오면 PIN을 묻습니다.
           기기마다 따로 설정되며 서버에는 저장되지 않습니다. PIN은 아래에서 바꿀 수 있고, 잊으면 잠금 화면에서 로그아웃해 해제할 수 있으며, 로그아웃하면 잠금도 함께 해제되므로 다시 로그인한 뒤 PIN을 다시 켜세요.
