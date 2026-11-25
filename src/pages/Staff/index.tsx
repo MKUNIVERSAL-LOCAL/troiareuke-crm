@@ -8,7 +8,7 @@ import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import StaffPerformanceCard from '../../components/StaffPerformanceCard';
 import { StaffStore, ReservationStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
-import { DAY_KEYS, BUFFER_OPTIONS, defaultSchedule, dayWindow, describeWindow } from '../../lib/staffScheduleRule';
+import { DAY_KEYS, BUFFER_OPTIONS, defaultSchedule, dayWindow, describeWindow, sameSchedule } from '../../lib/staffScheduleRule';
 import { getStaffSchedule, saveStaffSchedule, removeStaffSchedule } from '../../lib/staffScheduleStore';
 import { ConsultationStore } from '../../lib/consultationStore';
 import { recordStaffAlias } from '../../lib/staffAliases';
@@ -509,7 +509,8 @@ function StaffDetailModal({
       color,
       hireDate,
     });
-    saveStaffSchedule(schedule);
+    // 근무표를 실제로 바꿨을 때만 저장 — 전화·색만 고쳐도 기본값 행이 생겨 체크리스트가 "직원 근무표 ✓" 로 보이던 것 (191 리뷰 M-2)
+    if (!sameSchedule(schedule, getStaffSchedule(staff.id) ?? defaultSchedule(staff.id))) saveStaffSchedule(schedule);
     onUpdate();
   };
 

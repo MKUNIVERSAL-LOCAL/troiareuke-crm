@@ -99,3 +99,9 @@ export function describeWindow(window: DayWindow): string {
 export function dayKeyOf(date: Date): DayKey {
   return (['일', '월', '화', '수', '목', '금', '토'] as DayKey[])[date.getDay()];
 }
+
+/** 두 근무표가 같은가(updatedAt 제외) — 직원 수정 저장 때 바뀌지 않은 기본값을 설정 행에 쓰지 않게 (191 리뷰 M-2) */
+export function sameSchedule(a: StaffSchedule, b: StaffSchedule): boolean {
+  const norm = (x: StaffSchedule) => JSON.stringify({ u: x.useShopHours, b1: x.bufferBeforeMin, b2: x.bufferAfterMin, w: DAY_KEYS.map(d => { const sh = x.weekly[d]; return [sh.off, sh.start, sh.end, sh.breakStart ?? '', sh.breakEnd ?? '']; }) });
+  return norm(a) === norm(b);
+}

@@ -60,8 +60,8 @@ export const CHANNEL_LABEL: Record<BookingChannel, string> = { phone: '전화', 
 export const CHANNEL_SOURCE: Record<BookingChannel, ReservationSource> = { phone: 'phone', kakao: 'kakao', naver: 'naver', web: 'app' };
 
 /** 처리 전 요청 건수(동기) — 대시보드 오늘 할 일용. 로컬 어댑터 전용: 서버 어댑터(B-2)로 바뀌면 캐시된 건수를 돌려주게 바꾼다 (188) */
-export function countNewRequestsLocal(): number {
-  return read().filter(r => r.status === 'new').length;
+export function countNewRequestsLocal(today: string): number {
+  return read().filter(r => r.status === 'new' && r.date >= today).length; // 지난 날짜 요청은 요청함에서만(영구 긴급 줄 방지) (191 리뷰)
 }
 
 /** 처리 전 요청 — 날짜·시간 순 */

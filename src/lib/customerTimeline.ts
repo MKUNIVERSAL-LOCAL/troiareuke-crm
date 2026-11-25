@@ -11,7 +11,6 @@ import { ConsultationStore } from './consultationStore';
 import { listCampaigns, sendsForCustomer } from './campaignStore';
 import { consentFromTags } from './consentRule';
 import { toISO } from './revisitRule';
-import { getPhotoCount } from './photoStore';
 import { formatPrice } from './format';
 import type { Reservation } from '../types';
 
@@ -32,6 +31,8 @@ export interface TimelineItem {
   href?: string;
   /** 취소·노쇼·환불 등 눈에 띄게 표시할 상태 */
   tone?: 'bad' | 'muted';
+  /** 사진이 붙는 기록의 photoStore 키 — 장수는 화면이 보이는 항목에서만 센다(전수 IDB 읽기 방지) (189·191) */
+  photoKey?: string;
 }
 
 const RESERVATION_LABEL: Record<Reservation['status'], string> = {
@@ -41,12 +42,6 @@ const RESERVATION_LABEL: Record<Reservation['status'], string> = {
 export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
   reservation: '예약', treatment: '시술', consult: '상담', program: '프로그램', payment: '결제', product: '제품 판매', programNote: '회차권 변경', campaign: '캠페인 발송', consent: '수신 동의',
 };
-
-/** 상세 문구 뒤에 "사진 N장" — 타임라인에서 사진이 있는 날을 바로 알 수 있게 (189, GAP C-4) */
-function withPhotoCount(detail: string | undefined, photos: number): string | undefined {
-  const parts = [detail || '', photos > 0 ? `사진 ${photos}장` : ''].filter(Boolean);
-  return parts.length ? parts.join(' · ') : undefined;
-}
 
 function dateOf(iso: string): string {
   return (iso || '').slice(0, 10);
@@ -73,7 +68,8 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
     items.push({
       id: `trt:${t.id}`, kind: 'treatment', date: dateOf(t.treatmentDate), time: t.treatmentTime,
       title: parts.length ? parts.join(' · ') : '시술 기록 (내역 미입력)',
-      detail: withPhotoCount(t.treatmentDetails || t.skinCondition, getPhotoCount(`treatment:${t.id}`)), // 사진은 photoStore 'treatment:<id>' — 장수 캐시, 미적재면 읽기를 걸고 0(적재 뒤 onPhotoCacheChange 로 다시 그림) (189)
+      detail: t.treatmentDetails || t.skinCondition || undefined,
+      photoKey: `treatment:${t.id}`,
       href: `/treatments?open=${t.id}`,
     });
   }
@@ -82,7 +78,8 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
     items.push({
       id: `con:${c.id}`, kind: 'consult', date: dateOf(c.consultDate),
       title: `피부 상담${c.skinTypeResult ? ` · ${c.skinTypeResult}` : ''}${c.staffName ? ` · ${c.staffName}` : ''}`,
-      detail: withPhotoCount(c.concerns.length ? c.concerns.join(', ') : c.managerNote, getPhotoCount(`consult:${c.id}`)), // 상담 사진은 'consult:<id>' (189)
+      detail: c.concerns.length ? c.concerns.join(', ') : c.managerNote || undefined,
+      photoKey: `consult:${c.id}`,
     });
   }
 

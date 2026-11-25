@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Scissors, Sparkles, Package, CreditCard, History, ShoppingBag, ClipboardList, Send, ShieldCheck } from 'lucide-react';
 import { buildCustomerTimeline, TIMELINE_KIND_LABEL, type TimelineKind } from '../lib/customerTimeline';
 import { formatPrice, formatDate } from '../lib/format';
-import { onPhotoCacheChange } from '../lib/photoStore';
+import { getPhotoCount } from '../lib/photoStore';
+import { usePhotoCacheVersion } from '../hooks/usePhotoCache';
 
 const PAGE = 12;
 
@@ -28,9 +29,8 @@ export default function CustomerTimeline({ customerId, compact = false, tick = 0
   const navigate = useNavigate();
   const [filter, setFilter] = useState<TimelineKind | 'all'>('all');
   const [limit, setLimit] = useState(PAGE);
-  const [photoTick, setPhotoTick] = useState(0);
-  useEffect(() => onPhotoCacheChange(() => setPhotoTick(t => t + 1)), []); // 사진 장수가 비동기로 적재되면 "사진 N장" 을 다시 그린다 (189)
-  const all = useMemo(() => buildCustomerTimeline(customerId), [customerId, tick, photoTick]);
+  usePhotoCacheVersion(); // 사진 장수가 비동기로 적재되면 다시 그린다 — 장수는 보이는 항목에서만 읽는다 (189, 191 리뷰)
+  const all = useMemo(() => buildCustomerTimeline(customerId), [customerId, tick]);
   const kindsPresent = (Object.keys(TIMELINE_KIND_LABEL) as TimelineKind[]).filter(k => all.some(i => i.kind === k));
   // 걸러 둔 종류의 마지막 기록이 삭제되면 '전체'로 — 빈 화면에 갇히지 않게
   const effFilter = filter === 'all' || kindsPresent.includes(filter) ? filter : 'all';
@@ -63,6 +63,8 @@ export default function CustomerTimeline({ customerId, compact = false, tick = 0
           {shown.map(item => {
             const { icon: Icon, dot } = KIND_STYLE[item.kind];
             const refunded = item.kind === 'payment' && item.tone === 'bad';
+            const photos = item.photoKey ? getPhotoCount(item.photoKey) : 0; // 보이는 12건만 — 미적재면 읽기를 걸고 0, 적재 뒤 usePhotoCacheVersion 으로 다시 그림
+            const detail = [item.detail, photos > 0 ? `사진 ${photos}장` : ''].filter(Boolean).join(' · ');
             const inner = (
               <>
                 <span className={`absolute -left-[5px] top-2 w-2.5 h-2.5 rounded-full ring-2 ring-white ${dot}`} aria-hidden="true" />
@@ -72,7 +74,7 @@ export default function CustomerTimeline({ customerId, compact = false, tick = 0
                       <Icon size={11} aria-hidden="true" className="inline mr-1 -mt-0.5" />{TIMELINE_KIND_LABEL[item.kind]} · {formatDate(item.date)}
                     </span>
                     <span className={`block text-sm font-medium truncate ${item.tone === 'bad' ? 'text-rose-600' : item.tone === 'muted' ? 'text-gray-500' : 'text-gray-800'}`}>{item.title}</span>
-                    {item.detail && <span className="block text-xs text-gray-500 line-clamp-2">{item.detail}</span>}
+                    {detail && <span className="block text-xs text-gray-500 line-clamp-2">{detail}</span>}
                   </span>
                   {item.amount !== undefined && (
                     <span className={`text-sm font-semibold whitespace-nowrap ${refunded ? 'text-rose-600 line-through' : 'text-gray-900'}`}>

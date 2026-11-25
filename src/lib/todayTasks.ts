@@ -52,7 +52,7 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
     const tomorrow = getTomorrowReservations().length;
     if (tomorrow > 0) out.push({ key: 'tomorrow', label: '내일 예약 확인 안내', count: tomorrow, href: '/reservations', tone: 'normal' });
     // 전화·카톡·네이버로 받아 둔 예약 요청(요청함) — 예약 화면 머리글에만 보여 대시보드에서 놓치던 것, 누르면 요청함이 바로 열린다 (188, GAP R-6)
-    const requests = countNewRequestsLocal();
+    const requests = countNewRequestsLocal(toISO(new Date()));
     if (requests > 0) out.push({ key: 'requests', label: '예약 요청함 처리 전 요청 확인', count: requests, href: '/reservations?requests=1', tone: 'urgent' });
   }
   if (opts.customersOn && opts.reservationsOn) {
