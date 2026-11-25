@@ -122,7 +122,9 @@ function startCrossTabInvalidation(): () => void {
       if (!coreDirty) { notify(); return; } // 로컬 전용 테이블만 바뀜 — 서버엔 바뀐 것이 없어 12 GET 재조회를 돌리지 않는다 (200 리뷰 L-2)
       coreDirty = false;
       resetStoreCache(); // getAll() 이 바로 localStorage 폴백을 읽어 다른 탭 변경이 보인다
-      if (isNasDataConfigured) { void refreshFromServer({ force: true }).finally(notify); return; } // 서버 모드는 inFlight·outbox 가드를 공유하는 재조회 경로로 — 동시 initializeStores 2개가 서로 덮지 않게 (206, 203~205 리뷰 L-3)
+      // 서버 모드는 inFlight·outbox 가드를 공유하는 재조회 경로로 — 동시 initializeStores 2개가 서로 덮지 않게 (206, 203~205 리뷰 L-3).
+      // 재조회가 조기 반환(오프라인·큐 잔존·probe 실패)하면 코어가 "초기화 안 된" 상태로 남아, 이후 아무 저장이 트리거하는 지연 초기화가 probe 가드 없이 전체 재조회(삭제 행 부활 위험)를 돌린다 → 그 자리에서 플래그를 복구 (210, 206 리뷰 M-1)
+      if (isNasDataConfigured) { void refreshFromServer({ force: true }).then(ok => (ok ? undefined : initializeStores())).finally(notify); return; }
       void initializeStores().finally(notify); // 로컬 모드는 즉시 반환
     }, 300); // 한 동작이 키 여러 개를 쓰므로 묶는다
   };

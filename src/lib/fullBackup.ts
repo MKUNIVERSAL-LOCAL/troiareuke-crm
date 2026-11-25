@@ -42,6 +42,8 @@ const TABLE_LABELS: Record<string, string> = {
   customers: '고객', reservations: '예약', treatment_logs: '시술 기록', customer_programs: '고객 프로그램', programs: '프로그램',
   payments: '결제', product_sales: '제품 판매', products: '제품', services: '시술 메뉴', staff: '직원', consultations: '피부 상담',
   expenses: '지출', settings: '매장 설정', msg_templates: '메시지 템플릿', msg_history: '발송 이력',
+  // 비코어 로컬 테이블 — 요약에 영문 키가 그대로 보이던 것 (210, 206 리뷰 L-7)
+  msg_history_recipients: '발송 수신 고객', campaign_sends: '캠페인 발송 기록', booking_requests: '예약 요청함', stock_ledger: '재고 원장',
 };
 
 export const RESTORE_ALLOWED = !isAuthApiConfigured;

@@ -57,6 +57,7 @@ import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampai
 import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
 import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
 import { isGatewayPendingHistory, countResendable } from '../src/lib/messageHistoryRule';
+import { looksLikeAdMessage, undecorateAdMessage } from '../src/lib/adComplianceRule';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -1225,4 +1226,15 @@ test('다시 보낼 미연동 건 — 그 뒤 성공 건이 있을 때만, 수�
   expect(countResendable([pend('a', '20'), ok('s', '22')], id => id !== 'a', now)).toBe(0); // 수신 고객 기록이 없는 건은 다시 보낼 대상을 모른다
   expect(countResendable([{ ...pend('old', '01'), sentAt: '2026-10-01T10:00:00' }, ok('s', '22')], all, now)).toBe(0); // 30일 밖
   expect(countResendable([{ ...pend('x', '20'), cost: 11 }, ok('s', '22')], all, now)).toBe(0); // 비용이 있는 실패는 미연동이 아니라 실제 실패
+});
+
+test('광고 본문 판정·꾸밈 벗기기 — 재발송이 광고를 광고로 알아보고, 옛 080 꼬리말을 남기지 않는다 (210)', () => {
+  const decorated = decorateAdMessage('가을 이벤트 안내입니다.', '080-111-2222');
+  expect(looksLikeAdMessage(decorated)).toBe(true);
+  expect(looksLikeAdMessage('내일 예약 안내입니다.')).toBe(false);
+  expect(undecorateAdMessage(decorated)).toBe('가을 이벤트 안내입니다.');
+  // 번호가 바뀌어도 꼬리말이 두 줄로 늘지 않는다
+  expect(decorateAdMessage(undecorateAdMessage(decorated), '080-333-4444')).toBe('(광고) 가을 이벤트 안내입니다.\n무료수신거부 080-333-4444');
+  // 광고가 아닌 본문은 그대로
+  expect(undecorateAdMessage('내일 예약 안내입니다.')).toBe('내일 예약 안내입니다.');
 });

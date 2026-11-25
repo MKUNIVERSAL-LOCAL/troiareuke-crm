@@ -5,10 +5,12 @@
  */
 import { getShopId } from './store';
 
-export interface MessageRecipientRecord { historyId: string; customerIds: string[]; at: string }
+interface MessageRecipientRecord { historyId: string; customerIds: string[]; at: string }
 const KEY = () => `crm_${getShopId()}_msg_history_recipients`;
 /** 이력 300건분만 보관 — 세그먼트 대량 발송의 id 배열이 localStorage(5MB)를 비대화하지 않게 (203~205 리뷰 M-1) */
 const MAX_RECORDS = 300;
+/** 그보다 오래된 기록은 쓸모가 없다 — 재발송·타임라인이 보는 창(발송 이력 화면과 같은 체감) (210, 206 리뷰 L-4: at 이 쓰이지 않던 것) */
+const MAX_AGE_DAYS = 365;
 
 function read(): MessageRecipientRecord[] {
   try { const raw = localStorage.getItem(KEY()); const v = raw ? JSON.parse(raw) : []; return Array.isArray(v) ? v : []; } catch { return []; }
@@ -17,7 +19,13 @@ function read(): MessageRecipientRecord[] {
 /** 발송 이력을 저장한 직후 그 id 로 수신 고객을 기록한다. 실패해도 이력 자체는 남는다(타임라인 줄만 빠짐) */
 export function rememberRecipients(historyId: string, customerIds: string[]): void {
   if (customerIds.length === 0) return;
-  const next = [...read().filter(r => r.historyId !== historyId), { historyId, customerIds, at: new Date().toISOString() }];
+  const now = Date.now();
+  const fresh = read().filter(r => {
+    if (r.historyId === historyId) return false;
+    const t = new Date(r.at).getTime();
+    return Number.isNaN(t) || now - t < MAX_AGE_DAYS * 86_400_000; // 날짜가 깨진 옛 기록은 건수 상한에 맡긴다
+  });
+  const next = [...fresh, { historyId, customerIds, at: new Date().toISOString() }];
   const kept = next.length > MAX_RECORDS ? next.slice(next.length - MAX_RECORDS) : next;
   try { localStorage.setItem(KEY(), JSON.stringify(kept)); } catch (e) { console.warn('[messageRecipients] 수신 고객 기록 실패', e); }
 }

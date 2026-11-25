@@ -29,7 +29,7 @@ import {
 import type { MessageType, MessageTemplate, MessageHistory, Customer } from '../../types';
 import { topTags } from '../../lib/customerTags';
 import { consentOf, getOptOutNumber } from '../../lib/marketingConsent';
-import { canReceiveAd, decorateAdMessage, checkAdSend, type AdChannel } from '../../lib/adComplianceRule';
+import { canReceiveAd, decorateAdMessage, checkAdSend, looksLikeAdMessage, undecorateAdMessage, type AdChannel } from '../../lib/adComplianceRule';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import CampaignsCard from '../../components/campaigns/CampaignsCard';
 import clsx from 'clsx';
@@ -199,7 +199,7 @@ export default function Messaging() {
           {tabs.map(t => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => { setTab(t.key); if (t.key !== 'history') setHistoryStatus('all'); }} // 딥링크 상태 필터가 탭을 오가며 되살아나지 않게 (210, 208 리뷰 L-3)
               className={clsx(
                 'flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
                 tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
@@ -658,7 +658,8 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
   const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
   const customerOnlyCount = customerId ? history.filter(h => recipients.get(h.id)?.includes(customerId)).length : 0; // 칩 건수는 고객 필터만 적용한 수 — 상태·검색과 섞이지 않게 (리뷰 L-2)
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>(initialStatus); // 딥링크 초기값 — 탭이 열릴 때만 (208)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>(initialStatus); // 딥링크 초기값 (208)
+  useEffect(() => { setStatusFilter(initialStatus); }, [initialStatus]); // 이미 발송 이력 탭에 있을 때 들어온 딥링크도 먹게 — 재마운트가 없어 초기값이 무시되던 것 (210, 208 리뷰 L-3)
 
   useEffect(() => {
     setHistory(MessageHistoryStore.getAll());
@@ -798,9 +799,19 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
 
 function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, resendSource, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; resendSource?: MessageHistory | null; onSent: () => void }) {
   const { user: authUser } = useAuth(); // 수신 대상 미리보기 전화번호 마스킹 기준 (13차 #M12)
-  const [msgType, setMsgType] = useState<MessageType>(resendSource ? (resendSource.type === 'lms' ? 'lms' : resendSource.type.startsWith('kakao') ? resendSource.type : 'sms') : 'sms'); // 다시 보내기는 원본 유형 (207)
+  const kakaoSettings = SettingsStore.get().kakao;
+  // 다시 보내기는 원본 유형 — 카카오 채널이 끊겼으면 문자로 내린다(끊긴 유형이 선택된 모양으로 그려지던 것: 210, 207 리뷰 L-1)
+  const [msgType, setMsgType] = useState<MessageType>(() => {
+    if (!resendSource) return 'sms';
+    const t = resendSource.type;
+    if (t === 'kakao-channel') return kakaoSettings?.channelConnected ? t : 'sms';
+    if (t === 'kakao-openchat') return kakaoSettings?.openchatConnected ? t : 'sms';
+    return t === 'lms' ? 'lms' : 'sms'; // mms 는 이 창에 선택지가 없어 문자로 — 90바이트를 넘으면 자동 LMS
+  });
   const [recipientMode, setRecipientMode] = useState<Segment>(initialSegment ?? 'all');
-  const [content, setContent] = useState(resendSource?.content ?? '');
+  // 원본이 광고였으면 꾸밈(머리말·080 꼬리말)을 벗긴 본문으로 두고 광고 토글을 켠다 — 그렇지 않으면 동의 필터·야간 금지 점검을 건너뛴 채 광고가 다시 나간다 (210, 207 리뷰 H-1·L-8)
+  const resendIsAd = !!resendSource && looksLikeAdMessage(resendSource.content);
+  const [content, setContent] = useState(resendSource ? (resendIsAd ? undecorateAdMessage(resendSource.content) : resendSource.content) : '');
   const [title, setTitle] = useState(resendSource?.title ?? '');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplate);
   const [sending, setSending] = useState(false);
@@ -808,7 +819,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [resultMessage, setResultMessage] = useState('');
   const [sendPartial, setSendPartial] = useState(false); // 일부 실패 — 초록 "발송 완료!" 로 가짜 성공처럼 보이지 않게 (15차 #H5)
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
-  const [isAd, setIsAd] = useState(false); // 광고성이면 동의 고객만·(광고)·080·시간대 (155, GAP C-8·M-4)
+  const [isAd, setIsAd] = useState(resendIsAd); // 광고성이면 동의 고객만·(광고)·080·시간대 (155, GAP C-8·M-4). 재발송은 원본 본문으로 판정 (210)
   const [scheduleAt, setScheduleAt] = useState('');
   const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
 
@@ -818,7 +829,6 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [onlyCustomer, setOnlyCustomer] = useState<Customer | null>(() => (initialCustomerId && customers.find(c => c.id === initialCustomerId)) || null);
   const blockedCustomer = !!initialCustomerId && !onlyCustomer;
   const templates = MessageTemplateStore.getAll();
-  const kakaoSettings = SettingsStore.get().kakao;
 
   // Load initial template content
   useEffect(() => {
@@ -1074,7 +1084,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               {(() => {
                 const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal', 'norebook'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
-                if ((recipientMode.startsWith('tag:') || recipientMode.startsWith('saved:') || recipientMode.startsWith('resend:')) && !keys.includes(recipientMode)) keys.push(recipientMode); // resend: 다시 보내기 칩 (207)
+                if (resendSource && !keys.includes(`resend:${resendSource.id}` as Segment)) keys.push(`resend:${resendSource.id}` as Segment); // 다시 보내기 칩은 다른 칩을 눌렀다가도 되돌아올 수 있게 항상 (210, 207 리뷰 L-5)
+                if ((recipientMode.startsWith('tag:') || recipientMode.startsWith('saved:')) && !keys.includes(recipientMode)) keys.push(recipientMode);
                 return keys;
               })().map(key => ({
                 key,
