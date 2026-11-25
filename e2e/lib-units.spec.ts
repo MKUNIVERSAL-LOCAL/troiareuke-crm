@@ -38,6 +38,7 @@ import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOrigi
 import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
 import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
+import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1343,3 +1344,53 @@ test('사진 백업 파일 파싱 — 형식·버전·기록 키를 검사하고
   // 전체 백업 파일을 잘못 고르면 분명히 말한다
   expect(() => parsePhotoBackup(JSON.stringify({ format: 'troiareuke-crm-backup', version: 1, tables: {} }))).toThrow(/이 프로그램의 사진 백업 파일이 아닙니다/);
 });
+
+// ── 체크아웃 재예약 추천 (231, GAP R-11) ─────────────────────────
+// 결제한 자리에서 다음 예약을 잡게 하는 흐름. 틀리면 이미 예약이 있는 고객을 또 부르거나 과거 날짜를 권한다.
+
+test('재예약 추천 — 다가오는 예약이 있으면 추천하지 않는다(취소·노쇼는 예약으로 보지 않는다) (231)', () => {
+  const base = { paymentDate: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-11-25'] };
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-12-10', status: 'confirmed' }] })).toBeNull();
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-11-25', status: 'confirmed' }] })).toBeNull(); // 오늘 아직 안 끝난 예약
+  // 취소·노쇼·지난 예약·오늘 완료분은 "다음 예약" 이 아니다 → 추천한다
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-12-10', status: 'cancelled' }] })?.date).toBe('2026-12-23');
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-12-10', status: 'noshow' }] })?.date).toBe('2026-12-23');
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-11-25', status: 'completed' }] })?.date).toBe('2026-12-23');
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-11-01', status: 'confirmed' }] })?.date).toBe('2026-12-23');
+});
+
+test('재예약 추천 — 시술 기록의 다음 방문 권장일이 앞에 있으면 그 날짜 (231)', () => {
+  const r = suggestRebook({ paymentDate: '2026-11-25', nextAppointment: '2026-12-09', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  expect(r).toEqual({ date: '2026-12-09', basis: 'recommended', days: 14, reason: '시술 기록의 다음 방문 권장일' });
+  // 지난 권장일은 쓰지 않는다(과거 날짜로 예약을 권하지 않게) → 주기로
+  const past = suggestRebook({ paymentDate: '2026-11-25', nextAppointment: '2026-10-01', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  expect(past?.basis).toBe('shop');
+  expect(past?.date).toBe('2026-12-23');
+});
+
+test('재예약 추천 — 방문이 쌓이면 그 고객 평균 주기, 아니면 매장 기본 주기 (231)', () => {
+  // 3주 간격으로 네 번 다녀간 고객 → 개인 주기 21일
+  const personal = suggestRebook({ paymentDate: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-09-30', '2026-10-21', '2026-11-11', '2026-11-25'] });
+  expect(personal?.basis).toBe('personal');
+  expect(personal?.days).toBe(21);          // 간격 21·21·14 의 중앙값
+  expect(personal?.date).toBe(addDaysISO('2026-11-25', personal!.days));
+  expect(personal?.reason).toMatch(/이 고객 평균 주기/);
+  // 첫 방문이라 간격이 모자라면 매장 기본
+  const shop = suggestRebook({ paymentDate: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  expect(shop).toEqual({ date: '2026-12-23', basis: 'shop', days: 28, reason: '매장 기본 주기 28일' });
+  // 주기를 모르면(0) 추천하지 않는다 — 아무 날짜나 권하지 않는다
+  expect(suggestRebook({ paymentDate: '2026-11-25', shopCycleDays: 0, visitDays: [] })).toBeNull();
+  expect(suggestRebook({ paymentDate: '어제', shopCycleDays: 28, visitDays: [] })).toBeNull();
+});
+
+test('재예약 추천 — 마지막 방문이 결제일보다 뒤면(선결제) 그 방문일 기준 (231)', () => {
+  const r = suggestRebook({ paymentDate: '2026-11-01', lastVisitDate: '2026-11-20', shopCycleDays: 28, visitDays: ['2026-11-20'] });
+  expect(r?.date).toBe('2026-12-18'); // 11-20 + 28일
+  expect(describeRebook(r!, iso => iso)).toBe('2026-12-18 · 매장 기본 주기 28일');
+});
+
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}

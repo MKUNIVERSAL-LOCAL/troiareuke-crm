@@ -38,6 +38,8 @@ import { growthPct } from '../../lib/growth';
 import { tagRefund, refundedOn, memoWithoutRefundTag } from '../../lib/refundDate';
 import { parseAmount, isISODate } from '../../lib/inputRules';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
+import { suggestRebookFor, type RebookTarget } from '../../lib/rebook'; // 결제 직후 다음 방문 예약 유도 (231, GAP R-11)
+import { CalendarPlus } from 'lucide-react';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
@@ -73,6 +75,8 @@ export default function Sales() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // 결제 직후 "다음 방문 예약" 추천 (231) — 이미 다가오는 예약이 있으면 null 이라 뜨지 않는다
+  const [rebook, setRebook] = useState<RebookTarget | null>(null);
   const [viewMonth, setViewMonth] = useState(getYearMonth(new Date()));
   const [listSearch, setListSearch] = useState('');
   const [listType, setListType] = useState<'all' | Payment['type']>('all');
@@ -471,6 +475,11 @@ export default function Sales() {
       }
     } else {
       PaymentStore.save(payload);
+      // 체크아웃 재예약 유도 — 상용 CRM(Fresha·Boulevard)의 "다음 예약 잡기" 흐름 (231, GAP R-11).
+      // 환불·수정 건에는 띄우지 않고, 추천할 것이 없으면(다가오는 예약 있음·주기 모름) 조용히 지나간다.
+      if (payload.customerId && payload.status === 'completed') {
+        try { setRebook(suggestRebookFor(payload.customerId, payload.paymentDate)); } catch { setRebook(null); }
+      }
     }
     rememberPaymentMethod(form.paymentMethod);
 
@@ -608,6 +617,22 @@ export default function Sales() {
           손익계산서
         </button>
       </div>
+
+      {rebook && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-2xl" data-testid="rebook-prompt" role="status" aria-live="polite">
+          <CalendarPlus size={16} className="text-[#1a3a8f]" />
+          <p className="text-sm text-blue-900">
+            <b>{rebook.customerName}</b> 님 다음 방문 추천 — <b data-testid="rebook-date">{formatDate(rebook.suggestion.date)}</b>
+            <span className="text-blue-700"> · {rebook.suggestion.reason}</span>
+          </p>
+          <div className="flex gap-2 ml-auto">
+            <button type="button" onClick={() => { const t = rebook; setRebook(null); navigate(`/reservations?new=1&customer=${t.customerId}&date=${t.suggestion.date}`); }}
+              className="px-4 py-2 min-h-[40px] bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e]">예약 잡기</button>
+            <button type="button" onClick={() => setRebook(null)}
+              className="px-3 py-2 min-h-[40px] bg-white border border-blue-200 text-blue-800 text-sm rounded-xl hover:bg-blue-100">나중에</button>
+          </div>
+        </div>
+      )}
 
       {tab === 'overview' && (
         <div className="space-y-5">
