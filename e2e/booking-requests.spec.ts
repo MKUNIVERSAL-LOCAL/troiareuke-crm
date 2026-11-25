@@ -10,7 +10,7 @@ import { dialog, openReservationDetail, acceptAppConfirm, addReservation } from 
 
 const acc = makeAccount('BR');
 
-test('예약 요청 접수 → 예약으로 등록(폼 프리필·고객 자동 등록) → 거절', async ({ page }) => {
+test('예약 요청 접수 → 예약으로 등록(폼 프리필·고객 자동 등록) → 거절', async ({ page, context }) => {
   test.slow();
   test.skip(isNearMidnightSeoul(), '자정 경계 — 요청 날짜(오늘)와 예약표의 오늘이 달라진다');
   page.on('dialog', d => d.accept()); // 매장 휴무일 등 예약 폼 확인은 수락
@@ -117,4 +117,21 @@ test('예약 요청 접수 → 예약으로 등록(폼 프리필·고객 자동 
   await expect(inbox).toContainText('처리 전 요청이 없습니다');
   await page.keyboard.press('Escape');
   await expect(inbox).toHaveCount(0);
+
+  // 다른 탭이 요청을 접수하면(storage 이벤트) 이 탭의 대시보드 오늘 할 일에 바로 "처리 전 요청 1" 이 뜬다 (200)
+  await page.goto('/');
+  await expect(page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByRole('button', { name: /예약 요청함 처리 전 요청 확인/ })).toHaveCount(0);
+  const other = await context.newPage();
+  await other.goto('/reservations');
+  await other.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_booking_requests$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const t = new Date(); t.setDate(t.getDate() + 1);
+    const date = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    list.push({ id: 'other_' + Date.now(), channel: 'naver', customerName: '옆탭요청', phone: '010-9999-0000', serviceId: '', serviceName: '테스트관리', durationMin: 60, date, startTime: '15:00', privacyConsent: true, createdAt: new Date().toISOString(), status: 'new' });
+    localStorage.setItem(key, JSON.stringify(list));
+  });
+  const crossTabTask = page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByRole('button', { name: /예약 요청함 처리 전 요청 확인/ });
+  await expect(crossTabTask).toContainText('1', { timeout: 10_000 });
+  await other.close();
 });

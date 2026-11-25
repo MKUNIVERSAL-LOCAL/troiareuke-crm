@@ -26,8 +26,12 @@ const SERVER_TABLES: ReadonlyArray<readonly [table: string, localKey: string]> =
   ['message_templates', 'msg_templates'],
   ['message_history', 'msg_history'],
 ];
-/** 데이터 키만 — 보조 키(crm_last_sync_at 등)에 반응하면 두 탭이 서로의 재조회 시각 기록에 끝없이 재조회한다 (127~130 리뷰 #H1) */
-const DATA_KEY = /^crm_.+_(customers|programs|customer_programs|treatment_logs|products|product_sales|payments|staff|services|reservations|msg_templates|msg_history|settings)$/;
+/**
+ * 데이터 키만 — 보조 키(crm_last_sync_at 등)에 반응하면 두 탭이 서로의 재조회 시각 기록에 끝없이 재조회한다 (127~130 리뷰 #H1).
+ * 코어 테이블 13종 + 비코어 로컬 테이블(예약 요청함·캠페인 발송 기록·재고 원장·상담·지출) — 다른 탭이 요청을 접수·거절하거나 발송·입고를 기록해도
+ * 이 탭의 대시보드 오늘 할 일·요청함 건수가 같이 바뀌게 (200, 199 리뷰 M-1 ③)
+ */
+const DATA_KEY = /^crm_.+_(customers|programs|customer_programs|treatment_logs|products|product_sales|payments|staff|services|reservations|msg_templates|msg_history|settings|booking_requests|campaign_sends|stock_ledger|consultations|expenses)$/;
 
 /** 서버에서 다시 읽은 뒤 window 에 보낸다 — 목록을 가진 화면은 useDataRefreshed 로 받아 다시 그린다 */
 export const DATA_REFRESHED_EVENT = 'crm:data-refreshed';
