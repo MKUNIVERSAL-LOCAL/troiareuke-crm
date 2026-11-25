@@ -40,6 +40,7 @@ import { parseAmount, isISODate } from '../../lib/inputRules';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { suggestRebookFor, type RebookTarget } from '../../lib/rebook'; // 결제 직후 다음 방문 예약 유도 (231, GAP R-11)
 import { exportReceiptPdf } from '../../lib/receiptPdf'; // 결제 영수증 PDF (235, GAP P-9)
+import { splitPaymentNote } from '../../lib/receiptRule'; // 분할 결제 요약 (238, 리뷰 M-1)
 import { CalendarPlus, ReceiptText } from 'lucide-react';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -403,6 +404,10 @@ export default function Sales() {
   async function handleReceipt(p: Payment & { typeLabel?: string }) {
     setReceiptBusy(p.id);
     try {
+      // 같은 건(같은 예약·회차권)에 결제가 나뉘어 있으면 합계를 함께 적는다 — 한 장만 보면 절반 금액만 보였다 (238, 리뷰 M-1)
+      const siblings = p.referenceId
+        ? PaymentStore.getAll().filter(q => q.referenceId === p.referenceId && q.type === p.type)
+        : [p];
       const result = await exportReceiptPdf(
         {
           paymentDate: p.paymentDate,
@@ -411,16 +416,18 @@ export default function Sales() {
           paymentMethod: p.paymentMethod,
           typeLabel: p.typeLabel,
           status: p.status,
-          memo: memoWithoutRefundTag(p.memo) || undefined,
+          splitNote: splitPaymentNote(siblings) ?? undefined,
         },
         p.customerId ? (CustomerStore.getById(p.customerId)?.name ?? null) : null,
       );
+      const docName = p.status === 'pending' ? '결제 예정 내역서' : p.status === 'refunded' ? '환불 영수증' : '영수증';
       (result === 'cancelled' ? notify.info : notify)(
-        result === 'cancelled' ? '공유를 취소했습니다 — 영수증은 저장되지 않았습니다.'
-          : result === 'shared' ? '영수증을 공유 시트로 전달했습니다.' : '영수증 PDF를 저장했습니다.',
+        result === 'cancelled' ? `공유를 취소했습니다 — ${docName}는 저장되지 않았습니다.`
+          : result === 'shared' ? `${docName}를 공유 시트로 전달했습니다.` : `${docName} PDF를 저장했습니다.`,
       );
     } catch (err) {
-      notify(err instanceof Error ? err.message : '영수증을 만들지 못했습니다.');
+      // 글꼴·PDF 모듈 지연 로드 실패도 한글로 알린다(영문 오류 문구만 띄우지 않게) (238, 리뷰 LOW)
+      notify(`영수증을 만들지 못했습니다. 잠시 뒤 다시 시도해주세요.${err instanceof Error && err.message ? ` (${err.message})` : ''}`);
     } finally {
       setReceiptBusy(null);
     }
@@ -843,7 +850,7 @@ export default function Sales() {
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
                         <span className="flex items-center gap-1">
-                          <button onClick={() => handleReceipt(p)} disabled={receiptBusy === p.id} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg disabled:opacity-40" aria-label="영수증 저장"><ReceiptText size={16} /></button>
+                          <button onClick={() => handleReceipt(p)} disabled={receiptBusy === p.id} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg disabled:opacity-40" aria-label={p.status === 'pending' ? '결제 예정 내역서 저장' : '영수증 저장'}><ReceiptText size={16} /></button>
                           <button onClick={() => openEdit(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="결제 수정"><Pencil size={16} /></button>
                           <button onClick={() => handleDelete(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="결제 삭제"><Trash2 size={16} /></button>
                         </span>
@@ -879,7 +886,7 @@ export default function Sales() {
                       <span className="text-gray-500 text-xs">{p.paymentMethod}</span>
                       <span className="flex items-center justify-end gap-1.5">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
-                        <button onClick={() => handleReceipt(p)} disabled={receiptBusy === p.id} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded disabled:opacity-40 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="영수증 저장">
+                        <button onClick={() => handleReceipt(p)} disabled={receiptBusy === p.id} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded disabled:opacity-40 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label={p.status === 'pending' ? '결제 예정 내역서 저장' : '영수증 저장'}>
                           <ReceiptText size={13} />
                         </button>
                         <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">

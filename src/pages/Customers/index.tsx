@@ -55,7 +55,7 @@ import { buildSegmentIndex } from '../../lib/customerSegments';
 import { isCountableCustomer } from '../../lib/customerScope'; // 익명화·샘플 고객 제외 (236)
 // 태그 마스터 (237, GAP C-1) — 같은 뜻의 태그가 갈라지지 않게 목록에서 눌러 넣는다
 import { getTagMaster, saveTagMaster } from '../../lib/tagMaster';
-import { addMasterTag, removeMasterTag, tagChoices, appendTagToInput, MAX_MASTER_TAGS } from '../../lib/tagMasterRule';
+import { addMasterTag, removeMasterTag, tagChoices, appendTagToInput, countInputTags, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../../lib/tagMasterRule';
 // 등급 자동 제안 (236, GAP C-1) — 규칙은 순수 모듈, 적용은 사람이 고른 것만
 import { suggestGrade, GRADE_RULE_TEXT, GRADE_SUGGEST_NOTE, type SuggestGrade } from '../../lib/gradeSuggestRule';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
@@ -440,8 +440,16 @@ export default function Customers() {
   // 태그 마스터 — 설정 행에서 읽고, 고객 창의 칩과 관리 패널이 같은 목록을 쓴다 (237)
   const [tagMaster, setTagMaster] = useState<string[]>(() => getTagMaster());
   const [tagPanel, setTagPanel] = useState(false);
+  // 설정 행이 아직 서버에서 안 왔을 때 빈 목록으로 덮어쓰지 않게, 패널을 열 때·다른 기기 변경 때 다시 읽는다 (238, 리뷰 M-6)
+  const openTagPanel = () => { setTagMaster(getTagMaster()); setTagPanel(true); };
   const [tagDraft, setTagDraft] = useState('');
   const tagChipChoices = useMemo(() => tagChoices(tagMaster, tagOptionsForChips), [tagMaster, tagOptionsForChips]);
+  /** 칩 클릭 — 상한·거부 사유가 있으면 알리고, 없으면 입력칸에 더한다 (238, 리뷰 M-5) */
+  function appendTagWith(current: string, tag: string, apply: (next: string) => void) {
+    const r = appendTagToInput(current, tag);
+    if (r.error) { notify(r.error); return; }
+    if (r.value !== current) apply(r.value);
+  }
   function addToMaster() {
     const r = addMasterTag(tagMaster, tagDraft);
     if (r.error) { notify(r.error); return; }
@@ -454,13 +462,44 @@ export default function Customers() {
   const [gradePanel, setGradePanel] = useState(false);
   const [gradePicked, setGradePicked] = useState<Set<string>>(new Set());
   const openGradePanel = () => { setGradePicked(new Set(gradeSuggestions.map(g => g.id))); setGradePanel(true); };
-  function applyGradeSuggestions() {
+  const [gradeApplying, setGradeApplying] = useState(false);
+  /**
+   * 고른 고객만 등급을 올린다 — 되돌릴 수 없으니 먼저 확인하고,
+   * 코어 update() 가 한 명마다 고객 테이블 전체를 저장하므로 25명씩 끊어 돌린다(500명이면 4초 넘게 멈춘다, 성능 감사 2026-11-18) (238, 리뷰 H-3)
+   */
+  async function applyGradeSuggestions() {
     const picked = gradeSuggestions.filter(g => gradePicked.has(g.id));
     if (picked.length === 0) { notify('적용할 고객을 하나 이상 선택해주세요.'); return; }
-    for (const g of picked) CustomerStore.update(g.id, { grade: g.suggested });
-    notify(`${picked.length}명의 등급을 올렸습니다.`);
-    setGradePanel(false);
-    loadAll();
+    if (gradeApplying) return;
+    const sample = picked.slice(0, 3).map(g => `${g.name} ${g.current}→${g.suggested}`).join(', ');
+    if (!(await askConfirm({
+      title: '등급 올리기',
+      message: `${picked.length}명의 등급을 올릴까요?\n${sample}${picked.length > 3 ? ` 외 ${picked.length - 3}명` : ''}\n되돌리려면 고객 상세에서 등급을 직접 바꿔야 합니다.`,
+      confirmLabel: '등급 올리기',
+      cancelLabel: '닫기',
+    }))) return;
+    setGradeApplying(true);
+    let done = 0;
+    const step = () => {
+      try {
+        for (const g of picked.slice(done, done + 25)) {
+          if (CustomerStore.getById(g.id)?.grade === g.current) CustomerStore.update(g.id, { grade: g.suggested }); // 그 사이 직원이 바꿨으면 건드리지 않는다
+        }
+      } catch (e) {
+        setGradeApplying(false);
+        console.error('[customers] 등급 일괄 적용 실패:', e);
+        notify(`등급을 ${done}명까지 올리고 저장이 실패했습니다. 저장 공간을 확인한 뒤 남은 고객을 다시 시도해주세요.`);
+        loadAll();
+        return;
+      }
+      done += 25;
+      if (done < picked.length) { setTimeout(step, 0); return; }
+      setGradeApplying(false);
+      setGradePanel(false);
+      notify(`${picked.length}명의 등급을 올렸습니다.`);
+      loadAll();
+    };
+    setTimeout(step, 0);
   }
   const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
   const compareCustomers = (a: Customer, b: Customer): number => {
@@ -746,6 +785,13 @@ export default function Customers() {
   const treatmentModalRef = useRef<HTMLDivElement>(null);
   const consultModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(showAddModal, addModalRef);
+  // 새 창 2개도 오버레이 스택·포커스 트랩에 올린다 — 안 올리면 안드로이드 뒤로가기가 뒤의 고객 등록 폼을 닫는다 (238, 리뷰 M-4)
+  const tagPanelRef = useRef<HTMLDivElement>(null);
+  const gradePanelRef = useRef<HTMLDivElement>(null);
+  useOverlayClose(tagPanel, () => setTagPanel(false));
+  useFocusTrap(tagPanel, tagPanelRef);
+  useOverlayClose(gradePanel, () => { if (!gradeApplying) setGradePanel(false); });
+  useFocusTrap(gradePanel, gradePanelRef);
   useFocusTrap(showEditModal, editModalRef);
   useFocusTrap(showProgramModal, programModalRef);
   useFocusTrap(showTreatmentModal, treatmentModalRef);
@@ -1132,7 +1178,7 @@ export default function Customers() {
     setTreatForm(f => ({ ...f, treatmentDate: today(), customerProgramId: active.length === 1 ? active[0].id : '' }));
     setShowTreatmentModal(true);
   };
-  const tagOptions = useMemo(() => topTags(customers, 12), [customers]);
+  const tagOptions = useMemo(() => tagOptionsForChips.slice(0, 12), [tagOptionsForChips]); // 전수 스캔은 한 번만 (238, 리뷰 LOW)
   // 걸러 둔 태그가 사라지면(마지막 고객에서 지움·병합·익명화·상위 12 밖) 빈 목록에 갇히지 않게 자동 해제
   useEffect(() => {
     if (tagFilter && !tagOptions.some(t => t.tag === tagFilter)) setTagFilter('');
@@ -1625,8 +1671,9 @@ export default function Customers() {
     <div className="flex flex-col h-full">
       {/* 저장 세그먼트 편집 창 — 데스크톱(hidden lg:flex)·모바일(lg:hidden) 블록 어느 쪽에 두어도 반대 폭에서 숨겨진다(Modal 은 포털이 아님) → 루트 바로 아래 (166·168) */}
       {tagPanel && (
-        <div className="modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div role="dialog" aria-modal="true" aria-label="태그 목록 관리" className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" data-testid="tag-master-panel">
+        <div className="modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setTagPanel(false)}>
+          <div ref={tagPanelRef} role="dialog" aria-modal="true" aria-label="태그 목록 관리" onClick={e => e.stopPropagation()} tabIndex={-1}
+            className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" data-testid="tag-master-panel">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">태그 목록 관리</h2>
               <p className="mt-1 text-xs text-gray-500">매장이 쓰는 태그를 미리 정해 두면 고객 창에서 눌러 넣을 수 있습니다. 같은 뜻의 태그가 "민감성·민감·민감성피부" 처럼 갈라지면 태그 필터·발송 대상이 조용히 나뉩니다. 목록에서 지워도 고객에 붙은 태그는 그대로 남습니다({MAX_MASTER_TAGS}개까지).</p>
@@ -1653,8 +1700,9 @@ export default function Customers() {
         </div>
       )}
       {gradePanel && (
-        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div role="dialog" aria-modal="true" aria-label="등급 올릴 후보" className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" data-testid="grade-suggest-panel">
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!gradeApplying) setGradePanel(false); }}>
+          <div ref={gradePanelRef} role="dialog" aria-modal="true" aria-label="등급 올릴 후보" onClick={e => e.stopPropagation()} tabIndex={-1}
+            className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" data-testid="grade-suggest-panel">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="font-bold text-gray-900">등급 올릴 후보 {gradeSuggestions.length}명</h2>
               <p className="mt-1 text-xs text-gray-500">{GRADE_RULE_TEXT}</p>
@@ -1676,8 +1724,8 @@ export default function Customers() {
             </ul>
             <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
               <button type="button" onClick={() => setGradePanel(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">닫기</button>
-              <button type="button" onClick={applyGradeSuggestions} className="flex-1 py-2.5 bg-[#1a3a8f] text-white text-sm font-semibold rounded-xl hover:bg-[#15306e]">
-                선택한 {gradePicked.size}명 등급 올리기
+              <button type="button" onClick={applyGradeSuggestions} disabled={gradeApplying} className="flex-1 py-2.5 bg-[#1a3a8f] text-white text-sm font-semibold rounded-xl hover:bg-[#15306e] disabled:opacity-60">
+                {gradeApplying ? '적용 중...' : `선택한 ${gradePicked.size}명 등급 올리기`}
               </button>
             </div>
           </div>
@@ -2921,14 +2969,15 @@ export default function Customers() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 <div className="mt-1.5 flex flex-wrap gap-1" data-testid="tag-chips">
                   {tagChipChoices.map(c => (
-                    <button key={c.tag} type="button" onClick={() => setAddForm(fm => ({ ...fm, tags: appendTagToInput(fm.tags, c.tag) }))}
-                      className={`px-2 py-0.5 rounded-full text-xs border ${c.registered ? 'bg-blue-50 text-[#1a3a8f] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                    <button key={c.tag} type="button" onClick={() => appendTagWith(addForm.tags, c.tag, next => setAddForm(fm => ({ ...fm, tags: next })))}
+                      disabled={countInputTags(addForm.tags) >= MAX_TAGS_PER_CUSTOMER && !addForm.tags.includes(c.tag)}
+                      className={`px-2 py-0.5 rounded-full text-xs border disabled:opacity-40 ${c.registered ? 'bg-blue-50 text-[#1a3a8f] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
                       title={c.registered ? `${c.count}명 사용 중` : `목록에 없는 태그 · ${c.count}명 사용 중`}>
                       #{c.tag}{c.registered ? '' : ' (미등록)'}
                     </button>
                   ))}
                   {canManage && (
-                    <button type="button" onClick={() => setTagPanel(true)} data-testid="tag-master-open"
+                    <button type="button" onClick={openTagPanel} data-testid="tag-master-open"
                       className="px-2 py-0.5 rounded-full text-xs border border-dashed border-gray-300 text-gray-600">태그 목록 관리</button>
                   )}
                 </div>
@@ -3050,14 +3099,15 @@ export default function Customers() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 <div className="mt-1.5 flex flex-wrap gap-1" data-testid="tag-chips">
                   {tagChipChoices.map(c => (
-                    <button key={c.tag} type="button" onClick={() => setEditForm(fm => ({ ...fm, tags: appendTagToInput(fm.tags, c.tag) }))}
-                      className={`px-2 py-0.5 rounded-full text-xs border ${c.registered ? 'bg-blue-50 text-[#1a3a8f] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                    <button key={c.tag} type="button" onClick={() => appendTagWith(editForm.tags, c.tag, next => setEditForm(fm => ({ ...fm, tags: next })))}
+                      disabled={countInputTags(editForm.tags) >= MAX_TAGS_PER_CUSTOMER && !editForm.tags.includes(c.tag)}
+                      className={`px-2 py-0.5 rounded-full text-xs border disabled:opacity-40 ${c.registered ? 'bg-blue-50 text-[#1a3a8f] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
                       title={c.registered ? `${c.count}명 사용 중` : `목록에 없는 태그 · ${c.count}명 사용 중`}>
                       #{c.tag}{c.registered ? '' : ' (미등록)'}
                     </button>
                   ))}
                   {canManage && (
-                    <button type="button" onClick={() => setTagPanel(true)} data-testid="tag-master-open"
+                    <button type="button" onClick={openTagPanel} data-testid="tag-master-open"
                       className="px-2 py-0.5 rounded-full text-xs border border-dashed border-gray-300 text-gray-600">태그 목록 관리</button>
                   )}
                 </div>

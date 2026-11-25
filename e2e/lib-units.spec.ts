@@ -41,9 +41,9 @@ import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumIn
 import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
 import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
 import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
-import { buildReceipt, receiptFileName } from '../src/lib/receiptRule';
-import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT } from '../src/lib/gradeSuggestRule';
-import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, MAX_TAG_NAME, MAX_MASTER_TAGS } from '../src/lib/tagMasterRule';
+import { buildReceipt, receiptFileName, splitPaymentNote } from '../src/lib/receiptRule';
+import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT, VIP_RFM_MIN_VISITS, VIP_RFM_MIN_SPENT, GOLD_RFM_MIN_VISITS } from '../src/lib/gradeSuggestRule';
+import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, countInputTags, MAX_TAG_NAME, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../src/lib/tagMasterRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1590,24 +1590,26 @@ test('영수증 — 머리말·내역·합계, 세금계산서가 아니라고 �
 
 test('영수증 — 할인은 정가·할인 줄로 나누고, 발행일이 다르면 함께 적는다 (235)', () => {
   const r = buildReceipt({
-    payment: { paymentDate: '2026-11-20', amount: 80_000, discountAmount: 20_000, paymentMethod: '현금', typeLabel: '프로그램', status: 'completed', memo: '첫 방문 할인' },
+    payment: { paymentDate: '2026-11-20', amount: 80_000, discountAmount: 20_000, paymentMethod: '현금', typeLabel: '프로그램', status: 'completed', memo: '원장 지인 할인(내부 메모)' },
     customerName: '김고객', shop: SHOP, issuedOn: '2026-11-25',
   });
   const by = (label: string) => r.rows.find(x => x.label === label)?.value;
   expect(by('정가')).toBe('100,000원');   // 할인 전 금액을 되살려 적는다
   expect(by('할인')).toBe('-20,000원');
-  expect(by('메모')).toBe('첫 방문 할인');
   expect(by('발행일')).toBeTruthy();       // 결제일과 다른 날 뽑으면 발행일을 밝힌다
   expect(r.totalValue).toBe('80,000원');
+  // 직원용 메모는 고객 영수증에 인쇄하지 않는다 (238, 리뷰 M-2)
+  expect(by('메모')).toBeUndefined();
+  expect(JSON.stringify(r)).not.toContain('내부 메모');
 });
 
 test('영수증 — 환불 건은 환불 영수증, 대기 건은 예정 내역서 (235)', () => {
   const refund = buildReceipt({ payment: { paymentDate: '2026-11-25', amount: 50_000, status: 'refunded', paymentMethod: '카드', typeLabel: '단건 시술' }, customerName: '김고객', shop: SHOP });
   expect(refund.title).toBe('환불 영수증');
   expect(refund.isRefund).toBe(true);
-  expect(refund.totalLabel).toBe('환불 금액');
+  expect(refund.totalLabel).toBe('환불 처리된 원 결제 금액'); // 부분 환불 금액을 기록할 자리가 없다 (238, 리뷰 M-3)
   expect(refund.totalValue).toBe('-50,000원');   // 결제 영수증처럼 보이지 않게
-  expect(refund.notes.some(n => n.includes('환불 처리된 결제'))).toBe(true);
+  expect(refund.notes.some(n => n.includes('부분 환불이라면 실제 환불액은 매장 기록'))).toBe(true);
 
   const pending = buildReceipt({ payment: { paymentDate: '2026-11-25', amount: 50_000, status: 'pending' }, customerName: '김고객', shop: SHOP });
   expect(pending.title).toBe('결제 예정 내역서');
@@ -1646,10 +1648,14 @@ test('등급 제안 — VIP·골드 기준(방문·누적) 경계 (236)', () => 
   expect(suggestGrade({ current: '신규', visits: 1, spent: 50_000 })).toBeNull();                             // 첫 방문은 그대로 신규
 });
 
-test('등급 제안 — RFM 충성·우수는 금액 기준을 못 넘어도 올린다 (236)', () => {
-  expect(suggestGrade({ current: '일반', visits: 5, spent: 300_000, segment: '충성' })?.grade).toBe('VIP');
-  expect(suggestGrade({ current: '일반', visits: 5, spent: 300_000, segment: '충성' })?.reason).toMatch(/RFM 충성/);
-  expect(suggestGrade({ current: '신규', visits: 3, spent: 200_000, segment: '우수' })?.grade).toBe('골드');
+test('등급 제안 — RFM(매장 내 상대 순위)에도 절대 하한을 함께 본다 (236·238 리뷰 H-1)', () => {
+  // RFM 은 매장 안 백분위라 전원이 방문 1~2회인 매장에서는 방문 2회도 '충성' 이 된다 → 하한을 못 넘으면 VIP 로 올리지 않는다
+  expect(suggestGrade({ current: '신규', visits: 2, spent: 50_000, segment: '충성' })?.grade).toBe('일반');
+  expect(suggestGrade({ current: '신규', visits: 1, spent: 300_000, segment: '우수' })).toBeNull();           // 방문 1회는 아직 신규
+  expect(suggestGrade({ current: '일반', visits: VIP_RFM_MIN_VISITS, spent: VIP_RFM_MIN_SPENT, segment: '충성' })?.grade).toBe('VIP');
+  expect(suggestGrade({ current: '일반', visits: VIP_RFM_MIN_VISITS, spent: VIP_RFM_MIN_SPENT, segment: '충성' })?.reason).toMatch(/매장 내 상위 고객\(RFM 충성\)/);
+  expect(suggestGrade({ current: '일반', visits: VIP_RFM_MIN_VISITS - 1, spent: VIP_RFM_MIN_SPENT, segment: '충성' })).toBeNull(); // 방문 하한 미달 → 이미 '일반' 이라 올릴 것이 없다
+  expect(suggestGrade({ current: '신규', visits: GOLD_RFM_MIN_VISITS, spent: 100_000, segment: '우수' })?.grade).toBe('골드');
   expect(suggestGrade({ current: '신규', visits: 2, spent: 10_000, segment: '휴면' })?.grade).toBe('일반');   // 구분이 낮아도 방문 2회는 일반
 });
 
@@ -1676,6 +1682,8 @@ test('태그 이름 정리 — #·공백·쉼표·길이, 동의 태그는 거�
   expect(normalizeTagName('a'.repeat(MAX_TAG_NAME + 5))).toHaveLength(MAX_TAG_NAME);
   expect(normalizeTagName('민감성, 재구매')).toBeNull();          // 쉼표는 구분자
   expect(normalizeTagName('광고동의:2026-11-25')).toBeNull();     // 동의 태그는 동의 컨트롤이 관리한다
+  // 상태 태그 4종도 막는다 — 전에는 접두만 봐서 통과했고, 칩으로 넣어도 저장 때 조용히 버려졌다 (238, 리뷰 H-2)
+  for (const t of ['광고수신동의', '광고수신거부', '문자수신거부', '카카오수신거부']) expect(normalizeTagName(t)).toBeNull();
   expect(normalizeTagName('  ')).toBeNull();
   expect(normalizeTagName(42)).toBeNull();
 });
@@ -1699,9 +1707,9 @@ test('태그 목록 저장값 정리 — 배열이 아니거나 깨진 값 방�
   expect(sanitizeMaster(Array.from({ length: MAX_MASTER_TAGS + 10 }, (_, i) => 't' + i))).toHaveLength(MAX_MASTER_TAGS);
 });
 
-test('태그 칩 — 등록 태그 먼저(사용 많은 순), 쓰고 있지만 미등록인 태그도 보여 준다 (237)', () => {
+test('태그 칩 — 등록 태그 먼저(등록 순서), 쓰고 있지만 미등록인 태그도 보여 준다 (237·238 리뷰 M-7)', () => {
   const choices = tagChoices(['민감성', '재구매'], [{ tag: '단골', count: 5 }, { tag: '재구매', count: 3 }, { tag: '민감성', count: 1 }]);
-  expect(choices.map(c => c.tag)).toEqual(['재구매', '민감성', '단골']);
+  expect(choices.map(c => c.tag)).toEqual(['민감성', '재구매', '단골']); // 등록 순서 → 미등록은 뒤
   expect(choices.find(c => c.tag === '단골')!.registered).toBe(false); // 미등록이라고 밝힌다(숨기지 않는다)
   expect(choices.find(c => c.tag === '재구매')!.count).toBe(3);
   expect(tagChoices([], [])).toEqual([]);
@@ -1709,9 +1717,42 @@ test('태그 칩 — 등록 태그 먼저(사용 많은 순), 쓰고 있지만 �
 });
 
 test('태그 입력칸에 칩 더하기 — 중복은 그대로, 쉼표로 이어 붙인다 (237)', () => {
-  expect(appendTagToInput('', '민감성')).toBe('민감성');
-  expect(appendTagToInput('민감성', '재구매')).toBe('민감성, 재구매');
-  expect(appendTagToInput('민감성, 재구매', '민감성')).toBe('민감성, 재구매'); // 두 번 넣지 않는다
-  expect(appendTagToInput(' #민감성 ,', '재구매')).toBe('민감성, 재구매');     // 손으로 적은 표기도 정리
-  expect(appendTagToInput('민감성', '광고동의')).toBe('민감성');                // 거부된 이름은 아무 일도 하지 않는다
+  expect(appendTagToInput('', '민감성').value).toBe('민감성');
+  expect(appendTagToInput('민감성', '재구매').value).toBe('민감성, 재구매');
+  expect(appendTagToInput('민감성, 재구매', '민감성').value).toBe('민감성, 재구매'); // 두 번 넣지 않는다
+  expect(appendTagToInput('민감성, 재구매', '민감성').error).toBeUndefined();
+  expect(appendTagToInput(' #민감성 ,', '재구매').value).toBe('민감성, 재구매');     // 손으로 적은 표기도 정리
+  const consent = appendTagToInput('민감성', '광고수신동의');
+  expect(consent.value).toBe('민감성');
+  expect(consent.error).toMatch(/동의 설정/);                                        // 왜 안 들어가는지 알려 준다
+  // 고객당 10개 상한 — 전에는 11개째가 저장 때 조용히 잘렸다 (238, 리뷰 M-5)
+  const ten = Array.from({ length: MAX_TAGS_PER_CUSTOMER }, (_, i) => 't' + i).join(', ');
+  expect(countInputTags(ten)).toBe(MAX_TAGS_PER_CUSTOMER);
+  const over = appendTagToInput(ten, '하나더');
+  expect(over.value).toBe(ten);
+  expect(over.error).toMatch(new RegExp(String(MAX_TAGS_PER_CUSTOMER)));
+});
+
+// ── 238 리뷰 반영: 칩 자리 배분, 분할 결제 요약 ──
+
+test('태그 칩 — 등록 태그가 많아도 미등록 태그 자리가 남는다, 동의 태그는 칩에 없다 (238, 리뷰 H-2·M-7)', () => {
+  const master = Array.from({ length: 30 }, (_, i) => '등록' + i);
+  const usage = [{ tag: '쓰는태그', count: 9 }, { tag: '광고수신동의', count: 50 }, { tag: '광고동의:2026-11-26', count: 50 }];
+  const choices = tagChoices(master, usage, 24);
+  expect(choices).toHaveLength(24);
+  expect(choices.some(c => c.tag === '쓰는태그' && !c.registered)).toBe(true);   // 미등록 몫이 남는다
+  expect(choices.some(c => c.tag.startsWith('광고'))).toBe(false);               // 동의 태그는 칩에 올리지 않는다
+  // 등록 순서를 지킨다 — 사용 0건인 새 태그가 꼬리로 밀려 안 보이던 문제 (리뷰 M-7)
+  const fresh = tagChoices(['오래된', '방금추가'], [{ tag: '오래된', count: 7 }], 24);
+  expect(fresh.map(c => c.tag)).toEqual(['오래된', '방금추가']);
+});
+
+test('분할 결제 요약 — 2건 이상일 때만, 환불 건은 빼고 합계를 적는다 (238, 리뷰 M-1)', () => {
+  expect(splitPaymentNote([{ amount: 100_000, paymentMethod: '카드' }])).toBeNull(); // 1건이면 안내하지 않는다
+  expect(splitPaymentNote([])).toBeNull();
+  const note = splitPaymentNote([{ amount: 50_000, paymentMethod: '카드' }, { amount: 50_000, paymentMethod: '현금' }]);
+  expect(note).toBe('이 건은 2건으로 나눠 결제했습니다: 카드 50,000원 + 현금 50,000원 · 합계 100,000원');
+  // 환불된 행은 합계에서 뺀다(남은 1건이면 안내 자체를 안 한다)
+  expect(splitPaymentNote([{ amount: 50_000, paymentMethod: '카드' }, { amount: 50_000, paymentMethod: '현금', status: 'refunded' }])).toBeNull();
+  expect(splitPaymentNote([{ amount: 30_000 }, { amount: 20_000 }])).toContain('미지정 30,000원 + 미지정 20,000원');
 });

@@ -55,6 +55,11 @@ test('등급 올릴 후보를 보여 주고 고른 고객만 등급을 올린다
   // 선택하고 적용하면 등급이 올라가고 후보에서 사라진다
   await panel.getByRole('checkbox').first().check();
   await panel.getByRole('button', { name: /등급 올리기/ }).click();
+  // 되돌릴 수 없는 변경이라 확인창을 한 번 거친다 (238, 리뷰 H-3)
+  const confirm = page.getByTestId('confirm-dialog');
+  await expect(confirm).toContainText('1명의 등급을 올릴까요?');
+  await expect(confirm).toContainText('되돌리려면 고객 상세에서');
+  await confirm.getByRole('button', { name: '등급 올리기', exact: true }).click();
   await expect(page.getByText('1명의 등급을 올렸습니다.')).toBeVisible({ timeout: 10_000 });
   await dismissToasts(page);
   await expect(page.getByTestId('grade-suggest-open')).toHaveCount(0);

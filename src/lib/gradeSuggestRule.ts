@@ -9,8 +9,12 @@
 //   2) **올리는 제안만 한다.** 내리는 제안은 하지 않는다(휴면 VIP 를 강등해 버리면 돌아온 고객을 잃는다).
 //   3) 근거(방문 수·누적 결제·RFM 구분)를 함께 돌려줘 화면이 그대로 보여 준다.
 //   4) 방문 기록이 없는 고객은 제안하지 않는다.
-// 기준(화면에 그대로 적는다): VIP = 방문 8회 이상 & 누적 200만원 이상, 또는 RFM '충성'.
-//                             골드 = 방문 4회 이상 & 누적 80만원 이상, 또는 RFM '우수'.
+// 기준(화면에 그대로 적는다):
+//   VIP  = 방문 8회 이상 & 누적 200만원 이상, 또는 RFM '충성' + 방문 4회·누적 100만원 이상.
+//   골드 = 방문 4회 이상 & 누적 80만원 이상, 또는 RFM '우수' + 방문 2회 이상.
+//   일반 = 방문 2회 이상.
+// RFM 은 **매장 안 상대 순위**다(백분위) — 전원이 방문 1~2회인 매장에서는 방문 2회 고객도 '충성' 이 된다.
+// 그래서 RFM 경로에도 절대 하한을 AND 로 걸고, 근거 문구에 상대 순위임을 적는다 (238, 리뷰 H-1).
 // e2e/lib-units.spec.ts 가 브라우저 없이 직접 import 해 검증한다.
 // ═══════════════════════════════════════════════════════════════
 
@@ -23,6 +27,11 @@ export const VIP_VISITS = 8;
 export const VIP_SPENT = 2_000_000;
 export const GOLD_VISITS = 4;
 export const GOLD_SPENT = 800_000;
+/** RFM '충성' 으로 VIP 를 제안할 때의 절대 하한 (238, 리뷰 H-1) */
+export const VIP_RFM_MIN_VISITS = 4;
+export const VIP_RFM_MIN_SPENT = 1_000_000;
+/** RFM '우수' 로 골드를 제안할 때의 절대 하한 */
+export const GOLD_RFM_MIN_VISITS = 2;
 
 export interface GradeSuggestInput {
   current: string;
@@ -50,15 +59,15 @@ export function suggestGrade(i: GradeSuggestInput): GradeSuggestion | null {
   if (visits >= VIP_VISITS && spent >= VIP_SPENT) {
     target = 'VIP';
     reason = `방문 ${visits}회 · 누적 ${man(spent)}만원`;
-  } else if (i.segment === '충성') {
+  } else if (i.segment === '충성' && visits >= VIP_RFM_MIN_VISITS && spent >= VIP_RFM_MIN_SPENT) {
     target = 'VIP';
-    reason = `RFM 충성 고객(방문 ${visits}회 · 누적 ${man(spent)}만원)`;
+    reason = `매장 내 상위 고객(RFM 충성) · 방문 ${visits}회 · 누적 ${man(spent)}만원`;
   } else if (visits >= GOLD_VISITS && spent >= GOLD_SPENT) {
     target = '골드';
     reason = `방문 ${visits}회 · 누적 ${man(spent)}만원`;
-  } else if (i.segment === '우수') {
+  } else if (i.segment === '우수' && visits >= GOLD_RFM_MIN_VISITS) {
     target = '골드';
-    reason = `RFM 우수 고객(방문 ${visits}회 · 누적 ${man(spent)}만원)`;
+    reason = `매장 내 상위 고객(RFM 우수) · 방문 ${visits}회 · 누적 ${man(spent)}만원`;
   } else if (visits >= 2) {
     target = '일반';
     reason = `방문 ${visits}회 — 신규 단계는 지났습니다`;
@@ -75,5 +84,5 @@ function man(won: number): string {
 }
 
 /** 설정·안내 문구 — 기준을 숨기지 않는다 */
-export const GRADE_RULE_TEXT = `VIP: 방문 ${VIP_VISITS}회 이상·누적 ${VIP_SPENT / 10_000}만원 이상 또는 RFM 충성 / 골드: 방문 ${GOLD_VISITS}회 이상·누적 ${GOLD_SPENT / 10_000}만원 이상 또는 RFM 우수 / 일반: 방문 2회 이상`;
-export const GRADE_SUGGEST_NOTE = '등급을 자동으로 바꾸지 않고 올릴 후보만 보여 줍니다. 내리는 제안은 하지 않습니다(휴면 고객의 등급을 떨어뜨리지 않기 위해).';
+export const GRADE_RULE_TEXT = `VIP: 방문 ${VIP_VISITS}회·누적 ${VIP_SPENT / 10_000}만원 이상, 또는 매장 내 상위 고객이면서 방문 ${VIP_RFM_MIN_VISITS}회·누적 ${VIP_RFM_MIN_SPENT / 10_000}만원 이상 / 골드: 방문 ${GOLD_VISITS}회·누적 ${GOLD_SPENT / 10_000}만원 이상, 또는 매장 내 상위 고객이면서 방문 ${GOLD_RFM_MIN_VISITS}회 이상 / 일반: 방문 2회 이상`;
+export const GRADE_SUGGEST_NOTE = '등급을 자동으로 바꾸지 않고 올릴 후보만 보여 줍니다. 내리는 제안은 하지 않습니다(휴면 고객의 등급을 떨어뜨리지 않기 위해). "매장 내 상위 고객"은 이 매장 안에서의 상대 순위(RFM)라 매장마다 기준이 다릅니다 — 금액·방문 하한을 함께 넘은 고객만 올립니다.';
