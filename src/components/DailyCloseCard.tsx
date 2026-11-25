@@ -5,6 +5,7 @@ import { canShareText, shareText } from '../lib/mobileBridge';
 import { getDailyClose, buildDailyCloseMessage } from '../lib/dailyClose';
 import { notify } from '../lib/notify';
 import { useFeature } from '../hooks/useFeature';
+import { useScreenPinLocked } from '../hooks/useScreenPin';
 import { useAuth } from '../contexts/AuthContext';
 import { canDo } from '../lib/permissions';
 
@@ -15,7 +16,8 @@ import { canDo } from '../lib/permissions';
  */
 export default function DailyCloseCard({ compact = false, refreshKey = 0 }: { compact?: boolean; refreshKey?: number }) {
   const { user } = useAuth();
-  const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view'); // 매출·환불·지출 요약 — 직원 계정에는 숨긴다(매출 화면과 같은 규칙, 117~119 리뷰 #H2)
+  const moneyPinLocked = useScreenPinLocked('/sales'); // (224, 218 리뷰 H-3)
+  const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view') && !moneyPinLocked; // 매출·환불·지출 요약 — 직원 계정에는 숨긴다(매출 화면과 같은 규칙, 117~119 리뷰 #H2)
   const close = useMemo(() => getDailyClose(), [refreshKey]);
   const [copied, setCopied] = useState(false);
   if (!salesOn) return null;

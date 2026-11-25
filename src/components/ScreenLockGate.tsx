@@ -14,7 +14,7 @@ export default function ScreenLockGate({ children }: { children: React.ReactNode
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const onChange = () => setTick(t => t + 1);
@@ -22,7 +22,7 @@ export default function ScreenLockGate({ children }: { children: React.ReactNode
     return () => window.removeEventListener(APP_LOCK_CHANGED_EVENT, onChange);
   }, []);
   useEffect(() => { setPin(''); setError(null); }, [location.pathname, tick]);
-  useEffect(() => { if (needed) panelRef.current?.focus(); }, [needed, location.pathname]); // 낭독기가 화면 전환을 알게
+  useEffect(() => { if (needed) inputRef.current?.focus(); }, [needed, location.pathname]); // 게이트가 뜨면 바로 PIN 을 칠 수 있게(낭독기도 입력의 라벨을 읽는다) (224, 리뷰 L-1)
 
   if (!needed) return <>{children}</>;
 
@@ -35,7 +35,7 @@ export default function ScreenLockGate({ children }: { children: React.ReactNode
   };
 
   return (
-    <div ref={panelRef} role="region" tabIndex={-1} aria-labelledby="screen-lock-title" data-testid="screen-lock"
+    <div role="region" aria-labelledby="screen-lock-title" data-testid="screen-lock"
       className="min-h-[60vh] flex items-center justify-center p-6 outline-none">
       <div className="w-full max-w-sm text-center space-y-4">
         <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto">
@@ -44,7 +44,7 @@ export default function ScreenLockGate({ children }: { children: React.ReactNode
         <h1 id="screen-lock-title" className="text-lg font-bold text-gray-900">{screenLabel(needed)} 화면은 PIN이 필요합니다</h1>
         <p className="text-sm text-gray-500 leading-relaxed">설정 &gt; 백업·보안에서 정한 PIN을 입력하세요. 이 기기에서 이번 실행 동안만 열립니다.</p>
         <form className="space-y-3" onSubmit={e => { e.preventDefault(); void submit(); }}>
-          <input type="password" inputMode="numeric" maxLength={6} autoFocus value={pin}
+          <input ref={inputRef} type="password" inputMode="numeric" maxLength={6} value={pin}
             onChange={e => { setPin(e.target.value.replace(/\D/g, '')); setError(null); }}
             aria-label="PIN" className="w-40 mx-auto block text-center tracking-widest border border-gray-200 rounded-xl px-3 py-2.5 text-base focus:outline-none focus:border-[#1a3a8f]" />
           {error && <p role="alert" className="text-xs text-rose-600">{error}</p>}

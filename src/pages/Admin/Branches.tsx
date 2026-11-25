@@ -85,16 +85,16 @@ export default function Branches() {
   /** 지점의 실행 버전 — 대시보드와 같은 규칙(adminBranches.branchVersionInfo): 가장 낮은 버전이 경고 대상, 접속 시각은 가장 최근 */
   // 화면 PIN 초기화 (219, 승인 20) — 매장이 PIN 을 잊었을 때. 서버에는 "초기화 시각" 만 올라가고 지점 앱이 다음 조회에서 자기 기기 PIN 설정을 지운다
   const [pinResetBusy, setPinResetBusy] = useState<string | null>(null);
-  const [pinResetDone, setPinResetDone] = useState<Record<string, string>>({});
+  const [pinResetDone, setPinResetDone] = useState<Set<string>>(new Set());
   async function handleResetPin(b: { id: string; name: string }) {
     if (!window.confirm(`'${b.name}' 지점의 화면 잠금 PIN을 초기화할까요?\n그 지점 프로그램이 다음에 서버와 통신할 때 PIN 설정이 지워지고, 매장은 설정에서 새 PIN을 정하면 됩니다.`)) return;
     setPinResetBusy(b.id);
     try {
-      const res = await resetBranchAppLock(b.id);
-      setPinResetDone(prev => ({ ...prev, [b.id]: res.appLockResetAt }));
-      alert(`'${b.name}' 지점 PIN 초기화를 요청했습니다. 해당 지점 프로그램이 서버와 통신하면 적용됩니다.`);
+      await resetBranchAppLock(b.id);
+      setPinResetDone(prev => new Set(prev).add(b.id));
+      notify.success(`'${b.name}' 지점 PIN 초기화를 요청했습니다. 해당 지점 프로그램이 서버와 통신하면 적용됩니다.`);
     } catch (e: unknown) {
-      alert(`PIN 초기화에 실패했습니다: ${(e as Error)?.message || '서버 오류'}`);
+      notify.error(`PIN 초기화에 실패했습니다: ${(e as Error)?.message || '서버 오류'}`);
     } finally {
       setPinResetBusy(null);
     }
@@ -489,7 +489,7 @@ export default function Branches() {
                             data-testid="branch-pin-reset"
                             className="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
                           >
-                            {pinResetBusy === b.id ? '초기화 중…' : pinResetDone[b.id] ? 'PIN 초기화됨' : 'PIN 초기화'}
+                            {pinResetBusy === b.id ? '초기화 중…' : pinResetDone.has(b.id) ? 'PIN 초기화됨' : 'PIN 초기화'}
                           </button>
                         )}
                         <button

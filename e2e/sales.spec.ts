@@ -31,6 +31,11 @@ test('결제 등록 버튼을 두 번 빠르게 눌러도 한 건만 저장된�
   await expect(d).toBeVisible();
   await pickCustomer(page, acc2.customer, d);
   await d.getByLabel('결제 금액').fill('70000');
+  // 먼저 잘못된 금액으로 막아 본다 — 가드가 검증 앞에 걸리면 이 뒤로 저장이 영구히 죽는다 (224, 221 리뷰 H-2)
+  await d.getByLabel('결제 금액').fill('5만');
+  await d.getByRole('button', { name: '결제 등록' }).click();
+  await expect(d).toBeVisible(); // 거부돼 창이 남는다
+  await d.getByLabel('결제 금액').fill('70000');
   await d.getByRole('button', { name: '결제 등록' }).dblclick(); // 한 제스처로 두 번 — 이중 제출 가드가 두 번째를 막아야 한다
   await expect(d).toHaveCount(0);
   // 매출 합계가 7만 원 한 건이어야 한다(두 건이면 14만 원·2건)

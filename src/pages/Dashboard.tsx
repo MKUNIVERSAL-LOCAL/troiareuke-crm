@@ -30,6 +30,7 @@ import SetupChecklistCard from '../components/SetupChecklistCard';
 import { StatusBadge, SourceBadge } from '../components/ui/Badge';
 import { PaymentStore, CustomerStore, ProductStore, ReservationStore } from '../lib/store';
 import { useFeature } from '../hooks/useFeature';
+import { useScreenPinLocked } from '../hooks/useScreenPin';
 
 // 코어 PaymentStore.getDailyData()는 toISOString() 기반 UTC 날짜 키라
 // KST 0~9시에 당일 매출이 빠짐 — 코어 수정 금지이므로 페이지에서
@@ -128,7 +129,8 @@ export default function Dashboard() {
 
   // 어드민이 끈 모듈의 데이터·링크는 대시보드에서도 숨긴다 (게이트 화면 dead-end 방지)
   const { user } = useAuth();
-  const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view'); // 직원 계정은 매출 화면과 함께 금액 카드도 보지 않는다 (13차 #M14)
+  const moneyPinLocked = useScreenPinLocked('/sales'); // 매출 화면을 PIN 으로 잠갔으면 금액 카드도 가린다 — 게이트 우회 차단 (224, 218 리뷰 H-3)
+  const salesOn = useFeature('module.sales') && canDo(user?.role, 'sales.view') && !moneyPinLocked; // 직원 계정은 매출 화면과 함께 금액 카드도 보지 않는다 (13차 #M14)
   const reservationsOn = useFeature('module.reservations');
   const customersOn = useFeature('module.customers');
   const productsOn = useFeature('module.products');

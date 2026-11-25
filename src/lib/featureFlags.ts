@@ -8,6 +8,7 @@ import { setCatalogOverride } from './ai/catalog';
 import { FEATURE_MAP } from './featureRegistry';
 import { apiRequest, isAuthApiConfigured } from './authApi';
 import { getPreference, setPreference } from './shopPreferences';
+import { getShopId } from './store';
 import { getAppLock, disableAppLock, clearScreenUnlocks } from './appLock';
 import { shouldResetAppLock } from './appLockResetRule';
 import { notify } from './notify';
@@ -95,14 +96,22 @@ export function setDeviceFeatureEnabled(id: string, on: boolean): void {
  * NAS 서버에서 원격 플래그를 새로 받아온다. Layout 마운트 시 1회 호출.
  * 실패(오프라인·구버전 서버·미연동)해도 캐시/기본값으로 동작하므로 조용히 무시한다.
  */
-const LOCK_RESET_SEEN_KEY = 'crm_app_lock_reset_seen';
+const LOCK_RESET_SEEN_KEY = 'crm_app_lock_reset_seen'; // 값은 { branchId, iso } — 지점이 다르면 "처음 보는 초기화" 로 (224, 219 리뷰 M-3)
 
 /** 본사가 누른 화면 PIN 초기화를 이 기기에 반영 — 같은 초기화를 두 번 처리하지 않는다 (219) */
 async function applyAppLockReset(serverIso: string | null | undefined): Promise<void> {
+  const branchId = getShopId();
   let seen: string | null = null;
-  try { seen = localStorage.getItem(LOCK_RESET_SEEN_KEY); } catch { /* 저장소 접근 불가 — 서버 값을 따른다 */ }
+  try {
+    const raw = localStorage.getItem(LOCK_RESET_SEEN_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { branchId?: string; iso?: string } | string;
+      // 같은 PC 에서 다른 지점으로 재로그인하면(세션 만료 경로는 전체 wipe 를 거치지 않는다) 그 지점의 표식은 쓸 수 없다
+      if (typeof parsed === 'object' && parsed && parsed.branchId === branchId) seen = parsed.iso ?? null;
+    }
+  } catch { /* 저장소 접근 불가·깨진 값 — 서버 값을 따른다 */ }
   if (!shouldResetAppLock(serverIso, seen)) return;
-  try { localStorage.setItem(LOCK_RESET_SEEN_KEY, String(serverIso)); } catch { /* noop */ }
+  try { localStorage.setItem(LOCK_RESET_SEEN_KEY, JSON.stringify({ branchId, iso: String(serverIso) })); } catch { /* noop */ }
   const had = !!getAppLock();
   disableAppLock();
   clearScreenUnlocks();

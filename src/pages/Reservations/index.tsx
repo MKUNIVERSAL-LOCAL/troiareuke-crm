@@ -1757,8 +1757,9 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
 
   const saveLock = useRef(createSubmitLock());
   const handleSave = () => {
-    if (!saveLock.current.acquire()) return; // 이중 제출 가드 (221, GAP P-4)
-    { const blocked = monthCloseBlock(basePayment.paymentDate); if (blocked) { saveLock.current.release(); notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    { const blocked = monthCloseBlock(basePayment.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    // 이중 제출 — 합계·수단 검증을 지난 뒤에만 잠근다 (224, 221 리뷰 M-1)
+    if (!saveLock.current.acquire()) return;
     if (mode === 'single') {
       PaymentStore.save({ ...basePayment, amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
       rememberPaymentMethod(method);

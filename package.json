@@ -29,6 +29,7 @@
     "test:updater": "node scripts/test-updater-helpers.mjs",
     "check:distribution": "node scripts/check-distribution-invariants.mjs",
     "check:notes": "node scripts/check-release-notes.mjs",
+    "release:checks": "node scripts/check-routes.mjs && npm run check:e2e-types && node scripts/check-distribution-invariants.mjs && node scripts/check-release-notes.mjs && node scripts/test-updater-helpers.mjs && node scripts/test-nas-outbox.mjs && npm run build:e2e && npm run test:e2e",
     "release:run": "node scripts/release-run.mjs",
     "electron:build:release": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis portable",
     "build:e2e": "vite build --mode e2e --outDir dist-e2e && vite build --mode e2e-nas --outDir dist-e2e-nas",

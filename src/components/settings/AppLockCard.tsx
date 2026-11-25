@@ -77,7 +77,10 @@ export default function AppLockCard() {
         {cfg && ( /* 민감 화면 차등 (218) — 샵 계정 하나로 운영할 때 원장만 여는 화면을 고른다 */
           <fieldset className="border border-gray-100 rounded-xl p-3" data-testid="app-lock-screens">
             <legend className="text-xs font-bold text-gray-700 px-1">PIN을 물을 화면</legend>
-            <p className="text-xs text-gray-400 mb-2">고른 화면은 들어갈 때마다(이 기기 기준 실행마다 한 번) PIN을 묻습니다. 예약·시술 입력은 막지 않습니다.</p>
+            <p className="text-xs text-gray-400 mb-2">
+              고른 화면은 들어갈 때마다(이 기기 기준 실행마다 한 번) PIN을 묻습니다. 예약·시술 입력은 막지 않습니다.
+              <br />매출·손익을 고르면 대시보드 금액 카드·마감 요약도 함께 가려집니다. 다만 고객 목록을 골라도 예약·시술·결제 창에서는 고객 이름이 계속 보입니다(화면 단위 잠금).
+            </p>
             <div className="flex flex-wrap gap-x-4 gap-y-1.5">
               {SENSITIVE_SCREENS.map(sc => (
                 <label key={sc.key} className="flex items-center gap-1.5 text-sm text-gray-700 min-h-[32px]">

@@ -70,7 +70,8 @@ const steps = [
       console.log(`선행 조건 통과 — main, 깨끗, v${version}`);
     },
   },
-  { id: 'checks', label: '검사 — 라우트·e2e 타입·배포 불변·릴리스 노트·업데이터·outbox·코어 잠금', fn: () => { npm('release:all'); } },
+  // release:all 은 빌드·발행·서버 재배포까지 포함한다 → 여기서 부르면 릴리스가 두 번 돌고 ENV 마커 게이트가 발행 뒤로 밀린다 (224, 220 리뷰 H-1)
+  { id: 'checks', label: '검사 — 라우트·e2e 타입·배포 불변·릴리스 노트·업데이터·outbox·전체 스펙', fn: () => { npm('release:checks'); } },
   { id: 'build', label: '빌드 — 설치형·포터블(ENV 마커는 다음 단계에서 확인)', fn: () => { npm('electron:build:release'); } },
   {
     id: 'markers',
@@ -79,7 +80,8 @@ const steps = [
       const asar = path.join(root, 'release', 'win-unpacked', 'resources', 'app.asar');
       if (!fs.existsSync(asar)) throw new Error('app.asar 이 없습니다 — build 단계를 먼저 실행하세요.');
       const buf = fs.readFileSync(asar);
-      const count = needle => buf.toString('latin1').split(needle).length - 1;
+      const text = buf.toString('latin1'); // 큰 asar 를 한 번만 문자열화 (224, 리뷰 L-5)
+      const count = needle => text.split(needle).length - 1;
       const nas = count('crm-api.mkcorp.familyds.com');
       const supabase = count('hmgxhrtqfbffqrleorxf');
       const ver = count(version);
@@ -122,6 +124,7 @@ if (only) {
   picked = steps.slice(at);
 }
 picked = picked.filter(s => !skip.includes(s.id));
+if (picked.length === 0) { console.error('실행할 단계가 없습니다(--only·--skip 조합을 확인하세요).'); process.exit(1); } // 0개 완료를 성공처럼 보이지 않게 (224, 리뷰 L-6)
 
 console.log(`\n릴리스 v${version} — 단계 ${picked.length}개${dryRun ? ' (dry-run: 아무것도 바꾸지 않습니다)' : ''}`);
 for (const s of picked) console.log(`  · ${s.id} — ${s.label}`);

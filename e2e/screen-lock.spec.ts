@@ -61,4 +61,16 @@ test('설정에서 PIN을 켜고 민감 화면을 고르면 그 화면만 PIN을
   // 프로그램을 다시 켜면(새로 고침) 다시 묻는다 — 풀어 둔 상태는 메모리에만 있다
   await page.reload();
   await expect(page.getByTestId('screen-lock')).toBeVisible();
+
+  // 잠긴 동안에는 대시보드 금액 카드도 가려진다 — 게이트를 우회해 같은 숫자를 보던 길 (224, 218 리뷰 H-3)
+  await page.goto('/');
+  await expect(page.getByText('이번 달 총 매출')).toHaveCount(0);
+  // PIN 을 통과하면 다시 보인다 — 메뉴로 이동(새로 고침은 잠금을 되살리므로 금액도 다시 가려지는 것이 맞다)
+  await page.goto('/sales');
+  await gate.getByLabel('PIN').fill('4242');
+  await gate.getByRole('button', { name: '확인' }).click();
+  await expect(page.getByTestId('screen-lock')).toHaveCount(0);
+  await page.getByRole('link', { name: '대시보드' }).filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText('이번 달 총 매출').filter({ visible: true }).first()).toBeVisible(); // PC·모바일 2중 DOM
 });

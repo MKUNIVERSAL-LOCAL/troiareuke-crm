@@ -395,7 +395,6 @@ export default function Sales() {
   // 결제 등록/수정
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!saveLock.current.acquire()) return; // 이중 제출 — 같은 결제가 두 건 저장되지 않게 (221, GAP P-4)
     const customer = customers.find(c => c.id === form.customerId);
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
 
@@ -461,6 +460,8 @@ export default function Sales() {
     else if (form.status === 'refunded' && editingPayment && refundedOn(editingPayment)) payload.memo = tagRefund(payload.memo, refundedOn(editingPayment)!); // 폼에서 숨긴 기존 태그 재부착
     { const blocked = monthCloseBlock(form.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     { const blocked = monthCloseBlock(editingPayment?.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    // 이중 제출 — 검증을 모두 통과한 뒤에만 잠근다. 앞에서 잠그면 조기 반환마다 풀어야 해서 하나라도 빠지면 버튼이 조용히 죽는다 (224, 221 리뷰 H-2)
+    if (!saveLock.current.acquire()) return;
     if (editingId) {
       PaymentStore.update(editingId, payload);
       if (closeProgram) CustomerProgramStore.update(closeProgram.id, { isCompleted: true, notes: `${closeProgram.notes ? closeProgram.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
