@@ -5,7 +5,7 @@ import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
 import { smsBytes, SMS_BYTE_LIMIT } from '../src/lib/smsBytes';
-import { sanitizeStorageSnapshot } from '../src/lib/backupSanitize';
+import { sanitizeStorageSnapshot, backupTableShape } from '../src/lib/backupSanitize';
 import { computeRevisitDue, daysBetween, addDays } from '../src/lib/revisitRule';
 import { nextBirthday } from '../src/lib/birthdayRule';
 import { summarizeDailyClose, formatDailyCloseMessage } from '../src/lib/dailyCloseSummary';
@@ -1186,4 +1186,19 @@ test('대기 요청 안내 — 같은 날 처리 전 요청만, 취소된 시각
   expect(waitlistFor(list, '2026-11-28')).toEqual([]);
   expect(describeWaitlist(waitlistFor(list, '2026-11-26', '14:00'), '11월 26일')).toBe('11월 26일에 들어오고 싶어 한 대기 요청 4건(14:00·13:00·15:30 외)이 있습니다 — 예약 요청함에서 연락해 보세요.');
   expect(describeWaitlist([], '11월 26일')).toBeNull();
+});
+
+test('백업 테이블 모양 — 설정은 객체, 나머지는 배열, RAW 포장 허용, 스칼라 플래그는 제외, 객체 오류는 손상 (195 H-1·196)', () => {
+  expect(backupTableShape('customers', [])).toBe('ok');
+  expect(backupTableShape('customers', [{ id: 'a' }])).toBe('ok');
+  expect(backupTableShape('settings', { name: '매장' })).toBe('ok');
+  expect(backupTableShape('settings', { __raw: 'not-json' })).toBe('ok');
+  expect(backupTableShape('customers', { __raw: 'not-json' })).toBe('ok');
+  expect(backupTableShape('setup_hidden', 1)).toBe('scalar');          // 체크리스트 숨김 플래그 '1' — 백업 제외·복원 무시
+  expect(backupTableShape('setup_hidden', '1')).toBe('scalar');
+  expect(backupTableShape('flag', true)).toBe('scalar');
+  expect(backupTableShape('flag', null)).toBe('scalar');
+  expect(backupTableShape('customers', {})).toBe('invalid');           // 배열이어야 할 테이블이 객체 — 손상
+  expect(backupTableShape('customers', { __raw: 'x', extra: 1 })).toBe('invalid');
+  expect(backupTableShape('settings', [])).toBe('invalid');            // 설정이 배열 — 손상
 });

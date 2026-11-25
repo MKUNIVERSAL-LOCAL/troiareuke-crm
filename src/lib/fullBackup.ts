@@ -16,7 +16,7 @@ import { isAuthApiConfigured } from './authApi';
 import { exportFile } from './mobileBridge';
 import { todayISO } from './format';
 import { IS_MOBILE_APP } from './platform';
-import { SETTINGS_SECRET_FIELDS, isRecord, stripSettingsSecrets } from './backupSanitize';
+import { SETTINGS_SECRET_FIELDS, isRecord, stripSettingsSecrets, backupTableShape, BACKUP_RAW_MARK } from './backupSanitize';
 import { containsKeyLike, scrubKeyLike } from './ai/keyLeak';
 
 export const BACKUP_FORMAT = 'troiareuke-crm-backup';
@@ -25,7 +25,7 @@ export const BACKUP_VERSION = 1;
 const MOBILE_MAX_BYTES = 4.5 * 1024 * 1024;
 const TABLE_NAME_RE = /^[a-z][a-z0-9_]{0,40}$/;
 /** JSON으로 파싱되지 않는 원문 값을 담는 표식 — 복원 때 그대로 되돌린다 */
-const RAW_MARK = '__raw';
+const RAW_MARK = BACKUP_RAW_MARK;
 
 export interface BackupFile {
   format: typeof BACKUP_FORMAT;
@@ -65,8 +65,7 @@ export function buildBackup(appVersion: string, shopName?: string): BackupFile {
     if (table === 'settings' && isRecord(value)) value = stripSettingsSecrets(value);
     if (typeof value === 'string' && containsKeyLike(value)) value = scrubKeyLike(value); // 자유 텍스트에 붙여넣은 키도 백업으로 새지 않게 (154 리뷰 M-3)
     // 테이블 모양(설정은 객체, 나머지는 배열, JSON 이 아니면 RAW 포장)이 아닌 값 — 예: 체크리스트 숨김 플래그 `setup_hidden`='1' — 은 넣지 않는다. 넣으면 parseBackup 이 "손상" 으로 거부해 복원이 막혔다 (195 리뷰 H-1)
-    const rawWrapped = isRecord(value) && typeof value[RAW_MARK] === 'string' && Object.keys(value).length === 1;
-    if (!(table === 'settings' ? isRecord(value) : Array.isArray(value)) && !rawWrapped) continue;
+    if (backupTableShape(table, value) !== 'ok') continue; // 판정은 순수 backupSanitize.backupTableShape (196)
     tables[table] = value;
   }
   return { format: BACKUP_FORMAT, version: BACKUP_VERSION, appVersion, shopId: getShopId(), shopName, createdAt: new Date().toISOString(), tables };
@@ -108,10 +107,9 @@ export function parseBackup(text: string): BackupFile {
   if (IS_MOBILE_APP && text.length > MOBILE_MAX_BYTES) throw new Error('파일이 이 기기의 저장 공간 한도보다 큽니다. PC 앱에서 복원하세요.');
   // 테이블 값의 모양도 본다 — 손상된 파일의 {} 나 문자열을 그대로 복원하면 첫 화면의 .filter 에서 죽고 서버 모드에선 되돌릴 UI 도 없다 (14차 #M5)
   for (const [table, value] of Object.entries(parsed.tables)) {
-    const rawWrapped = isRecord(value) && typeof value[RAW_MARK] === 'string' && Object.keys(value).length === 1;
-    const ok = table === 'settings' ? (isRecord(value) || rawWrapped) : (Array.isArray(value) || rawWrapped);
-    if (!ok && (value === null || typeof value !== 'object')) { delete (parsed.tables as Record<string, unknown>)[table]; continue; } // 옛 파일의 스칼라 플래그(setup_hidden 등)는 테이블이 아니다 — 무시하고 복원 (195 리뷰 H-1)
-    if (!ok) throw new Error(`백업 파일의 '${Object.prototype.hasOwnProperty.call(TABLE_LABELS, table) ? TABLE_LABELS[table] : table}' 데이터가 손상됐습니다. 다른 백업 파일을 사용하세요.`);
+    const shape = backupTableShape(table, value);
+    if (shape === 'scalar') { delete (parsed.tables as Record<string, unknown>)[table]; continue; } // 옛 파일의 스칼라 플래그(setup_hidden 등)는 테이블이 아니다 — 무시하고 복원 (195 리뷰 H-1, 196)
+    if (shape === 'invalid') throw new Error(`백업 파일의 '${Object.prototype.hasOwnProperty.call(TABLE_LABELS, table) ? TABLE_LABELS[table] : table}' 데이터가 손상됐습니다. 다른 백업 파일을 사용하세요.`);
   }
   return parsed as unknown as BackupFile;
 }

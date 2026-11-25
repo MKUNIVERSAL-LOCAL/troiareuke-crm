@@ -54,7 +54,7 @@ LTV(예측, 연간 기대 × 기대 유지 기간 — 유지율 자료가 쌓인
 |---|---|---|
 | customerStatsRule·visitCycleRule·revisitRule·upcomingRule·rfmRule·churnRule·customerValueRule·kpiRule·utilizationRule·revenueMetricsRule·programSessionsRule·campaignPerformanceRule·segmentFilterRule·pilotMetricsRule·ai/briefingRule(지표 서식·targetPace·describeCause) | 분석 지표·브리핑 라벨 서식 | 이 문서 표, `AI-TEST-REPORT.md` |
 | schedulingRule·availabilityRule·staffScheduleRule·resourceRule·publicSlotsRule·reservationPolicyRule | 예약 겹침·가용 시각·근무 창·자원 상한·공개 슬롯·겹침 정책(allow/confirm/block) | `COMMERCIALIZATION-ROADMAP` 140~143 기록, `CUSTOMER-PORTAL-DESIGN-2026-11-24.md` |
-| stockLedgerRule·stockRule·programLedgerRule·refundRule | 재고 원장·안전 재고·회차 원장·환불 모델(결정 #9) | 로드맵 145~148, `REFUND-MODEL-DESIGN-2026-11-24.md` |
+| stockLedgerRule·stockRule·programLedgerRule·refundRule·backupSanitize(백업 비밀값 제거·테이블 모양 판정) | 재고 원장·안전 재고·회차 원장·환불 모델(결정 #9)·백업 파일 규칙 | 로드맵 145~148, `REFUND-MODEL-DESIGN-2026-11-24.md` |
 | adComplianceRule·consentRule·campaignRule·duplicateRule·birthdayRule | 광고 표기·법정 시간·동의 태그·캠페인 대상/멱등키·중복 후보(한계: 국가번호 +82 표기와 010 표기는 다른 번호로 봄 — 뒷 4자리 사유로만 잡힘)·생일 | 로드맵 155~157·171, `AI-SECURITY-POLICY.md`(동의 관련 PII) |
 | ai/modelRouterRule·ai/creditLedgerRule·ai/costSimulatorRule | 본사 AI 모델 선택·크레딧 원장·원가 시뮬레이션 | `AI-GATEWAY-ARCHITECTURE.md`, `AI-PRICING-AND-COST-ANALYSIS.md` |
 | portalRule | 고객 포털 OTP 정책·노출 항목 | `CUSTOMER-PORTAL-DESIGN-2026-11-24.md` |
