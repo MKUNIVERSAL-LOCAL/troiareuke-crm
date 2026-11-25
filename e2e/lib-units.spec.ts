@@ -8,6 +8,7 @@ import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCoun
 import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
 import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
 import { resultLabel, defaultSnoozeDays, addDays as addDaysFollowUp, isSnoozed, sanitizeFollowUps, pruneFollowUps, snoozedIdSet, describeFollowUp, describeHidden } from '../src/lib/followUpRule';
+import { normalizePreset, sanitizePresets, addPreset, removePreset, appendPreset, presetInMemo, MAX_PRESET_LEN, MAX_PRESETS } from '../src/lib/memoPresetRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -2340,4 +2341,32 @@ test('예약 변경 이력 — 삭제도 남고, 등록 줄은 "등록" 을 두 
   const create: HistoryEntry = { id: 'c', reservationId: 'r1', at: '2026-11-26T00:00:00.000Z', kind: 'create', changes: [{ label: '날짜·시간', from: '', to: '2026-11-26 14:00' }] };
   expect(describeEntryHead(create, () => '11-26 09:00')).toBe('11-26 09:00 · 등록');
   expect(describeChange(create.changes[0])).toBe('날짜·시간 2026-11-26 14:00 로 입력');
+});
+
+// ── 251: 자주 쓰는 메모 문구 ──
+
+test('메모 문구 — 정리·중복·상한과 거절 사유 (251)', () => {
+  expect(normalizePreset('  자극   없음 · 홈케어 안내 ')).toBe('자극 없음 · 홈케어 안내');
+  expect(normalizePreset('줄\n바꿈')).toBe('줄 바꿈');
+  expect(normalizePreset('가'.repeat(60))).toHaveLength(MAX_PRESET_LEN);
+  expect(normalizePreset(null)).toBe('');
+  expect(sanitizePresets(['a b', 'a  b', '', null, '다른 문구'])).toEqual(['a b', '다른 문구']); // 중복·빈 값 제거
+  // 거절 사유를 조용히 버리지 않는다
+  expect(addPreset([], ' ').error).toBe('문구를 입력해주세요.');
+  expect(addPreset([], '가').error).toBe('두 글자 이상 적어주세요.');
+  expect(addPreset(['자극 없음'], '자극  없음').error).toBe('이미 있는 문구입니다.');
+  const full = Array.from({ length: MAX_PRESETS }, (_, i) => '문구' + i);
+  expect(addPreset(full, '하나 더').error).toContain(`${MAX_PRESETS}개까지`);
+  expect(addPreset(['자극 없음'], '강도 낮춤').list).toEqual(['자극 없음', '강도 낮춤']);
+  expect(removePreset(['자극 없음', '강도 낮춤'], '자극 없음')).toEqual(['강도 낮춤']);
+});
+
+test('메모 문구 — 메모에 덧붙이고 같은 줄을 두 번 넣지 않는다 (251)', () => {
+  expect(appendPreset('', '자극 없음')).toBe('자극 없음');                       // 빈 메모에는 줄바꿈을 만들지 않는다
+  expect(appendPreset('홈케어 안내', '자극 없음')).toBe('홈케어 안내\n자극 없음');
+  expect(appendPreset('자극 없음', '자극 없음')).toBe('자극 없음');              // 이미 있으면 그대로
+  expect(appendPreset('홈케어 안내\n', '자극 없음')).toBe('홈케어 안내\n자극 없음'); // 끝 빈 줄 정리
+  expect(appendPreset('메모', '  ')).toBe('메모');
+  expect(presetInMemo('홈케어 안내\n자극 없음', '자극 없음')).toBe(true);
+  expect(presetInMemo('자극 없음이 있었다', '자극 없음')).toBe(false);           // 줄 단위로만 본다
 });
