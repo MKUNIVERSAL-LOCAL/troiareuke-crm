@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Scissors, Sparkles, Package, CreditCard, History, ShoppingBag, ClipboardList, Send, ShieldCheck } from 'lucide-react';
 import { buildCustomerTimeline, TIMELINE_KIND_LABEL, type TimelineKind } from '../lib/customerTimeline';
 import { formatPrice, formatDate } from '../lib/format';
+import { onPhotoCacheChange } from '../lib/photoStore';
 
 const PAGE = 12;
 
@@ -27,7 +28,9 @@ export default function CustomerTimeline({ customerId, compact = false, tick = 0
   const navigate = useNavigate();
   const [filter, setFilter] = useState<TimelineKind | 'all'>('all');
   const [limit, setLimit] = useState(PAGE);
-  const all = useMemo(() => buildCustomerTimeline(customerId), [customerId, tick]);
+  const [photoTick, setPhotoTick] = useState(0);
+  useEffect(() => onPhotoCacheChange(() => setPhotoTick(t => t + 1)), []); // 사진 장수가 비동기로 적재되면 "사진 N장" 을 다시 그린다 (189)
+  const all = useMemo(() => buildCustomerTimeline(customerId), [customerId, tick, photoTick]);
   const kindsPresent = (Object.keys(TIMELINE_KIND_LABEL) as TimelineKind[]).filter(k => all.some(i => i.kind === k));
   // 걸러 둔 종류의 마지막 기록이 삭제되면 '전체'로 — 빈 화면에 갇히지 않게
   const effFilter = filter === 'all' || kindsPresent.includes(filter) ? filter : 'all';

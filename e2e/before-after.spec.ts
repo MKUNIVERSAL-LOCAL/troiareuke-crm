@@ -41,7 +41,8 @@ test('시술 사진 태그 → 고객 Before/After 비교 → 비교 이미지 �
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   const desk = page.getByTestId('customers-desktop');
   await expect(desk.getByText('Before / After 타임랩스')).toBeVisible({ timeout: 10_000 });
-  await expect(desk.getByText('사진 2장')).toBeVisible();
+  await expect(desk.getByText('사진 2장').first()).toBeVisible(); // 타임랩스 헤더(첫 요소) — 타임라인 항목에도 같은 문구가 있다 (189)
+  await expect(desk.getByTestId('customer-timeline')).toContainText('사진 2장'); // 활동 타임라인 시술 항목에도 사진 수 (189)
   // 각도 필터: '정면'만 남기면 썸네일 1장, '전체'로 돌리면 2장
   const angleGroup = desk.getByRole('group', { name: '촬영 각도 필터' });
   const thumbs = desk.getByRole('button', { name: /사진 선택$/ });
