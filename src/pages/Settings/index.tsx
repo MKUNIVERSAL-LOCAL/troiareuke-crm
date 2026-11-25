@@ -1,5 +1,6 @@
 import { HIDE_ON_MOBILE, IS_MOBILE_APP } from '../../lib/platform';
 import { sanitizeStorageSnapshot } from '../../lib/backupSanitize';
+import { markBackupSaved } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
@@ -244,6 +245,7 @@ export default function Settings() {
     }
     const result = await electronAPI.backup.exportNow(sanitizeStorageSnapshot(snapshot)); // AI 키·문자 API 키는 백업 파일에 넣지 않는다 (UX 점검 2026-11-19)
     setBackupStatus(result.success ? 'done' : 'error');
+    if (result.success) markBackupSaved(); // 체크리스트 "전체 백업 1회" — Electron 경로도 기록 (193)
     if (result.success) notify.success(result.filePath ? `백업을 저장했습니다: ${result.filePath}` : '백업을 저장했습니다. [백업 폴더 열기]에서 확인하세요.'); // 어디에 저장됐는지 버튼 글자만으로는 모른다
     if (!result.success) notify(`백업 실패: ${result.error || '알 수 없는 오류'} — 백업 폴더 권한·경로를 확인해주세요.`); // 버튼 글자 3초만으로는 이유를 알 수 없다 (4차 UX 점검 2026-11-19)
     setTimeout(() => setBackupStatus('idle'), 3000);

@@ -26,7 +26,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const checklist = page.getByTestId('setup-checklist').filter({ visible: true }).first();
   await expect(checklist).toBeVisible();
   await expect(checklist).toContainText('첫 고객 등록');
-  await expect(checklist).toContainText('3/7 완료'); // 온보딩으로 매장 이름·직원·시술 메뉴는 끝난 상태, 파일럿 준비 3항목(080·근무표·시나리오)은 남음 (190)
+  await expect(checklist).toContainText('3/8 완료'); // 온보딩으로 매장 이름·직원·시술 메뉴는 끝난 상태, 파일럿 준비 4항목(080·근무표·시나리오·백업)은 남음 (190·193)
   await checklist.getByRole('button', { name: /첫 고객 등록/ }).click();
   await expect(page).toHaveURL(/\/customers$/); // ?new=1 캡처 후 정리
   const quickAddDialog = page.getByRole('dialog', { name: '고객 추가' });
@@ -41,7 +41,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.goto('/');
   await expect(page.getByText('오늘 예약 현황').filter({ visible: true }).first()).toBeVisible();
   const checklist2 = page.getByTestId('setup-checklist').filter({ visible: true }).first();
-  await expect(checklist2).toContainText('4/7 완료');
+  await expect(checklist2).toContainText('4/8 완료');
   await expect(checklist2).toContainText('파일럿 준비');
   await expect(checklist2.getByRole('button', { name: /광고 수신거부 080 번호/ })).toBeVisible();
   await page.goto('/customers'); // 아래 검색 품질 검증은 고객 화면에서
@@ -632,6 +632,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   expect(restoredShopName).toBe(acc.shop); // 배열이 아닌 테이블(설정)도 살아난다
   await page.goto('/customers');
   await expect(page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+  // 백업 파일을 한 번 저장했으니 첫 설정 체크리스트 "전체 백업 1회 저장" 은 완료 (193)
+  await page.goto('/');
+  const setupAfterBackup = page.getByTestId('setup-checklist').filter({ visible: true }).first();
+  await expect(setupAfterBackup).toContainText('전체 백업 1회 저장');
+  await expect(setupAfterBackup.getByRole('button', { name: /전체 백업 1회 저장/ })).toHaveCount(0);
 
   // ── 10. 개인정보 보존기간 정책 (P4, 2026-11-17): 1년으로 켜고 고객을 2년 전 방문으로 만들면 안내 → 목록 → 익명화 ──
   await page.goto('/settings');

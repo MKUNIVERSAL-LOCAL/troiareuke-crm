@@ -79,7 +79,18 @@ export function summarizeBackup(b: BackupFile): { label: string; count: number }
 export async function saveBackupFile(b: BackupFile): Promise<'shared' | 'cancelled' | 'downloaded'> {
   const safeName = (b.shopName || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const blob = new Blob([JSON.stringify(b)], { type: 'application/json' });
-  return exportFile(`${safeName}_전체백업_${todayISO()}.json`, blob);
+  const result = await exportFile(`${safeName}_전체백업_${todayISO()}.json`, blob);
+  if (result !== 'cancelled') markBackupSaved(); // 체크리스트 "전체 백업 1회" (193)
+  return result;
+}
+
+// ── 마지막 백업 시각(이 PC) — 첫 설정 체크리스트 "전체 백업 1회 저장" 판정. 파일 저장과 Electron '지금 백업' 둘 다 기록한다 (193, PILOT-CHECKLIST 22)
+const LAST_BACKUP_KEY = () => `troiareuke_last_backup_${getShopId()}`; // crm_<shop>_ 접두사 밖 — 복원이 매장 키를 전부 지우고 백업 파일도 그 접두사만 모으므로 기록이 살아남고 파일에도 안 들어간다
+export function markBackupSaved(): void {
+  try { localStorage.setItem(LAST_BACKUP_KEY(), new Date().toISOString()); } catch { /* 저장 불가면 판정만 못 할 뿐 */ }
+}
+export function lastBackupAt(): string | null {
+  try { return localStorage.getItem(LAST_BACKUP_KEY()); } catch { return null; }
 }
 
 /** 파일 내용을 검증해 백업 객체로. 형식이 아니면 Error */
