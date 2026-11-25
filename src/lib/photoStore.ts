@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { apiRequest, isAuthApiConfigured, AuthApiError } from './authApi';
+import type { PhotoAngle, PhotoLabel, PhotoEntry } from './photoTypes';
 
 const PREFIX = 'troiareuke_photos_';
 
@@ -282,6 +283,26 @@ function writeCache(entityKey: string, photos: PhotoEntry[]): void {
   })();
 }
 
+/**
+ * 이 기기에 사진이 있는 기록 키 전부 (228 사진 내보내기, GAP C-3).
+ * IndexedDB 는 키 목록을, localStorage 폴백은 접두어 스캔을 쓴다(메타키 제외). 읽기 실패는 빈 목록.
+ */
+export async function allPhotoEntityKeys(): Promise<string[]> {
+  await photoCacheReady;
+  if (backend === 'idb') {
+    const database = await getDb();
+    if (database) {
+      try {
+        const keys = await idbRun<IDBValidKey[]>(database, 'readonly', s => s.getAllKeys());
+        return keys.map(String).filter(k => k.length > 0);
+      } catch (e) {
+        console.error('[photoStore] 사진 키 목록 읽기 실패:', e);
+        return [];
+      }
+    }
+  }
+  return Object.keys(localStorage).filter(k => k.startsWith(PREFIX) && !isMetaKey(k)).map(k => k.slice(PREFIX.length));
+}
 /** 비동기 확정값 읽기 — 수정 모달처럼 "아직 안 읽음"을 빈 목록으로 오해하면 안 되는 곳. 읽기 실패는 null */
 export function getPhotosAsync(entityKey: string): Promise<PhotoEntry[] | null> {
   return loadCache(entityKey);
@@ -609,8 +630,8 @@ export function clearPhotos(entityKey: string): void {
   pushToNas(entityKey, []);
 }
 
-export type PhotoAngle = 'front' | 'left' | 'right' | 'other';
-export type PhotoLabel = 'before' | 'after';
+// 타입은 photoTypes.ts (228) — 순수 규칙 모듈이 이 파일을 끌고 오지 않도록 분리했다
+export type { PhotoAngle, PhotoLabel, PhotoEntry } from './photoTypes';
 
 export const PHOTO_ANGLES: { id: PhotoAngle; label: string }[] = [
   { id: 'front', label: '정면' },
@@ -622,14 +643,6 @@ export const PHOTO_LABELS: { id: PhotoLabel; label: string }[] = [
   { id: 'before', label: '시술 전' },
   { id: 'after', label: '시술 후' },
 ];
-
-export interface PhotoEntry {
-  id: string;
-  dataUrl: string;   // base64 data URL (리사이즈됨)
-  label?: PhotoLabel | string; // 시술 전/후 (구데이터 호환으로 string 허용)
-  angle?: PhotoAngle;          // 촬영 각도 — 같은 각도끼리 Before/After 비교·촬영 가이드 (2026-11-17)
-  takenAt: string;   // ISO 날짜 (촬영/업로드 시각)
-}
 
 /**
  * 이미지 파일을 최대 maxDim 픽셀로 리사이즈하고 JPEG로 압축해 base64 반환.

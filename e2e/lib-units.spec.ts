@@ -37,6 +37,7 @@ import { foldOldest } from '../src/lib/stockLedgerRule';
 import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
 import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
+import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1275,4 +1276,70 @@ test('이중 제출 잠금 — 한 번만 통과하고, 풀면 다시 통과한�
   expect(lock.acquire()).toBe(true);    // 다시 저장할 수 있다
   const other = createSubmitLock();     // 잠금은 폼마다 따로
   expect(other.acquire()).toBe(true);
+});
+
+// ── 사진 백업 순수 규칙 (228, GAP C-3) ───────────────────────────
+// 사진은 전체 백업에 들어가지 않아 로컬 모드 매장에서는 이 파일이 유일한 보관본이 된다 — 분할·병합이 틀리면 사진이 사라진다.
+
+test('사진 파일 분할 — 기록 하나는 쪼개지 않고, 상한을 넘는 기록은 혼자 한 파일로 (228)', () => {
+  const inv = [
+    { entityKey: 'treatment:a', count: 2, bytes: 60 },
+    { entityKey: 'treatment:b', count: 1, bytes: 50 },
+    { entityKey: 'treatment:c', count: 1, bytes: 30 },
+  ];
+  expect(planPhotoChunks(inv, 100)).toEqual([['treatment:a'], ['treatment:b', 'treatment:c']]);
+  expect(planPhotoChunks(inv, 1000)).toEqual([['treatment:a', 'treatment:b', 'treatment:c']]); // 넉넉하면 한 파일
+  // 상한보다 큰 기록도 빠뜨리지 않는다(혼자 한 파일)
+  expect(planPhotoChunks([{ entityKey: 'treatment:big', count: 1, bytes: 500 }], 100)).toEqual([['treatment:big']]);
+  expect(planPhotoChunks([], 100)).toEqual([]);
+  // 묶음 수가 달라져도 모든 기록이 정확히 한 번 들어간다
+  const keys = planPhotoChunks(inv, 90).flat();
+  expect(keys.slice().sort()).toEqual(['treatment:a', 'treatment:b', 'treatment:c']);
+});
+
+test('사진 용량·합계·표기 — 글자 수 합, 빈 목록 0, 사람이 읽는 단위 (228)', () => {
+  expect(photoBytes([{ id: 'p1', dataUrl: 'data:' + 'x'.repeat(95), takenAt: '2026-11-25' }])).toBe(100);
+  expect(photoBytes([])).toBe(0);
+  expect(sumInventory([{ entityKey: 'a:1', count: 2, bytes: 10 }, { entityKey: 'b:1', count: 3, bytes: 20 }]))
+    .toEqual({ entities: 2, photos: 5, bytes: 30 });
+  expect(formatBytes(500)).toBe('500B');
+  expect(formatBytes(2048)).toBe('2KB');
+  expect(formatBytes(1.5 * 1024 * 1024)).toBe('1.5MB');
+  expect(formatBytes(42 * 1024 * 1024)).toBe('42MB');
+});
+
+test('사진 병합 — 같은 id 는 이 기기 값 유지, 없는 것만 더하고 촬영 순으로 (228)', () => {
+  const mine = [{ id: 'p1', dataUrl: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', takenAt: '2026-11-01' }];
+  const incoming = [{ id: 'p1', dataUrl: 'data:image/jpeg;base64,DIFFERENT', takenAt: '2026-11-01' }, { id: 'p2', dataUrl: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', takenAt: '2026-10-01' }];
+  const r = mergePhotoEntries(mine, incoming);
+  expect(r.added).toBe(1);
+  expect(r.duplicates).toBe(1);
+  expect(r.merged.map(p => p.id)).toEqual(['p2', 'p1']);          // 촬영 시각 순
+  expect(r.merged.find(p => p.id === 'p1')!.dataUrl).toBe(mine[0].dataUrl); // 내 사진을 덮지 않는다
+  // 깨진 항목(dataUrl 없음·data: 아님)은 조용히 버린다 — 복원 뒤 빈 썸네일이 생기지 않게
+  const bad = mergePhotoEntries([], [{ id: 'x', dataUrl: 'http://evil/x.png', takenAt: '2026-11-01' }, { id: 'y' } as never]);
+  expect(bad.added).toBe(0);
+  expect(bad.merged).toEqual([]);
+});
+
+test('사진 백업 파일 파싱 — 형식·버전·기록 키를 검사하고 사유를 돌려준다 (228)', () => {
+  const good = JSON.stringify({
+    format: PHOTO_BACKUP_FORMAT, version: 1, appVersion: '1.0.64', shopId: 's1', createdAt: '2026-11-25T10:00:00.000Z',
+    part: 1, parts: 2,
+    items: [
+      { entityKey: 'treatment:t1', photos: [{ id: 'p1', dataUrl: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', takenAt: '2026-11-01' }] },
+      { entityKey: '엉뚱한키', photos: [{ id: 'p2', dataUrl: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', takenAt: '2026-11-01' }] },   // 기록 키 규칙 위반 → 건너뜀
+      { entityKey: 'customer:c1', photos: [] },                            // 빈 묶음 → 건너뜀
+    ],
+  });
+  const f = parsePhotoBackup(good);
+  expect(f.items.map(i => i.entityKey)).toEqual(['treatment:t1']);
+  expect(f.parts).toBe(2);
+  expect(() => parsePhotoBackup('{')).toThrow(/JSON 형식/);
+  expect(() => parsePhotoBackup('{}')).toThrow(/사진 백업 파일이 아닙니다/);
+  expect(() => parsePhotoBackup(JSON.stringify({ format: PHOTO_BACKUP_FORMAT, version: 99, items: [] }))).toThrow(/더 새 버전/);
+  expect(() => parsePhotoBackup(JSON.stringify({ format: PHOTO_BACKUP_FORMAT, version: 1 }))).toThrow(/사진 목록이 없는/);
+  expect(() => parsePhotoBackup(JSON.stringify({ format: PHOTO_BACKUP_FORMAT, version: 1, items: [{ entityKey: 'treatment:t1', photos: [] }] }))).toThrow(/복원할 사진이 없습니다/);
+  // 전체 백업 파일을 잘못 고르면 분명히 말한다
+  expect(() => parsePhotoBackup(JSON.stringify({ format: 'troiareuke-crm-backup', version: 1, tables: {} }))).toThrow(/이 프로그램의 사진 백업 파일이 아닙니다/);
 });

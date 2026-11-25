@@ -9,6 +9,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download, Sparkles } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
+import PhotoBackupCard from '../../components/settings/PhotoBackupCard';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
@@ -1434,6 +1435,8 @@ export default function Settings() {
                 </SettingCard>
                 {/* 전체 백업 파일 저장·복원 — 로컬 모드 데이터 소실 방지, PC·모바일 공용 (2026-11-18) */}
                 <BackupRestoreCard />
+                {/* 전/후 사진은 용량 때문에 전체 백업에 들어가지 않는다 — 따로 내보내기·가져오기 (228, GAP C-3) */}
+                <PhotoBackupCard />
               </div>
             )}
           </div>
