@@ -220,6 +220,8 @@ export interface ShopPreferences {
   mergedCustomerIds?: Record<string, string>;
   /** 마지막 전체 백업 저장 시각(ISO, 매장 기준) — 첫 설정 체크리스트 "전체 백업 1회" 판정. 설정 행이라 NAS 동기·로그아웃 wipe 와 무관 (193·195) */
   lastBackupAt?: string;
+  /** 자주 쓰는 태그 목록(태그 마스터) — 고객 창에서 눌러 넣는다 (237) */
+  tagMaster?: string[];
   /** 영수증에 인쇄할 사업자 정보 (235) — 가입 계정의 사업자등록번호는 코어 AuthUser 에 없어 매장이 직접 적는다 */
   receiptInfo?: { businessNumber?: string; ownerName?: string };
   /** 직원 인센티브(수당) 비율 — 매장 기본값 + 직원별 예외. 설정 행이라 NAS 동기, PC 교체와 무관 (233) */

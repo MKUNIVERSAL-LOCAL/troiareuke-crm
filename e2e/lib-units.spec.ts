@@ -43,6 +43,7 @@ import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCautio
 import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
 import { buildReceipt, receiptFileName } from '../src/lib/receiptRule';
 import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT } from '../src/lib/gradeSuggestRule';
+import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, MAX_TAG_NAME, MAX_MASTER_TAGS } from '../src/lib/tagMasterRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1664,4 +1665,53 @@ test('등급 제안 — 방문 기록이 없거나 값이 깨지면 제안하지
   expect(suggestGrade({ current: '신규', visits: NaN as unknown as number, spent: 0 })).toBeNull();
   // 모르는 등급 값(옛 데이터)은 가장 낮게 보고 제안이 막히지 않게 한다
   expect(suggestGrade({ current: '브론즈', visits: GOLD_VISITS, spent: GOLD_SPENT })?.grade).toBe('골드');
+});
+
+// ── 태그 마스터 (237, GAP C-1) ───────────────────────────────────
+// 같은 뜻의 태그가 갈라지면(민감성·민감·민감성피부) 태그 필터·발송 대상이 조용히 나뉜다.
+
+test('태그 이름 정리 — #·공백·쉼표·길이, 동의 태그는 거부 (237)', () => {
+  expect(normalizeTagName(' #민감성 ')).toBe('민감성');
+  expect(normalizeTagName('재구매  고객')).toBe('재구매 고객');   // 연속 공백은 한 칸
+  expect(normalizeTagName('a'.repeat(MAX_TAG_NAME + 5))).toHaveLength(MAX_TAG_NAME);
+  expect(normalizeTagName('민감성, 재구매')).toBeNull();          // 쉼표는 구분자
+  expect(normalizeTagName('광고동의:2026-11-25')).toBeNull();     // 동의 태그는 동의 컨트롤이 관리한다
+  expect(normalizeTagName('  ')).toBeNull();
+  expect(normalizeTagName(42)).toBeNull();
+});
+
+test('태그 목록 추가·삭제 — 중복·한도는 사유를 돌려준다 (237)', () => {
+  const one = addMasterTag([], '민감성');
+  expect(one.list).toEqual(['민감성']);
+  expect(one.error).toBeUndefined();
+  expect(addMasterTag(['민감성'], ' #민감성 ').error).toMatch(/이미 있는 태그/);
+  expect(addMasterTag(['민감성'], '광고동의').error).toMatch(/동의 설정에서만/);
+  const full = Array.from({ length: MAX_MASTER_TAGS }, (_, i) => 't' + i);
+  expect(addMasterTag(full, '하나더').error).toMatch(new RegExp(String(MAX_MASTER_TAGS)));
+  expect(removeMasterTag(['민감성', '재구매'], '민감성')).toEqual(['재구매']);
+  expect(removeMasterTag(['민감성'], '없는태그')).toEqual(['민감성']);   // 없는 것을 지워도 조용히 통과
+});
+
+test('태그 목록 저장값 정리 — 배열이 아니거나 깨진 값 방어 (237)', () => {
+  expect(sanitizeMaster(['민감성', ' #민감성 ', '', 7, '광고동의:x', '재구매'])).toEqual(['민감성', '재구매']);
+  expect(sanitizeMaster('민감성')).toEqual([]);
+  expect(sanitizeMaster(undefined)).toEqual([]);
+  expect(sanitizeMaster(Array.from({ length: MAX_MASTER_TAGS + 10 }, (_, i) => 't' + i))).toHaveLength(MAX_MASTER_TAGS);
+});
+
+test('태그 칩 — 등록 태그 먼저(사용 많은 순), 쓰고 있지만 미등록인 태그도 보여 준다 (237)', () => {
+  const choices = tagChoices(['민감성', '재구매'], [{ tag: '단골', count: 5 }, { tag: '재구매', count: 3 }, { tag: '민감성', count: 1 }]);
+  expect(choices.map(c => c.tag)).toEqual(['재구매', '민감성', '단골']);
+  expect(choices.find(c => c.tag === '단골')!.registered).toBe(false); // 미등록이라고 밝힌다(숨기지 않는다)
+  expect(choices.find(c => c.tag === '재구매')!.count).toBe(3);
+  expect(tagChoices([], [])).toEqual([]);
+  expect(tagChoices(['a', 'b', 'c'], [], 2)).toHaveLength(2);          // 상한
+});
+
+test('태그 입력칸에 칩 더하기 — 중복은 그대로, 쉼표로 이어 붙인다 (237)', () => {
+  expect(appendTagToInput('', '민감성')).toBe('민감성');
+  expect(appendTagToInput('민감성', '재구매')).toBe('민감성, 재구매');
+  expect(appendTagToInput('민감성, 재구매', '민감성')).toBe('민감성, 재구매'); // 두 번 넣지 않는다
+  expect(appendTagToInput(' #민감성 ,', '재구매')).toBe('민감성, 재구매');     // 손으로 적은 표기도 정리
+  expect(appendTagToInput('민감성', '광고동의')).toBe('민감성');                // 거부된 이름은 아무 일도 하지 않는다
 });
