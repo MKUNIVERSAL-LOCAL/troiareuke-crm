@@ -68,7 +68,7 @@ export default function Sidebar() {
           </div>
           <div>
             <p className="max-w-[145px] truncate text-[13px] font-bold text-[#1a3a8f] leading-tight" title={programName}>{programName}</p>
-            <p className="text-2xs text-gray-400 font-medium tracking-wide">에스테틱 고객관리</p>
+            <p className="text-xs text-gray-400 font-medium tracking-wide">에스테틱 고객관리</p>
           </div>
         </div>
       </div>
@@ -114,7 +114,7 @@ export default function Sidebar() {
             <p className="text-xs text-amber-700 mt-0.5">
               {formatLocalDate(serviceEndsAt)}까지 (D-{serviceDaysLeft})
             </p>
-            <p className="text-2xs text-amber-700 mt-1">연장은 본사에 문의해주세요</p>
+            <p className="text-xs text-amber-700 mt-1">연장은 본사에 문의해주세요</p>
           </div>
         )}
         {user?.plan === 'trial' && trialDaysLeft !== null && trialDaysLeft >= 0 && (
@@ -127,7 +127,7 @@ export default function Sidebar() {
           </div>
         )}
         <div className="bg-gray-50 rounded-xl px-4 py-3">
-          <p className="text-xs font-bold text-gray-700 truncate">{shopName || '샵 정보 미설정'}</p>
+          <p className="text-xs font-bold text-gray-700 truncate">{shopName || '매장 이름 미설정'}</p>
           <p className="text-xs text-gray-400 mt-0.5 truncate">{user?.shopType || '에스테틱'}</p>
         </div>
         <button

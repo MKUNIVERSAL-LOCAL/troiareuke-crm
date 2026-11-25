@@ -65,13 +65,22 @@ export async function changeFirstExpenseCategory(page: Page, category: string) {
 }
 
 /** 첫 결제를 환불 상태로 */
-export async function refundFirstPayment(page: Page) {
+export async function refundFirstPayment(page: Page, opts: { remaining?: number } = {}) {
   await visibleButton(page, /결제 내역 \(\d+\)/).click();
   await visibleButton(page, '결제 수정').click();
   const d = dialog(page, '결제 수정');
   await expect(d).toBeVisible();
   await d.getByRole('button', { name: '환불', exact: true }).click();
   await d.getByRole('button', { name: '저장', exact: true }).click();
+  // 회차권 결제면 "회차권 함께 종료" 앱 확인창이 뜬다(그 외 결제는 바로 저장) — 잔여 회차를 말하는지 확인하고 수락
+  const close = page.getByRole('dialog', { name: '회차권 함께 종료', exact: true });
+  // isVisible 의 timeout 은 무시된다(즉시 판정) — 창이 뜨는 데 걸리는 시간을 실제로 기다린다 (123~126 리뷰 #L1)
+  const shown = opts.remaining != null || await close.waitFor({ state: 'visible', timeout: 1500 }).then(() => true, () => false);
+  if (shown) {
+    await expect(close).toContainText(/환불로 저장하면 .*함께 종료/);
+    if (opts.remaining != null) await expect(close).toContainText(`잔여 ${opts.remaining}회`); // 호출부가 아는 잔여 회차를 창이 그대로 말하는지 (#L2)
+    await close.getByRole('button', { name: '환불로 저장', exact: true }).click();
+  }
   await expect(d).toHaveCount(0);
 }
 
@@ -277,7 +286,7 @@ export async function cancelFirstSale(page: Page) {
  * 예약 추가 — 담당 직원은 staff(label)가 있으면 그 직원, 없으면 첫 항목; 시술은 첫 항목.
  * expectRejected: 겹침(이중예약) confirm을 스펙 핸들러가 거절했을 때 — 창이 그대로 남아야 하고 Esc로 닫는다.
  */
-export async function addReservation(page: Page, acc: E2EAccount, startTime: string, opts: { staff?: string; expectRejected?: boolean } = {}) {
+export async function addReservation(page: Page, acc: E2EAccount, startTime: string, opts: { staff?: string; expectRejected?: boolean; date?: string } = {}) {
   await visibleButton(page, '예약 추가').click();
   const d = dialog(page, '예약 추가');
   await expect(d).toBeVisible();
@@ -285,6 +294,7 @@ export async function addReservation(page: Page, acc: E2EAccount, startTime: str
   if (opts.staff) await d.getByLabel('담당 직원').selectOption({ label: opts.staff });
   else await d.getByLabel('담당 직원').selectOption({ index: 1 });
   await d.getByLabel('시술', { exact: true }).selectOption({ index: 1 });
+  if (opts.date) await d.getByLabel('예약 날짜').fill(opts.date);
   await d.getByLabel('시작 시간').selectOption(startTime);
   await d.getByRole('button', { name: '예약 저장' }).click(); // 휴무일 confirm은 스펙의 dialog 핸들러가 수락
   if (opts.expectRejected) {
@@ -316,10 +326,20 @@ export async function completeReservation(page: Page, startTime: string, pay: bo
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
-/** 상세의 상태 버튼 하나를 누르고 창이 닫히는지 (노쇼·취소처리·예약 복구 — confirm은 스펙 핸들러가 수락) */
+/** 앱 확인창(askConfirm)을 제목으로 찾아 확인 버튼을 누른다 — 125부터 파괴적 동작은 window.confirm 이 아니라 앱 창이라 dialog 핸들러로는 안 닫힌다 */
+export async function acceptAppConfirm(page: Page, title: string, button: string) {
+  const d = page.getByRole('dialog', { name: title, exact: true });
+  await expect(d).toBeVisible();
+  await d.getByRole('button', { name: button, exact: true }).click();
+  await expect(d).toHaveCount(0);
+}
+
+const STATUS_CONFIRM: Record<'노쇼' | '취소처리' | '예약 복구', [string, string]> = { '노쇼': ['노쇼 처리', '노쇼 기록'], '취소처리': ['예약 취소 처리', '취소 처리'], '예약 복구': ['예약 복구', '복구'] };
+/** 상세의 상태 버튼 하나를 누르고 앱 확인창을 수락해 창이 닫히는지 (노쇼·취소처리·예약 복구) */
 export async function setReservationStatus(page: Page, startTime: string, button: '노쇼' | '취소처리' | '예약 복구') {
   const d = await openReservationDetail(page, startTime);
   await d.getByRole('button', { name: button, exact: true }).click();
+  await acceptAppConfirm(page, ...STATUS_CONFIRM[button]);
   await expect(d).toHaveCount(0);
 }
 

@@ -7,7 +7,7 @@ import {
   addProduct, expectStock, sellProduct, cancelFirstSale,
   addReservation, reservationItems, openReservationDetail, completeReservation, setReservationStatus, expectReservationDetail,
   expectTodayCard, expectStaffPerformance, expectCustomerNoShows,
-  plusDaysISO, expectProgramExpiry, expectProgramBadge, openProgramManage, expectTreatmentLinkState, toast,
+  plusDaysISO, expectProgramExpiry, expectProgramBadge, openProgramManage, expectTreatmentLinkState, toast, acceptAppConfirm,
 } from './flows';
 
 /**
@@ -199,7 +199,8 @@ export async function programExpiryScenario(page: Page, acc: E2EAccount) {
   await expect(toast(page, '총 회차는 1 이상이어야 합니다.', 'alert')).toBeVisible();
   await expect(manage).toBeVisible();
   await manage.getByLabel('총 회차').fill('10');
-  await manage.getByRole('button', { name: '완료 처리' }).click(); // confirm 수락
+  await manage.getByRole('button', { name: '완료 처리' }).click();
+  await acceptAppConfirm(page, '회차권 완료 처리', '완료 처리');
   await expect(manage).toHaveCount(0);
   await expectProgramBadge(page, name, '완료', true);
 
@@ -243,7 +244,8 @@ export async function periodProgramScenario(page: Page, acc: E2EAccount) {
   const manage = await openProgramManage(page, name);
   await expect(manage.getByText(/^기간제 · 등록 /)).toBeVisible();
   await expect(manage.getByLabel('총 회차')).toHaveCount(0);
-  await manage.getByRole('button', { name: '완료 처리' }).click(); // confirm 수락
+  await manage.getByRole('button', { name: '완료 처리' }).click();
+  await acceptAppConfirm(page, '회차권 완료 처리', '완료 처리');
   await expect(manage).toHaveCount(0);
   await expectProgramBadge(page, name, '완료', true);
   await expectTreatmentLinkState(page, acc, { select: false, hint: null });
@@ -314,7 +316,8 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
 
   // 퇴사 처리: 새 예약 담당 목록에서 빠지고 실적 표엔 "(퇴사)"
   await page.getByRole('heading', { name: /^박선임/ }).first().click();
-  await staffDetail.getByRole('button', { name: '퇴사 처리' }).click(); // confirm 수락
+  await staffDetail.getByRole('button', { name: '퇴사 처리' }).click();
+  await acceptAppConfirm(page, '퇴사 처리', '퇴사 처리');
   await expect(toast(page, '퇴사 처리했습니다.')).toBeVisible(); // info 톤도 role=status
   await expect(rowOf('박선임')).toContainText('박선임 (퇴사)');
   await expect(rowOf('박선임').getByTestId('perf-completed')).toHaveText('1건');
@@ -333,7 +336,7 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   await rename(/^김테스트/, '박선임', '010-1111-2222');
   await visibleButton(page, '퇴사·비활성').click();
   await page.getByRole('heading', { name: /^박선임/ }).first().click(); // 카드 제목에 '퇴사' 배지가 붙어 정확 일치 텍스트로는 못 잡는다
-  await staffDetail.getByRole('button', { name: '복직' }).click();
+  await staffDetail.getByRole('button', { name: '복직' }).click(); // 동명 재직자 → 확인창 없이 거절 토스트
   await expect(toast(page, /같은 이름의 재직 직원이 이미 있어 복직할 수 없습니다/, 'alert')).toBeVisible();
   await expect(staffDetail).toBeVisible(); // 거절이라 창은 그대로
   await page.keyboard.press('Escape');
@@ -343,6 +346,7 @@ export async function staffScenario(page: Page, acc: E2EAccount) {
   await visibleButton(page, '퇴사·비활성').click();
   await page.getByRole('heading', { name: /^박선임/ }).first().click();
   await staffDetail.getByRole('button', { name: '복직' }).click();
+  await acceptAppConfirm(page, '복직 처리', '복직');
   await expect(toast(page, '복직 처리했습니다.')).toBeVisible();
   options = await staffOptions();
   await expect(options.filter({ hasText: '박선임' })).toHaveCount(1);

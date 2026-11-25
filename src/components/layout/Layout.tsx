@@ -18,6 +18,7 @@ import { BLOCK_STAFF_UI } from '../../lib/buildTarget';
 import { refreshFeatureFlags } from '../../lib/featureFlags';
 import { clearLocalPhotoCacheForLogout } from '../../lib/photoStore';
 import { notify } from '../../lib/notify';
+import { startLiveRefresh } from '../../lib/liveRefresh';
 
 export default function Layout() {
   const location = useLocation();
@@ -44,6 +45,8 @@ export default function Layout() {
   useEffect(() => {
     refreshFeatureFlags();
   }, []);
+  // 다른 기기(폰/PC)의 변경을 재시작 없이 — 포커스·가시성·연결 복구·1분 주기로 서버 재조회 (16차 #H3)
+  useEffect(() => startLiveRefresh(), []);
 
   // 처리되지 않은 Promise 거부 — 콘솔에만 남고 화면은 멀쩡해 보이는 "조용한 실패"를 막는다 (실패 경로 감사 2026-11-18). 10초에 한 번만 알림
   useEffect(() => {

@@ -11,6 +11,7 @@ import { todayISO, formatDateTime, localISODate } from './format';
 import { maskPhone } from './masking';
 import { isProgramExpired } from './customerPrograms';
 import { buildCustomerStatsIndex, statsFor } from './customerStats';
+import { buildUsedSessionsIndex, derivedUsedSessions } from './programSessionsRule';
 import { refundedOn, memoWithoutRefundTag } from './refundDate';
 import { canceledSaleIds } from './saleCancel';
 import { saleCustomerNameResolver } from './customerIdentity';
@@ -210,6 +211,7 @@ function buildSheet(key: string): Omit<ExportSheet, 'dataRows' | 'key'> | null {
     }
     case 'customer_programs': {
       // 환불된 회차권 id 집합을 한 번만 — 프로그램마다 전체 결제를 훑지 않게 (리뷰 2026-11-20)
+      const usedIdx = buildUsedSessionsIndex(TreatmentLogStore.getAll()); // 회차권 × 기록 전수 비교를 피한다 (리뷰 #M4)
       const refundedPrograms = new Set(PaymentStore.getAll()
         .filter(p => p.type === 'program' && p.status === 'refunded' && p.referenceId)
         .map(p => p.referenceId as string));
@@ -221,14 +223,15 @@ function buildSheet(key: string): Omit<ExportSheet, 'dataRows' | 'key'> | null {
           const expired = isProgramExpired(cp);
           const closed = cp.isCompleted || expired;
           const refunded = refundedPrograms.has(cp.id);
-          const remaining = total === null ? '' : (closed ? 0 : Math.max(0, total - cp.usedSessions));
+          const used = derivedUsedSessions(cp, usedIdx); // 기록에서 센 사용 회차 (16차 #H2)
+          const remaining = total === null ? '' : (closed ? 0 : Math.max(0, total - used));
           const remainingValue = total && total > 0
-            ? (closed ? 0 : Math.round((cp.pricePaid / total) * Math.max(0, total - cp.usedSessions)))
+            ? (closed ? 0 : Math.round((cp.pricePaid / total) * Math.max(0, total - used)))
             : '';
           return {
             고객명: cp.customerName, 프로그램명: cp.programName, 카테고리: cp.category,
             구매일: cp.purchaseDate, 결제금액: cp.pricePaid, 결제수단: cp.paymentMethod,
-            구분: total === null ? '기간제(무제한)' : '회차권', 총회차: total ?? '', 사용회차: cp.usedSessions, 잔여회차: remaining, // 숫자 열에 '무제한' 글자를 섞지 않는다(SUM 깨짐)
+            구분: total === null ? '기간제(무제한)' : '회차권', 총회차: total ?? '', 사용회차: used, 잔여회차: remaining, // 숫자 열에 '무제한' 글자를 섞지 않는다(SUM 깨짐)
             잔여금액추정: remainingValue, 만료일: cp.expiryDate || '',
             상태: refunded ? '환불' : cp.isCompleted ? '완료' : expired ? '만료' : '이용중', 비고: cp.notes || '',
           };

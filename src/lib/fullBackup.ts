@@ -16,6 +16,7 @@ import { exportFile } from './mobileBridge';
 import { todayISO } from './format';
 import { IS_MOBILE_APP } from './platform';
 import { SETTINGS_SECRET_FIELDS, isRecord, stripSettingsSecrets } from './backupSanitize';
+import { containsKeyLike, scrubKeyLike } from './ai/keyLeak';
 
 export const BACKUP_FORMAT = 'troiareuke-crm-backup';
 export const BACKUP_VERSION = 1;
@@ -39,7 +40,7 @@ export interface BackupFile {
 const TABLE_LABELS: Record<string, string> = {
   customers: '고객', reservations: '예약', treatment_logs: '시술 기록', customer_programs: '고객 프로그램', programs: '프로그램',
   payments: '결제', product_sales: '제품 판매', products: '제품', services: '시술 메뉴', staff: '직원', consultations: '피부 상담',
-  expenses: '지출', settings: '샵 설정', msg_templates: '메시지 템플릿', msg_history: '발송 이력',
+  expenses: '지출', settings: '매장 설정', msg_templates: '메시지 템플릿', msg_history: '발송 이력',
 };
 
 export const RESTORE_ALLOWED = !isAuthApiConfigured;
@@ -61,6 +62,7 @@ export function buildBackup(appVersion: string, shopName?: string): BackupFile {
     let value: unknown;
     try { value = JSON.parse(raw); } catch { value = { [RAW_MARK]: raw }; }
     if (table === 'settings' && isRecord(value)) value = stripSettingsSecrets(value);
+    if (typeof value === 'string' && containsKeyLike(value)) value = scrubKeyLike(value); // 자유 텍스트에 붙여넣은 키도 백업으로 새지 않게 (154 리뷰 M-3)
     tables[table] = value;
   }
   return { format: BACKUP_FORMAT, version: BACKUP_VERSION, appVersion, shopId: getShopId(), shopName, createdAt: new Date().toISOString(), tables };

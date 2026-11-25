@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react';
 import { readJson } from '../../lib/safeJson';
 import { notify } from '../../lib/notify';
+import { josa } from '../../lib/josa';
 import { Users, Building2, Search, UserPlus, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import type { Branch } from '../../lib/supabase';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, adminCreateUser, adminGetApplication, adminApproveUser, adminRejectUser, type AdminApplicationDetail } from '../../lib/authApi';
@@ -247,7 +248,7 @@ export default function AdminUsers() {
   async function handleInvite() {
     const email = inviteEmail.trim();
     if (!email) { notify.error('초대할 이메일을 입력해주세요.'); return; }
-    if (!confirm(`${email} 을(를) 슈퍼어드민(관리자 콘솔 전체 권한)으로 초대할까요?`)) return;
+    if (!confirm(`${josa(email, '을/를')} 슈퍼어드민(관리자 콘솔 전체 권한)으로 초대할까요?`)) return;
     setInviteBusy(true);
     try {
       const result = await adminCreateUser({ email, name: inviteName.trim() || undefined, role: 'superadmin' });

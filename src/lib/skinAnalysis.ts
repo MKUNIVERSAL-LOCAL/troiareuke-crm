@@ -3,7 +3,7 @@
 // ───────────────────────────────────────────────────────────────
 // 얼굴 사진 1장 → 비전 지원 AI(OpenAI gpt-4o / Gemini 1.5)로 피부 상태를
 // 5개 지표(수분/유분/색소/모공/주름) 0~100 점수 + 간단 소견으로 분석.
-// 키는 AiChat과 동일하게 localStorage('ai_key_openai'/'ai_key_gemini')에서 읽음.
+// 키는 lib/ai/keys(단일 접근점)에서 읽음 — 보관 방식이 바뀌어도 이 파일은 그대로.
 //
 // ⚠️ 의료법 제27조 준수: '진단/처방/치료'가 아닌 '분석/소견/추천' 표현만 사용.
 //    본 분석은 관리 참고용이며 의학적 진단이 아님(호출부 UI에도 명시).
@@ -11,6 +11,7 @@
 //    교체하면 클라이언트에 키 노출 없이 동작(연동 지점 = 이 파일).
 // ═══════════════════════════════════════════════════════════════
 import { isAiProxyEnabled, aiProxySkinAnalysis } from './aiProxy';
+import { getAiKey } from './ai/keys';
 
 export interface SkinScores {
   moisture: number;      // 수분
@@ -37,12 +38,7 @@ const PROMPT = [
 ].join('\n');
 
 function getKeys() {
-  let openai = '', gemini = '';
-  try {
-    openai = localStorage.getItem('ai_key_openai') || '';
-    gemini = localStorage.getItem('ai_key_gemini') || '';
-  } catch { /* noop */ }
-  return { openai, gemini };
+  return { openai: getAiKey('openai'), gemini: getAiKey('gemini') }; // 키 접근은 lib/ai/keys 한 곳 (150, GAP A-2). 비전 호출의 어댑터 이관은 151
 }
 
 /** 사용 가능 여부 — 본사 AI 중계가 켜져 있거나, 이 기기에 비전 키가 있으면 true */

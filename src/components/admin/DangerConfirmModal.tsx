@@ -42,7 +42,7 @@ export default function DangerConfirmModal({ title, description, expected, expec
         {extra}
         <div>
           <label className="text-xs font-bold text-slate-300">
-            확인을 위해 {expectedLabel} <span className="text-red-300 font-mono">{expected}</span> 을(를) 그대로 입력하세요
+            확인을 위해 {expectedLabel} <span className="text-red-300 font-mono">{expected}</span> 값을 그대로 입력해주세요
           </label>
           <input
             value={typed}

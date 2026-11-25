@@ -1,4 +1,5 @@
 import { notify } from '../../lib/notify';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import Header from '../../components/layout/Header';
 import { useState, useEffect, useRef } from 'react';
@@ -57,6 +58,7 @@ export default function Programs() {
   function loadPrograms() {
     setPrograms(ProgramStore.getAll());
   }
+  useDataRefreshed(loadPrograms); // (16차 #H3)
 
   function openCreate() {
     setEditTarget(null);

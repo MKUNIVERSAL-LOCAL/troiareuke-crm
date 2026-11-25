@@ -11,8 +11,10 @@ const WeeklySalesChart = lazy(() => import('../components/charts/WeeklySalesChar
 import { format, startOfMonth, subMonths, endOfMonth } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../components/layout/Header';
+import TodayTasksCard, { useTodayTasks } from '../components/TodayTasksCard';
+import { useDataRefreshed } from '../hooks/useDataRefreshed';
 import StatCard from '../components/ui/StatCard';
-import { formatDate, formatWon, formatPrice, toManwon } from '../lib/format';
+import { formatDate, formatWon, formatPrice, toManwon, todayISO } from '../lib/format';
 import { countPaymentUnits } from '../lib/paymentCount';
 import { growthPct } from '../lib/growth';
 import { isCountableCustomer } from '../lib/customerScope';
@@ -140,6 +142,7 @@ export default function Dashboard() {
 
   // 다른 페이지에서 CRUD 후 돌아오거나 창에 포커스가 돌아오면 최신 데이터로 재계산 (stale 방지)
   const [refreshKey, setRefreshKey] = useState(0); // 포커스/가시성 복귀 때 알림 카드(회차권·내일 예약)도 다시 계산
+  const todayTasks = useTodayTasks(refreshKey); // 모바일·PC 카드가 한 결과를 나눠 쓴다 (178 리뷰 M-2)
   const refresh = () => { setData(getDashboardData()); setRefreshKey(k => k + 1); };
   useEffect(() => {
     refresh(); // 마운트 시 최신화
@@ -150,6 +153,12 @@ export default function Dashboard() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVisible);
     };
+  }, []);
+  useDataRefreshed(refresh); // 다른 기기의 변경이 서버에서 다시 읽혔을 때 (16차 #H3)
+  useEffect(() => { // 포커스를 잃지 않는 PC 가 자정을 넘기면 "오늘 예약"·마감 요약·완료 누락이 어제 기준으로 남았다 (16차 #L1)
+    let day = todayISO();
+    const timer = window.setInterval(() => { if (todayISO() !== day) { day = todayISO(); refresh(); } }, 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const {
@@ -180,8 +189,10 @@ export default function Dashboard() {
         )}
         {/* 첫 설정 체크리스트 — 할 일이 남은 새 매장에만 보인다 */}
         <SetupChecklistCard refreshKey={refreshKey} />
+        {/* 오늘 할 일 + 이달 운영 지표 — 알림 카드들을 행동 목록으로 (138) */}
+        <TodayTasksCard compact data={todayTasks} />
         {/* StatCards 2열 */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 [&>:last-child:nth-child(odd)]:col-span-2"> {/* 직원은 카드 3장 — 마지막 반 칸 공백 대신 전폭 (15차 #M12) */}
           {salesOn && (
             <button type="button" onClick={() => navigate('/sales')} data-testid="stat-card" className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-left active:bg-slate-50">
               <p className="text-xs text-gray-500">이번 달 총 매출</p>
@@ -308,8 +319,10 @@ export default function Dashboard() {
         )}
         {/* 첫 설정 체크리스트 — 할 일이 남은 새 매장에만 보인다 */}
         <SetupChecklistCard refreshKey={refreshKey} />
+        {/* 오늘 할 일 + 이달 운영 지표 — 알림 카드들을 행동 목록으로 (138) */}
+        <TodayTasksCard data={todayTasks} />
         {/* Stat Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 [&:has(>:last-child:nth-child(3))]:lg:grid-cols-3 [&>:last-child:nth-child(odd)]:col-span-2 lg:[&>:last-child:nth-child(odd)]:col-span-1">
           {salesOn && (
           <button type="button" className="text-left w-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300" onClick={() => navigate('/sales')}>
             <StatCard
@@ -521,7 +534,7 @@ export default function Dashboard() {
           </div>
           )}
 
-          {/* Alerts */}
+          {/* Alerts — 오늘 타임라인(reservationsOn)·재고 카드(productsOn)가 늘 있어 이 열은 비지 않는다 (123~126 리뷰 #M1: 15차 #M11 의 "빈 열" 전제는 틀렸다) */}
           <div className="space-y-4">
             {/* 오늘 마감 요약 — 복사/공유 (2026-11-17) */}
             <DailyCloseCard refreshKey={refreshKey} />

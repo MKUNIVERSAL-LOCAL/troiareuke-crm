@@ -1,4 +1,6 @@
 import { notify } from '../../lib/notify';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
+import { askConfirm } from '../../lib/confirmDialog';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -10,7 +12,11 @@ import {
 import ChartFallback from '../../components/charts/ChartFallback';
 const DailySalesChart = lazy(() => import('../../components/charts/DailySalesChart')); // recharts는 첫 화면 번들에서 분리 (2026-11-18)
 const PnlTrendChart = lazy(() => import('../../components/charts/PnlTrendChart'));
-import { PaymentStore, CustomerStore, CustomerProgramStore } from '../../lib/store';
+import { PaymentStore, CustomerStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
+import RevenueMetricsCard from '../../components/RevenueMetricsCard';
+import { monthMetrics } from '../../lib/revenueMetricsRule';
+import { monthCloseBlock, isMonthClosed, monthlyTarget } from '../../lib/monthClose';
+import { isAdminRole } from '../../lib/permissions';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import Header from '../../components/layout/Header';
@@ -21,6 +27,7 @@ import type { Payment, PaymentMethod, Expense, ExpenseCategory, CustomerProgram 
 import { EXPENSE_CATEGORIES, COGS_CATEGORIES } from '../../types';
 
 import { formatPrice, formatDate, todayISO as today, parseISODate, toManwon } from '../../lib/format';
+import { usedSessionsFor } from '../../lib/programSessions';
 import { splitPercent } from '../../lib/percent';
 import { countPaymentUnits } from '../../lib/paymentCount';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -167,6 +174,7 @@ export default function Sales() {
   function refreshExpenses() {
     setExpenses(ExpenseStore.getAll());
   }
+  useDataRefreshed(() => { loadPayments(); refreshExpenses(); setMetricsTick(t => t + 1); }); // (16차 #H3) 다른 기기의 마감·목표·고객도 반영 (149 리뷰 L-2)
 
   // 현재 보는 월 데이터
   const monthPayments = useMemo(
@@ -360,27 +368,29 @@ export default function Sales() {
 
   // 결제 삭제 — 판매 기록과 연결된 제품 결제(referenceId)는 차단 (PaymentStore.delete는 재고·판매기록을 복구하지 않아
   // 수정 모달의 환불 차단과 동일한 크로스 모듈 불일치 발생). 연결 없는 옛 제품 결제는 일반 결제처럼 지운다 (UX 점검 2026-11-19)
-  function handleDelete(p: Payment) {
+  async function handleDelete(p: Payment) {
     if (p.type === 'product' && p.referenceId) {
-      notify('제품 결제는 여기서 삭제하면 재고·판매기록과 어긋납니다. 제품/재고 페이지의 판매 취소를 사용해주세요.');
+      notify('제품 결제는 여기서 삭제하면 재고·판매 기록과 어긋납니다. [제품/재고 > 판매 기록]에서 판매 취소를 사용해주세요.');
       return;
     }
     // 회차권 결제도 같은 이유 — 지우면 회차권만 남아 계속 차감된다. 고객 상세 [관리] > [등록 취소]가 결제와 회차권을 함께 지운다 (정합성 감사 2026-11-19)
     const linkedProgram = p.type === 'program' && p.referenceId ? CustomerProgramStore.getById(p.referenceId) : undefined;
     if (linkedProgram) {
-      // [등록 취소]는 한 번도 쓰지 않은 회차권에만 있다 — 쓴 회차권은 환불 경로로 (리뷰 2026-11-19)
-      notify(linkedProgram.usedSessions > 0
-        ? `이미 ${linkedProgram.usedSessions}회 사용한 회차권의 결제는 삭제할 수 없습니다. 고객 상세의 [관리]에서 완료 처리한 뒤 이 결제를 [수정] > 환불로 바꿔주세요.`
+      // [등록 취소]는 한 번도 쓰지 않은 회차권에만 있다 — 쓴 회차권은 환불 경로로 (리뷰 2026-11-19). 사용 회차는 기록 기준 (리뷰 #L4)
+      const usedLinked = usedSessionsFor(linkedProgram);
+      notify(usedLinked > 0
+        ? `이미 ${usedLinked}회 사용한 회차권의 결제는 삭제할 수 없습니다. 고객 상세의 [관리]에서 완료 처리한 뒤 이 결제를 [수정] > 환불로 바꿔주세요.`
         : '회차권 결제는 여기서 지우면 회차권만 남아 계속 차감됩니다. 고객 상세의 해당 프로그램 [관리] > [등록 취소]로 결제와 회차권을 함께 지워주세요.');
       return;
     }
-    if (!window.confirm(`${formatDate(p.paymentDate)} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`)) return;
+    { const blocked = monthCloseBlock(p.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    if (!(await askConfirm({ title: '결제 삭제', message: `${formatDate(p.paymentDate)} · ${p.customerName || '고객'} · ${formatPrice(p.amount)} 결제를 삭제할까요?\n삭제 시 고객 누적 결제액에서도 차감됩니다.`, confirmLabel: '삭제', danger: true }))) return; // 앱 확인창 (15차 #H3)
     PaymentStore.delete(p.id);
     loadPayments();
   }
 
   // 결제 등록/수정
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const customer = customers.find(c => c.id === form.customerId);
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
@@ -424,11 +434,12 @@ export default function Sales() {
     if (form.status === 'refunded' && editingId && editingPayment?.type === 'program' && editingPayment.referenceId && editingPayment.status !== 'refunded') {
       const cp = CustomerProgramStore.getById(editingPayment.referenceId);
       if (cp && !cp.isCompleted) {
-        if (cp.usedSessions > 0) {
-          notify(`이미 ${cp.usedSessions}회 사용한 회차권입니다. 부분 환불은 고객 상세의 [관리]에서 먼저 완료 처리한 뒤 이 결제를 환불로 바꿔주세요.`);
+        const usedCp = usedSessionsFor(cp); // 기록 기준 (리뷰 #L4)
+        if (usedCp > 0) {
+          notify(`이미 ${usedCp}회 사용한 회차권입니다. 부분 환불은 고객 상세의 [관리]에서 먼저 완료 처리한 뒤 이 결제를 환불로 바꿔주세요.`);
           return;
         }
-        if (!window.confirm(`환불로 저장하면 ${cp.programName} 회차권(${cp.totalSessions != null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'})을 함께 종료합니다. 계속할까요?`)) return;
+        if (!(await askConfirm({ title: '회차권 함께 종료', message: `환불로 저장하면 ${cp.programName} 회차권(${cp.totalSessions != null ? `잔여 ${cp.totalSessions - cp.usedSessions}회` : '기간제'})을 함께 종료합니다. 계속할까요?`, confirmLabel: '환불로 저장', cancelLabel: '닫기' }))) return;
         closeProgram = cp;
       }
     }
@@ -444,6 +455,8 @@ export default function Sales() {
     // 환불 처리일 — Payment 에 환불일 필드가 없어 memo 태그로(이달 환불 처리 N원 표시의 근거) (10차 #M1)
     if (form.status === 'refunded' && editingPayment?.status !== 'refunded') payload.memo = tagRefund(payload.memo, today());
     else if (form.status === 'refunded' && editingPayment && refundedOn(editingPayment)) payload.memo = tagRefund(payload.memo, refundedOn(editingPayment)!); // 폼에서 숨긴 기존 태그 재부착
+    { const blocked = monthCloseBlock(form.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    { const blocked = monthCloseBlock(editingPayment?.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     if (editingId) {
       PaymentStore.update(editingId, payload);
       if (closeProgram) CustomerProgramStore.update(closeProgram.id, { isCompleted: true, notes: `${closeProgram.notes ? closeProgram.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
@@ -481,8 +494,9 @@ export default function Sales() {
     setShowExpenseModal(true);
   }
 
-  function handleExpenseDelete(x: Expense) {
-    if (!window.confirm(`${x.expenseDate} · ${x.category} · ${formatPrice(x.amount)} 지출을 삭제할까요?`)) return;
+  async function handleExpenseDelete(x: Expense) {
+    if (!(await askConfirm({ title: '지출 삭제', message: `${x.expenseDate} · ${x.category} · ${formatPrice(x.amount)} 지출을 삭제할까요?`, confirmLabel: '삭제', danger: true }))) return;
+    { const blocked = monthCloseBlock(x.expenseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     ExpenseStore.delete(x.id);
     refreshExpenses();
   }
@@ -509,6 +523,8 @@ export default function Sales() {
       paymentMethod: expenseForm.paymentMethod,
       memo: expenseForm.memo.trim() || undefined,
     };
+    { const blocked = monthCloseBlock(expenseForm.expenseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    { const blocked = monthCloseBlock(editingExpenseId ? expenses.find(e => e.id === editingExpenseId)?.expenseDate : null); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     if (editingExpenseId) {
       ExpenseStore.update(editingExpenseId, payload);
     } else {
@@ -519,6 +535,13 @@ export default function Sales() {
   }
 
   const growthRate = growthPct(thisSummary.total, lastSummary.total); // 대시보드와 같은 규칙 — 지난달 0 이면 null(배지 없음), 같으면 0% (10차 #M9)
+  // 이달 지표 — 순수 revenueMetricsRule(정의 ANALYTICS-DEFINITIONS). 목표·마감은 설정 행 (147, GAP P-6·P-7)
+  const [metricsTick, setMetricsTick] = useState(0);
+  const metrics = useMemo(() => {
+    const st = SettingsStore.get();
+    return monthMetrics({ month: viewMonth, today: today(), payments, expenses, programs: CustomerProgramStore.getAll(), logs: TreatmentLogStore.getAll(), customers, target: monthlyTarget(viewMonth), businessHours: st.businessHours, holidays: st.holidays, cogsCategories: [...COGS_CATEGORIES] });
+  }, [viewMonth, payments, expenses, customers, metricsTick]);
+  const monthClosed = useMemo(() => isMonthClosed(viewMonth), [viewMonth, metricsTick]);
 
   const [viewDate] = viewMonth.split('-');
   const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
@@ -626,6 +649,8 @@ export default function Sales() {
               </p>
             </div>
           </div>
+
+          <RevenueMetricsCard key={viewMonth} m={metrics} closed={monthClosed} canLock={isAdminRole(authUser?.role)} onChanged={() => setMetricsTick(t => t + 1)} />
 
           {/* 일별 매출 차트 */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
@@ -1179,7 +1204,7 @@ export default function Sales() {
                   ))}
                 </div>
                 {form.status === 'refunded' && (
-                  <p className="text-xs text-red-600 mt-1">환불로 저장하면 매출 통계와 고객 누적결제액에서 제외됩니다.</p>
+                  <p className="text-xs text-red-600 mt-1">환불로 저장하면 매출 통계와 고객 누적 결제액에서 제외됩니다.</p>
                 )}
                 {form.status === 'pending' && (
                   <p className="text-xs text-amber-700 mt-1">입금 확인 전 기록 — 매출·고객 누적 결제액에 포함되지 않습니다. 입금이 확인되면 '완료'로 바꿔주세요.</p>

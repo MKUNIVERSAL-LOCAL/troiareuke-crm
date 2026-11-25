@@ -4,8 +4,8 @@ import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download } from 'lucide-react';
+import { useSearchParams, Link } from 'react-router-dom';
+import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download, Sparkles } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
 import { sendMessages } from '../../lib/messagingGateway';
@@ -13,6 +13,8 @@ import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogle
 import Header from '../../components/layout/Header';
 import { SettingsStore, ServiceStore, ReservationStore, getShopId } from '../../lib/store';
 import { askConfirm } from '../../lib/confirmDialog';
+import { refreshFromServer } from '../../lib/liveRefresh';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import type { ShopSettings, Service, Subscription } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { isAuthApiConfigured, updateAuthProfile } from '../../lib/authApi';
@@ -21,6 +23,10 @@ import { isBeaconConsultationEnabled, setBeaconConsultationEnabled, onFeatureFla
 import { useFeatureAllowed } from '../../hooks/useFeature';
 import UpdateNewsBoard from '../../components/ui/UpdateNewsBoard';
 import SecurityGuideCard from '../../components/settings/SecurityGuideCard';
+import ResourcesCard from '../../components/settings/ResourcesCard';
+import AiServiceCard from '../../components/settings/AiServiceCard';
+import AdOptOutCard from '../../components/settings/AdOptOutCard';
+import ReservationPolicyCard from '../../components/settings/ReservationPolicyCard';
 import AppLockCard from '../../components/settings/AppLockCard';
 import RevisitCycleCard from '../../components/settings/RevisitCycleCard';
 import RetentionPolicyCard from '../../components/settings/RetentionPolicyCard';
@@ -87,12 +93,13 @@ function importLegacyShopData(fromShopId: string, toShopId: string): number {
   return copied;
 }
 
-type SettingTab = 'shop' | 'integrations' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup' | 'notice';
+type SettingTab = 'shop' | 'integrations' | 'ai' | 'notifications' | 'services' | 'hours' | 'subscription' | 'backup' | 'notice';
 
 const allTabs = [
-  { key: 'shop' as SettingTab, label: '샵 정보', icon: <Store size={16} /> },
+  { key: 'shop' as SettingTab, label: '매장 정보', icon: <Store size={16} /> },
   { key: 'hours' as SettingTab, label: '영업시간', icon: <Clock size={16} /> },
   { key: 'integrations' as SettingTab, label: '연동 설정', icon: <Link2 size={16} /> },
+  { key: 'ai' as SettingTab, label: 'AI 서비스', icon: <Sparkles size={16} /> }, // 이용 방식·키·모델·연결 테스트·마법사 (151)
   { key: 'notifications' as SettingTab, label: '알림 설정', icon: <Bell size={16} /> },
   { key: 'services' as SettingTab, label: '시술 관리', icon: <Palette size={16} /> },
   { key: 'subscription' as SettingTab, label: '구독/플랜', icon: <CreditCard size={16} /> },
@@ -131,12 +138,17 @@ export default function Settings() {
     return current;
   });
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  useDataRefreshed(() => setSettings(prev => ({ ...prev, holidays: SettingsStore.get().holidays || [] }))); // 다른 기기가 추가한 휴일을 저장 전에도 목록에 (리뷰 #L5) — 편집 중인 다른 칸은 건드리지 않는다
+  // 설정 저장은 행 전체 PUT — 저장 직전 서버 기준으로 맞춘다. 맞추지 못했으면(미전송분·불통) 조용히 옛 캐시로 덮지 않고 알린다 (16차 #H1, 리뷰 #L5)
+  const syncBeforeSave = async () => {
+    const ok = await refreshFromServer({ force: true });
+    if (isAuthApiConfigured && !ok) notify('서버와 맞추지 못해 이 기기 기준으로 저장합니다 — 다른 기기에서 바꾼 설정이 있으면 덮일 수 있습니다.');
+  };
   const [beaconOn, setBeaconOn] = useState(() => isBeaconConsultationEnabled());
   const beaconAllowed = useFeatureAllowed('customers.beacon');
   // 원격 플래그가 마운트 이후 도착해도 토글 표시가 실제 값과 어긋나지 않게 구독
   useEffect(() => onFeatureFlagsChanged(() => setBeaconOn(isBeaconConsultationEnabled())), []);
   const [services, setServices] = useState<Service[]>(() => ServiceStore.getAll());
-  const [saved, setSaved] = useState<string | null>(null);
 
   // Subscription state
   const [currentSubscription, setCurrentSubscription] = useState<Subscription | null>(null);
@@ -323,7 +335,7 @@ export default function Settings() {
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
         await loadSubscription();
-        flash('플랜이 변경되었습니다');
+        notify.success('플랜을 변경했습니다.');
       } catch {
         setPlanChangeError('플랜 변경에 실패했습니다.');
       } finally {
@@ -368,7 +380,7 @@ export default function Settings() {
 
         localStorage.setItem('troiareuke_subscription', JSON.stringify({ ...subData, id: `sub_${Date.now()}` }));
         await loadSubscription();
-        flash('플랜이 변경되었습니다');
+        notify.success('플랜을 변경했습니다.');
       } else {
         setPlanChangeError(result.error || '결제에 실패했습니다.');
       }
@@ -399,12 +411,6 @@ export default function Settings() {
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [serviceForm, setServiceForm] = useState(emptyServiceForm);
 
-  // Flash save feedback
-  const flash = (msg = '저장 완료') => {
-    setSaved(msg);
-    setTimeout(() => setSaved(null), 1500);
-  };
-
   // ─── Shop Info ────────────────────────────────────────────
   // 서버 프로필 갱신(await)이 끝나기 전 연타로 두 번 저장되는 것 방지 (2026-11-18)
   const [shopSaving, setShopSaving] = useState(false);
@@ -415,8 +421,9 @@ export default function Settings() {
   };
   const doShopSave = async () => {
     const shopName = settings.name.trim().replace(/\s*CRM\s*$/i, '').trim();
+    await syncBeforeSave(); // 설정 저장은 행 전체 PUT — 다른 기기가 바꾼 영업시간·휴일을 옛 캐시로 덮지 않게 먼저 서버 기준으로 (16차 #H1)
     if (!shopName) {
-      notify('샵 이름을 입력해주세요');
+      notify('매장 이름을 입력해주세요.');
       return;
     }
 
@@ -459,7 +466,7 @@ export default function Settings() {
       }
     } catch { /* 세션 갱신 실패는 샵 설정 저장을 막지 않음 */ }
 
-    flash(`${shopName} CRM으로 설정했습니다`);
+    notify.success(`${shopName} CRM으로 설정했습니다.`);
     if (remoteFailed) notify('서버 반영 실패 — 이 PC에는 저장됐지만 네트워크 확인 후 다시 저장해주세요.'); // 실패는 성공 토스트에 섞지 않는다 (UX 점검 2026-11-19)
   };
 
@@ -476,7 +483,7 @@ export default function Settings() {
     }));
   };
 
-  const handleHoursSave = () => {
+  const handleHoursSave = async () => {
     // 종료<시작(오후 8시를 08:00으로 오타)·빈 값이 그대로 저장되면 이후 모든 예약에 "영업시간 밖" 경고가 뜬다 (4차 UX 점검 2026-11-19)
     for (const day of dayLabels) {
       const h = settings.businessHours[day];
@@ -484,9 +491,12 @@ export default function Settings() {
       if (!h.open || !h.close) { notify(`${day}요일 영업시간을 모두 입력해주세요. 쉬는 날이면 체크를 풀어주세요.`); return; }
       if (h.open >= h.close) { notify(`${day}요일 종료 시간(${h.close})이 시작 시간(${h.open})보다 늦어야 합니다. 오후는 13:00~23:59로 적어주세요.`); return; }
     }
-    SettingsStore.save({ businessHours: settings.businessHours, holidays: settings.holidays || [] });
+    await syncBeforeSave(); // 다른 기기의 휴일·연동 설정과 병합 (16차 #H1)
+    const holidays = SettingsStore.get().holidays || []; // 휴일은 [추가]/[삭제] 때 즉시 저장되므로 서버 기준을 그대로 — 이 화면의 옛 목록으로 덮지 않는다
+    SettingsStore.save({ businessHours: settings.businessHours, holidays });
+    setSettings(prev => ({ ...prev, holidays }));
     setHoursDirty(false);
-    flash();
+    notify.success('영업시간을 저장했습니다.');
   };
 
   // 지정 휴일(명절·임시 휴무) — 예약 저장 전 경고에 쓰인다. 날짜 추가/삭제 후 [저장하기] (2026-11-18)
@@ -495,29 +505,33 @@ export default function Settings() {
     setSettings(prev => ({ ...prev, holidays }));
     SettingsStore.save({ holidays }); // 즉시 저장 — 영업시간 [저장하기]와 무관하게 유지(다른 탭 저장 버튼이 휴일을 안 담는 혼선 방지)
   };
-  const addHoliday = () => {
+  const addHoliday = async () => {
     const d = holidayInput;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { notify('날짜를 선택해주세요.'); return; }
-    saveHolidays([...new Set([...(settings.holidays || []), d])].sort());
+    await syncBeforeSave(); // 다른 기기가 추가한 휴일 위에 더한다 (16차 #H1)
+    saveHolidays([...new Set([...(SettingsStore.get().holidays || []), d])].sort());
     setHolidayInput('');
     notify(`${d} 휴일을 추가했습니다.`);
   };
-  const removeHoliday = (d: string) => { saveHolidays((settings.holidays || []).filter(x => x !== d)); notify(`${d} 휴일을 삭제했습니다.`); }; // 추가와 같은 피드백 (6차 UX 감사 2026-11-20)
+  const removeHoliday = async (d: string) => { await syncBeforeSave(); saveHolidays((SettingsStore.get().holidays || []).filter(x => x !== d)); notify(`${d} 휴일을 삭제했습니다.`); }; // 추가와 같은 피드백 (6차 UX 감사 2026-11-20)
 
   // ─── Integrations ─────────────────────────────────────────
-  const handleNaverSave = () => {
+  const handleNaverSave = async () => {
+    await syncBeforeSave(); // (16차 #H1)
     SettingsStore.save({ naverBooking: settings.naverBooking });
-    flash();
+    notify.success('네이버 예약 연동 설정을 저장했습니다.');
   };
 
-  const handleKakaoSave = () => {
+  const handleKakaoSave = async () => {
+    await syncBeforeSave(); // (16차 #H1)
     SettingsStore.save({ kakao: settings.kakao });
-    flash();
+    notify.success('카카오 연동 설정을 저장했습니다.');
   };
 
-  const handleSmsSave = () => {
+  const handleSmsSave = async () => {
+    await syncBeforeSave(); // (16차 #H1)
     SettingsStore.save({ smsCallerId: settings.smsCallerId }); // 발송사 API 키는 본사 서버에만 — 지점 입력란 제거 (보안 감사 2026-11-19)
-    flash();
+    notify.success('문자 발신번호를 저장했습니다.');
   };
 
   // ─── 기존 계정 데이터 이관 (베타 → NAS 컷오버) ───────────────
@@ -539,19 +553,7 @@ export default function Settings() {
 
   // ─── AI 분석 키 (피부분석·AI챗봇 공유) ──────────────────────
   // AiChat이 Coming Soon 게이트로 막혀 있어도 피부분석이 쓸 키를 여기서 입력 가능하게 한다.
-  const [aiKeys, setAiKeys] = useState(() => ({
-    openai: localStorage.getItem('ai_key_openai') || '',
-    gemini: localStorage.getItem('ai_key_gemini') || '',
-  }));
-  const handleAiKeysSave = () => {
-    try {
-      localStorage.setItem('ai_key_openai', aiKeys.openai.trim());
-      localStorage.setItem('ai_key_gemini', aiKeys.gemini.trim());
-      flash('AI 분석 키를 저장했습니다');
-    } catch {
-      notify('키 저장 실패 — 브라우저 저장소를 확인해주세요');
-    }
-  };
+  // AI 키·모델은 설정 > AI 서비스 탭(AiServiceCard)으로 옮김 (151)
 
   // ─── Notifications ────────────────────────────────────────
   // ─── Services ─────────────────────────────────────────────
@@ -598,7 +600,7 @@ export default function Settings() {
     }
     setServices(ServiceStore.getAll());
     setShowServiceModal(false);
-    flash(editingService ? '수정 완료' : '추가 완료');
+    notify.success(editingService ? '시술 메뉴를 수정했습니다.' : '시술 메뉴를 추가했습니다.');
   };
 
   const handleDeleteService = async (id: string) => {
@@ -611,7 +613,7 @@ export default function Settings() {
     if (!(await askConfirm({ title: '시술 메뉴 삭제', message: `${svc ? `'${svc.name}' 시술` : '이 시술'}을 삭제할까요?${detail}`, confirmLabel: '삭제', danger: true }))) return;
     ServiceStore.delete(id);
     setServices(ServiceStore.getAll());
-    flash('삭제 완료');
+    notify.success('시술 메뉴를 삭제했습니다.');
   };
 
   // Group services by category
@@ -623,14 +625,7 @@ export default function Settings() {
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header title="설정" subtitle="샵 운영 환경을 설정하세요" />
-
-      {/* Save feedback toast */}
-      {saved && (
-        <div className="fixed top-6 right-6 z-50 px-5 py-3 bg-green-700 text-white text-sm font-medium rounded-xl shadow-lg animate-fade-in">
-          {saved}
-        </div>
-      )}
+      <Header title="설정" subtitle="매장 운영 환경을 설정해주세요" />
 
       <div className="p-4 lg:p-8 flex-1">
         {/* 모바일(lg 미만): 탭을 가로 스크롤 칩으로 쌓고 본문은 전체 폭 — 2단 고정 폭은 412px에서 입력란이 화면 밖으로 밀렸다 (2026-11-17) */}
@@ -667,13 +662,13 @@ export default function Settings() {
           {/* Content */}
           <div className="flex-1 min-w-0">
             {tab === 'shop' && (
-              <SettingCard title="샵 기본 정보">
+              <SettingCard title="매장 기본 정보">
                 <div className="space-y-4">
-                  <FormRow label="샵 이름">
+                  <FormRow label="매장 이름">
                     <div className="space-y-2">
                       <input
                         type="text"
-                        aria-label="샵 이름"
+                        aria-label="매장 이름"
                         value={settings.name}
                         onChange={e => setSettings(prev => ({ ...prev, name: e.target.value }))}
                         className="form-input"
@@ -681,11 +676,11 @@ export default function Settings() {
                         maxLength={40}
                       />
                       <p className="text-xs text-gray-400">
-                        프로그램명 미리보기: <strong className="text-[#1a3a8f]">{settings.name.trim().replace(/\s*CRM\s*$/i, '') || '샵 이름'} CRM</strong>
+                        프로그램명 미리보기: <strong className="text-[#1a3a8f]">{settings.name.trim().replace(/\s*CRM\s*$/i, '') || '매장 이름'} CRM</strong>
                       </p>
                     </div>
                   </FormRow>
-                  <FormRow label="샵 유형">
+                  <FormRow label="매장 유형">
                     <select
                       value={settings.type}
                       onChange={e => setSettings(prev => ({ ...prev, type: e.target.value as ShopSettings['type'] }))}
@@ -800,6 +795,18 @@ export default function Settings() {
                     </button>
                   </div>
                 </div>
+              </SettingCard>
+            )}
+            {tab === 'hours' && (
+              <SettingCard title="베드·룸 자원">
+                <ResourcesCard />
+              </SettingCard>
+            )}
+            {tab === 'hours' && <ReservationPolicyCard />}
+
+            {tab === 'ai' && (
+              <SettingCard title="AI 서비스">
+                <AiServiceCard />
               </SettingCard>
             )}
 
@@ -980,7 +987,7 @@ export default function Settings() {
                       </div>
                       {googleConnected ? (
                         <button
-                          onClick={() => { clearGoogleTokens(); setGoogleConnected(false); flash('Google 캘린더 연결이 해제되었습니다'); }}
+                          onClick={() => { clearGoogleTokens(); setGoogleConnected(false); notify('Google 캘린더 연결을 해제했습니다.'); }}
                           className="px-4 py-2 text-sm font-medium rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200"
                         >
                           연결 해제
@@ -1050,68 +1057,18 @@ export default function Settings() {
                   </div>
                 </SettingCard>
 
-                {/* AI 피부분석 키 */}
-                <SettingCard title="AI 피부분석 (비전 분석 키)">
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-700">
-                      <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                      <span>
-                        고객 상세의 AI 피부분석 기능이 사용할 키입니다. OpenAI 또는 Gemini 중 하나만
-                        입력해도 동작합니다. 키는 이 기기에만 저장됩니다.
-                        <b> 본사가 서버에 AI 키를 설정한 경우에는 여기 키를 넣지 않아도 AI 피부분석·AI 챗봇이 동작합니다</b>(지점별 월 사용 한도 적용).
-                      </span>
-                    </div>
-                    <FormRow label="OpenAI API Key">
-                      <input
-                        type="password"
-                        value={aiKeys.openai}
-                        onChange={e => setAiKeys(prev => ({ ...prev, openai: e.target.value }))}
-                        className="form-input"
-                        placeholder="sk-..."
-                      />
-                    </FormRow>
-                    <FormRow label="Gemini API Key">
-                      <input
-                        type="password"
-                        value={aiKeys.gemini}
-                        onChange={e => setAiKeys(prev => ({ ...prev, gemini: e.target.value }))}
-                        className="form-input"
-                        placeholder="AIza..."
-                      />
-                    </FormRow>
-                    <button
-                      onClick={handleAiKeysSave}
-                      className="px-6 py-2 text-sm font-medium bg-[#1a3a8f] text-white rounded-xl hover:bg-[#15306e] transition-colors"
-                    >
-                      저장하기
-                    </button>
-                  </div>
-                </SettingCard>
               </div>
             )}
 
             {tab === 'notifications' && (
               <div className="space-y-6">
               <RevisitCycleCard />
+              <AdOptOutCard />
               <RetentionPolicyCard />
 
-              <SettingCard title="자동 알림 설정">
-                <div className="space-y-4">
-                  {([
-                    { key: 'reservationConfirm' as const, label: '예약 확인 문자', desc: '예약 등록 시 즉시 발송' },
-                    { key: 'reservationReminder' as const, label: '예약 리마인더', desc: '예약 전날 오전 9시 발송' },
-                    { key: 'birthdayMessage' as const, label: '생일 축하 메시지', desc: '생일 당일 오전 10시 카카오 발송' },
-                    { key: 'novisitMessage' as const, label: '미방문 고객 케어', desc: '60일 미방문 시 카카오 발송' },
-                  ]).map(n => (
-                    <div key={n.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{n.label}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{n.desc}</p>
-                        <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <SettingCard title="자동 발송(캠페인)">
+                <p className="text-sm text-gray-600">예약 전날 안내·생일 축하·미방문 케어·회차권 만료 안내 같은 자동 발송은 <b>문자/카카오 발송 &gt; 발송하기 &gt; 자동 발송(캠페인)</b>에서 만들고, 대상을 확인한 뒤 승인해 보냅니다. 광고성 캠페인은 위 080 번호와 고객의 수신 동의를 따릅니다.</p>
+                <Link to="/messaging" className="inline-block mt-3 px-4 py-2 text-sm font-medium text-[#1a3a8f] bg-blue-50 rounded-xl hover:bg-blue-100">캠페인 관리로 이동</Link>
               </SettingCard>
               </div>
             )}
@@ -1350,7 +1307,7 @@ export default function Settings() {
                 <SettingCard title="데이터 내보내기">
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">
-                      로그인한 계정의 샵 데이터만 내보내집니다. 선택한 항목이 {exportFormat === 'pdf' ? 'PDF 파일 하나로' : '시트별로 담긴 엑셀(.xlsx) 파일 하나로'} {IS_MOBILE_APP ? '만들어져 공유 시트로 전달됩니다' : '다운로드됩니다'}.
+                      로그인한 계정의 매장 데이터만 내보내집니다. 선택한 항목이 {exportFormat === 'pdf' ? 'PDF 파일 하나로' : '시트별로 담긴 엑셀(.xlsx) 파일 하나로'} {IS_MOBILE_APP ? '만들어져 공유 시트로 전달됩니다' : '다운로드됩니다'}.
                     </p>
                     <div className="flex gap-2">
                       <button

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, Scissors, Sparkles, Package, CreditCard, History } from 'lucide-react';
+import { CalendarDays, Scissors, Sparkles, Package, CreditCard, History, ShoppingBag, ClipboardList, Send, ShieldCheck } from 'lucide-react';
 import { buildCustomerTimeline, TIMELINE_KIND_LABEL, type TimelineKind } from '../lib/customerTimeline';
 import { formatPrice, formatDate } from '../lib/format';
 
@@ -12,6 +12,10 @@ const KIND_STYLE: Record<TimelineKind, { icon: typeof CalendarDays; dot: string 
   consult: { icon: Sparkles, dot: 'bg-indigo-500' },
   program: { icon: Package, dot: 'bg-[#1a3a8f]' },
   payment: { icon: CreditCard, dot: 'bg-amber-500' },
+  product: { icon: ShoppingBag, dot: 'bg-emerald-600' },
+  programNote: { icon: ClipboardList, dot: 'bg-slate-400' },
+  campaign: { icon: Send, dot: 'bg-fuchsia-500' },
+  consent: { icon: ShieldCheck, dot: 'bg-teal-600' },
 };
 
 /**

@@ -31,7 +31,7 @@ export function getUpcomingBirthdays(today = new Date(), windowDays = BIRTHDAY_W
 
 /** 생일 축하 안내 초안 — 혜택 문구는 지점이 고쳐 쓰도록 자리만 둔다 */
 export function buildBirthdayMessage(a: BirthdayAlert): string {
-  const shop = SettingsStore.get().name || '저희 샵';
+  const shop = SettingsStore.get().name || '저희 매장';
   const when = a.daysUntil === 0 ? '오늘' : `${a.dateLabel}`;
   return [
     `${a.customer.name}님, ${when} 생일을 진심으로 축하드려요`, // 이모지는 SMS를 유니코드(LMS 요금)로 만들고 일부 발송사가 지운다 (산출물 감사 2026-11-20)

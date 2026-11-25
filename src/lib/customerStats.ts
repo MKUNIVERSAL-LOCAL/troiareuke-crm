@@ -18,12 +18,16 @@ export function computeCustomerStats(customerId: string): CustomerStats {
   const totalSpent = PaymentStore.getAll()
     .filter(p => p.customerId === customerId && p.status === 'completed')
     .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const dates = collectVisitDates(customerId); // 같은 스캔을 두 번 돌리지 않는다 (139 #L2)
+  return { totalSpent, totalVisits: dates.length, lastVisitDate: dates.length ? dates[dates.length - 1] : null };
+}
+
+/** 고객 한 명의 방문일(완료 예약 ∪ 시술 기록, 서로 다른 날) — 방문 주기 산출 (135) */
+export function collectVisitDates(customerId: string): string[] {
   const dates = new Set<string>();
   for (const r of ReservationStore.getAll()) if (r.customerId === customerId && r.status === 'completed' && r.date) dates.add(r.date);
   for (const t of TreatmentLogStore.getAll()) if (t.customerId === customerId && t.treatmentDate) dates.add(t.treatmentDate);
-  let lastVisitDate: string | null = null;
-  for (const d of dates) if (!lastVisitDate || d > lastVisitDate) lastVisitDate = d;
-  return { totalSpent, totalVisits: dates.size, lastVisitDate };
+  return [...dates].sort();
 }
 
 /** 전 고객 재계산을 한 번의 버킷으로 — 목록·정렬·엑셀·리마인더용. 규칙은 customerStatsRule(순수) (10차 숫자 점검 2026-11-20) */

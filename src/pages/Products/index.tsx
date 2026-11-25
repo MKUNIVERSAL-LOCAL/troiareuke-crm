@@ -6,11 +6,16 @@ import { askConfirm } from '../../lib/confirmDialog';
 import { canDo } from '../../lib/permissions';
 import { parseAmount, parseCount, isISODate } from '../../lib/inputRules';
 import { thisYearMonthISO } from '../../lib/format';
+import { josa } from '../../lib/josa';
 import { isLowStock } from '../../lib/stockRule';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
-import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus } from 'lucide-react';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
+import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus, History } from 'lucide-react';
 import StockAdjustModal from '../../components/StockAdjustModal';
+import StockLedgerModal from '../../components/StockLedgerModal';
+import { recordStockMovement, removeStockEntries } from '../../lib/stockLedger';
+import { monthCloseBlock } from '../../lib/monthClose';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PaymentMethodPicker from '../../components/PaymentMethodPicker';
@@ -41,13 +46,18 @@ export default function Products() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
+  const [ledgerProduct, setLedgerProduct] = useState<Product | null>(null); // 재고 이동 이력·대조 (145)
   // 대시보드 재고 부족 알림(?stock=<id>) → 입고 모달 바로 열기. 1회 캡처 후 URL 비움(프리필 관례)
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const id = searchParams.get('stock');
-    if (!id) return;
-    const p = ProductStore.getAll().find(x => x.id === id);
-    if (p) setStockProduct(p); else notify('제품을 찾을 수 없습니다. 삭제됐거나 다른 매장의 제품입니다.');
+    const tabParam = searchParams.get('tab'); // 고객 타임라인 제품 판매 → 판매 기록 탭 (139 #M9 — 링크만 있고 탭이 안 바뀌던 것)
+    if (!id && tabParam !== 'sales') return;
+    if (tabParam === 'sales') setTab('sales');
+    if (id) {
+      const p = ProductStore.getAll().find(x => x.id === id);
+      if (p) setStockProduct(p); else notify('제품을 찾을 수 없습니다. 삭제됐거나 다른 매장의 제품입니다.');
+    }
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
   const [showSaleModal, setShowSaleModal] = useState(false);
@@ -58,6 +68,7 @@ export default function Products() {
     setSales(ProductSaleStore.getAll());
     setPayments(PaymentStore.getAll());
   }, []);
+  useDataRefreshed(refresh); // (16차 #H3)
 
   const handleDeleteProduct = async (product: Product) => {
     // 제품을 지우면 그 판매를 나중에 [판매 취소]해도 재고를 돌려줄 대상이 없다 — 판매만 멈추려면 비활성 (11차 #M9)
@@ -67,6 +78,7 @@ export default function Products() {
       : '\n재고 항목은 복구할 수 없습니다.';
     if (!(await askConfirm({ title: '제품 삭제', message: `'${product.name}' 제품을 삭제할까요?${detail}`, confirmLabel: '삭제', danger: true }))) return;
     ProductStore.delete(product.id);
+    removeStockEntries(product.id); // 재고 원장도 함께 (145)
     notify('제품을 삭제했습니다.'); // (15차 #M10)
     refresh();
   };
@@ -76,7 +88,10 @@ export default function Products() {
   const isCanceled = (sale: ProductSale) => canceled.has(sale.id);
   const handleDeleteSale = async (sale: ProductSale) => {
     if (!(await askConfirm({ title: '판매 취소', danger: true, confirmLabel: '판매 취소', cancelLabel: '닫기', message: `${formatDate(sale.saleDate)} · ${sale.productName} ${sale.quantity}개 판매 기록을 취소할까요?\n재고 ${sale.quantity}개가 복구되고, 연결된 결제는 환불로 바뀌어 매출·마감·엑셀에 환불 기록이 남습니다.` }))) return;
+    { const blocked = monthCloseBlock(sale.saleDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    const before = sale.productId ? ProductStore.getById(sale.productId) : undefined; // 원장 행의 "이동 전 재고" (145)
     const linked = PaymentStore.getAll().filter(p => p.referenceId === sale.id && p.status === 'completed');
+    for (const p of linked) { const blocked = monthCloseBlock(p.paymentDate); if (blocked) { notify.error(blocked); return; } } // 결제일이 판매일과 다를 수 있다 (149 리뷰 L-1)
     if (linked.length === 0) {
       // 연결 결제가 없는 옛 판매 — 예전처럼 행 삭제(코어: 재고 복구 포함)
       ProductSaleStore.delete(sale.id);
@@ -85,7 +100,8 @@ export default function Products() {
       if (sale.productId) ProductStore.adjustStock(sale.productId, -sale.quantity); // 제품이 지워진 옛 판매는 재고 복구 대상이 없다
       for (const p of linked) PaymentStore.update(p.id, { status: 'refunded', memo: tagRefund(p.memo, todayISO()) });
     }
-    notify(`판매를 취소했습니다. 재고 ${sale.quantity}${(sale.productId && ProductStore.getById(sale.productId)?.unit) || '개'}를 복구했습니다.`); // 파괴적 동작 뒤 피드백 (15차 #M10)
+    if (before) recordStockMovement({ product: before, kind: 'cancel', qty: sale.quantity, refId: sale.id, note: `${formatDate(sale.saleDate)} 판매 취소`, actor: user?.name }); // 재고 원장 (145)
+    notify(`판매를 취소했습니다. ${josa(`재고 ${sale.quantity}${(sale.productId && ProductStore.getById(sale.productId)?.unit) || '개'}`, '을/를')} 복구했습니다.`); // '1병를' 이 되던 것 (123~126 리뷰 #M3) // 파괴적 동작 뒤 피드백 (15차 #M10)
     refresh();
   };
 
@@ -153,7 +169,7 @@ export default function Products() {
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 [&:has(>:last-child:nth-child(3))]:lg:grid-cols-3 [&>:last-child:nth-child(odd)]:col-span-2 lg:[&>:last-child:nth-child(odd)]:col-span-1"> {/* 직원은 매출 카드가 빠져 3장 — 빈 칸 대신 3열·전폭 (15차 #M13) */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             <p className="text-xs text-gray-500 mb-1">전체 제품</p>
             <p className="text-2xl font-bold text-gray-900">{products.length}<span className="text-sm font-medium ml-1">종</span></p>
@@ -170,11 +186,11 @@ export default function Products() {
           </div>
           {canDo(user?.role, 'sales.view') && ( /* 매출 금액은 매출 화면·대시보드와 같은 권한 (117~119 리뷰 #M6) */
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출 (전체 기간 · 취소 제외)</p>
+            <p className="text-xs text-gray-500 mb-1">홈케어 누적 매출</p>
             <p className="text-2xl font-bold text-[#1a3a8f]">
               {formatPrice(totalSalesRevenue)}
             </p>
-            <p className="text-xs text-gray-400 mt-1">이달 {formatPrice(monthSalesRevenue)} — 매출 화면 '제품 매출'과 같은 기준</p>
+            <p className="text-xs text-gray-400 mt-1">이달 {formatPrice(monthSalesRevenue)} · 전체 기간, 취소 제외 — 매출 화면과 같은 기준</p>
           </div>
           )}
         </div>
@@ -240,7 +256,7 @@ export default function Products() {
                   <Package size={32} className="mx-auto mb-3 text-gray-300" />
                   {products.length === 0 ? (
                     <>
-                      <p className="text-sm text-gray-400">아직 제품이 없습니다 — 판매하고 재고를 관리할 홈케어 제품을 등록하세요</p>
+                      <p className="text-sm text-gray-400">아직 제품이 없습니다 — 판매하고 재고를 관리할 홈케어 제품을 등록해주세요</p>
                       <button type="button" onClick={() => setShowAddModal(true)} className="mt-3 px-4 py-2 bg-[#1a3a8f] text-white rounded-xl text-xs font-medium hover:bg-[#152f75]">제품 추가</button>
                     </>
                   ) : (
@@ -278,6 +294,7 @@ export default function Products() {
                             <span className="flex items-center gap-1">
                               <button onClick={() => handleSell(p)} disabled={!p.isActive} title={p.isActive ? undefined : '판매 중지 제품 — [수정]에서 판매 활성을 켜세요'} className="inline-flex items-center gap-1 px-3 py-2 bg-[#1a3a8f] text-white text-xs font-medium rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed"><ShoppingCart size={11} />판매</button>
                               <button onClick={() => setStockProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 입고·조정`}><PackagePlus size={11} />입고</button>
+                              <button onClick={() => setLedgerProduct(p)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg" aria-label={`${p.name} 재고 이력`}><History size={11} />이력</button>
                               <button onClick={() => setEditProduct(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="제품 수정"><Pencil size={16} /></button>
                               <button onClick={() => handleDeleteProduct(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="제품 삭제"><Trash2 size={16} /></button>
                             </span>
@@ -377,6 +394,15 @@ export default function Products() {
                                 입고
                               </button>
                               <button
+                                onClick={() => setLedgerProduct(p)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                                aria-label={`${p.name} 재고 이력`}
+                                title="입고·판매·실사 이력과 원장 대조"
+                              >
+                                <History size={11} />
+                                이력
+                              </button>
+                              <button
                                 onClick={() => setEditProduct(p)}
                                 className="p-1.5 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded-lg transition-colors"
                                 aria-label="제품 수정"
@@ -422,7 +448,7 @@ export default function Products() {
               <div className="py-16 text-center">
                 <TrendingUp size={32} className="mx-auto mb-3 text-gray-300" />
                 <p className="text-sm text-gray-400 mb-1">판매 기록이 없습니다</p>
-                <p className="text-xs text-gray-500">제품 목록에서 [판매]를 눌러 기록하세요</p>
+                <p className="text-xs text-gray-500">제품 목록에서 [판매]를 눌러 기록해주세요</p>
               </div>
             ) : (
               <>
@@ -519,7 +545,10 @@ export default function Products() {
         />
       )}
       {stockProduct && (
-        <StockAdjustModal product={stockProduct} onClose={() => setStockProduct(null)} onDone={() => { setStockProduct(null); refresh(); }} />
+        <StockAdjustModal product={stockProduct} actor={user?.name} onClose={() => setStockProduct(null)} onDone={() => { setStockProduct(null); refresh(); }} />
+      )}
+      {ledgerProduct && (
+        <StockLedgerModal product={ledgerProduct} actor={user?.name} onClose={() => setLedgerProduct(null)} onChanged={refresh} />
       )}
       {editProduct && (
         <AddProductModal
@@ -576,16 +605,15 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
       brand: form.brand.trim() || undefined,
       price,
       cost,
-      stock,
       minStock,
       unit: form.unit || '개',
       description: form.description.trim() || undefined,
       isActive: form.isActive,
     };
     if (isEdit && product) {
-      ProductStore.update(product.id, payload);
+      ProductStore.update(product.id, payload); // stock 제외 — 다른 기기의 판매·입고로 바뀐 재고를 되돌리지 않는다 (16차 #H1)
     } else {
-      ProductStore.save(payload);
+      ProductStore.save({ ...payload, stock });
     }
     onSaved();
   };
@@ -672,7 +700,7 @@ function AddProductModal({ product, onClose, onSaved }: { product?: Product | nu
               title={isEdit ? '재고는 목록의 [입고]·조정으로 바꿉니다 (매입 지출·사유가 함께 남도록)' : undefined}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30 disabled:bg-gray-50 disabled:text-gray-500"
             />
-            {isEdit && <p className="text-2xs text-gray-500 mt-1">재고는 [입고]·조정으로 바꿉니다</p>}
+            {isEdit && <p className="text-xs text-gray-500 mt-1">재고는 [입고]·조정으로 바꿉니다</p>}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">최소 재고</label>
@@ -775,8 +803,9 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       notify(`재고가 부족합니다. (현재 재고: ${fresh.stock}${product.unit})`);
       return;
     }
+    { const blocked = monthCloseBlock(form.saleDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     setSaving(true);
-    ProductSaleStore.save({
+    const sale = ProductSaleStore.save({
       customerId: form.customerId || undefined,
       customerName: selectedCustomer?.name || undefined,
       productId: product.id,
@@ -790,6 +819,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       notes: form.notes.trim() || undefined,
     });
     rememberPaymentMethod(form.paymentMethod); // 다음 판매·결제 등록의 기본값 (리뷰 60)
+    recordStockMovement({ product: fresh, kind: 'sale', qty: -qty, date: form.saleDate, refId: sale.id, note: selectedCustomer?.name ? `${selectedCustomer.name} 판매` : undefined, actor: form.staffName.trim() || undefined }); // 재고 원장 (145)
     onSaved();
   };
 

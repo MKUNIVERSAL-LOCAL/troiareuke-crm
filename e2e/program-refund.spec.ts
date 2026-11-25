@@ -21,8 +21,7 @@ async function readTable<T>(page: import('@playwright/test').Page, table: string
 
 test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료되고 매출·차감 경로에서 사라진다', async ({ page }) => {
   test.slow();
-  const dialogs: string[] = [];
-  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
+  page.on('dialog', d => d.accept()); // 남은 질문형 confirm 수락 — 파괴적 확인은 앱 창이라 아래에서 직접 단언
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
 
@@ -31,9 +30,7 @@ test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료�
 
   await page.goto('/sales');
   await expectSales(page, { total: '300,000원', count: 1 });
-  await refundFirstPayment(page);
-  // confirm이 "회차권을 함께 종료한다"고 잔여 회차와 함께 말했는가
-  expect(dialogs.some(m => /환불로 저장하면/.test(m) && /잔여 10회/.test(m) && /함께 종료/.test(m))).toBe(true);
+  await refundFirstPayment(page, { remaining: 10 }); // "회차권 함께 종료" 앱 확인창이 잔여 10회를 말하는지 flows 가 단언
   await visibleButton(page, '매출 현황').click(); // 결제 내역 보기에서 현황 카드로 돌아와서 확인
   await expectSales(page, { total: '0원', count: 1 }); // 환불 행은 남고 매출만 0
 
@@ -53,8 +50,7 @@ test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료�
 
 test('[등록 취소]는 쓰지 않은 회차권에만 보이고, 누르면 연결 결제까지 함께 지운다', async ({ page }) => {
   test.slow();
-  const dialogs: string[] = [];
-  page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
+  page.on('dialog', d => d.accept()); // 남은 질문형 confirm 수락 — 파괴적 확인은 앱 창이라 아래에서 직접 단언
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
 
@@ -79,7 +75,10 @@ test('[등록 취소]는 쓰지 않은 회차권에만 보이고, 누르면 연�
   const cancel = manage.getByRole('button', { name: '등록 취소' });
   await expect(cancel).toBeVisible();
   await cancel.click();
-  expect(dialogs.some(m => /등록을 취소할까요/.test(m) && /결제 1건\(300,000원\)/.test(m))).toBe(true);
+  const cancelConfirm = page.getByRole('dialog', { name: '회차권 등록 취소', exact: true });
+  await expect(cancelConfirm).toContainText(/등록을 취소할까요/);
+  await expect(cancelConfirm).toContainText(/결제 1건\(300,000원\)/); // 연결 결제 건수·금액을 창에서 말한다
+  await cancelConfirm.getByRole('button', { name: '등록 취소', exact: true }).click();
   await expect(manage).toHaveCount(0);
   await expect(page.getByTestId('program-card').filter({ hasText: '취소용 10회권' })).toHaveCount(0);
   await expect(page.getByTestId('program-card').filter({ hasText: '사용한 5회권' })).toHaveCount(1); // 쓴 회차권은 그대로

@@ -13,6 +13,8 @@ export type Action =
   | 'customer.delete'    // 고객 삭제·익명화(개별/일괄)·병합
   | 'customer.pii'       // 고객 전화·이메일·주소·생년월일 원문 보기·수정
   | 'ai.key'             // AI API 키 입력·삭제
+  | 'consent.edit'       // 광고 수신 동의·거부 기록(고객 상세 동의 컨트롤) (159 리뷰 L-2)
+  | 'campaign.manage'    // 자동 발송 캠페인 추가·수정·삭제·사용 토글 — "대상 확인·발송"은 발송 창과 같이 직원도 가능 (159 리뷰 L-2)
   | 'outbox.download';   // 서버가 거부한 저장분(고객 레코드 원문) 파일 내려받기
 
 const ADMIN_ROLES: ReadonlySet<string> = new Set<Role>(['admin', 'superadmin']);

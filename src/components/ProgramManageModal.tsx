@@ -1,8 +1,14 @@
 import { useState } from 'react';
+import { askConfirm } from '../lib/confirmDialog';
 import { createPortal } from 'react-dom';
 import Modal from './ui/Modal';
 import { CustomerProgramStore, PaymentStore, TreatmentLogStore } from '../lib/store';
-import { todayISO, parseISODate, toISODate, formatDate } from '../lib/format';
+import { usedSessionsFor } from '../lib/programSessions';
+import { buildProgramLedger, ledgerRemaining, PROGRAM_LEDGER_LABEL } from '../lib/programLedgerRule';
+import { programNoteLine, totalChangeLine } from '../lib/programNotes';
+import { monthCloseBlock } from '../lib/monthClose';
+import { todayISO, parseISODate, toISODate, formatDate, formatPrice } from '../lib/format';
+import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
 import type { CustomerProgram } from '../types';
 
@@ -17,11 +23,14 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   const [totalSessions, setTotalSessions] = useState(cp.totalSessions === null ? '' : String(cp.totalSessions));
   const [reason, setReason] = useState('');
   const isSessionBased = cp.totalSessions !== null;
-  const remaining = isSessionBased ? Math.max(0, (cp.totalSessions as number) - cp.usedSessions) : null;
-  const manuallyCompleted = cp.isCompleted && isSessionBased && cp.usedSessions < (cp.totalSessions as number);
+  const used = usedSessionsFor(cp); // 시술 기록에서 센 사용 회차 — 저장값은 다기기 동시 차감 때 어긋날 수 있다 (16차 #H2)
+  const remaining = isSessionBased ? Math.max(0, (cp.totalSessions as number) - used) : null;
+  const manuallyCompleted = cp.isCompleted && isSessionBased && used < (cp.totalSessions as number);
   const totalInput = totalSessions.replace(/[,\s]/g, '');
   const dirty = expiryDate !== (cp.expiryDate || '') || (isSessionBased && totalInput !== String(cp.totalSessions));
-  const changeLog = (cp.notes || '').split('\n').filter(l => /^\[\d{4}-\d{2}-\d{2}\]/.test(l));
+  // 회차 이력 — 시술 기록(차감 정본) + notes 기록 줄(보정·연장·완료·복원)을 날짜순으로, 행마다 잔여 (146, GAP P-1)
+  const ledgerRows = buildProgramLedger(cp, TreatmentLogStore.getAll().filter(t => t.customerProgramId === cp.id), formatPrice);
+  const ledgerLeft = ledgerRemaining(ledgerRows);
 
   const shift = (days: number) => {
     // 이미 지난 만료일에서 더하면 여전히 과거 — 연장은 오늘과 만료일 중 늦은 날부터
@@ -33,7 +42,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   };
 
   function appendNote(existing: string | undefined, line: string): string {
-    const entry = `[${todayISO()}] ${line}${reason.trim() ? ` — ${reason.trim()}` : ''}`;
+    const entry = programNoteLine(line, reason); // 시술 기록 삭제/수정이 남기는 줄과 같은 형식 (146)
     return existing ? `${existing}\n${entry}` : entry;
   }
 
@@ -51,12 +60,12 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
       if (!/^\d+$/.test(totalInput)) { notify('총 회차는 숫자만 입력해주세요.'); return; }
       const next = Number(totalInput);
       if (next < 1) { notify('총 회차는 1 이상이어야 합니다.'); return; }
-      if (next < cp.usedSessions) { notify(`이미 ${cp.usedSessions}회를 사용해 총 회차를 그보다 적게 둘 수 없습니다.`); return; }
+      if (next < used) { notify(`이미 ${used}회를 사용해 총 회차를 그보다 적게 둘 수 없습니다.`); return; }
       updates.totalSessions = next;
-      changes.push(`총 회차 ${cp.totalSessions}회 → ${next}회`);
+      changes.push(totalChangeLine(cp.totalSessions as number, next)); // 회차 이력 파서와 같은 형식 (149 리뷰 M-4)
       // 사람이 직접 완료 처리한 프로그램은 회차를 바꿔도 그대로 완료. 그 외엔 사용 회차 기준으로 다시 계산하고 상태가 바뀌면 기록
       if (!manuallyCompleted) {
-        const nextCompleted = cp.usedSessions >= next;
+        const nextCompleted = used >= next;
         if (nextCompleted !== cp.isCompleted) {
           updates.isCompleted = nextCompleted;
           changes.push(nextCompleted ? '진행중 → 완료' : '완료 → 진행중');
@@ -71,28 +80,30 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
   }
 
   // 고객·프로그램을 잘못 골라 등록한 경우 — 아직 한 번도 쓰지 않았을 때만. 연결된 결제(referenceId)를 지우면 누적 결제액은 자동 차감된다 (정합성 감사 2026-11-19)
-  const cancelable = cp.usedSessions === 0 && !TreatmentLogStore.getAll().some(t => t.customerProgramId === cp.id);
-  function cancelRegistration() {
+  const cancelable = used === 0 && !TreatmentLogStore.getAll().some(t => t.customerProgramId === cp.id);
+  async function cancelRegistration() {
+    { const blocked = monthCloseBlock(cp.purchaseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     const linked = PaymentStore.getAll().filter(p => p.referenceId === cp.id);
+    for (const p of linked) { const blocked = monthCloseBlock(p.paymentDate); if (blocked) { notify.error(blocked); return; } } // 결제일이 구매일과 다를 수 있다 (149 리뷰 L-1)
     const paid = linked.reduce((sum, p) => sum + p.amount, 0);
-    if (!window.confirm(`${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${paid.toLocaleString('ko-KR')}원)이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.`)) return;
+    if (!(await askConfirm({ title: '회차권 등록 취소', confirmLabel: '등록 취소', cancelLabel: '닫기', danger: true, message: `${cp.programName} 등록을 취소할까요?\n이 회차권과 연결된 결제 ${linked.length}건(${formatPrice(paid)})이 함께 삭제되고 고객 누적 결제액에서 차감됩니다. 되돌릴 수 없습니다.` }))) return;
     for (const p of linked) PaymentStore.delete(p.id);
     CustomerProgramStore.delete(cp.id);
     notify.success(`${cp.programName} 등록을 취소했습니다.${linked.length ? ` 결제 ${linked.length}건 삭제.` : ''}`);
     onDone();
   }
 
-  function toggleCompleted() {
+  async function toggleCompleted() {
     if (dirty) { notify('만료일·총 회차 변경을 먼저 [저장]하거나 취소한 뒤 완료 상태를 바꿔주세요.'); return; }
     if (cp.isCompleted) {
-      if (isSessionBased && cp.usedSessions >= (cp.totalSessions as number)) { notify('회차를 모두 사용한 프로그램은 되돌릴 수 없습니다. 총 회차를 늘려주세요.'); return; }
+      if (isSessionBased && used >= (cp.totalSessions as number)) { notify('회차를 모두 사용한 프로그램은 되돌릴 수 없습니다. 총 회차를 늘려주세요.'); return; }
       CustomerProgramStore.update(cp.id, { isCompleted: false, notes: appendNote(cp.notes, '완료 → 진행중으로 되돌림') });
-      notify(`${cp.programName}을(를) 진행중으로 되돌렸습니다.`);
+      notify(`${josa(cp.programName, '을/를')} 진행중으로 되돌렸습니다.`);
     } else {
       const left = remaining !== null && remaining > 0 ? `\n잔여 ${remaining}회는 더 이상 쓸 수 없게 됩니다.` : '';
-      if (!window.confirm(`${cp.programName}을(를) 완료 처리할까요?${left}`)) return;
+      if (!(await askConfirm({ title: '회차권 완료 처리', message: `${josa(cp.programName, '을/를')} 완료 처리할까요?${left}`, confirmLabel: '완료 처리' }))) return;
       CustomerProgramStore.update(cp.id, { isCompleted: true, notes: appendNote(cp.notes, `완료 처리${remaining ? ` (잔여 ${remaining}회 소멸)` : ''}`) });
-      notify(`${cp.programName}을(를) 완료 처리했습니다.`);
+      notify(`${josa(cp.programName, '을/를')} 완료 처리했습니다.`);
     }
     onDone();
   }
@@ -104,7 +115,7 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
         <div>
           <p className="font-semibold text-sm text-gray-900">{cp.programName}</p>
           <p className="text-xs text-gray-500">
-            {isSessionBased ? `사용 ${cp.usedSessions}회 / 총 ${cp.totalSessions}회 · 잔여 ${remaining}회` : '기간제'} · 등록 {formatDate(cp.purchaseDate)}
+            {isSessionBased ? `사용 ${used}회 / 총 ${cp.totalSessions}회 · 잔여 ${remaining}회` : '기간제'} · 등록 {formatDate(cp.purchaseDate)}
             {cp.isCompleted ? ' · 완료' : ''}
           </p>
         </div>
@@ -129,12 +140,27 @@ export default function ProgramManageModal({ program: cp, onClose, onDone }: { p
           <label className="block text-xs font-medium text-gray-600 mb-1">사유 (기록에 남음)</label>
           <input value={reason} onChange={e => setReason(e.target.value)} aria-label="사유" placeholder="예: 휴가로 1개월 연장 요청" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl" />
         </div>
-        {changeLog.length > 0 && (
-          <div className="p-3 bg-slate-50 rounded-xl">
-            <p className="text-xs font-medium text-gray-400 mb-1">변경 기록</p>
-            <p className="text-xs text-gray-600 whitespace-pre-line max-h-28 overflow-y-auto">{changeLog.slice(-10).join('\n')}</p>
-          </div>
-        )}
+        <div className="p-3 bg-slate-50 rounded-xl" data-testid="program-ledger">
+          <p className="text-xs font-medium text-gray-500 mb-1.5">
+            회차 이력
+            {isSessionBased && ledgerLeft !== null && (
+              <span className={`ml-2 font-normal ${ledgerLeft === remaining ? 'text-gray-400' : 'text-amber-700'}`}>
+                원장 잔여 {ledgerLeft}회 · 기록 기준 {remaining}회{ledgerLeft === remaining ? ' · 일치' : ' · 불일치 — 옛 수기 조정, 다른 기기 동시 수정, 구매일 이전 소급 기록 중 하나'}
+              </span>
+            )}
+          </p>
+          <ul className="text-xs text-gray-700 space-y-1 max-h-40 overflow-y-auto">
+            {ledgerRows.slice().reverse().map(r => (
+              <li key={r.id} data-testid="program-ledger-row" className="flex items-baseline gap-2">
+                <span className="text-gray-400 whitespace-nowrap">{formatDate(r.date)}</span>
+                <span className="font-medium whitespace-nowrap">{PROGRAM_LEDGER_LABEL[r.kind]}</span>
+                {r.delta !== null && <span className={`whitespace-nowrap font-semibold ${r.delta < 0 ? 'text-pink-700' : 'text-blue-700'}`}>{r.delta > 0 ? '+' : ''}{r.delta}회</span>}
+                {r.remaining !== null && <span className="text-gray-500 whitespace-nowrap">잔여 {r.remaining}회</span>}
+                <span className="text-gray-600 min-w-0 truncate" title={r.text}>{r.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
         <div className="flex flex-wrap gap-2 pt-1">
           <button type="button" onClick={toggleCompleted} disabled={dirty} title={dirty ? '변경 내용을 먼저 저장하세요' : undefined}
             className={`py-2.5 px-4 rounded-xl text-sm font-medium border disabled:opacity-40 ${cp.isCompleted ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-600 bg-white'}`}>

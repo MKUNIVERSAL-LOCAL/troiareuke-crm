@@ -4,6 +4,7 @@
 // (오프라인·구버전 서버에서는 캐시 → 기본값 순으로 정상 동작).
 // deviceToggle이 있는 기능은 어드민 허용 + 기기별 토글이 모두 켜져야 사용된다.
 
+import { setCatalogOverride } from './ai/catalog';
 import { FEATURE_MAP } from './featureRegistry';
 import { apiRequest, isAuthApiConfigured } from './authApi';
 import { getPreference, setPreference } from './shopPreferences';
@@ -98,6 +99,10 @@ export async function refreshFeatureFlags(): Promise<void> {
     remote = { global: res.global || {}, branch: res.branch || {} };
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify(remote));
+      // 본사가 내려주는 AI 모델 카탈로그('ai.catalog' — 배열) — 검증 통과분만 적용, 없으면 기본 카탈로그 (150·154).
+      // 지금 서버의 feature-flags PUT 은 boolean 만 받아 이 값이 내려오지 않는다 — 161(승인 B-2)의 전용 카탈로그 엔드포인트가 이 키를 채운다 (165 리뷰 H-1)
+      const cat = (remote as unknown as { global?: Record<string, unknown> }).global?.['ai.catalog'];
+      if (Array.isArray(cat)) setCatalogOverride(cat);
     } catch {
       /* 캐시 저장 실패 무시 */
     }

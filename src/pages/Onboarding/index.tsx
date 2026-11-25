@@ -13,7 +13,7 @@ import type { ShopSettings, SubscriptionPlan } from '../../types';
 import { loadXlsx } from '../../lib/dataExport';
 
 const steps = [
-  { icon: <Store size={20} />, label: '샵 정보', desc: '기본 정보 입력' },
+  { icon: <Store size={20} />, label: '매장 정보', desc: '기본 정보 입력' },
   { icon: <Users size={20} />, label: '직원 설정', desc: '직원 등록' },
   { icon: <Scissors size={20} />, label: '시술 항목', desc: '시술 항목 등록' },
   { icon: <Link2 size={20} />, label: '연동 설정', desc: '외부 서비스 연결' },
@@ -365,7 +365,7 @@ export default function Onboarding() {
             </div>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-gray-900">안녕하세요, {user?.name}님!</h1>
-          <p className="text-sm text-gray-400 mt-1">에스테틱 샵 정보를 설정하고 CRM을 시작해보세요</p>
+          <p className="text-sm text-gray-400 mt-1">매장 정보를 설정하고 CRM을 시작해보세요</p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
             <Sparkles size={12} className="text-[#1a3a8f]" />
             <span className="text-xs font-semibold text-[#1a3a8f]">에스테틱 전용 CRM 솔루션</span>
@@ -392,14 +392,14 @@ export default function Onboarding() {
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
           {/* Step 0: 샵 기본 정보 */}
           {step === 0 && (
-            <StepWrapper title="에스테틱 샵 기본 정보" subtitle="운영하시는 에스테틱 샵의 정보를 입력해주세요">
+            <StepWrapper title="매장 기본 정보" subtitle="운영하시는 매장의 정보를 입력해주세요">
               <div className="space-y-4">
                 <div>
-                  <label className="ob-label">샵 이름 *</label>
+                  <label className="ob-label">매장 이름 *</label>
                   <input value={shopName} onChange={e => setShopName(e.target.value)} className="ob-input" placeholder="예: 더마 에스테틱" />
                 </div>
                 <div>
-                  <label className="ob-label">샵 유형 *</label>
+                  <label className="ob-label">매장 유형 *</label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {shopTypes.map(t => (
                       <button key={t} onClick={() => setShopType(t)}

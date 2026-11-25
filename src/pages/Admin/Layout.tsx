@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2, Database, FileText, SlidersHorizontal } from 'lucide-react';
+import { LayoutDashboard, Building2, LogIn, Users, LogOut, ChevronRight, CreditCard, Megaphone, BarChart2, Database, FileText, SlidersHorizontal, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
 import { BLOCK_ADMIN_UI } from '../../lib/buildTarget';
@@ -15,6 +15,7 @@ const adminNav = [
   { to: '/admin/dashboard', label: '관리자 대시보드', icon: LayoutDashboard },
   { to: '/admin/branches', label: '지점 관리', icon: Building2 },
   { to: '/admin/subscriptions', label: '구독/플랜 관리', icon: CreditCard },
+  { to: '/admin/subscriptions?view=ai', label: 'AI 서비스 관리', icon: Sparkles }, // 코어 App.tsx 라우트를 늘리지 않기 위한 쿼리 뷰 (162)
   { to: '/admin/features', label: '기능 관리', icon: SlidersHorizontal },
   { to: '/admin/announcements', label: '공지사항', icon: Megaphone },
   { to: '/admin/login-logs', label: '로그인 기록', icon: LogIn },

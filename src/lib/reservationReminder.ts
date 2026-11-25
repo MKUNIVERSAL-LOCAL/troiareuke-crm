@@ -32,7 +32,7 @@ const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
 
 /** 예약 안내 문구 초안 — 복사/공유용 (발송사 연동 후 서버 자동 발송과 같은 내용) */
 export function buildReservationMessage(r: Reservation): string {
-  const shop = SettingsStore.get().name || '저희 샵';
+  const shop = SettingsStore.get().name || '저희 매장';
   const d = new Date(r.date + 'T00:00:00');
   const dateLabel = Number.isNaN(d.getTime()) ? r.date : `${d.getMonth() + 1}월 ${d.getDate()}일(${WEEKDAY[d.getDay()]})`;
   const services = r.services.map(s => s.serviceName).filter(Boolean).join(', ');

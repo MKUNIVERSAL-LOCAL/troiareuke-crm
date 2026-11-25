@@ -1,8 +1,11 @@
 import { isImeKey } from '../../lib/ime';
 ﻿import { useState, useEffect, useRef, useMemo } from 'react';
+import { monthCloseBlock } from '../../lib/monthClose';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
 import { healCustomerStatsWhenReady, buildCustomerStatsIndex, statsFor } from '../../lib/customerStats';
+import { usedSessionsFor, remainingFor, healProgramSessionsWhenReady } from '../../lib/programSessions';
+import { remainingSessions } from '../../lib/programSessionsRule';
 import { countPaymentUnits } from '../../lib/paymentCount';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -26,19 +29,30 @@ import { useOverlayClose, useFocusTrap, useMenuKeys } from '../../lib/overlaySta
 import PhoneLink from '../../components/ui/PhoneLink';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
+import { refreshFromServer } from '../../lib/liveRefresh';
 import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import ProgramManageModal from '../../components/ProgramManageModal';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
-import { mergeBlockReason, findSamePhoneCustomers, previewMerge } from '../../lib/customerMerge';
+import { mergeBlockReason, findDuplicateCandidates, previewMerge } from '../../lib/customerMerge';
 import { propagateCustomerIdentity, countIdentityCopies, IDENTITY_PROPAGATION_CONFIRM_AT, scrubCustomerBeforeDelete, DELETED_CUSTOMER_NAME } from '../../lib/customerIdentity';
 import { parseTags, topTags } from '../../lib/customerTags';
+import ConsentControl from '../../components/ConsentControl';
+import { isConsentTag, mergeGeneralTags } from '../../lib/consentRule';
 import { exportConsultationPdf } from '../../lib/consultReport';
 import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
-import { getCustomerRevisitInfo } from '../../lib/reminderEngine';
+import { getCustomerRevisitInfo, getCustomerVisitCycle, getRevisitDueCustomers } from '../../lib/reminderEngine';
+import { getProgramAlerts } from '../../lib/programAlerts';
+import { buildSegmentIndex } from '../../lib/customerSegments';
+import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
+import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
+import SegmentEditorModal from '../../components/SegmentEditorModal';
+import { CHURN_LABEL, CHURN_HIGH_RATIO } from '../../lib/churnRule';
+import { getCustomerValue } from '../../lib/customerValue';
 import { recordPrivacyAction } from '../../lib/privacyLog';
 import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
@@ -301,7 +315,7 @@ function RevisitBadge({ customerId, size = 'md' }: { customerId: string; size?: 
   }
   const late = info.daysLeft < 0;
   return (
-    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-700' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술 기록의 다음 방문 권장일' : '마지막 방문일 + 재방문 권장 주기'}>
+    <span className={`${cls} ${late ? 'text-rose-600' : info.daysLeft <= 7 ? 'text-amber-700' : 'text-gray-700'}`} title={info.basis === 'recommended' ? '시술 기록의 다음 방문 권장일' : `마지막 방문일 + ${info.cycleBasis === 'personal' ? '이 고객의 방문 주기' : '매장 기본 주기'} ${info.cycleDays}일`}>
       {formatDate(info.dueDate)} ({late ? `${-info.daysLeft}일 지남` : info.daysLeft === 0 ? '오늘' : `D-${info.daysLeft}`})
     </span>
   );
@@ -365,12 +379,22 @@ export default function Customers() {
   });
   useEffect(() => {
     // ?grade=는 첫 진입의 초기값으로만 쓰고 URL에서 지운다 — 남겨 두면 [필터 초기화] 뒤 보존기간 토글(URL 복사)·새로고침에 VIP로 되돌아간다 (리뷰 63)
-    if (!searchParams.get('grade')) return;
+    const keys = ['grade', 'churn', 'revisit', 'programAlert'].filter(k => searchParams.get(k)); // 대시보드 딥링크 3종도 초기값으로만 (139 #M1)
+    if (keys.length === 0) return;
     const next = new URLSearchParams(searchParams);
-    next.delete('grade');
+    for (const k of keys) next.delete(k);
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
   const [tagFilter, setTagFilter] = useState(''); // 태그 칩 필터 (2026-11-18)
+  // 저장 세그먼트(조건 조합) — 칩으로 고르면 목록이 그 조건으로 좁혀진다 (166, GAP C-6·M-2)
+  const [savedSegments, setSavedSegments] = useState<SavedSegment[]>(() => listSavedSegments());
+  const [segmentFilterId, setSegmentFilterId] = useState('');
+  const [segmentEditor, setSegmentEditor] = useState<SavedSegment | null | 'new'>(null);
+  const [churnOnly, setChurnOnly] = useState(() => searchParams.get('churn') === '1'); // 이탈 위험 높음만 (136) — 대시보드 "오늘 할 일" 딥링크 (138)
+  const [revisitOnly, setRevisitOnly] = useState(() => searchParams.get('revisit') === '1'); // 재방문 권장일 지남 (138)
+  const [programAlertOnly, setProgramAlertOnly] = useState(() => searchParams.get('programAlert') === '1'); // 회차권 소진·만료 임박 (138)
+  const revisitIds = useMemo(() => (revisitOnly ? new Set(getRevisitDueCustomers(0).map(d => d.customer.id)) : null), [revisitOnly, customers]);
+  const programAlertIds = useMemo(() => (programAlertOnly ? new Set(getProgramAlerts().map(a => a.customer.id)) : null), [programAlertOnly, customers]);
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
   type SortKey = 'recent' | 'name' | 'registered' | 'spent';
   const [sortKey, setSortKey] = useState<SortKey>('recent');
@@ -383,6 +407,13 @@ export default function Customers() {
   // 목록·정렬·행 표기는 기록 재계산값 — 저장 증분값은 상세를 열어 heal 하기 전까지 어긋나 보였다 (10차 숫자 점검 #H1). customers 가 바뀔 때(loadAll)마다 다시 센다
   const statsIndex = useMemo(() => buildCustomerStatsIndex(), [customers]);
   const statsOf = (c: Customer) => statsFor(c, statsIndex);
+  const segmentIndex = useMemo(() => buildSegmentIndex(statsIndex), [statsIndex]); // RFM 구분·이탈 위험(개인 주기 대비) — 전수 1회 (136)
+  const segmentFacts = useMemo(() => buildSegmentFacts(), [customers, statsIndex]); // 저장 세그먼트 평가 사실 (166) // eslint-disable-line react-hooks/exhaustive-deps
+  const activeSegment = savedSegments.find(sg => sg.id === segmentFilterId) ?? null;
+  const segmentFilterIds = useMemo(() => (activeSegment ? segmentIds(activeSegment.condition, segmentFacts) : null), [activeSegment, segmentFacts]);
+  const segmentCounts = useMemo(() => new Map(savedSegments.map(sg => [sg.id, segmentIds(sg.condition, segmentFacts).size])), [savedSegments, segmentFacts]); // 칩 인원은 검색 글자마다 다시 세지 않게 (170 리뷰 L-1)
+  const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
+  const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
   const compareCustomers = (a: Customer, b: Customer): number => {
     switch (sortKey) {
       case 'name': return a.name.localeCompare(b.name, 'ko');
@@ -433,6 +464,8 @@ export default function Customers() {
   // 타임랩스가 NAS에서 사진을 받아오면 최근 시술 썸네일도 같은 데이터를 다시 읽도록 리렌더
   const [photoTick, setPhotoTick] = useState(0);
   const [detailTick, setDetailTick] = useState(0); // loadAll마다 증가 — 활동 타임라인 재계산 (2026-11-18)
+  const selectedCycle = useMemo(() => (selected ? getCustomerVisitCycle(selected.id) : null), [selected?.id, detailTick, customers]); // 글자 입력마다 전수 스캔하지 않게 (139 #M8)
+  const selectedValue = useMemo(() => (selected ? getCustomerValue(selected.id) : null), [selected?.id, detailTick, customers]); // 실현 매출·객단가·연간 기대(예측) (137) — detailTick 과 무관하게 렌더마다(기록 저장 뒤 바로 반영)
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시가 비동기로 채워지면 썸네일·상담 사진을 다시 읽는다
   const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', address: '', gender: '여성' as Gender, grade: '신규' as CustomerGrade, skinType: '', memo: '', birthDate: '', referralSource: '', tags: '', allergies: '' });
 
@@ -475,13 +508,12 @@ export default function Customers() {
     }
     loadAll();
   };
-  const [mergeQuery, setMergeQuery] = useState(''); // 중복 의심 안내에서 열면 전화번호가 미리 입력된다
-  const samePhone = useMemo(() => (selected ? findSamePhoneCustomers(selected, customers) : []), [selected, customers]);
-  const openMergeFromHint = () => { setMergeQuery(selected?.phone ?? ''); setShowMergeModal(true); };
-  const dupHint = samePhone.length > 0 && (
+  const dupCandidates = useMemo(() => (selected ? findDuplicateCandidates(selected, customers) : []), [selected, customers]); // 전화·이메일·이름+생년월일·이름+뒷 4자리 (171, GAP C-9)
+  const openMergeFromHint = () => setShowMergeModal(true); // 병합 창이 중복 의심 후보를 먼저 보여준다 — 검색어 프리필 없음 (171·174)
+  const dupHint = dupCandidates.length > 0 && (
     <button type="button" onClick={openMergeFromHint} data-testid="dup-hint"
       className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 hover:bg-amber-100">
-      <GitMerge size={12} />같은 전화번호 고객 {samePhone.length}명 — 병합하기
+      <GitMerge size={12} />중복 의심 고객 {dupCandidates.length}명 — 병합하기
     </button>
   );
   const [progForm, setProgForm] = useState({ programId: '', pricePaid: '', paymentMethod: '카드' as PaymentMethod, purchaseDate: today(), notes: '' });
@@ -633,7 +665,7 @@ export default function Customers() {
   const [showAllMobileConsults, setShowAllMobileConsults] = useState(false);
   useEffect(() => { setShowAllMobileConsults(false); }, [selected?.id]);
 
-  const pull = usePullToRefresh(() => { loadAll(); }, { enabled: !(selected && isMobileLayout) }); // 모바일: 목록에서만 당겨서 새로고침(풀스크린 상세 안에서는 무시)
+  const pull = usePullToRefresh(async () => { await refreshFromServer({ force: true }); loadAll(); }, { enabled: !(selected && isMobileLayout) }); // 모바일: 목록에서만 당겨서 새로고침(풀스크린 상세 안에서는 무시)
   // Android 뒤로가기 — 열린 것 중 가장 위부터 하나씩 닫는다(상세 → 목록). 폼 모달은 Esc로는 닫지 않는다(입력 유실 방지, 취소 버튼으로)
   useOverlayClose(!!selected && isMobileLayout, () => setSelected(null), { escape: false });
   useOverlayClose(showAddModal, () => setShowAddModal(false), { escape: false });
@@ -984,6 +1016,15 @@ export default function Customers() {
     // 활성 프로그램만 — 0건일 때 시술 메뉴를 프로그램처럼 보여 주던 폴백은 제거: 총회차 null(무제한)·만료 없는 회차권이 Service id 로 만들어졌다 (11차 #M6)
     setPrograms(ProgramStore.getAll().filter(p => p.isActive));
   }
+  useDataRefreshed(() => { // 다른 기기의 변경이 서버에서 다시 읽혔을 때 — 열어 둔 상세도 최신 기록으로 (16차 #H3)
+    loadAll();
+    setSavedSegments(listSavedSegments()); // 다른 기기가 만든 세그먼트 칩 (170 리뷰 L-5)
+    setSelected(prev => (prev ? CustomerStore.getById(prev.id) ?? prev : prev));
+    if (selected) { // 열어 둔 상세의 회차권 목록도 서버 기준으로, 사용 회차는 기록 기준으로 (16차 #H2)
+      setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id));
+      healProgramSessionsWhenReady(selected.id, () => setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id)));
+    }
+  });
 
   // 보존기간 경과 고객 id — 고객 목록이나 정책이 바뀔 때만 재계산
   const expiredIds = useMemo(
@@ -996,9 +1037,13 @@ export default function Customers() {
     const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
     const matchTag = !tagFilter || (c.tags || []).includes(tagFilter);
     const matchRetention = !retentionOnly || expiredIds.has(c.id);
-    return matchSearch && matchGrade && matchTag && matchRetention;
+    const matchChurn = !churnOnly || segmentIndex.get(c.id)?.churn?.level === 'high';
+    const matchRevisit = !revisitIds || revisitIds.has(c.id);
+    const matchProgram = !programAlertIds || programAlertIds.has(c.id);
+    const matchSegment = !segmentFilterIds || segmentFilterIds.has(c.id); // 저장 세그먼트 (166)
+    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment;
   }).sort(compareCustomers),
-  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey]);
+  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -1008,7 +1053,7 @@ export default function Customers() {
   }, [customers, detailTick]);
   // 목록은 100명씩 — 전부 마운트하면 수백 명부터 폰에서 버벅인다. 검색·필터·정렬이 바뀌면 처음부터
   const [listLimit, setListLimit] = useState(LIST_PAGE);
-  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey]);
+  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey, churnOnly, revisitOnly, programAlertOnly, segmentFilterId]); // (170 리뷰 L-6)
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
@@ -1023,6 +1068,7 @@ export default function Customers() {
     setSelected(c);
     setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id));
     healCustomerStatsWhenReady(c.id, applyHealed);
+    healProgramSessionsWhenReady(c.id, () => setCustomerPrograms(CustomerProgramStore.getByCustomer(c.id))); // 사용 회차를 기록 기준으로 (16차 #H2)
   };
   const openFirstMatch = () => { if (filtered.length > 0) openCustomer(filtered[0]); };
   const qHandled = useRef<string | null>(null); // 같은 q로는 1회만 — 검색어를 더 치거나 목록이 갱신될 때 다시 열리지 않게 (리뷰 2026-11-18)
@@ -1055,6 +1101,24 @@ export default function Customers() {
       </div>
     );
   })();
+  // 저장 세그먼트 칩 행 — 선택하면 조건으로 좁히고, 선택된 칩 옆에 [편집]. 만들기는 관리자(customer.pii 와 같은 관리자 묶음) (166)
+  const savedSegmentRow = (savedSegments.length > 0 || canManage) ? (
+    <div className="flex flex-wrap items-center gap-1.5 pb-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">
+      {savedSegments.map(sg => {
+        const n = segmentCounts.get(sg.id) ?? 0;
+        const on = segmentFilterId === sg.id;
+        return (
+          <button key={sg.id} type="button" aria-pressed={on} title={describeSegment(sg.condition)} onClick={() => setSegmentFilterId(on ? '' : sg.id)}
+            className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-[#1a3a8f] border-blue-200 hover:bg-blue-50'}`}>
+            {sg.name} <span className="font-normal">{n}</span>
+          </button>
+        );
+      })}
+      {activeSegment && <button type="button" onClick={() => navigate(`/messaging?segment=saved:${activeSegment.id}`)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label={`${activeSegment.name} 세그먼트에 발송`}>이 세그먼트에 발송</button>}{/* 발송 창 딥링크 saved:<id> 의 생산자 (170 리뷰 L-2) */}
+      {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
+      {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
+    </div>
+  ) : null;
   const tagChips = selected && (selected.tags || []).length > 0 ? (
     <span className="flex flex-wrap gap-1 mt-1" data-testid="customer-tags">
       {(selected.tags || []).map(t => <span key={t} className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">#{t}</span>)}
@@ -1245,12 +1309,12 @@ export default function Customers() {
             referralSource: pick(r, ['유입경로', '유입', 'referralSource']) || undefined,
             email: pick(r, ['이메일', 'email']) || undefined,
             address: pick(r, ['주소', 'address']) || undefined,
-            allergies: pick(r, ['알레르기', 'allergies']) || undefined, tags: parseTags(pick(r, ['태그', 'tags'])), isActive: true,
+            allergies: pick(r, ['알레르기', 'allergies']) || undefined, tags: parseTags(pick(r, ['태그', 'tags'])).filter(t => !isConsentTag(t)), isActive: true, // 업로드 열로 동의를 만들 수 없다 — 동의는 고객 상세 컨트롤로만 (165 리뷰 M-1)
           });
           added++;
         }
         loadAll();
-        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀(이름/전화 누락 또는 이미 있는 전화번호${masked > 0 ? `, 가린 전화번호 ${masked}건` : ''}).${badBirth > 0 ? ` 생년월일 형식을 읽지 못해 비운 고객 ${badBirth}명(YYYY-MM-DD 로 적어주세요).` : ''} 기존 고객 정보는 바뀌지 않습니다(신규 추가 전용).`);
+        notify(`고객 업로드 완료: ${added}명 추가, ${skipped}건 건너뜀${masked > 0 ? ` · 가린 전화번호 ${masked}건 포함` : ''}${badBirth > 0 ? ` · 생년월일을 읽지 못해 비운 고객 ${badBirth}명` : ''}.`); // 토스트는 한 문장 — 건너뜀 사유·형식 안내는 업로드 안내 패널에 (15차 #M4)
       } catch (err) {
         notify('파일을 읽는 중 오류가 발생했습니다. 엑셀(.xlsx) 또는 CSV 형식인지 확인해주세요.');
       } finally {
@@ -1294,17 +1358,20 @@ export default function Customers() {
       referralSource: addForm.referralSource || undefined,
       email: addForm.email.trim() || undefined, allergies: addForm.allergies.trim() || undefined,
       address: addForm.address.trim() || undefined,
-      tags: parseTags(addForm.tags), isActive: true,
+      tags: parseTags(addForm.tags).filter(t => !isConsentTag(t)), isActive: true, // 동의는 고객 상세의 동의 컨트롤로만 — 입력란 타이핑으로 못 만든다 (159 리뷰 H-1)
       privacyConsent: true, privacyConsentAt: new Date().toISOString(),
     });
+    notify.success('고객을 등록했습니다.'); // 창만 닫히고 피드백이 없었다 (15차 #L10)
     setShowAddModal(false);
     resetAddForm();
     loadAll();
   }
 
   // 고객 수정 — 상세에서 '수정' 클릭 시 현재 값으로 폼 채우고 모달 오픈
+  const editBaseRef = useRef<Customer | null>(null); // 수정 창을 연 시점의 고객 — diff 기준 (127~130 리뷰 #H3)
   function openEditModal() {
     if (!selected) return;
+    editBaseRef.current = selected;
     setEditForm({
       name: selected.name, phone: selected.phone,
       email: selected.email ?? '', address: selected.address ?? '',
@@ -1312,7 +1379,7 @@ export default function Customers() {
       grade: selected.grade, skinType: selected.skinType ?? '',
       memo: selected.memo ?? '', birthDate: selected.birthDate ?? '',
       referralSource: selected.referralSource ?? '',
-      tags: (selected.tags || []).join(', '),
+      tags: (selected.tags || []).filter(t => !isConsentTag(t)).join(', '), // 동의 태그는 폼에 보이지 않는다 — 10개 제한에 잘려 수신거부가 사라지던 것 (159 리뷰 H-1)
       allergies: selected.allergies ?? '',
     });
     setShowEditModal(true);
@@ -1332,7 +1399,8 @@ export default function Customers() {
     const copies = identityChanged ? countIdentityCopies(selected.id, { name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone }) : 0;
     if (copies > IDENTITY_PROPAGATION_CONFIRM_AT && !(await askConfirm({ title: '기록 일괄 수정', message: `이름·연락처가 바뀌어 연결된 기록 ${copies}건도 함께 고칩니다. 서버 동기화에 시간이 걸릴 수 있습니다. 계속할까요?`, confirmLabel: '함께 수정' }))) return;
     // 직원 계정은 PII 입력칸이 없으므로 기존 값을 그대로 둔다 (13차 #H5)
-    CustomerStore.update(selected.id, {
+    // 바뀐 칸만 보낸다 — 서버 PATCH 가 병합이라, 폰에서 바꾼 전화번호를 PC 의 옛 수정 창이 메모만 고치며 되돌리던 것 (16차 #H1)
+    const next: Partial<Customer> = {
       name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone,
       gender: editForm.gender, grade: editForm.grade,
       skinType: editForm.skinType, memo: editForm.memo,
@@ -1341,9 +1409,16 @@ export default function Customers() {
       referralSource: editForm.referralSource || '',
       email: piiOk ? (editForm.email.trim() || '') : (selected.email || ''),
       address: piiOk ? (editForm.address.trim() || '') : (selected.address || ''),
-      tags: parseTags(editForm.tags),
+      tags: mergeGeneralTags(parseTags(editForm.tags), selected.tags), // 일반 태그만 바꾸고 동의 태그는 항상 보존 (159 리뷰 H-1)
       allergies: editForm.allergies.trim() || '',
-    });
+    };
+    const base = editBaseRef.current && editBaseRef.current.id === selected.id ? editBaseRef.current : selected; // 재조회로 selected 가 바뀌어도 폼이 본 값과 비교
+    const changed = Object.fromEntries(Object.entries(next).filter(([k, v]) => {
+      const before = (base as unknown as Record<string, unknown>)[k];
+      return JSON.stringify(v ?? '') !== JSON.stringify(before ?? (Array.isArray(v) ? [] : '')); // 비운 값 '' 과 저장 안 된 undefined 는 같은 뜻
+    })) as Partial<Customer>;
+    if (Object.keys(changed).length > 0) CustomerStore.update(selected.id, changed);
+    notify.success('고객 정보를 저장했습니다.'); // 전파 토스트보다 먼저 — 저장 자체를 알린다 (15차 #L10)
     if (identityChanged) {
       // 예약·시술·회차권·결제·상담에 복사된 이름(예약은 전화번호도) — 빠뜨리면 개명한 고객이 다른 화면 검색에서 사라지고 예약 카드가 옛 번호로 전화한다 (11차 #H1·H2)
       const n = propagateCustomerIdentity(selected.id, { name: editForm.name.trim(), phone: piiOk ? editForm.phone.trim() : selected.phone });
@@ -1359,7 +1434,6 @@ export default function Customers() {
   function handleMerged() {
     if (!selected) return;
     setShowMergeModal(false);
-    setMergeQuery('');
     const updated = CustomerStore.getById(selected.id);
     setSelected(updated ?? null);
     loadAll();
@@ -1394,7 +1468,7 @@ export default function Customers() {
     if (futureRes > 0 || activeProgs > 0) {
       const blockers = [futureRes > 0 ? `앞으로의 예약 ${futureRes}건` : '', activeProgs > 0 ? `진행 중 회차권 ${activeProgs}개` : ''].filter(Boolean).join(', ');
       const guide = [futureRes > 0 ? '예약은 취소하고' : '', activeProgs > 0 ? '회차권은 [관리]에서 완료 처리(또는 등록 취소)한' : ''].filter(Boolean).join(' ');
-      notify(`삭제할 수 없습니다 — ${blockers}이(가) 있습니다. ${guide} 뒤 삭제해주세요. 중복 고객이면 [병합]이 맞습니다.`);
+      notify(`삭제할 수 없습니다 — ${blockers}이 남아 있습니다. ${guide} 뒤 삭제해주세요.`); // '건'·'개'로 끝나 조사는 늘 '이' (15차 #M5·#L1)
       return;
     }
     if (!(await askConfirm({ title: '고객 삭제', message: `'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`, confirmLabel: '삭제', danger: true, returnFocusTo: menuAnchor() }))) return;
@@ -1414,6 +1488,8 @@ export default function Customers() {
 
     // 구매 날짜를 비우면 parseISODate('') 가 1900-01-01 이 되어 만료일 1900년(영구 차감 불가)·결제일 빈 값(매출 누락)이 됐다 (14차 #H1)
     if (!isISODate(progForm.purchaseDate)) { notify('구매 날짜를 선택해주세요.'); return; }
+    { const blocked = monthCloseBlock(progForm.purchaseDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+
     // 결제금액: 빈칸이면 정가, 입력했으면 그 값(0원 이벤트도 유효). 공백·통화기호가 섞여도 자릿수를 잃지 않게 공용 규칙 (14차 #H6)
     let pricePaid = prog.price;
     if (progForm.pricePaid.trim() !== '') {
@@ -1472,6 +1548,7 @@ export default function Customers() {
     });
     // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로, 방문 횟수를 같은 날 예약 완료와 별도로 +1 한다 — 기록에서 다시 세어 바로 맞춘다(하이드레이션 뒤) (정합성 감사·리뷰 2026-11-19)
     healCustomerStatsWhenReady(selected.id, applyHealed);
+    healProgramSessionsWhenReady(selected.id, () => setCustomerPrograms(CustomerProgramStore.getByCustomer(selected.id))); // (16차 #H2)
 
     setShowTreatmentModal(false);
     setTreatForm({ customerProgramId: '', staffName: '', treatmentDate: today(), treatmentTime: '', treatmentDetails: '', skinCondition: '', staffNotes: '', nextAppointment: '' });
@@ -1488,6 +1565,8 @@ export default function Customers() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* 저장 세그먼트 편집 창 — 데스크톱(hidden lg:flex)·모바일(lg:hidden) 블록 어느 쪽에 두어도 반대 폭에서 숨겨진다(Modal 은 포털이 아님) → 루트 바로 아래 (166·168) */}
+      {segmentEditor !== null && <SegmentEditorModal segment={segmentEditor === 'new' ? null : segmentEditor} facts={segmentFacts} tagOptions={[...new Set([...tagOptions.map(t => t.tag), ...((segmentEditor !== 'new' && segmentEditor?.condition.tagsAny) || [])])]} onClose={() => setSegmentEditor(null)} onSaved={() => { setSegmentEditor(null); const next = listSavedSegments(); setSavedSegments(next); if (!next.some(sg => sg.id === segmentFilterId)) setSegmentFilterId(''); }} />}
 
       {/* ── 모바일 뷰 (< lg) ── 카드 리스트 */}
       <div className="flex flex-col lg:hidden flex-1">
@@ -1514,6 +1593,7 @@ export default function Customers() {
             </button>
           </div>
           {tagChipsRow}
+          {savedSegmentRow}
           <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar pr-6">
             {(['전체', ...GRADES] as const).map(g => (
               <button
@@ -1534,6 +1614,19 @@ export default function Customers() {
             >
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
+            {revisitOnly && (
+              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
+            )}
+            {programAlertOnly && (
+              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+            )}
+            {(churnHighCount > 0 || churnOnly) && (
+              <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${churnOnly ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+                title={`마지막 방문 뒤 지난 날이 이 고객의 방문 주기 ${CHURN_HIGH_RATIO}배를 넘고 다음 예약이 없는 고객`}>
+                이탈 위험 {churnHighCount}
+              </button>
+            )}
             {retentionPolicy.enabled && (
               <button
                 type="button"
@@ -1572,7 +1665,7 @@ export default function Customers() {
                 </button>
               ) : (
                 // 검색 오타에 '첫 고객 등록'을 권하면 중복 고객이 생긴다 — 필터를 풀어 주는 길만 (3차 UX 점검 2026-11-19)
-                <button type="button" onClick={() => { setSearch(''); setGradeFilter('전체'); setTagFilter(''); setRetentionOnly(false); }} className="mt-3 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
+                <button type="button" onClick={() => { setSearch(''); setGradeFilter('전체'); setTagFilter(''); setRetentionOnly(false); setChurnOnly(false); setRevisitOnly(false); setProgramAlertOnly(false); }} className="mt-3 px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm font-medium">
                   필터 초기화
                 </button>
               )}
@@ -1601,7 +1694,7 @@ export default function Customers() {
                         {phoneFor(user?.role, customer.phone)}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {statsOf(customer).totalVisits}회
+                        {daysSince === null ? '방문 기록 없음' : daysSince === 0 ? '오늘 방문' : `${daysSince}일 전 방문`} · 방문 {statsOf(customer).totalVisits}회{segmentIndex.get(customer.id)?.churn?.level === 'high' && <span className="text-rose-700 font-medium"> · 이탈 위험</span>}
                       </p>
                     </div>
                     <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
@@ -1637,6 +1730,7 @@ export default function Customers() {
                   {gradeChip(selected, true)}
                 </div>
               </div>
+              {canManage ? ( /* 직원은 수정만 남아 1항목 메뉴가 되므로 [수정] 버튼을 바로 (15차 #M8) */
               <div className="relative">
                 <button
                   type="button"
@@ -1682,6 +1776,12 @@ export default function Customers() {
                   </>
                 )}
               </div>
+              ) : (
+              <button type="button" onClick={openEditModal} aria-label="고객 정보 수정" title="고객 정보 수정"
+                className="w-11 h-11 flex items-center justify-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200">
+                <Pencil size={18} />
+              </button>
+              )}
             </div>
 
             {/* 상세 콘텐츠 스크롤 */}
@@ -1732,6 +1832,25 @@ export default function Customers() {
                     <span className="text-xs text-gray-500">총 방문</span>
                     <span className="text-sm font-medium text-gray-900 tabular-nums">{selected.totalVisits}회</span>
                   </div>
+                  {selectedSeg && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">고객 구분</span>
+                      <span className="text-sm font-medium text-gray-900 text-right" data-testid="rfm-segment">
+                        {selectedSeg.rfm.segment}
+                        {selectedSeg.churn && <span className={`ml-1 text-xs ${selectedSeg.churn.level === 'high' ? 'text-rose-700 font-semibold' : selectedSeg.churn.level === 'medium' ? 'text-amber-700' : 'text-gray-500'}`}>· 이탈 위험 {CHURN_LABEL[selectedSeg.churn.level]}</span>}
+                        <span className="block text-xs text-gray-500 font-normal">최근성 {selectedSeg.rfm.r}·빈도 {selectedSeg.rfm.f}·금액 {selectedSeg.rfm.m} — 최근 1년, 매장 내 5분위</span>
+                      </span>
+                    </div>
+                  )}
+                  {selectedCycle && (
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-500">방문 주기</span>
+                      <span className="text-sm font-medium text-gray-900 tabular-nums text-right" data-testid="visit-cycle">
+                        {selectedCycle.days}일 <span className="text-xs text-gray-500">{selectedCycle.basis === 'personal' ? '이 고객 기준' : '매장 기준'}</span>
+                        <span className="block text-xs text-gray-500 font-normal">{selectedCycle.basis === 'personal' ? `방문 간격 ${selectedCycle.intervals}개의 중앙값` : '방문 3회 미만이라 매장 기본 주기'}</span>
+                      </span>
+                    </div>
+                  )}
                   {selectedNoShows > 0 && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">노쇼</span>
@@ -1741,8 +1860,28 @@ export default function Customers() {
                   {dupHint}
                   <div className="flex justify-between">
                     <span className="text-xs text-gray-500">총 결제</span>
-                    <span className="text-sm font-medium text-gray-900 tabular-nums">{formatPrice((selected.totalSpent || 0))}</span>
+                    <span className="text-sm font-medium text-gray-900 tabular-nums" title="완료된 결제 합 — 회차권 판매액 포함(현금 유입)">{formatPrice((selected.totalSpent || 0))}</span>
                   </div>
+                  {selectedValue && (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-xs text-gray-500">실현 매출</span>
+                        <span className="text-sm font-medium text-gray-900 tabular-nums text-right" data-testid="realized-revenue">{formatPrice(selectedValue.realizedRevenue)}<span className="block text-xs text-gray-500 font-normal">회차권은 사용한 회차만큼(기간제 전액)</span></span>
+                      </div>
+                      {selectedValue.avgTicket !== null && (
+                        <div className="flex justify-between">
+                          <span className="text-xs text-gray-500">객단가</span>
+                          <span className="text-sm font-medium text-gray-900 tabular-nums text-right">{formatPrice(selectedValue.avgTicket)}<span className="block text-xs text-gray-500 font-normal">실현 매출 ÷ 방문 {statsOf(selected).totalVisits}회</span></span>
+                        </div>
+                      )}
+                      {selectedValue.annualForecast !== null && canDo(user?.role, 'sales.view') && ( /* 매출 전망은 매출 화면·대시보드 금액 카드와 같은 권한 (139 #M7) */
+                        <div className="flex justify-between">
+                          <span className="text-xs text-gray-500">연간 기대 매출 <span className="text-gray-500">(예측)</span></span>
+                          <span className="text-sm font-medium text-gray-700 tabular-nums text-right">{formatPrice(selectedValue.annualForecast)}<span className="block text-xs text-gray-500 font-normal">객단가 × 365 ÷ 방문 주기 {selectedCycle?.days ?? '-'}일 — 지금 리듬이 1년 이어질 때</span></span>
+                        </div>
+                      )}
+                    </>
+                  )}
                   {(statsOf(selected).lastVisitDate || selected.lastVisitDate) && (
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-500">마지막 방문</span>
@@ -1754,7 +1893,7 @@ export default function Customers() {
                     <RevisitBadge customerId={selected.id} size="sm" />
                   </div>
                 </div>
-                {tagChips}
+                {tagChips}{selected && <ConsentControl customer={selected} onChanged={() => { loadAll(); setSelected(prev => (prev ? CustomerStore.getAll().find(c => c.id === prev.id) ?? prev : prev)); }} />}
                 <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">메모</p>
                   {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
@@ -1792,7 +1931,7 @@ export default function Customers() {
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
                         {c.recommendedSolution && <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{c.recommendedSolution}</p>}
                         {c.recommendedProducts.length > 0 && <p className="text-xs text-gray-500 mt-0.5">🧴 {c.recommendedProducts.join(', ')}</p>}
-                        {c.managerNote && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">📝 {c.managerNote}</p>}
+                        {c.managerNote && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{c.managerNote}</p>}
                         {c.nextConsultDate && <p className="text-xs text-indigo-600 mt-0.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>}
                         <ConsultPhotoStrip consultId={c.id} consultDate={c.consultDate} customerName={selected.name} tick={consultPhotoTick + photoCacheVersion} onOpen={setLightbox} />
                         <button
@@ -1845,11 +1984,11 @@ export default function Customers() {
                         {cp.totalSessions != null && (
                           <>
                             <p className="text-xs text-gray-500">
-                              사용 {cp.usedSessions || 0}회 / 총 {cp.totalSessions}회 · 잔여 {(cp.totalSessions - (cp.usedSessions || 0))}회
+                              사용 {usedSessionsFor(cp)}회 / 총 {cp.totalSessions}회 · 잔여 {remainingFor(cp)}회
                             </p>
                             <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden mt-1" aria-hidden="true">
-                              <div className={`h-1.5 rounded-full ${(cp.usedSessions || 0) / cp.totalSessions >= 0.8 ? 'bg-orange-400' : 'bg-blue-400'}`}
-                                style={{ width: `${Math.min(((cp.usedSessions || 0) / cp.totalSessions) * 100, 100)}%` }} />
+                              <div className={`h-1.5 rounded-full ${usedSessionsFor(cp) / cp.totalSessions >= 0.8 ? 'bg-orange-400' : 'bg-blue-400'}`}
+                                style={{ width: `${Math.min((usedSessionsFor(cp) / cp.totalSessions) * 100, 100)}%` }} />
                             </div>
                           </>
                         )}
@@ -1980,6 +2119,7 @@ export default function Customers() {
             />
           </div>
           {tagChipsRow}
+          {savedSegmentRow}
           <div className="flex gap-1 flex-wrap">
             {(['전체', ...GRADES] as const).map(g => (
               <button
@@ -2000,6 +2140,19 @@ export default function Customers() {
             >
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
+            {revisitOnly && (
+              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
+            )}
+            {programAlertOnly && (
+              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+            )}
+            {(churnHighCount > 0 || churnOnly) && (
+              <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${churnOnly ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+                title={`마지막 방문 뒤 지난 날이 이 고객의 방문 주기 ${CHURN_HIGH_RATIO}배를 넘고 다음 예약이 없는 고객`}>
+                이탈 위험 {churnHighCount}
+              </button>
+            )}
             {retentionPolicy.enabled && (
               <button
                 type="button"
@@ -2039,7 +2192,8 @@ export default function Customers() {
           ) : (
             visible.map(customer => {
               const daysSince = getDaysSince(statsOf(customer).lastVisitDate ?? undefined);
-              const isRisk = daysSince !== null && daysSince > 60;
+              const churn = segmentIndex.get(customer.id)?.churn ?? null; // 일괄 60일 대신 이 고객의 방문 주기 대비 (136)
+              const isRisk = churn?.level === 'high';
               const activeProgs = activeProgCount.get(customer.id) || 0;
               return (
                 <button
@@ -2066,7 +2220,7 @@ export default function Customers() {
                     {activeProgs > 0 && (
                       <span className="text-primary-600 font-medium">활성 {activeProgs}개</span>
                     )}
-                    {isRisk && <span className="inline-flex" title={`${daysSince}일 미방문`} aria-label={`${daysSince}일 미방문`}><AlertCircle size={11} className="text-orange-400" /></span>}
+                    {isRisk && churn && <span className="inline-flex items-center gap-0.5 text-rose-700 font-medium" title={`${daysSince}일 미방문 — 이 고객 방문 주기의 ${Math.round(churn.ratio * 100)}%`}><AlertCircle size={11} />이탈 위험</span>}
                   </div>
                 </button>
               );
@@ -2123,7 +2277,7 @@ export default function Customers() {
                     {selectedNoShows > 0 && (
                       <p className="text-xs mt-0.5 text-rose-600 font-medium" data-testid="noshow-badge">노쇼 {selectedNoShows}회 — 예약 확인 연락을 권장합니다</p>
                     )}
-                    {tagChips}{dupHint}
+                    {tagChips}{selected && <ConsentControl customer={selected} onChanged={() => { loadAll(); setSelected(prev => (prev ? CustomerStore.getAll().find(c => c.id === prev.id) ?? prev : prev)); }} />}{dupHint}
                   </div>
                 </div>
                 {/* 1366px 폭에서 버튼 글자가 세로로 깨지지 않도록 — 줄바꿈은 버튼 단위로 (2026-11-17) */}
@@ -2224,10 +2378,12 @@ export default function Customers() {
                 <div className="text-center">
                   <p className="text-xs text-gray-400">누적 결제</p>
                   <p className="text-lg font-bold text-gray-900" data-testid="customer-total-spent">{formatPrice(selected.totalSpent)}</p>
+                  {selectedValue && selectedValue.realizedRevenue !== (selected.totalSpent || 0) && <p className="text-xs text-gray-500" title="회차권은 사용한 회차만큼만">실현 {formatPrice(selectedValue.realizedRevenue)}</p>}
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">마지막 방문</p>
                   <p className="text-sm font-semibold text-gray-700">{formatDate(statsOf(selected).lastVisitDate || selected.lastVisitDate)}</p>
+                  {selectedCycle && <p className="text-xs text-gray-500">주기 {selectedCycle.days}일{selectedCycle.basis === 'shop' ? ' (매장 기준)' : ''}</p>}
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-gray-400">등록일</p>
@@ -2239,8 +2395,40 @@ export default function Customers() {
                 </div>
               </div>
 
+              {(selectedSeg || selectedCycle || selectedValue) && (
+                <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-gray-50" data-testid="customer-analytics">
+                  {selectedSeg && (
+                    <div>
+                      <p className="text-xs text-gray-500">고객 구분</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedSeg.rfm.segment}{selectedSeg.churn && <span className={`ml-1 text-xs font-medium ${selectedSeg.churn.level === 'high' ? 'text-rose-700' : selectedSeg.churn.level === 'medium' ? 'text-amber-700' : 'text-gray-500'}`}>· 이탈 위험 {CHURN_LABEL[selectedSeg.churn.level]}</span>}</p>
+                      <p className="text-xs text-gray-500">최근성 {selectedSeg.rfm.r}·빈도 {selectedSeg.rfm.f}·금액 {selectedSeg.rfm.m} (최근 1년, 매장 내 5분위)</p>
+                    </div>
+                  )}
+                  {selectedCycle && (
+                    <div>
+                      <p className="text-xs text-gray-500">방문 주기</p>
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums">{selectedCycle.days}일 <span className="text-xs font-normal text-gray-500">{selectedCycle.basis === 'personal' ? '이 고객 기준' : '매장 기준'}</span></p>
+                      <p className="text-xs text-gray-500">{selectedCycle.basis === 'personal' ? `방문 간격 ${selectedCycle.intervals}개의 중앙값` : '방문 3회 미만이라 매장 기본 주기'}</p>
+                    </div>
+                  )}
+                  {selectedValue && (
+                    <div>
+                      <p className="text-xs text-gray-500">실현 매출</p>
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatPrice(selectedValue.realizedRevenue)}</p>
+                      <p className="text-xs text-gray-500">회차권은 사용한 회차만큼(기간제 전액)</p>
+                    </div>
+                  )}
+                  {selectedValue && selectedValue.avgTicket !== null && (
+                    <div>
+                      <p className="text-xs text-gray-500">객단가</p>
+                      <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatPrice(selectedValue.avgTicket)}</p>
+                      <p className="text-xs text-gray-500">실현 매출 ÷ 방문 {statsOf(selected).totalVisits}회{selectedValue.annualForecast !== null && canDo(user?.role, 'sales.view') ? ` · 연간 기대 ${formatPrice(selectedValue.annualForecast)} (예측: × 365 ÷ 주기)` : ''}</p>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="mt-3 p-3 bg-gray-50 rounded-xl">
-                {selected.memo ? <p className="text-xs text-amber-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">📝 {selected.memo}</p> : <p className="text-xs text-gray-400">📝 메모 없음</p>}
+                {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                 {quickMemoRow(false)}
               </div>
             </div>
@@ -2323,7 +2511,7 @@ export default function Customers() {
                           <p className="text-xs text-gray-500 mt-1.5">🧴 {c.recommendedProducts.join(', ')}</p>
                         )}
                         {c.managerNote && (
-                          <p className="text-xs text-gray-500 mt-1.5">📝 {c.managerNote}</p>
+                          <p className="text-xs text-gray-500 mt-1.5">{c.managerNote}</p>
                         )}
                         {c.nextConsultDate && (
                           <p className="text-xs text-indigo-600 mt-1.5">다음 관리 권고일: {formatDate(c.nextConsultDate)}</p>
@@ -2376,8 +2564,9 @@ export default function Customers() {
               ) : (
                 <div className="space-y-3">
                   {customerPrograms.map(cp => {
-                    const remaining = cp.totalSessions !== null ? cp.totalSessions - cp.usedSessions : null;
-                    const progress = cp.totalSessions ? (cp.usedSessions / cp.totalSessions) * 100 : 0;
+                    const used = usedSessionsFor(cp); // 기록에서 센 사용 회차 (16차 #H2)
+                    const remaining = remainingFor(cp);
+                    const progress = cp.totalSessions ? (used / cp.totalSessions) * 100 : 0;
                     const isExpired = isProgramExpired(cp);
                     return (
                       <div
@@ -2407,7 +2596,7 @@ export default function Customers() {
                         {cp.totalSessions !== null ? (
                           <>
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                              <span>사용 {cp.usedSessions}회 / 총 {cp.totalSessions}회</span>
+                              <span>사용 {used}회 / 총 {cp.totalSessions}회</span>
                               <span className="font-bold text-blue-600">잔여 {remaining}회</span>
                             </div>
                             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -2504,7 +2693,8 @@ export default function Customers() {
                 <p>• <strong className="text-red-600">필수</strong>: <strong>이름</strong>, <strong>전화번호</strong> — 둘 중 하나라도 없으면 그 줄은 건너뜁니다</p>
                 <p>• 선택: 성별(남성/여성), 등급(신규·VIP 등), 생년월일(1990-01-15 형식), 피부유형, 유입경로, 이메일, 주소, 메모</p>
                 <p>• 첫 번째 줄은 반드시 <strong>항목 이름(헤더)</strong>이어야 하고, 첫 번째 시트만 읽습니다</p>
-                <p>• 이미 등록된 고객과 <strong>전화번호가 같으면 자동으로 건너뜁니다</strong> (중복 걱정 없음)</p>
+                <p>• 이미 등록된 고객과 <strong>전화번호가 같으면 자동으로 건너뜁니다</strong> (중복 걱정 없음) — 기존 고객 정보는 바뀌지 않는 신규 추가 전용입니다</p>
+                <p>• 생년월일을 읽지 못한 줄은 생년월일만 비우고 등록합니다 (YYYY-MM-DD 로 적어주세요)</p>
                 <p>• 엑셀(.xlsx, .xls)과 CSV 모두 지원</p>
               </div>
               <div className="flex gap-2">
@@ -2856,11 +3046,11 @@ export default function Customers() {
                   onChange={e => setTreatForm(f => ({ ...f, customerProgramId: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300">
                   <option value="">연결 안 함 (단건 시술)</option>
-                  {treatUsable.map(cp => (
+                  {treatUsable.map(cp => { const used = usedSessionsFor(cp); return ( // 기록에서 센 사용 회차 (16차 #H2)
                     <option key={cp.id} value={cp.id}>
-                      {cp.totalSessions !== null ? `${cp.programName} · 잔여 ${cp.totalSessions - cp.usedSessions}회 (${cp.usedSessions}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${cp.usedSessions}회 이용)`}
+                      {cp.totalSessions !== null ? `${cp.programName} · 잔여 ${remainingSessions(cp, used)}회 (${used}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${used}회 이용)`}
                     </option>
-                  ))}
+                  ); })}
                 </select>
                 {treatExpired.length > 0 && (
                   <div id="expired-program-hint" data-testid="expired-program-hint" className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex flex-wrap items-center gap-2">
@@ -3262,7 +3452,7 @@ export default function Customers() {
       )}
       {lightbox && <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
       {manageProgram && <ProgramManageModal program={manageProgram} onClose={() => setManageProgram(null)} onDone={handleProgramManaged} />}
-      {showMergeModal && selected && <CustomerMergeModal target={selected} initialQuery={mergeQuery} onClose={() => { setShowMergeModal(false); setMergeQuery(''); }} onMerged={handleMerged} />}
+      {showMergeModal && selected && <CustomerMergeModal target={selected} onClose={() => setShowMergeModal(false)} onMerged={handleMerged} />}
       </div>
     </div>
   );

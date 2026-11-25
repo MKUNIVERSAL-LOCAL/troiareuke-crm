@@ -13,6 +13,9 @@ import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStor
 import { ConsultationStore } from './consultationStore';
 import { isAnonymized } from './retentionPolicy';
 import { recordMergedCustomer } from './customerIdentity';
+import { consentFromTags, tagsWithConsent } from './consentRule';
+import { todayISO } from './format';
+import { duplicateCandidates, type DupCandidate } from './duplicateRule';
 import type { Customer, CustomerGrade } from '../types';
 
 export interface MergePreview {
@@ -47,11 +50,10 @@ export function mergeBlockReason(c: Customer): string | null {
   return null;
 }
 
-/** 같은 전화번호(숫자 8자리 이상 기준)를 쓰는 다른 고객 — 상세 화면의 "중복 의심" 안내용. 샘플·익명화 고객은 제외 */
-export function findSamePhoneCustomers(customer: Customer, customers: Customer[] = CustomerStore.getAll()): Customer[] {
-  const digits = (customer.phone || '').replace(/\D/g, '');
-  if (digits.length < 8 || mergeBlockReason(customer)) return [];
-  return customers.filter(c => c.id !== customer.id && !mergeBlockReason(c) && c.phone.replace(/\D/g, '') === digits);
+/** 같은 사람일 수 있는 다른 고객 — 같은 전화번호·이메일·이름+생년월일·이름+전화 뒷 4자리(duplicateRule). 상세 "중복 의심" 안내·병합 창 제안용. 샘플·익명화 고객 제외 (171, GAP C-9) */
+export function findDuplicateCandidates(customer: Customer, customers: Customer[] = CustomerStore.getAll()): DupCandidate<Customer>[] {
+  if (mergeBlockReason(customer)) return [];
+  return duplicateCandidates(customer, customers.filter(c => !mergeBlockReason(c)));
 }
 
 function later(a?: string, b?: string): string | undefined {
@@ -89,7 +91,7 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   const updates: Partial<Customer> = {
     totalVisits: (t.totalVisits || 0) + (source.totalVisits || 0),
     lastVisitDate: later(t.lastVisitDate, source.lastVisitDate),
-    tags: [...new Set([...(t.tags || []), ...(source.tags || [])])],
+    tags: normalizeMergedTags([...new Set([...(t.tags || []), ...(source.tags || [])])]),
     isActive: t.isActive !== false || source.isActive !== false,
   };
   if (source.registeredAt && (!t.registeredAt || source.registeredAt < t.registeredAt)) updates.registeredAt = source.registeredAt;
@@ -107,4 +109,9 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   CustomerStore.delete(sourceId);
   recordMergedCustomer(sourceId, targetId); // 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 — 병합이 끝난 뒤에만 기록(중간 예외 시 유령 매핑 방지) (11차 #M10, 리뷰 #M9)
   return preview;
+}
+
+/** 합집합 태그의 동의 예약어를 한 상태로 정리 — 동의+거부가 공존하면 거부 우선(consentFromTags), 동의일은 하나만 (165 리뷰 L-15) */
+function normalizeMergedTags(union: string[]): string[] {
+  return tagsWithConsent(union, consentFromTags(union), todayISO());
 }

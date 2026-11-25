@@ -14,6 +14,7 @@ export interface CustomerStats { totalSpent: number; totalVisits: number; lastVi
 
 export interface CustomerStatsIndex {
   byId: Map<string, CustomerStats>;
+  visitDays?: Map<string, string[]>; // 고객별 방문일(서로 다른 날, 오름차순) — 방문 주기 산출용 (135). 선택 필드: 옛 스펙의 인덱스 리터럴 호환
   noPayments: boolean;      // 결제 컬렉션이 통째로 비어 있으면(로드 실패·하이드레이션 전) 저장값을 0으로 보이지 않는다 — heal 과 같은 가드
   noVisitRecords: boolean;
 }
@@ -39,7 +40,9 @@ export function buildStatsIndex(src: CustomerStatsSource): CustomerStatsIndex {
     if (set) for (const d of set) if (!lastVisitDate || d > lastVisitDate) lastVisitDate = d;
     byId.set(id, { totalSpent: spent.get(id) || 0, totalVisits: set?.size || 0, lastVisitDate });
   }
-  return { byId, noPayments: src.payments.length === 0, noVisitRecords: src.reservations.length === 0 && src.treatmentLogs.length === 0 };
+  const visitDays = new Map<string, string[]>();
+  for (const [id, set] of days) visitDays.set(id, [...set].sort());
+  return { byId, visitDays, noPayments: src.payments.length === 0, noVisitRecords: src.reservations.length === 0 && src.treatmentLogs.length === 0 };
 }
 
 /**

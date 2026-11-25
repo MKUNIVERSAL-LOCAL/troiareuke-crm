@@ -81,7 +81,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
                 <p className="text-xs text-gray-400">
                   {d.overdueDays <= 0 ? '오늘 권장일' : `${d.overdueDays}일 지남`}
                   {' · '}
-                  {d.basis === 'recommended' ? '권장일 기준' : '방문주기 추정'}
+                  {d.basis === 'recommended' ? '권장일 기준' : d.cycleBasis === 'personal' ? `이 고객 주기 ${d.cycleDays}일` : `매장 기준 ${d.cycleDays}일`}
                 </p>
               </div>
               <button

@@ -158,17 +158,9 @@ textarea:hover:not(:focus) {
   border-color: #c7d2fe;
 }
 
-/* 부드러운 등장 — 설정 저장 확인 배너(animate-fade-in). 정의 없는 클래스로 남아 있던 것을 고아 keyframes와 이었다 (2026-11-19) */
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.animate-fade-in {
-  animation: fade-in-up 0.3s ease-out;
-}
 /* 모션 최소화 선호 사용자 존중 (접근성) */
 @media (prefers-reduced-motion: reduce) {
-  .modal-backdrop, .modal-card, .animate-slide-down, .animate-fade-in {
+  .modal-backdrop, .modal-card, .animate-slide-down {
     animation: none !important;
   }
 }

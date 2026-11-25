@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { askConfirm } from '../../lib/confirmDialog';
 import { Download, Upload, AlertTriangle } from 'lucide-react';
 import { buildBackup, summarizeBackup, saveBackupFile, parseBackup, restoreBackup, RESTORE_ALLOWED, type BackupFile } from '../../lib/fullBackup';
 import { SettingsStore } from '../../lib/store';
@@ -42,10 +43,10 @@ export default function BackupRestoreCard() {
     }
   }
 
-  function handleRestore() {
+  async function handleRestore() {
     if (!pending) return;
     const summary = summarizeBackup(pending.file).slice(0, 4).map(s => `${s.label} ${s.count}`).join(', ');
-    if (!window.confirm(`지금 이 기기의 매장 데이터를 모두 지우고 백업 파일(${pending.name})로 바꿀까요?\n${summary}\n되돌릴 수 없습니다. 복원 뒤 화면이 새로고침됩니다.`)) return;
+    if (!(await askConfirm({ title: '백업 복원', message: `지금 이 기기의 매장 데이터를 모두 지우고 백업 파일(${pending.name})로 바꿀까요?\n${summary}\n되돌릴 수 없습니다. 복원 뒤 화면이 새로고침됩니다.`, confirmLabel: '복원', cancelLabel: '닫기', danger: true }))) return; // 앱 확인창 (15차 #H3)
     setRestoring(true);
     setRestoreError('');
     try {

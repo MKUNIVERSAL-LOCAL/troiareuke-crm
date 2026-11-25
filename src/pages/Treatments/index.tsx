@@ -1,5 +1,5 @@
 import { notify } from '../../lib/notify';
-import { matchesSearch, todayISO, toISODate, parseISODate, formatDate } from '../../lib/format';
+import { matchesSearch, todayISO, toISODate, parseISODate, formatDate, formatPrice } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
@@ -11,8 +11,13 @@ import CustomerCombobox from '../../components/ui/CustomerCombobox';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
+import { refreshFromServer } from '../../lib/liveRefresh';
 import { TreatmentLogStore, CustomerStore, StaffStore, ServiceStore, CustomerProgramStore, ReservationStore } from '../../lib/store';
 import { healCustomerStatsWhenReady } from '../../lib/customerStats';
+import { usedSessionsFor, healProgramSessionsWhenReady } from '../../lib/programSessions';
+import { remainingSessions } from '../../lib/programSessionsRule';
+import { appendProgramNote } from '../../lib/programNotes';
 import type { TreatmentLog } from '../../types';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -61,7 +66,8 @@ export default function Treatments() {
   const loadLogs = () => {
     setTreatmentLogs(TreatmentLogStore.getAll());
   };
-  const pull = usePullToRefresh(() => { loadLogs(); }); // 모바일: 맨 위에서 당겨서 새로고침
+  useDataRefreshed(loadLogs); // (16차 #H3)
+  const pull = usePullToRefresh(async () => { await refreshFromServer({ force: true }); loadLogs(); }); // 모바일: 맨 위에서 당겨서 새로고침 — 서버부터
   // 목록 표시용 사진 장수 — base64 캐시를 매 렌더·매 키 입력마다 파싱하지 않도록 목록이 바뀔 때만 계산
   const photoCacheVersion = usePhotoCacheVersion(); // IndexedDB 캐시 적재·동기화 후 장수 갱신
 
@@ -125,8 +131,11 @@ export default function Treatments() {
   );
 
   const handleDelete = (id: string) => {
+    const log = TreatmentLogStore.getAll().find(t => t.id === id);
     TreatmentLogStore.delete(id);
     clearPhotos(`treatment:${id}`); // 연결된 사진도 정리
+    // 회차권 원장 — 기록이 사라지면 차감 행도 사라지므로, 복원된 회차를 기록 줄로 남긴다 (146, GAP P-1)
+    if (log?.customerProgramId && (log.sessionsUsed || 0) > 0) appendProgramNote(log.customerProgramId, `시술 기록 삭제 → ${log.sessionsUsed}회 복원 (${formatDate(log.treatmentDate)} 시술)`);
     setSelected(null);
     loadLogs();
   };
@@ -305,7 +314,7 @@ export default function Treatments() {
             // 예약 완료 처리에서 결제가 이미 등록된 건(referenceId=예약 id)이면 결제 연계를 다시 묻지 않는다
             const paidByReservation = !!reservationId && hasPaymentFor(reservationId); // 환불된 결제는 '등록됨'으로 치지 않는다 — 예약 상세와 같은 기준
             notify.success('시술 기록을 저장했습니다.'); // 회차권 연결 저장(result 없음)도 같은 안내 — 성공 안내와 결제 질문을 분리 — confirm의 [취소]가 저장 취소로 읽히지 않게 (6차 UX 감사 2026-11-20)
-            if (result && !paidByReservation && window.confirm(`${result.customerName} 고객의 결제 ${result.amount.toLocaleString()}원을 지금 매출에 등록할까요?\n(나중에 매출 화면에서도 등록할 수 있습니다)`)) {
+            if (result && !paidByReservation && window.confirm(`${result.customerName} 고객의 결제 ${formatPrice(result.amount)}을 지금 매출에 등록할까요?\n(나중에 매출 화면에서도 등록할 수 있습니다)`)) {
               const q = new URLSearchParams({ new: '1', customer: result.customerId, amount: String(result.amount), memo: result.details });
               // 예약에서 온 기록이면 결제를 그 예약에 연결(referenceId) — 안 넘기면 예약 상세가 "결제 미등록"으로 보여 2중 등록된다 (정합성 감사 2026-11-19)
               if (reservationId && (!savedDate || ReservationStore.getAll().find(x => x.id === reservationId)?.date === savedDate)) q.set('reference', reservationId);
@@ -518,6 +527,13 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         staffNotes: staffNotes || '',
         nextAppointment: nextAppointment || '',
       });
+      // 회차권 연결을 바꾸면 양쪽 원장에 줄을 남긴다 — 풀린 쪽은 복원, 새로 연결된 쪽은 차감 행(시술 기록)이 생기므로 정보 줄만 (146)
+      const prevProg = editing.customerProgramId || '';
+      if (prevProg !== (customerProgramId || '')) {
+        const n = editing.sessionsUsed || 1;
+        if (prevProg) appendProgramNote(prevProg, `시술 기록 수정으로 연결 해제 → ${n}회 복원 (${formatDate(treatmentDate)} 시술)`);
+        if (customerProgramId) appendProgramNote(customerProgramId, `시술 기록 수정으로 연결 (${formatDate(treatmentDate)} 시술, ${n}회 차감)`);
+      }
       if (photosReady) {
         try { savePhotos(`treatment:${editing.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
       }
@@ -540,7 +556,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
         try { savePhotos(`treatment:${saved.id}`, photos); } catch { notify('사진 저장 용량을 초과했습니다. 일부 사진을 줄여주세요.'); }
       }
       // 코어 incrementVisit은 마지막 방문일을 UTC '오늘'로, 방문 횟수를 같은 날 예약 완료와 별도로 +1 한다 — 기록에서 다시 세어 바로 맞춘다(모달이 든 customer 스냅샷이 아닌 저장소 기준) (정합성 감사·리뷰 2026-11-19)
-      if (saved) healCustomerStatsWhenReady(customerId);
+      if (saved) { healProgramSessionsWhenReady(customerId); healCustomerStatsWhenReady(customerId); } // 회차권 사용 회차도 기록 기준으로 (16차 #H2)
       // 결제 연계: 회차권 차감이 아닌 단건 시술이고 선택한 시술 항목에 금액이 있으면 결제 등록으로 이어준다 (2026-11-17)
       const amount = linkedProgram ? 0 : selectedServices.reduce((sum, name) => sum + (services.find(s => s.name === name)?.price ?? 0), 0);
       if (saved && amount > 0) {
@@ -602,11 +618,11 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
             >
               <option value="">연결 안 함 (단건 시술)</option>
-              {activePrograms.map(cp => (
+              {activePrograms.map(cp => { const used = usedSessionsFor(cp); return ( // 기록에서 센 사용 회차 (16차 #H2)
                 <option key={cp.id} value={cp.id}>
-                  {cp.totalSessions != null ? `${cp.programName} · 잔여 ${cp.totalSessions - cp.usedSessions}회 (${cp.usedSessions}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${cp.usedSessions}회 이용)`}
+                  {cp.totalSessions != null ? `${cp.programName} · 잔여 ${remainingSessions(cp, used)}회 (${used}/${cp.totalSessions})` : `${cp.programName} · 기간제 (${used}회 이용)`}
                 </option>
-              ))}
+              ); })}
             </select>
           </div>
         )}
@@ -623,7 +639,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
           <label className="block text-xs font-medium text-gray-600 mb-1.5">시술 항목</label>
           {services.length === 0 && (canOpenRoute(authUser?.role, '/settings')
             ? <PrereqHint text="등록된 시술 항목이 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다" action="시술 항목 등록" onGo={() => { onClose(); goTo('/settings?tab=services'); }} />
-            : <p className="mt-1.5 text-xs text-amber-700">등록된 시술 항목이 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다(시술 항목 등록은 매장 관리자).</p>)} {/* 117~119 리뷰 #H4 */}
+            : <p className="mt-1.5 text-xs text-amber-700">등록된 시술 항목이 없습니다 — 내역은 아래 칸에 직접 적을 수 있습니다. 시술 항목 등록은 매장 관리자에게 요청해주세요.</p>)} {/* 117~119 리뷰 #H4 */}
           <div className="space-y-2">
             {services.map(s => (
               <label key={s.id} className="flex items-center gap-3 p-2.5 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">
@@ -634,7 +650,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
                   className="rounded"
                 />
                 <span className="text-sm text-gray-700 flex-1">{s.name}</span>
-                <span className="text-sm font-medium text-gray-800">{s.price.toLocaleString()}원</span>
+                <span className="text-sm font-medium text-gray-800">{formatPrice(s.price)}</span>
               </label>
             ))}
           </div>

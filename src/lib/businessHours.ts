@@ -1,3 +1,4 @@
+import { josa } from './josa';
 // ═══════════════════════════════════════════════════════════════
 // businessHours — 영업시간·휴무일 점검 (비코어, 2026-11-18)
 // ───────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ export function checkBusinessHours(date: string, startTime: string, durationMinu
   const out: HoursWarning[] = [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return out;
   if ((s.holidays || []).includes(date)) {
-    out.push({ kind: 'holiday', message: `${date}은(는) 지정 휴일입니다.` });
+    out.push({ kind: 'holiday', message: `${josa(date, '은/는')} 지정 휴일입니다.` });
     return out;
   }
   const day = DAY_LABELS[parseISODate(date).getDay()];

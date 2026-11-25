@@ -9,6 +9,8 @@ import { ko } from 'date-fns/locale';
 // 로컬(KST) 기준 오늘 — toISOString().slice(0,10)은 UTC라 새벽에 전날로 어긋난다
 import { todayISO, localISODate } from '../../lib/format';
 import { parseAmount } from '../../lib/inputRules';
+import { useSearchParams } from 'react-router-dom';
+import AdminAiService from './AiService';
 
 // NAS 중앙 서버 모드에서는 구독 테이블이 없고 계정(auth_users)의 plan이 진실이다.
 // 이 화면은 NAS 모드일 때 계정 목록에서 구독 뷰를 파생하고, 수정은 plan/활성만 반영한다.
@@ -46,6 +48,8 @@ const statusOptions = [
 ];
 
 export default function Subscriptions() {
+  const [searchParams] = useSearchParams();
+  const aiView = searchParams.get('view') === 'ai'; // AI 서비스 관리 (162) — 훅 순서를 지키기 위해 분기 return 은 훅들 뒤에서
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -55,7 +59,7 @@ export default function Subscriptions() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
 
-  useEffect(() => { loadSubs(); }, []);
+  useEffect(() => { if (!aiView) loadSubs(); }, [aiView]); // AI 뷰에서는 숨은 구독 표를 위해 호출하지 않는다 (165 리뷰 L-10) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [loadError, setLoadError] = useState('');
   async function loadSubs() {
@@ -176,6 +180,7 @@ export default function Subscriptions() {
     mrr: subs.filter(s => s.status === 'active').reduce((sum, s) => sum + s.amount, 0),
   };
 
+  if (aiView) return <AdminAiService />;
   return (
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-8">

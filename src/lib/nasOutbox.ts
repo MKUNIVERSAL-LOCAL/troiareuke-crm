@@ -112,12 +112,22 @@ function writeRejected(list: RejectedNasMutation[]): boolean {
 }
 export function listRejectedNasOutbox(): RejectedNasMutation[] { return readRejected(); }
 export function clearRejectedNasOutbox(): void { writeRejected([]); }
-/** 거부분을 대기열 맨 뒤에 다시 넣는다 — 서버를 업데이트한 뒤 쓰는 수동 재시도 */
+/** 거부분을 대기열 **앞**에 원래 순서로 다시 넣는다 — 뒤에 넣으면 그 사이 쌓인 같은 기록의 PATCH(개명 등) 뒤에 옛 PUT 이 가서 덮었다 (16차 #L4). 서버를 업데이트한 뒤 쓰는 수동 재시도 */
 export function retryRejectedNasOutbox(): number {
   const list = readRejected();
   if (list.length === 0) return 0;
   writeRejected([]);
-  for (const m of list) enqueueNasMutation(m.path, m.method, m.body);
+  const key = outboxKey();
+  const restored: NasMutation[] = list.map(m => ({ id: mutationId(), path: m.path, method: m.method, body: m.body, createdAt: m.createdAt }));
+  try {
+    writeOutbox(key, [...restored, ...readOutbox(key)]);
+  } catch (error) {
+    console.error('[NAS] 거부분 재투입 실패(용량 초과 추정) — 뒤에 하나씩 넣는다:', error);
+    for (const m of list) enqueueNasMutation(m.path, m.method, m.body);
+    return list.length;
+  }
+  ensureRetryLoop();
+  void flushNasOutbox().catch(() => {});
   return list.length;
 }
 
@@ -171,19 +181,25 @@ export function flushNasOutbox(): Promise<void> {
   ensureRetryLoop(); // 재시작 직후 큐가 남아있는 경우에도 복구 루프가 살아있게 한다
 
   flushPromise = (async () => {
+    let sentAny = false;
     for (;;) {
       const next = readOutbox(key)[0];
-      if (!next) return;
+      if (!next) { if (sentAny) { try { localStorage.setItem('crm_last_sync_at', String(Date.now())); } catch { /* noop */ } } return; } // 실제 전송 성공으로 큐가 비었을 때만 동기화 시각 갱신 (16차 #L2, 리뷰 #L2)
       try {
         await apiRequest(next.path, {
           method: next.method,
           ...(next.body === undefined ? {} : { body: next.body }),
         });
+        sentAny = true;
       } catch (error) {
         if (!isPermanentRejection(error)) {
           // 세션 만료는 연결 복구로 풀리지 않는다 — 배너가 "자동 전송"이라고 하지 않게 알린다
           if (error instanceof AuthApiError && (error.status === 401 || error.status === 403)) {
             try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { auth: true, status: error.status } })); } catch { /* noop */ }
+          } else {
+            // 서버 불통·5xx 도 알린다 — 전에는 아무 이벤트가 없어 배너가 몇 시간이고 "대기 중 — 자동으로 전송됩니다"만 보였다 (16차 #M7)
+            const status = error instanceof AuthApiError ? error.status : 0;
+            try { window.dispatchEvent(new CustomEvent(OUTBOX_ERROR_EVENT, { detail: { transient: true, status, since: next.createdAt } })); } catch { /* noop */ }
           }
           throw error; // 일시 오류 — 큐 보존, 실패 전파
         }

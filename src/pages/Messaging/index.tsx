@@ -1,14 +1,19 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { askConfirm } from '../../lib/confirmDialog';
 import { maskPhone } from '../../lib/pii';
 import { normalizePhone } from '../../lib/inputRules';
 import { notify } from '../../lib/notify';
-import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
-import { formatDateTime, parseISODate, todayISO } from '../../lib/format';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed';
+import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT, MESSAGE_UNIT_COST } from '../../lib/smsBytes';
+import { formatDateTime, parseISODate, todayISO, formatPrice } from '../../lib/format';
 import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
-import { MessageSquare, Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
+import { segmentIdSets } from '../../lib/customerSegments';
+import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
+import type { SavedSegment } from '../../lib/segmentFilterRule';
+import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
 import { canShareText, shareText } from '../../lib/mobileBridge';
 import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
@@ -19,11 +24,14 @@ import {
 } from '../../lib/messagingGateway';
 import type { MessageType, MessageTemplate, MessageHistory, Customer } from '../../types';
 import { topTags } from '../../lib/customerTags';
+import { consentOf, getOptOutNumber } from '../../lib/marketingConsent';
+import { canReceiveAd, decorateAdMessage, checkAdSend, type AdChannel } from '../../lib/adComplianceRule';
 import { isAuthApiConfigured } from '../../lib/authApi';
+import CampaignsCard from '../../components/campaigns/CampaignsCard';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | `tag:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18)
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | `tag:${string}` | `saved:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18) / saved:<id> — 저장 세그먼트 (166)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
 const SEGMENT_LABELS: Record<string, string> = {
@@ -31,18 +39,30 @@ const SEGMENT_LABELS: Record<string, string> = {
   vip: 'VIP',
   birthday: '이번달 생일',
   novisit: '미방문 60일+',
-  revisit: '재방문 권장', // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
+  revisit: '재방문 권장',
+  churn: '이탈 위험', // 이 고객의 방문 주기 2배 이상 안 왔고 다음 예약 없음 (136, churnRule)
+  loyal: '충성 고객', // RFM 최근성·빈도 상위 (136, rfmRule) // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
 };
 
-function segmentLabel(seg: Segment): string {
+function segmentLabel(seg: Segment, saved: SavedSegment[] = []): string {
+  if (seg.startsWith('saved:')) return saved.find(sg => sg.id === seg.slice(6))?.name ?? '삭제된 세그먼트';
   return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);
+}
+/** 저장 세그먼트 id → 해당 고객 id 집합 — 발송 창·빠른 발송 카드가 한 번 만들어 공유 (166) */
+function savedSegmentSets(): { list: SavedSegment[]; sets: Map<string, Set<string>> } {
+  const list = listSavedSegments();
+  if (list.length === 0) return { list, sets: new Map() };
+  const facts = buildSegmentFacts();
+  return { list, sets: new Map(list.map(sg => [sg.id, segmentIds(sg.condition, facts)])) };
 }
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 /** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
 function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
-function segmentFilter(seg: Segment, revisitIds?: Set<string>): (c: Customer) => boolean {
+function segmentFilter(seg: Segment, revisitIds?: Set<string>, segIds?: { churn: Set<string>; loyal: Set<string> }, savedSets?: Map<string, Set<string>>): (c: Customer) => boolean {
+  if (seg.startsWith('saved:')) { const ids = savedSets?.get(seg.slice(6)); return ids ? c => ids.has(c.id) : () => false; } // 삭제된 세그먼트는 아무에게도 (166)
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
   if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
+  if (seg === 'churn' || seg === 'loyal') { const sets = segIds ?? segmentIdSets(); const ids = sets[seg]; return c => ids.has(c.id); }
   return Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg) ? SEGMENT_FILTERS[seg] : () => false; // 모르는 세그먼트('constructor' 같은 프로토타입 키 포함)는 '아무에게도' — 전체 발송 사고 방지
 }
 
@@ -89,7 +109,7 @@ export default function Messaging() {
   useEffect(() => {
     // 대시보드 재방문 리마인더 [단체 발송](?segment=revisit)·생일 카드(?segment=birthday) → 그 대상이 걸린 발송 모달 (3차·5차 UX 점검 2026-11-19)
     const seg = searchParams.get('segment');
-    if (seg && (seg === 'revisit' || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
+    if (seg && (seg === 'revisit' || seg === 'churn' || seg === 'loyal' || seg.startsWith('saved:') || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // saved:<id> 는 고객 목록 세그먼트 칩에서 (166) // churn·loyal 도 딥링크 허용 (139 #L7) // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
       setSendCustomerId(null);
       setSendSegment(seg as Segment);
       setShowSendModal(true);
@@ -164,7 +184,7 @@ export default function Messaging() {
           ))}
         </div>
 
-        {tab === 'send' && <SendPanel onSend={openSendModal} reloadKey={reloadKey} />}
+        {tab === 'send' && <SendPanel onSend={openSendModal} onSent={reload} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
         {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} />}
       </div>
@@ -195,21 +215,15 @@ function StatusChip({ label, connected }: { label: string; connected: boolean })
   );
 }
 
-function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; reloadKey: number }) {
+function SendPanel({ onSend, onSent, reloadKey }: { onSend: (segment: Segment) => void; onSent: () => void; reloadKey: number }) {
   const [customers, setCustomers] = useState(() => CustomerStore.getAll().filter(c => c.isActive !== false)); // 익명화 고객 제외
+  useDataRefreshed(() => setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false))); // 발송 대상 인원이 다른 기기 등록분을 반영 (16차 #H3)
 
   useEffect(() => {
     setCustomers(CustomerStore.getAll().filter(c => c.isActive !== false));
   }, [reloadKey]);
   const revisitCount = useMemo(() => revisitIdSet().size, [reloadKey]); // 대시보드 재방문 카드와 같은 기준 (리뷰 63)
-
-  const autoMessages = [
-    // 설명은 설정 > 알림 설정과 같은 문구 (UX QA 2026-11-17)
-    { title: '예약 확인 문자', desc: '예약 등록 시 즉시 발송', type: 'sms', key: 'reservationConfirm' as const },
-    { title: '예약 리마인더', desc: '예약 전날 오전 9시 발송', type: 'sms', key: 'reservationReminder' as const },
-    { title: '생일 축하 메시지', desc: '생일 당일 오전 10시 카카오 발송', type: 'kakao-channel', key: 'birthdayMessage' as const },
-    { title: '미방문 고객 케어', desc: '60일 미방문 시 카카오 발송', type: 'kakao-channel', key: 'novisitMessage' as const },
-  ];
+  const saved = useMemo(() => savedSegmentSets(), [reloadKey]); // 저장 세그먼트 카드 (166)
 
   const birthdayCount = customers.filter(c => {
     if (!c.birthDate) return false;
@@ -226,6 +240,7 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
           { key: 'birthday' as Segment, label: '이번달 생일', count: birthdayCount, color: 'pink' },
           { key: 'novisit' as Segment, label: '미방문 60일+', count: customers.filter(SEGMENT_FILTERS.novisit).length, color: 'orange' },
           { key: 'revisit' as Segment, label: '재방문 권장', count: revisitCount, color: 'amber' },
+          ...saved.list.map(sg => ({ key: `saved:${sg.id}` as Segment, label: sg.name, count: saved.sets.get(sg.id)?.size ?? 0, color: 'primary' })), // 저장 세그먼트 (166)
           ...topTags(customers, 4).map(t => ({ key: `tag:${t.tag}` as Segment, label: `#${t.tag}`, count: t.count, color: 'amber' })),
         ].map(t => (
           <button
@@ -252,32 +267,8 @@ function SendPanel({ onSend, reloadKey }: { onSend: (segment: Segment) => void; 
         ))}
       </div>
 
-      {/* Auto Messages */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-bold text-gray-900">자동 발송 설정</h3>
-          <p className="text-xs text-gray-400 mt-0.5">조건에 따라 자동으로 발송되는 메시지를 관리합니다</p>
-        </div>
-        <div className="divide-y divide-gray-50">
-          {autoMessages.map((m, i) => (
-            <div key={i} className="flex items-center justify-between px-6 py-4">
-              <div className="flex items-center gap-3">
-                <MessageSquare size={16} className="text-gray-400" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{m.title}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-xs text-gray-400">{m.desc}</p>
-                    <span className={clsx('px-1.5 py-0.5 rounded text-xs font-medium', MSG_TYPE_COLORS[m.type])}>
-                      {MSG_TYPE_LABELS[m.type]}
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-700 mt-0.5">(자동 발송 준비 중 — 현재는 수동 발송만 동작)</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* 자동 발송(캠페인) — 승인 발송 모드, 멱등키 (156) */}
+      <CampaignsCard onSent={onSent} />
     </div>
   );
 }
@@ -307,9 +298,9 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
     return categoryMatches && searchMatches;
   });
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const target = templates.find(t => t.id === id);
-    if (!window.confirm(`'${target?.name ?? '이 템플릿'}' 템플릿을 삭제할까요?\n이미 보낸 발송 이력은 남습니다.`)) return;
+    if (!(await askConfirm({ title: '템플릿 삭제', message: `'${target?.name ?? '이 템플릿'}' 템플릿을 삭제할까요?\n이미 보낸 발송 이력은 남습니다.`, confirmLabel: '삭제', danger: true }))) return;
     MessageTemplateStore.delete(id);
     setTemplates(MessageTemplateStore.getAll());
     onReload();
@@ -517,7 +508,7 @@ function TemplateModal({ editing, onClose, onSaved }: { editing?: MessageTemplat
               value={title}
               onChange={e => setTitle(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
-              placeholder="예: [우리샵] 예약 안내"
+              placeholder="예: [우리 매장] 예약 안내"
             />
           </div>
         )}
@@ -582,7 +573,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
   useEffect(() => { refresh(); }, [reloadKey, refresh]);
 
   const handleCancel = async (id: string) => {
-    if (!confirm('이 발송 예약을 취소할까요?')) return;
+    if (!(await askConfirm({ title: '발송 예약 취소', message: '이 발송 예약을 취소할까요?', confirmLabel: '예약 취소', cancelLabel: '닫기' }))) return;
     try {
       await cancelScheduledMessage(id);
       refresh();
@@ -752,7 +743,7 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
                   }
                   {h.status === 'sent' && h.failCount > 0 && <p className="text-xs text-red-600">실패 {h.failCount}명</p>}
                   {h.status === 'sent' && h.cost !== undefined && h.cost > 0 && (
-                    <p className="text-xs text-gray-400 mt-1">예상 비용 {h.cost.toLocaleString()}원</p>
+                    <p className="text-xs text-gray-400 mt-1">예상 비용 {formatPrice(h.cost)}</p>
                   )}
                 </div>
               </div>
@@ -778,9 +769,9 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [resultMessage, setResultMessage] = useState('');
   const [sendPartial, setSendPartial] = useState(false); // 일부 실패 — 초록 "발송 완료!" 로 가짜 성공처럼 보이지 않게 (15차 #H5)
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
+  const [isAd, setIsAd] = useState(false); // 광고성이면 동의 고객만·(광고)·080·시간대 (155, GAP C-8·M-4)
   const [scheduleAt, setScheduleAt] = useState('');
   const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
-  const contentBytes = smsBytes(content);
 
   const customers = useMemo(() => CustomerStore.getAll().filter(c => c.isActive !== false), []);
   // 개별 고객 발송 — 고객 상세에서 열었을 때. [대상 바꾸기]로 세그먼트 발송으로 되돌릴 수 있다.
@@ -811,27 +802,40 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준). 재방문 집합은 창이 열릴 때 한 번만 — 글자 입력마다 전수 스캔하지 않게 (리뷰 63)
   const revisitIds = useMemo(() => revisitIdSet(), []);
+  const segIds = useMemo(() => segmentIdSets(), []); // 이탈 위험·충성 (136) — 전수 스캔 1회
+  const saved = useMemo(() => savedSegmentSets(), []); // 저장 세그먼트 (166)
   const targetCustomers = useMemo(
-    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds))),
-    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds],
+    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds, saved.sets))),
+    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds, saved],
   );
   const recipientCount = targetCustomers.length;
+  // 광고성이면 수신 동의가 있고 이 채널을 거부하지 않은 고객만 (155)
+  const adChannel: AdChannel = msgType.startsWith('kakao') ? 'kakao' : 'sms';
+  const adEligible = useMemo(() => (isAd ? targetCustomers.filter(c => canReceiveAd(consentOf(c), adChannel)) : targetCustomers), [isAd, targetCustomers, adChannel]);
+  const adExcluded = targetCustomers.length - adEligible.length;
+  const optOutNumber = getOptOutNumber();
+  const adPreview = isAd && content.trim() ? decorateAdMessage(content, optOutNumber || '(080 번호 미등록)') : null;
+  const contentBytes = smsBytes(isAd ? decorateAdMessage(content, optOutNumber || '080-000-0000') : content); // 광고면 (광고)·080 꼬리말이 붙은 실제 본문 기준으로 바이트·종류·비용 (159 리뷰 M-3)
 
   // 수신 대상의 실제 전화번호 목록 — 번호가 없거나 10~11자리가 아닌 것('010-1', 내선 포함)은 발송·비용 추정에서 뺀다(게이트웨이 실패를 발송 뒤에 알던 것, 14차 #M8)
-  const recipientPhones = targetCustomers
+  const recipientPhones = adEligible
     .map(c => c.phone)
     .filter((p): p is string => { const k = normalizePhone(p); return k.length === 10 || k.length === 11; });
 
   // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
   const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;
-  const estimatedCost = effectiveType === 'sms' ? recipientPhones.length * 11 : effectiveType === 'lms' ? recipientPhones.length * 25 : recipientPhones.length * 5;
-  const excludedCount = recipientCount - recipientPhones.length;
+  const estimatedCost = recipientPhones.length * (effectiveType === 'sms' ? MESSAGE_UNIT_COST.sms : effectiveType === 'lms' ? MESSAGE_UNIT_COST.lms : MESSAGE_UNIT_COST.kakao); // 단가는 공용 상수 (165 리뷰 L-12)
+  const excludedCount = adEligible.length - recipientPhones.length; // 번호 문제로 빠진 수(광고 동의 제외는 ad-recipients 에 따로 표시, 155)
 
   const handleSend = async () => {
     if (!content.trim() || recipientCount === 0) return;
     if (recipientPhones.length === 0) { notify('발송할 수 있는 전화번호가 없습니다(10~11자리 휴대폰 번호만). 고객 정보의 전화번호를 확인해주세요.'); return; }
     // 개별 발송(고객 상세에서 열었을 때)은 {고객명}을 그 고객 이름으로 바꾼다 — 단체 발송은 수신자별 치환이 없으므로 그대로 두지 않고 막는다 (UX 점검 2026-11-19)
-    const finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
+    let finalContent = (onlyCustomer ? content.split('{고객명}').join(onlyCustomer.name) : content).trim();
+    // 광고성: 080 번호·시간대 점검 뒤 (광고) 머리말·무료수신거부 꼬리말을 붙인다 (155, 정보통신망법)
+    const adCheck = checkAdSend({ isAd, channel: adChannel, now: new Date(), optOutNumber, scheduledAt: scheduleMode === 'later' && scheduleAt ? new Date(scheduleAt) : null });
+    if (!adCheck.ok) { setSendResult('error'); setResultMessage(adCheck.reasons.join(' ')); return; }
+    if (isAd) finalContent = decorateAdMessage(finalContent, optOutNumber);
     // 종류는 실제로 나가는 문자열 기준 — 이름 치환으로 길어지거나 공백 정리로 짧아질 수 있다 (리뷰 60)
     const sendType: MessageType = msgType === 'sms' && smsBytes(finalContent) > SMS_BYTE_LIMIT ? 'lms' : msgType;
     // 치환 안 된 변수({고객명} 등)가 그대로 나가는 사고 방지 — 예약/즉시 발송 공통
@@ -842,7 +846,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       return;
     }
     // 발송은 되돌릴 수 없다 — 대상·인원을 한 번 더 확인 (전체 고객이 기본 대상이라 특히) (UX 점검 2026-11-19)
-    const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode)} ${recipientPhones.length}명`;
+    const target = onlyCustomer ? `${onlyCustomer.name} 고객 1명` : `${segmentLabel(recipientMode, saved.list)} ${recipientPhones.length}명`;
     const action = scheduleMode === 'later' && isScheduleAvailable ? '예약 발송을 등록' : '지금 발송';
     if (!window.confirm(`${target}에게 ${sendType === 'sms' ? 'SMS' : sendType === 'lms' ? 'LMS' : '카카오 메시지'}를 ${action}할까요?${excludedCount > 0 ? `\n(번호가 없거나 10~11자리가 아닌 ${excludedCount}명 제외)` : ''}`)) return;
     setSending(true);
@@ -921,10 +925,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       setResultMessage(
         `${result.sent}명 발송 성공` +
         (result.failed > 0 ? `, ${result.failed}명 실패` : '') +
-        (recipientCount > recipientPhones.length ? ` (번호가 없거나 10~11자리가 아닌 ${recipientCount - recipientPhones.length}명 제외)` : '') // 사유 표기 통일 (15차 #L11)
+        (adEligible.length > recipientPhones.length ? ` (번호가 없거나 10~11자리가 아닌 ${adEligible.length - recipientPhones.length}명 제외)` : '') // 사유 표기 통일 (15차 #L11)
       );
       onSent();
-      setTimeout(() => { onClose(); }, 1800);
+      if (result.failed === 0) setTimeout(() => { onClose(); }, 1800); // 일부 실패는 실패 인원을 읽을 수 있게 [닫기]로만 (123~126 리뷰 #M2)
     } else {
       // 발송 실패
       MessageHistoryStore.save({
@@ -953,7 +957,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         <div className="flex flex-col items-center justify-center py-12">
           {sendPartial ? <AlertCircle size={48} className="text-amber-600 mb-3" /> : <CheckCircle size={48} className="text-green-700 mb-3" />}
           <p className="text-lg font-bold text-gray-900">{sendPartial ? '일부만 발송됐습니다' : '발송 완료!'}</p>
-          <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다`}</p>
+          <p className="text-sm text-gray-500 mt-1">{resultMessage || `${recipientCount}명에게 발송을 요청했습니다.`}</p>
         </div>
       ) : sendResult === 'pending' ? (
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -976,6 +980,20 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         </div>
       ) : (
         <div className="space-y-5">
+          {/* 광고성 메시지 — 정보통신망법 표기·동의·시간대 (155) */}
+          <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-1.5">
+            <label className="flex items-center gap-2 text-sm text-gray-800">
+              <input type="checkbox" checked={isAd} onChange={e => setIsAd(e.target.checked)} className="rounded" aria-label="광고성 메시지" />
+              광고성 메시지(이벤트·할인·홍보)
+            </label>
+            {isAd && (
+              <>
+                <p className="text-xs text-gray-700" data-testid="ad-recipients">광고 대상 {adEligible.length}명{adExcluded > 0 ? ` · 동의 없음·거부 ${adExcluded}명 제외` : ''} · (광고) 머리말과 무료수신거부 {optOutNumber || '080 번호(설정 > 알림 설정에서 등록 — 미등록)'} 꼬리말이 자동으로 붙고, 21시~익일 8시에는 보낼 수 없습니다. 예약 확인·회차권 안내 같은 거래 안내는 광고가 아닙니다. 법은 보내는 곳(매장 이름·연락처)도 본문에 적게 하니 꼭 넣어주세요.</p>
+                {adPreview && <pre className="text-xs text-gray-700 whitespace-pre-wrap bg-white rounded-lg p-2 border border-gray-100 font-sans" data-testid="ad-preview">{adPreview}</pre>}
+              </>
+            )}
+          </div>
+
           {/* Message Type */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">발송 채널</label>
@@ -1014,13 +1032,13 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             ) : (
             <div className="flex gap-2 flex-wrap">
               {(() => {
-                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit'] as Segment[]), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
+                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
-                if (recipientMode.startsWith('tag:') && !keys.includes(recipientMode)) keys.push(recipientMode);
+                if ((recipientMode.startsWith('tag:') || recipientMode.startsWith('saved:')) && !keys.includes(recipientMode)) keys.push(recipientMode);
                 return keys;
               })().map(key => ({
                 key,
-                label: `${segmentLabel(key)} (${customers.filter(segmentFilter(key, revisitIds)).length}명)`,
+                label: `${segmentLabel(key, saved.list)} (${customers.filter(segmentFilter(key, revisitIds, segIds, saved.sets)).length}명)`,
               })).map(r => (
                 <button
                   key={r.key}
@@ -1154,7 +1172,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-500">예상 발송 비용</p>
-              <p className="text-base font-bold text-primary-600 mt-0.5">약 {estimatedCost.toLocaleString()}원</p>
+              <p className="text-base font-bold text-primary-600 mt-0.5">약 {formatPrice(estimatedCost)}</p>
             </div>
           </div>
 

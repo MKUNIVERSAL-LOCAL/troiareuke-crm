@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, pickCustomer, isNearMidnightSeoul } from './helpers';
+import { acceptAppConfirm } from './flows';
 
 /**
  * 핵심 사용 흐름 E2E 스모크 (로컬 모드 빌드, 외부 서버 없음)
@@ -194,7 +195,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await manageDialog.getByRole('button', { name: '저장', exact: true }).click();
   await expect(manageDialog).toHaveCount(0);
   await page.getByRole('button', { name: '회차권10 관리' }).filter({ visible: true }).first().click();
-  await manageDialog.getByRole('button', { name: '완료 처리' }).click(); // confirm은 dialog 핸들러가 수락
+  await manageDialog.getByRole('button', { name: '완료 처리' }).click();
+  await acceptAppConfirm(page, '회차권 완료 처리', '완료 처리'); // 125부터 앱 확인창
   await expect(manageDialog).toHaveCount(0);
   const managed2 = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;
@@ -284,15 +286,37 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   expect(pendingAfter).toEqual({ status: 'completed', linked: 1, amount: 30000 }); // 예약 id로 연결된 결제 1건
   await page.goto('/');
   await expect(page.getByTestId('pending-completion-card')).toHaveCount(0);
+  // 가동률 (180): 이달 완료·확정 예약 시간 ÷ 직원 근무 가용 시간 — 오늘 완료 예약이 있으니 "이달 운영 지표"에 %로 뜬다
+  await expect(page.getByTestId('kpi-util').filter({ visible: true }).first()).toHaveText(/^\d+%$/);
+  // 공식 보기 (183): 툴팁 없는 모바일·키보드에서도 지표 정의를 읽을 수 있다
+  const kpiCard = page.getByTestId('today-tasks-card').filter({ visible: true }).first();
+  await kpiCard.getByTestId('kpi-formula-toggle').click();
+  await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('가동률 = 이달 오늘까지 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간');
+  await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('재방문율 =');
+  await kpiCard.getByTestId('kpi-formula-toggle').click();
+  await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);
 
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
   await page.evaluate(() => {
+    // 사용 회차는 시술 기록이 정본(130, 16차 #H2) — 저장값만 올리면 기록 기준으로 되돌아간다. 총 회차를 "기록 합 + 1" 로 맞춰 잔여 1회를 만든다
     const key = Object.keys(localStorage).find(k => /^crm_.*_customer_programs$/.test(k))!;
+    const logKey = Object.keys(localStorage).find(k => /^crm_.*_treatment_logs$/.test(k));
+    const logs: { customerProgramId?: string; sessionsUsed?: number }[] = logKey ? JSON.parse(localStorage.getItem(logKey) || '[]') : [];
     const list = JSON.parse(localStorage.getItem(key) || '[]');
-    for (const cp of list) if (cp.totalSessions) cp.usedSessions = cp.totalSessions - 1;
+    for (const cp of list) {
+      if (!cp.totalSessions) continue;
+      const fromLogs = logs.filter(t => t.customerProgramId === cp.id).reduce((n, t) => n + Math.max(0, t.sessionsUsed || 0), 0);
+      const used = logs.some(t => t.customerProgramId === cp.id) ? fromLogs : cp.usedSessions;
+      cp.usedSessions = used;
+      cp.totalSessions = used + 1;
+    }
     localStorage.setItem(key, JSON.stringify(list));
   });
   await page.goto('/');
+  // 대시보드 "오늘 할 일" — 회차권 임박이 생겼으니 카드가 뜨고 해당 줄이 보인다 (138)
+  const tasksCard = page.getByTestId('today-tasks-card').filter({ visible: true }).first();
+  await expect(tasksCard).toBeVisible();
+  await expect(tasksCard.getByText(/회차권 소진·만료 임박/)).toBeVisible();
   const programCard = page.getByTestId('program-alert-card').filter({ visible: true }).first();
   await expect(programCard).toContainText('잔여 1회');
   await programCard.getByRole('button', { name: '재구매 안내' }).first().click();
@@ -300,6 +324,12 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await programCard.getByRole('button', { name: `${acc.customer} 고객 보기` }).first().click();
   await expect(page).toHaveURL(/\/customers/);
   await expect(page.getByTestId('customers-desktop').getByRole('heading', { name: '결제 내역' })).toBeVisible();
+  // PC 상세 분석 패널 — 고객 구분(RFM)·방문 주기·실현 매출이 공식 설명과 함께 보인다 (135~138, 리뷰 #H2)
+  const analytics = page.getByTestId('customers-desktop').getByTestId('customer-analytics');
+  await expect(analytics).toBeVisible();
+  await expect(analytics.getByText('고객 구분')).toBeVisible();
+  await expect(analytics.getByText('실현 매출', { exact: true })).toBeVisible(); // 객단가 설명의 '실현 매출 ÷ 방문'과 구분
+  await expect(analytics.getByText(/매장 내 5분위/)).toBeVisible();
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
 
@@ -328,7 +358,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     return id;
   });
   await page.goto(`/reservations?open=${noshowId}`);
-  await page.getByRole('button', { name: '노쇼', exact: true }).click(); // confirm은 dialog 핸들러가 수락
+  await page.getByRole('button', { name: '노쇼', exact: true }).click();
+  await acceptAppConfirm(page, '노쇼 처리', '노쇼 기록');
   const noshowStatus = await page.evaluate(id => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_reservations$/.test(k))!;
     return JSON.parse(localStorage.getItem(key) || '[]').find((r: { id: string }) => r.id === id)?.status;
@@ -400,9 +431,10 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(kbMenu.getByRole('menuitem', { name: '고객 삭제' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(kbMenu).toHaveCount(0);
-  await desk.getByTestId('dup-hint').click(); // "같은 전화번호 고객 1명 — 병합하기" → 전화번호가 검색칸에 미리 입력된다
+  await desk.getByTestId('dup-hint').click(); // "중복 의심 고객 1명 — 병합하기" → 병합 창이 의심 후보를 사유 배지와 함께 먼저 보여 준다 (171)
   const mergeDialog = page.getByRole('dialog', { name: '고객 병합', exact: true }); // 확인창 '고객 병합 확인'과 부분일치하지 않게 (114)
-  await expect(mergeDialog.getByLabel('병합할 고객 검색')).toHaveValue(acc.customerPhone);
+  await expect(mergeDialog.getByLabel('병합할 고객 검색')).toHaveValue('');
+  await expect(mergeDialog.getByTestId('dup-reason').first()).toContainText('같은 전화번호'); // 다중 키 사유 (171, GAP C-9)
   const dupOption = mergeDialog.getByRole('radio', { name: new RegExp(dupName) });
   await expect(dupOption).toHaveCount(1);
   await dupOption.check();
@@ -524,13 +556,15 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
 
   // ── 9-3-0. 직원 퇴사 처리/복직 (2026-11-18): 삭제 대신 비활성 — 재직 목록에서 빠지고 '퇴사·비활성' 필터에 보이며, 복직하면 돌아온다 ──
   await page.getByRole('heading', { name: perfExpected.name }).first().click(); // 직원 카드
-  await page.getByRole('button', { name: '퇴사 처리' }).click(); // confirm은 dialog 핸들러가 수락
+  await page.getByRole('button', { name: '퇴사 처리' }).click();
+  await acceptAppConfirm(page, '퇴사 처리', '퇴사 처리');
   await expect(page.getByText('퇴사 처리했습니다.').first()).toBeVisible();
   await expect(page.getByRole('heading', { name: perfExpected.name })).toHaveCount(0); // 기본 '재직' 필터에서 사라짐
   await page.getByRole('button', { name: '퇴사·비활성' }).click();
   await expect(page.getByRole('heading', { name: new RegExp(perfExpected.name) }).first()).toContainText('퇴사');
   await page.getByRole('heading', { name: new RegExp(perfExpected.name) }).first().click();
   await page.getByRole('button', { name: '복직' }).click();
+  await acceptAppConfirm(page, '복직 처리', '복직');
   await expect(page.getByText('복직 처리했습니다.').first()).toBeVisible();
   await page.getByRole('button', { name: '재직', exact: true }).click();
   await expect(page.getByRole('heading', { name: perfExpected.name })).toBeVisible();
@@ -577,7 +611,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await backupCard.getByLabel('백업 파일 선택').setInputFiles(backupPath!);
   await expect(backupCard.getByTestId('restore-preview')).toContainText('고객');
   const reloaded = page.waitForEvent('load'); // 복원 뒤 location.reload() — 끝나기 전에 이동하면 내비게이션이 끊긴다
-  await backupCard.getByRole('button', { name: '복원 실행' }).click(); // confirm은 dialog 핸들러가 수락
+  await backupCard.getByRole('button', { name: '복원 실행' }).click();
+  await page.getByRole('dialog', { name: '백업 복원', exact: true }).getByRole('button', { name: '복원', exact: true }).click(); // 앱 확인창 — 복원 직후 새로고침되므로 닫힘 단언은 생략
   await reloaded;
   const restoredShopName = await page.evaluate(() => {
     const key = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!;

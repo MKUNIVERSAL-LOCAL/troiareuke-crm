@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { askConfirm } from '../../lib/confirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { canDo } from '../../lib/permissions';
 import { WifiOff, UploadCloud, AlertTriangle, Image } from 'lucide-react';
@@ -31,6 +32,12 @@ const COLLECTION_LABELS: Record<string, string> = {
   expenses: '지출', customer_programs: '고객 회차권', programs: '프로그램', products: '제품', product_sales: '제품 판매',
   staff: '직원', services: '시술 항목', settings: '설정', message_templates: '메시지 템플릿', message_history: '발송 기록',
 };
+/** 대기 시간 표기 — 며칠 전 거부분이 큐 머리가 되면 "4,320분째"가 됐다 (리뷰 #L3) */
+function formatWaited(minutes: number): string {
+  if (minutes < 60) return `${minutes}분째`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}시간째`;
+  return `${Math.floor(minutes / 1440)}일째`;
+}
 function describeRejected(items: { path: string }[]): string {
   const counts = new Map<string, number>();
   for (const { path } of items) {
@@ -62,9 +69,10 @@ export default function OfflineBanner() {
   const [offline, setOffline] = useState(!navigator.onLine);
   const [minutes, setMinutes] = useState<number | null>(null);
   const [pending, setPending] = useState(() => pendingNasOutboxCount());
-  const [sendFailed, setSendFailed] = useState(false);
+  const [sendFailed, setSendFailed] = useState<{ status: number; since: string } | null>(null); // 일시 오류 — 서버 응답 코드와 가장 오래된 대기 항목 시각 (16차 #M7)
+  const [tick, setTick] = useState(0); // "N분째" 갱신용
   const [rejected, setRejected] = useState(() => listRejectedNasOutbox()); // 서버가 영구 거부한 저장분 — 재시작해도 남는다 (실패 경로 감사 2026-11-18)
-  const [authExpired, setAuthExpired] = useState(false);
+  const [authExpired, setAuthExpired] = useState<number | null>(null); // 401 세션 만료 / 403 사용기간 만료·비활성 — 안내가 다르다 (16차 #M2)
   const [lostRejected, setLostRejected] = useState(0); // 거부분을 이 기기에 보존조차 못 한 건수(저장 공간 부족)
   const [quotaFallback, setQuotaFallback] = useState<'none' | 'sent' | 'failed'>('none');
   const [photoDirty, setPhotoDirty] = useState(() => dirtyPhotoCount());
@@ -73,21 +81,19 @@ export default function OfflineBanner() {
   useEffect(() => {
     const onOffline = () => setOffline(true);
     const onOnline = () => {
-      setOffline(false);
-      setSendFailed(false); // 연결 복구 — 자동 재시도되므로 실패 배너 해제
-      setAuthExpired(false); // 재시도 루프가 아직 만료면 다시 올린다
+      setOffline(false); // 실패·만료 표시는 전송이 실제로 진행될 때(onOutboxChanged) 지운다 — online 마다 지우면 60초 뒤 다시 떠 깜빡였다 (16차 #L3)
     };
     const onOutboxChanged = (e: Event) => {
       const detail = (e as CustomEvent<{ count?: number }>).detail;
       const n = typeof detail?.count === 'number' ? detail.count : pendingNasOutboxCount();
-      setPending(prev => { if (n < prev) setAuthExpired(false); return n; }); // 전송이 진행되면 세션 문제는 해소된 것
+      setPending(prev => { if (n < prev) { setAuthExpired(null); setSendFailed(null); } return n; }); // 전송이 진행되면 세션·일시 오류는 해소된 것
     };
     const onOutboxError = (e: Event) => {
-      const detail = (e as CustomEvent<{ permanent?: boolean; auth?: boolean; fallback?: boolean; failed?: boolean; lost?: boolean }>).detail;
+      const detail = (e as CustomEvent<{ permanent?: boolean; auth?: boolean; status?: number; fallback?: boolean; failed?: boolean; lost?: boolean; transient?: boolean; since?: string }>).detail;
       if (detail?.permanent) { setRejected(listRejectedNasOutbox()); if (detail.lost) setLostRejected(n => n + 1); }
-      else if (detail?.auth) setAuthExpired(true);
+      else if (detail?.auth) setAuthExpired(detail.status ?? 401);
       else if (detail?.fallback) setQuotaFallback(detail.failed ? 'failed' : 'sent');
-      else setSendFailed(true);
+      else setSendFailed({ status: detail?.status ?? 0, since: detail?.since ?? new Date().toISOString() });
     };
     const onPhotoSync = () => { setPhotoDirty(dirtyPhotoCount()); setPhotoRejected(rejectedPhotoCount()); };
 
@@ -111,6 +117,11 @@ export default function OfflineBanner() {
       setMinutes(getMinutesSinceSync());
     }
   }, [offline]);
+  useEffect(() => { // 일시 오류 동안 "N분째" 를 1분마다 갱신
+    if (!sendFailed) return;
+    const timer = window.setInterval(() => setTick(t => t + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, [sendFailed]);
 
   const photoIssue = photoDirty > 0 || photoRejected > 0;
   if (!offline && pending === 0 && !sendFailed && rejected.length === 0 && lostRejected === 0 && !authExpired && quotaFallback === 'none' && !photoIssue) return null;
@@ -144,17 +155,22 @@ export default function OfflineBanner() {
         <span className="ml-auto flex items-center gap-1">
           {rejected.length > 0 && <button type="button" onClick={retry} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>}
           {rejected.length > 0 && canDo(user?.role, 'outbox.download') && <button type="button" onClick={download} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>내려받기</button>} {/* 고객 레코드 원문 파일 — 관리자만 (13차 #M13) */}
-          <button type="button" onClick={() => { if (window.confirm('거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.')) { clearRejectedNasOutbox(); setRejected([]); setLostRejected(0); } }} className={`${linkBtn} text-rose-500 hover:text-rose-700`}>지우기</button>
+          <button type="button" onClick={async () => { if (await askConfirm({ title: '거부된 저장분 지우기', message: '거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.', confirmLabel: '지우기', cancelLabel: '닫기', danger: true })) { clearRejectedNasOutbox(); setRejected([]); setLostRejected(0); } }} className={`${linkBtn} text-rose-500 hover:text-rose-700`}>지우기</button>
         </span>
       </div>
     );
   }
 
-  if (authExpired && pending > 0) {
+  if (authExpired !== null && pending > 0) {
+    // 403 은 사용기간 만료·계정 비활성 — 로그인도 거부되므로 "다시 로그인하세요"는 거짓 안내였다 (16차 #M2)
     return (
       <div role="alert" className={`${base} bg-rose-50 border-rose-200 text-rose-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
-        <span>로그인 세션이 만료돼 저장분 {pending}건을 보내지 못하고 있습니다 — 프로그램을 다시 시작해 로그인하면 이어서 전송됩니다 (대기분은 이 기기에 보존됩니다).</span>
+        <span>
+          {authExpired === 403
+            ? `사용기간이 끝나 저장분 ${pending}건을 보내지 못하고 있습니다 — 본사에서 연장하면 자동으로 전송됩니다. 그 전까지 이 기기의 데이터를 지우지 말고 설정 > 백업·보안에서 백업해 두세요.`
+            : `로그인 정보가 만료됐거나 계정이 중지돼 저장분 ${pending}건을 보내지 못하고 있습니다 — 다시 로그인이 되면 이어서 전송됩니다 (대기분은 이 기기에 남아 있습니다).`}
+        </span>
       </div>
     );
   }
@@ -207,11 +223,14 @@ export default function OfflineBanner() {
     );
   }
 
-  if (sendFailed) {
+  if (sendFailed && pending > 0) {
+    void tick; // 1분마다 다시 그려 "N분째" 갱신
+    const waited = Math.max(0, Math.floor((Date.now() - Date.parse(sendFailed.since)) / 60000));
+    const why = sendFailed.status >= 500 ? `서버 오류 ${sendFailed.status}` : sendFailed.status > 0 ? `응답 ${sendFailed.status}` : '서버가 응답하지 않음';
     return (
       <div role="status" aria-live="polite" className={`${base} bg-amber-50 border-amber-200 text-amber-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
-        <span>일부 저장분 전송 실패 — 연결 확인 후 자동 재시도됩니다</span>
+        <span>저장분 {pending}건을 보내지 못하고 있습니다({why}) — {formatWaited(waited)} 1분마다 다시 보내는 중입니다. 대기분은 이 기기에 남아 있고, 서버가 응답하면 자동으로 전송됩니다.</span>
       </div>
     );
   }

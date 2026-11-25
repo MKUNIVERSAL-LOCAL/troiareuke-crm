@@ -44,3 +44,8 @@
 - 자동 점검: `node scripts/check-distribution-invariants.mjs` (client-ci·release:all 게이트). 헬퍼 수정 시 `npm run test:updater`.
 - 릴리스 완료 조건: 채널 라이브 + 배포 검증(`npm run verify:nas`) + **48시간 내 어드민 대시보드 구버전 지점 0곳**.
 - 지점 대응 카드: `docs/BRANCH-INSTALL-GUIDE.md` — "다시 받으세요"는 새 PC·포맷·백신 삭제일 때만, 원인은 정책 문서 실사고에 기록.
+
+## 7. DERMASOLUTION 2.0 마스터 프롬프트 연계 (2026-11-24)
+- 세션 시작: `docs/NEXT-ACTION.md` → `docs/MASTER-DEVELOPMENT-STATUS.md` → `docs/OWNER-APPROVAL-QUEUE.md` 순으로 읽고 이어서 진행. 정본 로드맵은 `docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md`, 통합 로드맵은 `docs/MASTER-DEVELOPMENT-ROADMAP.md`.
+- 스킬: `.claude/skills/dermasolution-master-development`(총괄·보고·세션 종료), `dermasolution-global-crm-evolution`(CRM 고도화·외부 코드 A/B/C/D), `dermasolution-ai-platform-development`(AI BYOK→Managed, 키 보안, PII), `dermasolution-quality-security`(게이트·리뷰·라이선스·배포). 위 1~6절의 안전장치를 해제하지 않는다.
+- 승인 필요 항목(코어·운영 서버·외부 비용·실고객 발송·요금제)은 `OWNER-APPROVAL-QUEUE.md`에 기록하고, 승인 없이 가능한 비코어 작업을 계속한다.

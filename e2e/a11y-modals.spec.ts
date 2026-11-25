@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, becomeStaff } from './helpers';
 import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
 
 /**
@@ -47,6 +47,11 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await expect(dialog('고객 추가')).toBeVisible();
   });
   await closeDialog('고객 추가');
+  await step('/customers 세그먼트 만들기', async () => { // 저장 세그먼트 편집 창 (166)
+    await page.getByRole('button', { name: '+ 세그먼트' }).filter({ visible: true }).first().click();
+    await expect(dialog('세그먼트 만들기')).toBeVisible();
+  });
+  await closeDialog('세그먼트 만들기');
   await step('/customers 상세 패널', async () => {
     await page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first().click();
     await expect(desk.getByRole('button', { name: '회차권 등록' }).first()).toBeVisible();
@@ -166,6 +171,11 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await expect(dialog('메시지 발송')).toBeVisible();
   });
   await closeDialog('메시지 발송');
+  await step('/messaging 캠페인 추가', async () => { // 자동 발송 캠페인 정의 창 (156)
+    await page.getByRole('button', { name: '캠페인 추가' }).click();
+    await expect(dialog('캠페인 추가')).toBeVisible();
+  });
+  await closeDialog('캠페인 추가');
   await step('/messaging 템플릿 추가', async () => {
     await page.getByRole('button', { name: '템플릿 관리' }).click();
     await page.getByRole('button', { name: '템플릿 추가' }).first().click();
@@ -184,6 +194,13 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await page.getByRole('button', { name: '시술 관리', exact: true }).filter({ visible: true }).first().click();
     await page.getByRole('button', { name: '시술 추가' }).first().click();
     await expect(dialog('시술 추가')).toBeVisible();
+  });
+
+  // ── 직원 계정이 주소로 들어온 관리자 전용 화면 — 역할 게이트 패널은 가시성만 보고 axe 를 돌리지 않았다 (15차 #M21) ──
+  await becomeStaff(page);
+  await step('/settings 역할 게이트(직원)', async () => {
+    await page.goto('/settings');
+    await expect(page.getByTestId('role-gate')).toBeVisible();
   });
 
   assertNoBlocking(rows);

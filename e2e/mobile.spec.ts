@@ -297,7 +297,7 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(saveBtn).toBeVisible();
   const saveBox = await saveBtn.boundingBox();
   expect(saveBox && saveBox.x >= 0 && saveBox.x + saveBox.width <= vw, '설정 저장 버튼이 화면 밖').toBeTruthy();
-  await expectNoHorizontalOverflow(page, '설정 샵 정보');
+  await expectNoHorizontalOverflow(page, '설정 매장 정보');
 
   // 예약 등록 → 모바일 카드 → 상세 모달 (2026-11-17)
   await page.goto('/reservations');

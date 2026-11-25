@@ -21,7 +21,7 @@ export default function ConfirmHost() {
   // 기본 포커스: 되돌릴 수 없는 동작은 [취소], 일반 확인은 [확인]. React 는 autoFocus 를 DOM 에 쓰지 않아 포커스 트랩이 못 보았다 → 공용 규약 data-autofocus (15차 #H2)
   const focusCancel = !!danger;
   return (
-    <Modal isOpen onClose={() => resolve(false)} title={title} size="sm" elevated>
+    <Modal isOpen onClose={() => resolve(false)} title={title} size="sm" topmost>
       <div className="space-y-4" data-testid="confirm-dialog">
         <div className="flex items-start gap-3">
           {danger && <AlertTriangle size={20} className="text-red-600 shrink-0 mt-0.5" aria-hidden />}

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GitMerge, X, AlertTriangle } from 'lucide-react';
 import { CustomerStore } from '../lib/store';
-import { previewMerge, mergeCustomers, mergeBlockReason } from '../lib/customerMerge';
+import { previewMerge, mergeCustomers, mergeBlockReason, findDuplicateCandidates } from '../lib/customerMerge';
+import { DUP_REASON_LABEL } from '../lib/duplicateRule';
 import { isPaymentLinkAvailable, listPaymentRequests } from '../lib/paymentLinks';
 import { loadConsultations } from '../lib/consultationStore';
 import { isNasDataConfigured } from '../lib/nasData';
@@ -11,6 +12,7 @@ import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
 import { recordPrivacyAction, maskNameForLog } from '../lib/privacyLog';
 import { askConfirm } from '../lib/confirmDialog';
+import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
 import { useFocusTrap, useOverlayClose } from '../lib/overlayStack';
 import type { Customer } from '../types';
@@ -22,9 +24,9 @@ const MAX_CANDIDATES = 50;
  * PC·모바일 공용(body 포털). 되돌릴 수 없어 confirm 2단계. 서버 결제 링크가 켜진 지점은 흡수 고객의 미결 결제 요청이 있으면 막는다
  * (요청의 customer_id는 서버에만 있어 옮길 수 없고, 입금되면 삭제된 고객 앉으로 결제가 기록되기 때문).
  */
-export default function CustomerMergeModal({ target, initialQuery = '', onClose, onMerged }: { target: Customer; initialQuery?: string; onClose: () => void; onMerged: () => void }) {
+export default function CustomerMergeModal({ target, onClose, onMerged }: { target: Customer; onClose: () => void; onMerged: () => void }) {
   const { user } = useAuth();
-  const [query, setQuery] = useState(initialQuery);
+  const [query, setQuery] = useState(''); // 검색 전에는 중복 의심 후보가 먼저 보인다(171) — 프리필 없음 (174 리뷰 M-2)
   const [sourceId, setSourceId] = useState('');
   const [pendingBySource, setPendingBySource] = useState<Record<string, number> | null>(isPaymentLinkAvailable ? null : {});
   const [busy, setBusy] = useState(false);
@@ -56,10 +58,12 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
   }, []);
 
   const all = useMemo(() => CustomerStore.getAll().filter(c => c.id !== target.id && !mergeBlockReason(c)), [target.id]);
-  const matched = useMemo(
-    () => all.filter(c => !query.trim() || matchesSearch(query, [c.name, c.phone, c.email])),
-    [all, query],
-  );
+  const suspects = useMemo(() => findDuplicateCandidates(target, all), [target, all]); // 중복 의심 후보 — 검색 전에 먼저 보여 준다 (171, GAP C-9)
+  const suspectReason = useMemo(() => new Map(suspects.map(d => [d.customer.id, d.reasons.map(r => DUP_REASON_LABEL[r]).join('·')])), [suspects]);
+  const matched = useMemo(() => {
+    if (!query.trim()) return [...suspects.map(d => d.customer), ...all.filter(c => !suspectReason.has(c.id))]; // 검색 전: 의심 후보 → 나머지
+    return all.filter(c => matchesSearch(query, [c.name, c.phone, c.email]));
+  }, [all, query, suspects, suspectReason]);
   const candidates = matched.slice(0, MAX_CANDIDATES);
   const source = sourceId ? CustomerStore.getById(sourceId) : undefined;
   const preview = source ? previewMerge(source.id) : null;
@@ -71,7 +75,7 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
 
   async function handleMerge() {
     if (!source || busy || pendingRequests > 0 || serverCheckFailed || serverChecking) return;
-    if (!(await askConfirm({ title: '고객 병합 확인', message: `'${source.name}' 고객의 기록 ${total}건을 '${target.name}' 고객으로 옮기고 '${source.name}'을(를) 삭제할까요?\n되돌릴 수 없습니다.`, confirmLabel: '병합', danger: true }))) return;
+    if (!(await askConfirm({ title: '고객 병합 확인', message: `'${source.name}' 고객의 기록 ${total}건을 '${target.name}' 고객으로 옮기고 ${josa(`'${source.name}'`, '을/를')} 삭제할까요?\n되돌릴 수 없습니다.`, confirmLabel: '병합', danger: true }))) return;
     setBusy(true);
     try {
       const moved = mergeCustomers(target.id, source.id);
@@ -113,6 +117,7 @@ export default function CustomerMergeModal({ target, initialQuery = '', onClose,
                   <span className="flex-1 min-w-0 truncate">
                     <span className="font-medium text-gray-900">{c.name}</span>
                     <span className="text-gray-500"> · {maskPhone(c.phone, user?.role ?? 'staff')} · 방문 {c.totalVisits}회</span>
+                    {suspectReason.has(c.id) && <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100" data-testid="dup-reason">{suspectReason.get(c.id)}</span>}
                   </span>
                 </label>
               ))}

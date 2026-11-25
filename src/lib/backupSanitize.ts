@@ -1,3 +1,4 @@
+import { containsKeyLike, scrubKeyLike } from './ai/keyLeak';
 // ═══════════════════════════════════════════════════════════════
 // backupSanitize — 백업에 넣지 않는 비밀값 규칙 (순수 모듈, 저장소 의존 없음)
 // ───────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ export function stripSettingsSecrets(value: Record<string, unknown>): Record<str
   return copy;
 }
 
-/** Electron '지금 백업' 스냅샷에서 비밀값을 뺀다 — AI 키(ai_key_*)·비밀 키 목록·설정의 문자 API 키 (UX 점검 2026-11-19) */
+/** Electron '지금 백업' 스냅샷에서 비밀값을 뺀다 — AI 키(ai_key_*)·비밀 키 목록·설정의 문자 API 키 (UX 점검 2026-11-19). 남은 값에 키 꼴 문자열이 있으면 가린다 (152) */
 export function sanitizeStorageSnapshot(snapshot: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, raw] of Object.entries(snapshot)) {
@@ -34,7 +35,7 @@ export function sanitizeStorageSnapshot(snapshot: Record<string, string>): Recor
         if (isRecord(v)) { out[key] = JSON.stringify(stripSettingsSecrets(v)); continue; }
       } catch { /* JSON이 아니면 원문 유지 */ }
     }
-    out[key] = raw;
+    out[key] = containsKeyLike(raw) ? scrubKeyLike(raw) : raw; // 고객 메모 등에 붙여넣은 키도 백업 파일로 새지 않게 (152, AI-SECURITY-POLICY 1절)
   }
   return out;
 }
