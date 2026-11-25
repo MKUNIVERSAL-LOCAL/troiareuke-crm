@@ -4,6 +4,9 @@ import { markBackupSaved } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { getPreference, setPreference } from '../../lib/shopPreferences'; // 영수증 인쇄 정보 (235)
+// 고객 주의사항 키워드 — 매장이 쓰는 말을 더한다 (240, GAP C-11)
+import { getCautionKeywords, saveCautionKeywords } from '../../lib/cautionKeywords';
+import { CAUTION_KEYWORDS } from '../../lib/customerAlertRule';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
@@ -421,6 +424,23 @@ export default function Settings() {
   const [shopSaving, setShopSaving] = useState(false);
   // 영수증 인쇄 정보 — 설정 행(NAS 동기). 사업자등록번호는 코어 AuthUser 에 있어 화면에서 쓸 수 없다 (235, GAP P-9)
   const [receiptInfo, setReceiptInfo] = useState<{ businessNumber?: string; ownerName?: string }>(() => getPreference('receiptInfo') ?? {});
+  // 주의 키워드 — 추가·삭제는 누른 즉시 설정 행에 저장(결제수단과 같은 방식) (240)
+  const [cautionWords, setCautionWords] = useState<string[]>(() => getCautionKeywords());
+  const [cautionDraft, setCautionDraft] = useState('');
+  const addCautionWord = () => {
+    const word = cautionDraft.trim();
+    if (word.length < 2) { notify('키워드는 두 글자 이상으로 입력해주세요(한 글자는 아무 문장에나 걸립니다).'); return; }
+    if (CAUTION_KEYWORDS.includes(word)) { notify(`"${word}" 는 기본 키워드라 이미 경고로 올라갑니다.`); return; }
+    if (cautionWords.includes(word)) { notify(`이미 있는 키워드입니다: ${word}`); return; }
+    const next = saveCautionKeywords([...cautionWords, word]);
+    if (!next.includes(word)) { notify('키워드를 저장하지 못했습니다. 글자 수·개수(20개)를 확인해주세요.'); return; } // 조용히 사라지지 않게
+    setCautionWords(next);
+    setCautionDraft('');
+    notify('주의 키워드를 추가했습니다.');
+  };
+  const dropCautionWord = (word: string) => {
+    setCautionWords(saveCautionKeywords(cautionWords.filter(w => w !== word)));
+  };
   const saveReceiptInfo = () => {
     const next = {
       businessNumber: receiptInfo.businessNumber?.trim() || undefined,
@@ -730,6 +750,31 @@ export default function Settings() {
                     >
                       {shopSaving ? '저장 중...' : '저장하기'}
                     </button>
+                  </div>
+                  {/* 고객 주의사항 키워드 — 메모에서 이 말이 든 줄이 예약·시술 창 경고로 올라간다 (240, GAP C-11) */}
+                  <div className="pt-6 border-t border-gray-100" data-testid="settings-caution-keywords">
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">고객 주의사항 키워드</h4>
+                    <p className="text-xs text-gray-400 mb-3">
+                      고객 메모에 이 말이 들어간 줄은 예약 추가·수정 창, 예약 상세, 시술 기록 창에서 경고로 보입니다.
+                      기본 키워드(임신·금기·시술 불가·알레르기·켈로이드·복용 중·민감 등 {CAUTION_KEYWORDS.length}개)는 이미 들어 있고, 매장에서 쓰는 말만 더하면 됩니다(두 글자 이상, 20개까지).
+                      "주의사항 없음" 처럼 없다고 적은 줄은 경고로 띄우지 않습니다.
+                    </p>
+                    <div className="flex gap-2">
+                      <input value={cautionDraft} onChange={e => setCautionDraft(e.target.value)} aria-label="새 주의 키워드"
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCautionWord(); } }}
+                        placeholder="예: 레이저 금지, 필러 이력" className="form-input flex-1" maxLength={40} />
+                      <button type="button" onClick={addCautionWord} className="px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl whitespace-nowrap">추가</button>
+                    </div>
+                    {cautionWords.length > 0 && (
+                      <ul className="mt-3 flex flex-wrap gap-1.5">
+                        {cautionWords.map(w => (
+                          <li key={w} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-amber-50 text-amber-800 border border-amber-200">
+                            {w}
+                            <button type="button" onClick={() => dropCautionWord(w)} aria-label={`${w} 키워드 지우기`} className="text-amber-400 hover:text-red-600">✕</button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                   {/* 영수증 인쇄 정보 — 고객에게 주는 영수증에 찍힌다. 사업자등록번호는 가입 계정(코어)에 있어 여기서 따로 받는다 (235, GAP P-9) */}
                   <div className="pt-6 border-t border-gray-100" data-testid="settings-receipt-info">

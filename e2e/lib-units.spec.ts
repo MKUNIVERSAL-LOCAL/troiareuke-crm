@@ -39,7 +39,7 @@ import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalog
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
 import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
 import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
-import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
+import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, sanitizeCautionKeywords, CAUTION_KEYWORDS, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
 import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
 import { buildReceipt, receiptFileName, splitPaymentNote } from '../src/lib/receiptRule';
 import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT, VIP_RFM_MIN_VISITS, VIP_RFM_MIN_SPENT, GOLD_RFM_MIN_VISITS } from '../src/lib/gradeSuggestRule';
@@ -1793,4 +1793,28 @@ test('태그 이름 바꾸기 미리보기 — 바뀌는 수·합쳐지는 수·
   expect(previewRename(customers, '민감', '민감')).toEqual({ affected: 0, merges: 0, error: '같은 이름입니다.' });
   expect(previewRename(customers, '민감', '광고수신거부').error).toMatch(/동의 설정/);
   expect(previewRename(customers, '없는태그', '새이름')).toEqual({ affected: 0, merges: 0 }); // 대상 0명이면 조용히 0
+});
+
+// ── 매장이 추가한 주의 키워드 (240, GAP C-11) ────────────────────
+// 기본 목록에 없는 말("레이저 금지")을 놓치면 경고가 있는데도 안 뜬다.
+
+test('매장 주의 키워드 — 기본 목록에 없는 말도 경고로 올린다, 위험 순서는 금기 먼저 (240)', () => {
+  const memo = '레이저 금지 부위 있음\n임신 중\n커피 좋아함';
+  expect(memoCautionLines(memo)).toEqual(['임신 중']);                       // 매장 키워드를 안 주면 못 잡는다
+  expect(memoCautionLines(memo, ['레이저 금지'])).toEqual(['임신 중', '레이저 금지 부위 있음']); // 금기가 먼저, 매장 키워드는 2순위
+  const a = buildCustomerAlert({ memo, extraKeywords: ['레이저 금지'] });
+  expect(a.allLines).toEqual(['임신 중', '레이저 금지 부위 있음']);
+  // 부정 표현은 매장 키워드에도 그대로 적용된다
+  expect(memoCautionLines('레이저 금지 아님', ['레이저 금지'])).toEqual([]);
+});
+
+test('매장 주의 키워드 정리 — 한 글자·중복·기본 키워드·개수 상한 (240)', () => {
+  expect(sanitizeCautionKeywords(['레이저 금지', '필러 이력'])).toEqual(['레이저 금지', '필러 이력']);
+  expect(sanitizeCautionKeywords(['  레이저  금지 '])).toEqual(['레이저 금지']);  // 공백 정리
+  expect(sanitizeCautionKeywords(['약'])).toEqual([]);                            // 한 글자는 아무 문장에나 걸린다
+  expect(sanitizeCautionKeywords(['레이저 금지', '레이저 금지'])).toEqual(['레이저 금지']);
+  expect(sanitizeCautionKeywords([CAUTION_KEYWORDS[0]])).toEqual([]);             // 기본 키워드는 다시 넣지 않는다
+  expect(sanitizeCautionKeywords(['필러 이력', 7, null, ''])).toEqual(['필러 이력']);
+  expect(sanitizeCautionKeywords('레이저')).toEqual([]);                          // 배열이 아니면 빈 목록
+  expect(sanitizeCautionKeywords(Array.from({ length: 30 }, (_, i) => 'k' + i))).toHaveLength(20);
 });

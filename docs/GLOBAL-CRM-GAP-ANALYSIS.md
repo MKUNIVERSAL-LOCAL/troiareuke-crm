@@ -23,7 +23,7 @@
 | C-7 | 누적 실현 매출·객단가·LTV | ✅ 137 | `customerValueRule.ts`(순수)·`customerValue.ts`·고객 상세 가치 카드 | 현금 유입·실현 매출(회차권은 사용 비율)·객단가·연간 기대 매출[예측] 구현 — LTV(유지율 기반)만 자료 축적 뒤(ANALYTICS "다음 지표") | ERPNext 원장 개념(B) | `analytics/customerValue.ts`: 실현 매출(회차 사용 × 단가 + 단건 + 제품), 객단가, LTV(평균 주기·유지율 기반, 예측 표시) | 낮음 | 상 | 2 | — | 확정/예측 구분 표시, 스펙 |
 | C-8 | 마케팅 수신 동의·거부 | ✅ 155 | 고객 태그(consentRule)·ConsentControl·광고 대상 제외 | 광고 수신 동의·채널별 거부·080 없음 → 정통망법 | Mautic DNC(B) | 비코어 `preferences`/별도 컬렉션 `consents`(코어 필드 불가) + 발송 대상에서 제외 + 수신거부 처리 UI | 중(발송 경로) | 상(법규) | 2 | 정책(D) | 거부 고객이 광고 세그먼트에서 빠지는 E2E |
 | C-9 | 중복 탐지 다중 키 | ✅ 171 | `duplicateRule`·`customerMerge.findDuplicateCandidates` | 전화·이메일·이름+생년월일·이름+뒷 4자리, 병합 창 사유 배지 | — | 이름+생년월일 퍼지 후보 제안 | 낮음 | 중 | 1 | — | 스펙 |
-| C-11 | 현장 주의사항 경고(client alert) | ✅ 232 | `customerAlertRule.ts`(순수)·`CustomerAlertLine.tsx` | 알레르기·메모 주의 줄·반복 노쇼를 예약 추가·수정 창, 예약 상세, 시술 기록 창에서 보여 준다. 메모는 주의 키워드가 든 줄만, 노쇼는 2회부터, 최대 3줄 | Zenoti·Boulevard client alert(공개 UX) | 유지. 상담 기록의 금기 항목 연계는 비컨·상담 스키마 확장 뒤 | 낮음 | 상(안전) | 1 | — | lib-units(키워드·임계·중복) + customer-alert.spec(세 화면에서 노출) |
+| C-11 | 현장 주의사항 경고(client alert) | ✅ 232 | `customerAlertRule.ts`(순수)·`CustomerAlertLine.tsx` | 알레르기·메모 주의 줄·반복 노쇼를 예약 추가·수정 창, 예약 상세, 시술 기록 창에서 보여 준다. 메모는 주의 키워드가 든 줄만, 노쇼는 2회부터, 최대 3줄 | Zenoti·Boulevard client alert(공개 UX) | 유지. 매장 키워드 추가 완료(240 — 설정 > 매장 정보). 상담 기록의 금기 항목 연계는 비컨·상담 스키마 확장 뒤 | 낮음 | 상(안전) | 1 | — | lib-units(키워드·임계·중복) + customer-alert.spec(세 화면에서 노출) |
 | C-10 | 고객 포털(본인 예약·잔여 조회) | ◐ 169 설계 | `CUSTOMER-PORTAL-DESIGN-2026-11-24.md` + 순수 portalRule(OTP·노출 항목) | 화면·서버는 B-2·C-2 뒤(170~171) | Fresha/Boulevard(공개 UX) | 온라인 예약 페이지(R-6)와 함께 설계, 2차 | 중 | 중 | 3+ | B-2 서버 | — |
 
 ## 2. 예약 (P1 예약 고도화)

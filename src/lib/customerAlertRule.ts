@@ -13,6 +13,8 @@
 //   4) 줄이 상한을 넘으면 **위험한 줄부터** 남기고, 가린 줄 수를 돌려준다 — 화면이 "+N 더 보기" 로 펼친다.
 //      순서를 메모 원문대로 두면 '시술 불가' 가 조용히 밀려났다 (234, 리뷰 H-1).
 //   5) 노쇼는 2회 이상일 때만 — 1회는 흔하고, 2회부터 예약 확인 전화의 근거가 된다.
+//   6) 매장이 쓰는 말은 매장이 추가한다 (240) — "레이저 금지"·"필러 이력" 처럼 기본 목록에 없는 표현을 놓치면
+//      경고가 있는데도 안 뜬다. 추가 키워드는 2순위(몸 상태)로 다룬다.
 // e2e/lib-units.spec.ts 가 브라우저 없이 직접 import 해 검증한다.
 // ═══════════════════════════════════════════════════════════════
 
@@ -39,6 +41,23 @@ export interface CustomerAlertInput {
   memo?: string | null;
   /** 그 고객의 노쇼 건수 */
   noshowCount?: number;
+  /** 매장이 추가한 주의 키워드 (240) */
+  extraKeywords?: string[];
+}
+
+/** 매장 추가 키워드 정리 — 공백·중복·기본 키워드와 겹치는 것·너무 긴 것을 걸러 낸다 (240) */
+export function sanitizeCautionKeywords(value: unknown, max = 20): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'string') continue;
+    const t = raw.trim().replace(/\s+/g, ' ').slice(0, MAX_ALERT_LINE_LENGTH);
+    if (t === '' || t.length < 2) continue;                       // 한 글자는 아무 문장에나 걸린다
+    if (CAUTION_KEYWORDS.includes(t) || out.includes(t)) continue; // 기본 목록·중복은 더하지 않는다
+    out.push(t);
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 export interface CustomerAlert {
@@ -59,10 +78,10 @@ function clip(text: string): string {
   return t.length > MAX_ALERT_LINE_LENGTH ? `${t.slice(0, MAX_ALERT_LINE_LENGTH - 1)}…` : t;
 }
 
-/** 위험도 — 작은 수가 먼저 */
-function severity(line: string): number {
+/** 위험도 — 작은 수가 먼저. 매장 추가 키워드는 2순위(몸 상태)로 본다 */
+function severity(line: string, extra: string[] = []): number {
   if (CRITICAL_KEYWORDS.some(k => line.includes(k))) return 0;
-  if (BODY_KEYWORDS.some(k => line.includes(k))) return 1;
+  if (BODY_KEYWORDS.some(k => line.includes(k)) || extra.some(k => line.includes(k))) return 1;
   return 2;
 }
 
@@ -71,8 +90,8 @@ export function isNegatedCaution(line: string): boolean {
   return NEGATION_PATTERNS.some(re => re.test(line));
 }
 
-/** 메모에서 주의 키워드가 들어간 줄만 (위험한 순서, 중복 제거, 부정 표현 제외) */
-export function memoCautionLines(memo?: string | null): string[] {
+/** 메모에서 주의 키워드가 들어간 줄만 (위험한 순서, 중복 제거, 부정 표현 제외). extra 는 매장이 추가한 키워드 (240) */
+export function memoCautionLines(memo?: string | null, extra: string[] = []): string[] {
   if (typeof memo !== 'string' || memo.trim() === '') return [];
   const picked: { line: string; sev: number; order: number }[] = [];
   let order = 0;
@@ -80,10 +99,10 @@ export function memoCautionLines(memo?: string | null): string[] {
     const line = clip(raw);
     order += 1;
     if (line === '') continue;
-    if (!CAUTION_KEYWORDS.some(k => line.includes(k))) continue;
+    if (!CAUTION_KEYWORDS.some(k => line.includes(k)) && !extra.some(k => line.includes(k))) continue;
     if (isNegatedCaution(line)) continue; // 234 리뷰 M-5
     if (picked.some(p => p.line === line)) continue;
-    picked.push({ line, sev: severity(line), order });
+    picked.push({ line, sev: severity(line, extra), order });
   }
   picked.sort((a, b) => a.sev - b.sev || a.order - b.order); // 위험한 줄 먼저, 같으면 적은 순서대로
   return picked.map(p => p.line);
@@ -95,7 +114,8 @@ export function buildCustomerAlert(i: CustomerAlertInput): CustomerAlert {
   const noshow = Number.isFinite(i.noshowCount) && (i.noshowCount as number) >= NOSHOW_ALERT_MIN ? Math.floor(i.noshowCount as number) : 0;
   const all: string[] = [];
   if (allergies) all.push(`알레르기·주의: ${allergies}`);
-  for (const line of memoCautionLines(i.memo)) {
+  const extra = sanitizeCautionKeywords(i.extraKeywords);
+  for (const line of memoCautionLines(i.memo, extra)) {
     if (allergies && line.includes(allergies)) continue; // 같은 말을 두 번 띄우지 않는다
     all.push(line);
   }

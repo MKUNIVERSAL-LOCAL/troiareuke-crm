@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { CustomerStore, ReservationStore } from '../lib/store';
 import { buildCustomerAlert, hasCustomerAlert } from '../lib/customerAlertRule';
+import { getCautionKeywords } from '../lib/cautionKeywords'; // 매장이 추가한 주의 키워드 (240)
 
 /**
  * 현장 주의사항 경고 (232 · 234 리뷰 반영, GAP C-11)
@@ -17,7 +18,7 @@ export default function CustomerAlertLine({ customerId, className = '' }: { cust
     const c = CustomerStore.getById(customerId);
     if (!c) return null;
     const noshowCount = ReservationStore.getAll().filter(r => r.customerId === customerId && r.status === 'noshow').length;
-    return buildCustomerAlert({ allergies: c.allergies, memo: c.memo, noshowCount });
+    return buildCustomerAlert({ allergies: c.allergies, memo: c.memo, noshowCount, extraKeywords: getCautionKeywords() });
   }, [customerId]);
 
   if (!hasCustomerAlert(alert)) return null;
