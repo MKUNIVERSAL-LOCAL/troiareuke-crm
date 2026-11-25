@@ -11,6 +11,7 @@ import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import CustomerAlertLine from '../../components/CustomerAlertLine'; // 현장 주의사항 경고 (232, GAP C-11)
 import PhoneLink from '../../components/ui/PhoneLink';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
@@ -1365,6 +1366,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
             <CustomerCombobox customers={customers} value={customerId} onChange={setCustomerId} maskRole={authUser?.role ?? 'staff'} />
             {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
+            <CustomerAlertLine customerId={customerId} className="mt-2" />
             <ProgramBalance customerId={customerId} />
           </div>
           <div>
@@ -1610,6 +1612,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
               <span data-testid="reservation-status"><StatusBadge status={r.status} /></span>
             </div>
           </div>
+          <CustomerAlertLine customerId={r.customerId} />
         </div>
 
         <div className="grid grid-cols-2 gap-3">

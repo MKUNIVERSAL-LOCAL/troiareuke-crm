@@ -39,6 +39,7 @@ import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalog
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
 import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
 import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
+import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1394,3 +1395,45 @@ function addDaysISO(iso: string, days: number): string {
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+// ── 현장 주의사항 경고 (232, GAP C-11) ───────────────────────────
+// 예약·시술 자리에서 금기를 못 보면 사람이 다친다. 반대로 메모 전문을 띄우면 아무도 읽지 않는다.
+
+test('메모 주의 줄 — 키워드가 든 줄만, 중복 제거, 80자에서 자른다 (232)', () => {
+  expect(memoCautionLines('레티놀 주의\n커피 좋아함\n임신 중')).toEqual(['레티놀 주의', '임신 중']);
+  expect(memoCautionLines('커피 좋아함\n친구 소개')).toEqual([]);      // 경고가 없으면 만들지 않는다
+  expect(memoCautionLines('')).toEqual([]);
+  expect(memoCautionLines(null)).toEqual([]);
+  expect(memoCautionLines('주의 사항\n주의 사항')).toEqual(['주의 사항']); // 중복
+  const long = memoCautionLines('주의 ' + '가'.repeat(200))[0];
+  expect(long.length).toBe(MAX_ALERT_LINE_LENGTH);
+  expect(long.endsWith('…')).toBe(true);
+  // 여러 줄 공백·탭은 한 칸으로
+  expect(memoCautionLines('  켈로이드   체질  ')).toEqual(['켈로이드 체질']);
+});
+
+test('현장 경고 — 알레르기 먼저, 메모 주의 줄, 노쇼는 2회부터 (232)', () => {
+  const a = buildCustomerAlert({ allergies: '레티놀 자극', memo: '임신 중\n커피 좋아함', noshowCount: 3 });
+  expect(a.lines).toEqual(['알레르기·주의: 레티놀 자극', '임신 중', '노쇼 3회 — 예약 확인 전화를 권합니다']);
+  expect(a.allergies).toBe('레티놀 자극');
+  expect(a.noshow).toBe(3);
+  expect(hasCustomerAlert(a)).toBe(true);
+  // 노쇼 1회는 흔하다 → 올리지 않는다
+  expect(buildCustomerAlert({ noshowCount: NOSHOW_ALERT_MIN - 1 }).lines).toEqual([]);
+  expect(buildCustomerAlert({ noshowCount: NOSHOW_ALERT_MIN }).lines).toEqual(['노쇼 2회 — 예약 확인 전화를 권합니다']);
+});
+
+test('현장 경고 — 올릴 것이 없으면 아무 줄도 만들지 않는다 (232)', () => {
+  expect(buildCustomerAlert({}).lines).toEqual([]);
+  expect(buildCustomerAlert({ allergies: '   ', memo: '커피 좋아함' }).lines).toEqual([]);
+  expect(hasCustomerAlert(buildCustomerAlert({}))).toBe(false);
+  expect(hasCustomerAlert(null)).toBe(false);
+});
+
+test('현장 경고 — 줄은 최대 3개, 알레르기와 같은 말을 두 번 띄우지 않는다 (232)', () => {
+  const many = buildCustomerAlert({ allergies: '견과류', memo: '주의1\n주의2\n주의3\n주의4', noshowCount: 5 });
+  expect(many.lines.length).toBe(MAX_ALERT_LINES);
+  expect(many.lines[0]).toBe('알레르기·주의: 견과류');
+  const dup = buildCustomerAlert({ allergies: '견과류 알레르기', memo: '견과류 알레르기' });
+  expect(dup.lines).toEqual(['알레르기·주의: 견과류 알레르기']);
+});
