@@ -12,6 +12,7 @@ import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
+import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import { SettingsStore, ServiceStore, ReservationStore, getShopId } from '../../lib/store';
 import { askConfirm } from '../../lib/confirmDialog';
 import { refreshFromServer } from '../../lib/liveRefresh';
@@ -716,6 +717,12 @@ export default function Settings() {
                     >
                       {shopSaving ? '저장 중...' : '저장하기'}
                     </button>
+                  </div>
+                  {/* 결제수단 — 결제 창을 열지 않고도 미리 준비(PILOT-CHECKLIST 24). 추가·삭제는 누른 즉시 지점 설정에 저장돼 같은 지점 모든 PC 에 보인다 (210) */}
+                  <div className="pt-6 border-t border-gray-100" data-testid="settings-payment-methods">
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">결제수단</h4>
+                    <p className="text-xs text-gray-400 mb-3">결제·판매 창에서 고를 수 있는 수단입니다. 기본 4종은 지울 수 없고, 추가한 수단은 ✕ 로 지웁니다(기존 결제 기록은 그대로). 추가·삭제는 바로 저장되고 같은 지점 모든 PC 에 보입니다.</p>
+                    <PaymentMethodPicker value="" onChange={() => undefined} selectable={false} />
                   </div>
                 </div>
               </SettingCard>

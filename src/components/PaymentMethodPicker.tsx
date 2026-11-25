@@ -10,10 +10,12 @@ interface Props {
   onChange: (method: string) => void;
   /** 커스텀 수단 추가/삭제 UI 노출 여부 (기본 true) */
   manageable?: boolean;
+  /** 고르기(선택) 의미가 있는 곳인지 — 설정 화면의 관리 전용 블록은 false (고르는 척하는 버튼을 두지 않는다, 210) */
+  selectable?: boolean;
 }
 
-/** 결제수단 선택 버튼 그리드 — 기본 4종 + 커스텀 수단 + '기타 추가' */
-export default function PaymentMethodPicker({ value, onChange, manageable = true }: Props) {
+/** 결제수단 선택 버튼 그리드 — 기본 4종 + 커스텀 수단 + '기타 추가'. selectable=false 면 고르기 없이 추가·삭제만 */
+export default function PaymentMethodPicker({ value, onChange, manageable = true, selectable = true }: Props) {
   const [methods, setMethods] = useState<string[]>(() => getAllPaymentMethods());
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
@@ -22,7 +24,7 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
   const handleAdd = () => {
     if (addCustomPaymentMethod(newName)) {
       setMethods(getAllPaymentMethods());
-      onChange(newName.trim());
+      if (selectable) onChange(newName.trim()); // 관리 전용 블록에서는 고르지 않는다 (210)
       setNewName('');
       setAdding(false);
     } else {
@@ -35,17 +37,21 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
       <div className="flex flex-wrap gap-2">
         {methods.map(m => (
           <span key={m} className="relative inline-flex">
-            <button
-              type="button"
-              onClick={() => onChange(m)}
-              className={`px-3 py-2 rounded-xl text-sm border transition-colors ${
-                value === m
-                  ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]'
-                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              } ${manageable && customs.includes(m) ? 'pr-7' : ''}`}
-            >
-              {m}
-            </button>
+            {selectable ? (
+              <button
+                type="button"
+                onClick={() => onChange(m)}
+                className={`px-3 py-2 rounded-xl text-sm border transition-colors ${
+                  value === m
+                    ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]'
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                } ${manageable && customs.includes(m) ? 'pr-7' : ''}`}
+              >
+                {m}
+              </button>
+            ) : (
+              <span className={`px-3 py-2 rounded-xl text-sm border bg-white text-gray-600 border-gray-200 ${manageable && customs.includes(m) ? 'pr-7' : ''}`}>{m}</span>
+            )}
             {manageable && customs.includes(m) && (
               <button
                 type="button"
@@ -54,9 +60,9 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
                   if (!confirm(`결제수단 ${josa(`'${m}'`, '을/를')} 목록에서 삭제할까요? (기존 결제 기록은 유지됩니다)`)) return;
                   removeCustomPaymentMethod(m);
                   setMethods(getAllPaymentMethods());
-                  if (value === m) onChange('카드');
+                  if (selectable && value === m) onChange('카드');
                 }}
-                className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${value === m ? 'text-white/70 hover:text-white' : 'text-gray-300 hover:text-red-600'}`}
+                className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${selectable && value === m ? 'text-white/70 hover:text-white' : 'text-gray-300 hover:text-red-600'}`}
               >
                 <X size={12} />
               </button>

@@ -323,6 +323,15 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.goto('/');
   await page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByTestId('kpi-util-link').click();
   await expect(page).toHaveURL(/\/reservations/);
+  // ── 설정 > 매장 정보의 결제수단 관리 (210): 여기서 추가한 수단이 결제 창 선택지에 나타난다 ──
+  await page.goto('/settings?tab=shop');
+  const methodsBlock = page.getByTestId('settings-payment-methods').filter({ visible: true }).first();
+  await expect(methodsBlock).toContainText('카드');
+  await methodsBlock.getByRole('button', { name: '기타 추가' }).click();
+  await methodsBlock.getByPlaceholder('결제수단 이름 (예: 상품권, 제로페이)').fill('상품권');
+  await methodsBlock.getByRole('button', { name: '추가', exact: true }).click();
+  await expect(methodsBlock).toContainText('상품권');
+  await expect(methodsBlock.getByRole('button', { name: '상품권 삭제' })).toBeVisible(); // 추가한 수단만 지울 수 있다
   await page.goto('/');
 
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
