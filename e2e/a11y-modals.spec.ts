@@ -47,6 +47,15 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await expect(dialog('고객 추가')).toBeVisible();
   });
   await closeDialog('고객 추가');
+  await step('/customers 태그 목록 관리', async () => { // 237·239 — 고객 추가 창 위에 겹쳐 열린다
+    await page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first().click();
+    await page.getByTestId('tag-master-open').click();
+    await expect(page.getByRole('dialog', { name: '태그 목록 관리' })).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '태그 목록 관리' })).toHaveCount(0);
+  await closeDialog('고객 추가'); // 고객 추가 창은 Esc 로 닫지 않는다(입력 보호) — 닫기 버튼으로
+
   await step('/customers 세그먼트 만들기', async () => { // 저장 세그먼트 편집 창 (166)
     await page.getByRole('button', { name: '+ 세그먼트' }).filter({ visible: true }).first().click();
     await expect(dialog('세그먼트 만들기')).toBeVisible();

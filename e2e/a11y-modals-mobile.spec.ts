@@ -129,8 +129,22 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     await expect(dialog('지출(매입) 등록')).toBeVisible();
   });
 
+  // ── 태그 목록 관리 창 (237·239) — 고객 추가 창 위에 겹쳐 열린다 ──
+  await page.goto('/customers');
+  await step('m/customers 태그 목록 관리', async () => {
+    await vis('고객 추가').click();
+    await page.getByTestId('tag-master-open').click();
+    await expect(dialog('태그 목록 관리')).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(dialog('태그 목록 관리')).toHaveCount(0);
+
   // ── 직원·문자 ──
   await page.goto('/staff');
+  await step('m/staff 인센티브 비율 패널', async () => { // 233·238 — 표 안쪽 입력칸이 폰 폭에서 넘치지 않아야 한다
+    await page.getByTestId('staff-performance').getByRole('button', { name: '인센티브 비율' }).click();
+    await expect(page.getByTestId('commission-panel')).toBeVisible();
+  });
   await step('m/staff 직원 추가', async () => {
     await vis('직원 추가').click();
     await expect(dialog('직원 추가')).toBeVisible();
