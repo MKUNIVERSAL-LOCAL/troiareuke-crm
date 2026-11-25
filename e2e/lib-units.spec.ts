@@ -5,6 +5,7 @@ import { renameTagInSegments } from '../src/lib/segmentFilterRule';
 import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
 import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
 import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows } from '../src/lib/stockCountRule';
+import { diffReservation, statusChange, describeChange, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -2095,4 +2096,49 @@ test('재고 실사 — 0 으로 내려가는 제품을 따로 셀 수 있다 (2
   expect(zeroingRows(rows).map(r => r.id)).toEqual(['p1', 'p2']); // p3 는 현재고와 같아 저장 대상이 아니다
   expect(zeroingRows(buildCountRows(countItems, {}))).toEqual([]);
   expect(countNote({ counted: 0, unit: '개' }, '2026-11-26')).toBe('실사 0개 (2026-11-26)');
+});
+
+// ── 247: 예약 변경 이력 ──
+
+const baseResv = { date: '2026-11-26', startTime: '14:00', staffName: '김실장', customerName: '홍길동', services: [{ serviceName: '아쿠아필' }], totalPrice: 90_000, memo: '', status: 'confirmed' };
+
+test('예약 변경 이력 — 바뀐 항목만, 사람이 읽을 수 있는 줄로 (247)', () => {
+  expect(diffReservation(baseResv, baseResv)).toEqual([]); // 바뀐 것이 없으면 이력을 만들지 않는다
+  const moved = diffReservation(baseResv, { ...baseResv, date: '2026-11-27', startTime: '15:00' });
+  expect(moved).toHaveLength(1); // 날짜와 시간은 함께 읽어야 뜻이 통한다
+  expect(describeChange(moved[0])).toBe('날짜·시간 2026-11-26 14:00 → 2026-11-27 15:00');
+  const many = diffReservation(baseResv, { ...baseResv, staffName: '박원장', services: [{ serviceName: '진정관리' }], totalPrice: 120_000 });
+  expect(many.map(c => c.label)).toEqual(['담당 직원', '시술', '금액']);
+  expect(describeChange(many[2])).toBe('금액 90,000원 → 120,000원');
+  // 메모는 전문을 남기지 않는다 — 길고 개인 사정이 적힐 수 있다
+  const memo = diffReservation(baseResv, { ...baseResv, memo: '임신 중이라 레이저 제외' });
+  expect(memo).toEqual([{ label: '메모', from: '없음', to: '있음' }]);
+});
+
+test('예약 변경 이력 — 상태 변경은 한글 라벨로, 같은 상태면 남기지 않는다 (247)', () => {
+  expect(statusLabel('noshow')).toBe('노쇼');
+  expect(statusChange('confirmed', 'cancelled')).toEqual([{ label: '상태', from: '예약확정', to: '취소' }]);
+  expect(statusChange('completed', 'completed')).toEqual([]);
+  expect(describeChange(statusChange('confirmed', 'noshow')[0])).toBe('상태 예약확정 → 노쇼');
+});
+
+test('예약 변경 이력 — 모양이 깨진 기록은 버리고, 예약당·전체 상한을 지킨다 (247)', () => {
+  const entry = (id: string, rid: string, at: string): HistoryEntry =>
+    ({ id, reservationId: rid, at, kind: 'edit', changes: [{ label: '날짜·시간', from: 'a', to: 'b' }] });
+  const clean = sanitizeHistory([
+    entry('1', 'r1', '2026-11-26T01:00:00.000Z'),
+    { id: '2', reservationId: '', at: '2026-11-26T02:00:00.000Z', kind: 'edit', changes: [] },   // 예약 id 가 없다
+    { id: '3', reservationId: 'r1', at: '2026-11-26T03:00:00.000Z', kind: 'edit', changes: [] }, // 바뀐 것이 없다
+    null,
+  ]);
+  expect(clean.map(e => e.id)).toEqual(['1']);
+  // 한 예약에 상한을 넘겨 쌓이면 최근 것만 남는다
+  const lots = Array.from({ length: MAX_PER_RESERVATION + 5 }, (_, i) => entry('e' + i, 'r1', `2026-11-26T${String(i % 24).padStart(2, '0')}:00:00.000Z`));
+  const trimmed = trimHistory(lots, '2026-06-01');
+  expect(trimmed.filter(e => e.reservationId === 'r1')).toHaveLength(MAX_PER_RESERVATION);
+  // 보관 기간이 지난 기록은 버린다
+  expect(trimHistory([entry('old', 'r1', '2026-01-02T00:00:00.000Z')], '2026-06-01')).toEqual([]);
+  // 그 예약 것만, 최근 것이 위로
+  const mixed = [entry('a', 'r1', '2026-11-26T01:00:00.000Z'), entry('b', 'r2', '2026-11-26T02:00:00.000Z'), entry('c', 'r1', '2026-11-26T03:00:00.000Z')];
+  expect(historyFor(mixed, 'r1').map(e => e.id)).toEqual(['c', 'a']);
 });

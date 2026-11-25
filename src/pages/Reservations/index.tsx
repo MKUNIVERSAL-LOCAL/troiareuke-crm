@@ -4,6 +4,9 @@ import { askConfirm, askConfirmWithChoice } from '../../lib/confirmDialog';
 // 취소·노쇼 사유 (244, GAP R-10 후속) — 규칙은 순수 cancelReasonRule, 저장은 설정 행(cancelReasons)
 import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary } from '../../lib/cancelReasonRule';
 import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons';
+// 예약 변경 이력 (247) — 코어 Reservation 에 수정 시각·수정자 칸이 없어 이 기기 기록으로 남긴다
+import { logReservationEdit, logReservationStatus, logReservationCreate, reservationHistory } from '../../lib/reservationHistory';
+import { describeChange, describeEntryHead, HISTORY_CAVEAT } from '../../lib/reservationHistoryRule';
 import { createSubmitLock } from '../../lib/submitLock';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
@@ -49,7 +52,7 @@ import {
 import { registeredPaymentsFor } from '../../lib/pendingCompletion';
 import { readableTextOn } from '../../lib/color';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent, localizeGcalEventDates } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
-import { todayISO, formatDate, formatPrice } from '../../lib/format';
+import { todayISO, formatDate, formatPrice, formatDateTime } from '../../lib/format';
 import { josa } from '../../lib/josa';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
@@ -1367,6 +1370,8 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     if (isEdit && editing) {
       // 수정: 기존 예약 갱신 — status 는 보내지 않는다. 폰에서 완료/노쇼 처리한 예약을 PC 의 옛 수정 창이 '확정'으로 되돌렸다 (16차 #H1)
       ReservationStore.update(editing.id, reservation);
+      // 무엇이 바뀌었는지 남긴다 — "나는 3시로 바꿨는데" 를 매장이 확인할 수 있게 (247)
+      logReservationEdit(editing.id, editing, { ...reservation, status: editing.status }, authUser?.name);
       if (resources.length > 0) assignResource(editing.id, resourceId); // 자원 배정은 설정 행에 (142). 자원이 없으면 기존 배정은 그대로 (144 리뷰 M-1)
       // Google 캘린더에 옛 정보가 남지 않도록 기존 이벤트 삭제 후 재생성
       const oldEventId = getGcalMap()[editing.id];
@@ -1378,6 +1383,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       }
     } else {
       const saved = ReservationStore.save({ ...reservation, status: 'confirmed' });
+      logReservationCreate(saved.id, { ...reservation, status: 'confirmed' }, authUser?.name);
       if (saved && resourceId) assignResource(saved.id, resourceId); // 자원 배정은 설정 행에 (142)
       if (saved) onSaved?.(saved.id);
       // Google Calendar에도 추가 — 이벤트 id를 기억해 취소/삭제 시 정리 가능하게
@@ -1557,6 +1563,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     const answer = await askConfirmWithChoice({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기', choices: reasonOptions('cancelled'), choiceTitle: '취소 사유 (선택 — 이달 집계에 쌓입니다)' }); // 앱 확인창 (15차 #H3)
     if (!answer.ok) return;
     ReservationStore.updateStatus(r.id, 'cancelled');
+    logReservationStatus(r.id, r.status, 'cancelled', user?.name);
     if (answer.choice) saveReason(r.id, 'cancelled', answer.choice); // 사유 저장 실패는 취소 처리를 되돌리지 않는다 (244)
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     // 빈 자리를 원한 대기 요청이 있으면 바로 안내 — 요청함을 열어 보지 않아도 알 수 있게 (185, GAP R-10)
@@ -1569,10 +1576,15 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   // 잘못 취소·노쇼 처리한 예약을 되돌리는 길 — 상태만 '예약확정'으로, 취소 때 지운 Google 캘린더 일정은 다시 만든다 (리뷰 2026-11-19)
   const isClosed = r.status === 'cancelled' || r.status === 'noshow';
   const savedReason = isClosed ? reasonOf(r.id) : null; // 취소·노쇼가 아닌 예약에는 사유를 보여 주지 않는다 (244)
+  // 이 예약의 변경 이력 — 상세를 열 때 한 번 읽는다(저장은 창을 닫고 다시 열어야 보이므로 충분하다) (247)
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const history = useMemo(() => reservationHistory(r.id), [r.id]);
+  const shownHistory = showAllHistory ? history : history.slice(0, 3);
   const handleRestore = async () => {
     const google = isGoogleCalendarConnected();
     if (!(await askConfirm({ title: '예약 복구', confirmLabel: '복구', message: `이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}` }))) return;
     ReservationStore.updateStatus(r.id, 'confirmed');
+    logReservationStatus(r.id, r.status, 'confirmed', user?.name);
     saveReason(r.id, 'cancelled', ''); // 취소·노쇼가 아니게 됐으니 사유도 지운다 — 남겨 두면 이달 집계가 맞지 않는다 (244)
     if (google) {
       createCalendarEvent({ ...r, status: 'confirmed' })
@@ -1586,6 +1598,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     const answer = await askConfirmWithChoice({ title: '노쇼 처리', message: `${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`, confirmLabel: '노쇼 기록', cancelLabel: '닫기', choices: reasonOptions('noshow'), choiceTitle: '노쇼 사유 (선택 — 이달 집계에 쌓입니다)' });
     if (!answer.ok) return;
     ReservationStore.updateStatus(r.id, 'noshow');
+    logReservationStatus(r.id, r.status, 'noshow', user?.name);
     if (answer.choice) saveReason(r.id, 'noshow', answer.choice);
     cleanupGcalEvent(r.id);
     notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
@@ -1596,6 +1609,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 
   const handleComplete = () => {
     ReservationStore.updateStatus(r.id, 'completed');
+    logReservationStatus(r.id, r.status, 'completed', user?.name);
     saveReason(r.id, 'cancelled', ''); // 완료된 예약에 취소·노쇼 사유가 남으면 집계·상세가 서로 다른 말을 한다 (246 리뷰 M-3)
     healProgramSessionsWhenReady(r.customerId); // 회차권 사용 회차도 기록 기준으로 (16차 #H2)
     healCustomerStatsWhenReady(r.customerId); // 코어 +1이 같은 날 시술 기록과 겹치면 두 번 세진다 — 기록(다녀간 날 수)으로 바로 맞춤, 하이드레이션 뒤 (리뷰 2026-11-19)
@@ -1685,6 +1699,26 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           <div data-testid="reservation-reason">
             <p className="text-xs font-medium text-gray-500 mb-1">{savedReason.kind === 'noshow' ? '노쇼 사유' : '취소 사유'}</p>
             <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">{labelFor(savedReason.kind, savedReason.reason)}</p>
+          </div>
+        )}
+
+        {history.length > 0 && (
+          <div data-testid="reservation-history">
+            <p className="text-xs font-medium text-gray-500 mb-1">변경 이력</p>
+            <ul className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 space-y-2">
+              {shownHistory.map(e => (
+                <li key={e.id}>
+                  <p className="text-xs text-gray-500">{describeEntryHead(e, iso => formatDateTime(iso))}</p>
+                  {e.changes.map((c, idx) => <p key={idx} className="text-sm">{describeChange(c)}</p>)}
+                </li>
+              ))}
+            </ul>
+            {history.length > 3 && (
+              <button type="button" onClick={() => setShowAllHistory(v => !v)} className="mt-1 text-xs text-[#1a3a8f] hover:underline">
+                {showAllHistory ? '최근 3건만 보기' : `전체 ${history.length}건 보기`}
+              </button>
+            )}
+            <p className="text-2xs text-gray-400 mt-1">{HISTORY_CAVEAT}</p>
           </div>
         )}
 
