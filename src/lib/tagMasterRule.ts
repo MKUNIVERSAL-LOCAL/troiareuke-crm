@@ -19,6 +19,8 @@ export const MAX_MASTER_TAGS = 50;
 export const MAX_TAGS_PER_CUSTOMER = 10;
 /** 칩에서 미등록 태그에 보장하는 자리 — 등록 태그가 많아도 "쓰고 있는데 목록에 없는 태그" 가 사라지지 않게 (238, 리뷰 M-7) */
 const EXTRA_CHIP_QUOTA = 6;
+/** 칩 기본 상한 — 마스터 50개를 거의 다 보여 줄 수 있게(등록 태그가 칩에서 빠지면 눌러 넣을 수 없다) (242, 리뷰 M-6) */
+export const CHIP_LIMIT = 40;
 /**
  * 동의 예약어 접두 — 정확히 예약어가 아니어도 이 말로 시작하는 태그는 막는다.
  * '광고동의'(날짜 없는 형태)처럼 예약어를 닮은 이름이 목록에 남으면 직원이 동의 기록으로 착각한다 (238, 리뷰 H-2).
@@ -80,7 +82,7 @@ export interface TagChoice {
  * 고객 창에 보여 줄 태그 칩 — 등록된 태그 먼저(사용 수 많은 순), 그다음 쓰고 있지만 미등록인 태그.
  * 미등록 태그를 숨기면 매장은 왜 자기 태그가 안 보이는지 알 수 없다.
  */
-export function tagChoices(master: string[], usage: { tag: string; count: number }[], limit = 24): TagChoice[] {
+export function tagChoices(master: string[], usage: { tag: string; count: number }[], limit = CHIP_LIMIT): TagChoice[] {
   const counts = new Map(usage.map(u => [u.tag, u.count]));
   // 등록 태그는 **등록 순서**로 — 사용 수로 정렬하면 방금 추가한 태그(0건)가 꼬리로 밀려 안 보였다 (238, 리뷰 M-7)
   const registered = sanitizeMaster(master).map(tag => ({ tag, count: counts.get(tag) ?? 0, registered: true }));
@@ -88,8 +90,9 @@ export function tagChoices(master: string[], usage: { tag: string; count: number
     .filter(u => !registered.some(r => r.tag === u.tag) && normalizeTagName(u.tag) === u.tag) // 동의 태그·예약어 닮은 이름은 칩에 올리지 않는다 (238, 리뷰 H-2)
     .map(u => ({ tag: u.tag, count: u.count, registered: false }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag, 'ko'));
-  // 미등록 태그 자리를 먼저 떼어 둔다 — 등록 태그가 상한을 다 먹어 미등록이 전부 사라지지 않게
-  const extraSlots = Math.min(extras.length, EXTRA_CHIP_QUOTA);
+  // 미등록 태그 자리를 떼어 두되 절반을 넘기지 않는다 — 전에는 상한이 작으면 등록 태그가 전부 사라졌고(리뷰 L-1),
+  // 등록 태그가 19개부터 칩에 안 나와 "목록에서 눌러 넣는다" 가 작동하지 않았다 (242, 리뷰 M-6)
+  const extraSlots = Math.min(extras.length, EXTRA_CHIP_QUOTA, Math.floor(limit / 2));
   const regPart = registered.slice(0, Math.max(0, limit - extraSlots));
   const extraPart = extras.slice(0, Math.max(0, limit - regPart.length));
   return [...regPart, ...extraPart];

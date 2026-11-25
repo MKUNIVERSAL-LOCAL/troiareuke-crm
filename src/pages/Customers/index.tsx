@@ -55,10 +55,10 @@ import { buildSegmentIndex } from '../../lib/customerSegments';
 import { isCountableCustomer } from '../../lib/customerScope'; // 익명화·샘플 고객 제외 (236)
 // 태그 마스터 (237, GAP C-1) — 같은 뜻의 태그가 갈라지지 않게 목록에서 눌러 넣는다
 import { getTagMaster, saveTagMaster } from '../../lib/tagMaster';
-import { addMasterTag, removeMasterTag, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../../lib/tagMasterRule';
+import { addMasterTag, removeMasterTag, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, normalizeTagName, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../../lib/tagMasterRule';
 // 등급 자동 제안 (236, GAP C-1) — 규칙은 순수 모듈, 적용은 사람이 고른 것만
 import { suggestGrade, GRADE_RULE_TEXT, GRADE_SUGGEST_NOTE, type SuggestGrade } from '../../lib/gradeSuggestRule';
-import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
+import { listSavedSegments, buildSegmentFacts, segmentIds, renameTagInSavedSegments, segmentsUsingTag } from '../../lib/savedSegments';
 import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
 import SegmentEditorModal from '../../components/SegmentEditorModal';
 import { CHURN_LABEL, CHURN_HIGH_RATIO } from '../../lib/churnRule';
@@ -463,51 +463,69 @@ export default function Customers() {
   function startRename(tag: string) { setRenameFrom(tag); setRenameTo(tag); }
   async function applyRename() {
     if (!renameFrom || renaming) return;
-    const all = CustomerStore.getAll().filter(isCountableCustomer);
-    const preview = previewRename(all, renameFrom, renameTo);
-    if (preview.error) { notify(preview.error); return; }
-    const target = renameTo.trim().replace(/^#+/, '').trim();
-    if (preview.affected === 0) {
-      // 고객에게 붙은 태그가 없으면 목록 이름만 바꾼다 — "바꿨습니다" 를 거짓으로 말하지 않게 그대로 알린다
-      setTagMaster(saveTagMaster(renameTagInList(tagMaster, renameFrom, target)));
-      notify(`목록의 태그 이름만 바꿨습니다(이 태그가 붙은 고객은 없습니다): ${renameFrom} → ${target}`);
-      setRenameFrom(null);
-      return;
-    }
-    if (!(await askConfirm({
-      title: '태그 이름 바꾸기',
-      message: `"${renameFrom}" 을 "${target}" 으로 바꿀까요?\n고객 ${preview.affected}명의 태그가 바뀝니다${preview.merges > 0 ? `(그중 ${preview.merges}명은 이미 "${target}" 이 있어 하나로 합쳐집니다)` : ''}.\n되돌리려면 반대로 한 번 더 바꿔야 합니다.`,
-      confirmLabel: '이름 바꾸기',
-      cancelLabel: '닫기',
-    }))) return;
-    setRenaming(true);
-    const ids = all.filter(c => renameTagOnCustomer(c.tags, renameFrom, target).changed).map(c => c.id);
-    let done = 0;
-    const step = () => {
-      try {
-        // 코어 update() 는 한 명마다 고객 표 전체를 저장한다 → 25명씩 (238 리뷰 H-3 과 같은 이유)
-        for (const id of ids.slice(done, done + 25)) {
-          const c = CustomerStore.getById(id);
-          if (!c) continue;
-          const r = renameTagOnCustomer(c.tags, renameFrom, target);
-          if (r.changed) CustomerStore.update(id, { tags: r.tags });
-        }
-      } catch (e) {
-        setRenaming(false);
-        console.error('[customers] 태그 이름 변경 실패:', e);
-        notify(`태그 이름을 ${done}명까지 바꾸고 저장이 실패했습니다. 저장 공간을 확인한 뒤 다시 시도해주세요.`);
-        loadAll();
+    setRenaming(true); // 확인창 앞에서 먼저 잠근다 — 더블클릭에 확인창이 두 번 열리지 않게 (242, 리뷰 L-2)
+    try {
+      const all = CustomerStore.getAll().filter(isCountableCustomer);
+      // 저장되는 이름으로 미리 정규화한다 — 전에는 확인창·토스트가 정규화 전 이름을 말해 저장값과 달랐다 (242, 리뷰 M-3)
+      const target = normalizeTagName(renameTo);
+      const preview = previewRename(all, renameFrom, renameTo);
+      if (preview.error || !target) { notify(preview.error ?? '바꿀 이름을 확인해주세요.'); return; }
+      const inactive = CustomerStore.getAll().filter(c => !isCountableCustomer(c) && renameTagOnCustomer(c.tags, renameFrom, target).changed).length;
+      const segments = segmentsUsingTag(renameFrom); // 세그먼트 조건도 함께 바꾼다 (242, 리뷰 H-1)
+      if (preview.affected === 0) {
+        // 고객에게 붙은 태그가 없으면 목록 이름만 바꾼다 — "바꿨습니다" 를 거짓으로 말하지 않게 그대로 알린다
+        setTagMaster(saveTagMaster(renameTagInList(getTagMaster(), renameFrom, target)));
+        const movedSegments = renameTagInSavedSegments(renameFrom, target);
+        if (movedSegments.length > 0) setSavedSegments(listSavedSegments());
+        notify(`목록의 태그 이름만 바꿨습니다(이 태그가 붙은 고객은 없습니다): ${renameFrom} → ${target}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개 조건도 함께 바꿨습니다` : ''}`);
+        setRenameFrom(null);
         return;
       }
-      done += 25;
-      if (done < ids.length) { setTimeout(step, 0); return; }
-      setTagMaster(saveTagMaster(renameTagInList(tagMaster, renameFrom, target)));
-      setRenaming(false);
-      setRenameFrom(null);
-      notify(`고객 ${ids.length}명의 태그를 "${target}" 으로 바꿨습니다${preview.merges > 0 ? ` (${preview.merges}명은 기존 태그와 합쳐짐)` : ''}.`);
-      loadAll();
-    };
-    setTimeout(step, 0);
+      const lines = [
+        `"${renameFrom}" 을 "${target}" 으로 바꿀까요?`,
+        `고객 ${preview.affected}명의 태그가 바뀝니다${preview.merges > 0 ? `(그중 ${preview.merges}명은 이미 "${target}" 이 있어 하나로 합쳐집니다)` : ''}.`,
+        ...(segments.length > 0 ? [`저장 세그먼트 ${segments.length}개(${segments.slice(0, 2).join(', ')}${segments.length > 2 ? ' 외' : ''})의 조건도 함께 바뀝니다.`] : []),
+        ...(inactive > 0 ? [`탈퇴·익명화 고객 ${inactive}명은 그대로 둡니다(개인정보 보존 정책).`] : []),
+        preview.merges > 0 ? '합쳐진 고객은 반대로 바꿔도 원래대로 돌아가지 않습니다.' : '되돌리려면 반대로 한 번 더 바꿔야 합니다.',
+      ];
+      if (!(await askConfirm({ title: '태그 이름 바꾸기', message: lines.join('\n'), confirmLabel: '이름 바꾸기', cancelLabel: '닫기' }))) return;
+      const ids = all.filter(c => renameTagOnCustomer(c.tags, renameFrom, target).changed).map(c => c.id);
+      let done = 0;
+      let applied = 0;
+      const step = () => {
+        try {
+          // 코어 update() 는 한 명마다 고객 표 전체를 저장한다 → 25명씩 (238 리뷰 H-3 과 같은 이유)
+          for (const id of ids.slice(done, done + 25)) {
+            const c = CustomerStore.getById(id);
+            if (!c) continue;
+            const r = renameTagOnCustomer(c.tags, renameFrom, target);
+            if (!r.changed) continue; // 그 사이 다른 기기가 태그를 지웠다
+            CustomerStore.update(id, { tags: r.tags });
+            applied += 1;
+          }
+        } catch (e) {
+          setRenaming(false);
+          console.error('[customers] 태그 이름 변경 실패:', e);
+          notify(`태그 이름을 ${applied}명까지 바꾸고 저장이 실패했습니다. 저장 공간을 확인한 뒤 다시 시도해주세요.`);
+          loadAll();
+          return;
+        }
+        done += 25;
+        if (done < ids.length) { setTimeout(step, 0); return; }
+        setTagMaster(saveTagMaster(renameTagInList(getTagMaster(), renameFrom, target))); // 적용 중 추가된 태그를 덮지 않게 다시 읽는다 (242, 리뷰 L-4)
+        const movedSegments = renameTagInSavedSegments(renameFrom, target);
+        if (movedSegments.length > 0) setSavedSegments(listSavedSegments());
+        setRenaming(false);
+        setRenameFrom(null);
+        const skipped = ids.length - applied;
+        notify(`고객 ${applied}명의 태그를 "${target}" 으로 바꿨습니다${preview.merges > 0 ? ` (${preview.merges}명은 기존 태그와 합쳐짐)` : ''}${skipped > 0 ? ` · ${skipped}명은 그 사이 바뀌어 건너뜀` : ''}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개 조건도 함께 바꿈` : ''}.`);
+        loadAll();
+      };
+      setTimeout(step, 0);
+    } finally {
+      // 청크가 시작되면 step 이 끝낼 때 풀고, 그 전에 빠져나온 경우(거절·검증 실패)는 여기서 푼다
+      if (!renameFrom) setRenaming(false);
+    }
   }
   function dropFromMaster(tag: string) {
     setTagMaster(saveTagMaster(removeMasterTag(tagMaster, tag)));
@@ -533,15 +551,18 @@ export default function Customers() {
     }))) return;
     setGradeApplying(true);
     let done = 0;
+    let applied = 0;
     const step = () => {
       try {
         for (const g of picked.slice(done, done + 25)) {
-          if (CustomerStore.getById(g.id)?.grade === g.current) CustomerStore.update(g.id, { grade: g.suggested }); // 그 사이 직원이 바꿨으면 건드리지 않는다
+          if (CustomerStore.getById(g.id)?.grade !== g.current) continue; // 그 사이 직원이 바꿨으면 건드리지 않는다
+          CustomerStore.update(g.id, { grade: g.suggested });
+          applied += 1;
         }
       } catch (e) {
         setGradeApplying(false);
         console.error('[customers] 등급 일괄 적용 실패:', e);
-        notify(`등급을 ${done}명까지 올리고 저장이 실패했습니다. 저장 공간을 확인한 뒤 남은 고객을 다시 시도해주세요.`);
+        notify(`등급을 ${applied}명까지 올리고 저장이 실패했습니다. 저장 공간을 확인한 뒤 남은 고객을 다시 시도해주세요.`);
         loadAll();
         return;
       }
@@ -549,7 +570,7 @@ export default function Customers() {
       if (done < picked.length) { setTimeout(step, 0); return; }
       setGradeApplying(false);
       setGradePanel(false);
-      notify(`${picked.length}명의 등급을 올렸습니다.`);
+      notify(`${applied}명의 등급을 올렸습니다.${picked.length - applied > 0 ? ` (${picked.length - applied}명은 그 사이 등급이 바뀌어 건너뜀)` : ''}`);
       loadAll();
     };
     setTimeout(step, 0);

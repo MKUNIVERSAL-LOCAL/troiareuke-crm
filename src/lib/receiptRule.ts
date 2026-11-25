@@ -125,11 +125,23 @@ export function splitPaymentNote(
   parts: { amount: number; paymentMethod?: string; status?: string }[],
   formatMoney: (n: number) => string = formatPrice,
 ): string | null {
-  const alive = parts.filter(p => p.status !== 'refunded');
-  if (alive.length < 2) return null;
-  const total = alive.reduce((sum, p) => sum + (Number.isFinite(p.amount) ? Math.round(p.amount) : 0), 0);
-  const detail = alive.map(p => `${p.paymentMethod?.trim() || '미지정'} ${formatMoney(Math.round(p.amount || 0))}`).join(' + ');
-  return `이 건은 ${alive.length}건으로 나눠 결제했습니다: ${detail} · 합계 ${formatMoney(total)}`;
+  // 받은 돈만 합친다 — 전에는 환불만 걸러 '대기(미입금)' 분이 합계에 들어가 고객 영수증이
+  // 받지 않은 돈을 받은 것처럼 적었다 (242, 리뷰 H-2)
+  const paid = parts.filter(p => p.status === 'completed' || p.status === undefined);
+  const pending = parts.filter(p => p.status === 'pending');
+  const pendingTotal = pending.reduce((sum, p) => sum + won(p.amount), 0);
+  const pendingNote = pendingTotal > 0 ? ` (아직 받지 않은 ${formatMoney(pendingTotal)} 은 합계에서 뺐습니다)` : '';
+  if (paid.length < 2) {
+    // 받은 건이 한 건뿐이면 분할 안내는 필요 없지만, 미입금이 남아 있으면 그 사실은 알린다
+    return pendingTotal > 0 ? `이 건에는 아직 받지 않은 금액 ${formatMoney(pendingTotal)} 이 남아 있습니다(이 영수증 금액에 포함되지 않습니다).` : null;
+  }
+  const total = paid.reduce((sum, p) => sum + won(p.amount), 0);
+  const detail = paid.map(p => `${p.paymentMethod?.trim() || '미지정'} ${formatMoney(won(p.amount))}`).join(' + ');
+  return `이 건은 ${paid.length}건으로 나눠 결제했습니다: ${detail} · 합계 ${formatMoney(total)}${pendingNote}`;
+}
+
+function won(n: unknown): number {
+  return typeof n === 'number' && Number.isFinite(n) ? Math.round(n) : 0;
 }
 
 /** 파일 이름 — 매장·고객·날짜. 경로에 쓸 수 없는 글자는 뺀다 */

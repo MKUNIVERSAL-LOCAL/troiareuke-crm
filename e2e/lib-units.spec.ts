@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate } from '../src/lib/format';
 import { splitPercent } from '../src/lib/percent';
+import { renameTagInSegments } from '../src/lib/segmentFilterRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -43,7 +44,7 @@ import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCautio
 import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
 import { buildReceipt, receiptFileName, splitPaymentNote } from '../src/lib/receiptRule';
 import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT, VIP_RFM_MIN_VISITS, VIP_RFM_MIN_SPENT, GOLD_RFM_MIN_VISITS } from '../src/lib/gradeSuggestRule';
-import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, MAX_TAG_NAME, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../src/lib/tagMasterRule';
+import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, MAX_TAG_NAME, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER, CHIP_LIMIT } from '../src/lib/tagMasterRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1747,7 +1748,7 @@ test('태그 칩 — 등록 태그가 많아도 미등록 태그 자리가 남�
   expect(fresh.map(c => c.tag)).toEqual(['오래된', '방금추가']);
 });
 
-test('분할 결제 요약 — 2건 이상일 때만, 환불 건은 빼고 합계를 적는다 (238, 리뷰 M-1)', () => {
+test('분할 결제 요약 — 받은 돈만 합치고, 미입금은 따로 말한다 (238·242 리뷰 H-2)', () => {
   expect(splitPaymentNote([{ amount: 100_000, paymentMethod: '카드' }])).toBeNull(); // 1건이면 안내하지 않는다
   expect(splitPaymentNote([])).toBeNull();
   const note = splitPaymentNote([{ amount: 50_000, paymentMethod: '카드' }, { amount: 50_000, paymentMethod: '현금' }]);
@@ -1755,6 +1756,20 @@ test('분할 결제 요약 — 2건 이상일 때만, 환불 건은 빼고 합�
   // 환불된 행은 합계에서 뺀다(남은 1건이면 안내 자체를 안 한다)
   expect(splitPaymentNote([{ amount: 50_000, paymentMethod: '카드' }, { amount: 50_000, paymentMethod: '현금', status: 'refunded' }])).toBeNull();
   expect(splitPaymentNote([{ amount: 30_000 }, { amount: 20_000 }])).toContain('미지정 30,000원 + 미지정 20,000원');
+  // 대기(미입금)는 합계에 넣지 않는다 — 전에는 고객 영수증이 받지 않은 돈을 받은 것처럼 적었다 (242, 리뷰 H-2)
+  const withPending = splitPaymentNote([
+    { amount: 500_000, paymentMethod: '카드', status: 'completed' },
+    { amount: 500_000, paymentMethod: '현금', status: 'pending' },
+  ]);
+  expect(withPending).toBe('이 건에는 아직 받지 않은 금액 500,000원 이 남아 있습니다(이 영수증 금액에 포함되지 않습니다).');
+  const twoPaidOnePending = splitPaymentNote([
+    { amount: 300_000, paymentMethod: '카드', status: 'completed' },
+    { amount: 200_000, paymentMethod: '현금', status: 'completed' },
+    { amount: 500_000, paymentMethod: '계좌이체', status: 'pending' },
+  ]);
+  expect(twoPaidOnePending).toContain('합계 500,000원');
+  expect(twoPaidOnePending).toContain('아직 받지 않은 500,000원 은 합계에서 뺐습니다');
+  expect(twoPaidOnePending).not.toContain('1,000,000원');
 });
 
 // ── 태그 이름 일괄 변경 (239, GAP C-1) ───────────────────────────
@@ -1801,7 +1816,7 @@ test('태그 이름 바꾸기 미리보기 — 바뀌는 수·합쳐지는 수·
 test('매장 주의 키워드 — 기본 목록에 없는 말도 경고로 올린다, 위험 순서는 금기 먼저 (240)', () => {
   const memo = '레이저 금지 부위 있음\n임신 중\n커피 좋아함';
   expect(memoCautionLines(memo)).toEqual(['임신 중']);                       // 매장 키워드를 안 주면 못 잡는다
-  expect(memoCautionLines(memo, ['레이저 금지'])).toEqual(['임신 중', '레이저 금지 부위 있음']); // 금기가 먼저, 매장 키워드는 2순위
+  expect(memoCautionLines(memo, ['레이저 금지'])).toEqual(['임신 중', '레이저 금지 부위 있음']); // 금기가 먼저, 매장 키워드는 3순위
   const a = buildCustomerAlert({ memo, extraKeywords: ['레이저 금지'] });
   expect(a.allLines).toEqual(['임신 중', '레이저 금지 부위 있음']);
   // 부정 표현은 매장 키워드에도 그대로 적용된다
@@ -1817,4 +1832,40 @@ test('매장 주의 키워드 정리 — 한 글자·중복·기본 키워드·�
   expect(sanitizeCautionKeywords(['필러 이력', 7, null, ''])).toEqual(['필러 이력']);
   expect(sanitizeCautionKeywords('레이저')).toEqual([]);                          // 배열이 아니면 빈 목록
   expect(sanitizeCautionKeywords(Array.from({ length: 30 }, (_, i) => 'k' + i))).toHaveLength(20);
+});
+
+// ── 242 리뷰 반영: 세그먼트 조건 치환, 매장 키워드 순위, 칩 자리 ──
+
+test('태그 이름 바꾸기 — 저장 세그먼트의 태그 조건도 함께 바꾼다 (242, 리뷰 H-1)', () => {
+  const segs = [
+    { id: 's1', name: '민감 고객', condition: { tagsAny: ['민감'] }, createdAt: '', updatedAt: '' },
+    { id: 's2', name: '민감·단골', condition: { tagsAny: ['민감', '민감성'] }, createdAt: '', updatedAt: '' },
+    { id: 's3', name: '등급 VIP', condition: { grades: ['VIP' as const] }, createdAt: '', updatedAt: '' },
+  ];
+  const r = renameTagInSegments(segs, '민감', '민감성');
+  expect(r.affected).toEqual(['민감 고객', '민감·단골']);
+  expect(r.segments[0].condition.tagsAny).toEqual(['민감성']);
+  expect(r.segments[1].condition.tagsAny).toEqual(['민감성']);        // 이미 있던 이름과 합친다
+  expect(r.segments[2]).toBe(segs[2]);                                 // 관계없는 세그먼트는 그대로(같은 객체)
+  // 쓰는 세그먼트가 없으면 아무것도 바꾸지 않는다
+  expect(renameTagInSegments(segs, '없는태그', '새이름').affected).toEqual([]);
+});
+
+test('매장 주의 키워드 — 흔한 말을 넣어도 진짜 경고를 3줄 밖으로 밀지 않는다 (242, 리뷰 M-1)', () => {
+  const memo = ['고객 요청으로 10분 늦게 시작', '고객이 주차 문의', '고객 동반 1인', '켈로이드 체질 — 레이저 강도 낮춤'].join('\n');
+  const a = buildCustomerAlert({ memo, extraKeywords: ['고객'] });
+  expect(a.lines[0]).toContain('켈로이드');   // 몸 상태(2순위)가 매장 키워드(3순위)보다 먼저
+  expect(a.allLines).toHaveLength(4);
+  expect(a.hiddenCount).toBe(1);
+});
+
+test('태그 칩 — 상한이 작아도 등록 태그가 사라지지 않는다 (242, 리뷰 L-1·M-6)', () => {
+  expect(CHIP_LIMIT).toBeGreaterThanOrEqual(40); // 마스터 50개를 거의 다 눌러 넣을 수 있어야 한다
+  const small = tagChoices(['a', 'b', 'c'], Array.from({ length: 10 }, (_, i) => ({ tag: 'u' + i, count: 10 - i })), 6);
+  expect(small.filter(c => c.registered).map(c => c.tag)).toEqual(['a', 'b', 'c']); // 등록 태그가 먼저 자리를 받는다
+  expect(small.filter(c => !c.registered)).toHaveLength(3);
+  // 등록 태그가 많아도 기본 상한에서는 대부분 보인다(19번째부터 안 보이던 문제)
+  const many = tagChoices(Array.from({ length: 30 }, (_, i) => 'r' + i), [{ tag: 'u1', count: 3 }], CHIP_LIMIT);
+  expect(many.filter(c => c.registered)).toHaveLength(30);
+  expect(many.some(c => c.tag === 'u1')).toBe(true);
 });

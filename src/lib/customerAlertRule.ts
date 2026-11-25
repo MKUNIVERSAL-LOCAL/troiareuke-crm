@@ -14,7 +14,8 @@
 //      순서를 메모 원문대로 두면 '시술 불가' 가 조용히 밀려났다 (234, 리뷰 H-1).
 //   5) 노쇼는 2회 이상일 때만 — 1회는 흔하고, 2회부터 예약 확인 전화의 근거가 된다.
 //   6) 매장이 쓰는 말은 매장이 추가한다 (240) — "레이저 금지"·"필러 이력" 처럼 기본 목록에 없는 표현을 놓치면
-//      경고가 있는데도 안 뜬다. 추가 키워드는 2순위(몸 상태)로 다룬다.
+//      경고가 있는데도 안 뜬다. 추가 키워드는 **3순위(참고)** 다 — 2순위로 두면 '고객' 같은 흔한 말 하나로
+//      켈로이드·당뇨 같은 진짜 경고가 3줄 밖으로 밀렸다 (242, 리뷰 M-1).
 // e2e/lib-units.spec.ts 가 브라우저 없이 직접 import 해 검증한다.
 // ═══════════════════════════════════════════════════════════════
 
@@ -78,11 +79,12 @@ function clip(text: string): string {
   return t.length > MAX_ALERT_LINE_LENGTH ? `${t.slice(0, MAX_ALERT_LINE_LENGTH - 1)}…` : t;
 }
 
-/** 위험도 — 작은 수가 먼저. 매장 추가 키워드는 2순위(몸 상태)로 본다 */
-function severity(line: string, extra: string[] = []): number {
+/** 위험도 — 작은 수가 먼저. 매장 추가 키워드는 3순위(참고)로 본다 (242, 리뷰 M-1) */
+function severity(line: string): number {
   if (CRITICAL_KEYWORDS.some(k => line.includes(k))) return 0;
-  if (BODY_KEYWORDS.some(k => line.includes(k)) || extra.some(k => line.includes(k))) return 1;
-  return 2;
+  if (BODY_KEYWORDS.some(k => line.includes(k))) return 1;
+  if (NOTE_KEYWORDS.some(k => line.includes(k))) return 2;
+  return 3; // 매장 추가 키워드만 걸린 줄
 }
 
 /** "주의사항 없음" 처럼 경고가 아닌 줄인가 */
@@ -102,7 +104,7 @@ export function memoCautionLines(memo?: string | null, extra: string[] = []): st
     if (!CAUTION_KEYWORDS.some(k => line.includes(k)) && !extra.some(k => line.includes(k))) continue;
     if (isNegatedCaution(line)) continue; // 234 리뷰 M-5
     if (picked.some(p => p.line === line)) continue;
-    picked.push({ line, sev: severity(line, extra), order });
+    picked.push({ line, sev: severity(line), order });
   }
   picked.sort((a, b) => a.sev - b.sev || a.order - b.order); // 위험한 줄 먼저, 같으면 적은 순서대로
   return picked.map(p => p.line);

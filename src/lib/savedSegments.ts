@@ -7,7 +7,7 @@ import { isUpcomingReservation } from './upcomingRule';
 import { isCountableCustomer } from './customerScope';
 import { consentOf } from './marketingConsent';
 import { todayISO } from './format';
-import { matchesSegment, type CustomerFacts, type SavedSegment, type SegmentCondition } from './segmentFilterRule';
+import { matchesSegment, renameTagInSegments, type CustomerFacts, type SavedSegment, type SegmentCondition } from './segmentFilterRule';
 
 function genId(): string {
   return globalThis.crypto?.randomUUID?.() || Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -25,6 +25,22 @@ export function saveSegment(name: string, condition: SegmentCondition, id?: stri
   setPreference('savedSegments', existing ? list.map(s => (s.id === saved.id ? saved : s)) : [...list, saved]);
   return saved;
 }
+/**
+ * 저장 세그먼트의 태그 조건에서 이름을 바꾼다 (242, 리뷰 H-1).
+ * 태그 일괄 변경이 고객 태그만 바꾸면 "민감 고객" 세그먼트가 아무 설명 없이 0명이 됐다 — 발송 대상도 함께 0명.
+ * @returns 바뀐 세그먼트 이름들(화면이 사용자에게 알린다)
+ */
+export function renameTagInSavedSegments(from: string, to: string): string[] {
+  const { segments, affected } = renameTagInSegments(listSavedSegments(), from, to);
+  if (affected.length > 0) setPreference('savedSegments', segments);
+  return affected;
+}
+
+/** 그 태그를 조건으로 쓰는 세그먼트 이름들 — 확인창에서 영향 범위를 미리 알린다 (242, 리뷰 H-1) */
+export function segmentsUsingTag(tag: string): string[] {
+  return listSavedSegments().filter(s => s.condition.tagsAny?.includes(tag)).map(s => s.name);
+}
+
 export function deleteSegment(id: string): void {
   setPreference('savedSegments', listSavedSegments().filter(s => s.id !== id));
 }

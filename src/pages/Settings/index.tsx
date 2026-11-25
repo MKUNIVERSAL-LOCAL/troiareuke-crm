@@ -6,7 +6,7 @@ import { notify } from '../../lib/notify';
 import { getPreference, setPreference } from '../../lib/shopPreferences'; // 영수증 인쇄 정보 (235)
 // 고객 주의사항 키워드 — 매장이 쓰는 말을 더한다 (240, GAP C-11)
 import { getCautionKeywords, saveCautionKeywords } from '../../lib/cautionKeywords';
-import { CAUTION_KEYWORDS } from '../../lib/customerAlertRule';
+import { CAUTION_KEYWORDS, sanitizeCautionKeywords } from '../../lib/customerAlertRule';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
@@ -428,9 +428,11 @@ export default function Settings() {
   const [cautionWords, setCautionWords] = useState<string[]>(() => getCautionKeywords());
   const [cautionDraft, setCautionDraft] = useState('');
   const addCautionWord = () => {
-    const word = cautionDraft.trim();
+    // 저장되는 형태로 먼저 정리한다 — 전에는 원문과 저장값(공백 축약)이 달라 "저장하지 못했습니다" 가 거짓으로 떴고
+    // 목록·입력칸이 저장값과 어긋났다 (242, 리뷰 M-2)
+    const word = sanitizeCautionKeywords([cautionDraft])[0] ?? '';
     if (word.length < 2) { notify('키워드는 두 글자 이상으로 입력해주세요(한 글자는 아무 문장에나 걸립니다).'); return; }
-    if (CAUTION_KEYWORDS.includes(word)) { notify(`"${word}" 는 기본 키워드라 이미 경고로 올라갑니다.`); return; }
+    if (CAUTION_KEYWORDS.includes(cautionDraft.trim())) { notify(`"${cautionDraft.trim()}" 는 기본 키워드라 이미 경고로 올라갑니다.`); return; }
     if (cautionWords.includes(word)) { notify(`이미 있는 키워드입니다: ${word}`); return; }
     const next = saveCautionKeywords([...cautionWords, word]);
     if (!next.includes(word)) { notify('키워드를 저장하지 못했습니다. 글자 수·개수(20개)를 확인해주세요.'); return; } // 조용히 사라지지 않게

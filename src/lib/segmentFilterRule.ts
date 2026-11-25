@@ -121,3 +121,25 @@ export function describeSegment(c: SegmentCondition): string {
   if (c.adConsent) parts.push(CONSENT_LABEL[c.adConsent]);
   return parts.join(' · ') || '전체';
 }
+
+/**
+ * 저장 세그먼트의 태그 조건에서 이름을 바꾼다 (242, 리뷰 H-1).
+ * 태그 이름을 일괄 변경하면 고객 태그는 바뀌는데 세그먼트 조건은 옛 이름을 문자열로 들고 있어
+ * "민감 고객" 세그먼트가 아무 설명 없이 0명이 됐다 — 태그 통합을 하려고 만든 기능이 세그먼트를 끊었다.
+ * 바꾼 이름이 이미 조건에 있으면 합친다. 바뀐 세그먼트만 새 객체로 돌려준다(나머지는 그대로).
+ */
+export function renameTagInSegments(segments: SavedSegment[], from: string, to: string): { segments: SavedSegment[]; affected: string[] } {
+  const affected: string[] = [];
+  const next = segments.map(seg => {
+    const tags = seg.condition.tagsAny;
+    if (!tags?.length || !tags.includes(from)) return seg;
+    const replaced: string[] = [];
+    for (const t of tags) {
+      const name = t === from ? to : t;
+      if (!replaced.includes(name)) replaced.push(name);
+    }
+    affected.push(seg.name);
+    return { ...seg, condition: { ...seg.condition, tagsAny: replaced } };
+  });
+  return { segments: next, affected };
+}
