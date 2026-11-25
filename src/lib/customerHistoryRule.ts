@@ -11,7 +11,7 @@
 // e2e/lib-units.spec.ts 가 브라우저 없이 직접 import 해 검증한다.
 // ═══════════════════════════════════════════════════════════════
 
-export type CustomerHistoryKind = 'edit' | 'grade' | 'delete';
+export type CustomerHistoryKind = 'edit' | 'grade' | 'merge';
 
 export interface CustomerChange { label: string; from: string; to: string }
 
@@ -51,8 +51,10 @@ export function maskPhone(value: string | undefined): string {
 export function maskEmail(value: string | undefined): string {
   const v = (value ?? '').trim();
   if (!v) return '없음';
-  const [id, domain] = v.split('@');
-  return `${id.slice(0, 2)}···${domain ? `@${domain}` : ''}`;
+  const at = v.indexOf('@');
+  const id = at >= 0 ? v.slice(0, at) : v;
+  const domain = at >= 0 ? v.slice(at) : ''; // @ 가 여러 개여도 뒤를 그대로 둔다 (254 리뷰 L-7)
+  return `${id.slice(0, 2)}···${domain}`;
 }
 
 function filled(value: string | undefined): string {
@@ -67,20 +69,27 @@ function tagText(tags: string[] | undefined): string {
   return (tags ?? []).join(', ');
 }
 
+/** 태그는 순서를 뜻으로 보지 않는다 — 다시 입력해 순서만 바뀐 것을 변경으로 적지 않게 (254 리뷰 M-6) */
+function tagKey(tags: string[] | undefined): string {
+  return [...new Set((tags ?? []).map(t => t.trim()).filter(Boolean))].sort().join('|');
+}
+
 /** 저장 전/후를 비교해 바뀐 항목만. 바뀐 것이 없으면 빈 배열(이력을 만들지 않는다) */
 export function diffCustomer(before: CustomerSnapshot, after: CustomerSnapshot): CustomerChange[] {
   const out: CustomerChange[] = [];
   const text = (v: string | undefined) => (v ?? '').trim();
   if (text(before.name) !== text(after.name)) out.push({ label: '이름', from: text(before.name), to: text(after.name) });
-  if (text(before.phone) !== text(after.phone)) out.push({ label: '연락처', from: maskPhone(before.phone), to: maskPhone(after.phone) });
-  if (text(before.email) !== text(after.email)) out.push({ label: '이메일', from: maskEmail(before.email), to: maskEmail(after.email) });
+  // 마스킹·정규화 **뒤** 값으로 비교한다 — 하이픈만 지워도 "···5678 → ···5678" 같은 뜻 없는 줄이 남고
+  // 고객당 20칸·전체 상한을 먹었다 (254 리뷰 M-6)
+  if (maskPhone(before.phone) !== maskPhone(after.phone)) out.push({ label: '연락처', from: maskPhone(before.phone), to: maskPhone(after.phone) });
+  if (maskEmail(before.email) !== maskEmail(after.email)) out.push({ label: '이메일', from: maskEmail(before.email), to: maskEmail(after.email) });
   if (text(before.grade) !== text(after.grade)) out.push({ label: '등급', from: text(before.grade), to: text(after.grade) });
   if (text(before.gender) !== text(after.gender)) out.push({ label: '성별', from: text(before.gender), to: text(after.gender) });
   if (text(before.skinType) !== text(after.skinType)) out.push({ label: '피부 타입', from: text(before.skinType), to: text(after.skinType) });
   if (text(before.referralSource) !== text(after.referralSource)) out.push({ label: '유입 경로', from: text(before.referralSource), to: text(after.referralSource) });
   if (text(before.birthDate) !== text(after.birthDate)) out.push({ label: '생일', from: filled(before.birthDate), to: filled(after.birthDate) });
   if (text(before.address) !== text(after.address)) out.push({ label: '주소', from: filled(before.address), to: filled(after.address) });
-  if (tagText(before.tags) !== tagText(after.tags)) out.push({ label: '태그', from: tagText(before.tags) || '없음', to: tagText(after.tags) || '없음' });
+  if (tagKey(before.tags) !== tagKey(after.tags)) out.push({ label: '태그', from: tagText(before.tags) || '없음', to: tagText(after.tags) || '없음' });
   if (has(before.memo) !== has(after.memo)) out.push({ label: '메모', from: has(before.memo), to: has(after.memo) });
   if (has(before.allergies) !== has(after.allergies)) out.push({ label: '알레르기', from: has(before.allergies), to: has(after.allergies) });
   return out;
@@ -100,18 +109,20 @@ export function describeCustomerChange(c: CustomerChange): string {
 
 export function describeCustomerEntryHead(e: CustomerHistoryEntry, formatTime: (iso: string) => string): string {
   const who = e.actor ? ` · ${e.actor}` : '';
-  const what = e.kind === 'grade' ? '등급 변경' : e.kind === 'delete' ? '삭제' : '정보 수정';
+  const what = e.kind === 'grade' ? '등급 변경' : e.kind === 'merge' ? '고객 병합' : '정보 수정';
   return `${formatTime(e.at)}${who} · ${what}`;
 }
 
-export const MAX_CUSTOMER_HISTORY = 1000;
+// 일괄 적용(등급 제안·태그 이름 변경)이 한 번에 수백 건을 쓰므로, 한 번의 조작으로 상한이 소진되지 않게 넉넉히 (254 리뷰 H-3)
+export const MAX_CUSTOMER_HISTORY = 3000;
 export const MAX_PER_CUSTOMER = 20;
 
 function isEntry(e: unknown): e is CustomerHistoryEntry {
   if (!e || typeof e !== 'object') return false;
   const r = e as CustomerHistoryEntry;
   return typeof r.customerId === 'string' && r.customerId.length > 0
-    && typeof r.at === 'string' && r.at.length > 0
+    // 날짜 모양이 아니면 버린다 — 깨진 한 줄이 180일 정리를 영구히 피해 남았다 (254 리뷰 L-3)
+    && typeof r.at === 'string' && /^\d{4}-\d{2}-\d{2}/.test(r.at)
     && Array.isArray(r.changes);
 }
 
@@ -123,12 +134,12 @@ export function sanitizeCustomerHistory(value: unknown): CustomerHistoryEntry[] 
     const changes = raw.changes
       .filter(c => c && typeof c.label === 'string')
       .map(c => ({ label: String(c.label).slice(0, 20), from: String(c.from ?? '').slice(0, 60), to: String(c.to ?? '').slice(0, 60) }));
-    if (changes.length === 0 && raw.kind !== 'delete') continue;
+    if (changes.length === 0) continue;
     out.push({
       id: typeof raw.id === 'string' && raw.id ? raw.id : `${raw.customerId}-${raw.at}`,
       customerId: raw.customerId,
       at: raw.at,
-      kind: raw.kind === 'grade' || raw.kind === 'delete' ? raw.kind : 'edit',
+      kind: raw.kind === 'grade' || raw.kind === 'merge' ? raw.kind : 'edit',
       ...(raw.actor ? { actor: String(raw.actor).slice(0, 20) } : {}),
       changes,
     });
@@ -137,7 +148,7 @@ export function sanitizeCustomerHistory(value: unknown): CustomerHistoryEntry[] 
 }
 
 /** 고객당 최근 MAX_PER_CUSTOMER 건, 전체 MAX_CUSTOMER_HISTORY 건, keepFrom 이전은 버린다 */
-export function trimCustomerHistory(entries: CustomerHistoryEntry[], keepFrom: string, max = MAX_CUSTOMER_HISTORY): CustomerHistoryEntry[] {
+export function trimCustomerHistory(entries: CustomerHistoryEntry[], keepFrom: string, max: number = MAX_CUSTOMER_HISTORY): CustomerHistoryEntry[] {
   const fresh = entries.filter(e => e.at.slice(0, 10) >= keepFrom);
   const perCount = new Map<string, number>();
   const kept: CustomerHistoryEntry[] = [];
@@ -157,6 +168,10 @@ export function customerHistoryFor(entries: CustomerHistoryEntry[], customerId: 
 }
 
 export const CUSTOMER_HISTORY_CAVEAT =
-  '이 PC 에서 한 변경만 남습니다(다른 PC·폰에서 한 변경은 그 기기에 남습니다). 연락처·이메일은 일부만, 메모·알레르기는 바뀐 사실만 남깁니다. 최근 1000건·고객당 20건·180일까지 보관합니다.';
+  '이 PC 에서 한 변경만 남습니다(다른 PC·폰에서 한 변경은 그 기기에 남습니다). 엑셀 가져오기로 덮어쓴 값은 남지 않습니다. 연락처·이메일은 일부만, 메모·알레르기는 바뀐 사실만 남겨 추가 사본을 줄였습니다(이름·등급·태그는 그대로). 최근 3000건·고객당 20건·180일까지 보관합니다.';
 
-export const CUSTOMER_HISTORY_EMPTY = '이 PC 에 남은 변경 기록이 없습니다.';
+/** 기록이 없을 때 — "변경이 없었다" 로 읽히지 않게 적는다 (254 리뷰 M-3) */
+export const CUSTOMER_HISTORY_EMPTY = '이 PC 에 기록된 변경이 없습니다(변경이 없었다는 뜻은 아닙니다).';
+
+/** 저장이 실패했을 때 — 기록이 비어 보이는 이유를 말한다 (254 리뷰 M-3) */
+export const CUSTOMER_HISTORY_WRITE_FAILED = '변경 기록을 저장하지 못했습니다(저장 공간 부족) — 이 목록은 비어 있을 수 있습니다.';

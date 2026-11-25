@@ -135,8 +135,16 @@ export function describeReasonSummary(s: ReasonSummary, monthLabel?: string, top
  * 정직성: 지난달 자료가 아예 없으면(기록 시작 전) 비교하지 않는다 — 0 에서 늘었다고 말하지 않는다.
  */
 export interface ReasonTrend {
-  /** 지난달 자료가 있는가(취소·노쇼가 한 건이라도 있었는가) */
+  /** 지난달 자료가 있는가(취소·노쇼가 한 건이라도 있었는가) — 건수 비교의 조건 */
   comparable: boolean;
+  /**
+   * 매장 쪽 사유를 비교할 수 있는가 — **두 달 모두 사유가 적혀 있어야** 한다.
+   * 지난달에 아무도 사유를 적지 않았으면 previous.shopSide 가 0 이라 "매장 쪽 +3" 처럼
+   * 거짓 악화(또는 이번 달에 안 적으면 거짓 개선)를 말했다 (254 리뷰 H-1).
+   */
+  shopComparable: boolean;
+  /** 지난달에 사유가 적힌 건수 — 화면이 기준을 밝힐 때 쓴다 */
+  previousRecorded: number;
   cancelDelta: number;
   noshowDelta: number;
   shopSideDelta: number;
@@ -146,6 +154,8 @@ export function compareReasonMonths(current: ReasonSummary, previous: ReasonSumm
   const comparable = previous.cancelled + previous.noshow > 0;
   return {
     comparable,
+    shopComparable: previous.recorded > 0 && current.recorded > 0,
+    previousRecorded: previous.recorded,
     cancelDelta: current.cancelled - previous.cancelled,
     noshowDelta: current.noshow - previous.noshow,
     shopSideDelta: current.shopSide - previous.shopSide,
@@ -160,9 +170,11 @@ export function describeReasonTrend(t: ReasonTrend): string | null {
   const parts: string[] = [];
   if (t.cancelDelta !== 0) parts.push(`취소 ${signed(t.cancelDelta)}`);
   if (t.noshowDelta !== 0) parts.push(`노쇼 ${signed(t.noshowDelta)}`);
-  if (t.shopSideDelta !== 0) parts.push(`매장 쪽 사유 ${signed(t.shopSideDelta)}`);
-  if (parts.length === 0) return '지난달과 같습니다';
-  return `지난달 대비 ${parts.join(' · ')}`;
+  // 매장 쪽 사유는 두 달 모두 사유가 적혀 있을 때만 비교한다 (254 리뷰 H-1)
+  if (t.shopComparable && t.shopSideDelta !== 0) parts.push(`매장 쪽 사유 ${signed(t.shopSideDelta)}`);
+  if (parts.length === 0) return '지난달과 취소·노쇼 건수가 같습니다';
+  const basis = t.shopComparable ? ` (지난달 사유 기록 ${t.previousRecorded}건 기준)` : '';
+  return `지난달 대비 ${parts.join(' · ')}${basis}`;
 }
 
 /** 지난달(YYYY-MM) */

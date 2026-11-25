@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { History } from 'lucide-react';
 import { formatDateTime } from '../lib/format';
-import { customerHistory } from '../lib/customerHistory';
-import { describeCustomerChange, describeCustomerEntryHead, CUSTOMER_HISTORY_CAVEAT, CUSTOMER_HISTORY_EMPTY } from '../lib/customerHistoryRule';
+import { customerHistory, historyWriteFailed } from '../lib/customerHistory';
+import { describeCustomerChange, describeCustomerEntryHead, CUSTOMER_HISTORY_CAVEAT, CUSTOMER_HISTORY_EMPTY, CUSTOMER_HISTORY_WRITE_FAILED } from '../lib/customerHistoryRule';
 
 /**
  * 고객 정보 변경 이력 (252) — 고객 정보는 덮어쓰기라 누가 언제 무엇을 바꿨는지 남지 않았다.
@@ -18,6 +18,9 @@ export default function CustomerHistoryCard({ customerId, tick = 0 }: { customer
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4" data-testid="customer-history">
       <h3 className="text-sm font-bold text-gray-900 flex items-center gap-1.5 mb-2"><History size={14} className="text-[#1a3a8f]" />정보 변경 이력</h3>
+      {historyWriteFailed() && (
+        <p className="text-sm text-amber-800 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl mb-2" role="status">{CUSTOMER_HISTORY_WRITE_FAILED}</p>
+      )}
       {entries.length === 0 ? (
         <p className="text-sm text-gray-500">{CUSTOMER_HISTORY_EMPTY}</p>
       ) : (
@@ -37,7 +40,7 @@ export default function CustomerHistoryCard({ customerId, tick = 0 }: { customer
           )}
         </>
       )}
-      <p className="text-2xs text-gray-400 mt-1">{CUSTOMER_HISTORY_CAVEAT}</p>
+      <p className="text-xs text-gray-400 mt-1">{CUSTOMER_HISTORY_CAVEAT}</p>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { logReservationStatus } from '../../lib/reservationHistory'; // 시술 기록이 예약을 완료로 바꾼 것도 이력에 (250 리뷰 H-3)
 // 자주 쓰는 메모 문구 (251) — 같은 문장을 하루 수십 번 다시 쓰던 것
 import { memoPresets, saveMemoPreset, deleteMemoPreset } from '../../lib/memoPresets';
-import { appendPreset, presetInMemo, MAX_PRESET_LEN } from '../../lib/memoPresetRule';
+import { appendPreset, removePresetLine, presetInMemo, MAX_PRESET_LEN } from '../../lib/memoPresetRule';
 import { notify } from '../../lib/notify';
 import { matchesSearch, todayISO, toISODate, parseISODate, formatDate, formatPrice } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -733,7 +733,8 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
               {presets.map(t => {
                 const on = presetInMemo(staffNotes, t);
                 return (
-                  <button key={t} type="button" onClick={() => setStaffNotes(prev => appendPreset(prev, t))} aria-pressed={on}
+                  <button key={t} type="button" onClick={() => setStaffNotes(prev => (on ? removePresetLine(prev, t) : appendPreset(prev, t)))} aria-pressed={on}
+                    title={on ? '다시 누르면 메모에서 이 줄을 뺍니다' : '메모에 한 줄 추가'}
                     className={`px-3 py-2 min-h-[36px] rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                     {t}
                   </button>
@@ -749,6 +750,8 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
                   className="flex-1 min-h-[44px] px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300" />
                 <button type="button" onClick={handleAddPreset} className="px-4 min-h-[44px] rounded-xl bg-[#1a3a8f] text-white text-sm font-semibold hover:bg-[#15306e]">추가</button>
               </div>
+              {/* 설정 행 저장의 한계를 적는다 — 249 연락 기록과 같은 안내 (254 리뷰 M-5) */}
+              <p className="text-xs text-gray-400">문구는 매장 설정에 저장되어 모든 PC 가 함께 씁니다. 다른 PC 와 같은 시각(1분 안)에 설정을 바꾸면 드물게 한쪽이 덮일 수 있습니다.</p>
               {presets.length === 0 ? (
                 <p className="text-xs text-gray-500">자주 쓰는 문장을 저장해 두면 메모에 눌러 넣을 수 있습니다(매장 공용, {MAX_PRESET_LEN}자까지).</p>
               ) : (

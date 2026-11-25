@@ -4,7 +4,7 @@
 // PC를 바꾸면 사라졌다. 이 유틸은 (1) 서버 동기 설정을 우선 읽고 (2) 예전 localStorage 값이 있으면
 // 한 번 이관(migrate)한 뒤 (3) 저장은 항상 SettingsStore.save로 해 서버에 반영한다.
 // localStorage는 오프라인·즉시 반응용 캐시로만 남긴다.
-import { SettingsStore } from './store';
+import { SettingsStore, getShopId } from './store';
 import type { ShopPreferences } from '../types';
 
 type PrefKey = keyof ShopPreferences;
@@ -44,5 +44,24 @@ export function migrateLegacyPreference<K extends PrefKey>(
     return parsed;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * 설정 행이 **디스크에 실제로** 저장됐는지 확인한다 (254 리뷰 M-1).
+ * SettingsStore.get() 은 메모리 캐시를 먼저 돌려주고 safeSetItem 은 용량 초과를 삼키므로,
+ * 캐시를 되읽는 확인은 저장 실패를 잡지 못한다 — localStorage 원본을 직접 본다.
+ * 읽을 수 없으면(프라이빗 모드 등) null 을 돌려주고 호출 쪽이 "확인 불가" 로 다룬다.
+ */
+export function readPersistedPreference<K extends PrefKey>(key: K): ShopPreferences[K] | null | undefined {
+  try {
+    const raw = localStorage.getItem(`crm_${getShopId()}_settings`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const prefs = parsed?.preferences;
+    if (!prefs || typeof prefs !== 'object') return undefined;
+    return prefs[key];
+  } catch {
+    return null;
   }
 }

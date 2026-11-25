@@ -3,7 +3,7 @@ import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, expectNoH
 import { registerPayment, addReservation, openReservationDetail } from './flows';
 
 /**
- * 폰 폭에서 새 기능 점검 (241·244) — 228~244 으로 들어온 화면은 PC 스펙만 있었다.
+ * 폰 폭에서 새 기능 점검 (241·244·254) — 228~252 으로 들어온 화면은 PC 스펙만 있었다.
  * 매장은 태블릿·폰으로 쓰는 일이 많아(UI 품질 절대 기준) 영수증·수당·태그·등급·사진 백업이
  * 폰에서 눌릴 수 있고 가로로 넘치지 않아야 한다. 창 안쪽 가로 넘침까지 본다.
  */
@@ -102,4 +102,28 @@ test('폰 폭: 영수증·사진 백업·태그·등급·수당 화면이 눌리
   await page.getByRole('button', { name: '이번달' }).click();
   await expect(page.getByTestId('cancel-reason-summary').filter({ visible: true }).first()).toContainText('매장 사정(직원·설비) 1건');
   await expectNoHorizontalOverflow(page, '예약 화면 이번달 탭(취소 사유 줄)');
+
+  // ── 251 메모 문구 칩: 폰에서 저장·눌러 넣기·다시 눌러 빼기 (254 리뷰 L-6) ──
+  await page.goto('/treatments?new=1');
+  const log = page.getByRole('dialog', { name: '시술 기록 추가' });
+  await expect(log).toBeVisible();
+  await log.getByTestId('memo-preset-manage').click();
+  const editor = log.getByTestId('memo-preset-editor');
+  await editor.getByLabel('새 문구').fill('자극 없음');
+  await editor.getByRole('button', { name: '추가' }).click();
+  await dismissToasts(page);
+  await expectNoHorizontalOverflow(page, '시술 기록 메모 문구 관리(폰)');
+  const memoField = log.getByPlaceholder('시술 특이사항, 다음 방문 시 주의사항 등');
+  await log.getByTestId('memo-presets').getByRole('button', { name: '자극 없음' }).click();
+  await expect(memoField).toHaveValue('자극 없음');
+  await log.getByTestId('memo-presets').getByRole('button', { name: '자극 없음' }).click(); // 다시 누르면 빠진다
+  await expect(memoField).toHaveValue('');
+  await log.getByRole('button', { name: '닫기', exact: true }).first().click();
+
+  // ── 252 정보 변경 이력 카드: 폰 상세에서 보이고 가로로 넘치지 않는다 ──
+  await page.goto('/customers');
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  const histCard = page.getByTestId('customer-history').filter({ visible: true }).first();
+  await expect(histCard).toBeVisible();
+  await expectNoHorizontalOverflow(page, '고객 상세 정보 변경 이력(폰)');
 });

@@ -4,6 +4,7 @@ import { CustomerStore } from './store';
 import { todayISO } from './format';
 import { getPreference, setPreference } from './shopPreferences';
 import { consentFromTags, tagsWithConsent } from './consentRule';
+import { logCustomerEdit } from './customerHistory'; // 동의 토글도 변경 이력에 (254 리뷰 H-2)
 import type { Customer } from '../types';
 import type { ConsentState } from './adComplianceRule';
 
@@ -14,13 +15,16 @@ export function consentOf(c: Pick<Customer, 'tags'>): ConsentState {
 interface ConsentPatch { ad?: 'consented' | 'optout' | 'unknown'; sms?: boolean; kakao?: boolean }
 
 /** 고객의 동의 상태를 바꿔 저장한다(태그 갱신 — 코어 CustomerStore.update, 고객 행 단위 동기) */
-export function setConsent(customerId: string, patch: ConsentPatch): ConsentState | null {
+export function setConsent(customerId: string, patch: ConsentPatch, actor?: string): ConsentState | null {
   const c = CustomerStore.getAll().find(x => x.id === customerId);
   if (!c) return null;
   const cur = consentOf(c);
   const ad = patch.ad ?? cur.ad;
   const next: ConsentState = { ad, sms: patch.sms ?? cur.sms, kakao: patch.kakao ?? cur.kakao, consentAt: ad === 'consented' ? (cur.ad === 'consented' ? cur.consentAt : todayISO()) : undefined };
-  CustomerStore.update(customerId, { tags: tagsWithConsent(c.tags, next, todayISO()) });
+  const nextTags = tagsWithConsent(c.tags, next, todayISO());
+  CustomerStore.update(customerId, { tags: nextTags });
+  // 광고 수신 동의는 법적으로 다툴 수 있는 항목이라 변경 사실을 남긴다 (254 리뷰 H-2)
+  logCustomerEdit(customerId, { tags: c.tags }, { tags: nextTags }, actor);
   return next;
 }
 

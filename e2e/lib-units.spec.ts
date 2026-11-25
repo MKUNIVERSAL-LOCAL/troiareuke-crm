@@ -8,7 +8,7 @@ import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCoun
 import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
 import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
 import { resultLabel, defaultSnoozeDays, addDays as addDaysFollowUp, isSnoozed, sanitizeFollowUps, pruneFollowUps, snoozedIdSet, describeFollowUp, describeHidden } from '../src/lib/followUpRule';
-import { normalizePreset, sanitizePresets, addPreset, removePreset, appendPreset, presetInMemo, MAX_PRESET_LEN, MAX_PRESETS } from '../src/lib/memoPresetRule';
+import { normalizePreset, sanitizePresets, addPreset, removePreset, appendPreset, removePresetLine, presetInMemo, MAX_PRESET_LEN, MAX_PRESETS } from '../src/lib/memoPresetRule';
 import { diffCustomer, gradeChange, describeCustomerChange, describeCustomerEntryHead, sanitizeCustomerHistory, trimCustomerHistory, customerHistoryFor, maskPhone, maskEmail, MAX_PER_CUSTOMER } from '../src/lib/customerHistoryRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
@@ -2426,17 +2426,67 @@ test('취소 사유 추세 — 지난달 자료가 없으면 비교하지 않는
   // 지난달 자료가 있으면 변화만 적는다
   const prev = summarizeReasons({ cancelled: 3, noshow: 2 }, [{ kind: 'cancelled', reason: 'customer-schedule' }]);
   const t1 = compareReasonMonths(cur, prev);
-  expect(t1).toEqual({ comparable: true, cancelDelta: 2, noshowDelta: 0, shopSideDelta: 1 });
-  expect(describeReasonTrend(t1)).toBe('지난달 대비 취소 +2 · 매장 쪽 사유 +1');
+  expect(t1).toMatchObject({ comparable: true, shopComparable: true, cancelDelta: 2, noshowDelta: 0, shopSideDelta: 1 });
+  expect(describeReasonTrend(t1)).toBe('지난달 대비 취소 +2 · 매장 쪽 사유 +1 (지난달 사유 기록 1건 기준)');
   // 줄어든 것도 그대로
   const t2 = compareReasonMonths(prev, cur);
-  expect(describeReasonTrend(t2)).toBe('지난달 대비 취소 -2 · 매장 쪽 사유 -1');
+  expect(describeReasonTrend(t2)).toBe('지난달 대비 취소 -2 · 매장 쪽 사유 -1 (지난달 사유 기록 1건 기준)');
   // 변화가 없으면 그 사실을 말한다
-  expect(describeReasonTrend(compareReasonMonths(prev, prev))).toBe('지난달과 같습니다');
+  expect(describeReasonTrend(compareReasonMonths(prev, prev))).toBe('지난달과 취소·노쇼 건수가 같습니다');
 });
 
 test('지난달 계산 — 연말 경계 (253)', () => {
   expect(previousMonth('2026-11')).toBe('2026-10');
   expect(previousMonth('2026-01')).toBe('2025-12');
   expect(previousMonth('엉망')).toBe('엉망');
+});
+
+// ── 254: 251~253 리뷰 반영 ──
+
+test('취소 사유 추세 — 지난달에 사유를 아무도 적지 않았으면 "매장 쪽 +N" 을 말하지 않는다 (254 리뷰 H-1)', () => {
+  // 244(사유 입력)가 나간 첫 달의 모든 매장이 보던 거짓 악화
+  const prevNoReasons = summarizeReasons({ cancelled: 8, noshow: 3 }, []);               // 지난달: 취소는 있었지만 사유 0건
+  const curWithReasons = summarizeReasons({ cancelled: 8, noshow: 3 }, [
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'cancelled', reason: 'duplicate' },
+  ]);
+  const t = compareReasonMonths(curWithReasons, prevNoReasons);
+  expect(t.comparable).toBe(true);        // 건수는 비교할 수 있다
+  expect(t.shopComparable).toBe(false);   // 매장 쪽 사유는 비교할 수 없다
+  const line = describeReasonTrend(t);
+  expect(line).not.toContain('매장 쪽');  // 취소 건수가 같으니 변화 없음만 말한다
+  expect(line).toBe('지난달과 취소·노쇼 건수가 같습니다');
+  // 거꾸로 이번 달에 사유를 안 적었을 때도 "개선" 으로 말하지 않는다
+  const back = compareReasonMonths(prevNoReasons, curWithReasons);
+  expect(describeReasonTrend(back)).not.toContain('매장 쪽');
+});
+
+test('메모 문구 — 칩을 다시 누르면 그 줄이 빠진다(실제 토글) (254 리뷰 M-4)', () => {
+  const memo = appendPreset(appendPreset('', '자극 없음'), '강도 낮춤');
+  expect(memo).toBe('자극 없음\n강도 낮춤');
+  expect(removePresetLine(memo, '자극 없음')).toBe('강도 낮춤');
+  expect(removePresetLine(memo, '강도 낮춤')).toBe('자극 없음');
+  expect(removePresetLine('자극 없음', '자극 없음')).toBe('');
+  // 없던 문구면 메모를 건드리지 않는다(타이핑 중인 끝 공백도 그대로)
+  expect(removePresetLine('직접 쓴 메모   ', '자극 없음')).toBe('직접 쓴 메모   ');
+  // 사이 빈 줄이 겹치지 않게 정리한다
+  expect(removePresetLine('A\n자극 없음\nB', '자극 없음')).toBe('A\nB');
+});
+
+test('고객 변경 이력 — 형식만 바뀐 연락처·순서만 바뀐 태그는 기록하지 않는다 (254 리뷰 M-6)', () => {
+  const before = { phone: '010-1234-5678', email: 'hong@test.com', tags: ['a', 'b'] };
+  expect(diffCustomer(before, { ...before, phone: '01012345678' })).toEqual([]);  // 하이픈만 지웠다
+  expect(diffCustomer(before, { ...before, tags: ['b', 'a'] })).toEqual([]);      // 순서만 바뀜
+  expect(diffCustomer(before, { ...before, tags: ['b', 'a', 'c'] })).toHaveLength(1);
+  // 실제로 다른 번호는 기록한다
+  expect(diffCustomer(before, { ...before, phone: '010-1234-9999' })).toHaveLength(1);
+  // @ 가 여러 개인 이메일도 도메인을 잘라 먹지 않는다
+  expect(maskEmail('a@b@c.com')).toBe('a···@b@c.com');
+});
+
+test('고객 변경 이력 — 날짜 모양이 아닌 기록은 버린다(영구 잔류 방지) (254 리뷰 L-3)', () => {
+  const broken = [{ id: 'x', customerId: 'c1', at: 'not-a-date', kind: 'edit' as const, changes: [{ label: '등급', from: '일반', to: 'VIP' }] }];
+  expect(sanitizeCustomerHistory(broken)).toEqual([]);
+  expect(trimCustomerHistory(sanitizeCustomerHistory(broken), '2026-06-01')).toEqual([]);
 });

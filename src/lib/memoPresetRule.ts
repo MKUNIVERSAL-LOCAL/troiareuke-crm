@@ -62,6 +62,19 @@ export function appendPreset(memo: string, preset: string): string {
   return base ? `${base}\n${clean}` : clean;
 }
 
+/**
+ * 메모에서 그 문구 줄을 뺀다 — 칩을 다시 누르면 빠져야 한다.
+ * 전에는 눌린 칩을 다시 눌러도 아무 일이 없어(장식 UI) 직원이 메모에서 손으로 지워야 했다 (254 리뷰 M-4).
+ */
+export function removePresetLine(memo: string, preset: string): string {
+  const clean = normalizePreset(preset);
+  if (!clean) return memo;
+  const lines = (memo ?? '').split('\n');
+  const kept = lines.filter(l => l.trim() !== clean);
+  if (kept.length === lines.length) return memo;          // 없던 줄이면 그대로(끝 공백도 건드리지 않는다)
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\s+$/, '');
+}
+
 /** 이미 메모에 들어 있는 문구인가 — 칩을 눌린 상태로 보여 주려고 */
 export function presetInMemo(memo: string, preset: string): boolean {
   const clean = normalizePreset(preset);

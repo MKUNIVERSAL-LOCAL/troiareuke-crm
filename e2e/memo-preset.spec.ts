@@ -41,13 +41,16 @@ test('시술 기록 메모에 자주 쓰는 문구를 저장해 눌러 넣는다
   await expect(page.getByText('이미 있는 문구입니다.')).toBeVisible();
   await dismissToasts(page);
 
-  // 칩을 눌러 메모에 덧붙인다 — 두 번 눌러도 줄이 두 번 생기지 않는다
+  // 칩을 눌러 메모에 덧붙이고, **다시 누르면 그 줄이 빠진다**(실제 토글 — 254 리뷰 M-4)
   const chips = dialog.getByTestId('memo-presets');
+  const memo = dialog.getByPlaceholder('시술 특이사항, 다음 방문 시 주의사항 등');
   await chips.getByRole('button', { name: '자극 없음 · 홈케어 안내' }).click();
   await chips.getByRole('button', { name: '강도 한 단계 낮춤' }).click();
-  await chips.getByRole('button', { name: '자극 없음 · 홈케어 안내' }).click();
-  const memo = dialog.getByPlaceholder('시술 특이사항, 다음 방문 시 주의사항 등');
   await expect(memo).toHaveValue('자극 없음 · 홈케어 안내\n강도 한 단계 낮춤');
+  await chips.getByRole('button', { name: '자극 없음 · 홈케어 안내' }).click(); // 다시 누르면 빠진다
+  await expect(memo).toHaveValue('강도 한 단계 낮춤');
+  await chips.getByRole('button', { name: '자극 없음 · 홈케어 안내' }).click(); // 다시 넣는다
+  await expect(memo).toHaveValue('강도 한 단계 낮춤\n자극 없음 · 홈케어 안내');
 
   // 문구 삭제 — 칩에서도 사라진다
   await editor.getByRole('button', { name: '강도 한 단계 낮춤 문구 삭제' }).click();
@@ -55,5 +58,5 @@ test('시술 기록 메모에 자주 쓰는 문구를 저장해 눌러 넣는다
   await expect(chips.getByRole('button', { name: '강도 한 단계 낮춤' })).toHaveCount(0);
   await expect(chips.getByRole('button', { name: '자극 없음 · 홈케어 안내' })).toBeVisible();
   // 이미 쓴 메모는 지워지지 않는다(문구 목록과 기록은 별개)
-  await expect(memo).toHaveValue('자극 없음 · 홈케어 안내\n강도 한 단계 낮춤');
+  await expect(memo).toHaveValue('강도 한 단계 낮춤\n자극 없음 · 홈케어 안내');
 });

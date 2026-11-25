@@ -37,7 +37,7 @@ import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import FollowUpCard from '../../components/FollowUpCard'; // 연락 기록·미루기 (249)
 import CustomerHistoryCard from '../../components/CustomerHistoryCard'; // 정보 변경 이력 (252)
-import { logCustomerEdit, logCustomerGrade } from '../../lib/customerHistory';
+import { logCustomerEdit, logCustomerGrade, logCustomerGradeBatch, logCustomerEditBatch } from '../../lib/customerHistory';
 import { snoozedCustomerIds } from '../../lib/followUp';
 import { describeHidden } from '../../lib/followUpRule';
 import ProgramManageModal from '../../components/ProgramManageModal';
@@ -357,7 +357,9 @@ export default function Customers() {
     const text = quickMemo.trim();
     if (!text) return;
     const line = `[${today()}] ${text}`;
+    const beforeMemo = selected.memo;
     CustomerStore.update(selected.id, { memo: selected.memo ? `${selected.memo}\n${line}` : line });
+    logCustomerEdit(selected.id, { memo: beforeMemo }, { memo: selected.memo ? `${selected.memo}\n${line}` : line }, user?.name); // 빠른 메모도 기록 (254 리뷰 H-2)
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
     setQuickMemo('');
@@ -502,6 +504,7 @@ export default function Customers() {
       const ids = all.filter(c => renameTagOnCustomer(c.tags, renameFrom, target).changed).map(c => c.id);
       let done = 0;
       let applied = 0;
+      const renameRows: { id: string; before: { tags?: string[] }; after: { tags?: string[] } }[] = []; // 이력은 끝에서 한 번에 (254 리뷰 H-2·H-3)
       const step = () => {
         try {
           // 코어 update() 는 한 명마다 고객 표 전체를 저장한다 → 25명씩 (238 리뷰 H-3 과 같은 이유)
@@ -511,6 +514,7 @@ export default function Customers() {
             const r = renameTagOnCustomer(c.tags, renameFrom, target);
             if (!r.changed) continue; // 그 사이 다른 기기가 태그를 지웠다
             CustomerStore.update(id, { tags: r.tags });
+            renameRows.push({ id, before: { tags: c.tags }, after: { tags: r.tags } });
             applied += 1;
           }
         } catch (e) {
@@ -526,6 +530,7 @@ export default function Customers() {
         const movedSegments = renameTagInSavedSegments(renameFrom, target);
         if (movedSegments.length > 0) setSavedSegments(listSavedSegments());
         setRenaming(false);
+        logCustomerEditBatch(renameRows, user?.name); // 태그 일괄 변경도 고객마다 이력에(저장은 한 번) (254 리뷰 H-2)
         setRenameFrom(null);
         const skipped = ids.length - applied;
         notify(`고객 ${applied}명의 태그를 "${target}" 으로 바꿨습니다${preview.merges > 0 ? ` (${preview.merges}명은 기존 태그와 합쳐짐)` : ''}${skipped > 0 ? ` · ${skipped}명은 그 사이 바뀌어 건너뜀` : ''}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개 조건도 함께 바꿈` : ''}.`);
@@ -562,12 +567,13 @@ export default function Customers() {
     setGradeApplying(true);
     let done = 0;
     let applied = 0;
+    const appliedRows: { id: string; from?: string; to: string }[] = [];
     const step = () => {
       try {
         for (const g of picked.slice(done, done + 25)) {
           if (CustomerStore.getById(g.id)?.grade !== g.current) continue; // 그 사이 직원이 바꿨으면 건드리지 않는다
           CustomerStore.update(g.id, { grade: g.suggested });
-          logCustomerGrade(g.id, g.current, g.suggested, user?.name); // 일괄 적용도 고객마다 남긴다 (252)
+          appliedRows.push({ id: g.id, from: g.current, to: g.suggested }); // 이력은 루프 끝에서 한 번에 (254 리뷰 H-3)
           applied += 1;
         }
       } catch (e) {
@@ -580,6 +586,7 @@ export default function Customers() {
       done += 25;
       if (done < picked.length) { setTimeout(step, 0); return; }
       setGradeApplying(false);
+      logCustomerGradeBatch(appliedRows, user?.name); // 저장 한 번 — 전에는 고객마다 전체 이력을 다시 썼다 (254 리뷰 H-3)
       setGradePanel(false);
       notify(`${applied}명의 등급을 올렸습니다.${picked.length - applied > 0 ? ` (${picked.length - applied}명은 그 사이 등급이 바뀌어 건너뜀)` : ''}`);
       loadAll();
@@ -1048,6 +1055,7 @@ export default function Customers() {
     const isLatestRecord = !savedConsultId || consultations[0]?.id === savedConsultId;
     if (isLatestRecord && consultForm.skinTypeResult && consultForm.skinTypeResult !== selected.skinType) {
       CustomerStore.update(selected.id, { skinType: consultForm.skinTypeResult });
+      logCustomerEdit(selected.id, { skinType: selected.skinType }, { skinType: consultForm.skinTypeResult }, user?.name); // 상담 저장이 바꾼 피부 타입도 기록 (254 리뷰 H-2)
       const updated = CustomerStore.getById(selected.id);
       if (updated) setSelected(updated);
     }
@@ -1173,10 +1181,11 @@ export default function Customers() {
     if (ids.length === 0) return;
     promoteRunning.current = true;
     let i = 0;
+    const promoted: { id: string; from?: string; to: string }[] = []; // 자동 승급도 이력에(저장은 한 번) (254 리뷰 H-2)
     const step = () => {
       try {
         // 그 사이 직원이 등급을 바꿨으면(VIP 등) 건드리지 않는다
-        for (const id of ids.slice(i, i + 25)) if (CustomerStore.getById(id)?.grade === '신규') CustomerStore.update(id, { grade: '일반' });
+        for (const id of ids.slice(i, i + 25)) if (CustomerStore.getById(id)?.grade === '신규') { CustomerStore.update(id, { grade: '일반' }); promoted.push({ id, from: '신규', to: '일반' }); }
       } catch (e) {
         promoteRunning.current = false; // 저장 실패(용량 등)로 가드가 잠기지 않게 — 다음 loadAll에서 재시도
         console.error('[customers] 자동 승급 저장 실패:', e);
@@ -1185,6 +1194,7 @@ export default function Customers() {
       i += 25;
       if (i < ids.length) { setTimeout(step, 0); return; }
       promoteRunning.current = false;
+      logCustomerGradeBatch(promoted, '자동 승급');
       setCustomers(CustomerStore.getAll()); // 승급 결과를 목록에 반영
     };
     setTimeout(step, 0);

@@ -19,7 +19,7 @@ test('고객 정보를 고치면 바뀐 항목만 이력에 남고, 연락처·�
   await openCustomer(page, acc);
   const history = page.getByTestId('customer-history').filter({ visible: true }).first();
   await expect(history).toBeVisible();
-  await expect(history).toContainText('이 PC 에 남은 변경 기록이 없습니다');
+  await expect(history).toContainText('기록된 변경이 없습니다'); // "변경이 없었다" 로 읽히지 않게 적는다 (254 리뷰 M-3)
 
   // 등급 변경 — 누가 바꿨는지와 함께 남는다
   await changeGrade(page, '신규', 'VIP');

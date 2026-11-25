@@ -9,6 +9,8 @@
 // 로컬 쓰기는 동기이므로 중간에 실패(저장 용량 등)하면 일부만 옮겨진 채 source가 남는다 — 같은 병합을 다시 실행하면 이어서 완료된다.
 // ═══════════════════════════════════════════════════════════════
 
+import { logCustomerMerge, clearCustomerHistory } from './customerHistory';
+import { clearHistoryOfCustomer } from './reservationHistory';
 import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore, ProductSaleStore } from './store';
 import { ConsultationStore } from './consultationStore';
 import { isAnonymized } from './retentionPolicy';
@@ -106,6 +108,10 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   if (source.memo) updates.memo = t.memo ? `${t.memo}\n[병합: ${source.name}] ${source.memo}` : `[병합: ${source.name}] ${source.memo}`;
   if (!t.privacyConsent && source.privacyConsent) { updates.privacyConsent = true; updates.privacyConsentAt = source.privacyConsentAt; }
   CustomerStore.update(targetId, updates);
+  // 남는 고객에 "고객 병합" 이력을 남기고, 사라지는 고객의 이력(실명 포함)은 지운다 (254 리뷰 H-2·M-2)
+  logCustomerMerge(targetId, t, { ...t, ...updates });
+  clearCustomerHistory(sourceId);
+  clearHistoryOfCustomer(sourceId);
   CustomerStore.delete(sourceId);
   recordMergedCustomer(sourceId, targetId); // 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 — 병합이 끝난 뒤에만 기록(중간 예외 시 유령 매핑 방지) (11차 #M10, 리뷰 #M9)
   return preview;
