@@ -291,6 +291,12 @@ export default function Reservations() {
   const [requestCount, setRequestCount] = useState(0);
   const refreshRequestCount = () => { void newRequests().then(l => setRequestCount(l.length)); }; // 어댑터는 비동기(서버 어댑터 대비) (144 리뷰 L-3)
   useEffect(() => { refreshRequestCount(); }, []);
+  // 대시보드 오늘 할 일 "예약 요청함 처리 전 요청"(?requests=1) → 요청함 바로 열기, 1회 캡처 후 URL 비움 (188)
+  useEffect(() => {
+    if (searchParams.get('requests') !== '1') return;
+    setShowRequests(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [fromRequest, setFromRequest] = useState<{ req: BookingRequest; createdCustomerId?: string } | null>(null);
   const registerFromRequest = (req: BookingRequest) => {
     setShowRequests(false);

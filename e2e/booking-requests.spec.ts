@@ -39,6 +39,17 @@ test('예약 요청 접수 → 예약으로 등록(폼 프리필·고객 자동 
   await expect(item).toContainText('신규 고객');
   await expect(item).toContainText('14:00');
 
+  // 대시보드 오늘 할 일에 "예약 요청함 처리 전 요청 확인 1" → 누르면 요청함이 바로 열린다 (188)
+  await page.keyboard.press('Escape');
+  await expect(inbox).toHaveCount(0);
+  await page.goto('/');
+  const requestTask = page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByRole('button', { name: /예약 요청함 처리 전 요청 확인/ });
+  await expect(requestTask).toContainText('1');
+  await requestTask.click();
+  await expect(page).toHaveURL(/\/reservations/);
+  await expect(inbox).toBeVisible();
+  await expect(item).toHaveCount(1);
+
   // 예약으로 등록 → 예약 폼 프리필
   await item.getByRole('button', { name: '예약으로 등록' }).click();
   await expect(inbox).toHaveCount(0);

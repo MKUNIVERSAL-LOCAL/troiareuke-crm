@@ -59,6 +59,11 @@ export const CHANNEL_LABEL: Record<BookingChannel, string> = { phone: '전화', 
 /** 요청 채널 → 예약 유입 경로(SourceBadge) */
 export const CHANNEL_SOURCE: Record<BookingChannel, ReservationSource> = { phone: 'phone', kakao: 'kakao', naver: 'naver', web: 'app' };
 
+/** 처리 전 요청 건수(동기) — 대시보드 오늘 할 일용. 로컬 어댑터 전용: 서버 어댑터(B-2)로 바뀌면 캐시된 건수를 돌려주게 바꾼다 (188) */
+export function countNewRequestsLocal(): number {
+  return read().filter(r => r.status === 'new').length;
+}
+
 /** 처리 전 요청 — 날짜·시간 순 */
 export async function newRequests(): Promise<BookingRequest[]> {
   return (await bookingRequests.list()).filter(r => r.status === 'new').sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
