@@ -305,7 +305,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     const customers = JSON.parse(localStorage.getItem(key(/^crm_.*_customers$/)) || '[]');
     const reservations = JSON.parse(localStorage.getItem(key(/^crm_.*_reservations$/)) || '[]');
     const main = customers[0]; const id = 'norebook_' + Date.now();
-    customers.push({ ...main, id, name: '재예약없음고객', phone: '010-9999-0202' });
+    customers.push({ ...main, id, name: '재예약없음고객', phone: '010-9999-0202', birthDate: undefined, email: undefined }); // 6-3 의 생일(오늘)·이메일을 상속하지 않게 — 생일 카드·중복 의심이 2명이 되지 않도록 (203)
     reservations.push({ ...reservations[0], id: 'norebookres_' + Date.now(), customerId: id, customerName: '재예약없음고객', status: 'completed', startTime: '09:00', endTime: '10:00' });
     localStorage.setItem(key(/^crm_.*_customers$/), JSON.stringify(customers)); localStorage.setItem(key(/^crm_.*_reservations$/), JSON.stringify(reservations));
   });

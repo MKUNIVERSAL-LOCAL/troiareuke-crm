@@ -82,6 +82,8 @@ function setCache(shopId: string, rows: Expense[]): void {
   _expenses = rows;
   _expensesShopId = shopId;
 }
+/** 다른 탭이 localStorage 를 바꿨을 때(liveRefresh storage 이벤트) 캐시를 버린다 — 다음 getAll() 이 저장소를 다시 읽는다 (203, 200 리뷰 M-1) */
+export function resetExpenseCache(): void { _expenses = null; _expensesShopId = null; }
 
 /** 페이지 진입 시 1회 서버 로드 — NAS 우선. @returns true면 서버 행 적용, false면 서버에서 못 받아 localStorage 캐시 유지(호출 쪽이 알림). 로컬 모드는 true */
 export async function loadExpenses(): Promise<boolean> {

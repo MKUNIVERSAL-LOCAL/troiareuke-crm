@@ -78,7 +78,7 @@ export const TRIGGER_DEFAULT_REPEAT: Record<CampaignTrigger, CampaignRepeat> = {
 export const REPEAT_LABELS: Record<CampaignRepeat, string> = { once: '고객당 1회', yearly: '해마다 1회', per_event: '사건마다 1회' };
 export const CAMPAIGN_VARS = ['{고객명}', '{매장명}', '{예약일시}', '{시술명}', '{프로그램명}', '{잔여회차}', '{만료일}', '{마지막방문일}', '{결제금액}'];
 /** 편집 창 미리보기용 샘플 값 — 실고객 데이터가 아니라 고정 예시(가명). 매장명은 호출 쪽이 설정값으로 덮는다 (201) */
-export const CAMPAIGN_SAMPLE_VARS: Record<string, string> = { '{고객명}': '홍길동', '{매장명}': '우리 매장', '{예약일시}': '11.26 14:00', '{시술명}': '기본 관리', '{프로그램명}': '10회 관리권', '{잔여회차}': '2', '{만료일}': '12.31', '{마지막방문일}': '11.10', '{결제금액}': '150,000원' };
+export const CAMPAIGN_SAMPLE_VARS: Record<string, string> = { '{고객명}': '홍길동', '{매장명}': '우리 매장', '{예약일시}': '2026.11.26 14:00', '{시술명}': '기본 관리', '{프로그램명}': '10회 관리권', '{잔여회차}': '2', '{만료일}': '2026.12.31', '{마지막방문일}': '2026.11.10', '{결제금액}': '150,000원' }; // 날짜는 실제 발송(formatDate) 과 같은 형식 — 바이트 수가 어긋나지 않게 (203, 201 리뷰 L-3)
 
 /** 사람이 읽는 트리거 설명 */
 export function describeTrigger(c: Pick<Campaign, 'trigger' | 'days'>): string {

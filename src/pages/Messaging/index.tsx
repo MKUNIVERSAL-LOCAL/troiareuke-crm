@@ -11,6 +11,7 @@ import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
+import { buildCustomerStatsIndex } from '../../lib/customerStats';
 import { getNoRebookCustomerIds } from '../../lib/todayTasks';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import type { SavedSegment } from '../../lib/segmentFilterRule';
@@ -40,10 +41,10 @@ const SEGMENT_LABELS: Record<string, string> = {
   vip: 'VIP',
   birthday: '이번달 생일',
   novisit: '미방문 60일+',
-  revisit: '재방문 권장',
+  revisit: '재방문 권장', // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
   churn: '이탈 위험', // 이 고객의 방문 주기 2배 이상 안 왔고 다음 예약 없음 (136, churnRule)
   loyal: '충성 고객', // RFM 최근성·빈도 상위 (136, rfmRule)
-  norebook: '재예약 없음', // 이달 방문했지만 다음 예약 없음 — 대시보드 재예약률 타일·고객 목록 칩과 같은 기준 (184 kpiRule, 202) // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
+  norebook: '재예약 없음', // 이달 방문했지만 다음 예약 없음 — 대시보드 재예약률 타일·고객 목록 칩과 같은 기준 (184 kpiRule, 202)
 };
 
 function segmentLabel(seg: Segment, saved: SavedSegment[] = []): string {
@@ -61,13 +62,13 @@ function savedSegmentSets(): { list: SavedSegment[]; sets: Map<string, Set<strin
 /** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
 function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
 type SegmentIdSets = { churn: Set<string>; loyal: Set<string>; norebook: Set<string> };
-/** 이탈 위험·충성(136) + 재예약 없음(202) id 집합 — 전수 스캔이라 호출하는 쪽에서 useMemo 로 한 번만 */
-function allSegmentIdSets(): SegmentIdSets { return { ...segmentIdSets(), norebook: getNoRebookCustomerIds() }; }
-function segmentFilter(seg: Segment, revisitIds?: Set<string>, segIds?: SegmentIdSets, savedSets?: Map<string, Set<string>>): (c: Customer) => boolean {
+/** 이탈 위험·충성(136) + 재예약 없음(202) id 집합 — 전수 스캔이라 호출하는 쪽에서 useMemo 로 한 번만. 통계 인덱스는 한 번 만들어 둘이 공유 (203) */
+function allSegmentIdSets(): SegmentIdSets { const stats = buildCustomerStatsIndex(); return { ...segmentIdSets(stats), norebook: getNoRebookCustomerIds(stats) }; }
+function segmentFilter(seg: Segment, revisitIds: Set<string> | undefined, segIds: SegmentIdSets, savedSets?: Map<string, Set<string>>): (c: Customer) => boolean { // segIds 는 호출자 2곳이 모두 넘긴다 — 폴백 전수 스캔 분기 제거 (203)
   if (seg.startsWith('saved:')) { const ids = savedSets?.get(seg.slice(6)); return ids ? c => ids.has(c.id) : () => false; } // 삭제된 세그먼트는 아무에게도 (166)
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
   if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
-  if (seg === 'churn' || seg === 'loyal' || seg === 'norebook') { const sets = segIds ?? allSegmentIdSets(); const ids = sets[seg]; return c => ids.has(c.id); }
+  if (seg === 'churn' || seg === 'loyal' || seg === 'norebook') { const ids = segIds[seg]; return c => ids.has(c.id); }
   return Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg) ? SEGMENT_FILTERS[seg] : () => false; // 모르는 세그먼트('constructor' 같은 프로토타입 키 포함)는 '아무에게도' — 전체 발송 사고 방지
 }
 

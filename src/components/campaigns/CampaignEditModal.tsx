@@ -94,13 +94,19 @@ export default function CampaignEditModal({ campaign, onClose, onSaved }: { camp
             ))}
           </div>
           {draft.content.trim() && (() => { // 샘플 값으로 치환한 미리보기 — 매장 문구로 고치며 길이·광고 표기를 바로 본다 (201, PILOT 26)
-            const rendered = renderCampaignContent(draft.content, { ...CAMPAIGN_SAMPLE_VARS, '{매장명}': SettingsStore.get().name || CAMPAIGN_SAMPLE_VARS['{매장명}'] });
+            // 매장명은 실제 발송(campaignTriggers)처럼 설정값만 — 비어 있으면 {매장명} 을 그대로 두고 경고(실제로는 미치환 변수로 발송이 건너뛰어진다) (203, 201 리뷰 L-4)
+            const shopName = SettingsStore.get().name;
+            const vars: Record<string, string> = { ...CAMPAIGN_SAMPLE_VARS };
+            if (shopName) vars['{매장명}'] = shopName; else delete vars['{매장명}'];
+            const rendered = renderCampaignContent(draft.content, vars);
+            const shopMissing = !shopName && rendered.includes('{매장명}');
             const shown = draft.isAd ? decorateAdMessage(rendered, getOptOutNumber() || '(080 번호 미등록)') : rendered;
-            const bytes = smsBytes(shown);
+            const bytes = smsBytes(draft.isAd ? decorateAdMessage(rendered, getOptOutNumber() || '080-000-0000') : rendered); // 바이트는 발송 창과 같은 플레이스홀더 길이로 (203, 201 리뷰 L-5)
             const kind = draft.channel === 'sms' ? (bytes > SMS_BYTE_LIMIT ? `LMS ${bytes}/${LMS_BYTE_LIMIT}바이트` : `SMS ${bytes}/${SMS_BYTE_LIMIT}바이트`) : `카카오 ${bytes}바이트`;
             return (
               <div className="mt-2 text-xs rounded-xl border border-gray-100 bg-gray-50 px-3 py-2" data-testid="campaign-preview">
                 <p className="text-gray-500 mb-1">미리보기(샘플 고객) · {kind}{draft.channel === 'sms' && bytes > LMS_BYTE_LIMIT ? ' — 너무 깁니다' : ''}</p>
+                {shopMissing && <p className="text-amber-700 mb-1" role="status">매장명 미설정 — 설정에서 매장명을 입력해야 발송됩니다</p>}
                 <p className="text-gray-800 whitespace-pre-wrap">{shown}</p>
               </div>
             );

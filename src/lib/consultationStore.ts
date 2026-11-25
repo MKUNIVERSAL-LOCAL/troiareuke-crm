@@ -80,6 +80,8 @@ function fromDbConsultation(row: Record<string, any>): Consultation {
 
 // ─── 메모리 캐시 ───────────────────────────────────────────────
 let _consultations: Consultation[] | null = null;
+/** 다른 탭이 localStorage 를 바꿨을 때(liveRefresh storage 이벤트) 캐시를 버린다 — 다음 getAll() 이 저장소를 다시 읽는다 (203, 200 리뷰 M-1) */
+export function resetConsultationCache(): void { _consultations = null; }
 
 /** 앱 시작/고객 진입 시 1회 서버 로드 — NAS (실패 시 localStorage 유지) */
 /** @returns true면 서버 행을 적용, false면 서버에서 못 받아 이 기기 캐시 유지(nasLoad는 실패 시 null만 돌려주고 reject하지 않는다 — 호출 쪽이 이 값으로 알려야 한다). 로컬 모드는 true */

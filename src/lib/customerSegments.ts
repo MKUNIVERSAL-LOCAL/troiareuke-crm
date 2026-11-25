@@ -50,8 +50,8 @@ export function buildSegmentIndex(stats: CustomerStatsIndex = buildCustomerStats
 }
 
 /** 발송 대상 세그먼트용 id 집합 — 이탈 위험 높음 / 충성 */
-export function segmentIdSets(): { churn: Set<string>; loyal: Set<string> } {
-  const idx = buildSegmentIndex();
+export function segmentIdSets(stats?: CustomerStatsIndex): { churn: Set<string>; loyal: Set<string> } { // stats 를 넘기면 통계 인덱스를 다시 만들지 않는다 (203)
+  const idx = buildSegmentIndex(stats);
   const churn = new Set<string>(); const loyal = new Set<string>();
   for (const [id, v] of idx) { if (v.churn?.level === 'high') churn.add(id); if (v.rfm.segment === '충성') loyal.add(id); }
   return { churn, loyal };
