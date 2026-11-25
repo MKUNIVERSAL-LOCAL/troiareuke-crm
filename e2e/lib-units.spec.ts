@@ -43,7 +43,7 @@ import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCautio
 import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
 import { buildReceipt, receiptFileName, splitPaymentNote } from '../src/lib/receiptRule';
 import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT, VIP_RFM_MIN_VISITS, VIP_RFM_MIN_SPENT, GOLD_RFM_MIN_VISITS } from '../src/lib/gradeSuggestRule';
-import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, countInputTags, MAX_TAG_NAME, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../src/lib/tagMasterRule';
+import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, MAX_TAG_NAME, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../src/lib/tagMasterRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1755,4 +1755,42 @@ test('분할 결제 요약 — 2건 이상일 때만, 환불 건은 빼고 합�
   // 환불된 행은 합계에서 뺀다(남은 1건이면 안내 자체를 안 한다)
   expect(splitPaymentNote([{ amount: 50_000, paymentMethod: '카드' }, { amount: 50_000, paymentMethod: '현금', status: 'refunded' }])).toBeNull();
   expect(splitPaymentNote([{ amount: 30_000 }, { amount: 20_000 }])).toContain('미지정 30,000원 + 미지정 20,000원');
+});
+
+// ── 태그 이름 일괄 변경 (239, GAP C-1) ───────────────────────────
+// 목록을 정해도 이미 갈라진 태그는 남는다. 고객 수백 명의 태그를 바꾸는 일이라 틀리면 되돌리기 어렵다.
+
+test('태그 이름 바꾸기 — 고객 태그를 바꾸고, 이미 있으면 합친다 (239)', () => {
+  expect(renameTagOnCustomer(['민감', '재구매'], '민감', '민감성')).toEqual({ tags: ['민감성', '재구매'], changed: true, merged: false });
+  // 바꾼 이름이 이미 있으면 두 번 넣지 않고 하나로
+  expect(renameTagOnCustomer(['민감', '민감성'], '민감', '민감성')).toEqual({ tags: ['민감성'], changed: true, merged: true });
+  // 대상 태그가 없으면 손대지 않는다
+  expect(renameTagOnCustomer(['재구매'], '민감', '민감성')).toEqual({ tags: ['재구매'], changed: false, merged: false });
+  expect(renameTagOnCustomer(null, '민감', '민감성')).toEqual({ tags: [], changed: false, merged: false });
+  // 동의 태그는 그대로 남는다(일반 태그만 바꾼다)
+  expect(renameTagOnCustomer(['민감', '광고수신동의'], '민감', '민감성').tags).toEqual(['민감성', '광고수신동의']);
+  // 쓸 수 없는 이름·같은 이름이면 아무 일도 하지 않는다
+  expect(renameTagOnCustomer(['민감'], '민감', '광고수신동의').changed).toBe(false);
+  expect(renameTagOnCustomer(['민감'], '민감', '  ').changed).toBe(false);
+  expect(renameTagOnCustomer(['민감'], '민감', '민감').changed).toBe(false);
+});
+
+test('태그 목록 이름 바꾸기 — 목록에서도 합쳐지고 순서는 유지된다 (239)', () => {
+  expect(renameTagInList(['민감', '재구매'], '민감', '민감성')).toEqual(['민감성', '재구매']);
+  expect(renameTagInList(['민감성', '민감'], '민감', '민감성')).toEqual(['민감성']); // 중복 제거
+  expect(renameTagInList(['재구매'], '민감', '민감성')).toEqual(['재구매']);
+  expect(renameTagInList(['민감'], '민감', '광고동의')).toEqual(['민감']);           // 거부된 이름이면 그대로
+});
+
+test('태그 이름 바꾸기 미리보기 — 바뀌는 수·합쳐지는 수·사유 (239)', () => {
+  const customers = [
+    { tags: ['민감', '재구매'] },
+    { tags: ['민감', '민감성'] },
+    { tags: ['단골'] },
+    { tags: null },
+  ];
+  expect(previewRename(customers, '민감', '민감성')).toEqual({ affected: 2, merges: 1 });
+  expect(previewRename(customers, '민감', '민감')).toEqual({ affected: 0, merges: 0, error: '같은 이름입니다.' });
+  expect(previewRename(customers, '민감', '광고수신거부').error).toMatch(/동의 설정/);
+  expect(previewRename(customers, '없는태그', '새이름')).toEqual({ affected: 0, merges: 0 }); // 대상 0명이면 조용히 0
 });

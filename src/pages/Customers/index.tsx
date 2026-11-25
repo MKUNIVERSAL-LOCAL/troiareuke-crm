@@ -55,7 +55,7 @@ import { buildSegmentIndex } from '../../lib/customerSegments';
 import { isCountableCustomer } from '../../lib/customerScope'; // 익명화·샘플 고객 제외 (236)
 // 태그 마스터 (237, GAP C-1) — 같은 뜻의 태그가 갈라지지 않게 목록에서 눌러 넣는다
 import { getTagMaster, saveTagMaster } from '../../lib/tagMaster';
-import { addMasterTag, removeMasterTag, tagChoices, appendTagToInput, countInputTags, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../../lib/tagMasterRule';
+import { addMasterTag, removeMasterTag, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../../lib/tagMasterRule';
 // 등급 자동 제안 (236, GAP C-1) — 규칙은 순수 모듈, 적용은 사람이 고른 것만
 import { suggestGrade, GRADE_RULE_TEXT, GRADE_SUGGEST_NOTE, type SuggestGrade } from '../../lib/gradeSuggestRule';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
@@ -455,6 +455,59 @@ export default function Customers() {
     if (r.error) { notify(r.error); return; }
     setTagMaster(saveTagMaster(r.list));
     setTagDraft('');
+  }
+  // 태그 이름 일괄 변경 (239) — 이미 갈라진 태그("민감"·"민감성피부")를 손으로 고치려면 고객을 하나씩 열어야 해서 아무도 안 한다
+  const [renameFrom, setRenameFrom] = useState<string | null>(null);
+  const [renameTo, setRenameTo] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  function startRename(tag: string) { setRenameFrom(tag); setRenameTo(tag); }
+  async function applyRename() {
+    if (!renameFrom || renaming) return;
+    const all = CustomerStore.getAll().filter(isCountableCustomer);
+    const preview = previewRename(all, renameFrom, renameTo);
+    if (preview.error) { notify(preview.error); return; }
+    const target = renameTo.trim().replace(/^#+/, '').trim();
+    if (preview.affected === 0) {
+      // 고객에게 붙은 태그가 없으면 목록 이름만 바꾼다 — "바꿨습니다" 를 거짓으로 말하지 않게 그대로 알린다
+      setTagMaster(saveTagMaster(renameTagInList(tagMaster, renameFrom, target)));
+      notify(`목록의 태그 이름만 바꿨습니다(이 태그가 붙은 고객은 없습니다): ${renameFrom} → ${target}`);
+      setRenameFrom(null);
+      return;
+    }
+    if (!(await askConfirm({
+      title: '태그 이름 바꾸기',
+      message: `"${renameFrom}" 을 "${target}" 으로 바꿀까요?\n고객 ${preview.affected}명의 태그가 바뀝니다${preview.merges > 0 ? `(그중 ${preview.merges}명은 이미 "${target}" 이 있어 하나로 합쳐집니다)` : ''}.\n되돌리려면 반대로 한 번 더 바꿔야 합니다.`,
+      confirmLabel: '이름 바꾸기',
+      cancelLabel: '닫기',
+    }))) return;
+    setRenaming(true);
+    const ids = all.filter(c => renameTagOnCustomer(c.tags, renameFrom, target).changed).map(c => c.id);
+    let done = 0;
+    const step = () => {
+      try {
+        // 코어 update() 는 한 명마다 고객 표 전체를 저장한다 → 25명씩 (238 리뷰 H-3 과 같은 이유)
+        for (const id of ids.slice(done, done + 25)) {
+          const c = CustomerStore.getById(id);
+          if (!c) continue;
+          const r = renameTagOnCustomer(c.tags, renameFrom, target);
+          if (r.changed) CustomerStore.update(id, { tags: r.tags });
+        }
+      } catch (e) {
+        setRenaming(false);
+        console.error('[customers] 태그 이름 변경 실패:', e);
+        notify(`태그 이름을 ${done}명까지 바꾸고 저장이 실패했습니다. 저장 공간을 확인한 뒤 다시 시도해주세요.`);
+        loadAll();
+        return;
+      }
+      done += 25;
+      if (done < ids.length) { setTimeout(step, 0); return; }
+      setTagMaster(saveTagMaster(renameTagInList(tagMaster, renameFrom, target)));
+      setRenaming(false);
+      setRenameFrom(null);
+      notify(`고객 ${ids.length}명의 태그를 "${target}" 으로 바꿨습니다${preview.merges > 0 ? ` (${preview.merges}명은 기존 태그와 합쳐짐)` : ''}.`);
+      loadAll();
+    };
+    setTimeout(step, 0);
   }
   function dropFromMaster(tag: string) {
     setTagMaster(saveTagMaster(removeMasterTag(tagMaster, tag)));
@@ -1689,10 +1742,25 @@ export default function Customers() {
               {tagMaster.map(t => (
                 <li key={t} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-blue-50 text-[#1a3a8f] border border-blue-200">
                   #{t}
+                  <button type="button" onClick={() => startRename(t)} aria-label={`${t} 태그 이름 바꾸기`} className="text-blue-400 hover:text-[#1a3a8f]" title="이름 바꾸기(고객 태그도 함께 바뀝니다)">✎</button>
                   <button type="button" onClick={() => dropFromMaster(t)} aria-label={`${t} 태그 목록에서 지우기`} className="text-blue-400 hover:text-red-600">✕</button>
                 </li>
               ))}
             </ul>
+            {renameFrom && (
+              <div className="px-5 py-3 border-t border-gray-100 space-y-2" data-testid="tag-rename">
+                <p className="text-xs text-gray-600"><b>#{renameFrom}</b> 이름 바꾸기 — 이 태그가 붙은 고객의 태그도 함께 바뀌고, 바꾼 이름이 이미 있으면 하나로 합쳐집니다.</p>
+                <div className="flex gap-2">
+                  <input value={renameTo} onChange={e => setRenameTo(e.target.value)} aria-label="바꿀 태그 이름"
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void applyRename(); } }}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+                  <button type="button" onClick={() => void applyRename()} disabled={renaming}
+                    className="px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl disabled:opacity-60">{renaming ? '바꾸는 중...' : '바꾸기'}</button>
+                  <button type="button" onClick={() => setRenameFrom(null)} disabled={renaming}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 disabled:opacity-60">취소</button>
+                </div>
+              </div>
+            )}
             <div className="px-5 py-4 border-t border-gray-100">
               <button type="button" onClick={() => setTagPanel(false)} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">닫기</button>
             </div>

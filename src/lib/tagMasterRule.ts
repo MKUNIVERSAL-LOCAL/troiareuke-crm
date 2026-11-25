@@ -119,3 +119,67 @@ export function appendTagToInput(current: string, tag: string): AppendResult {
   if (parts.length >= MAX_TAGS_PER_CUSTOMER) return { value: current, error: `태그는 고객당 ${MAX_TAGS_PER_CUSTOMER}개까지입니다.` };
   return { value: [...parts, name].join(', ') };
 }
+
+// ── 태그 이름 일괄 변경 (239, GAP C-1) ───────────────────────────
+// 왜: 목록을 정해 둬도 **이미 갈라진 태그**("민감"·"민감성피부")는 그대로 남는다. 손으로 고치려면 고객을 하나씩 열어야 해서
+//     아무도 안 한다 → 태그 필터·세그먼트·발송 대상이 계속 둘로 나뉜다.
+// 규칙:
+//   - 바꿀 이름은 태그 이름 규칙을 그대로 따른다(동의 태그·예약어 접두는 거부).
+//   - 바꾼 이름이 이미 그 고객에게 있으면 **합친다**(중복으로 두 번 넣지 않는다).
+//   - 동의 태그는 건드리지 않는다. 고객당 상한(10개)을 넘기는 일도 없다(합치기만 하므로 수가 늘지 않는다).
+//   - 대상이 없으면 아무 일도 하지 않고 그 사실을 돌려준다(한 명도 안 바뀌었는데 "바꿨습니다" 라고 하지 않게).
+
+export interface RenameResult {
+  /** 바꾼 뒤 태그 목록 */
+  tags: string[];
+  /** 이 고객의 태그가 바뀌었는가 */
+  changed: boolean;
+  /** 바꾼 이름이 이미 있어 합쳐졌는가 */
+  merged: boolean;
+}
+
+/** 고객 한 명의 태그에서 이름을 바꾼다(합치기 포함) */
+export function renameTagOnCustomer(tags: string[] | undefined | null, from: string, to: string): RenameResult {
+  const list = (tags || []).filter(t => typeof t === 'string');
+  const target = normalizeTagName(to);
+  if (!target || from === target) return { tags: list, changed: false, merged: false };
+  if (!list.includes(from)) return { tags: list, changed: false, merged: false };
+  const merged = list.includes(target);
+  const out: string[] = [];
+  for (const t of list) {
+    if (t === from) {
+      if (!out.includes(target)) out.push(target); // 이미 있으면 합친다
+      continue;
+    }
+    if (!out.includes(t)) out.push(t);
+  }
+  return { tags: out, changed: true, merged };
+}
+
+/** 매장 태그 목록에서 이름을 바꾼다 — 바꾼 이름이 이미 있으면 한 줄로 합친다 */
+export function renameTagInList(list: string[], from: string, to: string): string[] {
+  const target = normalizeTagName(to);
+  if (!target) return list;
+  const out: string[] = [];
+  for (const t of sanitizeMaster(list)) {
+    const next = t === from ? target : t;
+    if (!out.includes(next)) out.push(next);
+  }
+  return out;
+}
+
+/** 바꾸기 전 확인용 — 몇 명이 바뀌고 몇 명은 합쳐지는지 */
+export function previewRename(customers: { tags?: string[] | null }[], from: string, to: string): { affected: number; merges: number; error?: string } {
+  const target = normalizeTagName(to);
+  if (!target) return { affected: 0, merges: 0, error: '바꿀 이름을 확인해주세요. 쉼표·#·빈 값은 쓸 수 없고, 광고 수신 동의·거부 태그는 동의 설정에서만 관리합니다.' };
+  if (target === from) return { affected: 0, merges: 0, error: '같은 이름입니다.' };
+  let affected = 0;
+  let merges = 0;
+  for (const c of customers) {
+    const r = renameTagOnCustomer(c.tags, from, target);
+    if (!r.changed) continue;
+    affected += 1;
+    if (r.merged) merges += 1;
+  }
+  return { affected, merges };
+}
