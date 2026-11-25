@@ -40,6 +40,7 @@ import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/us
 import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
 import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
 import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
+import { parseRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1436,4 +1437,53 @@ test('현장 경고 — 줄은 최대 3개, 알레르기와 같은 말을 두 �
   expect(many.lines[0]).toBe('알레르기·주의: 견과류');
   const dup = buildCustomerAlert({ allergies: '견과류 알레르기', memo: '견과류 알레르기' });
   expect(dup.lines).toEqual(['알레르기·주의: 견과류 알레르기']);
+});
+
+// ── 직원 인센티브(수당) (233, GAP S-1) ──────────────────────────
+// 급여에 쓰는 숫자라 경계와 반올림을 못으로 박는다. 틀리면 사람에게 돈이 덜 간다.
+
+test('수당 비율 입력 — 0~50%, 소수점 한 자리, 잘못된 값은 null (233)', () => {
+  expect(parseRate('10')).toBe(10);
+  expect(parseRate('12.5')).toBe(12.5);
+  expect(parseRate('12.5%')).toBe(12.5);
+  expect(parseRate(' 7 ')).toBe(7);
+  expect(parseRate('')).toBe(0);
+  expect(parseRate('0')).toBe(0);
+  expect(parseRate(String(MAX_COMMISSION_RATE))).toBe(MAX_COMMISSION_RATE);
+  expect(parseRate('50.1')).toBeNull();      // 상한 밖
+  expect(parseRate('-5')).toBeNull();
+  expect(parseRate('12.55')).toBeNull();     // 소수점 두 자리
+  expect(parseRate('열 퍼센트')).toBeNull();
+  expect(parseRate('1e2')).toBeNull();
+  expect(parseRate(null)).toBeNull();
+  expect(parseRate(12.5)).toBe(12.5);
+});
+
+test('수당 비율 — 직원별 예외가 있으면 그것, 없으면 매장 기본 (233)', () => {
+  const config = { serviceRate: 10, productRate: 5, perStaff: { s2: { serviceRate: 15 }, s3: { productRate: 0 } } };
+  expect(ratesFor('s1', config)).toEqual({ serviceRate: 10, productRate: 5 });
+  expect(ratesFor('s2', config)).toEqual({ serviceRate: 15, productRate: 5 }); // 시술만 예외
+  expect(ratesFor('s3', config)).toEqual({ serviceRate: 10, productRate: 0 }); // 0 도 뜻이 있는 값
+  expect(ratesFor('s1')).toEqual({ serviceRate: 0, productRate: 0 });          // 설정 없음
+  // 범위를 벗어난 저장값은 읽을 때 막는다(옛 설정·수동 편집 방어)
+  expect(ratesFor('s1', { serviceRate: 999, productRate: -5 })).toEqual({ serviceRate: MAX_COMMISSION_RATE, productRate: 0 });
+});
+
+test('수당 금액 — 실결제액·제품 판매액 기준, 원 단위 내림 (233)', () => {
+  expect(computeCommission({ paidAmount: 1_000_000, productAmount: 200_000 }, { serviceRate: 10, productRate: 5 }))
+    .toEqual({ service: 100_000, product: 10_000, total: 110_000 });
+  // 내림 — 12.5% × 70,007 = 8,750.875 → 8,750
+  expect(computeCommission({ paidAmount: 70_007 }, { serviceRate: 12.5, productRate: 0 }).service).toBe(8_750);
+  expect(computeCommission({}, { serviceRate: 10, productRate: 10 })).toEqual({ service: 0, product: 0, total: 0 });
+  expect(computeCommission({ paidAmount: -50_000 }, { serviceRate: 10, productRate: 0 }).service).toBe(0); // 음수(환불 과다)는 0
+  expect(computeCommission({ paidAmount: 50_000 }, { serviceRate: 0, productRate: 0 }).total).toBe(0);
+});
+
+test('수당 표시 여부·기준 문구 — 전부 0이면 열을 띄우지 않는다 (233)', () => {
+  expect(commissionConfigured()).toBe(false);
+  expect(commissionConfigured({ serviceRate: 0, productRate: 0 })).toBe(false);
+  expect(commissionConfigured({ serviceRate: 0, productRate: 0, perStaff: { s1: { serviceRate: 3 } } })).toBe(true);
+  expect(commissionConfigured({ serviceRate: 10, productRate: 0 })).toBe(true);
+  expect(describeCommissionBasis({ serviceRate: 10, productRate: 5 }))
+    .toBe('시술 10% × 실결제액 + 제품 5% × 제품 판매액 (원 단위 내림)');
 });

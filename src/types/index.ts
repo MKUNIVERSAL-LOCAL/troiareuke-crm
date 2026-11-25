@@ -220,6 +220,8 @@ export interface ShopPreferences {
   mergedCustomerIds?: Record<string, string>;
   /** 마지막 전체 백업 저장 시각(ISO, 매장 기준) — 첫 설정 체크리스트 "전체 백업 1회" 판정. 설정 행이라 NAS 동기·로그아웃 wipe 와 무관 (193·195) */
   lastBackupAt?: string;
+  /** 직원 인센티브(수당) 비율 — 매장 기본값 + 직원별 예외. 설정 행이라 NAS 동기, PC 교체와 무관 (233) */
+  staffCommission?: { serviceRate: number; productRate: number; perStaff?: Record<string, { serviceRate?: number; productRate?: number }> };
   /** 직원별 근무표·휴게·준비/정리 버퍼 staffId → 근무표 — 새 컬렉션(서버 화이트리스트 승인 B-2) 대신 설정 행으로 동기화 (141) */
   staffSchedules?: Record<string, StaffSchedule>;
   /** 베드·룸·장비 자원 목록 (142) */
