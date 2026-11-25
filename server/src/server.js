@@ -12,6 +12,7 @@ import pg from 'pg';
 import {
   MAX_TEXT_LENGTH, MAX_ID_LENGTH,
   maskEmail, normalizeEmail, isEmail, isStrongPassword, isUuid, isValidId, isValidBranchId, isValidText,
+  FLAG_SCOPE_RE, FLAG_KEY_RE, validateFlagsInput,
 } from './validate.js';
 
 const { Pool } = pg;
@@ -2021,24 +2022,6 @@ app.delete('/api/admin/announcements/:id', requireSession, requireSuperadmin, as
 });
 
 // ── 기능 플래그 (본사 → 전 지점 원격 기능 제어) ──────────────────
-const FLAG_SCOPE_RE = /^[A-Za-z0-9_:-]{1,64}$/; // 'global' 또는 branch_id
-const FLAG_KEY_RE = /^[A-Za-z0-9_.-]{1,64}$/;
-
-function validateFlagsInput(body) {
-  const flags = body?.flags;
-  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) {
-    return { error: 'flags 객체가 필요합니다.' };
-  }
-  const entries = Object.entries(flags);
-  if (entries.length > 100) return { error: '기능 항목이 너무 많습니다. (100개 이하)' };
-  const out = {};
-  for (const [key, value] of entries) {
-    if (!FLAG_KEY_RE.test(key)) return { error: `기능 id 형식이 올바르지 않습니다: ${key.slice(0, 80)}` };
-    if (typeof value !== 'boolean') return { error: `기능 값은 true/false여야 합니다: ${key}` };
-    out[key] = value;
-  }
-  return { value: out };
-}
 
 // 지점: 자기 지점에 적용될 전역+지점 플래그 조회 (클라이언트가 기본값과 병합)
 app.get('/api/feature-flags', requireSession, async (req, res, next) => {

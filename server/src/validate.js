@@ -44,3 +44,27 @@ export function isValidText(value, { required = false, max = MAX_TEXT_LENGTH } =
   if (value.includes('�')) return false;
   return !required || value.trim().length > 0;
 }
+
+// ── 기능 플래그 (본사 → 전 지점 원격 기능 제어, 219 의 PIN 초기화 라우트도 같은 스코프 규칙) (226) ──
+export const FLAG_SCOPE_RE = /^[A-Za-z0-9_:-]{1,64}$/; // 'global' 또는 branch_id
+export const FLAG_KEY_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/**
+ * 어드민이 보낸 flags 입력 검증 — 통과하면 { value }, 아니면 { error }.
+ * 값은 boolean 만 받는다(타임스탬프 같은 다른 값을 섞으면 어드민 화면·지점 병합 규칙이 깨진다 — 219 는 그래서 별도 컬럼을 썼다).
+ */
+export function validateFlagsInput(body) {
+  const flags = body?.flags;
+  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) {
+    return { error: 'flags 객체가 필요합니다.' };
+  }
+  const entries = Object.entries(flags);
+  if (entries.length > 100) return { error: '기능 항목이 너무 많습니다. (100개 이하)' };
+  const out = {};
+  for (const [key, value] of entries) {
+    if (!FLAG_KEY_RE.test(key)) return { error: `기능 id 형식이 올바르지 않습니다: ${key.slice(0, 80)}` };
+    if (typeof value !== 'boolean') return { error: `기능 값은 true/false여야 합니다: ${key}` };
+    out[key] = value;
+  }
+  return { value: out };
+}
