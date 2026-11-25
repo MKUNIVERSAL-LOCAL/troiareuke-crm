@@ -33,7 +33,7 @@ test('취소·노쇼에 사유를 남기면 예약 상세와 이달 집계에 �
   await detail.getByRole('button', { name: '취소처리' }).click();
   const cancelConfirm = page.getByRole('dialog', { name: '예약 취소 처리' });
   await expect(cancelConfirm).toBeVisible();
-  await cancelConfirm.getByTestId('confirm-choices').getByRole('button', { name: '고객 일정 변경' }).click();
+  await cancelConfirm.getByTestId('confirm-choices').getByRole('radio', { name: '고객 일정 변경' }).click();
   await cancelConfirm.getByRole('button', { name: '취소 처리' }).click();
   await expect(cancelConfirm).toHaveCount(0);
   await dismissToasts(page);
@@ -50,7 +50,7 @@ test('취소·노쇼에 사유를 남기면 예약 상세와 이달 집계에 �
   await detail.getByRole('button', { name: '노쇼', exact: true }).click();
   const noShowConfirm = page.getByRole('dialog', { name: '노쇼 처리' });
   await expect(noShowConfirm).toBeVisible();
-  await noShowConfirm.getByRole('button', { name: '직접 입력' }).click();
+  await noShowConfirm.getByRole('radio', { name: '직접 입력' }).click();
   await noShowConfirm.getByPlaceholder('사유를 짧게 적어주세요 (30자)').fill('연락처가  바뀌어  안내 못 감');
   await noShowConfirm.getByRole('button', { name: '노쇼 기록' }).click();
   await expect(noShowConfirm).toHaveCount(0);
@@ -76,7 +76,7 @@ test('취소·노쇼에 사유를 남기면 예약 상세와 이달 집계에 �
   // ── 이달 집계 줄 ──
   const summary = page.getByTestId('cancel-reason-summary').filter({ visible: true }).first(); // PC·모바일 두 벌이 DOM 에 있다
   await expect(summary).toBeVisible();
-  await expect(summary).toContainText('이달 취소 2건 · 노쇼 1건');
+  await expect(summary).toContainText('취소 2건 · 노쇼 1건'); // 앞에는 보고 있는 달(예: 11월)이 붙는다
   await expect(summary).toContainText('고객 일정 변경 1건');
   await expect(summary).toContainText('사유 미기록 1건');
 
@@ -96,6 +96,6 @@ test('취소·노쇼에 사유를 남기면 예약 상세와 이달 집계에 �
   await page.keyboard.press('Escape');
   await expect(detail).toHaveCount(0);
 
-  await expect(summary).toContainText('이달 취소 1건 · 노쇼 1건');
+  await expect(summary).toContainText('취소 1건 · 노쇼 1건');
   await expect(summary).not.toContainText('고객 일정 변경');
 });

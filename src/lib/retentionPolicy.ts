@@ -14,6 +14,7 @@ import { ConsultationStore } from './consultationStore';
 import { clearPhotos } from './photoStore';
 import type { Customer } from '../types';
 import { getPreference, setPreference } from './shopPreferences';
+import { clearFreeTextReasonsOfCustomer } from './cancelReasons';
 import { propagateCustomerIdentity, upcomingReservationsOf } from './customerIdentity';
 import { resyncGcalEvents } from './gcalEventMap';
 
@@ -93,6 +94,7 @@ export function anonymizeCustomers(ids: string[]): number {
     });
     // 연결 기록에 복사된 이름·전화 + 공유 Google 캘린더 앞 일정 — 고객 정보 수정·삭제와 같은 전파(customerIdentity). 수동 복제본일 때 캘린더만 빠져 실명이 남았다 (리뷰 #H4)
     propagateCustomerIdentity(id, { name: ANONYMIZED_NAME, phone: '' }, { resyncCalendar: false });
+    clearFreeTextReasonsOfCustomer(id); // 취소·노쇼에 직접 적은 사유(개인 사정이 적힐 수 있다)도 지운다 (246 리뷰 M-4)
     TreatmentLogStore.getByCustomer(id).forEach(t => clearPhotos(`treatment:${t.id}`));
     ConsultationStore.getByCustomer(id).forEach(c => clearPhotos(`consult:${c.id}`));
     n += 1;

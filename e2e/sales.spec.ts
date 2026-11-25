@@ -91,6 +91,6 @@ test('결제를 등록하면 다음 방문 예약을 그 자리에서 잡게 안
   await expect(stats).toBeVisible();
   await expect(stats).toContainText('다음 방문 추천 1건');
   await expect(stats).toContainText('[예약 잡기] 1건(100%)');
-  await expect(stats).toContainText('추천일에 예약이 잡힌 고객 1명(100%)');
+  await expect(stats).toContainText('추천일에 예약이 잡힌 건 1건(100%)');
   await expect(stats).toContainText('추정');
 });

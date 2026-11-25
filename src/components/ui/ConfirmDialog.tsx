@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import Modal from './Modal';
 import { registerConfirmHost, type PendingConfirm } from '../../lib/confirmDialog';
@@ -28,10 +28,11 @@ function ConfirmBody({ pending }: { pending: PendingConfirm }) {
   const { title, message, confirmLabel = '확인', cancelLabel = '취소', danger, resolve, choices, choiceTitle = '사유 (선택)', allowOtherText = true } = pending;
   const [choice, setChoice] = useState<string | null>(null);
   const [other, setOther] = useState('');
+  const otherRef = useRef<HTMLInputElement | null>(null);
+  // 고른 것만 저장한다 — 전에는 "직접 입력" 을 다시 눌러 껐는데도 쓴 글이 사유로 저장됐다 (246 리뷰 L-5)
   const picked = (): string | null => {
-    const typed = other.replace(/\s+/g, ' ').trim();
-    if (choice === OTHER_ID) return typed || null;       // 직접 입력을 골랐으면 쓴 말만
-    return choice ?? (typed || null);                     // 칩을 안 골랐어도 쓴 말이 있으면 그것을
+    if (choice === OTHER_ID) return other.replace(/\s+/g, ' ').trim() || null;
+    return choice;
   };
   // 기본 포커스: 되돌릴 수 없는 동작은 [취소], 일반 확인은 [확인]. React 는 autoFocus 를 DOM 에 쓰지 않아 포커스 트랩이 못 보았다 → 공용 규약 data-autofocus (15차 #H2)
   const focusCancel = !!danger;
@@ -44,21 +45,22 @@ function ConfirmBody({ pending }: { pending: PendingConfirm }) {
         </div>
         {/* 사유 선택 — 고르지 않아도 확인은 된다(집계에 "사유 미기록" 으로 센다) (244) */}
         {choices && choices.length > 0 && (
-          <div role="group" aria-label={choiceTitle} data-testid="confirm-choices">
+          <div role="radiogroup" aria-label={choiceTitle} data-testid="confirm-choices">
             <p className="text-xs font-medium text-gray-500 mb-2">{choiceTitle}</p>
             <div className="flex flex-wrap gap-1.5">
               {choices.map(c => {
                 const on = choice === c.id;
                 return (
-                  <button key={c.id} type="button" aria-pressed={on} onClick={() => setChoice(on ? null : c.id)}
-                    className={`px-3 py-1.5 min-h-[36px] rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                  <button key={c.id} type="button" role="radio" aria-checked={on} onClick={() => setChoice(on ? null : c.id)}
+                    className={`px-3 py-2 min-h-[44px] rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                     {c.label}
                   </button>
                 );
               })}
               {allowOtherText && (
-                <button type="button" aria-pressed={choice === OTHER_ID} onClick={() => setChoice(choice === OTHER_ID ? null : OTHER_ID)}
-                  className={`px-3 py-1.5 min-h-[36px] rounded-full text-xs font-medium border transition-colors ${choice === OTHER_ID ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                <button type="button" role="radio" aria-checked={choice === OTHER_ID}
+                  onClick={() => { const next = choice === OTHER_ID ? null : OTHER_ID; setChoice(next); if (next) window.setTimeout(() => otherRef.current?.focus(), 0); }}
+                  className={`px-3 py-2 min-h-[44px] rounded-full text-xs font-medium border transition-colors ${choice === OTHER_ID ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
                   직접 입력
                 </button>
               )}
@@ -66,8 +68,8 @@ function ConfirmBody({ pending }: { pending: PendingConfirm }) {
             {allowOtherText && choice === OTHER_ID && (
               <label className="block mt-2">
                 <span className="sr-only">사유 직접 입력</span>
-                <input type="text" value={other} onChange={e => setOther(e.target.value)} maxLength={30} placeholder="사유를 짧게 적어주세요 (30자)"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#1a3a8f]" />
+                <input id="confirm-choice-other" ref={otherRef} type="text" value={other} onChange={e => setOther(e.target.value)} maxLength={30} placeholder="사유를 짧게 적어주세요 (30자)"
+                  className="w-full min-h-[44px] border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-[#1a3a8f]" />
               </label>
             )}
           </div>

@@ -86,8 +86,13 @@ export function describeCountSummary(s: CountSummary): string {
   return `${parts.join(' · ')}${delta.length > 0 ? ` (합계 ${delta.join(' / ')})` : ''}`;
 }
 
+/** 0 으로 내려가는 제품 수 — 확인창이 따로 경고해야 한다 (246 리뷰 M-6) */
+export function zeroingRows(rows: CountRow[]): CountRow[] {
+  return rowsToSave(rows).filter(r => r.counted === 0);
+}
+
 /** 원장 행에 남길 설명 — 실사 날짜·실제 수량·메모 */
-export function countNote(row: Pick<CountRow, 'counted' | 'unit'>, date: string, memo?: string): string {
+export function countNote(row: { counted: number; unit: string }, date: string, memo?: string): string {
   const base = `실사 ${row.counted}${row.unit} (${date})`;
   const m = (memo ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
   return m ? `${base} · ${m}` : base;

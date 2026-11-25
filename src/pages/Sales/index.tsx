@@ -603,7 +603,7 @@ export default function Sales() {
   }, [viewMonth, payments, expenses, customers, metricsTick]);
   const monthClosed = useMemo(() => isMonthClosed(viewMonth), [viewMonth, metricsTick]);
   // 체크아웃 재예약 안내 성과 (243, GAP R-11 후속) — 추천이 없었던 달에는 줄 자체를 보여 주지 않는다
-  const rebookStatsLine = useMemo(() => describeRebookSummary(rebookStatsFor(viewMonth)), [viewMonth, payments, rebookTick]);
+  const rebookStatsLine = useMemo(() => { const r = rebookStatsFor(viewMonth); return describeRebookSummary(r.summary, r.truncated); }, [viewMonth, payments, rebookTick]);
 
   const [viewDate] = viewMonth.split('-');
   const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;

@@ -2,9 +2,9 @@ import { test, expect } from '@playwright/test';
 import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate } from '../src/lib/format';
 import { splitPercent } from '../src/lib/percent';
 import { renameTagInSegments } from '../src/lib/segmentFilterRule';
-import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
-import { reasonOptions, labelFor, normalizeReasonText, summarizeReasons, describeReasonSummary, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
-import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote } from '../src/lib/stockCountRule';
+import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
+import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
+import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows } from '../src/lib/stockCountRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -1892,7 +1892,7 @@ test('재예약 성과 — 추천·누름·추천일 예약을 따로 센다 (24
     { customerId: 'c4', date: '2026-12-13', status: 'noshow' },     // 노쇼도 아니다
   ]);
   expect(r).toEqual({ shown: 4, clicked: 2, booked: 1, clickRate: 50, bookRate: 25 });
-  expect(describeRebookSummary(r)).toBe('다음 방문 추천 4건 · [예약 잡기] 2건(50%) · 추천일에 예약이 잡힌 고객 1명(25%)');
+  expect(describeRebookSummary(r)).toBe('다음 방문 추천 4건 · [예약 잡기] 2건(50%) · 추천일에 예약이 잡힌 건 1건(25%)');
 });
 
 test('재예약 성과 — 지난 날짜의 완료 예약은 성과로 센다(그날 실제로 왔다) (243)', () => {
@@ -1918,20 +1918,31 @@ test('재예약 기록 — 달로 자르고, 모양이 깨진 기록은 버린�
   ]);
   expect(entries.map(e => e.id)).toEqual(['1', '2']);
   expect(entriesInMonth(entries, '2026-11').map(e => e.id)).toEqual(['1']);
-  // 같은 id 는 뒤에 온 것(누름 표시가 붙은 쪽)을 남긴다
-  const merged = sanitizeRebookLog([shown('1', 'c1', '2026-11-10', '2026-11-10T00:00:00.000Z'), shown('1', 'c1', '2026-11-10', '2026-11-10T00:00:00.000Z', '2026-11-10T00:01:00.000Z')]);
+  // 같은 고객·같은 추천일은 한 건으로 합치고 [예약 잡기] 기록을 살린다 (246 리뷰 L-3 — 전에는 눌림이 덮여 사라졌다)
+  const merged = sanitizeRebookLog([
+    shown('1', 'c1', '2026-11-10', '2026-11-10T00:00:00.000Z', '2026-11-10T00:01:00.000Z'),
+    shown('2', 'c1', '2026-11-10', '2026-11-10T02:00:00.000Z'),
+  ]);
   expect(merged).toHaveLength(1);
-  expect(merged[0].clickedAt).toBeTruthy();
+  expect(merged[0].id).toBe('1');             // 먼저 뜬 안내가 기준
+  expect(merged[0].clickedAt).toBeTruthy();   // 눌림 기록은 살아남는다
+  expect(rebookKey(merged[0])).toBe('c1|2026-11-10');
   expect(sanitizeRebookLog(undefined)).toEqual([]);
 });
 
-test('재예약 기록 — 설정 행에 무한정 쌓이지 않는다 (243)', () => {
+test('재예약 기록 — 무한정 쌓이지 않고, 잘린 달을 알려 준다 (243·246 리뷰 M-2)', () => {
   const many = Array.from({ length: MAX_REBOOK_LOG + 30 }, (_, i) => shown(String(i), 'c' + i, '2026-12-10', `2026-11-20T00:${String(i % 60).padStart(2, '0')}:00.000Z`));
   const trimmed = trimRebookLog(many, '2026-06-01');
-  expect(trimmed).toHaveLength(MAX_REBOOK_LOG);
-  expect(trimmed[trimmed.length - 1].id).toBe(String(MAX_REBOOK_LOG + 29)); // 최근 것이 남는다
+  expect(trimmed.entries).toHaveLength(MAX_REBOOK_LOG);
+  expect(trimmed.entries[trimmed.entries.length - 1].id).toBe(String(MAX_REBOOK_LOG + 29)); // 최근 것이 남는다
+  expect(trimmed.droppedMonths).toEqual(['2026-11']); // 그 달 숫자가 실제보다 작다는 사실이 남는다
   // 보관 기간이 지난 기록은 건수와 무관하게 버린다
-  expect(trimRebookLog([shown('old', 'c1', '2026-12-10', '2026-01-02T00:00:00.000Z')], '2026-06-01')).toEqual([]);
+  const old = trimRebookLog([shown('old', 'c1', '2026-12-10', '2026-01-02T00:00:00.000Z')], '2026-06-01');
+  expect(old.entries).toEqual([]);
+  expect(old.droppedMonths).toEqual(['2026-01']);
+  // 잘린 달에는 화면이 "실제보다 적게 나온다" 고 적는다
+  const line = describeRebookSummary({ shown: 3, clicked: 1, booked: 1, clickRate: 33.3, bookRate: 33.3 }, true);
+  expect(line).toContain('기록 보관 한도로 이 달 일부가 빠져 실제보다 적게 나옵니다');
 });
 
 // ── 244: 취소·노쇼 사유 (GAP R-10 후속) ──
@@ -2032,4 +2043,56 @@ test('재고 실사 요약 — 일치·미입력·오류·증감 합을 숨기�
 test('재고 실사 원장 설명 — 실제 수량·날짜·메모가 남는다 (245)', () => {
   expect(countNote({ counted: 8, unit: '개' }, '2026-11-26')).toBe('실사 8개 (2026-11-26)');
   expect(countNote({ counted: 0, unit: '장' }, '2026-11-26', '  월말   실사 ')).toBe('실사 0장 (2026-11-26) · 월말 실사');
+});
+
+// ── 246: 243~245 리뷰 반영 ──
+
+test('재예약 성과 — 같은 방문에 안내가 두 번 떠도 한 건으로 센다 (246 리뷰 M-1)', () => {
+  // 시술 결제 + 제품 결제를 따로 등록하면 같은 고객·같은 추천일 안내가 두 번 뜬다
+  const entries = [
+    shown('a', 'c1', '2026-12-10', '2026-11-26T01:00:00.000Z'),
+    shown('b', 'c1', '2026-12-10', '2026-11-26T01:05:00.000Z', '2026-11-26T01:06:00.000Z'),
+    shown('c', 'c2', '2026-12-11', '2026-11-26T02:00:00.000Z'),
+  ];
+  const r = summarizeRebook(entries, [{ customerId: 'c1', date: '2026-12-10', status: 'confirmed' }]);
+  expect(r.shown).toBe(2);        // 기록 3건이지만 고객·추천일 기준 2건
+  expect(r.clicked).toBe(1);      // 둘 중 하나라도 눌렀으면 누른 것
+  expect(r.booked).toBe(1);       // 예약 1건을 2건으로 세지 않는다
+  expect(r.clickRate).toBe(50);
+  expect(r.bookRate).toBe(50);
+});
+
+test('취소 사유 — 상태와 기록의 kind 가 어긋나도 내부 id 를 화면에 내보내지 않는다 (246 리뷰 M-3)', () => {
+  expect(labelFor('cancelled', 'no-contact')).toBe('연락 없이 오지 않음');   // 노쇼 보기지만 라벨을 찾는다
+  expect(labelFor('noshow', 'customer-schedule')).toBe('고객 일정 변경');
+  expect(labelFor('cancelled', '직접 적은 사유')).toBe('직접 적은 사유');
+  expect(isPresetReason('shop-schedule')).toBe(true);
+  expect(isPresetReason('no-contact')).toBe(true);
+  expect(isPresetReason('직접 적은 사유')).toBe(false);  // 개인 사정이 적힐 수 있는 쪽 — 익명화 때 지운다
+});
+
+test('취소 사유 집계 — 매장 쪽 건수를 화면에 적고 총건수를 넘기지 않는다 (246 리뷰 M-5)', () => {
+  const s = summarizeReasons({ cancelled: 4, noshow: 1 }, [
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'cancelled', reason: 'duplicate' },
+    { kind: 'noshow', reason: 'reminder-missed' },
+  ]);
+  expect(s.shopSide).toBe(3);
+  const line = describeReasonSummary(s, '11월');
+  expect(line).toContain('11월 취소 4건 · 노쇼 1건');   // "이달" 대신 보고 있는 달
+  expect(line).toContain('그중 매장 쪽 사유 3건');
+  // 지워진 예약의 기록이 남아도 총건수를 넘기지 않는다
+  const over = summarizeReasons({ cancelled: 1, noshow: 0 }, [
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'cancelled', reason: 'duplicate' },
+  ]);
+  expect(over.shopSide).toBe(1);
+  expect(over.missing).toBe(0);
+});
+
+test('재고 실사 — 0 으로 내려가는 제품을 따로 셀 수 있다 (246 리뷰 M-6)', () => {
+  const rows = buildCountRows(countItems, { p1: '0', p2: '0', p3: '5', p4: '' });
+  expect(zeroingRows(rows).map(r => r.id)).toEqual(['p1', 'p2']); // p3 는 현재고와 같아 저장 대상이 아니다
+  expect(zeroingRows(buildCountRows(countItems, {}))).toEqual([]);
+  expect(countNote({ counted: 0, unit: '개' }, '2026-11-26')).toBe('실사 0개 (2026-11-26)');
 });

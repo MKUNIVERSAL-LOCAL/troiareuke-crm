@@ -248,8 +248,6 @@ export interface ShopPreferences {
   reservationPolicy?: ReservationPolicy;
   /** 예약 id → 취소·노쇼 사유. 코어 Reservation 에 사유 칸이 없어 설정 행에 둔다. 1년 보관 (244) */
   reservationCancelReasons?: Record<string, { kind: 'cancelled' | 'noshow'; reason: string; at: string }>;
-  /** 체크아웃 재예약 안내 기록(추천·누름) — 성과 지표 산출용. 180일·400건까지 보관 (243) */
-  rebookLog?: { id: string; customerId: string; suggestedDate: string; basis?: string; shownAt: string; clickedAt?: string }[];
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
   retentionPolicy?: { enabled: boolean; years: number };
 }

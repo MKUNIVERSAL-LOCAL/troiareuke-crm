@@ -95,7 +95,7 @@ test('폰 폭: 영수증·사진 백업·태그·등급·수당 화면이 눌리
   const confirmDialog = page.getByRole('dialog', { name: '예약 취소 처리' });
   await expect(confirmDialog).toBeVisible();
   await expectNoHorizontalOverflow(page, '취소 사유 확인창(폰)');
-  await confirmDialog.getByTestId('confirm-choices').getByRole('button', { name: '매장 사정(직원·설비)' }).click();
+  await confirmDialog.getByTestId('confirm-choices').getByRole('radio', { name: '매장 사정(직원·설비)' }).click();
   await confirmDialog.getByRole('button', { name: '취소 처리' }).click();
   await expect(confirmDialog).toHaveCount(0);
   await dismissToasts(page); // 취소 처리 뒤 상세는 닫힌다 — 사유 표시는 PC 스펙(cancel-reason)이 담당

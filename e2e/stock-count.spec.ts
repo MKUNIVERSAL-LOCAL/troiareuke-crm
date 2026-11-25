@@ -42,6 +42,7 @@ test('재고 실사 — 적은 제품만 맞추고, 빈칸은 그대로 두고, 
   await expect(confirm).toBeVisible();
   await expect(confirm).toContainText('실사앰플 10→8개');
   await expect(confirm).toContainText('적지 않은 제품 1종은 그대로 둡니다');
+  await expect(confirm).toContainText('전체 증감 합계 -2'); // 앞 3종 예시만 보고 넘기지 않도록 합계를 적는다 (246 리뷰 M-6)
   await confirm.getByRole('button', { name: '실사 반영' }).click();
   await expect(count).toHaveCount(0);
   await dismissToasts(page);

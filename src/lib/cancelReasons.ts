@@ -5,9 +5,10 @@
 import { getPreference, setPreference } from './shopPreferences';
 import { ReservationStore } from './store';
 import { todayISO } from './format';
-import { normalizeReasonText, type CancelKind } from './cancelReasonRule';
+import { normalizeReasonText, isPresetReason, type CancelKind } from './cancelReasonRule';
 
 const KEEP_DAYS = 365; // 1년치는 "작년 이맘때" 비교에 쓸 수 있다
+const MAX_REASONS = 500; // 삭제된 예약의 고아 기록까지 무한정 쌓이지 않게 (246 리뷰 M-4)
 
 export interface StoredReason { kind: CancelKind; reason: string; at: string }
 
@@ -51,13 +52,42 @@ function pruned(map: Record<string, StoredReason>): Record<string, StoredReason>
   cutoff.setDate(cutoff.getDate() - KEEP_DAYS);
   const keepFrom = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
   const dates = new Map(ReservationStore.getAll().map(r => [r.id, r.date] as const));
-  const out: Record<string, StoredReason> = {};
+  const kept: [string, StoredReason][] = [];
   for (const [id, rec] of Object.entries(map)) {
     const d = dates.get(id);
-    // 이 기기 캐시에 없는 예약(다른 기기 것·아직 못 받은 것)은 지우지 않는다 — 날짜를 알고 1년 지난 것만 (144 리뷰 M-2 와 같은 규칙)
-    if (!d || d >= keepFrom) out[id] = rec;
+    // 이 기기 캐시에 없는 예약(다른 기기 것·아직 못 받은 것)은 날짜로 지우지 않는다 (144 리뷰 M-2 와 같은 규칙)
+    if (d && d < keepFrom) continue;
+    // 다만 적은 시각이 1년 넘은 기록은 예약이 사라졌어도 지운다 — 삭제된 예약의 고아 기록이 영구히 남았다 (246 리뷰 M-4)
+    if (!d && rec.at && rec.at.slice(0, 10) < keepFrom) continue;
+    kept.push([id, rec]);
   }
+  // 그래도 많으면 최근 것만 — 적은 시각(at) 기준
+  kept.sort((a, b) => String(a[1].at).localeCompare(String(b[1].at)));
+  const out: Record<string, StoredReason> = {};
+  for (const [id, rec] of kept.slice(Math.max(0, kept.length - MAX_REASONS))) out[id] = rec;
   return out;
+}
+
+/**
+ * 고객 익명화·삭제 때 **직접 입력한 사유만** 지운다 (246 리뷰 M-4).
+ * 직접 입력 30자에는 "○○ 임신으로 중단" 같은 개인 사정이 적힐 수 있는데, 익명화가 이 기록을 몰랐다.
+ * 등록된 보기(고객 일정 변경 등)는 개인정보가 아니라 통계라 남긴다.
+ */
+export function clearFreeTextReasonsOfCustomer(customerId: string): number {
+  try {
+    const map = reasonMap();
+    const mine = new Set(ReservationStore.getAll().filter(r => r.customerId === customerId).map(r => r.id));
+    let removed = 0;
+    const next: Record<string, StoredReason> = {};
+    for (const [id, rec] of Object.entries(map)) {
+      if (mine.has(id) && !isPresetReason(rec.reason)) { removed += 1; continue; }
+      next[id] = rec;
+    }
+    if (removed > 0) setPreference('reservationCancelReasons', next);
+    return removed;
+  } catch {
+    return 0;
+  }
 }
 
 /** 그 달의 취소·노쇼 건수와, 그중 사유가 적힌 기록 — 집계는 cancelReasonRule.summarizeReasons */
@@ -74,8 +104,11 @@ export function monthCancelFacts(yearMonth: string): {
     else if (r.status === 'noshow') totals.noshow += 1;
     else continue;
     const rec = map[r.id];
-    // 상태와 기록이 어긋나면(취소 → 노쇼로 바꾼 뒤 사유를 안 고친 경우) 지금 상태를 믿는다
-    if (rec) records.push({ kind: r.status === 'noshow' ? 'noshow' : 'cancelled', reason: rec.reason });
+    if (!rec) continue;
+    // 상태와 기록의 kind 가 어긋나면(노쇼로 적은 뒤 취소로 바꾼 경우) 그 사유는 **미기록으로 떨어뜨린다** (246 리뷰 M-3)
+    const nowKind: CancelKind = r.status === 'noshow' ? 'noshow' : 'cancelled';
+    if (rec.kind !== nowKind) continue;
+    records.push({ kind: nowKind, reason: rec.reason });
   }
   return { totals, records };
 }

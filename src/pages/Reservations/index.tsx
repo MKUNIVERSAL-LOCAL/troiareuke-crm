@@ -338,7 +338,9 @@ export default function Reservations() {
   const cancelLines = useMemo(() => {
     const line = (month: string) => {
       const facts = monthCancelFacts(month);
-      return describeReasonSummary(summarizeReasons(facts.totals, facts.records));
+      // "이달" 대신 보고 있는 달을 적는다 — 주간 보기가 달을 넘나들면 어느 달인지 알 수 없었다 (246 리뷰 L-10)
+      const label = `${Number(month.slice(5, 7))}월`;
+      return describeReasonSummary(summarizeReasons(facts.totals, facts.records), label);
     };
     return {
       pc: line(format(viewMode === 'week' ? startOfWeek(currentDate, { weekStartsOn: 1 }) : currentDate, 'yyyy-MM')),
@@ -1594,6 +1596,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
 
   const handleComplete = () => {
     ReservationStore.updateStatus(r.id, 'completed');
+    saveReason(r.id, 'cancelled', ''); // 완료된 예약에 취소·노쇼 사유가 남으면 집계·상세가 서로 다른 말을 한다 (246 리뷰 M-3)
     healProgramSessionsWhenReady(r.customerId); // 회차권 사용 회차도 기록 기준으로 (16차 #H2)
     healCustomerStatsWhenReady(r.customerId); // 코어 +1이 같은 날 시술 기록과 겹치면 두 번 세진다 — 기록(다녀간 날 수)으로 바로 맞춤, 하이드레이션 뒤 (리뷰 2026-11-19)
     // 완료 → 결제 브리지: 기존엔 상태만 바뀌고 매출에 잡히지 않아 Sales에서 수기 재입력이 필요했음
@@ -1617,6 +1620,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (await askConfirm({ title: '예약 삭제', message: `이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`, confirmLabel: '삭제', danger: true })) {
       ReservationStore.delete(r.id);
       assignResource(r.id, null); // 자원 배정도 함께 정리 (142)
+      saveReason(r.id, 'cancelled', ''); // 취소·노쇼 사유도 함께 정리 — 삭제된 예약의 사유가 설정 행에 영구히 남았다 (246 리뷰 M-4)
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();
     }

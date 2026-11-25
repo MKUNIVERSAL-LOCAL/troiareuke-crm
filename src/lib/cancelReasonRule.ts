@@ -33,6 +33,20 @@ export function reasonOptions(kind: CancelKind): ReasonOption[] {
   return kind === 'noshow' ? NOSHOW_REASONS : CANCEL_REASONS;
 }
 
+/**
+ * 라벨·책임을 찾을 때는 **두 목록을 모두** 본다 (246 리뷰 M-3).
+ * 취소로 적힌 예약을 노쇼로 바꾸는 식으로 상태와 기록의 kind 가 어긋나면,
+ * 그 kind 목록에서만 찾던 코드가 내부 영어 id('no-contact')를 사장 화면에 사유로 찍었다.
+ */
+function findOption(value: string): ReasonOption | undefined {
+  return CANCEL_REASONS.find(o => o.id === value) ?? NOSHOW_REASONS.find(o => o.id === value);
+}
+
+/** 등록된 보기인가 — 직접 입력(개인 사정이 적힐 수 있다)과 구분한다 (246 리뷰 M-4) */
+export function isPresetReason(value: string): boolean {
+  return findOption(value) !== undefined;
+}
+
 export const MAX_REASON_TEXT = 30;
 
 /** 직접 입력 사유 정리 — 공백 축약·길이 제한. 빈 값이면 '' (기록하지 않는다) */
@@ -41,14 +55,15 @@ export function normalizeReasonText(value: unknown): string {
   return value.replace(/\s+/g, ' ').trim().slice(0, MAX_REASON_TEXT);
 }
 
-/** 저장값 → 화면 문구. 목록 id 면 그 라벨, 아니면 직접 입력한 말 그대로 */
+/** 저장값 → 화면 문구. 등록된 보기면 그 라벨, 아니면 직접 입력한 말 그대로 */
 export function labelFor(kind: CancelKind, value: string): string {
-  const hit = reasonOptions(kind).find(o => o.id === value);
+  void kind; // 두 목록을 모두 보므로 kind 는 필요 없다 — 호출부 호환을 위해 남긴다
+  const hit = findOption(value);
   return hit ? hit.label : normalizeReasonText(value);
 }
 
-function byOf(kind: CancelKind, value: string): ReasonOption['by'] {
-  const hit = reasonOptions(kind).find(o => o.id === value);
+function byOf(value: string): ReasonOption['by'] {
+  const hit = findOption(value);
   return hit ? hit.by : 'unknown'; // 직접 입력은 책임을 짐작하지 않는다
 }
 
@@ -82,10 +97,10 @@ export function summarizeReasons(
     const label = labelFor(rec.kind, rec.reason);
     if (!label) continue;
     recorded += 1;
-    if (byOf(rec.kind, rec.reason) === 'shop') shopSide += 1;
+    if (byOf(rec.reason) === 'shop') shopSide += 1;
     const prev = counts.get(label);
     if (prev) prev.count += 1;
-    else counts.set(label, { label, count: 1, by: byOf(rec.kind, rec.reason) });
+    else counts.set(label, { label, count: 1, by: byOf(rec.reason) });
   }
   const total = totals.cancelled + totals.noshow;
   return {
@@ -93,17 +108,23 @@ export function summarizeReasons(
     noshow: totals.noshow,
     recorded: Math.min(recorded, total),
     missing: Math.max(0, total - recorded),
-    shopSide,
+    shopSide: Math.min(shopSide, total), // 지워진 예약의 기록이 남아 총건수를 넘기지 않게 (246 리뷰 M-5)
     top: [...counts.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)),
   };
 }
 
-/** 화면 한 줄 — 취소·노쇼가 없으면 아무것도 적지 않는다 */
-export function describeReasonSummary(s: ReasonSummary, topN = 3): string | null {
+/**
+ * 화면 한 줄 — 취소·노쇼가 없으면 아무것도 적지 않는다.
+ * monthLabel: 보고 있는 달("11월") — 주간 보기가 달을 넘나들 때 "이달" 이 어느 달인지 모르던 것 (246 리뷰 L-10).
+ * **매장 쪽 사유 건수**를 함께 적는다 — 운영으로 줄일 수 있는 몫이라 이 기능의 핵심 숫자인데
+ * 계산만 하고 화면에 없었다 (246 리뷰 M-5).
+ */
+export function describeReasonSummary(s: ReasonSummary, monthLabel?: string, topN = 3): string | null {
   if (s.cancelled + s.noshow === 0) return null;
-  const head = `이달 취소 ${s.cancelled}건 · 노쇼 ${s.noshow}건`;
+  const head = `${monthLabel ?? '이달'} 취소 ${s.cancelled}건 · 노쇼 ${s.noshow}건`;
+  const shop = s.shopSide > 0 ? ` · 그중 매장 쪽 사유 ${s.shopSide}건` : '';
   if (s.top.length === 0) return `${head} — 사유 미기록 ${s.missing}건`;
   const list = s.top.slice(0, topN).map(t => `${t.label} ${t.count}건`).join(' · ');
   const tail = s.missing > 0 ? ` · 사유 미기록 ${s.missing}건` : '';
-  return `${head} — ${list}${tail}`;
+  return `${head} — ${list}${tail}${shop}`;
 }
