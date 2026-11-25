@@ -190,6 +190,14 @@ export function adminGetFeatureFlags() {
   return apiRequest<{ scopes: Record<string, FeatureFlagMap> }>('/api/admin/feature-flags');
 }
 
+/** 지점 화면 PIN(앱 잠금) 초기화 — 매장이 PIN 을 잊었을 때. 지점 앱이 다음 플래그 조회에서 로컬 PIN 설정을 지운다 (219, 승인 20) */
+export async function resetBranchAppLock(scope: string): Promise<{ scope: string; appLockResetAt: string }> {
+  return apiRequest<{ scope: string; appLockResetAt: string }>(
+    `/api/admin/feature-flags/${encodeURIComponent(scope)}/app-lock-reset`,
+    { method: 'POST' },
+  );
+}
+
 export function adminSaveFeatureFlags(scope: string, flags: FeatureFlagMap) {
   return apiRequest<{ scope: string; flags: FeatureFlagMap }>(
     `/api/admin/feature-flags/${encodeURIComponent(scope)}`,

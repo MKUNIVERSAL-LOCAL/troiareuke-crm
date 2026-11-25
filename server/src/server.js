@@ -411,8 +411,11 @@ async function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS feature_flags (
       scope text PRIMARY KEY,
       flags jsonb NOT NULL DEFAULT '{}',
-      updated_at timestamptz NOT NULL DEFAULT now()
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      -- 본사가 지점 화면 PIN(앱 잠금)을 초기화한 시각. PIN 해시는 서버에 올리지 않고 이 시각만 둔다 (219, 승인 20)
+      app_lock_reset_at timestamptz
     );
+    ALTER TABLE feature_flags ADD COLUMN IF NOT EXISTS app_lock_reset_at timestamptz;
 
     -- 지점 → 고객 결제 요청 링크 (토스페이먼츠 카드/가상계좌 수납)
     CREATE TABLE IF NOT EXISTS payment_requests (
@@ -2077,13 +2080,16 @@ app.get('/api/feature-flags', requireSession, async (req, res, next) => {
   try {
     const branchId = req.authUser.branch_id || '';
     const { rows } = await pool.query(
-      'SELECT scope, flags FROM feature_flags WHERE scope = $1 OR scope = $2',
+      'SELECT scope, flags, app_lock_reset_at FROM feature_flags WHERE scope = $1 OR scope = $2',
       ['global', branchId || 'global'],
     );
     const byScope = Object.fromEntries(rows.map((r) => [r.scope, r.flags || {}]));
+    const branchRow = branchId ? rows.find((r) => r.scope === branchId) : null;
     res.json({
       global: byScope.global || {},
       branch: (branchId && byScope[branchId]) || {},
+      // 화면 PIN 초기화 시각 — 지점 앱이 기기에 적어 둔 값보다 새로우면 로컬 PIN 설정을 지운다 (219)
+      appLockResetAt: branchRow?.app_lock_reset_at ? new Date(branchRow.app_lock_reset_at).toISOString() : null,
     });
   } catch (error) {
     next(error);
@@ -2114,6 +2120,24 @@ app.put('/api/admin/feature-flags/:scope', requireSession, requireSuperadmin, as
       RETURNING scope, flags
     `, [scope, JSON.stringify(parsed.value)]);
     res.json({ scope: rows[0].scope, flags: rows[0].flags });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 어드민: 지점 화면 PIN(앱 잠금) 초기화 — 매장이 PIN 을 잊었을 때 전화 한 통으로 풀어 준다 (219, 승인 20).
+// PIN 해시는 기기에만 있어 서버가 알 수 없다 → "초기화 시각" 만 올려 두고, 지점 앱이 그 값을 보면 자기 기기의 PIN 설정을 지운다.
+app.post('/api/admin/feature-flags/:scope/app-lock-reset', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const scope = String(req.params.scope || '');
+    if (!FLAG_SCOPE_RE.test(scope) || scope === 'global') return res.status(400).json({ error: '지점 스코프가 필요합니다.' });
+    const { rows } = await pool.query(`
+      INSERT INTO feature_flags (scope, flags, app_lock_reset_at, updated_at)
+      VALUES ($1, '{}'::jsonb, now(), now())
+      ON CONFLICT (scope) DO UPDATE SET app_lock_reset_at = now(), updated_at = now()
+      RETURNING scope, app_lock_reset_at
+    `, [scope]);
+    res.json({ scope: rows[0].scope, appLockResetAt: new Date(rows[0].app_lock_reset_at).toISOString() });
   } catch (error) {
     next(error);
   }

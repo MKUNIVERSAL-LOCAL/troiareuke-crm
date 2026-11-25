@@ -8,6 +8,9 @@ import { setCatalogOverride } from './ai/catalog';
 import { FEATURE_MAP } from './featureRegistry';
 import { apiRequest, isAuthApiConfigured } from './authApi';
 import { getPreference, setPreference } from './shopPreferences';
+import { getAppLock, disableAppLock, clearScreenUnlocks } from './appLock';
+import { shouldResetAppLock } from './appLockResetRule';
+import { notify } from './notify';
 
 const EVENT = 'feature-flags-changed';
 const CACHE_KEY = 'crm_feature_flags_cache_v1';
@@ -92,10 +95,25 @@ export function setDeviceFeatureEnabled(id: string, on: boolean): void {
  * NAS 서버에서 원격 플래그를 새로 받아온다. Layout 마운트 시 1회 호출.
  * 실패(오프라인·구버전 서버·미연동)해도 캐시/기본값으로 동작하므로 조용히 무시한다.
  */
+const LOCK_RESET_SEEN_KEY = 'crm_app_lock_reset_seen';
+
+/** 본사가 누른 화면 PIN 초기화를 이 기기에 반영 — 같은 초기화를 두 번 처리하지 않는다 (219) */
+async function applyAppLockReset(serverIso: string | null | undefined): Promise<void> {
+  let seen: string | null = null;
+  try { seen = localStorage.getItem(LOCK_RESET_SEEN_KEY); } catch { /* 저장소 접근 불가 — 서버 값을 따른다 */ }
+  if (!shouldResetAppLock(serverIso, seen)) return;
+  try { localStorage.setItem(LOCK_RESET_SEEN_KEY, String(serverIso)); } catch { /* noop */ }
+  const had = !!getAppLock();
+  disableAppLock();
+  clearScreenUnlocks();
+  if (had) notify('본사에서 화면 잠금 PIN을 초기화했습니다. 설정 > 백업·보안에서 새 PIN을 정해주세요.');
+}
+
 export async function refreshFeatureFlags(): Promise<void> {
   if (!isAuthApiConfigured) return;
   try {
-    const res = await apiRequest<{ global?: FlagMap; branch?: FlagMap }>('/api/feature-flags');
+    const res = await apiRequest<{ global?: FlagMap; branch?: FlagMap; appLockResetAt?: string | null }>('/api/feature-flags');
+    void applyAppLockReset(res.appLockResetAt);
     remote = { global: res.global || {}, branch: res.branch || {} };
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify(remote));

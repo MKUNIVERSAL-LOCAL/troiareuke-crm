@@ -59,6 +59,7 @@ import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
 import { isGatewayPendingHistory, countResendable } from '../src/lib/messageHistoryRule';
 import { looksLikeAdMessage, undecorateAdMessage } from '../src/lib/adComplianceRule';
 import { anonymizeResidue, describeAnonymizeResidue } from '../src/lib/anonymizeResidue';
+import { shouldResetAppLock } from '../src/lib/appLockResetRule';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -1247,4 +1248,17 @@ test('익명화 잔존 안내 — 남는 것만 세고, 없으면 문장을 만�
   expect(both.map(i => i.count)).toEqual([2, 1]);
   expect(describeAnonymizeResidue(both)).toBe('다만 문자·카카오 발송 이력의 본문·제목 2건, 제품 판매 기록의 이름 1건에 적힌 이름은 이번에 지워지지 않습니다(프로그램 보관 기록).');
   expect(describeAnonymizeResidue(anonymizeResidue({ messageHistory: 0, productSales: 3 }))).toBe('다만 제품 판매 기록의 이름 3건에 적힌 이름은 이번에 지워지지 않습니다(프로그램 보관 기록).');
+});
+
+test('화면 PIN 초기화 판정 — 처음 본 초기화는 적용, 이미 처리한 것은 무시, 깨진 값은 PIN 을 지우지 않는다 (219)', () => {
+  const t1 = '2026-11-25T09:00:00.000Z';
+  const t2 = '2026-11-25T10:00:00.000Z';
+  expect(shouldResetAppLock(t1, null)).toBe(true);        // 처음 보는 초기화
+  expect(shouldResetAppLock(t1, t1)).toBe(false);          // 같은 초기화를 두 번 처리하지 않는다
+  expect(shouldResetAppLock(t2, t1)).toBe(true);           // 본사가 다시 눌렀다
+  expect(shouldResetAppLock(t1, t2)).toBe(false);          // 서버 값이 더 오래됐으면 무시
+  expect(shouldResetAppLock(null, t1)).toBe(false);        // 초기화한 적 없음
+  expect(shouldResetAppLock(undefined, null)).toBe(false);
+  expect(shouldResetAppLock('어제', null)).toBe(false);     // 깨진 값으로 PIN 을 지우지 않는다
+  expect(shouldResetAppLock(t1, '깨짐')).toBe(true);        // 기기 기록이 깨졌으면 서버를 따른다
 });

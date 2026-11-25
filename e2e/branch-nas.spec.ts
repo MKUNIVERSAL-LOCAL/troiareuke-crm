@@ -21,7 +21,7 @@ const BRANCH_STAFF = { ...BRANCH_ADMIN, id: 'u-br-2', email: 'staff@example.test
 
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-const INITIAL = { pgEnabled: false };
+const INITIAL = { pgEnabled: false, appLockResetAt: null as string | null };
 const state = { ...INITIAL };
 const unmocked: string[] = [];
 const created: Record<string, unknown>[] = [];
@@ -39,7 +39,7 @@ async function mockNas(page: Page, user: typeof BRANCH_ADMIN = BRANCH_ADMIN) {
   await page.route(`${API}/api/auth/signup`, route => json(route, { user: { ...BRANCH_ADMIN, id: 'u-new', status: 'pending', isOnboarded: false }, pending: true }));
   await page.route(`${API}/api/data/**`, route => (route.request().method() === 'GET' ? json(route, { rows: [] }) : json(route, { ok: true })));
   await page.route(`${API}/api/data/customers`, route => (route.request().method() === 'GET' ? json(route, { rows: serverCustomers }) : json(route, { ok: true }))); // 나중 등록이 우선 매칭
-  await page.route(`${API}/api/feature-flags**`, route => json(route, { global: { 'module.aiChat': true } })); // AI 챗은 본사가 켜 주는 모듈(기본 준비 중) — 서버 응답 모양 { global, branch }
+  await page.route(`${API}/api/feature-flags**`, route => json(route, { global: { 'module.aiChat': true }, appLockResetAt: state.appLockResetAt })); // AI 챗은 본사가 켜 주는 모듈(기본 준비 중) — 서버 응답 모양 { global, branch }
   await page.route(`${API}/api/announcements**`, route => json(route, { announcements: [] }));
   await page.route(`${API}/api/ai/status**`, route => json(route, { enabled: true, providers: ['claude'], monthlyLimit: 100, usedThisMonth: 3, remaining: 97 }));
   // 본사 중계 호출 — 요청 본문을 모아 둔다(자료 블록·키 미전송 검사, 154 리뷰 H-1)
@@ -190,4 +190,31 @@ test('지점 앱(NAS 흉내) 직원 계정: 설정·직원 관리·매출 메뉴
   await expect(edit.getByRole('textbox', { name: '전화번호' })).toHaveCount(0);
   await expect(edit.getByRole('textbox', { name: '이메일' })).toHaveCount(0);
   await expect(edit.getByRole('textbox', { name: '주소' })).toHaveCount(0);
+});
+
+test('지점 앱(NAS 흉내): 본사가 화면 PIN을 초기화하면 다음 통신에서 이 기기의 PIN 설정이 지워진다', async ({ page }) => {
+  // 219(승인 20) — PIN 해시는 기기에만 있어 서버가 모른다. 본사는 "초기화 시각" 만 올리고, 지점 앱이 그 값을 보면 스스로 지운다.
+  await mockNas(page);
+  await page.goto('/login');
+  await page.getByLabel('이메일', { exact: true }).fill(BRANCH_ADMIN.email);
+  await page.getByLabel('비밀번호', { exact: true }).fill('test-password-only-for-mock'); // '비밀번호 보기' 버튼과 겹치지 않게 exact
+  await page.locator('form button[type="submit"]').first().click();
+  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+
+  // 매장이 PIN 을 켠 상태를 만든다(설정 화면과 같은 저장 형태)
+  await page.evaluate(() => localStorage.setItem('crm_app_lock', JSON.stringify({ hash: 'x'.repeat(64), timeoutMin: 15, screens: ['sales'], awayLock: false })));
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '백업·보안', exact: true }).filter({ visible: true }).first().click();
+  await expect(page.getByTestId('app-lock-card').getByText(/사용 중/)).toBeVisible();
+
+  // 본사가 초기화를 누른 뒤(서버 응답에 시각이 실린다) 지점 앱이 다시 통신하면 PIN 설정이 사라진다
+  state.appLockResetAt = new Date().toISOString();
+  await page.reload();
+  await expect(page.getByText('본사에서 화면 잠금 PIN을 초기화했습니다. 설정 > 백업·보안에서 새 PIN을 정해주세요.')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('crm_app_lock'))).toBeNull();
+
+  // 같은 초기화를 두 번 처리하지 않는다 — 다시 PIN 을 켜고 새로 고쳐도 그대로 남는다
+  await page.evaluate(() => localStorage.setItem('crm_app_lock', JSON.stringify({ hash: 'y'.repeat(64), timeoutMin: 15, screens: [], awayLock: false })));
+  await page.reload();
+  expect(await page.evaluate(() => localStorage.getItem('crm_app_lock'))).not.toBeNull();
 });
