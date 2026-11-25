@@ -600,6 +600,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.evaluate(() => {
     localStorage.setItem('ai_key_openai', 'sk-SECRET-TEST');
     localStorage.setItem('crm_sms_gateway_key', 'gw-SECRET-TEST');
+    const hKey = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!.replace(/_settings$/, '_setup_hidden'); localStorage.setItem(hKey, '1'); // 체크리스트 [숨기기] 뒤 저장한 백업 — 스칼라 키가 파일에 들어가 복원이 거부되던 결함 (195 리뷰 H-1)
     const sKey = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k));
     if (sKey) { const st = JSON.parse(localStorage.getItem(sKey) || '{}'); st.smsApiKey = 'sms-SECRET-TEST'; localStorage.setItem(sKey, JSON.stringify(st)); }
   });
@@ -610,6 +611,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const backupPath = await backupFile.path();
   const backupJson = JSON.parse(readFileSync(backupPath!, 'utf8'));
   expect(backupJson.format).toBe('troiareuke-crm-backup');
+  expect(backupJson.tables.setup_hidden).toBeUndefined(); // 테이블 모양이 아닌 플래그는 파일에 없다 (195)
   const backupText = readFileSync(backupPath!, 'utf8');
   expect(backupText).not.toContain('SECRET-TEST'); // AI 키·게이트웨이 키·smsApiKey 어느 것도 파일에 없다
   expect(backupText).not.toContain('troiareuke_local_users');

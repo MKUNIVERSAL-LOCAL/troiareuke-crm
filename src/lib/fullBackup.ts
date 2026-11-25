@@ -11,6 +11,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { getShopId } from './store';
+import { getPreference, setPreference } from './shopPreferences';
 import { isAuthApiConfigured } from './authApi';
 import { exportFile } from './mobileBridge';
 import { todayISO } from './format';
@@ -63,6 +64,9 @@ export function buildBackup(appVersion: string, shopName?: string): BackupFile {
     try { value = JSON.parse(raw); } catch { value = { [RAW_MARK]: raw }; }
     if (table === 'settings' && isRecord(value)) value = stripSettingsSecrets(value);
     if (typeof value === 'string' && containsKeyLike(value)) value = scrubKeyLike(value); // 자유 텍스트에 붙여넣은 키도 백업으로 새지 않게 (154 리뷰 M-3)
+    // 테이블 모양(설정은 객체, 나머지는 배열, JSON 이 아니면 RAW 포장)이 아닌 값 — 예: 체크리스트 숨김 플래그 `setup_hidden`='1' — 은 넣지 않는다. 넣으면 parseBackup 이 "손상" 으로 거부해 복원이 막혔다 (195 리뷰 H-1)
+    const rawWrapped = isRecord(value) && typeof value[RAW_MARK] === 'string' && Object.keys(value).length === 1;
+    if (!(table === 'settings' ? isRecord(value) : Array.isArray(value)) && !rawWrapped) continue;
     tables[table] = value;
   }
   return { format: BACKUP_FORMAT, version: BACKUP_VERSION, appVersion, shopId: getShopId(), shopName, createdAt: new Date().toISOString(), tables };
@@ -84,13 +88,13 @@ export async function saveBackupFile(b: BackupFile): Promise<'shared' | 'cancell
   return result;
 }
 
-// ── 마지막 백업 시각(이 PC) — 첫 설정 체크리스트 "전체 백업 1회 저장" 판정. 파일 저장과 Electron '지금 백업' 둘 다 기록한다 (193, PILOT-CHECKLIST 22)
-const LAST_BACKUP_KEY = () => `troiareuke_last_backup_${getShopId()}`; // crm_<shop>_ 접두사 밖 — 복원이 매장 키를 전부 지우고 백업 파일도 그 접두사만 모으므로 기록이 살아남고 파일에도 안 들어간다
+// ── 마지막 백업 시각(매장 기준) — 첫 설정 체크리스트 "전체 백업 1회 저장" 판정. 파일 저장과 Electron '지금 백업' 둘 다 기록한다 (193, PILOT-CHECKLIST 22)
+// 설정 행(preferences)에 둔다: 이 PC localStorage 키는 서버 모드 로그아웃 wipe(코어)가 지워 로그인마다 미완으로 돌아갔다 (195 리뷰 M-1). 복원 때는 restoreBackup 이 현재 값을 보존한다
 export function markBackupSaved(): void {
-  try { localStorage.setItem(LAST_BACKUP_KEY(), new Date().toISOString()); } catch { /* 저장 불가면 판정만 못 할 뿐 */ }
+  try { setPreference('lastBackupAt', new Date().toISOString()); } catch { /* 저장 불가면 판정만 못 할 뿐 */ }
 }
 export function lastBackupAt(): string | null {
-  try { return localStorage.getItem(LAST_BACKUP_KEY()); } catch { return null; }
+  return getPreference('lastBackupAt') ?? null;
 }
 
 /** 파일 내용을 검증해 백업 객체로. 형식이 아니면 Error */
@@ -106,6 +110,7 @@ export function parseBackup(text: string): BackupFile {
   for (const [table, value] of Object.entries(parsed.tables)) {
     const rawWrapped = isRecord(value) && typeof value[RAW_MARK] === 'string' && Object.keys(value).length === 1;
     const ok = table === 'settings' ? (isRecord(value) || rawWrapped) : (Array.isArray(value) || rawWrapped);
+    if (!ok && (value === null || typeof value !== 'object')) { delete (parsed.tables as Record<string, unknown>)[table]; continue; } // 옛 파일의 스칼라 플래그(setup_hidden 등)는 테이블이 아니다 — 무시하고 복원 (195 리뷰 H-1)
     if (!ok) throw new Error(`백업 파일의 '${Object.prototype.hasOwnProperty.call(TABLE_LABELS, table) ? TABLE_LABELS[table] : table}' 데이터가 손상됐습니다. 다른 백업 파일을 사용하세요.`);
   }
   return parsed as unknown as BackupFile;
@@ -139,6 +144,10 @@ export function restoreBackup(b: BackupFile): { written: number; skipped: number
       const cur = JSON.parse(curSettingsRaw);
       const merged = { ...(tables.settings as Record<string, unknown>) };
       for (const f of SETTINGS_SECRET_FIELDS) if (isRecord(cur) && cur[f] !== undefined && merged[f] === undefined) merged[f] = cur[f];
+      // 마지막 백업 시각은 이 매장의 사실 — 파일이 그 전에 만들어졌으면 현재 값을 유지 (195)
+      const curPrefs = isRecord(cur) && isRecord(cur.preferences) ? cur.preferences : null;
+      const filePrefs = isRecord(merged.preferences) ? merged.preferences : {};
+      if (curPrefs && typeof curPrefs.lastBackupAt === 'string' && filePrefs.lastBackupAt === undefined) merged.preferences = { ...filePrefs, lastBackupAt: curPrefs.lastBackupAt };
       tables.settings = merged;
     } catch { /* 현재 settings가 깨져 있으면 파일 값 그대로 */ }
   }

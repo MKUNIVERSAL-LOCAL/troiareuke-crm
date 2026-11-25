@@ -31,7 +31,7 @@ function buildSetupItems(): Item[] {
     { key: 'optout', group: 'pilot', label: '광고 수신거부 080 번호', desc: '광고성 문자·캠페인을 보내려면 필요합니다', done: !!getOptOutNumber(), to: '/settings?tab=notifications' },
     { key: 'schedule', group: 'pilot', label: '직원 근무표', desc: '직원 수정 창에서 요일별 근무·휴게·버퍼를 저장하세요 — 예약 겹침 경고·빈 시간 안내가 씁니다', done: StaffStore.getAll().some(st => st.isActive && !!allStaffSchedules()[st.id]), to: '/staff' },
     { key: 'campaigns', group: 'pilot', label: '자동 발송 시나리오', desc: '문자/카카오 > 자동 발송에서 "기본 시나리오 16 추가"', done: listCampaigns().length > 0, to: '/messaging', action: 'campaign.manage' },
-    { key: 'backup', group: 'pilot', label: '전체 백업 1회 저장', desc: '설정 > 백업·보안에서 백업 파일을 한 번 저장해 두세요(이 PC 기준)', done: !!lastBackupAt(), to: '/settings?tab=backup' },
+    { key: 'backup', group: 'pilot', label: '전체 백업 1회 저장', desc: '설정 > 백업·보안에서 백업 파일을 한 번 저장해 두세요(매장 기준 — 어느 PC 에서 저장해도 완료)', done: !!lastBackupAt(), to: '/settings?tab=backup' },
   ];
 }
 
