@@ -106,6 +106,7 @@ const MSG_TYPE_COLORS: Record<string, string> = {
 
 export default function Messaging() {
   const [tab, setTab] = useState<Tab>('send');
+  const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null); // 고객 활동 타임라인 메시지 줄 → 그 고객 발송만 (205)
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendSegment, setSendSegment] = useState<Segment>('all');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -119,6 +120,13 @@ export default function Messaging() {
       setSendCustomerId(null);
       setSendSegment(seg as Segment);
       setShowSendModal(true);
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    const hist = searchParams.get('history');
+    if (hist) { // 고객 활동 타임라인 "문자/카카오 발송" 줄 → 발송 이력 탭을 그 고객 발송만으로 (205)
+      setHistoryCustomerId(hist);
+      setTab('history');
       setSearchParams({}, { replace: true });
       return;
     }
@@ -192,7 +200,7 @@ export default function Messaging() {
 
         {tab === 'send' && <SendPanel onSend={openSendModal} onSent={reload} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
-        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} />}
+        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} customerId={historyCustomerId} onClearCustomer={() => setHistoryCustomerId(null)} />}
       </div>
 
       {showSendModal && (
@@ -631,8 +639,9 @@ function formatSentAt(value: string): string {
   return isNaN(d.getTime()) ? value : formatDateTime(value);
 }
 
-function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => void }) {
+function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
+  const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>('all');
 
@@ -642,6 +651,7 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredHistory = history.filter(item => {
+    if (customerId && !item.customerIds?.includes(customerId)) return false; // 수신 고객 id 가 기록된 건(204 부터)만 걸린다 (205)
     const statusMatches = statusFilter === 'all' || item.status === statusFilter;
     const searchMatches = !normalizedSearch || [
       item.templateName || '직접 작성',
@@ -701,6 +711,9 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
           <option value="sent">성공</option>
           <option value="failed">실패·미연동</option>
         </select>
+        {customerName && ( /* 타임라인에서 넘어온 고객 필터 — 누르면 해제 (205) */
+          <button type="button" onClick={onClearCustomer} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="고객 활동 타임라인에서 연 필터 — 누르면 해제" aria-label={`${customerName} 발송만 보기 해제`} data-testid="history-customer-chip">{customerName} 발송만 {filteredHistory.length} ✕</button>
+        )}
       </div>
       <div className="divide-y divide-gray-50 overflow-y-auto max-h-[65vh]">
         {filteredHistory.length === 0 && (

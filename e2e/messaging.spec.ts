@@ -51,4 +51,11 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
   const timeline = page.getByTestId('customer-timeline').filter({ visible: true }).first();
   await expect(timeline).toContainText('문자 발송 · 리마인드 안내');
   await expect(timeline).toContainText('발송사 미연동 — 실제 발송 안 됨');
+  // 줄을 누르면 발송 이력 탭이 그 고객 발송만으로 열린다 (205)
+  await timeline.getByRole('button', { name: /문자 발송 · 리마인드 안내/ }).click();
+  await expect(page).toHaveURL(/\/messaging/);
+  await expect(page.getByTestId('history-customer-chip')).toContainText(`${acc.customer} 발송만 1`);
+  await expect(page.getByText(/내일 방문 예정입니다/).first()).toBeVisible();
+  await page.getByTestId('history-customer-chip').click();
+  await expect(page.getByTestId('history-customer-chip')).toHaveCount(0);
 });

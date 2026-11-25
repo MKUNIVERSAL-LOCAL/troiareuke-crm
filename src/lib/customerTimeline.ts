@@ -150,7 +150,7 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
     items.push({
       id: `msg:${h.id}`, kind: 'message', date: toISO(at), time: `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`,
       title: `${h.type.startsWith('kakao') ? '카카오' : '문자'} 발송 · ${h.templateName || h.title || '직접 작성'}`,
-      detail, tone: h.status === 'sent' ? undefined : gatewayPending ? 'muted' : 'bad', href: '/messaging',
+      detail, tone: h.status === 'sent' ? undefined : gatewayPending ? 'muted' : 'bad', href: `/messaging?history=${customerId}`, // 발송 이력 탭을 이 고객 발송만으로 (205)
     });
   }
   // 광고 수신 동의 — 동의일 태그(광고동의:YYYY-MM-DD)가 있는 동안 한 줄. 거부로 바꾸면 동의 태그가 지워져 줄도 사라진다(태그가 정본) (179)
