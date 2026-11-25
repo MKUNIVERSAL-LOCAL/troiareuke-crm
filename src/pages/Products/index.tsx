@@ -231,10 +231,11 @@ export default function Products() {
                   className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30"
                 />
               </div>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap" role="group" aria-label="제품 분류">
                 {CATEGORIES.map(c => (
                   <button
                     key={c}
+                    aria-pressed={category === c} /* (217) */
                     onClick={() => setCategory(c)}
                     className={clsx(
                       'px-3.5 py-2 text-sm font-medium rounded-xl border transition-all',

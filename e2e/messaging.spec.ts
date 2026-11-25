@@ -92,6 +92,8 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
   });
   await page.goto('/messaging?tab=history');
   await expect(page.getByText('성과 테스트').first()).toBeVisible();
+  // 켜진 탭·채널이 낭독 상태로도 드러난다 (217)
+  await expect(page.getByRole('button', { name: '발송 이력' })).toHaveAttribute('aria-current', 'true');
   // 받는 사람 표시·이름 검색 (212)
   await expect(page.getByTestId('history-recipients').first()).toContainText(`받는 사람 ${acc.customer}`);
   await page.getByLabel('발송 이력 검색').fill(acc.customer);

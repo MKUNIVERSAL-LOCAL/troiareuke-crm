@@ -196,10 +196,11 @@ export default function Messaging() {
         </div>
 
         {/* Tabs */}
-        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full mb-6">
+        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full mb-6" role="group" aria-label="문자/카카오 화면 전환">
           {tabs.map(t => (
             <button
               key={t.key}
+              aria-current={tab === t.key ? 'true' : undefined} /* 설정 탭과 같은 표기 (217) */
               onClick={() => { setTab(t.key); if (t.key !== 'history') setHistoryStatus('all'); }} // 딥링크 상태 필터가 탭을 오가며 되살아나지 않게 (210, 208 리뷰 L-3)
               className={clsx(
                 'flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
@@ -1076,10 +1077,11 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           {/* Message Type */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">발송 채널</label>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap" role="group" aria-label="발송 채널">
               {msgTypes.map(t => (
                 <button
                   key={t.key}
+                  aria-pressed={msgType === t.key} /* 선택을 색으로만 알리던 것 (217) */
                   onClick={() => setMsgType(t.key)}
                   disabled={t.disabled}
                   className={clsx(

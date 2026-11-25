@@ -633,6 +633,7 @@ export default function Reservations() {
             return (
               <button
                 key={s.id}
+                aria-pressed={active} /* 선택을 색으로만 알리던 것 (217) */
                 onClick={() => setStaffFilter(active ? 'all' : s.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                   active ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'

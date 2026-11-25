@@ -203,10 +203,11 @@ export default function Programs() {
       </div>
 
       {/* 카테고리 필터 */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar pr-6 sm:flex-wrap">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar pr-6 sm:flex-wrap" role="group" aria-label="프로그램 분류 필터">
         {['전체', ...CATEGORIES].map(cat => (
           <button
             key={cat}
+            aria-pressed={filterCategory === cat} /* (217) */
             onClick={() => setFilterCategory(cat)}
             className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               filterCategory === cat
