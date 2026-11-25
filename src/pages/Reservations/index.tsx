@@ -31,6 +31,7 @@ import { activeResources, allResources, resourceAssignments, resourceOf, assignR
 import { freeResources, resourceConflicts, RESOURCE_KIND_LABEL } from '../../lib/resourceRule';
 import BookingRequestsModal from '../../components/BookingRequestsModal';
 import { newRequests, ensureCustomerFor, acceptRequest, CHANNEL_SOURCE } from '../../lib/bookingRequests';
+import { waitlistFor, describeWaitlist } from '../../lib/waitlistRule';
 import { monthCloseBlock } from '../../lib/monthClose';
 import type { BookingRequest } from '../../types';
 import type { Reservation, Staff } from '../../types';
@@ -1514,6 +1515,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (!(await askConfirm({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기' }))) return; // 앱 확인창 (15차 #H3)
     ReservationStore.updateStatus(r.id, 'cancelled');
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
+    // 빈 자리를 원한 대기 요청이 있으면 바로 안내 — 요청함을 열어 보지 않아도 알 수 있게 (185, GAP R-10)
+    void newRequests().then(list => { const msg = describeWaitlist(waitlistFor(list, r.date, r.startTime), formatDate(r.date)); if (msg) notify.info(msg); }).catch(() => undefined);
     onUpdate();
   };
   // 노쇼 — 상세에서 바로 처리 (2026-11-18). 고객 상세 "노쇼 N회"·직원 실적 제외·완료 누락 카드에서 빠진다.

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, isNearMidnightSeoul, visibleButton } from './helpers';
-import { dialog, openReservationDetail, acceptAppConfirm } from './flows';
+import { dialog, openReservationDetail, acceptAppConfirm, addReservation } from './flows';
 
 /**
  * 예약 요청함 (143, GAP R-6·R-10) — 카톡으로 온 요청을 접수(처음 고객 → 동의 필수)하면 머리글 버튼에 건수가 붙고,
@@ -71,6 +71,17 @@ test('예약 요청 접수 → 예약으로 등록(폼 프리필·고객 자동 
   await form.getByRole('button', { name: '요청 접수' }).click();
   await expect(item).toHaveCount(1);
   await expect(item).not.toContainText('신규 고객');
+  // 같은 날 16:00 예약을 취소 처리하면 그 자리를 원한 대기 요청(16:00)이 안내된다 (185, GAP R-10)
+  await page.keyboard.press('Escape');
+  await expect(inbox).toHaveCount(0);
+  await addReservation(page, acc, '16:00');
+  const cancelDetail = await openReservationDetail(page, '16:00');
+  await cancelDetail.getByRole('button', { name: '취소처리' }).click();
+  await acceptAppConfirm(page, '예약 취소 처리', '취소 처리');
+  await expect(page.getByText(/대기 요청 1건\(16:00\)/).first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await visibleButton(page, /예약 요청함/).click();
+  await expect(inbox).toBeVisible();
   await item.getByRole('button', { name: '거절' }).click();
   await acceptAppConfirm(page, '요청 거절', '거절');
   await expect(item).toHaveCount(0);

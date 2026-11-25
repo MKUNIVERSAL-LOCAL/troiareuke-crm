@@ -22,6 +22,7 @@ import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
 import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
 import { monthlyKpis, noRebookIds } from '../src/lib/kpiRule';
+import { waitlistFor, describeWaitlist } from '../src/lib/waitlistRule';
 import { utilization, formatHours } from '../src/lib/utilizationRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
@@ -1175,4 +1176,14 @@ test('예약 정책 — 겹침 판정: 정책 켬이면 막고, 꺼짐이면 확
   expect(decideOverlap({ blockOverlap: true }, true)).toBe('block');
   expect(decideOverlap({ blockOverlap: false }, true)).toBe('confirm');
   expect(decideOverlap({ blockOverlap: true }, false)).toBe('allow');
+});
+
+test('대기 요청 안내 — 같은 날 처리 전 요청만, 취소된 시각과 가까운 순, 문장은 건수·시각만 (185)', () => {
+  const rq = (id: string, date: string, startTime: string, status = 'new') => ({ id, date, startTime, status });
+  const list = [rq('a', '2026-11-26', '10:00'), rq('b', '2026-11-26', '15:30'), rq('c', '2026-11-26', '14:00', 'rejected'), rq('d', '2026-11-27', '14:00'), rq('e', '2026-11-26', '14:00'), rq('f', '2026-11-26', '13:00')];
+  expect(waitlistFor(list, '2026-11-26', '14:00').map(r => r.id)).toEqual(['e', 'f', 'b', 'a']); // 0·60·90·240분 차이
+  expect(waitlistFor(list, '2026-11-26').map(r => r.id)).toEqual(['a', 'f', 'e', 'b']);           // 기준 시각 없으면 시각순
+  expect(waitlistFor(list, '2026-11-28')).toEqual([]);
+  expect(describeWaitlist(waitlistFor(list, '2026-11-26', '14:00'), '11월 26일')).toBe('11월 26일에 들어오고 싶어 한 대기 요청 4건(14:00·13:00·15:30 외)이 있습니다 — 예약 요청함에서 연락해 보세요.');
+  expect(describeWaitlist([], '11월 26일')).toBeNull();
 });
