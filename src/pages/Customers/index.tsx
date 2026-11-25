@@ -1095,10 +1095,10 @@ export default function Customers() {
     const tags = tagOptions;
     if (tags.length === 0) return null;
     return (
-      <div className="flex flex-wrap gap-1.5 pb-1" role="group" aria-label="태그 필터" data-testid="tag-filter">
+      <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible gap-1.5 pb-1 -mx-1 px-1" role="group" aria-label="태그 필터" data-testid="tag-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
         {tags.map(({ tag, count }) => (
           <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-            className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
+            className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
             #{tag} <span className="font-normal">{count}</span>
           </button>
         ))}
@@ -1107,20 +1107,20 @@ export default function Customers() {
   })();
   // 저장 세그먼트 칩 행 — 선택하면 조건으로 좁히고, 선택된 칩 옆에 [편집]. 만들기는 관리자(customer.pii 와 같은 관리자 묶음) (166)
   const savedSegmentRow = (savedSegments.length > 0 || canManage) ? (
-    <div className="flex flex-wrap items-center gap-1.5 pb-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">
+    <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible items-center gap-1.5 pb-1 -mx-1 px-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
       {savedSegments.map(sg => {
         const n = segmentCounts.get(sg.id) ?? 0;
         const on = segmentFilterId === sg.id;
         return (
           <button key={sg.id} type="button" aria-pressed={on} title={describeSegment(sg.condition)} onClick={() => setSegmentFilterId(on ? '' : sg.id)}
-            className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-[#1a3a8f] border-blue-200 hover:bg-blue-50'}`}>
+            className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-[#1a3a8f] border-blue-200 hover:bg-blue-50'}`}>
             {sg.name} <span className="font-normal">{n}</span>
           </button>
         );
       })}
-      {activeSegment && <button type="button" onClick={() => navigate(`/messaging?segment=saved:${activeSegment.id}`)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label={`${activeSegment.name} 세그먼트에 발송`}>이 세그먼트에 발송</button>}{/* 발송 창 딥링크 saved:<id> 의 생산자 (170 리뷰 L-2) */}
-      {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
-      {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
+      {activeSegment && <button type="button" onClick={() => navigate(`/messaging?segment=saved:${activeSegment.id}`)} className="flex-shrink-0 px-2 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label={`${activeSegment.name} 세그먼트에 발송`}>이 세그먼트에 발송</button>}{/* 발송 창 딥링크 saved:<id> 의 생산자 (170 리뷰 L-2) */}
+      {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
+      {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
     </div>
   ) : null;
   const tagChips = selected && (selected.tags || []).length > 0 ? (
