@@ -10,11 +10,12 @@ import nodemailer from 'nodemailer';
 import pg from 'pg';
 // 입력 검증·마스킹은 순수 모듈로 분리해 테스트한다 (225, GAP Q-3) — npm run test:server
 import {
-  MAX_TEXT_LENGTH, MAX_ID_LENGTH,
   maskEmail, normalizeEmail, isEmail, isStrongPassword, isUuid, isValidId, isValidBranchId, isValidText,
-  FLAG_SCOPE_RE, FLAG_KEY_RE, validateFlagsInput, APP_VERSION_RE,
+  FLAG_SCOPE_RE, validateFlagsInput, APP_VERSION_RE,
 } from './validate.js';
 import { publicUser } from './mappers.js';
+// 재배포 확인용 코드 지문 (229, 리뷰 H-1) — /health 로 알려 배포 스크립트가 구 컨테이너를 구분한다
+import { CODE_HASH } from './buildInfo.js';
 
 const { Pool } = pg;
 
@@ -663,7 +664,7 @@ async function consumeResetToken(token, password) {
 app.get('/health', async (_req, res, next) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ ok: true, service: 'troiareuke-auth' });
+    res.json({ ok: true, service: 'troiareuke-auth', codeHash: CODE_HASH });
   } catch (error) {
     next(error);
   }

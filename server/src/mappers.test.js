@@ -47,6 +47,20 @@ test('publicUser — 날짜: NOT NULL 컬럼은 ISO, nullable 은 null', () => {
   assert.equal(bare.lastSeenAt, null);     // 아직 접속 기록 없음
 });
 
+test('publicUser — 날짜: pg 가 돌려주는 Date 객체도 같은 ISO 로 (229 리뷰 L-2)', () => {
+  // 운영에서 pg 는 timestamptz 를 JS Date 로 돌려준다 — 문자열만 테스트하면 그 경로가 비어 있다
+  const u = publicUser(row({
+    trial_ends_at: new Date('2026-12-31T00:00:00.000Z'),
+    created_at: new Date('2026-01-01T00:00:00.000Z'),
+    service_ends_at: new Date('2027-01-31T00:00:00.000Z'),
+    last_seen_at: new Date('2026-11-25T10:00:00.000Z'),
+  }));
+  assert.equal(u.trialEndsAt, '2026-12-31T00:00:00.000Z');
+  assert.equal(u.createdAt, '2026-01-01T00:00:00.000Z');
+  assert.equal(u.serviceEndsAt, '2027-01-31T00:00:00.000Z');
+  assert.equal(u.lastSeenAt, '2026-11-25T10:00:00.000Z');
+});
+
 test('publicUser — 버전 텔레메트리 폴백(구버전 지점을 본사가 찾는 근거)', () => {
   assert.equal(publicUser(row()).lastAppVersion, null);
   assert.equal(publicUser(row({ last_app_version: '1.0.63', last_app_mode: 'nas' })).lastAppVersion, '1.0.63');

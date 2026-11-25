@@ -68,6 +68,7 @@ test('isValidText — required·최대 길이·깨진 인코딩 문자 거부', 
   assert.ok(!isValidText(123));                            // 문자열만
   assert.ok(isValidText('a'.repeat(MAX_TEXT_LENGTH)));
   assert.ok(!isValidText('a'.repeat(MAX_TEXT_LENGTH + 1)));
+  assert.ok(isValidText('a'.repeat(20), { max: 20 }));     // 경계 양쪽 (229 리뷰 L-1)
   assert.ok(!isValidText('a'.repeat(21), { max: 20 }));
   assert.ok(!isValidText('깨진�입력'));                // CP949 클라이언트 흔적 (2026-09-22 실측)
 });
@@ -87,6 +88,7 @@ test('FLAG_SCOPE_RE — global·지점 id 만, 한글·공백·64자 초과 거�
   assert.ok(!FLAG_SCOPE_RE.test('지점1'));
   assert.ok(!FLAG_SCOPE_RE.test('a b'));
   assert.ok(!FLAG_SCOPE_RE.test(''));
+  assert.ok(FLAG_SCOPE_RE.test('a'.repeat(64)));   // 경계 양쪽 (229 리뷰 L-1)
   assert.ok(!FLAG_SCOPE_RE.test('a'.repeat(65)));
 });
 
@@ -110,6 +112,9 @@ test('validateFlagsInput — boolean 만 받고, 모양이 틀리면 사유를 �
   // 219 가 타임스탬프를 flags 에 섞지 않고 별도 컬럼을 쓴 이유 — 여기서 막힌다
   assert.match(validateFlagsInput({ flags: { appLockResetAt: '2026-11-25T00:00:00.000Z' } }).error, /true\/false/);
   assert.match(validateFlagsInput({ flags: { '나쁜 키': true } }).error, /기능 id 형식/);
+  // 100개 경계 양쪽 — 한쪽만 박으면 구현을 >= 100 으로 바꿔도 테스트가 초록이다 (229 리뷰 L-1)
+  const hundred = Object.fromEntries(Array.from({ length: 100 }, (_, i) => ['k' + i, true]));
+  assert.equal(Object.keys(validateFlagsInput({ flags: hundred }).value).length, 100);
   const many = Object.fromEntries(Array.from({ length: 101 }, (_, i) => ['k' + i, true]));
   assert.match(validateFlagsInput({ flags: many }).error, /너무 많습니다/);
 });

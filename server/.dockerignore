@@ -1,3 +1,5 @@
 node_modules
 npm-debug.log
 .env
+# 단위 테스트는 런타임 이미지에 넣지 않는다 (229, 리뷰 M-4)
+src/*.test.js

@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CODE_HASH } from '../server/src/buildInfo.js';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { version } = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
@@ -26,6 +27,13 @@ await check('서버 헬스체크 (auth-api 기동)', async () => {
   const r = await fetch(`${API}/health`);
   const j = await r.json();
   if (!j.ok) throw new Error(`ok=${j.ok}`);
+});
+
+// 서버가 정말 이 저장소 코드를 돌리는지 — 라우트 생존만으로는 구 컨테이너를 구분할 수 없다 (229, 리뷰 H-1)
+await check(`서버 코드 지문 일치 (로컬 ${CODE_HASH})`, async () => {
+  const j = await (await fetch(`${API}/health`)).json();
+  if (!j.codeHash) throw new Error('서버가 지문을 알려주지 않습니다 — server/ 재배포 필요(구버전)');
+  if (j.codeHash !== CODE_HASH) throw new Error(`서버=${j.codeHash}, 로컬=${CODE_HASH} — server/ 재배포 필요`);
 });
 
 await check('비밀번호 재설정 페이지 응답 + 브랜드 표기', async () => {
