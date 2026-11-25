@@ -824,9 +824,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const contentBytes = smsBytes(isAd ? decorateAdMessage(content, optOutNumber || '080-000-0000') : content); // 광고면 (광고)·080 꼬리말이 붙은 실제 본문 기준으로 바이트·종류·비용 (159 리뷰 M-3)
 
   // 수신 대상의 실제 전화번호 목록 — 번호가 없거나 10~11자리가 아닌 것('010-1', 내선 포함)은 발송·비용 추정에서 뺀다(게이트웨이 실패를 발송 뒤에 알던 것, 14차 #M8)
-  const recipientPhones = adEligible
-    .map(c => c.phone)
-    .filter((p): p is string => { const k = normalizePhone(p); return k.length === 10 || k.length === 11; });
+  const recipientCustomers = adEligible.filter(c => { const k = normalizePhone(c.phone); return k.length === 10 || k.length === 11; });
+  const recipientPhones = recipientCustomers.map(c => c.phone);
 
   // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
   const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;
@@ -900,6 +899,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         title: title || undefined,
         content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
+        customerIds: recipientCustomers.map(c => c.id), // 고객 활동 타임라인용 (204)
         successCount: 0,
         failCount: recipientPhones.length,
         sentAt: new Date().toISOString(),
@@ -919,6 +919,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         title: title || undefined,
         content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
+        customerIds: recipientCustomers.map(c => c.id), // 고객 활동 타임라인용 (204)
         successCount: result.sent,
         failCount: result.failed,
         sentAt: new Date().toISOString(),
@@ -944,6 +945,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         title: title || undefined,
         content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
+        customerIds: recipientCustomers.map(c => c.id), // 고객 활동 타임라인용 (204)
         successCount: 0,
         failCount: recipientPhones.length,
         sentAt: new Date().toISOString(),

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer } from './helpers';
+import { openCustomer } from './flows';
 
 /**
  * 문자/카카오 발송 흐름 E2E (로컬 모드, 발송사 미연동) — 템플릿 작성 → 발송 창에서 템플릿 적용 → 발송 시도 →
@@ -44,4 +45,10 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
   await expect(page.getByText('발송 이력이 없어요')).toHaveCount(0); // 빈 상태 문구(85)가 사라졌는지 — 이력이 실제로 생겼다는 뜻
   await expect(page.getByText(/미연동/).first()).toBeVisible();
   await expect(page.getByText(/내일 방문 예정입니다/).first()).toBeVisible();
+
+  // ── 고객 활동 타임라인에도 같은 발송이 한 줄(수신 고객 id 기록, 204) — 미연동이라 "실제 발송 안 됨" 으로 정직하게 ──
+  await openCustomer(page, acc);
+  const timeline = page.getByTestId('customer-timeline').filter({ visible: true }).first();
+  await expect(timeline).toContainText('문자 발송 · 리마인드 안내');
+  await expect(timeline).toContainText('발송사 미연동 — 실제 발송 안 됨');
 });

@@ -6,7 +6,7 @@ import { formatDate } from './format';
 // 섹션을 오가지 않고 한눈에 보기 위한 읽기 전용 뷰. 저장소는 건드리지 않는다.
 // ═══════════════════════════════════════════════════════════════
 
-import { ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore, ProductSaleStore, CustomerStore } from './store';
+import { ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore, ProductSaleStore, CustomerStore, MessageHistoryStore } from './store';
 import { ConsultationStore } from './consultationStore';
 import { listCampaigns, sendsForCustomer } from './campaignStore';
 import { consentFromTags } from './consentRule';
@@ -14,7 +14,7 @@ import { toISO } from './revisitRule';
 import { formatPrice } from './format';
 import type { Reservation } from '../types';
 
-export type TimelineKind = 'reservation' | 'treatment' | 'consult' | 'program' | 'payment' | 'product' | 'programNote' | 'campaign' | 'consent';
+export type TimelineKind = 'reservation' | 'treatment' | 'consult' | 'program' | 'payment' | 'product' | 'programNote' | 'campaign' | 'consent' | 'message';
 
 export interface TimelineItem {
   id: string;
@@ -40,7 +40,7 @@ const RESERVATION_LABEL: Record<Reservation['status'], string> = {
 };
 
 export const TIMELINE_KIND_LABEL: Record<TimelineKind, string> = {
-  reservation: '예약', treatment: '시술', consult: '상담', program: '프로그램', payment: '결제', product: '제품 판매', programNote: '회차권 변경', campaign: '캠페인 발송', consent: '수신 동의',
+  reservation: '예약', treatment: '시술', consult: '상담', program: '프로그램', payment: '결제', product: '제품 판매', programNote: '회차권 변경', campaign: '캠페인 발송', consent: '수신 동의', message: '메시지 발송',
 };
 
 function dateOf(iso: string): string {
@@ -136,6 +136,21 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
       title: `캠페인 발송 · ${campaignNames.get(sd.campaignId) ?? '삭제된 캠페인'}`,
       detail: '이 PC 에서 승인·발송 성공',
       href: '/messaging',
+    });
+  }
+  // 문자·카카오 수동 발송(발송 창·상담 결과 안내) — 이력에 수신 고객 id 가 남은 건(204 부터)만, 이 PC 기록. 미연동 판정은 발송 이력 화면과 같은 식. 캠페인 실행은 위 campaign 줄이 맡는다 (GAP C-4)
+  for (const h of MessageHistoryStore.getAll()) {
+    if (!h.customerIds?.includes(customerId)) continue;
+    const at = new Date(h.sentAt);
+    if (Number.isNaN(at.getTime())) continue;
+    const gatewayPending = h.status === 'failed' && h.successCount === 0 && !h.cost;
+    const detail = h.status === 'sent'
+      ? (h.recipients > 1 ? `${h.recipients}명에게 발송${h.failCount > 0 ? ` · ${h.failCount}명 실패` : ''}` : '발송 성공')
+      : gatewayPending ? '발송사 미연동 — 실제 발송 안 됨' : '발송 실패';
+    items.push({
+      id: `msg:${h.id}`, kind: 'message', date: toISO(at), time: `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`,
+      title: `${h.type.startsWith('kakao') ? '카카오' : '문자'} 발송 · ${h.templateName || h.title || '직접 작성'}`,
+      detail, tone: h.status === 'sent' ? undefined : gatewayPending ? 'muted' : 'bad', href: '/messaging',
     });
   }
   // 광고 수신 동의 — 동의일 태그(광고동의:YYYY-MM-DD)가 있는 동안 한 줄. 거부로 바꾸면 동의 태그가 지워져 줄도 사라진다(태그가 정본) (179)

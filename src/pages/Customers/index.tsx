@@ -923,6 +923,7 @@ export default function Customers() {
       title: `${selected.name}님 피부 상담 결과`,
       content,
       recipients: 1,
+      customerIds: [selected.id], // 고객 활동 타임라인용 (204)
       successCount: result.pending ? 0 : result.sent,
       failCount: result.pending ? 1 : result.failed,
       sentAt: new Date().toISOString(), // 발송 화면과 같은 ISO — toLocaleString 행이 새로 생기지 않게 (6차 UX 감사 2026-11-20)

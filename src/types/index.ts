@@ -112,6 +112,8 @@ export interface MessageHistory {
   title?: string;
   content: string;
   recipients: number;
+  /** 수신 고객 id — 고객 활동 타임라인이 이 PC 의 발송 이력을 고객별로 보이기 위해 (204). 캠페인 실행 이력은 campaign_sends 가 맡아 비움 */
+  customerIds?: string[];
   successCount: number;
   failCount: number;
   sentAt: string;
