@@ -7,6 +7,7 @@ import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarize
 import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows } from '../src/lib/stockCountRule';
 import { diffReservation, statusChange, describeChange, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
 import { reorderSuggestions, reorderListText, describeReorderRow } from '../src/lib/reorderRule';
+import { resultLabel, defaultSnoozeDays, addDays as addDaysFollowUp, isSnoozed, sanitizeFollowUps, pruneFollowUps, snoozedIdSet, describeFollowUp, describeHidden } from '../src/lib/followUpRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -2206,4 +2207,46 @@ test('발주 제안 — 복사 글은 수량 중심이고 추정이라고 적는
   expect(text).toContain('수량은 매장이 확인 후 확정합니다');
   expect(describeReorderRow(rows[0])).toContain('앰플 31개 주문 권장');
   expect(reorderListText([], '2026-11-26')).toBe(''); // 제안이 없으면 복사할 글도 없다
+});
+
+// ── 249: 고객 연락 기록·미루기 ──
+
+test('연락 기록 — 결과마다 기본 미루기 기간이 다르고, 기한이 지나면 스스로 풀린다 (249)', () => {
+  expect(resultLabel('no-answer')).toBe('부재·연결 안 됨');
+  expect(defaultSnoozeDays('booked')).toBe(30);
+  expect(defaultSnoozeDays('no-answer')).toBe(3);
+  expect(defaultSnoozeDays('직접 입력한 결과')).toBe(0); // 모르는 결과는 미루지 않는다
+  expect(addDaysFollowUp('2026-11-26', 7)).toBe('2026-12-03');
+  // 기한 당일까지는 숨기고, 다음 날부터 다시 보인다
+  const rec = { at: '2026-11-26', result: 'later', until: '2026-12-03' };
+  expect(isSnoozed(rec, '2026-12-03')).toBe(true);
+  expect(isSnoozed(rec, '2026-12-04')).toBe(false);
+  expect(isSnoozed({ at: '2026-11-26', result: 'later' }, '2026-11-26')).toBe(false); // 미루지 않은 기록
+  expect(isSnoozed(undefined, '2026-11-26')).toBe(false);
+});
+
+test('연락 기록 — 저장값 정리·보관 상한·숨긴 고객 집합 (249)', () => {
+  const clean = sanitizeFollowUps({
+    c1: { at: '2026-11-26', result: 'booked', until: '2026-12-26', note: '  다음 달   초 ', actor: '김실장' },
+    c2: { at: '엉망', result: 'booked' },                       // 날짜가 아니다
+    c3: { at: '2026-11-26', result: '   ' },                    // 결과가 비었다
+    c4: { at: '2026-11-26', result: 'later', until: '엉망' },    // 기한이 날짜가 아니다 → 미루기 없이 기록만
+  });
+  expect(Object.keys(clean)).toEqual(['c1', 'c4']);
+  expect(clean.c1.note).toBe('다음 달 초');
+  expect(clean.c4.until).toBeUndefined();
+  // 숨긴 고객 집합 — 기한이 남은 것만
+  const set = snoozedIdSet({ ...clean, c5: { at: '2026-01-01', result: 'later', until: '2026-01-08' } }, '2026-11-26');
+  expect([...set]).toEqual(['c1']);
+  // 오래된 기록은 버린다(기한도 지난 것)
+  const pruned = pruneFollowUps({ old: { at: '2025-01-01', result: 'later', until: '2025-01-08' }, keep: clean.c1 }, '2026-06-01');
+  expect(Object.keys(pruned)).toEqual(['keep']);
+});
+
+test('연락 기록 — 화면 문구는 결과·기한·메모를 그대로, 숨긴 인원은 숨기지 않는다 (249)', () => {
+  expect(describeFollowUp({ at: '2026-11-26', result: 'no-answer', until: '2026-11-29', note: '오후에 다시', actor: '김실장' }))
+    .toBe('2026-11-26 부재·연결 안 됨 · 2026-11-29 까지 미룸 · 오후에 다시 (김실장)');
+  expect(describeFollowUp({ at: '2026-11-26', result: 'messaged' })).toBe('2026-11-26 문자·카톡 보냄');
+  expect(describeHidden(3)).toBe('연락을 미룬 고객 3명은 목록에서 숨겼습니다(기한이 지나면 다시 나옵니다).');
+  expect(describeHidden(0)).toBeNull();
 });

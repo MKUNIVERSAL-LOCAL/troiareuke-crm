@@ -246,6 +246,8 @@ export interface ShopPreferences {
   savedSegments?: SavedSegment[];
   /** 예약 정책 — 겹침 하드 블록 등(기본 꺼짐) (173, GAP R-3) */
   reservationPolicy?: ReservationPolicy;
+  /** 고객 id → 연락 결과·미루기 기한. 할 일 목록이 매일 같은 고객을 띄우던 것을 끊는다 (249) */
+  followUps?: Record<string, { at: string; result: string; until?: string; note?: string; actor?: string }>;
   /** 예약 id → 취소·노쇼 사유. 코어 Reservation 에 사유 칸이 없어 설정 행에 둔다. 1년 보관 (244) */
   reservationCancelReasons?: Record<string, { kind: 'cancelled' | 'noshow'; reason: string; at: string }>;
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */

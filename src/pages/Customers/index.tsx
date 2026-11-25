@@ -35,6 +35,9 @@ import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
+import FollowUpCard from '../../components/FollowUpCard'; // 연락 기록·미루기 (249)
+import { snoozedCustomerIds } from '../../lib/followUp';
+import { describeHidden } from '../../lib/followUpRule';
 import ProgramManageModal from '../../components/ProgramManageModal';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
 import { mergeBlockReason, findDuplicateCandidates, previewMerge } from '../../lib/customerMerge';
@@ -1201,6 +1204,9 @@ export default function Customers() {
     [customers, retentionPolicy.enabled, retentionPolicy.years],
   );
   // 필터링 — 입력·정렬·목록이 바뀔 때만 (3,000명 × 초성 검색 + 한글 정렬을 매 렌더마다 하지 않게, 성능 감사 2026-11-18)
+  // 연락을 미뤄 둔 고객 — 할 일 딥링크 필터(이탈 위험·재방문·회차권·재예약 없음)에서만 숨긴다 (249)
+  const snoozedIds = useMemo(() => snoozedCustomerIds(), [customers, detailTick]);
+  const contactFilterOn = churnOnly || revisitOnly || programAlertOnly || norebookOnly;
   const filtered = useMemo(() => customers.filter(c => {
     const matchSearch = matchesSearch(search, [c.name, c.phone, c.email]);
     const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
@@ -1211,9 +1217,22 @@ export default function Customers() {
     const matchProgram = !programAlertIds || programAlertIds.has(c.id);
     const matchSegment = !segmentFilterIds || segmentFilterIds.has(c.id); // 저장 세그먼트 (166)
     const matchNoRebook = !norebookIds || norebookIds.has(c.id); // (184)
-    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment && matchNoRebook;
+    const matchFollowUp = !contactFilterOn || !snoozedIds.has(c.id); // 미뤄 둔 고객은 그 기한까지 숨긴다 (249)
+    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment && matchNoRebook && matchFollowUp;
   }).sort(compareCustomers),
-  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds, norebookIds]);
+  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds, norebookIds, contactFilterOn, snoozedIds]);
+  // 숨긴 인원 — 조용히 줄어든 숫자는 거짓말이다 (249)
+  const hiddenByFollowUp = useMemo(() => {
+    if (!contactFilterOn) return 0;
+    return customers.filter(c => {
+      if (!snoozedIds.has(c.id)) return false;
+      const inChurn = !churnOnly || segmentIndex.get(c.id)?.churn?.level === 'high';
+      const inRevisit = !revisitIds || revisitIds.has(c.id);
+      const inProgram = !programAlertIds || programAlertIds.has(c.id);
+      const inNoRebook = !norebookIds || norebookIds.has(c.id);
+      return inChurn && inRevisit && inProgram && inNoRebook;
+    }).length;
+  }, [customers, snoozedIds, contactFilterOn, churnOnly, segmentIndex, revisitIds, programAlertIds, norebookIds]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -1880,6 +1899,10 @@ export default function Customers() {
             {norebookOnly && (norebookIds?.size ?? 0) > 0 && ( /* 재예약 권유 문자까지 한 흐름 — 발송 창 딥링크 norebook 의 생산자 (202) */
               <button type="button" onClick={() => navigate('/messaging?segment=norebook')} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label="재예약 없음 고객에게 발송" data-testid="norebook-send">이 고객들에게 발송</button>
             )}
+            {/* 연락을 미뤄 둔 고객은 숨겼다는 사실을 적는다 — 조용히 줄어든 숫자는 거짓말이다 (249) */}
+            {hiddenByFollowUp > 0 && (
+              <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-600 bg-gray-100" data-testid="follow-up-hidden">{describeHidden(hiddenByFollowUp)}</span>
+            )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
                 className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${churnOnly ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
@@ -2289,6 +2312,7 @@ export default function Customers() {
 
               <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => (canSales ? leaveDetailTo(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
+              <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => setDetailTick(t => t + 1)} />
               <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
             </div>
@@ -2411,6 +2435,10 @@ export default function Customers() {
             )}
             {norebookOnly && (norebookIds?.size ?? 0) > 0 && ( /* 재예약 권유 문자까지 한 흐름 — 발송 창 딥링크 norebook 의 생산자 (202) */
               <button type="button" onClick={() => navigate('/messaging?segment=norebook')} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label="재예약 없음 고객에게 발송" data-testid="norebook-send">이 고객들에게 발송</button>
+            )}
+            {/* 연락을 미뤄 둔 고객은 숨겼다는 사실을 적는다 — 조용히 줄어든 숫자는 거짓말이다 (249) */}
+            {hiddenByFollowUp > 0 && (
+              <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-600 bg-gray-100" data-testid="follow-up-hidden">{describeHidden(hiddenByFollowUp)}</span>
             )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
@@ -2928,6 +2956,7 @@ export default function Customers() {
 
             <CustomerPaymentHistory customerId={selected.id} onAdd={() => (canSales ? navigate(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
+            <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => setDetailTick(t => t + 1)} />
             <CustomerTimeline key={selected.id} customerId={selected.id} tick={detailTick} />
           </div>
         </div>
