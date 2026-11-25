@@ -68,3 +68,6 @@ export function validateFlagsInput(body) {
   }
   return { value: out };
 }
+
+// ── 프로그램 버전 헤더 (클라이언트가 매 요청에 X-App-Version 으로 보낸다 — 구버전 지점 추적) (227) ──
+export const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}([-.][0-9A-Za-z.-]{0,20})?$/;

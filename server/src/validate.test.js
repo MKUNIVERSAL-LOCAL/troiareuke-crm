@@ -1,12 +1,12 @@
 // 서버 입력 검증 테스트 (225, GAP Q-3) — 의존성 0, node 내장 러너.
-//   node --test server/src        (= npm run test:server, release:checks 에 포함)
+//   node --test "server/src/*.test.js"   (= npm run test:server, release:checks 에 포함)
 // 여기 있는 함수들이 가입·데이터 저장·어드민 라우트의 1차 방어선이라, 회귀가 생기면 조용히 잘못된 값이 DB 에 들어간다.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MAX_TEXT_LENGTH, MAX_ID_LENGTH,
   maskEmail, normalizeEmail, isEmail, isStrongPassword, isUuid, isValidId, isValidBranchId, isValidText,
-  FLAG_SCOPE_RE, FLAG_KEY_RE, validateFlagsInput,
+  FLAG_SCOPE_RE, FLAG_KEY_RE, validateFlagsInput, APP_VERSION_RE,
 } from './validate.js';
 
 test('normalizeEmail — 공백 제거·소문자', () => {
@@ -112,4 +112,14 @@ test('validateFlagsInput — boolean 만 받고, 모양이 틀리면 사유를 �
   assert.match(validateFlagsInput({ flags: { '나쁜 키': true } }).error, /기능 id 형식/);
   const many = Object.fromEntries(Array.from({ length: 101 }, (_, i) => ['k' + i, true]));
   assert.match(validateFlagsInput({ flags: many }).error, /너무 많습니다/);
+});
+
+test('APP_VERSION_RE — 1.0.63 형태만, 긴 꼬리·문자 버전 거부 (227)', () => {
+  assert.ok(APP_VERSION_RE.test('1.0.63'));
+  assert.ok(APP_VERSION_RE.test('1.0.63-beta.1'));
+  assert.ok(APP_VERSION_RE.test('1.0.63.1'));
+  assert.ok(!APP_VERSION_RE.test('v1.0.63'));
+  assert.ok(!APP_VERSION_RE.test('1.0'));
+  assert.ok(!APP_VERSION_RE.test(''));
+  assert.ok(!APP_VERSION_RE.test('1.0.63-' + 'a'.repeat(21)));
 });
