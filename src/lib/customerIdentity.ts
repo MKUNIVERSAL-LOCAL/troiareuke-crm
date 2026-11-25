@@ -4,6 +4,7 @@
 import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
 import { ConsultationStore } from './consultationStore';
 import { clearHistoryOfCustomer } from './reservationHistory';
+import { clearCustomerHistory } from './customerHistory';
 import { clearPhotos } from './photoStore';
 import { getPreference, setPreference } from './shopPreferences';
 import { resyncGcalEvents } from './gcalEventMap';
@@ -76,6 +77,7 @@ export function scrubCustomerBeforeDelete(customerId: string): number {
   for (const t of TreatmentLogStore.getByCustomer(customerId)) clearPhotos(`treatment:${t.id}`);
   for (const c of ConsultationStore.getByCustomer(customerId)) clearPhotos(`consult:${c.id}`);
   clearHistoryOfCustomer(customerId); // 예약 변경 이력에 남은 실명도 지운다 (250 리뷰 H-4)
+  clearCustomerHistory(customerId);   // 고객 정보 변경 이력도 지운다 (252)
   return propagateCustomerIdentity(customerId, { name: DELETED_CUSTOMER_NAME, phone: '' });
 }
 

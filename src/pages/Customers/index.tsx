@@ -36,6 +36,8 @@ import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbo
 import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import FollowUpCard from '../../components/FollowUpCard'; // 연락 기록·미루기 (249)
+import CustomerHistoryCard from '../../components/CustomerHistoryCard'; // 정보 변경 이력 (252)
+import { logCustomerEdit, logCustomerGrade } from '../../lib/customerHistory';
 import { snoozedCustomerIds } from '../../lib/followUp';
 import { describeHidden } from '../../lib/followUpRule';
 import ProgramManageModal from '../../components/ProgramManageModal';
@@ -565,6 +567,7 @@ export default function Customers() {
         for (const g of picked.slice(done, done + 25)) {
           if (CustomerStore.getById(g.id)?.grade !== g.current) continue; // 그 사이 직원이 바꿨으면 건드리지 않는다
           CustomerStore.update(g.id, { grade: g.suggested });
+          logCustomerGrade(g.id, g.current, g.suggested, user?.name); // 일괄 적용도 고객마다 남긴다 (252)
           applied += 1;
         }
       } catch (e) {
@@ -654,7 +657,8 @@ export default function Customers() {
   // 선택된 고객의 등급을 변경 (뱃지 클릭 → 드롭다운)
   function changeGrade(grade: CustomerGrade) {
     if (!selected || selected.grade === grade) { setShowGradeMenu(false); return; }
-    CustomerStore.update(selected.id, { grade });
+    const savedGrade = CustomerStore.update(selected.id, { grade });
+    if (savedGrade) logCustomerGrade(selected.id, selected.grade, grade, user?.name); // 등급을 누가 바꿨는지 남긴다 (252)
     loadAll();          // 목록 뱃지도 갱신
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
@@ -1612,7 +1616,11 @@ export default function Customers() {
       const before = (base as unknown as Record<string, unknown>)[k];
       return JSON.stringify(v ?? '') !== JSON.stringify(before ?? (Array.isArray(v) ? [] : '')); // 비운 값 '' 과 저장 안 된 undefined 는 같은 뜻
     })) as Partial<Customer>;
-    if (Object.keys(changed).length > 0) CustomerStore.update(selected.id, changed);
+    if (Object.keys(changed).length > 0) {
+      const saved = CustomerStore.update(selected.id, changed);
+      // 누가 언제 무엇을 바꿨는지 남긴다 — 저장이 안 됐으면 이력도 남기지 않는다 (252, 250 리뷰 L-4 와 같은 규칙)
+      if (saved) logCustomerEdit(selected.id, base, { ...base, ...changed }, user?.name);
+    }
     notify.success('고객 정보를 저장했습니다.'); // 전파 토스트보다 먼저 — 저장 자체를 알린다 (15차 #L10)
     if (identityChanged) {
       // 예약·시술·회차권·결제·상담에 복사된 이름(예약은 전화번호도) — 빠뜨리면 개명한 고객이 다른 화면 검색에서 사라지고 예약 카드가 옛 번호로 전화한다 (11차 #H1·H2)
@@ -2312,6 +2320,7 @@ export default function Customers() {
               <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => (canSales ? leaveDetailTo(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
               <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => { setDetailTick(t => t + 1); setFollowUpTick(t => t + 1); }} />
+              <CustomerHistoryCard key={`ch-${selected.id}`} customerId={selected.id} tick={detailTick} />
               <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
             </div>
@@ -2956,6 +2965,7 @@ export default function Customers() {
             <CustomerPaymentHistory customerId={selected.id} onAdd={() => (canSales ? navigate(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
             <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => { setDetailTick(t => t + 1); setFollowUpTick(t => t + 1); }} />
+            <CustomerHistoryCard key={`ch-${selected.id}`} customerId={selected.id} tick={detailTick} />
             <CustomerTimeline key={selected.id} customerId={selected.id} tick={detailTick} />
           </div>
         </div>

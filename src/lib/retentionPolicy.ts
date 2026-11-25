@@ -16,6 +16,7 @@ import type { Customer } from '../types';
 import { getPreference, setPreference } from './shopPreferences';
 import { clearFreeTextReasonsOfCustomer } from './cancelReasons';
 import { clearHistoryOfCustomer } from './reservationHistory';
+import { clearCustomerHistory } from './customerHistory';
 import { propagateCustomerIdentity, upcomingReservationsOf } from './customerIdentity';
 import { resyncGcalEvents } from './gcalEventMap';
 
@@ -97,6 +98,7 @@ export function anonymizeCustomers(ids: string[]): number {
     propagateCustomerIdentity(id, { name: ANONYMIZED_NAME, phone: '' }, { resyncCalendar: false });
     clearFreeTextReasonsOfCustomer(id); // 취소·노쇼에 직접 적은 사유(개인 사정이 적힐 수 있다)도 지운다 (246 리뷰 M-4)
     clearHistoryOfCustomer(id);         // 예약 변경 이력에 남은 실명도 지운다 (250 리뷰 H-4)
+    clearCustomerHistory(id);           // 고객 정보 변경 이력(이름·태그)도 지운다 (252)
     TreatmentLogStore.getByCustomer(id).forEach(t => clearPhotos(`treatment:${t.id}`));
     ConsultationStore.getByCustomer(id).forEach(c => clearPhotos(`consult:${c.id}`));
     n += 1;

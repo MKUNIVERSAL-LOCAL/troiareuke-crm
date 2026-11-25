@@ -9,6 +9,7 @@ import { diffReservation, statusChange, describeChange, describeEntryHead, sanit
 import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
 import { resultLabel, defaultSnoozeDays, addDays as addDaysFollowUp, isSnoozed, sanitizeFollowUps, pruneFollowUps, snoozedIdSet, describeFollowUp, describeHidden } from '../src/lib/followUpRule';
 import { normalizePreset, sanitizePresets, addPreset, removePreset, appendPreset, presetInMemo, MAX_PRESET_LEN, MAX_PRESETS } from '../src/lib/memoPresetRule';
+import { diffCustomer, gradeChange, describeCustomerChange, describeCustomerEntryHead, sanitizeCustomerHistory, trimCustomerHistory, customerHistoryFor, maskPhone, maskEmail, MAX_PER_CUSTOMER } from '../src/lib/customerHistoryRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -2369,4 +2370,47 @@ test('메모 문구 — 메모에 덧붙이고 같은 줄을 두 번 넣지 않�
   expect(appendPreset('메모', '  ')).toBe('메모');
   expect(presetInMemo('홈케어 안내\n자극 없음', '자극 없음')).toBe(true);
   expect(presetInMemo('자극 없음이 있었다', '자극 없음')).toBe(false);           // 줄 단위로만 본다
+});
+
+// ── 252: 고객 정보 변경 이력 ──
+
+const custBefore = { name: '홍길동', phone: '010-1234-5678', email: 'hong@test.com', grade: '일반', tags: ['민감성'], memo: '', allergies: '' };
+
+test('고객 변경 이력 — 개인정보는 적게 남긴다(연락처 일부·메모는 사실만) (252)', () => {
+  const changes = diffCustomer(custBefore, { ...custBefore, phone: '010-9999-0000', email: 'new@test.com', memo: '임신 중', allergies: '복숭아' });
+  const byLabel = new Map(changes.map(c => [c.label, c]));
+  expect(byLabel.get('연락처')).toEqual({ label: '연락처', from: '···5678', to: '···0000' }); // 뒤 4자리만
+  expect(byLabel.get('이메일')?.to).toBe('ne···@test.com');
+  expect(byLabel.get('메모')).toEqual({ label: '메모', from: '없음', to: '있음' });            // 내용은 남기지 않는다
+  expect(byLabel.get('알레르기')).toEqual({ label: '알레르기', from: '없음', to: '있음' });
+  expect(maskPhone('')).toBe('없음');
+  expect(maskEmail(undefined)).toBe('없음');
+  // 생일·주소는 적었는지만
+  const privacy = diffCustomer(custBefore, { ...custBefore, birthDate: '1990-01-01', address: '서울시 강남구 …' });
+  expect(privacy.map(c => [c.label, c.to])).toEqual([['생일', '적음'], ['주소', '적음']]);
+});
+
+test('고객 변경 이력 — 등급·태그·이름은 그대로, 바뀐 것이 없으면 기록하지 않는다 (252)', () => {
+  expect(diffCustomer(custBefore, custBefore)).toEqual([]);
+  const changes = diffCustomer(custBefore, { ...custBefore, name: '김길동', grade: 'VIP', tags: ['민감성', '임산부'] });
+  expect(changes.map(c => describeCustomerChange(c))).toEqual([
+    '이름 홍길동 → 김길동',
+    '등급 일반 → VIP',
+    '태그 민감성 → 민감성, 임산부',
+  ]);
+  expect(gradeChange('일반', 'VIP')).toEqual([{ label: '등급', from: '일반', to: 'VIP' }]);
+  expect(gradeChange('VIP', 'VIP')).toEqual([]);
+  expect(describeCustomerEntryHead({ id: 'x', customerId: 'c1', at: '2026-11-26T01:00:00.000Z', kind: 'grade', actor: '김실장', changes: [] }, () => '11-26 10:00'))
+    .toBe('11-26 10:00 · 김실장 · 등급 변경');
+});
+
+test('고객 변경 이력 — 모양이 깨진 기록·상한·고객별 조회 (252)', () => {
+  const entry = (id: string, cid: string, at: string) => ({ id, customerId: cid, at, kind: 'edit' as const, changes: [{ label: '등급', from: '일반', to: 'VIP' }] });
+  const clean = sanitizeCustomerHistory([entry('1', 'c1', '2026-11-26T01:00:00.000Z'), { id: '2', customerId: '', at: 'x', kind: 'edit', changes: [] }, null]);
+  expect(clean.map(e => e.id)).toEqual(['1']);
+  const lots = Array.from({ length: MAX_PER_CUSTOMER + 5 }, (_, i) => entry('e' + i, 'c1', `2026-11-26T${String(i % 24).padStart(2, '0')}:00:00.000Z`));
+  expect(trimCustomerHistory(lots, '2026-06-01').filter(e => e.customerId === 'c1')).toHaveLength(MAX_PER_CUSTOMER);
+  expect(trimCustomerHistory([entry('old', 'c1', '2026-01-02T00:00:00.000Z')], '2026-06-01')).toEqual([]);
+  const mixed = [entry('a', 'c1', '2026-11-26T01:00:00.000Z'), entry('b', 'c2', '2026-11-26T02:00:00.000Z'), entry('c', 'c1', '2026-11-26T03:00:00.000Z')];
+  expect(customerHistoryFor(mixed, 'c1').map(e => e.id)).toEqual(['c', 'a']);
 });
