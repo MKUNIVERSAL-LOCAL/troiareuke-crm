@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate } from '../src/lib/format';
 import { splitPercent } from '../src/lib/percent';
 import { renameTagInSegments } from '../src/lib/segmentFilterRule';
+import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -1868,4 +1869,65 @@ test('태그 칩 — 상한이 작아도 등록 태그가 사라지지 않는다
   const many = tagChoices(Array.from({ length: 30 }, (_, i) => 'r' + i), [{ tag: 'u1', count: 3 }], CHIP_LIMIT);
   expect(many.filter(c => c.registered)).toHaveLength(30);
   expect(many.some(c => c.tag === 'u1')).toBe(true);
+});
+
+// ── 243: 체크아웃 재예약 안내 성과 (GAP R-11 후속) ──
+
+const shown = (id: string, customerId: string, suggestedDate: string, shownAt: string, clickedAt?: string): RebookLogEntry =>
+  ({ id, customerId, suggestedDate, shownAt, ...(clickedAt ? { clickedAt } : {}) });
+
+test('재예약 성과 — 추천·누름·추천일 예약을 따로 센다 (243)', () => {
+  const entries = [
+    shown('1', 'c1', '2026-12-10', '2026-11-12T10:00:00.000Z', '2026-11-12T10:00:30.000Z'),
+    shown('2', 'c2', '2026-12-11', '2026-11-13T10:00:00.000Z', '2026-11-13T10:01:00.000Z'),
+    shown('3', 'c3', '2026-12-12', '2026-11-14T10:00:00.000Z'), // 나중에 한 건
+    shown('4', 'c4', '2026-12-13', '2026-11-15T10:00:00.000Z'),
+  ];
+  const r = summarizeRebook(entries, [
+    { customerId: 'c1', date: '2026-12-10', status: 'scheduled' },  // 추천일에 잡혔다
+    { customerId: 'c2', date: '2026-12-20', status: 'scheduled' },  // 잡긴 했지만 다른 날짜 → 세지 않는다
+    { customerId: 'c3', date: '2026-12-12', status: 'cancelled' },  // 취소는 성과가 아니다
+    { customerId: 'c4', date: '2026-12-13', status: 'noshow' },     // 노쇼도 아니다
+  ]);
+  expect(r).toEqual({ shown: 4, clicked: 2, booked: 1, clickRate: 50, bookRate: 25 });
+  expect(describeRebookSummary(r)).toBe('다음 방문 추천 4건 · [예약 잡기] 2건(50%) · 추천일에 예약이 잡힌 고객 1명(25%)');
+});
+
+test('재예약 성과 — 지난 날짜의 완료 예약은 성과로 센다(그날 실제로 왔다) (243)', () => {
+  const r = summarizeRebook([shown('1', 'c1', '2026-11-20', '2026-11-01T01:00:00.000Z', '2026-11-01T01:00:10.000Z')],
+    [{ customerId: 'c1', date: '2026-11-20', status: 'completed' }]);
+  expect(r.booked).toBe(1);
+  expect(r.bookRate).toBe(100);
+});
+
+test('재예약 성과 — 추천이 없었던 달에는 0%가 아니라 아무것도 말하지 않는다 (243)', () => {
+  const r = summarizeRebook([], [{ customerId: 'c1', date: '2026-12-10', status: 'scheduled' }]);
+  expect(r).toEqual({ shown: 0, clicked: 0, booked: 0, clickRate: null, bookRate: null });
+  expect(describeRebookSummary(r)).toBeNull();
+});
+
+test('재예약 기록 — 달로 자르고, 모양이 깨진 기록은 버린다 (243)', () => {
+  const entries = sanitizeRebookLog([
+    shown('1', 'c1', '2026-11-10', '2026-11-10T00:00:00.000Z'),
+    shown('2', 'c2', '2026-12-01', '2026-12-01T00:00:00.000Z'),
+    { id: '3', customerId: 'c3', suggestedDate: '엉망', shownAt: '2026-11-11T00:00:00.000Z' }, // 날짜 모양이 아니다
+    { id: '4', customerId: '', suggestedDate: '2026-11-12', shownAt: '2026-11-12T00:00:00.000Z' }, // 고객이 없다
+    null,
+  ]);
+  expect(entries.map(e => e.id)).toEqual(['1', '2']);
+  expect(entriesInMonth(entries, '2026-11').map(e => e.id)).toEqual(['1']);
+  // 같은 id 는 뒤에 온 것(누름 표시가 붙은 쪽)을 남긴다
+  const merged = sanitizeRebookLog([shown('1', 'c1', '2026-11-10', '2026-11-10T00:00:00.000Z'), shown('1', 'c1', '2026-11-10', '2026-11-10T00:00:00.000Z', '2026-11-10T00:01:00.000Z')]);
+  expect(merged).toHaveLength(1);
+  expect(merged[0].clickedAt).toBeTruthy();
+  expect(sanitizeRebookLog(undefined)).toEqual([]);
+});
+
+test('재예약 기록 — 설정 행에 무한정 쌓이지 않는다 (243)', () => {
+  const many = Array.from({ length: MAX_REBOOK_LOG + 30 }, (_, i) => shown(String(i), 'c' + i, '2026-12-10', `2026-11-20T00:${String(i % 60).padStart(2, '0')}:00.000Z`));
+  const trimmed = trimRebookLog(many, '2026-06-01');
+  expect(trimmed).toHaveLength(MAX_REBOOK_LOG);
+  expect(trimmed[trimmed.length - 1].id).toBe(String(MAX_REBOOK_LOG + 29)); // 최근 것이 남는다
+  // 보관 기간이 지난 기록은 건수와 무관하게 버린다
+  expect(trimRebookLog([shown('old', 'c1', '2026-12-10', '2026-01-02T00:00:00.000Z')], '2026-06-01')).toEqual([]);
 });

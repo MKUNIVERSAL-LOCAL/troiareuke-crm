@@ -41,6 +41,8 @@ import { getAllPaymentMethods } from '../../lib/paymentMethods';
 import { suggestRebookFor, type RebookTarget } from '../../lib/rebook'; // 결제 직후 다음 방문 예약 유도 (231, GAP R-11)
 import { exportReceiptPdf } from '../../lib/receiptPdf'; // 결제 영수증 PDF (235, GAP P-9)
 import { splitPaymentNote } from '../../lib/receiptRule'; // 분할 결제 요약 (238, 리뷰 M-1)
+import { logRebookShown, logRebookClicked, rebookStatsFor } from '../../lib/rebookLog'; // 재예약 안내 성과 기록 (243)
+import { describeRebookSummary, REBOOK_STATS_CAVEAT } from '../../lib/rebookStatsRule';
 import { CalendarPlus, ReceiptText } from 'lucide-react';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
@@ -79,6 +81,9 @@ export default function Sales() {
   const [editingId, setEditingId] = useState<string | null>(null);
   // 결제 직후 "다음 방문 예약" 추천 (231) — 이미 다가오는 예약이 있으면 null 이라 뜨지 않는다
   const [rebook, setRebook] = useState<RebookTarget | null>(null);
+  // 그 추천이 예약으로 이어졌는지 세기 위한 기록 id (243) — 저장 실패면 null 이고 지표에 안 들어간다
+  const [rebookLogId, setRebookLogId] = useState<string | null>(null);
+  const [rebookTick, setRebookTick] = useState(0);
   const [viewMonth, setViewMonth] = useState(getYearMonth(new Date()));
   const [listSearch, setListSearch] = useState('');
   const [listType, setListType] = useState<'all' | Payment['type']>('all');
@@ -514,7 +519,12 @@ export default function Sales() {
       // 체크아웃 재예약 유도 — 상용 CRM(Fresha·Boulevard)의 "다음 예약 잡기" 흐름 (231, GAP R-11).
       // 환불·수정 건에는 띄우지 않고, 추천할 것이 없으면(다가오는 예약 있음·주기 모름) 조용히 지나간다.
       if (payload.customerId && payload.status === 'completed') {
-        try { setRebook(suggestRebookFor(payload.customerId, payload.paymentDate)); } catch { setRebook(null); }
+        try {
+          const target = suggestRebookFor(payload.customerId, payload.paymentDate);
+          setRebook(target);
+          // 추천이 실제 예약으로 이어지는지 세기 위해 기록한다 (243) — 기록 실패는 안내를 막지 않는다
+          setRebookLogId(target ? logRebookShown({ customerId: target.customerId, suggestedDate: target.suggestion.date, basis: target.suggestion.basis }) : null);
+        } catch { setRebook(null); setRebookLogId(null); }
       }
     }
     rememberPaymentMethod(form.paymentMethod);
@@ -592,6 +602,8 @@ export default function Sales() {
     return monthMetrics({ month: viewMonth, today: today(), payments, expenses, programs: CustomerProgramStore.getAll(), logs: TreatmentLogStore.getAll(), customers, target: monthlyTarget(viewMonth), businessHours: st.businessHours, holidays: st.holidays, cogsCategories: [...COGS_CATEGORIES] });
   }, [viewMonth, payments, expenses, customers, metricsTick]);
   const monthClosed = useMemo(() => isMonthClosed(viewMonth), [viewMonth, metricsTick]);
+  // 체크아웃 재예약 안내 성과 (243, GAP R-11 후속) — 추천이 없었던 달에는 줄 자체를 보여 주지 않는다
+  const rebookStatsLine = useMemo(() => describeRebookSummary(rebookStatsFor(viewMonth)), [viewMonth, payments, rebookTick]);
 
   const [viewDate] = viewMonth.split('-');
   const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
@@ -663,7 +675,7 @@ export default function Sales() {
             <span className="text-blue-700"> · {rebook.suggestion.reason}</span>
           </p>
           <div className="flex gap-2 ml-auto">
-            <button type="button" onClick={() => { const t = rebook; setRebook(null); navigate(`/reservations?new=1&customer=${t.customerId}&date=${t.suggestion.date}`); }}
+            <button type="button" onClick={() => { const t = rebook; setRebook(null); logRebookClicked(rebookLogId); setRebookLogId(null); setRebookTick(n => n + 1); navigate(`/reservations?new=1&customer=${t.customerId}&date=${t.suggestion.date}`); }}
               className="px-4 py-2 min-h-[40px] bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e]">예약 잡기</button>
             <button type="button" onClick={() => setRebook(null)}
               className="px-3 py-2 min-h-[40px] bg-white border border-blue-200 text-blue-800 text-sm rounded-xl hover:bg-blue-100">나중에</button>
@@ -718,6 +730,14 @@ export default function Sales() {
           </div>
 
           <RevenueMetricsCard key={viewMonth} m={metrics} closed={monthClosed} canLock={isAdminRole(authUser?.role)} onChanged={() => setMetricsTick(t => t + 1)} />
+
+          {rebookStatsLine && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-5" data-testid="rebook-stats">
+              <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2"><CalendarPlus size={16} className="text-[#1a3a8f]" />체크아웃 재예약 안내</h3>
+              <p className="text-sm text-gray-900">{rebookStatsLine}</p>
+              <p className="text-xs text-gray-500 mt-2">{REBOOK_STATS_CAVEAT}</p>
+            </div>
+          )}
 
           {/* 일별 매출 차트 */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">

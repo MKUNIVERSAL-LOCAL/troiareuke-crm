@@ -44,7 +44,7 @@ test('결제 등록 버튼을 두 번 빠르게 눌러도 한 건만 저장된�
   await expect(page.getByText('140,000원')).toHaveCount(0);
 });
 
-test('결제를 등록하면 다음 방문 예약을 그 자리에서 잡게 안내한다 (231, GAP R-11)', async ({ page }) => {
+test('결제를 등록하면 다음 방문 예약을 그 자리에서 잡게 안내하고, 그 결과를 지표로 센다 (231·243, GAP R-11)', async ({ page }) => {
   test.slow();
   page.on('dialog', d => d.accept());
   await signupAndOnboard(page, acc3);
@@ -75,8 +75,22 @@ test('결제를 등록하면 다음 방문 예약을 그 자리에서 잡게 안
   const todayISO = new Date().toLocaleDateString('sv-SE'); // 로컬 YYYY-MM-DD
   expect(dateValue > todayISO).toBe(true); // 과거·오늘이 아니라 앞날을 권한다
 
+  // 추천한 날짜에 실제로 예약을 잡는다 — 성과 지표가 이 건을 세야 한다 (243)
+  await add.getByLabel('담당 직원').selectOption({ index: 1 });
+  await add.getByLabel('시술', { exact: true }).selectOption({ index: 1 });
+  await add.getByLabel('시작 시간').selectOption({ index: 1 });
+  await add.getByRole('button', { name: '예약 저장' }).click();
+  await expect(add).toHaveCount(0);
+
   // 안내는 한 번만 — 화면을 다시 열면 남아 있지 않다(결제 때마다 새로 계산한다)
-  await add.getByRole('button', { name: '취소', exact: true }).click();
   await page.goto('/sales');
   await expect(page.getByTestId('rebook-prompt')).toHaveCount(0);
+
+  // 성과 지표 — 추천 1건·[예약 잡기] 1건·추천일 예약 1명, 그리고 추정이라는 사실을 함께 적는다 (243)
+  const stats = page.getByTestId('rebook-stats');
+  await expect(stats).toBeVisible();
+  await expect(stats).toContainText('다음 방문 추천 1건');
+  await expect(stats).toContainText('[예약 잡기] 1건(100%)');
+  await expect(stats).toContainText('추천일에 예약이 잡힌 고객 1명(100%)');
+  await expect(stats).toContainText('추정');
 });
