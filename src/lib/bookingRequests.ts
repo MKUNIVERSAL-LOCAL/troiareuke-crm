@@ -35,12 +35,17 @@ function genId(): string {
   return globalThis.crypto?.randomUUID?.() || Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
+// 마지막으로 읽은 목록(캐시) — 동기 건수 조회(대시보드)가 어댑터를 우회하지 않게 list/add/update 가 갱신한다. 서버 어댑터로 바뀌어도 같은 경로 (198, 191 리뷰 L-4)
+let cache: BookingRequest[] | null = null;
+function remember(list: BookingRequest[]): BookingRequest[] { cache = list; return list; }
+
 /** 로컬 어댑터 — 이 기기에만 남는다(요청은 접수 직원이 바로 처리하는 짧은 대기 목록). 서버 어댑터는 승인 B-2 뒤 */
 const localAdapter: BookingRequestAdapter = {
-  list: async () => read(),
+  list: async () => remember(read()),
   async add(input) {
     const req: BookingRequest = { ...input, id: genId(), createdAt: new Date().toISOString(), status: 'new' };
     write([...read(), req]);
+    remember(read());
     return req;
   },
   async update(id, patch) {
@@ -49,6 +54,7 @@ const localAdapter: BookingRequestAdapter = {
     if (i < 0) return null;
     list[i] = { ...list[i], ...patch };
     write(list);
+    remember(read());
     return list[i];
   },
 };
@@ -59,9 +65,10 @@ export const CHANNEL_LABEL: Record<BookingChannel, string> = { phone: '전화', 
 /** 요청 채널 → 예약 유입 경로(SourceBadge) */
 export const CHANNEL_SOURCE: Record<BookingChannel, ReservationSource> = { phone: 'phone', kakao: 'kakao', naver: 'naver', web: 'app' };
 
-/** 처리 전 요청 건수(동기) — 대시보드 오늘 할 일용. 로컬 어댑터 전용: 서버 어댑터(B-2)로 바뀌면 캐시된 건수를 돌려주게 바꾼다 (188) */
-export function countNewRequestsLocal(today: string): number {
-  return read().filter(r => r.status === 'new' && r.date >= today).length; // 지난 날짜 요청은 요청함에서만(영구 긴급 줄 방지) (191 리뷰)
+/** 오늘 이후 처리 전 요청 건수(동기) — 대시보드 오늘 할 일용. 어댑터가 갱신한 캐시를 읽고, 아직 한 번도 읽지 않았으면 로컬 어댑터에서만 직접 읽는다(서버 어댑터면 0 — 첫 list 뒤 정확) (188·198) */
+export function countNewRequests(today: string): number {
+  const list = cache ?? (bookingRequests === localAdapter ? remember(read()) : []);
+  return list.filter(r => r.status === 'new' && r.date >= today).length; // 지난 날짜 요청은 요청함에서만(영구 긴급 줄 방지) (191 리뷰)
 }
 
 /** 처리 전 요청 — 날짜·시간 순 */
