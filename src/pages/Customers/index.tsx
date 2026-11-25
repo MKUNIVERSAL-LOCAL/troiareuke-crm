@@ -48,6 +48,7 @@ import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo, getCustomerVisitCycle, getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { getProgramAlerts } from '../../lib/programAlerts';
 import { getNoRebookCustomerIds } from '../../lib/todayTasks';
+import { rememberRecipients } from '../../lib/messageRecipients';
 import { buildSegmentIndex } from '../../lib/customerSegments';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
@@ -917,19 +918,18 @@ export default function Customers() {
       phones: selected.phone ? [selected.phone] : [],
     });
     // 게이트웨이 미연동(pending)은 발송을 시도한 것이 아니다 — 실패 건으로 이력·통계에 쌓지 않는다 (UX 점검 2026-11-19)
-    if (!result.pending) MessageHistoryStore.save({
+    if (!result.pending) rememberRecipients(MessageHistoryStore.save({ // 가드 안이라 pending 삼항은 데드 분기였음 — 제거 (206 리뷰 L-4). 수신 고객은 사이드맵에 (204·206)
       type: 'kakao-channel',
       templateName: '상담 결과 안내',
       title: `${selected.name}님 피부 상담 결과`,
       content,
       recipients: 1,
-      customerIds: [selected.id], // 고객 활동 타임라인용 (204)
-      successCount: result.pending ? 0 : result.sent,
-      failCount: result.pending ? 1 : result.failed,
+      successCount: result.sent,
+      failCount: result.failed,
       sentAt: new Date().toISOString(), // 발송 화면과 같은 ISO — toLocaleString 행이 새로 생기지 않게 (6차 UX 감사 2026-11-20)
-      status: !result.pending && result.sent > 0 ? 'sent' : 'failed',
-      cost: !result.pending && result.sent > 0 ? 5 : 0,
-    });
+      status: result.sent > 0 ? 'sent' : 'failed',
+      cost: result.sent > 0 ? 5 : 0,
+    }).id, [selected.id]);
     setKakaoSending(false);
     if (result.pending) {
       setKakaoMsg('상담은 저장했습니다. 카카오 발송은 본사 서버에 발송사가 연동되면 되므로 지금은 실제로 전송되지 않았습니다. 발송 이력에는 남기지 않았습니다.');

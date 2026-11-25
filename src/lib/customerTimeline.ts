@@ -10,6 +10,8 @@ import { ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore
 import { ConsultationStore } from './consultationStore';
 import { listCampaigns, sendsForCustomer } from './campaignStore';
 import { consentFromTags } from './consentRule';
+import { historyIdsForCustomer } from './messageRecipients';
+import { isGatewayPendingHistory } from './messageHistoryRule';
 import { toISO } from './revisitRule';
 import { formatPrice } from './format';
 import type { Reservation } from '../types';
@@ -138,12 +140,13 @@ export function buildCustomerTimeline(customerId: string): TimelineItem[] {
       href: '/messaging',
     });
   }
-  // 문자·카카오 수동 발송(발송 창·상담 결과 안내) — 이력에 수신 고객 id 가 남은 건(204 부터)만, 이 PC 기록. 미연동 판정은 발송 이력 화면과 같은 식. 캠페인 실행은 위 campaign 줄이 맡는다 (GAP C-4)
-  for (const h of MessageHistoryStore.getAll()) {
-    if (!h.customerIds?.includes(customerId)) continue;
+  // 문자·카카오 수동 발송(발송 창·상담 결과 안내) — 수신 고객 사이드맵(이 PC, 204·206)에 있는 이력만. 미연동 판정은 발송 이력 화면과 같은 규칙. 캠페인 실행은 위 campaign 줄이 맡는다 (GAP C-4)
+  const myHistory = historyIdsForCustomer(customerId);
+  for (const h of myHistory.size > 0 ? MessageHistoryStore.getAll() : []) {
+    if (!myHistory.has(h.id)) continue;
     const at = new Date(h.sentAt);
     if (Number.isNaN(at.getTime())) continue;
-    const gatewayPending = h.status === 'failed' && h.successCount === 0 && !h.cost;
+    const gatewayPending = isGatewayPendingHistory(h);
     const detail = h.status === 'sent'
       ? (h.recipients > 1 ? `${h.recipients}명에게 발송${h.failCount > 0 ? ` · ${h.failCount}명 실패` : ''}` : '발송 성공')
       : gatewayPending ? '발송사 미연동 — 실제 발송 안 됨' : '발송 실패';

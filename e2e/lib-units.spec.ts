@@ -56,6 +56,7 @@ import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
 import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
+import { isGatewayPendingHistory } from '../src/lib/messageHistoryRule';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -1203,4 +1204,13 @@ test('백업 테이블 모양 — 설정은 객체, 나머지는 배열, RAW 포
   expect(backupTableShape('customers', {})).toBe('invalid');           // 배열이어야 할 테이블이 객체 — 손상
   expect(backupTableShape('customers', { __raw: 'x', extra: 1 })).toBe('invalid');
   expect(backupTableShape('settings', [])).toBe('invalid');            // 설정이 배열 — 손상
+});
+
+test('발송 이력 미연동 판정 — 실패·성공 0·비용 0/없음/null 이면 미연동, 비용이 있거나 성공이 있으면 아님 (206)', () => {
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 0, cost: 0 })).toBe(true);
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 0 })).toBe(true);
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 0, cost: null })).toBe(true); // 서버 JSONB 옛 행 — 화면·타임라인이 같은 답
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 0, cost: 11 })).toBe(false);
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 1, cost: 0 })).toBe(false);
+  expect(isGatewayPendingHistory({ status: 'sent', successCount: 0, cost: 0 })).toBe(false);
 });

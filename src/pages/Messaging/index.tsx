@@ -13,6 +13,8 @@ import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
 import { buildCustomerStatsIndex } from '../../lib/customerStats';
 import { getNoRebookCustomerIds } from '../../lib/todayTasks';
+import { rememberRecipients, recipientIndex } from '../../lib/messageRecipients';
+import { isGatewayPendingHistory } from '../../lib/messageHistoryRule';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import type { SavedSegment } from '../../lib/segmentFilterRule';
 import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -642,6 +644,8 @@ function formatSentAt(value: string): string {
 function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
+  const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
+  const customerOnlyCount = customerId ? history.filter(h => recipients.get(h.id)?.includes(customerId)).length : 0; // 칩 건수는 고객 필터만 적용한 수 — 상태·검색과 섞이지 않게 (리뷰 L-2)
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>('all');
 
@@ -651,7 +655,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer }: { relo
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredHistory = history.filter(item => {
-    if (customerId && !item.customerIds?.includes(customerId)) return false; // 수신 고객 id 가 기록된 건(204 부터)만 걸린다 (205)
+    if (customerId && !recipients.get(item.id)?.includes(customerId)) return false; // 수신 고객이 기록된 건(204 부터, 이 PC)만 걸린다 (205·206)
     const statusMatches = statusFilter === 'all' || item.status === statusFilter;
     const searchMatches = !normalizedSearch || [
       item.templateName || '직접 작성',
@@ -712,7 +716,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer }: { relo
           <option value="failed">실패·미연동</option>
         </select>
         {customerName && ( /* 타임라인에서 넘어온 고객 필터 — 누르면 해제 (205) */
-          <button type="button" onClick={onClearCustomer} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="고객 활동 타임라인에서 연 필터 — 누르면 해제" aria-label={`${customerName} 발송만 보기 해제`} data-testid="history-customer-chip">{customerName} 발송만 {filteredHistory.length} ✕</button>
+          <button type="button" onClick={onClearCustomer} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="고객 활동 타임라인에서 연 필터 — 누르면 해제" aria-label={`${customerName} 발송만 보기 해제`} data-testid="history-customer-chip">{customerName} 발송만 {customerOnlyCount} ✕</button>
         )}
       </div>
       <div className="divide-y divide-gray-50 overflow-y-auto max-h-[65vh]">
@@ -720,7 +724,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer }: { relo
           <div className="py-14 text-center text-sm text-gray-400">조건에 맞는 발송 이력이 없어요</div>
         )}
         {filteredHistory.map(h => {
-          const isGatewayPending = h.status === 'failed' && h.successCount === 0 && (h.cost === 0 || h.cost === undefined);
+          const isGatewayPending = isGatewayPendingHistory(h); // 타임라인과 같은 판정 (206)
           return (
             <div key={h.id} className="px-6 py-4">
               <div className="flex items-start justify-between">
@@ -903,42 +907,41 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       phones: recipientPhones,
     });
 
+    const recipientIds = recipientCustomers.map(c => c.id); // 고객 활동 타임라인·고객 필터·다시 보내기용 사이드맵 (204·206)
     if (result.pending) {
       // 게이트웨이 미연동 — 발송되지 않았음을 명확히 기록
-      MessageHistoryStore.save({
+      rememberRecipients(MessageHistoryStore.save({
         type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
         content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
-        customerIds: recipientCustomers.map(c => c.id), // 고객 활동 타임라인용 (204)
         successCount: 0,
         failCount: recipientPhones.length,
         sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
-      });
+      }).id, recipientIds);
       setSending(false);
       setSendResult('pending');
       setResultMessage(result.reason ?? '게이트웨이 미연동');
       onSent();
     } else if (result.sent > 0) {
       // 실제 발송 성공 (일부 실패 포함 — 부분 성공도 sent로 기록해 성공/실패 건수 모두 노출)
-      MessageHistoryStore.save({
+      rememberRecipients(MessageHistoryStore.save({
         type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
         content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
-        customerIds: recipientCustomers.map(c => c.id), // 고객 활동 타임라인용 (204)
         successCount: result.sent,
         failCount: result.failed,
         sentAt: new Date().toISOString(),
         status: 'sent',
         cost: estimatedCost,
-      });
+      }).id, recipientIds);
       setSending(false);
       setSendResult('success');
       setSendPartial(result.failed > 0);
@@ -951,20 +954,19 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       if (result.failed === 0) setTimeout(() => { onClose(); }, 1800); // 일부 실패는 실패 인원을 읽을 수 있게 [닫기]로만 (123~126 리뷰 #M2)
     } else {
       // 발송 실패
-      MessageHistoryStore.save({
+      rememberRecipients(MessageHistoryStore.save({
         type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
         title: title || undefined,
         content: finalContent, // 이력은 실제로 나간 본문(민원·분쟁 증빙). 실명 영구 보존은 MessageHistory 보존기간 파기(코어 delete 필요 — 메모 ⑪)로 푼다 (116 #M1 → 리뷰 #M6 번복)
         recipients: recipientPhones.length,
-        customerIds: recipientCustomers.map(c => c.id), // 고객 활동 타임라인용 (204)
         successCount: 0,
         failCount: recipientPhones.length,
         sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
-      });
+      }).id, recipientIds);
       setSending(false);
       setSendResult('error');
       setResultMessage(result.reason ?? '발송 실패');

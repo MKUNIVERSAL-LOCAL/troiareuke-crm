@@ -121,8 +121,9 @@ function startCrossTabInvalidation(): () => void {
       const notify = () => window.dispatchEvent(new CustomEvent(DATA_REFRESHED_EVENT));
       if (!coreDirty) { notify(); return; } // 로컬 전용 테이블만 바뀜 — 서버엔 바뀐 것이 없어 12 GET 재조회를 돌리지 않는다 (200 리뷰 L-2)
       coreDirty = false;
-      resetStoreCache();
-      void initializeStores().finally(notify); // 로컬 모드는 즉시 반환, 서버 모드는 서버 기준으로
+      resetStoreCache(); // getAll() 이 바로 localStorage 폴백을 읽어 다른 탭 변경이 보인다
+      if (isNasDataConfigured) { void refreshFromServer({ force: true }).finally(notify); return; } // 서버 모드는 inFlight·outbox 가드를 공유하는 재조회 경로로 — 동시 initializeStores 2개가 서로 덮지 않게 (206, 203~205 리뷰 L-3)
+      void initializeStores().finally(notify); // 로컬 모드는 즉시 반환
     }, 300); // 한 동작이 키 여러 개를 쓰므로 묶는다
   };
   window.addEventListener('storage', onStorage);
