@@ -7,6 +7,7 @@ import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons'
 // 예약 변경 이력 (247) — 코어 Reservation 에 수정 시각·수정자 칸이 없어 이 기기 기록으로 남긴다
 import { logReservationEdit, logReservationStatus, logReservationCreate, logReservationDelete, reservationHistory } from '../../lib/reservationHistory';
 import { describeChange, describeEntryHead, HISTORY_CAVEAT, HISTORY_EMPTY } from '../../lib/reservationHistoryRule';
+import MemoPresetChips from '../../components/MemoPresetChips'; // 자주 쓰는 메모 문구 (255)
 import { createSubmitLock } from '../../lib/submitLock';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
@@ -1504,6 +1505,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="특이사항"
           />
+          <MemoPresetChips value={memo} onChange={setMemo} />
         </div>
         {googleAvailable && !isEdit && (
           <label className="flex items-center gap-2 cursor-pointer">

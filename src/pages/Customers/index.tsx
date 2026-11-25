@@ -37,6 +37,7 @@ import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import FollowUpCard from '../../components/FollowUpCard'; // 연락 기록·미루기 (249)
 import CustomerHistoryCard from '../../components/CustomerHistoryCard'; // 정보 변경 이력 (252)
+import MemoPresetChips from '../../components/MemoPresetChips'; // 자주 쓰는 메모 문구 (255)
 import { logCustomerEdit, logCustomerGrade, logCustomerGradeBatch, logCustomerEditBatch } from '../../lib/customerHistory';
 import { snoozedCustomerIds } from '../../lib/followUp';
 import { describeHidden } from '../../lib/followUpRule';
@@ -381,6 +382,8 @@ export default function Customers() {
       </button>
     </form>
   );
+  // 한 줄 메모에도 같은 문구를 쓴다 — 줄바꿈 대신 ' · ' 로 잇는다 (255)
+  const quickMemoPresets = () => <MemoPresetChips value={quickMemo} onChange={setQuickMemo} oneLine label="빠른 메모 문구" />;
   // 헤더 전역 검색(?q=)에서 넘어온 검색어를 초기값·변경 모두 반영
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -2198,6 +2201,7 @@ export default function Customers() {
                   <p className="text-xs text-gray-500 mb-1">메모</p>
                   {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                   {quickMemoRow(true)}
+                  {quickMemoPresets()}
                 </div>
               </div>
 
@@ -2742,6 +2746,7 @@ export default function Customers() {
               <div className="mt-3 p-3 bg-gray-50 rounded-xl">
                 {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                 {quickMemoRow(false)}
+                {quickMemoPresets()}
               </div>
             </div>
 
@@ -3751,6 +3756,7 @@ export default function Customers() {
               {/* 관리사 소견 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">관리사 소견</label>
+                <MemoPresetChips value={consultForm.managerNote} onChange={next => setConsultForm(fm => ({ ...fm, managerNote: next }))} />
                 <textarea aria-label="관리사 소견" value={consultForm.managerNote} onChange={e => setConsultForm(f => ({ ...f, managerNote: e.target.value }))}
                   rows={2} placeholder="고객 피부 상태 관찰 소견을 기록하세요"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />

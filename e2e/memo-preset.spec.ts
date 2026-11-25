@@ -59,4 +59,21 @@ test('시술 기록 메모에 자주 쓰는 문구를 저장해 눌러 넣는다
   await expect(chips.getByRole('button', { name: '자극 없음 · 홈케어 안내' })).toBeVisible();
   // 이미 쓴 메모는 지워지지 않는다(문구 목록과 기록은 별개)
   await expect(memo).toHaveValue('강도 한 단계 낮춤\n자극 없음 · 홈케어 안내');
+
+  // ── 같은 문구를 예약 메모·빠른 메모에서도 쓴다 (255) ──
+  await dialog.getByRole('button', { name: '닫기', exact: true }).first().click();
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click();
+  const add2 = page.getByRole('dialog', { name: '예약 추가' });
+  await expect(add2).toBeVisible();
+  await add2.getByTestId('memo-presets').getByRole('button', { name: '자극 없음 · 홈케어 안내' }).click();
+  await expect(add2.getByLabel('메모')).toHaveValue('자극 없음 · 홈케어 안내');
+  await page.keyboard.press('Escape');
+
+  // 고객 상세의 한 줄 메모 — 줄바꿈 대신 " · " 로 잇는다
+  await page.goto('/customers');
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  const quickChips = page.getByTestId('memo-preset-chips').filter({ visible: true }).first();
+  await quickChips.getByRole('button', { name: '자극 없음 · 홈케어 안내' }).click();
+  await expect(page.getByLabel('빠른 메모').filter({ visible: true }).first()).toHaveValue('자극 없음 · 홈케어 안내');
 });
