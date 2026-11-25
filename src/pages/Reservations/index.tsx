@@ -31,6 +31,7 @@ import { activeResources, allResources, resourceAssignments, resourceOf, assignR
 import { freeResources, resourceConflicts, RESOURCE_KIND_LABEL } from '../../lib/resourceRule';
 import BookingRequestsModal from '../../components/BookingRequestsModal';
 import { newRequests, ensureCustomerFor, acceptRequest, CHANNEL_SOURCE } from '../../lib/bookingRequests';
+import { waitlistFor, describeWaitlist } from '../../lib/waitlistRule';
 import { monthCloseBlock } from '../../lib/monthClose';
 import type { BookingRequest } from '../../types';
 import type { Reservation, Staff } from '../../types';
@@ -290,6 +291,12 @@ export default function Reservations() {
   const [requestCount, setRequestCount] = useState(0);
   const refreshRequestCount = () => { void newRequests().then(l => setRequestCount(l.length)); }; // 어댑터는 비동기(서버 어댑터 대비) (144 리뷰 L-3)
   useEffect(() => { refreshRequestCount(); }, []);
+  // 대시보드 오늘 할 일 "예약 요청함 처리 전 요청"(?requests=1) → 요청함 바로 열기, 1회 캡처 후 URL 비움 (188)
+  useEffect(() => {
+    if (searchParams.get('requests') !== '1') return;
+    setShowRequests(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [fromRequest, setFromRequest] = useState<{ req: BookingRequest; createdCustomerId?: string } | null>(null);
   const registerFromRequest = (req: BookingRequest) => {
     setShowRequests(false);
@@ -626,6 +633,7 @@ export default function Reservations() {
             return (
               <button
                 key={s.id}
+                aria-pressed={active} /* 선택을 색으로만 알리던 것 (217) */
                 onClick={() => setStaffFilter(active ? 'all' : s.id)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                   active ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
@@ -1514,6 +1522,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (!(await askConfirm({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기' }))) return; // 앱 확인창 (15차 #H3)
     ReservationStore.updateStatus(r.id, 'cancelled');
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
+    // 빈 자리를 원한 대기 요청이 있으면 바로 안내 — 요청함을 열어 보지 않아도 알 수 있게 (185, GAP R-10)
+    if (r.date >= todayISO()) void newRequests().then(list => { const msg = describeWaitlist(waitlistFor(list, r.date, r.startTime), formatDate(r.date)); if (msg) notify.info(msg); }).catch(() => undefined); // 지난 날짜 자리는 안내하지 않는다 (187 리뷰 L-4)
     onUpdate();
   };
   // 노쇼 — 상세에서 바로 처리 (2026-11-18). 고객 상세 "노쇼 N회"·직원 실적 제외·완료 누락 카드에서 빠진다.

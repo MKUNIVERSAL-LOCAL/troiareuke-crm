@@ -76,6 +76,13 @@
     - 무인 경로(정본): DSM `CRM-publish-update` / `CRM-server-update` **매일 00:00** — 오너가 반복 설정을 "매일"로 바꿔야 유효. **실사고 2026-11-23~25**: 두 작업이 비활성(체크 해제) 상태여서 v1.0.60·v1.0.61 이 채널에 안 올라가 지점이 1.0.59 에 48시간 멈춤 → 11-25 09:41 오너 DSM 로그인 뒤 `CRM-publish-update` 활성·즉시 실행으로 복구. 릴리스 체크리스트에 "DSM 작업 활성 상태 확인(`verify:nas` 채널 버전)"을 릴리스 직후 필수로. 확인은 SSH에서 `grep synoschedtask /etc/crontab` 의 두 작업 줄이 `0 0 * * *`인지.
     - 즉시 경로(보조): `release:all` 마지막에 `publish-nas-channel.mjs`(SSH, 해시 검증 후 원자적 교체)와 `deploy-nas-server.mjs`가 실행된다. 빌드 때문에 PC가 켜져 있는 순간이므로 채널이 즉시 최신이 된다. 서버 재배포는 root가 필요해 오너가 1회 `scripts/nas-tasks/grant-deploy-sudo.sh`를 DSM(root)에서 실행해 주면 이후 자동, 아니면 안내만 출력하고 릴리스는 성공 처리.
 
+## 릴리스 노트 (214, 2026-11-25)
+
+- 업데이트 배너는 `docs/RELEASE-NOTES-CURRENT.md` **앞 2000자**를 매장 직원에게 그대로 보여준다(`prepare-portable-update.mjs`·`prepare-mobile-update.mjs` 가 매니페스트에 그만큼 넣는다).
+- 그래서 **새 릴리스 항목은 반드시 맨 위 섹션**에 모은다. 지난 버전 내용이 배너에 걸리면 그 앞에 "— 아래는 이미 적용된 지난 업데이트 내용입니다 —" 구분선을 둔다.
+- 자동 점검: `npm run check:notes`(= `node scripts/check-release-notes.mjs`, `release:all` 게이트 포함). 규칙 자체 점검은 `node scripts/check-release-notes.mjs --selftest`.
+- 실사고: v1.0.62 뒤 묶음 17개의 노트가 옛 섹션에 섞여 들어가, 그대로 릴리스하면 배너에 이미 적용된 내용만 보일 상태였다(214 에서 정정).
+
 ## 근거 구조 (v1.0.40 확립, v1.0.48 강화)
 
 - `electron/portable-updater.cjs`: 포터블=단일 exe 교체 / 폴더형=zip을 임시 폴더에 풀어 복사(부분 덮어쓰기 방지).

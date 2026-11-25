@@ -5,7 +5,7 @@ import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
 import { smsBytes, SMS_BYTE_LIMIT } from '../src/lib/smsBytes';
-import { sanitizeStorageSnapshot } from '../src/lib/backupSanitize';
+import { sanitizeStorageSnapshot, backupTableShape } from '../src/lib/backupSanitize';
 import { computeRevisitDue, daysBetween, addDays } from '../src/lib/revisitRule';
 import { nextBirthday } from '../src/lib/birthdayRule';
 import { summarizeDailyClose, formatDailyCloseMessage } from '../src/lib/dailyCloseSummary';
@@ -21,7 +21,8 @@ import { personalCycleDays, resolveVisitCycle } from '../src/lib/visitCycleRule'
 import { quintileScores, scoreRfm, segmentOf } from '../src/lib/rfmRule';
 import { churnRisk, atRiskRevenue90 } from '../src/lib/churnRule';
 import { realizedProgramRevenue, computeCustomerValue } from '../src/lib/customerValueRule';
-import { monthlyKpis } from '../src/lib/kpiRule';
+import { monthlyKpis, noRebookIds } from '../src/lib/kpiRule';
+import { waitlistFor, describeWaitlist } from '../src/lib/waitlistRule';
 import { utilization, formatHours } from '../src/lib/utilizationRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
@@ -54,6 +55,10 @@ import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, 
 import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
+import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
+import { isGatewayPendingHistory, countResendable } from '../src/lib/messageHistoryRule';
+import { looksLikeAdMessage, undecorateAdMessage } from '../src/lib/adComplianceRule';
+import { anonymizeResidue, describeAnonymizeResidue } from '../src/lib/anonymizeResidue';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -476,6 +481,7 @@ test('이달 운영 지표 — 방문 고객·재방문율·재예약률·객단
   expect(k.avgTicket).toBe(50_000);
   const empty = monthlyKpis({ month: '2026-11', visitDays: new Map(), payments: [], upcomingByCustomer: new Set() });
   expect(empty).toEqual({ visitors: 0, returning: 0, rebooked: 0, revisitRate: null, rebookRate: null, avgTicket: null, monthRevenue: 0 });
+  expect(noRebookIds({ month: '2026-11', visitDays, upcomingByCustomer: new Set(['a', 'c']) })).toEqual(['b', 'd']); // 분모(3) − 분자(1) = 2명, c 는 이달 방문 아님 (184)
 });
 
 test('가동률 — 근무 창 − 휴게 대비 확정·완료 예약 분, 휴일은 가용 0, 대기·취소·기간 밖 제외, 종료 없으면 60분, 가용 0 은 없음 (180, ANALYTICS-DEFINITIONS)', () => {
@@ -903,6 +909,7 @@ test('기본 시나리오 16개는 모두 유효하고 트리거 11종을 덮으
   expect(CAMPAIGN_PRESETS.length).toBe(16);
   expect(new Set(CAMPAIGN_PRESETS.map(p => p.name)).size).toBe(16);
   for (const p of CAMPAIGN_PRESETS) expect(validateCampaign(p), p.name).toEqual([]);
+  for (const p of CAMPAIGN_PRESETS) expect(renderCampaignContent(p.content, CAMPAIGN_SAMPLE_VARS), p.name).not.toMatch(/\{[^}]+\}/); // 샘플 값이 변수 9종을 전부 덮어 미리보기에 {변수} 가 남지 않는다 (201)
   expect(new Set(CAMPAIGN_PRESETS.map(p => p.trigger)).size).toBe(Object.keys(TRIGGER_LABELS).length); // 트리거 전부에 시나리오 하나 이상
   expect(CAMPAIGN_PRESETS.filter(p => p.isAd).map(p => p.name)).toEqual(['미방문 90일 복귀 혜택', '생일 주간 혜택']); // 혜택만 광고, 거래 안내는 비광고
   expect(missingPresets(['예약 전날 안내', '생일 축하']).length).toBe(14);
@@ -1174,4 +1181,70 @@ test('예약 정책 — 겹침 판정: 정책 켬이면 막고, 꺼짐이면 확
   expect(decideOverlap({ blockOverlap: true }, true)).toBe('block');
   expect(decideOverlap({ blockOverlap: false }, true)).toBe('confirm');
   expect(decideOverlap({ blockOverlap: true }, false)).toBe('allow');
+});
+
+test('대기 요청 안내 — 같은 날 처리 전 요청만, 취소된 시각과 가까운 순, 문장은 건수·시각만 (185)', () => {
+  const rq = (id: string, date: string, startTime: string, status = 'new') => ({ id, date, startTime, status });
+  const list = [rq('a', '2026-11-26', '10:00'), rq('b', '2026-11-26', '15:30'), rq('c', '2026-11-26', '14:00', 'rejected'), rq('d', '2026-11-27', '14:00'), rq('e', '2026-11-26', '14:00'), rq('f', '2026-11-26', '13:00')];
+  expect(waitlistFor(list, '2026-11-26', '14:00').map(r => r.id)).toEqual(['e', 'f', 'b', 'a']); // 0·60·90·240분 차이
+  expect(waitlistFor(list, '2026-11-26').map(r => r.id)).toEqual(['a', 'f', 'e', 'b']);           // 기준 시각 없으면 시각순
+  expect(waitlistFor(list, '2026-11-28')).toEqual([]);
+  expect(describeWaitlist(waitlistFor(list, '2026-11-26', '14:00'), '11월 26일')).toBe('11월 26일에 들어오고 싶어 한 대기 요청 4건(14:00·13:00·15:30 외)이 있습니다 — 예약 요청함에서 연락해 보세요.');
+  expect(describeWaitlist([], '11월 26일')).toBeNull();
+});
+
+test('백업 테이블 모양 — 설정은 객체, 나머지는 배열, RAW 포장 허용, 스칼라 플래그는 제외, 객체 오류는 손상 (195 H-1·196)', () => {
+  expect(backupTableShape('customers', [])).toBe('ok');
+  expect(backupTableShape('customers', [{ id: 'a' }])).toBe('ok');
+  expect(backupTableShape('settings', { name: '매장' })).toBe('ok');
+  expect(backupTableShape('settings', { __raw: 'not-json' })).toBe('ok');
+  expect(backupTableShape('customers', { __raw: 'not-json' })).toBe('ok');
+  expect(backupTableShape('setup_hidden', 1)).toBe('scalar');          // 체크리스트 숨김 플래그 '1' — 백업 제외·복원 무시
+  expect(backupTableShape('setup_hidden', '1')).toBe('scalar');
+  expect(backupTableShape('flag', true)).toBe('scalar');
+  expect(backupTableShape('flag', null)).toBe('scalar');
+  expect(backupTableShape('customers', {})).toBe('invalid');           // 배열이어야 할 테이블이 객체 — 손상
+  expect(backupTableShape('customers', { __raw: 'x', extra: 1 })).toBe('invalid');
+  expect(backupTableShape('settings', [])).toBe('invalid');            // 설정이 배열 — 손상
+});
+
+test('발송 이력 미연동 판정 — 실패·성공 0·비용 0/없음/null 이면 미연동, 비용이 있거나 성공이 있으면 아님 (206)', () => {
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 0, cost: 0 })).toBe(true);
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 0 })).toBe(true);
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 0, cost: null })).toBe(true); // 서버 JSONB 옛 행 — 화면·타임라인이 같은 답
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 0, cost: 11 })).toBe(false);
+  expect(isGatewayPendingHistory({ status: 'failed', successCount: 1, cost: 0 })).toBe(false);
+  expect(isGatewayPendingHistory({ status: 'sent', successCount: 0, cost: 0 })).toBe(false);
+});
+
+test('다시 보낼 미연동 건 — 그 뒤 성공 건이 있을 때만, 수신 고객 기록·30일 안의 것만 (208)', () => {
+  const now = new Date('2026-11-25T12:00:00');
+  const pend = (id: string, day: string) => ({ id, status: 'failed', successCount: 0, cost: 0, sentAt: `2026-11-${day}T10:00:00` });
+  const ok = (id: string, day: string) => ({ id, status: 'sent', successCount: 1, cost: 11, sentAt: `2026-11-${day}T10:00:00` });
+  const all = () => true;
+  expect(countResendable([pend('a', '20'), pend('b', '21')], all, now)).toBe(0); // 성공 건이 없으면 발송사가 살아난 증거가 없다 — 권하지 않음
+  expect(countResendable([pend('a', '20'), ok('s', '22'), pend('b', '23')], all, now)).toBe(1); // 성공(22일) 전의 미연동(20일)만, 그 뒤 미연동(23일)은 아직
+  expect(countResendable([pend('a', '20'), ok('s', '22')], id => id !== 'a', now)).toBe(0); // 수신 고객 기록이 없는 건은 다시 보낼 대상을 모른다
+  expect(countResendable([{ ...pend('old', '01'), sentAt: '2026-10-01T10:00:00' }, ok('s', '22')], all, now)).toBe(0); // 30일 밖
+  expect(countResendable([{ ...pend('x', '20'), cost: 11 }, ok('s', '22')], all, now)).toBe(0); // 비용이 있는 실패는 미연동이 아니라 실제 실패
+});
+
+test('광고 본문 판정·꾸밈 벗기기 — 재발송이 광고를 광고로 알아보고, 옛 080 꼬리말을 남기지 않는다 (210)', () => {
+  const decorated = decorateAdMessage('가을 이벤트 안내입니다.', '080-111-2222');
+  expect(looksLikeAdMessage(decorated)).toBe(true);
+  expect(looksLikeAdMessage('내일 예약 안내입니다.')).toBe(false);
+  expect(undecorateAdMessage(decorated)).toBe('가을 이벤트 안내입니다.');
+  // 번호가 바뀌어도 꼬리말이 두 줄로 늘지 않는다
+  expect(decorateAdMessage(undecorateAdMessage(decorated), '080-333-4444')).toBe('(광고) 가을 이벤트 안내입니다.\n무료수신거부 080-333-4444');
+  // 광고가 아닌 본문은 그대로
+  expect(undecorateAdMessage('내일 예약 안내입니다.')).toBe('내일 예약 안내입니다.');
+});
+
+test('익명화 잔존 안내 — 남는 것만 세고, 없으면 문장을 만들지 않는다 (216)', () => {
+  expect(anonymizeResidue({ messageHistory: 0, productSales: 0 })).toEqual([]);
+  expect(describeAnonymizeResidue([])).toBeNull(); // 남는 것이 없으면 없는 걱정을 만들지 않는다
+  const both = anonymizeResidue({ messageHistory: 2, productSales: 1 });
+  expect(both.map(i => i.count)).toEqual([2, 1]);
+  expect(describeAnonymizeResidue(both)).toBe('다만 문자·카카오 발송 이력의 본문·제목 2건, 제품 판매 기록의 이름 1건에 적힌 이름은 이번에 지워지지 않습니다(프로그램 보관 기록).');
+  expect(describeAnonymizeResidue(anonymizeResidue({ messageHistory: 0, productSales: 3 }))).toBe('다만 제품 판매 기록의 이름 3건에 적힌 이름은 이번에 지워지지 않습니다(프로그램 보관 기록).');
 });

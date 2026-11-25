@@ -1,0 +1,33 @@
+/**
+ * 수동 발송(발송 창·상담 결과 안내) 성과 추정 — 발송 뒤 14일 안의 예약·결제를 "그 문자 덕" 으로 본다는 추정이지 인과가 아니다(화면은 항상 [추정]).
+ * 숫자는 순수 규칙(campaignPerformanceRule)에서만 계산하고, 여기서는 이 PC 사이드맵(206)의 수신 고객으로 입력을 모은다 (211, GAP M-6 확장).
+ * 행마다 전수 스캔을 하지 않도록 호출 쪽이 누른 행만 계산한다(발송 이력 "성과 보기").
+ */
+import { ReservationStore, PaymentStore } from './store';
+import { recipientsOf } from './messageRecipients';
+import { estimatePerformance, describePerformance, type CampaignPerformance } from './campaignPerformanceRule';
+
+/**
+ * 이력 1건의 성과 추정. 수신 고객 기록이 없으면(204·206 전 이력·다른 PC 발송) null — 값을 만들지 않는다.
+ * @param known 호출 쪽이 이미 가진 수신 고객(발송 이력 화면의 목록 색인) — 사이드맵을 다시 읽지 않게 (215, 211 리뷰 L-2)
+ */
+export function estimateHistoryPerformance(historyId: string, sentAt: string, known?: string[]): CampaignPerformance | null {
+  if (Number.isNaN(new Date(sentAt).getTime())) return null; // 옛 toLocaleString 발송일은 창을 계산할 수 없다 — 조용한 0 대신 표시 없음 (215, 리뷰 L-3)
+  const ids = known ?? recipientsOf(historyId);
+  if (!ids || ids.length === 0) return null;
+  const set = new Set(ids);
+  const resv = ReservationStore.getAll().filter(r => set.has(r.customerId)); // 이 발송의 수신 고객만 — 전체 예약·결제를 고객마다 훑지 않게
+  const pays = PaymentStore.getAll().filter(p => !!p.customerId && set.has(p.customerId));
+  return estimatePerformance(ids.map(id => ({ customerId: id, at: sentAt })), resv, pays);
+}
+
+/**
+ * 화면 문구 — 부분 실패 발송은 사이드맵에 대상 전원이 적혀 있어 "발송 N명" 이 과대다(게이트웨이가 건수만 돌려줘 실패자를 가릴 수 없다).
+ * 실패가 있으면 "대상 N명(성공 M·실패 K)" 으로 바꿔 같은 행의 "실패 K명" 과 모순되지 않게 한다 (215, 211 리뷰 H-1 — 가짜 성공 금지)
+ */
+export function describeHistoryPerformance(p: CampaignPerformance, h: { successCount: number; failCount: number }, formatPrice: (n: number) => string): string | null {
+  if (h.failCount <= 0) return describePerformance(p, formatPrice);
+  if (p.sent === 0) return null;
+  const money = p.revenue > 0 ? ` ${formatPrice(p.revenue)}` : '';
+  return `[추정] 대상 ${p.sent}명(성공 ${h.successCount}명·실패 ${h.failCount}명) → ${p.windowDays}일 내 예약 ${p.reserved}명 · 결제 ${p.paid}명${money}`;
+}

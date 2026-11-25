@@ -1,4 +1,7 @@
-import { ProductStore, ReservationStore, PaymentStore, StaffStore, SettingsStore } from './store';
+import { ProductStore, ReservationStore, PaymentStore, StaffStore, SettingsStore, MessageHistoryStore } from './store';
+import { recipientIndex } from './messageRecipients';
+import { isAuthApiConfigured } from './authApi';
+import { countResendable } from './messageHistoryRule';
 import { buildSegmentIndex } from './customerSegments';
 import { getRevisitDueCustomers } from './reminderEngine';
 import { getProgramAlerts } from './programAlerts';
@@ -8,9 +11,10 @@ import { isCountableCustomer } from './customerScope';
 import { isUpcomingReservation } from './upcomingRule';
 import { getPendingCompletionReservations } from './pendingCompletion';
 import { getTomorrowReservations } from './reservationReminder';
+import { countNewRequests } from './bookingRequests';
 import { isLowStock } from './stockRule';
-import { buildCustomerStatsIndex } from './customerStats';
-import { monthlyKpis, type MonthlyKpis } from './kpiRule';
+import { buildCustomerStatsIndex, type CustomerStatsIndex } from './customerStats';
+import { monthlyKpis, noRebookIds, type KpiInput, type MonthlyKpis } from './kpiRule';
 import { toISO } from './revisitRule';
 import { selectEnabledCampaigns, type CampaignSelection } from './campaignCandidates';
 import { utilization, type Utilization, type UtilizationDay } from './utilizationRule';
@@ -28,8 +32,8 @@ export interface TodayTaskOptions { customersOn: boolean; reservationsOn: boolea
 /** @param campaigns 이미 고른 캠페인 대상(브리핑처럼 같은 화면에서 또 쓰는 쪽이 넘긴다) — 없으면 여기서 1회 계산 (178 리뷰 M-3) */
 export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSelection[]): TodayTask[] {
   const out: TodayTask[] = [];
-  if (opts.customersOn) {
-    const stats = buildCustomerStatsIndex(); // 이탈 위험·재방문 권장이 같은 인덱스를 쓴다 (139 #M8)
+  const stats = opts.customersOn ? buildCustomerStatsIndex() : null; // 이탈 위험·재방문 권장·재예약 권유가 같은 인덱스를 쓴다 (139 #M8, 187 L-2)
+  if (opts.customersOn && stats) {
     const seg = buildSegmentIndex(stats);
     let churn = 0, atRisk = 0;
     for (const v of seg.values()) if (v.churn?.level === 'high') { churn++; atRisk += v.atRisk90; }
@@ -50,10 +54,24 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
     if (pending > 0) out.push({ key: 'pending', label: '지난 예약 완료·노쇼 처리', count: pending, href: '/reservations', tone: 'urgent' });
     const tomorrow = getTomorrowReservations().length;
     if (tomorrow > 0) out.push({ key: 'tomorrow', label: '내일 예약 확인 안내', count: tomorrow, href: '/reservations', tone: 'normal' });
+    // 전화·카톡·네이버로 받아 둔 예약 요청(요청함) — 예약 화면 머리글에만 보여 대시보드에서 놓치던 것, 누르면 요청함이 바로 열린다 (188, GAP R-6)
+    const requests = countNewRequests(toISO(new Date()));
+    if (requests > 0) out.push({ key: 'requests', label: '예약 요청함 처리 전 요청 확인', count: requests, href: '/reservations?requests=1', tone: 'urgent' });
+  }
+  if (opts.customersOn && opts.reservationsOn) {
+    // 이달 방문했지만 다음 예약이 없는 고객 — 재예약률 타일의 "빠진 사람"에게 바로 연락 (184, GAP D-1)
+    const noRebook = getNoRebookCustomerIds(stats ?? undefined).size; // 위에서 만든 통계 인덱스 재사용 — 대시보드 새로고침당 전수 스캔 1회 감소 (187 리뷰 L-2)
+    if (noRebook > 0) out.push({ key: 'norebook', label: '이달 방문 뒤 다음 예약 없는 고객 재예약 권유', count: noRebook, href: '/customers?norebook=1', tone: 'normal' });
   }
   if (opts.productsOn) {
     const low = ProductStore.getAll().filter(isLowStock).length;
     if (low > 0) out.push({ key: 'stock', label: '재고 부족 제품 입고', count: low, href: '/products', tone: 'normal' });
+  }
+  if (opts.messagingOn && isAuthApiConfigured) { // 발송 경로가 붙은 매장만 — 서버 모드 백업을 로컬 모드 PC 에 복원해 성공 이력이 들어온 경우의 헛걸음 방지 (210, 208 리뷰 L-6)
+    // 나가지 않은 문자(미연동·발송사 거절) — 그 뒤 성공 건이 생겨 발송 경로가 살아난 것이 확인된 매장에만, 수신 고객이 기록된 건(이 PC)만. 누르면 발송 이력이 실패·미연동만으로 열린다 (208, 207 다시 보내기)
+    const recipients = recipientIndex();
+    const resend = countResendable(MessageHistoryStore.getAll(), id => (recipients.get(id)?.length ?? 0) > 0, new Date());
+    if (resend > 0) out.push({ key: 'resend', label: '나가지 않은 문자 다시 보내기', count: resend, href: '/messaging?tab=history&status=failed', tone: 'normal' });
   }
   if (opts.customersOn && opts.messagingOn) {
     // 켜진 캠페인의 오늘 승인 전 대상 합계 — 브리핑 "연락할 고객"·실행 창과 같은 공용 선별(campaignCandidates) (177, 178 리뷰 M-2·M-3)
@@ -64,18 +82,27 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
   return out;
 }
 
-/** 이달 운영 지표 — 규칙은 kpiRule(순수) */
-export function getMonthlyKpis(): MonthlyKpis {
+/** 이달 지표 입력 — 지표·재예약 권유 목록이 같은 분모(집계 대상 고객·방문일·다음 예약)를 쓴다 (184) */
+function kpiInput(stats: CustomerStatsIndex = buildCustomerStatsIndex()): KpiInput {
   const today = toISO(new Date());
   const month = today.slice(0, 7);
-  const stats = buildCustomerStatsIndex();
   const upcoming = new Set<string>();
   for (const r of ReservationStore.getAll()) if (isUpcomingReservation(r, today)) upcoming.add(r.customerId); // (139 #H3)
   // 샘플·익명화·삭제 고객의 남은 기록이 방문 고객·재방문율에 들어가지 않게 — 집계 대상 고객만 (139 #M6)
   const countable = new Set(CustomerStore.getAll().filter(isCountableCustomer).map(c => c.id));
   const visitDays = new Map<string, string[]>();
   for (const [id, days] of stats.visitDays ?? new Map<string, string[]>()) if (countable.has(id)) visitDays.set(id, days);
-  return monthlyKpis({ month, visitDays, payments: PaymentStore.getAll().filter(p => p.customerId && countable.has(p.customerId)), upcomingByCustomer: upcoming });
+  return { month, visitDays, payments: PaymentStore.getAll().filter(p => p.customerId && countable.has(p.customerId)), upcomingByCustomer: upcoming };
+}
+
+/** 이달 운영 지표 — 규칙은 kpiRule(순수) */
+export function getMonthlyKpis(): MonthlyKpis {
+  return monthlyKpis(kpiInput());
+}
+
+/** 이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률 타일·오늘 할 일에서 고객 목록(?norebook=1)으로 (184) */
+export function getNoRebookCustomerIds(stats?: CustomerStatsIndex): Set<string> {
+  return new Set(noRebookIds(kpiInput(stats)));
 }
 
 /** 이달(오늘까지) 가동률 — 날마다 활성 직원의 근무 창(근무표 또는 영업시간, 매장 휴일은 창 없음) 대비 확정·완료 예약 시간. 규칙은 utilizationRule(순수) (180, GAP R-10) */

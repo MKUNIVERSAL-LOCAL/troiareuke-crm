@@ -10,6 +10,8 @@
 import { initializeStores, resetStoreCache, getShopId } from './store';
 import { isNasDataConfigured, nasLoad } from './nasData';
 import { flushNasOutbox, pendingNasOutboxCount, listRejectedNasOutbox, OUTBOX_CHANGED_EVENT } from './nasOutbox';
+import { resetConsultationCache } from './consultationStore';
+import { resetExpenseCache } from './expenseStore';
 
 /** 코어 store.ts NAS_LOCAL_KEYS 와 같은 표(서버 컬렉션 → localStorage 키 접미사) — 코어를 import 할 수 없어 복제(131 리뷰 H1·H2) */
 const SERVER_TABLES: ReadonlyArray<readonly [table: string, localKey: string]> = [
@@ -26,8 +28,14 @@ const SERVER_TABLES: ReadonlyArray<readonly [table: string, localKey: string]> =
   ['message_templates', 'msg_templates'],
   ['message_history', 'msg_history'],
 ];
-/** 데이터 키만 — 보조 키(crm_last_sync_at 등)에 반응하면 두 탭이 서로의 재조회 시각 기록에 끝없이 재조회한다 (127~130 리뷰 #H1) */
-const DATA_KEY = /^crm_.+_(customers|programs|customer_programs|treatment_logs|products|product_sales|payments|staff|services|reservations|msg_templates|msg_history|settings)$/;
+/**
+ * 데이터 키만 — 보조 키(crm_last_sync_at 등)에 반응하면 두 탭이 서로의 재조회 시각 기록에 끝없이 재조회한다 (127~130 리뷰 #H1).
+ * 코어 테이블 13종은 코어 캐시 리셋 + initializeStores(서버 모드는 서버 기준 재조회). 비코어 로컬 테이블(예약 요청함·캠페인 발송 기록·재고 원장·상담·지출)은
+ * 서버 재조회 없이 비코어 모듈 캐시만 버리고 화면에 알린다 — 다른 탭이 요청을 접수·거절하거나 발송·입고·상담·지출을 기록해도 이 탭이 같이 바뀌고,
+ * 옛 캐시 배열로 덮어쓰는 유실(16차 #M8 패턴)이 없다 (200·203, 199 리뷰 M-1 ③, 200 리뷰 M-1·L-2)
+ */
+const CORE_DATA_KEY = /^crm_.+_(customers|programs|customer_programs|treatment_logs|products|product_sales|payments|staff|services|reservations|msg_templates|msg_history|settings)$/;
+const LOCAL_DATA_KEY = /^crm_.+_(booking_requests|campaign_sends|stock_ledger|consultations|expenses)$/;
 
 /** 서버에서 다시 읽은 뒤 window 에 보낸다 — 목록을 가진 화면은 useDataRefreshed 로 받아 다시 그린다 */
 export const DATA_REFRESHED_EVENT = 'crm:data-refreshed';
@@ -101,12 +109,23 @@ export function refreshFromServer(opts: { force?: boolean } = {}): Promise<boole
  */
 function startCrossTabInvalidation(): () => void {
   let timer = 0;
+  let coreDirty = false;
   const onStorage = (e: StorageEvent) => {
-    if (!e.key || !DATA_KEY.test(e.key)) return; // 데이터 키만 — outbox·세션·동기화 시각 키 제외 (#H1)
+    if (!e.key) return;
+    const core = CORE_DATA_KEY.test(e.key);
+    if (!core && !LOCAL_DATA_KEY.test(e.key)) return; // 데이터 키만 — outbox·세션·동기화 시각 키 제외 (#H1)
+    if (core) coreDirty = true;
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
-      resetStoreCache();
-      void initializeStores().finally(() => window.dispatchEvent(new CustomEvent(DATA_REFRESHED_EVENT))); // 로컬 모드는 즉시 반환, 서버 모드는 서버 기준으로
+      resetConsultationCache(); resetExpenseCache(); // 비코어 모듈 캐시 — 어느 키든 함께 버린다(값싸고, 코어 키와 같은 동작에 섞여 쓰이기도) (203)
+      const notify = () => window.dispatchEvent(new CustomEvent(DATA_REFRESHED_EVENT));
+      if (!coreDirty) { notify(); return; } // 로컬 전용 테이블만 바뀜 — 서버엔 바뀐 것이 없어 12 GET 재조회를 돌리지 않는다 (200 리뷰 L-2)
+      coreDirty = false;
+      resetStoreCache(); // getAll() 이 바로 localStorage 폴백을 읽어 다른 탭 변경이 보인다
+      // 서버 모드는 inFlight·outbox 가드를 공유하는 재조회 경로로 — 동시 initializeStores 2개가 서로 덮지 않게 (206, 203~205 리뷰 L-3).
+      // 재조회가 조기 반환(오프라인·큐 잔존·probe 실패)하면 코어가 "초기화 안 된" 상태로 남아, 이후 아무 저장이 트리거하는 지연 초기화가 probe 가드 없이 전체 재조회(삭제 행 부활 위험)를 돌린다 → 그 자리에서 플래그를 복구 (210, 206 리뷰 M-1)
+      if (isNasDataConfigured) { void refreshFromServer({ force: true }).then(ok => (ok ? undefined : initializeStores())).finally(notify); return; }
+      void initializeStores().finally(notify); // 로컬 모드는 즉시 반환
     }, 300); // 한 동작이 키 여러 개를 쓰므로 묶는다
   };
   window.addEventListener('storage', onStorage);

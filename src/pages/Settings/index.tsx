@@ -1,5 +1,6 @@
 import { HIDE_ON_MOBILE, IS_MOBILE_APP } from '../../lib/platform';
 import { sanitizeStorageSnapshot } from '../../lib/backupSanitize';
+import { markBackupSaved } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
@@ -11,6 +12,7 @@ import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
+import PaymentMethodPicker from '../../components/PaymentMethodPicker';
 import { SettingsStore, ServiceStore, ReservationStore, getShopId } from '../../lib/store';
 import { askConfirm } from '../../lib/confirmDialog';
 import { refreshFromServer } from '../../lib/liveRefresh';
@@ -244,6 +246,7 @@ export default function Settings() {
     }
     const result = await electronAPI.backup.exportNow(sanitizeStorageSnapshot(snapshot)); // AI 키·문자 API 키는 백업 파일에 넣지 않는다 (UX 점검 2026-11-19)
     setBackupStatus(result.success ? 'done' : 'error');
+    if (result.success) markBackupSaved(); // 체크리스트 "전체 백업 1회" — Electron 경로도 기록 (193)
     if (result.success) notify.success(result.filePath ? `백업을 저장했습니다: ${result.filePath}` : '백업을 저장했습니다. [백업 폴더 열기]에서 확인하세요.'); // 어디에 저장됐는지 버튼 글자만으로는 모른다
     if (!result.success) notify(`백업 실패: ${result.error || '알 수 없는 오류'} — 백업 폴더 권한·경로를 확인해주세요.`); // 버튼 글자 3초만으로는 이유를 알 수 없다 (4차 UX 점검 2026-11-19)
     setTimeout(() => setBackupStatus('idle'), 3000);
@@ -714,6 +717,12 @@ export default function Settings() {
                     >
                       {shopSaving ? '저장 중...' : '저장하기'}
                     </button>
+                  </div>
+                  {/* 결제수단 — 결제 창을 열지 않고도 미리 준비(PILOT-CHECKLIST 24). 추가·삭제는 누른 즉시 지점 설정에 저장돼 같은 지점 모든 PC 에 보인다 (210) */}
+                  <div className="pt-6 border-t border-gray-100" data-testid="settings-payment-methods">
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">결제수단</h4>
+                    <p className="text-xs text-gray-400 mb-3">결제·판매 창에서 고를 수 있는 수단입니다. 기본 4종은 지울 수 없고, 추가한 수단은 ✕ 로 지웁니다(기존 결제 기록은 그대로). 추가·삭제는 바로 저장되고 같은 지점 모든 PC 에 보입니다.</p>
+                    <PaymentMethodPicker value="" onChange={() => undefined} selectable={false} />
                   </div>
                 </div>
               </SettingCard>

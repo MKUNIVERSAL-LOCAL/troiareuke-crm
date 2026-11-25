@@ -31,3 +31,10 @@ export function monthlyKpis(i: KpiInput): MonthlyKpis {
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null);
   return { visitors, returning, rebooked, revisitRate: pct(returning, visitors), rebookRate: pct(rebooked, visitors), avgTicket: visitors > 0 ? Math.round(monthRevenue / visitors) : null, monthRevenue };
 }
+
+/** 이달 방문했지만 다음 예약이 없는 고객 id — 재예약률의 분모 − 분자. 재예약 권유 목록(고객 목록 ?norebook=1) (184, GAP D-1) */
+export function noRebookIds(i: Pick<KpiInput, 'month' | 'visitDays' | 'upcomingByCustomer'>): string[] {
+  const out: string[] = [];
+  for (const [id, days] of i.visitDays) if (days.some(d => d.startsWith(i.month)) && !i.upcomingByCustomer.has(id)) out.push(id);
+  return out;
+}

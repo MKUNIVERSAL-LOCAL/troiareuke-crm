@@ -39,3 +39,17 @@ export function sanitizeStorageSnapshot(snapshot: Record<string, string>): Recor
   }
   return out;
 }
+
+/** JSON 이 아니던 원문을 백업에 넣을 때의 포장 키 — { __raw: "..." } */
+export const BACKUP_RAW_MARK = '__raw';
+
+/**
+ * 백업 테이블 값의 모양 — 'ok' 설정은 객체·나머지는 배열(또는 RAW 포장), 'scalar' 테이블이 아닌 플래그(예: setup_hidden='1' — 백업에서 제외·복원 때 무시),
+ * 'invalid' 객체 모양이 틀린 손상(복원 거부). 195 리뷰 H-1(숨김 플래그가 복원을 막던 결함)의 판정을 한 곳에 (196)
+ */
+export function backupTableShape(table: string, value: unknown): 'ok' | 'scalar' | 'invalid' {
+  const rawWrapped = isRecord(value) && typeof value[BACKUP_RAW_MARK] === 'string' && Object.keys(value).length === 1;
+  const ok = table === 'settings' ? (isRecord(value) || rawWrapped) : (Array.isArray(value) || rawWrapped);
+  if (ok) return 'ok';
+  return value === null || typeof value !== 'object' ? 'scalar' : 'invalid';
+}

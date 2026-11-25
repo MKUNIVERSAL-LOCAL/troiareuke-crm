@@ -16,7 +16,7 @@
 | 7 유료 AI 출시 | 요금제·PG·약관 | 대기 | 승인 대기열 C |
 
 ## 2. 현재 버전·브랜치
-- 코드: v1.0.61(package.json), GitHub Release v1.0.61(11-24). **NAS 채널 v1.0.61(11-25 09:41 복구 — DSM `CRM-publish-update` 활성·실행, verify:nas 5/5)**. `CRM-server-update` 는 아직 비활성(오너 결정).
+- 코드: v1.0.62(package.json), GitHub Release v1.0.62(11-25 10:56). **NAS 채널 v1.0.62(SSH 직접 게시, verify:nas 5/5)**. 서버 재배포: v1.0.61→v1.0.62 사이 server/ 변경 0건이라 재배포 불필요(서버는 v1.0.61 그대로 최신). `CRM-server-update` 는 비활성(오너 결정: 끄고 릴리스 때 수동/sudo 규칙).
 - 브랜치 `feat/commercialization-restart-2026-11-17` → PR #56(main 대비 15커밋, 125~130 + 재검증 기록). 131 게이트 진행.
 - 품질 게이트: tsc 0, build, build:e2e(두 빌드), Playwright 54(chromium·mobile·admin-nas), check:distribution/routes, test:updater, test:outbox 9, mobile:prepare, core-lock guard(PreToolUse hook).
 

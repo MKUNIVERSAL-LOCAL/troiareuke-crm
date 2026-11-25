@@ -11,11 +11,12 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { getShopId } from './store';
+import { getPreference, setPreference } from './shopPreferences';
 import { isAuthApiConfigured } from './authApi';
 import { exportFile } from './mobileBridge';
 import { todayISO } from './format';
 import { IS_MOBILE_APP } from './platform';
-import { SETTINGS_SECRET_FIELDS, isRecord, stripSettingsSecrets } from './backupSanitize';
+import { SETTINGS_SECRET_FIELDS, isRecord, stripSettingsSecrets, backupTableShape, BACKUP_RAW_MARK } from './backupSanitize';
 import { containsKeyLike, scrubKeyLike } from './ai/keyLeak';
 
 export const BACKUP_FORMAT = 'troiareuke-crm-backup';
@@ -24,7 +25,7 @@ export const BACKUP_VERSION = 1;
 const MOBILE_MAX_BYTES = 4.5 * 1024 * 1024;
 const TABLE_NAME_RE = /^[a-z][a-z0-9_]{0,40}$/;
 /** JSON으로 파싱되지 않는 원문 값을 담는 표식 — 복원 때 그대로 되돌린다 */
-const RAW_MARK = '__raw';
+const RAW_MARK = BACKUP_RAW_MARK;
 
 export interface BackupFile {
   format: typeof BACKUP_FORMAT;
@@ -41,6 +42,8 @@ const TABLE_LABELS: Record<string, string> = {
   customers: '고객', reservations: '예약', treatment_logs: '시술 기록', customer_programs: '고객 프로그램', programs: '프로그램',
   payments: '결제', product_sales: '제품 판매', products: '제품', services: '시술 메뉴', staff: '직원', consultations: '피부 상담',
   expenses: '지출', settings: '매장 설정', msg_templates: '메시지 템플릿', msg_history: '발송 이력',
+  // 비코어 로컬 테이블 — 요약에 영문 키가 그대로 보이던 것 (210, 206 리뷰 L-7)
+  msg_history_recipients: '발송 수신 고객', campaign_sends: '캠페인 발송 기록', booking_requests: '예약 요청함', stock_ledger: '재고 원장',
 };
 
 export const RESTORE_ALLOWED = !isAuthApiConfigured;
@@ -60,9 +63,10 @@ export function buildBackup(appVersion: string, shopName?: string): BackupFile {
     const raw = localStorage.getItem(key);
     if (raw === null) continue;
     let value: unknown;
-    try { value = JSON.parse(raw); } catch { value = { [RAW_MARK]: raw }; }
+    try { value = JSON.parse(raw); } catch { value = { [RAW_MARK]: containsKeyLike(raw) ? scrubKeyLike(raw) : raw }; } // JSON 이 아닌 원문은 RAW 포장 — 키 꼴 문자열은 여기서 스크럽(154 리뷰 M-3, 199 리뷰 L-1: 문자열 value 분기는 195 뒤 늘 제외돼 죽은 줄이었다)
     if (table === 'settings' && isRecord(value)) value = stripSettingsSecrets(value);
-    if (typeof value === 'string' && containsKeyLike(value)) value = scrubKeyLike(value); // 자유 텍스트에 붙여넣은 키도 백업으로 새지 않게 (154 리뷰 M-3)
+    // 테이블 모양(설정은 객체, 나머지는 배열, JSON 이 아니면 RAW 포장)이 아닌 값 — 예: 체크리스트 숨김 플래그 `setup_hidden`='1' — 은 넣지 않는다. 넣으면 parseBackup 이 "손상" 으로 거부해 복원이 막혔다 (195 리뷰 H-1)
+    if (backupTableShape(table, value) !== 'ok') continue; // 판정은 순수 backupSanitize.backupTableShape (196)
     tables[table] = value;
   }
   return { format: BACKUP_FORMAT, version: BACKUP_VERSION, appVersion, shopId: getShopId(), shopName, createdAt: new Date().toISOString(), tables };
@@ -79,7 +83,18 @@ export function summarizeBackup(b: BackupFile): { label: string; count: number }
 export async function saveBackupFile(b: BackupFile): Promise<'shared' | 'cancelled' | 'downloaded'> {
   const safeName = (b.shopName || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const blob = new Blob([JSON.stringify(b)], { type: 'application/json' });
-  return exportFile(`${safeName}_전체백업_${todayISO()}.json`, blob);
+  const result = await exportFile(`${safeName}_전체백업_${todayISO()}.json`, blob);
+  if (result !== 'cancelled') markBackupSaved(); // 체크리스트 "전체 백업 1회" (193)
+  return result;
+}
+
+// ── 마지막 백업 시각(매장 기준) — 첫 설정 체크리스트 "전체 백업 1회 저장" 판정. 파일 저장과 Electron '지금 백업' 둘 다 기록한다 (193, PILOT-CHECKLIST 22)
+// 설정 행(preferences)에 둔다: 이 PC localStorage 키는 서버 모드 로그아웃 wipe(코어)가 지워 로그인마다 미완으로 돌아갔다 (195 리뷰 M-1). 복원 때는 restoreBackup 이 현재 값을 보존한다
+export function markBackupSaved(): void {
+  try { setPreference('lastBackupAt', new Date().toISOString()); } catch { /* 저장 불가면 판정만 못 할 뿐 */ }
+}
+export function lastBackupAt(): string | null {
+  return getPreference('lastBackupAt') ?? null;
 }
 
 /** 파일 내용을 검증해 백업 객체로. 형식이 아니면 Error */
@@ -93,9 +108,9 @@ export function parseBackup(text: string): BackupFile {
   if (IS_MOBILE_APP && text.length > MOBILE_MAX_BYTES) throw new Error('파일이 이 기기의 저장 공간 한도보다 큽니다. PC 앱에서 복원하세요.');
   // 테이블 값의 모양도 본다 — 손상된 파일의 {} 나 문자열을 그대로 복원하면 첫 화면의 .filter 에서 죽고 서버 모드에선 되돌릴 UI 도 없다 (14차 #M5)
   for (const [table, value] of Object.entries(parsed.tables)) {
-    const rawWrapped = isRecord(value) && typeof value[RAW_MARK] === 'string' && Object.keys(value).length === 1;
-    const ok = table === 'settings' ? (isRecord(value) || rawWrapped) : (Array.isArray(value) || rawWrapped);
-    if (!ok) throw new Error(`백업 파일의 '${Object.prototype.hasOwnProperty.call(TABLE_LABELS, table) ? TABLE_LABELS[table] : table}' 데이터가 손상됐습니다. 다른 백업 파일을 사용하세요.`);
+    const shape = backupTableShape(table, value);
+    if (shape === 'scalar') { delete (parsed.tables as Record<string, unknown>)[table]; continue; } // 옛 파일의 스칼라 플래그(setup_hidden 등)는 테이블이 아니다 — 무시하고 복원 (195 리뷰 H-1, 196)
+    if (shape === 'invalid') throw new Error(`백업 파일의 '${Object.prototype.hasOwnProperty.call(TABLE_LABELS, table) ? TABLE_LABELS[table] : table}' 데이터가 손상됐습니다. 다른 백업 파일을 사용하세요.`);
   }
   return parsed as unknown as BackupFile;
 }
@@ -128,6 +143,10 @@ export function restoreBackup(b: BackupFile): { written: number; skipped: number
       const cur = JSON.parse(curSettingsRaw);
       const merged = { ...(tables.settings as Record<string, unknown>) };
       for (const f of SETTINGS_SECRET_FIELDS) if (isRecord(cur) && cur[f] !== undefined && merged[f] === undefined) merged[f] = cur[f];
+      // 마지막 백업 시각은 이 매장의 사실 — 파일이 그 전에 만들어졌으면 현재 값을 유지 (195)
+      const curPrefs = isRecord(cur) && isRecord(cur.preferences) ? cur.preferences : null;
+      const filePrefs = isRecord(merged.preferences) ? merged.preferences : {};
+      if (curPrefs && typeof curPrefs.lastBackupAt === 'string' && filePrefs.lastBackupAt === undefined) merged.preferences = { ...filePrefs, lastBackupAt: curPrefs.lastBackupAt };
       tables.settings = merged;
     } catch { /* 현재 settings가 깨져 있으면 파일 값 그대로 */ }
   }

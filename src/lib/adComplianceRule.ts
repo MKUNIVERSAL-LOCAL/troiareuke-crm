@@ -5,7 +5,17 @@
  *  - 수신 동의가 없거나 수신거부한 고객은 광고 대상에서 뺀다(채널별). 거래 안내(예약 확인·회차권 만료 등 영업성 아닌 안내)는 광고가 아니라 이 규칙을 적용하지 않는다.
  * 동의·거부는 고객 태그(코어 Customer.tags — 고객 행마다 서버 동기)에 적어 두 기기 동시 저장에도 안전하다: 태그 사전은 marketingConsent.ts.
  */
-const AD_PREFIX = '(광고)';
+export const AD_PREFIX = '(광고)'; // 다시 보내기가 "원본이 광고였는지" 를 본문으로 판정할 때도 쓴다 (210)
+const OPT_OUT_LABEL = '무료수신거부';
+/** 본문이 광고 꾸밈(머리말)을 이미 갖고 있는가 — 발송 이력 재발송의 광고 판정 (210, 207 리뷰 H-1) */
+export function looksLikeAdMessage(content: string): boolean {
+  return content.trim().startsWith(AD_PREFIX);
+}
+/** 광고 꾸밈을 벗긴 원문 — 재발송 때 옛 080 번호 꼬리말이 남지 않게 (210, 리뷰 L-8) */
+export function undecorateAdMessage(content: string): string {
+  const body = content.trim().startsWith(AD_PREFIX) ? content.trim().slice(AD_PREFIX.length).trimStart() : content.trim();
+  return body.split('\n').filter(line => !line.trim().startsWith(OPT_OUT_LABEL)).join('\n').trim();
+}
 export const QUIET_START_HOUR = 21; // 21:00 부터
 export const QUIET_END_HOUR = 8;    // 08:00 전까지
 
@@ -32,7 +42,7 @@ export function isValidOptOutNumber(n: string | undefined | null): boolean {
 export function decorateAdMessage(content: string, optOutNumber: string): string {
   let body = content.trim();
   if (!body.startsWith(AD_PREFIX)) body = `${AD_PREFIX} ${body}`;
-  const tail = `무료수신거부 ${optOutNumber.trim()}`;
+  const tail = `${OPT_OUT_LABEL} ${optOutNumber.trim()}`;
   if (!body.includes(optOutNumber.trim())) body = `${body}\n${tail}`; // 문구만 보면 "무료수신거부는 매장으로…" 같은 본문에 번호가 빠진다 (159 리뷰 M-4)
   return body;
 }

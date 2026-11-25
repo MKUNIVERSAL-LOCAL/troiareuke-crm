@@ -26,7 +26,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const checklist = page.getByTestId('setup-checklist').filter({ visible: true }).first();
   await expect(checklist).toBeVisible();
   await expect(checklist).toContainText('첫 고객 등록');
-  await expect(checklist).toContainText('3/4 완료'); // 온보딩으로 매장 이름·직원·시술 메뉴는 끝난 상태
+  await expect(checklist).toContainText('3/8 완료'); // 온보딩으로 매장 이름·직원·시술 메뉴는 끝난 상태, 파일럿 준비 4항목(080·근무표·시나리오·백업)은 남음 (190·193)
   await checklist.getByRole('button', { name: /첫 고객 등록/ }).click();
   await expect(page).toHaveURL(/\/customers$/); // ?new=1 캡처 후 정리
   const quickAddDialog = page.getByRole('dialog', { name: '고객 추가' });
@@ -37,10 +37,13 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page).toHaveURL(/\/settings$/);
 
   await createCustomer(page, acc);
-  // 마지막 항목(첫 고객)까지 끝나면 체크리스트는 사라진다
+  // 기본 4항목이 끝나도 "파일럿 준비" 3항목이 남아 체크리스트는 유지된다(숨기기 가능) (190)
   await page.goto('/');
   await expect(page.getByText('오늘 예약 현황').filter({ visible: true }).first()).toBeVisible();
-  await expect(page.getByTestId('setup-checklist')).toHaveCount(0);
+  const checklist2 = page.getByTestId('setup-checklist').filter({ visible: true }).first();
+  await expect(checklist2).toContainText('4/8 완료');
+  await expect(checklist2).toContainText('파일럿 준비');
+  await expect(checklist2.getByRole('button', { name: /광고 수신거부 080 번호/ })).toBeVisible();
   await page.goto('/customers'); // 아래 검색 품질 검증은 고객 화면에서
 
   // 검색 품질: 전화 뒷자리 4자리·초성으로도 찾힌다 (2026-11-17)
@@ -295,6 +298,41 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('재방문율 =');
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);
+  // 드릴다운 (184): 재예약률 타일 → 다음 예약 없는 이달 방문 고객 목록(필터 칩), 가동률 타일 → 예약 화면
+  // 기본 고객은 내일 예약이 있어 '재예약 없음' 0명 — 오늘 완료 방문만 있고 다음 예약이 없는 고객을 하나 심어 1명으로 (202)
+  await page.evaluate(() => {
+    const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
+    const customers = JSON.parse(localStorage.getItem(key(/^crm_.*_customers$/)) || '[]');
+    const reservations = JSON.parse(localStorage.getItem(key(/^crm_.*_reservations$/)) || '[]');
+    const main = customers[0]; const id = 'norebook_' + Date.now();
+    customers.push({ ...main, id, name: '재예약없음고객', phone: '010-9999-0202', birthDate: undefined, email: undefined }); // 6-3 의 생일(오늘)·이메일을 상속하지 않게 — 생일 카드·중복 의심이 2명이 되지 않도록 (203)
+    reservations.push({ ...reservations[0], id: 'norebookres_' + Date.now(), customerId: id, customerName: '재예약없음고객', status: 'completed', startTime: '09:00', endTime: '10:00' });
+    localStorage.setItem(key(/^crm_.*_customers$/), JSON.stringify(customers)); localStorage.setItem(key(/^crm_.*_reservations$/), JSON.stringify(reservations));
+  });
+  await page.goto('/');
+  await page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByTestId('kpi-rebook-link').click();
+  await expect(page).toHaveURL(/\/customers/); // ?norebook=1 은 초기값으로만 쓰고 바로 URL 에서 지워진다(187 리뷰 M-1) — 칩으로 판정
+  await expect(page.getByTestId('norebook-chip').filter({ visible: true }).first()).toContainText('재예약 없음 1');
+  await expect(page.getByText('재예약없음고객').filter({ visible: true }).first()).toBeVisible(); // PC·모바일 2중 DOM
+  // 칩 옆 "이 고객들에게 발송" → 발송 창이 '재예약 없음 (1명)' 세그먼트로 열린다 (202)
+  await page.getByTestId('norebook-send').filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(/\/messaging/);
+  const norebookSend = page.getByRole('dialog', { name: '메시지 발송' });
+  await expect(norebookSend.getByRole('button', { name: '재예약 없음 (1명)' })).toHaveClass(/bg-primary-600/);
+  await page.keyboard.press('Escape');
+  await page.goto('/');
+  await page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByTestId('kpi-util-link').click();
+  await expect(page).toHaveURL(/\/reservations/);
+  // ── 설정 > 매장 정보의 결제수단 관리 (210): 여기서 추가한 수단이 결제 창 선택지에 나타난다 ──
+  await page.goto('/settings?tab=shop');
+  const methodsBlock = page.getByTestId('settings-payment-methods').filter({ visible: true }).first();
+  await expect(methodsBlock).toContainText('카드');
+  await methodsBlock.getByRole('button', { name: '기타 추가' }).click();
+  await methodsBlock.getByPlaceholder('결제수단 이름 (예: 상품권, 제로페이)').fill('상품권');
+  await methodsBlock.getByRole('button', { name: '추가', exact: true }).click();
+  await expect(methodsBlock).toContainText('상품권');
+  await expect(methodsBlock.getByRole('button', { name: '상품권 삭제' })).toBeVisible(); // 추가한 수단만 지울 수 있다
+  await page.goto('/');
 
   // ── 7-0. 회차권 소진 임박 알림 (2026-11-17): 잔여 1회로 만들면 대시보드 카드에 뜨고, 누르면 고객 상세가 열린다 ──
   await page.evaluate(() => {
@@ -589,6 +627,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.evaluate(() => {
     localStorage.setItem('ai_key_openai', 'sk-SECRET-TEST');
     localStorage.setItem('crm_sms_gateway_key', 'gw-SECRET-TEST');
+    const hKey = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k))!.replace(/_settings$/, '_setup_hidden'); localStorage.setItem(hKey, '1'); // 체크리스트 [숨기기] 뒤 저장한 백업 — 스칼라 키가 파일에 들어가 복원이 거부되던 결함 (195 리뷰 H-1)
     const sKey = Object.keys(localStorage).find(k => /^crm_.*_settings$/.test(k));
     if (sKey) { const st = JSON.parse(localStorage.getItem(sKey) || '{}'); st.smsApiKey = 'sms-SECRET-TEST'; localStorage.setItem(sKey, JSON.stringify(st)); }
   });
@@ -599,6 +638,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const backupPath = await backupFile.path();
   const backupJson = JSON.parse(readFileSync(backupPath!, 'utf8'));
   expect(backupJson.format).toBe('troiareuke-crm-backup');
+  expect(backupJson.tables.setup_hidden).toBeUndefined(); // 테이블 모양이 아닌 플래그는 파일에 없다 (195)
   const backupText = readFileSync(backupPath!, 'utf8');
   expect(backupText).not.toContain('SECRET-TEST'); // AI 키·게이트웨이 키·smsApiKey 어느 것도 파일에 없다
   expect(backupText).not.toContain('troiareuke_local_users');
@@ -621,6 +661,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   expect(restoredShopName).toBe(acc.shop); // 배열이 아닌 테이블(설정)도 살아난다
   await page.goto('/customers');
   await expect(page.getByText(acc.customer, { exact: true }).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+  // 백업 파일을 한 번 저장했으니 첫 설정 체크리스트 "전체 백업 1회 저장" 은 완료 (193)
+  await page.goto('/');
+  const setupAfterBackup = page.getByTestId('setup-checklist').filter({ visible: true }).first();
+  await expect(setupAfterBackup).toContainText('전체 백업 1회 저장');
+  await expect(setupAfterBackup.getByRole('button', { name: /전체 백업 1회 저장/ })).toHaveCount(0);
 
   // ── 10. 개인정보 보존기간 정책 (P4, 2026-11-17): 1년으로 켜고 고객을 2년 전 방문으로 만들면 안내 → 목록 → 익명화 ──
   await page.goto('/settings');

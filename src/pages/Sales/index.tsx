@@ -866,8 +866,9 @@ export default function Sales() {
 
           {/* 지출 목록 */}
           <div className="bg-white rounded-2xl border border-gray-100">
-            <div className="p-3 border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar pr-6">
+            <div className="p-3 border-b border-gray-100 flex items-center gap-2 overflow-x-auto no-scrollbar pr-6" role="group" aria-label="지출 분류 필터">
               <button
+                aria-pressed={expenseCategoryFilter === 'all'} /* (217) */
                 onClick={() => setExpenseCategoryFilter('all')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === 'all' ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
@@ -876,6 +877,7 @@ export default function Sales() {
               {EXPENSE_CATEGORIES.map(c => (
                 <button
                   key={c}
+                  aria-pressed={expenseCategoryFilter === c} /* (217) */
                   onClick={() => setExpenseCategoryFilter(c)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${expenseCategoryFilter === c ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                 >

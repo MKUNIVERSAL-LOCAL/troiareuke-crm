@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { askConfirm } from '../../lib/confirmDialog';
 import { maskPhone } from '../../lib/pii';
@@ -11,6 +11,11 @@ import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
+import { buildCustomerStatsIndex } from '../../lib/customerStats';
+import { getNoRebookCustomerIds } from '../../lib/todayTasks';
+import { rememberRecipients, recipientIndex, recipientsOf } from '../../lib/messageRecipients';
+import { isGatewayPendingHistory } from '../../lib/messageHistoryRule';
+import { estimateHistoryPerformance, describeHistoryPerformance } from '../../lib/messagePerformance';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import type { SavedSegment } from '../../lib/segmentFilterRule';
 import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -25,13 +30,13 @@ import {
 import type { MessageType, MessageTemplate, MessageHistory, Customer } from '../../types';
 import { topTags } from '../../lib/customerTags';
 import { consentOf, getOptOutNumber } from '../../lib/marketingConsent';
-import { canReceiveAd, decorateAdMessage, checkAdSend, type AdChannel } from '../../lib/adComplianceRule';
+import { canReceiveAd, decorateAdMessage, checkAdSend, looksLikeAdMessage, undecorateAdMessage, type AdChannel } from '../../lib/adComplianceRule';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import CampaignsCard from '../../components/campaigns/CampaignsCard';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | `tag:${string}` | `saved:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18) / saved:<id> — 저장 세그먼트 (166)
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | 'norebook' | `tag:${string}` | `saved:${string}` | `resend:${string}`; // resend:<이력 id> — 발송 이력 "다시 보내기" 의 같은 수신 고객 (207) // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18) / saved:<id> — 저장 세그먼트 (166)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
 const SEGMENT_LABELS: Record<string, string> = {
@@ -39,12 +44,14 @@ const SEGMENT_LABELS: Record<string, string> = {
   vip: 'VIP',
   birthday: '이번달 생일',
   novisit: '미방문 60일+',
-  revisit: '재방문 권장',
+  revisit: '재방문 권장', // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
   churn: '이탈 위험', // 이 고객의 방문 주기 2배 이상 안 왔고 다음 예약 없음 (136, churnRule)
-  loyal: '충성 고객', // RFM 최근성·빈도 상위 (136, rfmRule) // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
+  loyal: '충성 고객', // RFM 최근성·빈도 상위 (136, rfmRule)
+  norebook: '재예약 없음', // 이달 방문했지만 다음 예약 없음 — 대시보드 재예약률 타일·고객 목록 칩과 같은 기준 (184 kpiRule, 202)
 };
 
 function segmentLabel(seg: Segment, saved: SavedSegment[] = []): string {
+  if (seg.startsWith('resend:')) return '다시 보내기';
   if (seg.startsWith('saved:')) return saved.find(sg => sg.id === seg.slice(6))?.name ?? '삭제된 세그먼트';
   return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);
 }
@@ -58,11 +65,15 @@ function savedSegmentSets(): { list: SavedSegment[]; sets: Map<string, Set<strin
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 /** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
 function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
-function segmentFilter(seg: Segment, revisitIds?: Set<string>, segIds?: { churn: Set<string>; loyal: Set<string> }, savedSets?: Map<string, Set<string>>): (c: Customer) => boolean {
+type SegmentIdSets = { churn: Set<string>; loyal: Set<string>; norebook: Set<string> };
+/** 이탈 위험·충성(136) + 재예약 없음(202) id 집합 — 전수 스캔이라 호출하는 쪽에서 useMemo 로 한 번만. 통계 인덱스는 한 번 만들어 둘이 공유 (203) */
+function allSegmentIdSets(): SegmentIdSets { const stats = buildCustomerStatsIndex(); return { ...segmentIdSets(stats), norebook: getNoRebookCustomerIds(stats) }; }
+function segmentFilter(seg: Segment, revisitIds: Set<string> | undefined, segIds: SegmentIdSets, savedSets?: Map<string, Set<string>>, resendIds?: Set<string>): (c: Customer) => boolean { // segIds 는 호출자 2곳이 모두 넘긴다 — 폴백 전수 스캔 분기 제거 (203)
+  if (seg.startsWith('resend:')) return resendIds ? c => resendIds.has(c.id) : () => false; // 이력의 수신 고객 집합 — 없으면 아무에게도 (207)
   if (seg.startsWith('saved:')) { const ids = savedSets?.get(seg.slice(6)); return ids ? c => ids.has(c.id) : () => false; } // 삭제된 세그먼트는 아무에게도 (166)
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
   if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
-  if (seg === 'churn' || seg === 'loyal') { const sets = segIds ?? segmentIdSets(); const ids = sets[seg]; return c => ids.has(c.id); }
+  if (seg === 'churn' || seg === 'loyal' || seg === 'norebook') { const ids = segIds[seg]; return c => ids.has(c.id); }
   return Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg) ? SEGMENT_FILTERS[seg] : () => false; // 모르는 세그먼트('constructor' 같은 프로토타입 키 포함)는 '아무에게도' — 전체 발송 사고 방지
 }
 
@@ -100,6 +111,9 @@ const MSG_TYPE_COLORS: Record<string, string> = {
 
 export default function Messaging() {
   const [tab, setTab] = useState<Tab>('send');
+  const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null); // 고객 활동 타임라인 메시지 줄 → 그 고객 발송만 (205)
+  const [historyStatus, setHistoryStatus] = useState<'all' | 'failed'>('all'); // 대시보드 "다시 보내기" 할 일 → 실패·미연동만 (208)
+  const [resendSource, setResendSource] = useState<MessageHistory | null>(null); // 발송 이력 "다시 보내기" 원본 — 같은 대상·본문·유형으로 발송 창 (207)
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendSegment, setSendSegment] = useState<Segment>('all');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -109,10 +123,23 @@ export default function Messaging() {
   useEffect(() => {
     // 대시보드 재방문 리마인더 [단체 발송](?segment=revisit)·생일 카드(?segment=birthday) → 그 대상이 걸린 발송 모달 (3차·5차 UX 점검 2026-11-19)
     const seg = searchParams.get('segment');
-    if (seg && (seg === 'revisit' || seg === 'churn' || seg === 'loyal' || seg.startsWith('saved:') || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // saved:<id> 는 고객 목록 세그먼트 칩에서 (166) // churn·loyal 도 딥링크 허용 (139 #L7) // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
+    if (seg && (seg === 'revisit' || seg === 'churn' || seg === 'loyal' || seg === 'norebook' || seg.startsWith('saved:') || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // saved:<id> 는 고객 목록 세그먼트 칩에서 (166) // churn·loyal 도 딥링크 허용 (139 #L7) // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
       setSendCustomerId(null);
       setSendSegment(seg as Segment);
       setShowSendModal(true);
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    if (searchParams.get('tab') === 'history') { // 대시보드 오늘 할 일 "다시 보내기" → 발송 이력 탭, status=failed 면 실패·미연동만 (208)
+      setHistoryStatus(searchParams.get('status') === 'failed' ? 'failed' : 'all');
+      setTab('history');
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    const hist = searchParams.get('history');
+    if (hist) { // 고객 활동 타임라인 "문자/카카오 발송" 줄 → 발송 이력 탭을 그 고객 발송만으로 (205)
+      setHistoryCustomerId(hist);
+      setTab('history');
       setSearchParams({}, { replace: true });
       return;
     }
@@ -169,11 +196,12 @@ export default function Messaging() {
         </div>
 
         {/* Tabs */}
-        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full mb-6">
+        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit max-w-full mb-6" role="group" aria-label="문자/카카오 화면 전환">
           {tabs.map(t => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              aria-current={tab === t.key ? 'true' : undefined} /* 설정 탭과 같은 표기 (217) */
+              onClick={() => { setTab(t.key); if (t.key !== 'history') setHistoryStatus('all'); }} // 딥링크 상태 필터가 탭을 오가며 되살아나지 않게 (210, 208 리뷰 L-3)
               className={clsx(
                 'flex-shrink-0 whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
                 tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
@@ -186,15 +214,16 @@ export default function Messaging() {
 
         {tab === 'send' && <SendPanel onSend={openSendModal} onSent={reload} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
-        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} />}
+        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} customerId={historyCustomerId} onClearCustomer={() => setHistoryCustomerId(null)} initialStatus={historyStatus} onResend={h => { setResendSource(h); setSendCustomerId(null); openSendModal(`resend:${h.id}`); }} />}
       </div>
 
       {showSendModal && (
         <SendMessageModal
-          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); setSendCustomerId(null); }}
+          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); setSendCustomerId(null); setResendSource(null); }}
           initialTemplate={selectedTemplate}
           initialSegment={sendSegment}
           initialCustomerId={sendCustomerId}
+          resendSource={resendSource}
           onSent={reload}
         />
       )}
@@ -625,24 +654,45 @@ function formatSentAt(value: string): string {
   return isNaN(d.getTime()) ? value : formatDateTime(value);
 }
 
-function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => void }) {
+function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialStatus = 'all', onResend }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void; initialStatus?: 'all' | 'failed'; onResend: (h: MessageHistory) => void }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
+  const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
+  const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
+  // 이력 id → 받는 사람 이름 — 목록에서 "누구에게 간 문자" 인지 바로 보이게. 고객 목록을 한 번만 색인한다 (212)
+  const recipientNames = useMemo(() => {
+    if (recipients.size === 0) return new Map<string, string[]>();
+    const byId = new Map(CustomerStore.getAll().map(c => [c.id, c.name]));
+    return new Map([...recipients].map(([hid, ids]) => [hid, ids.map(id => byId.get(id) ?? '삭제된 고객')]));
+  }, [recipients]);
+  const describeRecipients = (hid: string): string | null => {
+    const names = recipientNames.get(hid);
+    if (!names || names.length === 0) return null;
+    return names.length === 1 ? names[0] : `${names[0]} 외 ${names.length - 1}명`;
+  };
+  const [perf, setPerf] = useState<Record<string, string>>({}); // 누른 행만 성과 추정 — 행마다 예약·결제 전수 스캔을 하지 않게 (211)
+  useEffect(() => { setPerf({}); }, [reloadKey]); // 발송이 생기면 옛 추정치를 지운다
+  const customerOnlyCount = customerId ? history.filter(h => recipients.get(h.id)?.includes(customerId)).length : 0; // 칩 건수는 고객 필터만 적용한 수 — 상태·검색과 섞이지 않게 (리뷰 L-2)
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'failed'>(initialStatus); // 딥링크 초기값 (208)
+  useEffect(() => { setStatusFilter(initialStatus); }, [initialStatus]); // 이미 발송 이력 탭에 있을 때 들어온 딥링크도 먹게 — 재마운트가 없어 초기값이 무시되던 것 (210, 208 리뷰 L-3)
 
   useEffect(() => {
     setHistory(MessageHistoryStore.getAll());
   }, [reloadKey]);
 
+  // 검색 대상 문자열은 행마다 한 번만 만든다 — 글자를 칠 때마다 수백 명 이름을 다시 소문자화하지 않게 (215, 212 리뷰 M-1)
+  const haystacks = useMemo(() => new Map(history.map(h => [h.id, [
+    h.templateName || '직접 작성',
+    h.content,
+    formatSentAt(h.sentAt),
+    MSG_TYPE_LABELS[h.type] || h.type,
+    ...(recipientNames.get(h.id) ?? []), // 받는 사람 이름으로도 찾는다 (212)
+  ].join('\n').toLowerCase()])), [history, recipientNames]);
   const normalizedSearch = search.trim().toLowerCase();
   const filteredHistory = history.filter(item => {
+    if (customerId && !recipients.get(item.id)?.includes(customerId)) return false; // 수신 고객이 기록된 건(204 부터, 이 PC)만 걸린다 (205·206)
     const statusMatches = statusFilter === 'all' || item.status === statusFilter;
-    const searchMatches = !normalizedSearch || [
-      item.templateName || '직접 작성',
-      item.content,
-      formatSentAt(item.sentAt),
-      MSG_TYPE_LABELS[item.type] || item.type,
-    ].some(value => value.toLowerCase().includes(normalizedSearch));
+    const searchMatches = !normalizedSearch || (haystacks.get(item.id) ?? '').includes(normalizedSearch);
     return statusMatches && searchMatches;
   });
 
@@ -680,7 +730,7 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="템플릿명, 내용, 발송일 검색"
+            placeholder="템플릿명, 내용, 받는 사람, 발송일 검색"
             className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none"
             aria-label="발송 이력 검색"
           />
@@ -695,13 +745,16 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
           <option value="sent">성공</option>
           <option value="failed">실패·미연동</option>
         </select>
+        {customerName && ( /* 타임라인에서 넘어온 고객 필터 — 누르면 해제 (205) */
+          <button type="button" onClick={onClearCustomer} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="고객 활동 타임라인에서 연 필터 — 누르면 해제" aria-label={`${customerName} 발송만 보기 해제`} data-testid="history-customer-chip">{customerName} 발송만 {customerOnlyCount} ✕</button>
+        )}
       </div>
       <div className="divide-y divide-gray-50 overflow-y-auto max-h-[65vh]">
         {filteredHistory.length === 0 && (
           <div className="py-14 text-center text-sm text-gray-400">조건에 맞는 발송 이력이 없어요</div>
         )}
         {filteredHistory.map(h => {
-          const isGatewayPending = h.status === 'failed' && h.successCount === 0 && (h.cost === 0 || h.cost === undefined);
+          const isGatewayPending = isGatewayPendingHistory(h); // 타임라인과 같은 판정 (206)
           return (
             <div key={h.id} className="px-6 py-4">
               <div className="flex items-start justify-between">
@@ -728,6 +781,9 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
                       )}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{formatSentAt(h.sentAt)}</p>
+                    {describeRecipients(h.id) && ( /* 받는 사람 — 이 PC 사이드맵에 남은 건만(204·206 부터) (212) */
+                      <p className="text-xs text-gray-500 mt-0.5" data-testid="history-recipients">받는 사람 {describeRecipients(h.id)}</p>
+                    )}
                     {isGatewayPending && (
                       <p className="text-xs text-amber-700 mt-0.5">게이트웨이 미연동 — 실제 발송 안 됨</p>
                     )}
@@ -748,6 +804,17 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{h.content}</p>
+              {(recipients.get(h.id)?.length ?? 0) > 0 && ( /* 수신 고객이 사이드맵에 남은 건(204·206 부터, 이 PC)만 — 같은 대상·본문으로 발송 창을 연다. 미연동으로 못 나간 건을 발송사 연결 뒤 다시 보낼 때 (207) */
+                <div className="mt-2 ml-11 flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => onResend(h)} className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" aria-label={`${h.templateName || '직접 작성'} 같은 대상에게 다시 보내기`} data-testid="history-resend">같은 대상에게 다시 보내기</button>
+                  {h.status === 'sent' && ( /* 실제로 나간 건만 — 미연동·실패 건은 성과를 물을 대상이 아니다 (211). 계산 뒤에도 버튼을 남겨 예약·결제가 생긴 뒤 다시 볼 수 있게 (215, 리뷰 L-1) */
+                    <button type="button" onClick={() => { const p = estimateHistoryPerformance(h.id, h.sentAt, recipients.get(h.id)); const line = p && describeHistoryPerformance(p, h, formatPrice); if (line) setPerf(prev => ({ ...prev, [h.id]: line })); }} className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" aria-label={`${h.templateName || '직접 작성'} 성과 추정 ${perf[h.id] ? '다시 보기' : '보기'}`} data-testid="history-perf">{perf[h.id] ? '성과 다시 보기' : '성과 보기'}</button>
+                  )}
+                </div>
+              )}
+              {perf[h.id] && ( /* 발송 뒤 14일 창 예약·결제 — 추정이지 인과가 아니라 [추정] 라벨을 붙인 그대로 보여 준다 (211, GAP M-6, ANALYTICS-DEFINITIONS) */
+                <p className="mt-2 ml-11 text-xs text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" data-testid="history-perf-line">{perf[h.id]}</p>
+              )}
             </div>
           );
         })}
@@ -757,19 +824,29 @@ function HistoryPanel({ reloadKey, onSend }: { reloadKey: number; onSend: () => 
   );
 }
 
-function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; onSent: () => void }) {
+function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, resendSource, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; resendSource?: MessageHistory | null; onSent: () => void }) {
   const { user: authUser } = useAuth(); // 수신 대상 미리보기 전화번호 마스킹 기준 (13차 #M12)
-  const [msgType, setMsgType] = useState<MessageType>('sms');
+  const kakaoSettings = SettingsStore.get().kakao;
+  // 다시 보내기는 원본 유형 — 카카오 채널이 끊겼으면 문자로 내린다(끊긴 유형이 선택된 모양으로 그려지던 것: 210, 207 리뷰 L-1)
+  const [msgType, setMsgType] = useState<MessageType>(() => {
+    if (!resendSource) return 'sms';
+    const t = resendSource.type;
+    if (t === 'kakao-channel') return kakaoSettings?.channelConnected ? t : 'sms';
+    if (t === 'kakao-openchat') return kakaoSettings?.openchatConnected ? t : 'sms';
+    return t === 'lms' ? 'lms' : 'sms'; // mms 는 이 창에 선택지가 없어 문자로 — 90바이트를 넘으면 자동 LMS
+  });
   const [recipientMode, setRecipientMode] = useState<Segment>(initialSegment ?? 'all');
-  const [content, setContent] = useState('');
-  const [title, setTitle] = useState('');
+  // 원본이 광고였으면 꾸밈(머리말·080 꼬리말)을 벗긴 본문으로 두고 광고 토글을 켠다 — 그렇지 않으면 동의 필터·야간 금지 점검을 건너뛴 채 광고가 다시 나간다 (210, 207 리뷰 H-1·L-8)
+  const resendIsAd = !!resendSource && looksLikeAdMessage(resendSource.content);
+  const [content, setContent] = useState(resendSource ? (resendIsAd ? undecorateAdMessage(resendSource.content) : resendSource.content) : '');
+  const [title, setTitle] = useState(resendSource?.title ?? '');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplate);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
   const [resultMessage, setResultMessage] = useState('');
   const [sendPartial, setSendPartial] = useState(false); // 일부 실패 — 초록 "발송 완료!" 로 가짜 성공처럼 보이지 않게 (15차 #H5)
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
-  const [isAd, setIsAd] = useState(false); // 광고성이면 동의 고객만·(광고)·080·시간대 (155, GAP C-8·M-4)
+  const [isAd, setIsAd] = useState(resendIsAd); // 광고성이면 동의 고객만·(광고)·080·시간대 (155, GAP C-8·M-4). 재발송은 원본 본문으로 판정 (210)
   const [scheduleAt, setScheduleAt] = useState('');
   const byteLimit = msgType === 'sms' ? SMS_BYTE_LIMIT : LMS_BYTE_LIMIT;
 
@@ -779,7 +856,6 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const [onlyCustomer, setOnlyCustomer] = useState<Customer | null>(() => (initialCustomerId && customers.find(c => c.id === initialCustomerId)) || null);
   const blockedCustomer = !!initialCustomerId && !onlyCustomer;
   const templates = MessageTemplateStore.getAll();
-  const kakaoSettings = SettingsStore.get().kakao;
 
   // Load initial template content
   useEffect(() => {
@@ -802,11 +878,15 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준). 재방문 집합은 창이 열릴 때 한 번만 — 글자 입력마다 전수 스캔하지 않게 (리뷰 63)
   const revisitIds = useMemo(() => revisitIdSet(), []);
-  const segIds = useMemo(() => segmentIdSets(), []); // 이탈 위험·충성 (136) — 전수 스캔 1회
+  const segIds = useMemo(() => allSegmentIdSets(), []); // 이탈 위험·충성 (136)·재예약 없음 (202) — 전수 스캔 1회
   const saved = useMemo(() => savedSegmentSets(), []); // 저장 세그먼트 (166)
+  const resendIds = useMemo(() => { const ids = resendSource ? recipientsOf(resendSource.id) : undefined; return ids ? new Set(ids) : undefined; }, [resendSource]); // 다시 보내기 수신 고객 — 사이드맵(이 PC) (207)
+  // 폰에서는 칩이 한 줄 가로 스크롤이라(213) 끝에 붙는 다시 보내기·태그 칩이 화면 밖에 남을 수 있다 → 선택된 칩을 보이는 곳으로 (215, 213 리뷰 M-2)
+  const selectedChipRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { selectedChipRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' }); }, [recipientMode]);
   const targetCustomers = useMemo(
-    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds, saved.sets))),
-    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds, saved],
+    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds, saved.sets, resendIds))),
+    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds, saved, resendIds],
   );
   const recipientCount = targetCustomers.length;
   // 광고성이면 수신 동의가 있고 이 채널을 거부하지 않은 고객만 (155)
@@ -818,9 +898,8 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const contentBytes = smsBytes(isAd ? decorateAdMessage(content, optOutNumber || '080-000-0000') : content); // 광고면 (광고)·080 꼬리말이 붙은 실제 본문 기준으로 바이트·종류·비용 (159 리뷰 M-3)
 
   // 수신 대상의 실제 전화번호 목록 — 번호가 없거나 10~11자리가 아닌 것('010-1', 내선 포함)은 발송·비용 추정에서 뺀다(게이트웨이 실패를 발송 뒤에 알던 것, 14차 #M8)
-  const recipientPhones = adEligible
-    .map(c => c.phone)
-    .filter((p): p is string => { const k = normalizePhone(p); return k.length === 10 || k.length === 11; });
+  const recipientCustomers = adEligible.filter(c => { const k = normalizePhone(c.phone); return k.length === 10 || k.length === 11; });
+  const recipientPhones = recipientCustomers.map(c => c.phone);
 
   // 90바이트를 넘긴 SMS는 LMS로 나간다 — 비용 추정도 같은 기준 (UX 점검 2026-11-19)
   const effectiveType: MessageType = msgType === 'sms' && contentBytes > SMS_BYTE_LIMIT ? 'lms' : msgType;
@@ -885,9 +964,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       phones: recipientPhones,
     });
 
+    const recipientIds = recipientCustomers.map(c => c.id); // 고객 활동 타임라인·고객 필터·다시 보내기용 사이드맵 (204·206)
     if (result.pending) {
       // 게이트웨이 미연동 — 발송되지 않았음을 명확히 기록
-      MessageHistoryStore.save({
+      rememberRecipients(MessageHistoryStore.save({
         type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
@@ -899,14 +979,14 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
-      });
+      }).id, recipientIds);
       setSending(false);
       setSendResult('pending');
       setResultMessage(result.reason ?? '게이트웨이 미연동');
       onSent();
     } else if (result.sent > 0) {
       // 실제 발송 성공 (일부 실패 포함 — 부분 성공도 sent로 기록해 성공/실패 건수 모두 노출)
-      MessageHistoryStore.save({
+      rememberRecipients(MessageHistoryStore.save({
         type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
@@ -918,7 +998,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         sentAt: new Date().toISOString(),
         status: 'sent',
         cost: estimatedCost,
-      });
+      }).id, recipientIds);
       setSending(false);
       setSendResult('success');
       setSendPartial(result.failed > 0);
@@ -931,7 +1011,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
       if (result.failed === 0) setTimeout(() => { onClose(); }, 1800); // 일부 실패는 실패 인원을 읽을 수 있게 [닫기]로만 (123~126 리뷰 #M2)
     } else {
       // 발송 실패
-      MessageHistoryStore.save({
+      rememberRecipients(MessageHistoryStore.save({
         type: sendType,
         templateId: selectedTemplate?.id,
         templateName: selectedTemplate?.name,
@@ -943,7 +1023,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         sentAt: new Date().toISOString(),
         status: 'failed',
         cost: 0,
-      });
+      }).id, recipientIds);
       setSending(false);
       setSendResult('error');
       setResultMessage(result.reason ?? '발송 실패');
@@ -997,10 +1077,11 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
           {/* Message Type */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-2">발송 채널</label>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap" role="group" aria-label="발송 채널">
               {msgTypes.map(t => (
                 <button
                   key={t.key}
+                  aria-pressed={msgType === t.key} /* 선택을 색으로만 알리던 것 (217) */
                   onClick={() => setMsgType(t.key)}
                   disabled={t.disabled}
                   className={clsx(
@@ -1030,21 +1111,24 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
                 <button type="button" onClick={() => setOnlyCustomer(null)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">대상 바꾸기</button>
               </div>
             ) : (
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible py-1 -my-1 -mx-1 px-1" data-testid="recipient-chips" role="group" aria-label="수신 대상">
               {(() => {
-                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
+                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal', 'norebook'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
+                if (resendSource && !keys.includes(`resend:${resendSource.id}` as Segment)) keys.push(`resend:${resendSource.id}` as Segment); // 다시 보내기 칩은 다른 칩을 눌렀다가도 되돌아올 수 있게 항상 (210, 207 리뷰 L-5)
                 if ((recipientMode.startsWith('tag:') || recipientMode.startsWith('saved:')) && !keys.includes(recipientMode)) keys.push(recipientMode);
                 return keys;
               })().map(key => ({
                 key,
-                label: `${segmentLabel(key, saved.list)} (${customers.filter(segmentFilter(key, revisitIds, segIds, saved.sets)).length}명)`,
+                label: `${segmentLabel(key, saved.list)} (${customers.filter(segmentFilter(key, revisitIds, segIds, saved.sets, resendIds)).length}명)`,
               })).map(r => (
                 <button
                   key={r.key}
+                  ref={recipientMode === r.key ? selectedChipRef : undefined}
+                  aria-pressed={recipientMode === r.key}
                   onClick={() => setRecipientMode(r.key as typeof recipientMode)}
                   className={clsx(
-                    'px-3 py-2 text-sm font-medium rounded-xl border transition-all',
+                    'flex-shrink-0 whitespace-nowrap min-h-[36px] lg:min-h-0 px-3 py-2 text-sm font-medium rounded-xl border transition-all', // 폰 터치 36px·줄바꿈 금지 (213)
                     recipientMode === r.key
                       ? 'bg-primary-600 text-white border-primary-600'
                       : 'bg-white text-gray-600 border-gray-200'

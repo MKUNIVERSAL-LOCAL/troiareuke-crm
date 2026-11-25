@@ -47,6 +47,10 @@ import { useIsMobileLayout } from '../../hooks/useMediaQuery';
 import { usePhotoCacheVersion } from '../../hooks/usePhotoCache';
 import { getCustomerRevisitInfo, getCustomerVisitCycle, getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { getProgramAlerts } from '../../lib/programAlerts';
+import { getNoRebookCustomerIds } from '../../lib/todayTasks';
+import { rememberRecipients } from '../../lib/messageRecipients';
+import { countAnonymizeResidue } from '../../lib/anonymizeResidueCount';
+import { describeAnonymizeResidue } from '../../lib/anonymizeResidue';
 import { buildSegmentIndex } from '../../lib/customerSegments';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
@@ -379,7 +383,7 @@ export default function Customers() {
   });
   useEffect(() => {
     // ?grade=는 첫 진입의 초기값으로만 쓰고 URL에서 지운다 — 남겨 두면 [필터 초기화] 뒤 보존기간 토글(URL 복사)·새로고침에 VIP로 되돌아간다 (리뷰 63)
-    const keys = ['grade', 'churn', 'revisit', 'programAlert'].filter(k => searchParams.get(k)); // 대시보드 딥링크 3종도 초기값으로만 (139 #M1)
+    const keys = ['grade', 'churn', 'revisit', 'programAlert', 'norebook'].filter(k => searchParams.get(k)); // 대시보드 딥링크 4종도 초기값으로만 — 칩 해제 뒤 새로고침에 되살아나지 않게 (139 #M1, 187 리뷰 M-1)
     if (keys.length === 0) return;
     const next = new URLSearchParams(searchParams);
     for (const k of keys) next.delete(k);
@@ -395,6 +399,8 @@ export default function Customers() {
   const [programAlertOnly, setProgramAlertOnly] = useState(() => searchParams.get('programAlert') === '1'); // 회차권 소진·만료 임박 (138)
   const revisitIds = useMemo(() => (revisitOnly ? new Set(getRevisitDueCustomers(0).map(d => d.customer.id)) : null), [revisitOnly, customers]);
   const programAlertIds = useMemo(() => (programAlertOnly ? new Set(getProgramAlerts().map(a => a.customer.id)) : null), [programAlertOnly, customers]);
+  const [norebookOnly, setNorebookOnly] = useState(() => searchParams.get('norebook') === '1'); // 이달 방문·다음 예약 없음 — 대시보드 재예약률 타일·오늘 할 일 딥링크 (184)
+  const norebookIds = useMemo(() => (norebookOnly ? getNoRebookCustomerIds() : null), [norebookOnly, customers]);
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
   type SortKey = 'recent' | 'name' | 'registered' | 'spent';
   const [sortKey, setSortKey] = useState<SortKey>('recent');
@@ -914,18 +920,18 @@ export default function Customers() {
       phones: selected.phone ? [selected.phone] : [],
     });
     // 게이트웨이 미연동(pending)은 발송을 시도한 것이 아니다 — 실패 건으로 이력·통계에 쌓지 않는다 (UX 점검 2026-11-19)
-    if (!result.pending) MessageHistoryStore.save({
+    if (!result.pending) rememberRecipients(MessageHistoryStore.save({ // 가드 안이라 pending 삼항은 데드 분기였음 — 제거 (206 리뷰 L-4). 수신 고객은 사이드맵에 (204·206)
       type: 'kakao-channel',
       templateName: '상담 결과 안내',
       title: `${selected.name}님 피부 상담 결과`,
       content,
       recipients: 1,
-      successCount: result.pending ? 0 : result.sent,
-      failCount: result.pending ? 1 : result.failed,
+      successCount: result.sent,
+      failCount: result.failed,
       sentAt: new Date().toISOString(), // 발송 화면과 같은 ISO — toLocaleString 행이 새로 생기지 않게 (6차 UX 감사 2026-11-20)
-      status: !result.pending && result.sent > 0 ? 'sent' : 'failed',
-      cost: !result.pending && result.sent > 0 ? 5 : 0,
-    });
+      status: result.sent > 0 ? 'sent' : 'failed',
+      cost: result.sent > 0 ? 5 : 0,
+    }).id, [selected.id]);
     setKakaoSending(false);
     if (result.pending) {
       setKakaoMsg('상담은 저장했습니다. 카카오 발송은 본사 서버에 발송사가 연동되면 되므로 지금은 실제로 전송되지 않았습니다. 발송 이력에는 남기지 않았습니다.');
@@ -1041,9 +1047,10 @@ export default function Customers() {
     const matchRevisit = !revisitIds || revisitIds.has(c.id);
     const matchProgram = !programAlertIds || programAlertIds.has(c.id);
     const matchSegment = !segmentFilterIds || segmentFilterIds.has(c.id); // 저장 세그먼트 (166)
-    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment;
+    const matchNoRebook = !norebookIds || norebookIds.has(c.id); // (184)
+    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment && matchNoRebook;
   }).sort(compareCustomers),
-  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds]);
+  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds, norebookIds]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -1053,7 +1060,7 @@ export default function Customers() {
   }, [customers, detailTick]);
   // 목록은 100명씩 — 전부 마운트하면 수백 명부터 폰에서 버벅인다. 검색·필터·정렬이 바뀌면 처음부터
   const [listLimit, setListLimit] = useState(LIST_PAGE);
-  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey, churnOnly, revisitOnly, programAlertOnly, segmentFilterId]); // (170 리뷰 L-6)
+  useEffect(() => { setListLimit(LIST_PAGE); }, [search, gradeFilter, tagFilter, retentionOnly, sortKey, churnOnly, revisitOnly, programAlertOnly, segmentFilterId, norebookOnly]); // (170 리뷰 L-6)
   const visible = useMemo(() => filtered.slice(0, listLimit), [filtered, listLimit]);
   // 데스크 입력 속도: 검색창에서 Enter → 첫 결과 열기, 전역 검색(?q=)으로 왔는데 1명만 맞으면 바로 열기 (입력 속도 감사 2026-11-18)
   // 상세를 열 때 누적 결제액·방문 횟수·마지막 방문일을 기록(결제·예약·시술)에서 다시 세어 어긋나 있으면 고친다 — 서버 결제 링크 자동 기록·다기기·복원 뒤 drift (정합성 감사 2026-11-19)
@@ -1091,10 +1098,10 @@ export default function Customers() {
     const tags = tagOptions;
     if (tags.length === 0) return null;
     return (
-      <div className="flex flex-wrap gap-1.5 pb-1" role="group" aria-label="태그 필터" data-testid="tag-filter">
+      <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible gap-1.5 py-1 -my-1 -mx-1 px-1" role="group" aria-label="태그 필터" data-testid="tag-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
         {tags.map(({ tag, count }) => (
           <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-            className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
+            className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
             #{tag} <span className="font-normal">{count}</span>
           </button>
         ))}
@@ -1103,20 +1110,20 @@ export default function Customers() {
   })();
   // 저장 세그먼트 칩 행 — 선택하면 조건으로 좁히고, 선택된 칩 옆에 [편집]. 만들기는 관리자(customer.pii 와 같은 관리자 묶음) (166)
   const savedSegmentRow = (savedSegments.length > 0 || canManage) ? (
-    <div className="flex flex-wrap items-center gap-1.5 pb-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">
+    <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible items-center gap-1.5 py-1 -my-1 -mx-1 px-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
       {savedSegments.map(sg => {
         const n = segmentCounts.get(sg.id) ?? 0;
         const on = segmentFilterId === sg.id;
         return (
           <button key={sg.id} type="button" aria-pressed={on} title={describeSegment(sg.condition)} onClick={() => setSegmentFilterId(on ? '' : sg.id)}
-            className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-[#1a3a8f] border-blue-200 hover:bg-blue-50'}`}>
+            className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-[#1a3a8f] border-blue-200 hover:bg-blue-50'}`}>
             {sg.name} <span className="font-normal">{n}</span>
           </button>
         );
       })}
-      {activeSegment && <button type="button" onClick={() => navigate(`/messaging?segment=saved:${activeSegment.id}`)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label={`${activeSegment.name} 세그먼트에 발송`}>이 세그먼트에 발송</button>}{/* 발송 창 딥링크 saved:<id> 의 생산자 (170 리뷰 L-2) */}
-      {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
-      {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
+      {activeSegment && <button type="button" onClick={() => navigate(`/messaging?segment=saved:${activeSegment.id}`)} className="flex-shrink-0 px-2 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label={`${activeSegment.name} 세그먼트에 발송`}>이 세그먼트에 발송</button>}{/* 발송 창 딥링크 saved:<id> 의 생산자 (170 리뷰 L-2) */}
+      {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
+      {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
     </div>
   ) : null;
   const tagChips = selected && (selected.tags || []).length > 0 ? (
@@ -1129,7 +1136,8 @@ export default function Customers() {
     if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
     const targets = filtered.filter(c => expiredIds.has(c.id) && !isAnonymized(c));
     if (targets.length === 0) return;
-    if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
+    const residueBulk = describeAnonymizeResidue(countAnonymizeResidue(targets.map(c => c.id))); // 발송 이력 본문·제품 판매 이름은 코어 수정 수단이 없어 남는다 — 사실대로 (216)
+    if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.${residueBulk ? `\n${residueBulk}` : ''}`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
     const n = anonymizeCustomers(targets.map(c => c.id));
     recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' }); // 파기 대장 (9차 점검 #29)
     notify(`고객 ${n}명을 익명화했습니다.`);
@@ -1443,7 +1451,8 @@ export default function Customers() {
   async function handleAnonymizeOne() {
     if (!selected || isAnonymized(selected)) return;
     if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
-    if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`, confirmLabel: '익명화', danger: true, returnFocusTo: menuAnchor() }))) return;
+    const residueOne = describeAnonymizeResidue(countAnonymizeResidue([selected.id])); // (216)
+    if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.${residueOne ? `\n${residueOne}` : ''}`, confirmLabel: '익명화', danger: true, returnFocusTo: menuAnchor() }))) return;
     const n = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
     recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
@@ -1619,6 +1628,12 @@ export default function Customers() {
             )}
             {programAlertOnly && (
               <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+            )}
+            {norebookOnly && (
+              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {norebookIds?.size ?? 0} ✕</button>
+            )}
+            {norebookOnly && (norebookIds?.size ?? 0) > 0 && ( /* 재예약 권유 문자까지 한 흐름 — 발송 창 딥링크 norebook 의 생산자 (202) */
+              <button type="button" onClick={() => navigate('/messaging?segment=norebook')} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label="재예약 없음 고객에게 발송" data-testid="norebook-send">이 고객들에게 발송</button>
             )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
@@ -2145,6 +2160,12 @@ export default function Customers() {
             )}
             {programAlertOnly && (
               <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+            )}
+            {norebookOnly && (
+              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {norebookIds?.size ?? 0} ✕</button>
+            )}
+            {norebookOnly && (norebookIds?.size ?? 0) > 0 && ( /* 재예약 권유 문자까지 한 흐름 — 발송 창 딥링크 norebook 의 생산자 (202) */
+              <button type="button" onClick={() => navigate('/messaging?segment=norebook')} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label="재예약 없음 고객에게 발송" data-testid="norebook-send">이 고객들에게 발송</button>
             )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}

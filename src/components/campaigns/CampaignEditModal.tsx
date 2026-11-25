@@ -3,7 +3,11 @@ import { useState } from 'react';
 import Modal from '../ui/Modal';
 import { notify } from '../../lib/notify';
 import { saveCampaign, newCampaignDraft, type CampaignInput } from '../../lib/campaignStore';
-import { TRIGGER_LABELS, TRIGGER_DAYS, TRIGGER_DEFAULT_REPEAT, REPEAT_LABELS, CAMPAIGN_VARS, describeTrigger, validateCampaign, type Campaign, type CampaignTrigger, type CampaignRepeat } from '../../lib/campaignRule';
+import { TRIGGER_LABELS, TRIGGER_DAYS, TRIGGER_DEFAULT_REPEAT, REPEAT_LABELS, CAMPAIGN_VARS, CAMPAIGN_SAMPLE_VARS, describeTrigger, validateCampaign, renderCampaignContent, type Campaign, type CampaignTrigger, type CampaignRepeat } from '../../lib/campaignRule';
+import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT } from '../../lib/smsBytes';
+import { decorateAdMessage } from '../../lib/adComplianceRule';
+import { getOptOutNumber } from '../../lib/marketingConsent';
+import { SettingsStore } from '../../lib/store';
 import { CAMPAIGN_PRESETS } from '../../lib/campaignPresets';
 import { listSavedSegments } from '../../lib/savedSegments';
 
@@ -89,6 +93,24 @@ export default function CampaignEditModal({ campaign, onClose, onSaved }: { camp
               <button key={v} type="button" onClick={() => set('content', draft.content + v)} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200">{v}</button>
             ))}
           </div>
+          {draft.content.trim() && (() => { // 샘플 값으로 치환한 미리보기 — 매장 문구로 고치며 길이·광고 표기를 바로 본다 (201, PILOT 26)
+            // 매장명은 실제 발송(campaignTriggers)처럼 설정값만 — 비어 있으면 {매장명} 을 그대로 두고 경고(실제로는 미치환 변수로 발송이 건너뛰어진다) (203, 201 리뷰 L-4)
+            const shopName = SettingsStore.get().name;
+            const vars: Record<string, string> = { ...CAMPAIGN_SAMPLE_VARS };
+            if (shopName) vars['{매장명}'] = shopName; else delete vars['{매장명}'];
+            const rendered = renderCampaignContent(draft.content, vars);
+            const shopMissing = !shopName && rendered.includes('{매장명}');
+            const shown = draft.isAd ? decorateAdMessage(rendered, getOptOutNumber() || '(080 번호 미등록)') : rendered;
+            const bytes = smsBytes(draft.isAd ? decorateAdMessage(rendered, getOptOutNumber() || '080-000-0000') : rendered); // 바이트는 발송 창과 같은 플레이스홀더 길이로 (203, 201 리뷰 L-5)
+            const kind = draft.channel === 'sms' ? (bytes > SMS_BYTE_LIMIT ? `LMS ${bytes}/${LMS_BYTE_LIMIT}바이트` : `SMS ${bytes}/${SMS_BYTE_LIMIT}바이트`) : `카카오 ${bytes}바이트`;
+            return (
+              <div className="mt-2 text-xs rounded-xl border border-gray-100 bg-gray-50 px-3 py-2" data-testid="campaign-preview">
+                <p className="text-gray-500 mb-1">미리보기(샘플 고객) · {kind}{draft.channel === 'sms' && bytes > LMS_BYTE_LIMIT ? ' — 너무 깁니다' : ''}</p>
+                {shopMissing && <p className="text-amber-700 mb-1" role="status">매장명 미설정 — 설정에서 매장명을 입력해야 발송됩니다</p>}
+                <p className="text-gray-800 whitespace-pre-wrap">{shown}</p>
+              </div>
+            );
+          })()}
         </div>
         <label className="flex items-start gap-2 text-sm text-gray-800">
           <input type="checkbox" checked={draft.isAd} onChange={e => set('isAd', e.target.checked)} className="rounded mt-0.5" aria-label="광고성 캠페인" />

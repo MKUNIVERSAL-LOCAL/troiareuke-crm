@@ -291,6 +291,25 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(mobileTimeline.getByRole('listitem').first()).toBeVisible();
   await page.getByRole('button', { name: '뒤로가기' }).click();
 
+  // 문자 발송 창: 폰에서 수신 대상 칩이 한 줄 가로 스크롤이라 본문 입력이 화면 안에 남는다 (213)
+  await page.goto('/messaging');
+  await page.getByRole('button', { name: '메시지 보내기' }).click();
+  const sendDialog = page.getByRole('dialog', { name: '메시지 발송' });
+  await expect(sendDialog).toBeVisible();
+  const chips = sendDialog.getByTestId('recipient-chips');
+  // 한 줄 가로 스크롤인지 — 줄바꿈으로 되돌아가면 scrollWidth 가 늘지 않아 실패한다 (215, 213 리뷰 M-3)
+  const scroll = await chips.evaluate(el => ({ scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, height: el.getBoundingClientRect().height }));
+  expect(scroll.scrollWidth > scroll.clientWidth, '수신 대상 칩이 한 줄 가로 스크롤이 아니다').toBeTruthy();
+  expect(scroll.height < 60, `수신 대상 칩 줄이 한 줄이 아니다(높이 ${scroll.height})`).toBeTruthy();
+  const allChip = chips.getByRole('button', { name: /^전체 \(/ });
+  const allBox = await allChip.boundingBox();
+  expect(allBox && allBox.height >= 36, '수신 대상 칩이 터치 기준(36px)보다 작다').toBeTruthy();
+  const taBox = await sendDialog.locator('textarea').boundingBox(); // 본문 입력이 뷰포트 안에 있는지 — toBeVisible 은 화면 밖도 통과한다
+  expect(taBox && taBox.y >= 0 && taBox.y < page.viewportSize()!.height, '본문 입력이 화면 밖으로 밀렸다').toBeTruthy();
+  await expectNoHorizontalOverflow(page, '문자 발송 창');
+  await page.keyboard.press('Escape');
+  await expect(sendDialog).toHaveCount(0);
+
   // 설정 화면: 모바일에서 탭 칩이 가로로 쌓이고 입력란이 화면 안에 있다
   await page.goto('/settings');
   const saveBtn = page.getByRole('button', { name: '저장하기' }).filter({ visible: true }).first();

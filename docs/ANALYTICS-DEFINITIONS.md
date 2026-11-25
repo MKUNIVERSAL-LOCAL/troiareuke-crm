@@ -23,8 +23,9 @@
 | **객단가** | 실현 매출 ÷ 방문 횟수 | 위 + 방문일 | 전체 | 방문 0 → 없음 | 확정 | customerValueRule | **137** |
 | **연간 기대 매출** | 객단가 × (365 ÷ 개인 방문 주기) | 위 + 방문 주기(135) | 전체 | 객단가 없음 또는 **개인 주기 없음(방문 3회 미만)이면 없음** — 매장 기본 주기로는 예측하지 않는다(139). "지금 리듬이 1년 이어진다면"의 추정 — 확정 아님, 화면에 (예측) 표기, 매출 열람 권한(sales.view)에만 | **예측** | customerValueRule | 137, 139 |
 | **이달 방문 고객** | 이달에 방문일이 하나라도 있는 **집계 대상 고객**(샘플·익명화·삭제 제외) 수 | 방문일 | 이번 달 | todayTasks.getMonthlyKpis 가 isCountableCustomer 로 거른다(139) | 확정 | kpiRule.monthlyKpis | 138, 139 |
+| **오늘 할 일(대시보드)** | 행동 목록 11종(208 부터 "미연동으로 나가지 않았던 문자 다시 보내기" — 가장 최근 성공 건 전의 미연동 건, 수신 고객 기록·30일 안): 이탈 위험 고객 연락(churnRule 높음)·재방문 권장일 지난 고객(revisitRule·visitCycleRule)·회차권 소진·만료 임박(programAlerts)·이번 달 생일(발송 모듈 켜짐)·지난 예약 완료·노쇼 처리(pendingCompletion)·내일 예약 확인(reservationReminder)·예약 요청함 처리 전(오늘 이후 요청, 188·191)·이달 방문 뒤 다음 예약 없음(kpiRule.noRebookIds, 184)·재고 부족(stockRule)·캠페인 발송 대상(campaignCandidates, 177·178) | 각 규칙 모듈 | 시점(오늘) | 0건인 줄은 숨김, 줄이 없고 이달 지표도 없을 때만 카드 없음(지표가 있으면 "밀린 일이 없습니다"). 모듈 게이팅: 고객 줄 4종은 고객 모듈, 생일·캠페인은 고객+발송 모듈, 재예약 없음은 고객+예약 모듈, 예약·요청함은 예약 모듈, 재고는 제품 모듈. 각 줄은 해당 목록·화면으로 연결(딥링크는 1회 캡처 뒤 URL 비움) | 확정 | todayTasks.buildTodayTasks | 138, 177, 184, 188, 195 |
 | **재방문율(이달)** | 이달 방문 고객 중 이달 이전에도 방문 기록이 있는 고객 비율(%) | 방문일 | 이번 달 | 방문 고객 0 → 없음 | 확정 | kpiRule | **138** |
-| **재예약률(이달)** | 이달 방문 고객 중 **다음 예약**(위 정의)이 있는 고객 비율(%) | 방문일·reservations | 이번 달 | 방문 고객 0 → 없음. 오늘 완료된 예약은 분자에 안 들어간다(139) | 확정 | kpiRule | 138, 139 |
+| **재예약률(이달)** | 이달 방문 고객 중 **다음 예약**(위 정의)이 있는 고객 비율(%) | 방문일·reservations | 이번 달 | 방문 고객 0 → 없음. 오늘 완료된 예약은 분자에 안 들어간다(139). 분모 − 분자(이달 방문·다음 예약 없음) 고객 목록은 고객 목록 `?norebook=1` — 대시보드 타일·오늘 할 일에서 진입(184) | 확정 | kpiRule(noRebookIds) | 138, 139, 184 |
 | **가동률(이달)** | 오늘까지의 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간(근무표 또는 영업시간, 매장 휴일·휴게 제외) × 100(%) | reservations·staffSchedules·businessHours·holidays | 이번 달(오늘까지) | 가용 0 → 없음. 대기·취소·노쇼 제외, 종료 없는 예약은 60분, 근무 외·휴일 예약도 예약 분에 들어가 100% 초과 가능(그대로 표시). 겹친 예약은 각각 센다. 준비·정리 버퍼는 가용 분에서 빼지 않는다(브리핑 "오늘 빈 시간" 은 버퍼 반영 — 기준이 다름). 분자는 담당자 무관(비활성·미지정 담당 예약 포함), 분모는 활성 직원만 | 확정 | utilizationRule(대시보드 타일·월 브리핑 [확정] 줄) | 180·181 |
 | **이달 객단가(현금)** | 이달 완료 결제 합 ÷ 이달 방문 고객 수 | payments(completed, 이달)·방문일 | 이번 달 | 회차권 판매액 포함(현금 기준) — 고객 상세 객단가(실현)와 다름, 라벨 "(현금)" | 확정 | kpiRule | **138** |
 | 월 매출 | 결제일이 그 달인 완료(completed) 결제 금액 합 | payments(status=completed) | 월 | 환불·대기 제외(매출 화면 "총 매출"과 같은 정의) | 확정 | revenueMetricsRule.monthMetrics.total | 147 |
@@ -38,6 +39,7 @@
 | 손익분기 매출 | 판관비 ÷ (1 − 매출원가율), 원가율 = 매출원가(제품·소모품 매입) ÷ 월 매출 | expenses | 월 | 원가율 ≥ 1 이면 —, 매출 0·원가 0 이면 판관비 | 확정 | monthMetrics.breakEven | 147 |
 | 영업시간·시간당 매출 | 휴무·지정 휴일이 아닌 날의 (마감 − 오픈) 합(이달은 오늘까지), 매출 ÷ 영업시간 | 설정 businessHours·holidays | 월 | 영업시간 설정 없으면 — | 확정 | revenueMetricsRule.openHoursInMonth, monthMetrics.perHour | 147 |
 | 월말 예상 | 이달 매출 ÷ 지난 일수 × 그 달 일수 | 월 매출 | 이달 | 과거 달·매출 0 이면 — | **예측** | monthMetrics.projected | 147 |
+| 수동 발송 성과(발송 이력) | 그 발송의 수신 고객(이 PC 사이드맵 206) 기준, 발송일 D 부터 D+14 안의 예약(취소·노쇼 제외) 고객 수, 완료 결제 고객 수·금액 합 — 캠페인 성과와 같은 순수 규칙 | msg_history + msg_history_recipients(이 PC), reservations, payments | 발송 뒤 14일 | 수신 고객 기록이 없으면 버튼·표시 없음; 창 안 발생 = 인과 아님 | **추정** | campaignPerformanceRule + messagePerformance | 211 |
 | 캠페인 성과 | 고객별 첫 발송일 D 부터 D+14 안의 예약(취소·노쇼 제외) 고객 수, 완료 결제 고객 수·금액 합 | campaign_sends(이 기기 발송 성공), reservations, payments | 발송 뒤 14일 | 발송 0 이면 표시 없음; 창 안 발생 = 인과 아님 | **추정** | campaignPerformanceRule | 157 |
 | **세그먼트 조건(저장 세그먼트)** | 등급·태그(하나 이상)·마지막 방문 뒤 일수 범위(미방문 제외)·방문 횟수 범위·누적 결제 이상·**최근 N일(기본 90, 양끝 포함) 완료 결제 합 이상(환불 행은 환불일에 차감 — 순액)·진행 중(미완료·만료 전) 회차권 유무**(175·178)·RFM 구분·이탈 위험·이달 생일·다음 예약 유무·광고 수신 상태 — 전부 AND, 빈 조건은 저장 불가, 금액·방문 횟수 최소는 1 이상 | customerStats·customerSegments·marketingConsent 로 만든 고객 사실(buildSegmentFacts) | 시점 | 자료 없는 항목(RFM null 등)은 그 조건에 불일치 | 확정(규칙) | segmentFilterRule.matchesSegment | 166·175·178 |
 | **캠페인 대상·멱등키** | 트리거(11종)가 고른 고객 중 멱등키(캠페인·고객·회차 버킷) 미발송·광고면 수신 동의·채널 거부 아님·전화 10~11자리·변수 치환 완료·(선택)세그먼트 안 | campaignTriggers(reminderEngine·programAlerts·customerStats) | 오늘 | 제외 사유 6종 집계, 성공 발송만 기록(기기별) | 확정(규칙) | campaignRule.selectCandidates | 156, 167 |
@@ -53,7 +55,7 @@ LTV(예측, 연간 기대 × 기대 유지 기간 — 유지율 자료가 쌓인
 |---|---|---|
 | customerStatsRule·visitCycleRule·revisitRule·upcomingRule·rfmRule·churnRule·customerValueRule·kpiRule·utilizationRule·revenueMetricsRule·programSessionsRule·campaignPerformanceRule·segmentFilterRule·pilotMetricsRule·ai/briefingRule(지표 서식·targetPace·describeCause) | 분석 지표·브리핑 라벨 서식 | 이 문서 표, `AI-TEST-REPORT.md` |
 | schedulingRule·availabilityRule·staffScheduleRule·resourceRule·publicSlotsRule·reservationPolicyRule | 예약 겹침·가용 시각·근무 창·자원 상한·공개 슬롯·겹침 정책(allow/confirm/block) | `COMMERCIALIZATION-ROADMAP` 140~143 기록, `CUSTOMER-PORTAL-DESIGN-2026-11-24.md` |
-| stockLedgerRule·stockRule·programLedgerRule·refundRule | 재고 원장·안전 재고·회차 원장·환불 모델(결정 #9) | 로드맵 145~148, `REFUND-MODEL-DESIGN-2026-11-24.md` |
+| stockLedgerRule·stockRule·programLedgerRule·refundRule·backupSanitize(백업 비밀값 제거·테이블 모양 판정) | 재고 원장·안전 재고·회차 원장·환불 모델(결정 #9)·백업 파일 규칙 | 로드맵 145~148, `REFUND-MODEL-DESIGN-2026-11-24.md` |
 | adComplianceRule·consentRule·campaignRule·duplicateRule·birthdayRule | 광고 표기·법정 시간·동의 태그·캠페인 대상/멱등키·중복 후보(한계: 국가번호 +82 표기와 010 표기는 다른 번호로 봄 — 뒷 4자리 사유로만 잡힘)·생일 | 로드맵 155~157·171, `AI-SECURITY-POLICY.md`(동의 관련 PII) |
 | ai/modelRouterRule·ai/creditLedgerRule·ai/costSimulatorRule | 본사 AI 모델 선택·크레딧 원장·원가 시뮬레이션 | `AI-GATEWAY-ARCHITECTURE.md`, `AI-PRICING-AND-COST-ANALYSIS.md` |
 | portalRule | 고객 포털 OTP 정책·노출 항목 | `CUSTOMER-PORTAL-DESIGN-2026-11-24.md` |
