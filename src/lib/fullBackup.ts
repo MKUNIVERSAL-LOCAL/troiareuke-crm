@@ -61,9 +61,8 @@ export function buildBackup(appVersion: string, shopName?: string): BackupFile {
     const raw = localStorage.getItem(key);
     if (raw === null) continue;
     let value: unknown;
-    try { value = JSON.parse(raw); } catch { value = { [RAW_MARK]: raw }; }
+    try { value = JSON.parse(raw); } catch { value = { [RAW_MARK]: containsKeyLike(raw) ? scrubKeyLike(raw) : raw }; } // JSON 이 아닌 원문은 RAW 포장 — 키 꼴 문자열은 여기서 스크럽(154 리뷰 M-3, 199 리뷰 L-1: 문자열 value 분기는 195 뒤 늘 제외돼 죽은 줄이었다)
     if (table === 'settings' && isRecord(value)) value = stripSettingsSecrets(value);
-    if (typeof value === 'string' && containsKeyLike(value)) value = scrubKeyLike(value); // 자유 텍스트에 붙여넣은 키도 백업으로 새지 않게 (154 리뷰 M-3)
     // 테이블 모양(설정은 객체, 나머지는 배열, JSON 이 아니면 RAW 포장)이 아닌 값 — 예: 체크리스트 숨김 플래그 `setup_hidden`='1' — 은 넣지 않는다. 넣으면 parseBackup 이 "손상" 으로 거부해 복원이 막혔다 (195 리뷰 H-1)
     if (backupTableShape(table, value) !== 'ok') continue; // 판정은 순수 backupSanitize.backupTableShape (196)
     tables[table] = value;

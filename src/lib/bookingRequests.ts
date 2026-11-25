@@ -37,7 +37,8 @@ function genId(): string {
 
 // 마지막으로 읽은 목록(캐시) — 동기 건수 조회(대시보드)가 어댑터를 우회하지 않게 list/add/update 가 갱신한다. 서버 어댑터로 바뀌어도 같은 경로 (198, 191 리뷰 L-4)
 let cache: BookingRequest[] | null = null;
-function remember(list: BookingRequest[]): BookingRequest[] { cache = list; return list; }
+let cacheKey = ''; // 어느 매장 키의 목록인지 — 계정 전환(로컬 모드 재로그인은 reload 없음) 뒤 다른 매장 건수를 보이지 않게 (199 리뷰 M-1)
+function remember(list: BookingRequest[]): BookingRequest[] { cache = list; cacheKey = KEY(); return list; }
 
 /** 로컬 어댑터 — 이 기기에만 남는다(요청은 접수 직원이 바로 처리하는 짧은 대기 목록). 서버 어댑터는 승인 B-2 뒤 */
 const localAdapter: BookingRequestAdapter = {
@@ -65,9 +66,13 @@ export const CHANNEL_LABEL: Record<BookingChannel, string> = { phone: '전화', 
 /** 요청 채널 → 예약 유입 경로(SourceBadge) */
 export const CHANNEL_SOURCE: Record<BookingChannel, ReservationSource> = { phone: 'phone', kakao: 'kakao', naver: 'naver', web: 'app' };
 
-/** 오늘 이후 처리 전 요청 건수(동기) — 대시보드 오늘 할 일용. 어댑터가 갱신한 캐시를 읽고, 아직 한 번도 읽지 않았으면 로컬 어댑터에서만 직접 읽는다(서버 어댑터면 0 — 첫 list 뒤 정확) (188·198) */
+/**
+ * 오늘 이후 처리 전 요청 건수(동기) — 대시보드 오늘 할 일용 (188·198·199).
+ * 로컬 어댑터는 항상 저장소를 직접 읽는다 — 다른 탭의 접수·거절, 서버 모드 로그아웃 wipe, 계정 전환 뒤에도 틀린 건수가 없게(199 리뷰 M-1: 캐시 우선은 회귀였다).
+ * 캐시는 서버 어댑터(B-2) 대비용 — 같은 매장 키의 목록일 때만 쓰고, 아직 읽기 전이면 0(첫 list 뒤 정확).
+ */
 export function countNewRequests(today: string): number {
-  const list = cache ?? (bookingRequests === localAdapter ? remember(read()) : []);
+  const list = bookingRequests === localAdapter ? read() : (cache && cacheKey === KEY() ? cache : []);
   return list.filter(r => r.status === 'new' && r.date >= today).length; // 지난 날짜 요청은 요청함에서만(영구 긴급 줄 방지) (191 리뷰)
 }
 

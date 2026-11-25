@@ -60,9 +60,10 @@ export default function BookingRequestsModal({ onClose, onRegister }: { onClose:
     if (stale.length === 0) return;
     if (!(await askConfirm({ title: '지난 요청 정리', confirmLabel: '정리', cancelLabel: '닫기', message: `날짜가 지난 처리 전 요청 ${stale.length}건을 전부 거절로 처리할까요?\n거절한 요청의 이름·전화는 7일 뒤 삭제됩니다.` }))) return;
     try {
-      for (const r of stale) await rejectRequest(r.id);
+      let done = 0;
+      for (const r of stale) if (await rejectRequest(r.id)) done += 1; // 다른 탭이 이미 처리한 건은 null — 실제 처리 수만 (199 리뷰 L-2)
       await reload();
-      notify.info(`지난 요청 ${stale.length}건을 거절로 정리했습니다.`);
+      notify.info(`지난 요청 ${done}건을 거절로 정리했습니다.`);
     } catch {
       notify.error('일부 요청을 처리하지 못했습니다. 다시 시도해주세요.');
       await reload();
@@ -133,7 +134,7 @@ export default function BookingRequestsModal({ onClose, onRegister }: { onClose:
         <div className="space-y-2">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Inbox size={14} /> 처리 전 요청 {list.length > 0 && <span className="text-[#1a3a8f]">{list.length}건</span>}</p>
           {stale.length > 0 && (
-            <div className="flex items-center justify-between gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+            <div role="status" className="flex items-center justify-between gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
               <span>날짜가 지난 요청 {stale.length}건이 남아 있습니다.</span>
               <button type="button" onClick={() => void clearStale()} className="px-2.5 py-1 min-h-[32px] rounded-lg bg-white border border-amber-200 font-medium hover:bg-amber-100" data-testid="booking-request-clear-stale">지난 요청 {stale.length}건 거절로 정리</button>
             </div>
