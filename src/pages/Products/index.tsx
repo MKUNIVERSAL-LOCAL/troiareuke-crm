@@ -1,4 +1,5 @@
-﻿import { useState, useCallback, useEffect, useMemo } from 'react';
+﻿import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { createSubmitLock } from '../../lib/submitLock';
 import { tagRefund } from '../../lib/refundDate';
 import { canceledSaleIds } from '../../lib/saleCancel';
 import { saleCustomerNameResolver } from '../../lib/customerIdentity';
@@ -776,6 +777,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
     notes: '',
   });
   const [saving, setSaving] = useState(false);
+  const saleLock = useRef(createSubmitLock()); // 이중 제출 가드 (221, GAP P-4)
 
   const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
@@ -805,6 +807,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       return;
     }
     { const blocked = monthCloseBlock(form.saleDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    if (!saleLock.current.acquire()) return; // 이중 제출 — 같은 판매가 두 건 기록되지 않게 (221, GAP P-4)
     setSaving(true);
     const sale = ProductSaleStore.save({
       customerId: form.customerId || undefined,

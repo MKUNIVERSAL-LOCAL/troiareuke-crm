@@ -60,6 +60,7 @@ import { isGatewayPendingHistory, countResendable } from '../src/lib/messageHist
 import { looksLikeAdMessage, undecorateAdMessage } from '../src/lib/adComplianceRule';
 import { anonymizeResidue, describeAnonymizeResidue } from '../src/lib/anonymizeResidue';
 import { shouldResetAppLock } from '../src/lib/appLockResetRule';
+import { createSubmitLock } from '../src/lib/submitLock';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -1261,4 +1262,17 @@ test('화면 PIN 초기화 판정 — 처음 본 초기화는 적용, 이미 처
   expect(shouldResetAppLock(undefined, null)).toBe(false);
   expect(shouldResetAppLock('어제', null)).toBe(false);     // 깨진 값으로 PIN 을 지우지 않는다
   expect(shouldResetAppLock(t1, '깨짐')).toBe(true);        // 기기 기록이 깨졌으면 서버를 따른다
+});
+
+test('이중 제출 잠금 — 한 번만 통과하고, 풀면 다시 통과한다 (221, GAP P-4)', () => {
+  const lock = createSubmitLock();
+  expect(lock.locked).toBe(false);
+  expect(lock.acquire()).toBe(true);   // 첫 저장
+  expect(lock.locked).toBe(true);
+  expect(lock.acquire()).toBe(false);  // 두 번째 클릭은 막힌다
+  expect(lock.acquire()).toBe(false);
+  lock.release();                       // 폼을 닫으면
+  expect(lock.acquire()).toBe(true);    // 다시 저장할 수 있다
+  const other = createSubmitLock();     // 잠금은 폼마다 따로
+  expect(other.acquire()).toBe(true);
 });

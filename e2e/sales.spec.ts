@@ -1,6 +1,7 @@
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer } from './helpers';
 import { salesScenario } from './scenarios';
+import { pickCustomer } from './helpers';
 
 /**
  * 돈 흐름 E2E (PC 폭) — 결제 → 지출(매입) → 손익계산서 → 환불이 숫자로 맞게 반영되는지.
@@ -9,6 +10,7 @@ import { salesScenario } from './scenarios';
  */
 
 const acc = makeAccount('SL');
+const acc2 = makeAccount('SL2'); // 이중 제출 테스트는 매출이 섞이지 않게 별도 매장
 
 test('결제 → 지출 → 손익계산서 → 환불이 숫자로 맞게 반영된다', async ({ page }) => {
   test.slow();
@@ -16,4 +18,22 @@ test('결제 → 지출 → 손익계산서 → 환불이 숫자로 맞게 반�
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
   await salesScenario(page, acc);
+});
+
+test('결제 등록 버튼을 두 번 빠르게 눌러도 한 건만 저장된다 (221, GAP P-4)', async ({ page }) => {
+  test.slow();
+  page.on('dialog', d => d.accept());
+  await signupAndOnboard(page, acc2);
+  await createCustomer(page, acc2);
+  await page.goto('/sales');
+  await page.getByRole('button', { name: '결제 등록' }).filter({ visible: true }).first().click();
+  const d = page.getByRole('dialog', { name: '결제 등록' });
+  await expect(d).toBeVisible();
+  await pickCustomer(page, acc2.customer, d);
+  await d.getByLabel('결제 금액').fill('70000');
+  await d.getByRole('button', { name: '결제 등록' }).dblclick(); // 한 제스처로 두 번 — 이중 제출 가드가 두 번째를 막아야 한다
+  await expect(d).toHaveCount(0);
+  // 매출 합계가 7만 원 한 건이어야 한다(두 건이면 14만 원·2건)
+  await expect(page.getByText('70,000원').first()).toBeVisible();
+  await expect(page.getByText('140,000원')).toHaveCount(0);
 });

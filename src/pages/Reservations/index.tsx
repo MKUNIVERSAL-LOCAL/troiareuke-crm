@@ -1,6 +1,7 @@
 ﻿import { useState, useCallback, useEffect, useMemo, type CSSProperties, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { askConfirm } from '../../lib/confirmDialog';
+import { createSubmitLock } from '../../lib/submitLock';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, addMinutes } from 'date-fns';
@@ -1754,8 +1755,10 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
     status: 'completed' as const,
   };
 
+  const saveLock = useRef(createSubmitLock());
   const handleSave = () => {
-    { const blocked = monthCloseBlock(basePayment.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    if (!saveLock.current.acquire()) return; // 이중 제출 가드 (221, GAP P-4)
+    { const blocked = monthCloseBlock(basePayment.paymentDate); if (blocked) { saveLock.current.release(); notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     if (mode === 'single') {
       PaymentStore.save({ ...basePayment, amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
       rememberPaymentMethod(method);

@@ -47,7 +47,7 @@
 | P-1 | 회차권 차감·만료·연장·완료 | ✅ 146 | `programSessions*`, `programLedgerRule`(파생 원장), `ProgramManageModal` 회차 이력 | 동시 차감은 파생으로 우회(코어 delta 는 A-15a) | ERPNext 원장(B) | 회차 원장 컬렉션(차감/복원/조정 행) → 이력·감사, 코어 delta 는 A-15a | 중 | 상 | 2 | A-15a(근본) | 원장 합 = 파생 합 스펙 |
 | P-2 | 금액권(선불 충전) | ✗ | — | 회차 아닌 금액 충전 없음 | Mindbody/Fresha 패키지 | 2차(원장 P-1 위에) | 중 | 중 | 2 | 정책 | — |
 | P-3 | 환불 모델 | ◐ 148 | `refundRule.ts`(B 모델 규칙·검증·제안액, 스펙 고정) + 설계서, UI 연결은 결정 #9 뒤 | 부분 환불·사유·승인자 없음 | ERPNext Credit Note(B) | 결정 #9 뒤 비코어 `refunds` 컬렉션(원 결제 참조) | 중 | 상 | 2 | 결정 #9 | 매출·손익·엑셀 정합 E2E |
-| P-4 | 결제 중복·Idempotency | ◐ | 모달 닫힘·saving 플래그 | 서버 멱등키 없음(outbox 재전송은 PUT upsert 라 멱등) | ERPNext(B) | 클라이언트 생성 id 기반 멱등은 이미 성립 → 결제 링크 웹훅 중복은 서버 검증 있음. 문서화 + 테스트 추가 | 낮음 | 중 | 0.5 | — | test:outbox 재전송 1건 |
+| P-4 | 결제 중복·Idempotency | ◐ 221 | 클라이언트 이중 제출 잠금(submitLock — 결제 등록·예약 완료 결제·제품 판매), 모달 닫힘·saving 플래그 | 서버 멱등키 없음(outbox 재전송은 PUT upsert 라 멱등) | ERPNext(B) | 클라이언트 생성 id 기반 멱등은 이미 성립 → 결제 링크 웹훅 중복은 서버 검증 있음. 문서화 + 테스트 추가 | 낮음 | 중 | 0.5 | — | test:outbox 재전송 1건 |
 | P-5 | 재고 입출고 원장 | ◐ 145 | `stockLedgerRule`+로컬 원장(입고 단가·사유·실사·판매·취소 행, 대조·조정), 서버 원장은 B-2/S-7 뒤 | 입고 단가·사유·실사 이력 없음, 동시 수정 유실 | ERPNext Stock Ledger(B) | `stockLedger` 컬렉션(입고/판매/조정/실사 행) → 현재고 파생, 매입 지출과 연결 | 중 | 상 | 2 | — | 원장 합 = 재고 스펙 |
 | P-6 | 매출 지표 | ✅ 147 | `revenueMetricsRule` + 이달 지표 카드(10개) + 월 목표 | 일/월/손익은 있으나 전년 대비·목표 달성률·시간당·신규/기존·할인·미사용 회원권 잔액·BEP·월말 예상 없음 | Metabase Offset(B) | `analytics/revenue.ts` 순수 지표 + 매출 화면 카드, 회원권 판매 vs 사용(실현) 구분 | 낮음 | 상 | 3 | — | 스펙·드릴다운 |
 | P-7 | 마감 확정·수정 잠금 | ✅ 147 | `monthClose`(설정 행) + 저장 경로 가드 6곳 | 세무 신고 후 숫자 변경 가능 | ERPNext docstatus(B) | 월 마감 잠금(비코어 preferences + 저장 경로 가드) | 중 | 중 | 1 | 정책 | 잠긴 달 수정 차단 E2E |

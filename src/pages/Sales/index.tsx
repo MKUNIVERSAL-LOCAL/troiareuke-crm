@@ -3,6 +3,7 @@ import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { askConfirm } from '../../lib/confirmDialog';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { createSubmitLock } from '../../lib/submitLock';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
@@ -342,7 +343,9 @@ export default function Sales() {
 
   const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: (getLastPaymentMethod() ?? '카드') as PaymentMethod, paymentDate: today(), memo: '', discountAmount: '0', status: 'completed', referenceId: '' });
 
+  const saveLock = useRef(createSubmitLock());
   function closeModal() {
+    saveLock.current.release(); // 폼을 닫으면 다시 저장할 수 있게 (221)
     setShowModal(false);
     setEditingId(null);
     resetForm();
@@ -392,6 +395,7 @@ export default function Sales() {
   // 결제 등록/수정
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!saveLock.current.acquire()) return; // 이중 제출 — 같은 결제가 두 건 저장되지 않게 (221, GAP P-4)
     const customer = customers.find(c => c.id === form.customerId);
     const typeLabels = { single_treatment: '단건 시술', program: '프로그램', product: '제품 판매', other: '기타' };
 
