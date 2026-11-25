@@ -27,7 +27,7 @@ export default function FollowUpCard({ customerId, actor, onSaved }: { customerI
   function handleSave() {
     const ok = saveFollowUp(customerId, { result, note: note.trim() || undefined, snoozeDays: days, actor });
     if (!ok) { notify('연락 기록을 저장하지 못했습니다. 저장 공간을 확인해주세요.'); return; }
-    notify.success(days > 0 ? `연락을 기록하고 ${days}일간 할 일 목록에서 숨깁니다.` : '연락을 기록했습니다(할 일 목록에는 계속 보입니다).');
+    notify.success(days > 0 ? `연락을 기록했습니다. 앞으로 ${days}일(오늘 포함) 할 일 목록에서 숨깁니다.` : '연락을 기록했습니다(할 일 목록에는 계속 보입니다).');
     setOpen(false);
     setNote('');
     setTick(t => t + 1);
@@ -82,6 +82,7 @@ export default function FollowUpCard({ customerId, actor, onSaved }: { customerI
             <input type="text" value={note} onChange={e => setNote(e.target.value)} maxLength={40} placeholder="예: 다음 달 초에 다시 연락"
               className="w-full min-h-[44px] border border-gray-200 rounded-xl px-3 text-sm outline-none focus:border-[#1a3a8f]" />
           </label>
+          <p className="text-2xs text-gray-400">기록은 매장 설정에 저장되어 같은 지점 모든 PC 가 함께 봅니다. 다른 PC 와 같은 시각(1분 안)에 적으면 드물게 한쪽이 덮일 수 있습니다.</p>
           <button type="button" onClick={handleSave} data-testid="follow-up-save"
             className="w-full min-h-[44px] rounded-xl bg-[#1a3a8f] text-white text-sm font-semibold hover:bg-[#15306e]">
             연락 기록 저장

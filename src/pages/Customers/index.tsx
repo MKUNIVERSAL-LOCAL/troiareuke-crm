@@ -1,5 +1,5 @@
 import { isImeKey } from '../../lib/ime';
-﻿import { useState, useEffect, useRef, useMemo } from 'react';
+﻿import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { monthCloseBlock } from '../../lib/monthClose';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
@@ -407,7 +407,7 @@ export default function Customers() {
   const [revisitOnly, setRevisitOnly] = useState(() => searchParams.get('revisit') === '1'); // 재방문 권장일 지남 (138)
   const [programAlertOnly, setProgramAlertOnly] = useState(() => searchParams.get('programAlert') === '1'); // 회차권 소진·만료 임박 (138)
   const revisitIds = useMemo(() => (revisitOnly ? new Set(getRevisitDueCustomers(0).map(d => d.customer.id)) : null), [revisitOnly, customers]);
-  const programAlertIds = useMemo(() => (programAlertOnly ? new Set(getProgramAlerts().map(a => a.customer.id)) : null), [programAlertOnly, customers]);
+  const programAlertIds = useMemo(() => (programAlertOnly ? new Set(getProgramAlerts().map(a => a.customer.id)) : null), [programAlertOnly, customers]); // 고객 단위 — 한 고객의 알림 2건을 2명으로 세지 않는다 (250 리뷰 L-8)
   const [norebookOnly, setNorebookOnly] = useState(() => searchParams.get('norebook') === '1'); // 이달 방문·다음 예약 없음 — 대시보드 재예약률 타일·오늘 할 일 딥링크 (184)
   const norebookIds = useMemo(() => (norebookOnly ? getNoRebookCustomerIds() : null), [norebookOnly, customers]);
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
@@ -428,7 +428,12 @@ export default function Customers() {
   const activeSegment = savedSegments.find(sg => sg.id === segmentFilterId) ?? null;
   const segmentFilterIds = useMemo(() => (activeSegment ? segmentIds(activeSegment.condition, segmentFacts) : null), [activeSegment, segmentFacts]);
   const segmentCounts = useMemo(() => new Map(savedSegments.map(sg => [sg.id, segmentIds(sg.condition, segmentFacts).size])), [savedSegments, segmentFacts]); // 칩 인원은 검색 글자마다 다시 세지 않게 (170 리뷰 L-1)
-  const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
+  // 연락을 미뤄 둔 고객 — 할 일 딥링크 필터(이탈 위험·재방문·회차권·재예약 없음)에서만 숨긴다 (249)
+  const [followUpTick, setFollowUpTick] = useState(0); // 연락 기록 저장 뒤 숨김 집합·칩 숫자를 다시 센다 (249)
+  const snoozedIds = useMemo(() => snoozedCustomerIds(), [customers, followUpTick]);
+  // 칩 숫자도 목록·대시보드와 같은 기준(미루기 제외) — 세 숫자가 갈라지던 것 (250 리뷰 M-4)
+  const churnHighCount = useMemo(() => { let n = 0; for (const [id, v] of segmentIndex.entries()) if (v.churn?.level === 'high' && !snoozedIds.has(id)) n++; return n; }, [segmentIndex, snoozedIds]);
+  const chipCount = useCallback((ids: Set<string> | null) => (ids ? [...ids].filter(id => !snoozedIds.has(id)).length : 0), [snoozedIds]);
   // 등급 올릴 후보 — 전수 1회(기록 재계산값 기준). 자동 적용은 하지 않는다 (236, GAP C-1)
   const gradeSuggestions = useMemo(() => {
     const out: { id: string; name: string; current: string; suggested: SuggestGrade; reason: string }[] = [];
@@ -1204,35 +1209,29 @@ export default function Customers() {
     [customers, retentionPolicy.enabled, retentionPolicy.years],
   );
   // 필터링 — 입력·정렬·목록이 바뀔 때만 (3,000명 × 초성 검색 + 한글 정렬을 매 렌더마다 하지 않게, 성능 감사 2026-11-18)
-  // 연락을 미뤄 둔 고객 — 할 일 딥링크 필터(이탈 위험·재방문·회차권·재예약 없음)에서만 숨긴다 (249)
-  const snoozedIds = useMemo(() => snoozedCustomerIds(), [customers, detailTick]);
   const contactFilterOn = churnOnly || revisitOnly || programAlertOnly || norebookOnly;
-  const filtered = useMemo(() => customers.filter(c => {
-    const matchSearch = matchesSearch(search, [c.name, c.phone, c.email]);
-    const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
-    const matchTag = !tagFilter || (c.tags || []).includes(tagFilter);
-    const matchRetention = !retentionOnly || expiredIds.has(c.id);
-    const matchChurn = !churnOnly || segmentIndex.get(c.id)?.churn?.level === 'high';
-    const matchRevisit = !revisitIds || revisitIds.has(c.id);
-    const matchProgram = !programAlertIds || programAlertIds.has(c.id);
-    const matchSegment = !segmentFilterIds || segmentFilterIds.has(c.id); // 저장 세그먼트 (166)
-    const matchNoRebook = !norebookIds || norebookIds.has(c.id); // (184)
-    const matchFollowUp = !contactFilterOn || !snoozedIds.has(c.id); // 미뤄 둔 고객은 그 기한까지 숨긴다 (249)
-    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment && matchNoRebook && matchFollowUp;
-  }).sort(compareCustomers),
-  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds, norebookIds, contactFilterOn, snoozedIds]);
-  // 숨긴 인원 — 조용히 줄어든 숫자는 거짓말이다 (249)
+  // 필터 술어 — filtered 와 "숨긴 인원" 이 **같은 조건**을 쓴다(미루기만 토글). 전에는 검색·등급·태그를
+  // 빼먹어 숨긴 인원이 과대로 나왔다 (250 리뷰 M-7)
+  const matchesFilters = useCallback((c: Customer, withFollowUp: boolean) => {
+    if (!matchesSearch(search, [c.name, c.phone, c.email])) return false;
+    if (!(gradeFilter === '전체' || c.grade === gradeFilter)) return false;
+    if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
+    if (retentionOnly && !expiredIds.has(c.id)) return false;
+    if (churnOnly && segmentIndex.get(c.id)?.churn?.level !== 'high') return false;
+    if (revisitIds && !revisitIds.has(c.id)) return false;
+    if (programAlertIds && !programAlertIds.has(c.id)) return false;
+    if (segmentFilterIds && !segmentFilterIds.has(c.id)) return false; // 저장 세그먼트 (166)
+    if (norebookIds && !norebookIds.has(c.id)) return false; // (184)
+    if (withFollowUp && contactFilterOn && snoozedIds.has(c.id)) return false; // 미뤄 둔 고객은 그 기한까지 숨긴다 (249)
+    return true;
+  }, [search, gradeFilter, tagFilter, retentionOnly, expiredIds, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds, norebookIds, contactFilterOn, snoozedIds]);
+  const filtered = useMemo(() => customers.filter(c => matchesFilters(c, true)).sort(compareCustomers),
+  [customers, matchesFilters, sortKey]);
+  // 숨긴 인원 — 조용히 줄어든 숫자는 거짓말이다 (249). 같은 술어에서 미루기만 끄고 센다
   const hiddenByFollowUp = useMemo(() => {
     if (!contactFilterOn) return 0;
-    return customers.filter(c => {
-      if (!snoozedIds.has(c.id)) return false;
-      const inChurn = !churnOnly || segmentIndex.get(c.id)?.churn?.level === 'high';
-      const inRevisit = !revisitIds || revisitIds.has(c.id);
-      const inProgram = !programAlertIds || programAlertIds.has(c.id);
-      const inNoRebook = !norebookIds || norebookIds.has(c.id);
-      return inChurn && inRevisit && inProgram && inNoRebook;
-    }).length;
-  }, [customers, snoozedIds, contactFilterOn, churnOnly, segmentIndex, revisitIds, programAlertIds, norebookIds]);
+    return customers.filter(c => snoozedIds.has(c.id) && matchesFilters(c, false)).length;
+  }, [customers, snoozedIds, contactFilterOn, matchesFilters]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -1888,20 +1887,20 @@ export default function Customers() {
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
             {revisitOnly && (
-              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {chipCount(revisitIds)} ✕</button>
             )}
             {programAlertOnly && (
-              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {chipCount(programAlertIds)} ✕</button>
             )}
             {norebookOnly && (
-              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {norebookIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {chipCount(norebookIds)} ✕</button>
             )}
             {norebookOnly && (norebookIds?.size ?? 0) > 0 && ( /* 재예약 권유 문자까지 한 흐름 — 발송 창 딥링크 norebook 의 생산자 (202) */
               <button type="button" onClick={() => navigate('/messaging?segment=norebook')} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label="재예약 없음 고객에게 발송" data-testid="norebook-send">이 고객들에게 발송</button>
             )}
             {/* 연락을 미뤄 둔 고객은 숨겼다는 사실을 적는다 — 조용히 줄어든 숫자는 거짓말이다 (249) */}
             {hiddenByFollowUp > 0 && (
-              <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-600 bg-gray-100" data-testid="follow-up-hidden">{describeHidden(hiddenByFollowUp)}</span>
+              <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-600 bg-gray-100" data-testid="follow-up-hidden" title={describeHidden(hiddenByFollowUp) ?? ''}>미룬 {hiddenByFollowUp}명 숨김</span>
             )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
@@ -2312,7 +2311,7 @@ export default function Customers() {
 
               <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => (canSales ? leaveDetailTo(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
-              <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => setDetailTick(t => t + 1)} />
+              <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => { setDetailTick(t => t + 1); setFollowUpTick(t => t + 1); }} />
               <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
             </div>
@@ -2425,20 +2424,20 @@ export default function Customers() {
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
             {revisitOnly && (
-              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {chipCount(revisitIds)} ✕</button>
             )}
             {programAlertOnly && (
-              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {chipCount(programAlertIds)} ✕</button>
             )}
             {norebookOnly && (
-              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {norebookIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {chipCount(norebookIds)} ✕</button>
             )}
             {norebookOnly && (norebookIds?.size ?? 0) > 0 && ( /* 재예약 권유 문자까지 한 흐름 — 발송 창 딥링크 norebook 의 생산자 (202) */
               <button type="button" onClick={() => navigate('/messaging?segment=norebook')} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label="재예약 없음 고객에게 발송" data-testid="norebook-send">이 고객들에게 발송</button>
             )}
             {/* 연락을 미뤄 둔 고객은 숨겼다는 사실을 적는다 — 조용히 줄어든 숫자는 거짓말이다 (249) */}
             {hiddenByFollowUp > 0 && (
-              <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-600 bg-gray-100" data-testid="follow-up-hidden">{describeHidden(hiddenByFollowUp)}</span>
+              <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-600 bg-gray-100" data-testid="follow-up-hidden" title={describeHidden(hiddenByFollowUp) ?? ''}>미룬 {hiddenByFollowUp}명 숨김</span>
             )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
@@ -2956,7 +2955,7 @@ export default function Customers() {
 
             <CustomerPaymentHistory customerId={selected.id} onAdd={() => (canSales ? navigate(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
-            <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => setDetailTick(t => t + 1)} />
+            <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => { setDetailTick(t => t + 1); setFollowUpTick(t => t + 1); }} />
             <CustomerTimeline key={selected.id} customerId={selected.id} tick={detailTick} />
           </div>
         </div>

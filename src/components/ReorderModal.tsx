@@ -5,7 +5,7 @@ import { canceledSaleIds } from '../lib/saleCancel';
 import { copyText } from '../lib/clipboard';
 import { todayISO } from '../lib/format';
 import { notify } from '../lib/notify';
-import { reorderSuggestions, reorderListText, DEFAULT_WINDOW_DAYS, DEFAULT_COVER_DAYS, REORDER_CAVEAT } from '../lib/reorderRule';
+import { reorderSuggestions, reorderListText, DEFAULT_WINDOW_DAYS, DEFAULT_COVER_DAYS, REORDER_CAVEAT, REORDER_EMPTY } from '../lib/reorderRule';
 import type { Product } from '../types';
 
 /**
@@ -22,7 +22,7 @@ export default function ReorderModal({ products, onClose }: { products: Product[
     const sales = ProductSaleStore.getAll();
     const canceled = canceledSaleIds(PaymentStore.getAll());
     return reorderSuggestions({
-      products: products.map(p => ({ id: p.id, name: p.name, unit: p.unit, stock: p.stock, minStock: p.minStock })),
+      products: products.map(p => ({ id: p.id, name: p.name, unit: p.unit, stock: p.stock, minStock: p.minStock, isActive: p.isActive })),
       sales: sales.map(s => ({ id: s.id, productId: s.productId, quantity: s.quantity, saleDate: s.saleDate })),
       canceledSaleIds: canceled,
       today,
@@ -32,8 +32,7 @@ export default function ReorderModal({ products, onClose }: { products: Product[
   }, [products, coverDays, today]);
 
   async function handleCopy() {
-    const text = reorderListText(rows, today);
-    if (!text) { notify('복사할 발주 목록이 없습니다.'); return; }
+    const text = reorderListText(rows, today); // 버튼은 제안이 있을 때만 보이므로 빈 글이 올 일은 없다
     const ok = await copyText(text);
     if (ok) notify.success(`발주 목록 ${rows.length}종을 복사했습니다. 거래처에 붙여 보내세요.`);
     else notify('복사하지 못했습니다. 목록을 길게 눌러 직접 복사해주세요.'); // 가짜 성공 금지
@@ -43,9 +42,10 @@ export default function ReorderModal({ products, onClose }: { products: Product[
     <Modal isOpen onClose={onClose} title="발주 제안" size="lg">
       <div className="space-y-4" data-testid="reorder">
         <div className="flex flex-wrap items-center gap-2">
+          {/* 보이는 글자와 음성 안내가 같아야 한다 — aria-label 로 다른 말을 하면 안 된다 (250 리뷰 L-7) */}
           <label className="text-sm text-gray-700">
             며칠분을 채울지
-            <select value={coverDays} onChange={e => setCoverDays(Number(e.target.value))} aria-label="커버 일수"
+            <select value={coverDays} onChange={e => setCoverDays(Number(e.target.value))}
               className="ml-2 border border-gray-200 rounded-xl px-2 py-1.5 min-h-[40px] text-sm bg-white outline-none">
               {[14, 30, 45, 60].map(d => <option key={d} value={d}>{d}일분</option>)}
             </select>
@@ -54,9 +54,7 @@ export default function ReorderModal({ products, onClose }: { products: Product[
         </div>
 
         {rows.length === 0 ? (
-          <p className="text-sm text-gray-600 py-6 text-center" data-testid="reorder-empty">
-            지금 주문할 제품이 없습니다. 재고가 최근 판매 속도와 안전재고를 모두 넘습니다.
-          </p>
+          <p className="text-sm text-gray-600 py-6 text-center" data-testid="reorder-empty">{REORDER_EMPTY}</p>
         ) : (
           <>
             <div className="max-h-[50vh] overflow-y-auto -mx-1 px-1">

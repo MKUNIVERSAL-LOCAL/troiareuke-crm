@@ -5,7 +5,7 @@
 import { getPreference, setPreference } from './shopPreferences';
 import { todayISO } from './format';
 import {
-  sanitizeFollowUps, pruneFollowUps, snoozedIdSet, isSnoozed, addDays, defaultSnoozeDays,
+  sanitizeFollowUps, pruneFollowUps, snoozedIdSet, addDays, defaultSnoozeDays,
   type FollowUpRecord,
 } from './followUpRule';
 
@@ -29,10 +29,6 @@ export function snoozedCustomerIds(today = todayISO()): Set<string> {
   return snoozedIdSet(followUps(), today);
 }
 
-export function isCustomerSnoozed(customerId: string, today = todayISO()): boolean {
-  return isSnoozed(followUps()[customerId], today);
-}
-
 /**
  * 연락 결과를 기록한다. snoozeDays 를 주지 않으면 결과별 기본값(예약 잡음 30일·부재 3일 …)을 쓴다.
  * 0 이면 미루지 않는다(기록만 남는다). 저장 실패는 false 로 알린다 — 화면이 가짜 성공을 말하지 않게.
@@ -48,9 +44,12 @@ export function saveFollowUp(customerId: string, input: { result: string; note?:
       ...(input.note ? { note: input.note } : {}),
       ...(input.actor ? { actor: input.actor } : {}),
     };
-    const next = pruneFollowUps({ ...followUps(), [customerId]: rec }, keepFrom());
+    const next = pruneFollowUps({ ...followUps(), [customerId]: rec }, keepFrom(), undefined, today);
     setPreference('followUps', next);
-    return true;
+    // 저장이 정말 됐는지 되읽어 확인한다 — safeSetItem 은 용량 초과를 삼키므로 try/catch 만으로는
+    // 아무것도 저장되지 않았는데 "기록했습니다" 가 떴다 (250 리뷰 M-3)
+    const saved = followUps()[customerId];
+    return !!saved && saved.result === rec.result && saved.until === rec.until;
   } catch {
     return false;
   }
@@ -64,8 +63,9 @@ export function clearSnooze(customerId: string): boolean {
     if (!rec) return true;
     const { until: _until, ...rest } = rec;
     void _until;
-    setPreference('followUps', pruneFollowUps({ ...map, [customerId]: rest }, keepFrom()));
-    return true;
+    setPreference('followUps', pruneFollowUps({ ...map, [customerId]: rest }, keepFrom(), undefined, todayISO()));
+    return !followUps()[customerId]?.until; // 되읽어 확인 (250 리뷰 M-3)
+  
   } catch {
     return false;
   }

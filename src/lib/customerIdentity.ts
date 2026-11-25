@@ -3,6 +3,7 @@
 // 모두 이 전파를 쓴다 — 한 곳만 빠지면 개명한 고객이 다른 화면 검색에서 사라지거나 공유 캘린더에 실명이 남는다 (114~116 리뷰 #H4).
 import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
 import { ConsultationStore } from './consultationStore';
+import { clearHistoryOfCustomer } from './reservationHistory';
 import { clearPhotos } from './photoStore';
 import { getPreference, setPreference } from './shopPreferences';
 import { resyncGcalEvents } from './gcalEventMap';
@@ -74,6 +75,7 @@ function mergedCustomerIds(): Record<string, string> {
 export function scrubCustomerBeforeDelete(customerId: string): number {
   for (const t of TreatmentLogStore.getByCustomer(customerId)) clearPhotos(`treatment:${t.id}`);
   for (const c of ConsultationStore.getByCustomer(customerId)) clearPhotos(`consult:${c.id}`);
+  clearHistoryOfCustomer(customerId); // 예약 변경 이력에 남은 실명도 지운다 (250 리뷰 H-4)
   return propagateCustomerIdentity(customerId, { name: DELETED_CUSTOMER_NAME, phone: '' });
 }
 

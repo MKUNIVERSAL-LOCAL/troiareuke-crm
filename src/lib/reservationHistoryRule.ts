@@ -10,7 +10,7 @@
 // e2e/lib-units.spec.ts 가 브라우저 없이 직접 import 해 검증한다.
 // ═══════════════════════════════════════════════════════════════
 
-export type HistoryKind = 'create' | 'edit' | 'status';
+export type HistoryKind = 'create' | 'edit' | 'status' | 'delete';
 
 export interface HistoryChange {
   /** 바뀐 항목 이름(화면 문구) */
@@ -33,13 +33,11 @@ export interface HistoryEntry {
 export interface HistorySnapshot {
   date: string;
   startTime: string;
-  endTime?: string;
   staffName?: string;
   customerName?: string;
   services?: { serviceName: string }[];
   totalPrice?: number;
   memo?: string;
-  status?: string;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -96,7 +94,7 @@ export function describeChange(c: HistoryChange): string {
 /** 이력 한 건의 머리말 — "11-26 14:03 · 김실장" */
 export function describeEntryHead(e: HistoryEntry, formatTime: (iso: string) => string): string {
   const who = e.actor ? ` · ${e.actor}` : '';
-  const what = e.kind === 'create' ? '등록' : e.kind === 'status' ? '상태 변경' : '수정';
+  const what = e.kind === 'create' ? '등록' : e.kind === 'status' ? '상태 변경' : e.kind === 'delete' ? '삭제' : '수정';
   return `${formatTime(e.at)}${who} · ${what}`;
 }
 
@@ -119,12 +117,12 @@ export function sanitizeHistory(value: unknown): HistoryEntry[] {
     const changes = raw.changes
       .filter(c => c && typeof c.label === 'string')
       .map(c => ({ label: String(c.label).slice(0, 20), from: String(c.from ?? '').slice(0, 60), to: String(c.to ?? '').slice(0, 60) }));
-    if (changes.length === 0 && raw.kind !== 'create') continue; // 바뀐 것이 없는 기록은 보여 줄 것이 없다
+    if (changes.length === 0 && raw.kind !== 'create' && raw.kind !== 'delete') continue; // 바뀐 것이 없는 기록은 보여 줄 것이 없다
     out.push({
       id: typeof raw.id === 'string' && raw.id ? raw.id : `${raw.reservationId}-${raw.at}`,
       reservationId: raw.reservationId,
       at: raw.at,
-      kind: raw.kind === 'create' || raw.kind === 'status' ? raw.kind : 'edit',
+      kind: raw.kind === 'create' || raw.kind === 'status' || raw.kind === 'delete' ? raw.kind : 'edit',
       ...(raw.actor ? { actor: String(raw.actor).slice(0, 20) } : {}),
       changes,
     });
@@ -157,4 +155,7 @@ export function historyFor(entries: HistoryEntry[], reservationId: string): Hist
   return entries.filter(e => e.reservationId === reservationId).sort((a, b) => b.at.localeCompare(a.at));
 }
 
-export const HISTORY_CAVEAT = '이 PC 에서 한 변경만 남습니다(다른 PC·폰에서 한 변경은 그 기기에 남습니다).';
+export const HISTORY_CAVEAT = '이 PC 에서 한 변경만 남습니다(다른 PC·폰에서 한 변경은 그 기기에 남습니다). 최근 1000건·예약당 20건·180일까지 보관합니다.';
+
+/** 이력이 하나도 없을 때도 그 사실을 말한다 — 전에는 섹션과 함께 경고까지 사라져 "한 번도 안 바뀌었다" 로 읽혔다 (250 리뷰 H-3) */
+export const HISTORY_EMPTY = '이 PC 에 남은 변경 기록이 없습니다 — 다른 PC·폰에서 등록·변경한 내용은 그 기기에 남습니다.';

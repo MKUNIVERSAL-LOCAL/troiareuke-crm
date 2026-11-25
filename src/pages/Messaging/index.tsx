@@ -9,6 +9,7 @@ import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT, MESSAGE_UNIT_COST } from '../
 import { formatDateTime, parseISODate, todayISO, formatPrice } from '../../lib/format';
 import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
+import { snoozedCustomerIds } from '../../lib/followUp';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
 import { buildCustomerStatsIndex } from '../../lib/customerStats';
@@ -64,10 +65,19 @@ function savedSegmentSets(): { list: SavedSegment[]; sets: Map<string, Set<strin
 }
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 /** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
-function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
+function revisitIdSet(): Set<string> {
+  const snoozed = snoozedCustomerIds(); // 미뤄 둔 고객 제외 (250 리뷰 M-5)
+  return new Set(getRevisitDueCustomers().map(d => d.customer.id).filter(id => !snoozed.has(id)));
+}
 type SegmentIdSets = { churn: Set<string>; loyal: Set<string>; norebook: Set<string> };
 /** 이탈 위험·충성(136) + 재예약 없음(202) id 집합 — 전수 스캔이라 호출하는 쪽에서 useMemo 로 한 번만. 통계 인덱스는 한 번 만들어 둘이 공유 (203) */
-function allSegmentIdSets(): SegmentIdSets { const stats = buildCustomerStatsIndex(); return { ...segmentIdSets(stats), norebook: getNoRebookCustomerIds(stats) }; }
+function allSegmentIdSets(): SegmentIdSets {
+  const stats = buildCustomerStatsIndex();
+  const snoozed = snoozedCustomerIds(); // 연락을 미뤄 둔 고객은 발송 대상에서도 뺀다 — "당분간 안 받겠다" 고객에게 문자가 갔다 (250 리뷰 M-5)
+  const without = (ids: Set<string>) => new Set([...ids].filter(id => !snoozed.has(id)));
+  const base = segmentIdSets(stats);
+  return { churn: without(base.churn), loyal: base.loyal, norebook: without(getNoRebookCustomerIds(stats)) };
+}
 function segmentFilter(seg: Segment, revisitIds: Set<string> | undefined, segIds: SegmentIdSets, savedSets?: Map<string, Set<string>>, resendIds?: Set<string>): (c: Customer) => boolean { // segIds 는 호출자 2곳이 모두 넘긴다 — 폴백 전수 스캔 분기 제거 (203)
   if (seg.startsWith('resend:')) return resendIds ? c => resendIds.has(c.id) : () => false; // 이력의 수신 고객 집합 — 없으면 아무에게도 (207)
   if (seg.startsWith('saved:')) { const ids = savedSets?.get(seg.slice(6)); return ids ? c => ids.has(c.id) : () => false; } // 삭제된 세그먼트는 아무에게도 (166)

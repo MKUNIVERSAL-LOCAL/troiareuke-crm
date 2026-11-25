@@ -51,10 +51,14 @@ export function addDays(date: string, days: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** 아직 미뤄 둔 상태인가 — 기한이 지나면 스스로 풀린다(직원이 해제를 잊어도 고객이 영구히 숨지 않는다) */
+/**
+ * 아직 미뤄 둔 상태인가 — 기한이 지나면 스스로 풀린다(직원이 해제를 잊어도 고객이 영구히 숨지 않는다).
+ * until 은 "다시 보이기 시작하는 날" 이다 → 3일을 고르면 오늘·내일·모레 숨고 3일 뒤에 나온다.
+ * (전에는 until 당일도 숨겨 "3일간" 이라면서 4일 숨었다 — 250 리뷰 L-1)
+ */
 export function isSnoozed(rec: FollowUpRecord | undefined, today: string): boolean {
   if (!rec?.until || !DATE_RE.test(rec.until)) return false;
-  return rec.until >= today;
+  return rec.until > today;
 }
 
 export function sanitizeFollowUps(value: unknown): Record<string, FollowUpRecord> {
@@ -77,12 +81,22 @@ export function sanitizeFollowUps(value: unknown): Record<string, FollowUpRecord
 
 export const MAX_FOLLOW_UPS = 500;
 
-/** 오래된 기록 정리 — keepFrom 이전 연락은 버리고, 그래도 많으면 최근 것만 남긴다 */
-export function pruneFollowUps(map: Record<string, FollowUpRecord>, keepFrom: string, max = MAX_FOLLOW_UPS): Record<string, FollowUpRecord> {
+/**
+ * 오래된 기록 정리 — keepFrom 이전 연락은 버리고, 그래도 많으면 최근 것만 남긴다.
+ * **진행 중인 미루기는 건수 상한보다 먼저 보호한다** — 전에는 "당분간 안 받겠다" 로 90일 미뤄 둔 고객이
+ * 상한에 밀려 사라지고 할 일 목록에 다시 올라왔다(직원이 또 전화한다 — 250 리뷰 M-6).
+ */
+export function pruneFollowUps(map: Record<string, FollowUpRecord>, keepFrom: string, max = MAX_FOLLOW_UPS, today = keepFrom): Record<string, FollowUpRecord> {
   const rows = Object.entries(map).filter(([, r]) => r.at >= keepFrom || (r.until ?? '') >= keepFrom);
-  rows.sort((a, b) => a[1].at.localeCompare(b[1].at));
+  const active = rows.filter(([, r]) => isSnoozed(r, today));
+  const rest = rows.filter(([, r]) => !isSnoozed(r, today));
+  rest.sort((a, b) => a[1].at.localeCompare(b[1].at));
+  active.sort((a, b) => String(a[1].until).localeCompare(String(b[1].until))); // 기한이 가까운 것부터 버린다
+  const keepActive = active.slice(Math.max(0, active.length - max));
+  const room = Math.max(0, max - keepActive.length);
   const out: Record<string, FollowUpRecord> = {};
-  for (const [id, r] of rows.slice(Math.max(0, rows.length - max))) out[id] = r;
+  for (const [id, r] of rest.slice(Math.max(0, rest.length - room))) out[id] = r;
+  for (const [id, r] of keepActive) out[id] = r;
   return out;
 }
 

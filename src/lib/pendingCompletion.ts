@@ -6,6 +6,7 @@
 // 최근 90일만 본다 — 그보다 오래된 것은 "잊은 체크아웃"이 아니라 이력이고, 일괄 처리가 수백 건의 저장·서버 전송을 일으키지 않게.
 // ═══════════════════════════════════════════════════════════════
 
+import { logReservationStatus } from './reservationHistory';
 import { ReservationStore, PaymentStore } from './store';
 import { cleanupGcalEvent } from './gcalEventMap';
 import { todayISO, toISODate } from './format';
@@ -43,10 +44,12 @@ export function hasPaymentFor(reservationId: string): boolean {
 }
 
 /** 상태 일괄 변경 — 한 건씩 updateStatus를 거쳐 방문 통계가 맞게 반영된다. @returns 바뀐 건수 */
-export function settleReservations(ids: string[], status: 'completed' | 'noshow'): number {
+export function settleReservations(ids: string[], status: 'completed' | 'noshow', actor?: string): number {
   let n = 0;
   for (const id of ids) {
+    const before = ReservationStore.getAll().find(r => r.id === id)?.status;
     if (!ReservationStore.updateStatus(id, status)) continue;
+    logReservationStatus(id, before, status, actor); // 완료 누락 카드가 주 경로인데 이력에 안 남았다 (250 리뷰 H-3)
     n++;
     if (status === 'noshow') cleanupGcalEvent(id); // 예약 화면의 노쇼 처리와 같은 정리 — 공유 캘린더에 빈 슬롯이 잡혀 보이지 않게
   }

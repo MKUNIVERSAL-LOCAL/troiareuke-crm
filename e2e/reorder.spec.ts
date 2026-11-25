@@ -34,7 +34,7 @@ test('발주 제안 — 판매 속도로 수량을 제안하고 근거를 적고
   const ampoule = panel.getByTestId('reorder-row').filter({ hasText: '발주앰플' });
   await expect(ampoule).toBeVisible();
   await expect(ampoule).toContainText('주문 권장');
-  await expect(ampoule).toContainText('최근 30일 2개 판매');
+  await expect(ampoule).toContainText('2개 판매'); // 센 날수는 첫 판매일 기준이라 "최근 1일" 일 수 있다 (250 리뷰 M-8)
   await expect(ampoule).toContainText('현재고 3개');
 
   // 한계를 숨기지 않는다
@@ -43,7 +43,7 @@ test('발주 제안 — 판매 속도로 수량을 제안하고 근거를 적고
   // 커버 일수를 늘리면 제안 수량도 커진다(공식이 화면과 맞는지)
   const qtyText = async () => (await ampoule.textContent()) || '';
   const before = await qtyText();
-  await panel.getByLabel('커버 일수').selectOption('60');
+  await panel.getByLabel('며칠분을 채울지').selectOption('60');
   await expect(ampoule).not.toHaveText(before);
 
   // 복사 — 실제 클립보드 내용까지 확인(가짜 성공 금지)

@@ -3,7 +3,7 @@
 //   설정 행에 두면 예약을 저장할 때마다 preferences 묶음 전체가 서버로 올라가 다른 PC 의 설정을 덮는다(246 리뷰 H-1).
 //   지점 공용 이력은 서버 컬렉션 승인(B-2/S-7) 뒤 같은 행 형식을 올리는 어댑터로 — 승인 큐 25.
 // 규칙은 reservationHistoryRule.ts(순수). 여기서는 저장과 읽기만 한다.
-import { getShopId, safeSetItem } from './store';
+import { getShopId, safeSetItem, ReservationStore } from './store';
 import { todayISO } from './format';
 import {
   sanitizeHistory, trimHistory, historyFor, diffReservation, statusChange,
@@ -54,9 +54,39 @@ export function logReservationStatus(reservationId: string, from: string | undef
   record(reservationId, 'status', statusChange(from, to), actor);
 }
 
-/** 예약을 새로 등록했다 — 첫 줄이 "등록" 으로 시작하게 */
+/** 예약을 새로 등록했다 — 머리말이 이미 "등록" 이라 줄에는 날짜·시간만 적는다 (250 리뷰 L-5) */
 export function logReservationCreate(reservationId: string, snapshot: HistorySnapshot, actor?: string): void {
-  record(reservationId, 'create', [{ label: '등록', from: '', to: `${snapshot.date} ${snapshot.startTime}` }], actor);
+  record(reservationId, 'create', [{ label: '날짜·시간', from: '', to: `${snapshot.date} ${snapshot.startTime}` }], actor);
+}
+
+/** 예약을 삭제했다 — "그 예약 받은 적 없다" 분쟁의 핵심 경로라 흔적을 남긴다 (250 리뷰 H-3) */
+export function logReservationDelete(reservationId: string, snapshot: HistorySnapshot, actor?: string): void {
+  record(reservationId, 'delete', [{ label: '삭제', from: `${snapshot.date} ${snapshot.startTime}`, to: '' }], actor);
+}
+
+/**
+ * 그 고객의 예약 이력을 지운다 — 익명화·고객 삭제가 이 기록을 몰라 **실명이 최대 180일 남았다** (250 리뷰 H-4).
+ * 244 의 취소 사유 정리(clearFreeTextReasonsOfCustomer)와 같은 짝이다.
+ */
+export function clearHistoryOfCustomer(customerId: string): number {
+  try {
+    const mine = new Set(ReservationStore.getAll().filter(r => r.customerId === customerId).map(r => r.id));
+    if (mine.size === 0) return 0;
+    const all = read();
+    const next = all.filter(e => !mine.has(e.reservationId));
+    if (next.length === all.length) return 0;
+    safeSetItem(KEY(), JSON.stringify(next));
+    return all.length - next.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** 예약 한 건의 이력을 지운다 — 예약을 삭제할 때 호출(삭제 기록만 남기거나 전부 정리) */
+export function clearHistoryOfReservation(reservationId: string): void {
+  try {
+    safeSetItem(KEY(), JSON.stringify(read().filter(e => e.reservationId !== reservationId)));
+  } catch { /* 무시 */ }
 }
 
 /** 그 예약의 이력(최근 것이 위로) */

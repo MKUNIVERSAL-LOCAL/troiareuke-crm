@@ -5,8 +5,8 @@ import { askConfirm, askConfirmWithChoice } from '../../lib/confirmDialog';
 import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary } from '../../lib/cancelReasonRule';
 import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons';
 // 예약 변경 이력 (247) — 코어 Reservation 에 수정 시각·수정자 칸이 없어 이 기기 기록으로 남긴다
-import { logReservationEdit, logReservationStatus, logReservationCreate, reservationHistory } from '../../lib/reservationHistory';
-import { describeChange, describeEntryHead, HISTORY_CAVEAT } from '../../lib/reservationHistoryRule';
+import { logReservationEdit, logReservationStatus, logReservationCreate, logReservationDelete, reservationHistory } from '../../lib/reservationHistory';
+import { describeChange, describeEntryHead, HISTORY_CAVEAT, HISTORY_EMPTY } from '../../lib/reservationHistoryRule';
 import { createSubmitLock } from '../../lib/submitLock';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
@@ -1369,9 +1369,10 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     }
     if (isEdit && editing) {
       // 수정: 기존 예약 갱신 — status 는 보내지 않는다. 폰에서 완료/노쇼 처리한 예약을 PC 의 옛 수정 창이 '확정'으로 되돌렸다 (16차 #H1)
-      ReservationStore.update(editing.id, reservation);
-      // 무엇이 바뀌었는지 남긴다 — "나는 3시로 바꿨는데" 를 매장이 확인할 수 있게 (247)
-      logReservationEdit(editing.id, editing, { ...reservation, status: editing.status }, authUser?.name);
+      const savedEdit = ReservationStore.update(editing.id, reservation);
+      // 무엇이 바뀌었는지 남긴다 — "나는 3시로 바꿨는데" 를 매장이 확인할 수 있게 (247).
+      // 저장이 안 됐으면(다른 기기가 지운 예약) 이력도 남기지 않는다 (250 리뷰 L-4)
+      if (savedEdit) logReservationEdit(editing.id, editing, reservation, authUser?.name);
       if (resources.length > 0) assignResource(editing.id, resourceId); // 자원 배정은 설정 행에 (142). 자원이 없으면 기존 배정은 그대로 (144 리뷰 M-1)
       // Google 캘린더에 옛 정보가 남지 않도록 기존 이벤트 삭제 후 재생성
       const oldEventId = getGcalMap()[editing.id];
@@ -1383,7 +1384,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       }
     } else {
       const saved = ReservationStore.save({ ...reservation, status: 'confirmed' });
-      logReservationCreate(saved.id, { ...reservation, status: 'confirmed' }, authUser?.name);
+      logReservationCreate(saved.id, reservation, authUser?.name);
       if (saved && resourceId) assignResource(saved.id, resourceId); // 자원 배정은 설정 행에 (142)
       if (saved) onSaved?.(saved.id);
       // Google Calendar에도 추가 — 이벤트 id를 기억해 취소/삭제 시 정리 가능하게
@@ -1562,8 +1563,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
       : '';
     const answer = await askConfirmWithChoice({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기', choices: reasonOptions('cancelled'), choiceTitle: '취소 사유 (선택 — 이달 집계에 쌓입니다)' }); // 앱 확인창 (15차 #H3)
     if (!answer.ok) return;
-    ReservationStore.updateStatus(r.id, 'cancelled');
-    logReservationStatus(r.id, r.status, 'cancelled', user?.name);
+    const okCancel = ReservationStore.updateStatus(r.id, 'cancelled');
+    if (okCancel) logReservationStatus(r.id, r.status, 'cancelled', user?.name); // 저장 실패면 이력도 남기지 않는다 (250 리뷰 L-4)
     if (answer.choice) saveReason(r.id, 'cancelled', answer.choice); // 사유 저장 실패는 취소 처리를 되돌리지 않는다 (244)
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     // 빈 자리를 원한 대기 요청이 있으면 바로 안내 — 요청함을 열어 보지 않아도 알 수 있게 (185, GAP R-10)
@@ -1583,8 +1584,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const handleRestore = async () => {
     const google = isGoogleCalendarConnected();
     if (!(await askConfirm({ title: '예약 복구', confirmLabel: '복구', message: `이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}` }))) return;
-    ReservationStore.updateStatus(r.id, 'confirmed');
-    logReservationStatus(r.id, r.status, 'confirmed', user?.name);
+    const okRestore = ReservationStore.updateStatus(r.id, 'confirmed');
+    if (okRestore) logReservationStatus(r.id, r.status, 'confirmed', user?.name);
     saveReason(r.id, 'cancelled', ''); // 취소·노쇼가 아니게 됐으니 사유도 지운다 — 남겨 두면 이달 집계가 맞지 않는다 (244)
     if (google) {
       createCalendarEvent({ ...r, status: 'confirmed' })
@@ -1597,8 +1598,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const handleNoShow = async () => {
     const answer = await askConfirmWithChoice({ title: '노쇼 처리', message: `${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`, confirmLabel: '노쇼 기록', cancelLabel: '닫기', choices: reasonOptions('noshow'), choiceTitle: '노쇼 사유 (선택 — 이달 집계에 쌓입니다)' });
     if (!answer.ok) return;
-    ReservationStore.updateStatus(r.id, 'noshow');
-    logReservationStatus(r.id, r.status, 'noshow', user?.name);
+    const okNoShow = ReservationStore.updateStatus(r.id, 'noshow');
+    if (okNoShow) logReservationStatus(r.id, r.status, 'noshow', user?.name);
     if (answer.choice) saveReason(r.id, 'noshow', answer.choice);
     cleanupGcalEvent(r.id);
     notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
@@ -1608,8 +1609,8 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const [showPayModal, setShowPayModal] = useState(false);
 
   const handleComplete = () => {
-    ReservationStore.updateStatus(r.id, 'completed');
-    logReservationStatus(r.id, r.status, 'completed', user?.name);
+    const okComplete = ReservationStore.updateStatus(r.id, 'completed');
+    if (okComplete) logReservationStatus(r.id, r.status, 'completed', user?.name);
     saveReason(r.id, 'cancelled', ''); // 완료된 예약에 취소·노쇼 사유가 남으면 집계·상세가 서로 다른 말을 한다 (246 리뷰 M-3)
     healProgramSessionsWhenReady(r.customerId); // 회차권 사용 회차도 기록 기준으로 (16차 #H2)
     healCustomerStatsWhenReady(r.customerId); // 코어 +1이 같은 날 시술 기록과 겹치면 두 번 세진다 — 기록(다녀간 날 수)으로 바로 맞춤, 하이드레이션 뒤 (리뷰 2026-11-19)
@@ -1632,6 +1633,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     const payWarn = paidForThis.length > 0 ? `\n\n등록된 결제 ${formatPrice(paidAmount)}은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.` : '';
     const cancelTip = isClosed ? '' : ' 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.';
     if (await askConfirm({ title: '예약 삭제', message: `이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`, confirmLabel: '삭제', danger: true })) {
+      logReservationDelete(r.id, r, user?.name); // "그 예약 받은 적 없다" 분쟁의 핵심 경로 — 흔적을 남긴다 (250 리뷰 H-3)
       ReservationStore.delete(r.id);
       assignResource(r.id, null); // 자원 배정도 함께 정리 (142)
       saveReason(r.id, 'cancelled', ''); // 취소·노쇼 사유도 함께 정리 — 삭제된 예약의 사유가 설정 행에 영구히 남았다 (246 리뷰 M-4)
@@ -1702,9 +1704,12 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           </div>
         )}
 
-        {history.length > 0 && (
-          <div data-testid="reservation-history">
-            <p className="text-xs font-medium text-gray-500 mb-1">변경 이력</p>
+        <div data-testid="reservation-history">
+          <p className="text-xs font-medium text-gray-500 mb-1">변경 이력</p>
+          {history.length === 0 ? (
+            <p className="text-sm text-gray-500 bg-gray-50 rounded-xl p-3">{HISTORY_EMPTY}</p>
+          ) : (
+          <>
             <ul className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 space-y-2">
               {shownHistory.map(e => (
                 <li key={e.id}>
@@ -1718,9 +1723,10 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
                 {showAllHistory ? '최근 3건만 보기' : `전체 ${history.length}건 보기`}
               </button>
             )}
-            <p className="text-2xs text-gray-400 mt-1">{HISTORY_CAVEAT}</p>
-          </div>
-        )}
+          </>
+          )}
+          <p className="text-2xs text-gray-400 mt-1">{HISTORY_CAVEAT}</p>
+        </div>
 
         {r.memo && (
           <div>

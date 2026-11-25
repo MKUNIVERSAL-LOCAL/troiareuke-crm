@@ -5,8 +5,8 @@ import { renameTagInSegments } from '../src/lib/segmentFilterRule';
 import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
 import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
 import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows } from '../src/lib/stockCountRule';
-import { diffReservation, statusChange, describeChange, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
-import { reorderSuggestions, reorderListText, describeReorderRow } from '../src/lib/reorderRule';
+import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
+import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
 import { resultLabel, defaultSnoozeDays, addDays as addDaysFollowUp, isSnoozed, sanitizeFollowUps, pruneFollowUps, snoozedIdSet, describeFollowUp, describeHidden } from '../src/lib/followUpRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
@@ -2156,13 +2156,17 @@ const reorderProducts = [
 
 test('발주 제안 — 판매 속도로 수량·남은 일수를 내고, 급한 것부터 (248)', () => {
   const sales = [
+    // 기간 밖 판매 1건 — 이 제품을 30일 전부터 팔고 있었다는 뜻(센 날수 = 30). 짧은 기록은 따로 테스트한다(250 M-8)
+    { id: 'seed', productId: 'r1', quantity: 1, saleDate: '2026-10-01' },
     ...Array.from({ length: 18 }, (_, i) => ({ id: 's' + i, productId: 'r1', quantity: 1, saleDate: '2026-11-10' })),
     { id: 'm1', productId: 'r2', quantity: 10, saleDate: '2026-11-20' },
+    { id: 'm0', productId: 'r2', quantity: 1, saleDate: '2026-10-01' },
   ];
   const rows = reorderSuggestions({ products: reorderProducts, sales, today: '2026-11-26' });
   const ampoule = rows.find(r => r.id === 'r1');
   expect(ampoule?.sold).toBe(18);
-  expect(ampoule?.dailyRate).toBe(0.6);           // 18 ÷ 30
+  expect(ampoule?.dailyRate).toBeCloseTo(0.6, 5); // 18 ÷ 30 — 계산은 원값(250 리뷰 M-1)
+  expect(ampoule?.dailyRateText).toBe('0.6');     // 화면에만 소수 한 자리
   expect(ampoule?.daysLeft).toBe(3);              // 2 ÷ 0.6 = 3.33 → 3일분
   expect(ampoule?.suggestQty).toBe(19);           // 0.6×30 + 3 − 2 = 19
   expect(ampoule?.reason).toContain('최근 30일 18개 판매');
@@ -2190,14 +2194,17 @@ test('발주 제안 — 취소된 판매·기간 밖·미래 날짜는 세지 �
     products: [reorderProducts[0]], sales, canceledSaleIds: new Set(['cancelled']), today: '2026-11-26', coverDays: 30,
   });
   expect(rows[0].sold).toBe(10);
-  expect(rows[0].dailyRate).toBe(0.3);
-  expect(rows[0].suggestQty).toBe(10); // 0.3×30 + 3 − 2 = 10
+  expect(rows[0].dailyRate).toBeCloseTo(10 / 30, 5); // 원값 0.3333… (반올림 0.3 으로 계산하면 수량이 어긋난다)
+  expect(rows[0].suggestQty).toBe(11); // ceil(0.3333×30) + 3 − 2 = 11
 });
 
 test('발주 제안 — 복사 글은 수량 중심이고 추정이라고 적는다 (248)', () => {
   const rows = reorderSuggestions({
     products: [reorderProducts[0], reorderProducts[2]],
-    sales: [{ id: 's', productId: 'r1', quantity: 30, saleDate: '2026-11-20' }],
+    sales: [
+      { id: 'seed', productId: 'r1', quantity: 1, saleDate: '2026-10-01' }, // 센 날수 30 (기간 밖은 수량에 안 들어간다)
+      { id: 's', productId: 'r1', quantity: 30, saleDate: '2026-11-20' },
+    ],
     today: '2026-11-26',
   });
   const text = reorderListText(rows, '2026-11-26');
@@ -2218,9 +2225,10 @@ test('연락 기록 — 결과마다 기본 미루기 기간이 다르고, 기�
   expect(defaultSnoozeDays('직접 입력한 결과')).toBe(0); // 모르는 결과는 미루지 않는다
   expect(addDaysFollowUp('2026-11-26', 7)).toBe('2026-12-03');
   // 기한 당일까지는 숨기고, 다음 날부터 다시 보인다
+  // until 은 "다시 보이기 시작하는 날" — 7일을 고르면 그 날 다시 보인다 (250 리뷰 L-1)
   const rec = { at: '2026-11-26', result: 'later', until: '2026-12-03' };
-  expect(isSnoozed(rec, '2026-12-03')).toBe(true);
-  expect(isSnoozed(rec, '2026-12-04')).toBe(false);
+  expect(isSnoozed(rec, '2026-12-02')).toBe(true);
+  expect(isSnoozed(rec, '2026-12-03')).toBe(false);
   expect(isSnoozed({ at: '2026-11-26', result: 'later' }, '2026-11-26')).toBe(false); // 미루지 않은 기록
   expect(isSnoozed(undefined, '2026-11-26')).toBe(false);
 });
@@ -2249,4 +2257,87 @@ test('연락 기록 — 화면 문구는 결과·기한·메모를 그대로, �
   expect(describeFollowUp({ at: '2026-11-26', result: 'messaged' })).toBe('2026-11-26 문자·카톡 보냄');
   expect(describeHidden(3)).toBe('연락을 미룬 고객 3명은 목록에서 숨겼습니다(기한이 지나면 다시 나옵니다).');
   expect(describeHidden(0)).toBeNull();
+});
+
+// ── 250: 247~249 리뷰 반영 ──
+
+test('발주 제안 — 재고부족(재고 = 안전재고)이면 반드시 줄을 만든다 (250 리뷰 H-1)', () => {
+  // 매장 공용 규칙 isLowStock 은 stock <= minStock 인데, 전에는 stock < minStock 만 봐서
+  // 헤더가 "재고부족" 이라는 제품을 발주 제안이 "주문할 것 없음" 이라고 말했다
+  const same = reorderSuggestions({ products: [{ id: 'p', name: '앰플', unit: '개', stock: 5, minStock: 5 }], sales: [], today: '2026-11-26' });
+  expect(same).toHaveLength(1);
+  expect(same[0].suggestQty).toBeGreaterThanOrEqual(1);
+  // 안전재고 0 + 재고 0 도 재고부족이다
+  const zero = reorderSuggestions({ products: [{ id: 'p', name: '앰플', unit: '개', stock: 0, minStock: 0 }], sales: [], today: '2026-11-26' });
+  expect(zero).toHaveLength(1);
+  expect(zero[0].suggestQty).toBe(1);
+  // 단종(비활성) 제품은 발주 대상이 아니다
+  expect(reorderSuggestions({ products: [{ id: 'p', name: '단종', unit: '개', stock: 0, minStock: 5, isActive: false }], sales: [], today: '2026-11-26' })).toEqual([]);
+  expect(REORDER_EMPTY).toContain('안전재고를 넘고');
+});
+
+test('발주 제안 — 한 달에 1개 팔린 제품을 "판매 기록 없음" 이라고 적지 않는다 (250 리뷰 H-2)', () => {
+  const rows = reorderSuggestions({
+    products: [{ id: 'p', name: '고가앰플', unit: '개', stock: 1, minStock: 5 }],
+    sales: [{ id: 's', productId: 'p', quantity: 1, saleDate: '2026-11-10' }],
+    today: '2026-11-26',
+  });
+  expect(rows[0].sold).toBe(1);
+  expect(rows[0].reason).not.toContain('판매 기록 없음');
+  expect(rows[0].reason).toContain('1개 판매');
+  expect(rows[0].daysLeft).not.toBeNull();     // 속도를 알므로 남은 일수도 안다
+  expect(rows[0].dailyRate).toBeGreaterThan(0);
+  // 판매가 정말 0건일 때만 그 문구를 쓴다
+  const none = reorderSuggestions({ products: [{ id: 'p', name: '신제품', unit: '개', stock: 1, minStock: 5 }], sales: [], today: '2026-11-26' });
+  expect(none[0].reason).toContain('판매 기록 없음');
+});
+
+test('발주 제안 — 판매 기록이 짧으면 센 날수로 계산하고 그 사실을 적는다 (250 리뷰 M-8)', () => {
+  // 영업 3일 된 매장: 3일에 3개 → 하루 1개(전에는 3÷30 = 0.1개로 깎여 "30일분 남음" 이라고 했다)
+  const rows = reorderSuggestions({
+    products: [{ id: 'p', name: '앰플', unit: '개', stock: 3, minStock: 2 }],
+    sales: [
+      { id: 'a', productId: 'p', quantity: 1, saleDate: '2026-11-24' },
+      { id: 'b', productId: 'p', quantity: 1, saleDate: '2026-11-25' },
+      { id: 'c', productId: 'p', quantity: 1, saleDate: '2026-11-26' },
+    ],
+    today: '2026-11-26',
+  });
+  expect(rows[0].countedDays).toBe(3);
+  expect(rows[0].dailyRate).toBeCloseTo(1, 5);
+  expect(rows[0].daysLeft).toBe(3);
+  expect(rows[0].reason).toContain('판매 기록이 3일치뿐이라 추정이 거칠다');
+});
+
+test('발주 제안 — 음수 재고를 0 으로 꾸미지 않는다 (250 리뷰 L-9)', () => {
+  const rows = reorderSuggestions({ products: [{ id: 'p', name: '앰플', unit: '개', stock: -5, minStock: 10 }], sales: [], today: '2026-11-26' });
+  expect(rows[0].stock).toBe(-5);
+  expect(rows[0].suggestQty).toBe(15); // 안전재고 10 − (−5) = 15
+  expect(rows[0].reason).toContain('현재고 -5개');
+});
+
+test('연락 기록 — 진행 중인 미루기는 건수 상한보다 먼저 보호한다 (250 리뷰 M-6)', () => {
+  const today = '2026-11-26';
+  const map: Record<string, { at: string; result: string; until?: string }> = {};
+  // 상한을 넘는 활성 미루기 + 오래된 기록
+  for (let i = 0; i < 510; i += 1) map['act' + i] = { at: '2026-11-01', result: 'declined', until: '2027-02-01' };
+  for (let i = 0; i < 50; i += 1) map['old' + i] = { at: '2026-11-20', result: 'messaged' };
+  const pruned = pruneFollowUps(map, '2026-01-01', 500, today);
+  const kept = Object.keys(pruned);
+  expect(kept).toHaveLength(500);
+  expect(kept.every(k => k.startsWith('act'))).toBe(true); // 활성 미루기가 자리를 먼저 받는다
+  // 활성 미루기가 적으면 나머지 기록도 남는다
+  const small = pruneFollowUps({ a: { at: '2026-11-01', result: 'declined', until: '2027-02-01' }, b: { at: '2026-11-20', result: 'messaged' } }, '2026-01-01', 500, today);
+  expect(Object.keys(small).sort()).toEqual(['a', 'b']);
+});
+
+test('예약 변경 이력 — 삭제도 남고, 등록 줄은 "등록" 을 두 번 말하지 않는다 (250 리뷰 H-3·L-5)', () => {
+  const del: HistoryEntry = { id: 'd', reservationId: 'r1', at: '2026-11-26T01:00:00.000Z', kind: 'delete', changes: [{ label: '삭제', from: '2026-11-26 14:00', to: '' }] };
+  expect(sanitizeHistory([del])).toHaveLength(1);
+  expect(describeEntryHead(del, () => '11-26 10:00')).toBe('11-26 10:00 · 삭제');
+  expect(describeChange(del.changes[0])).toBe('삭제 2026-11-26 14:00 지움');
+  // 등록 줄은 머리말이 "등록" 이므로 항목 이름은 날짜·시간
+  const create: HistoryEntry = { id: 'c', reservationId: 'r1', at: '2026-11-26T00:00:00.000Z', kind: 'create', changes: [{ label: '날짜·시간', from: '', to: '2026-11-26 14:00' }] };
+  expect(describeEntryHead(create, () => '11-26 09:00')).toBe('11-26 09:00 · 등록');
+  expect(describeChange(create.changes[0])).toBe('날짜·시간 2026-11-26 14:00 로 입력');
 });

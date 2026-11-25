@@ -1,3 +1,4 @@
+import { logReservationStatus } from '../../lib/reservationHistory'; // 시술 기록이 예약을 완료로 바꾼 것도 이력에 (250 리뷰 H-3)
 import { notify } from '../../lib/notify';
 import { matchesSearch, todayISO, toISODate, parseISODate, formatDate, formatPrice } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -309,6 +310,7 @@ export default function Treatments() {
               const r = ReservationStore.getAll().find(x => x.id === reservationId);
               if (r && (r.status === 'confirmed' || r.status === 'pending') && (!savedDate || r.date === savedDate)) {
                 ReservationStore.updateStatus(reservationId, 'completed');
+                logReservationStatus(reservationId, r.status, 'completed'); // 시술 기록이 바꾼 상태도 이력에 (250 리뷰 H-3)
                 healCustomerStatsWhenReady(r.customerId); // 완료 +1이 같은 날 시술 기록과 겹쳐 두 번 세지지 않게 — 하이드레이션 뒤 (리뷰 2026-11-19)
               }
             }
