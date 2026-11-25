@@ -299,9 +299,27 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);
   // 드릴다운 (184): 재예약률 타일 → 다음 예약 없는 이달 방문 고객 목록(필터 칩), 가동률 타일 → 예약 화면
-  await kpiCard.getByTestId('kpi-rebook-link').click();
+  // 기본 고객은 내일 예약이 있어 '재예약 없음' 0명 — 오늘 완료 방문만 있고 다음 예약이 없는 고객을 하나 심어 1명으로 (202)
+  await page.evaluate(() => {
+    const key = (re: RegExp) => Object.keys(localStorage).find(k => re.test(k))!;
+    const customers = JSON.parse(localStorage.getItem(key(/^crm_.*_customers$/)) || '[]');
+    const reservations = JSON.parse(localStorage.getItem(key(/^crm_.*_reservations$/)) || '[]');
+    const main = customers[0]; const id = 'norebook_' + Date.now();
+    customers.push({ ...main, id, name: '재예약없음고객', phone: '010-9999-0202' });
+    reservations.push({ ...reservations[0], id: 'norebookres_' + Date.now(), customerId: id, customerName: '재예약없음고객', status: 'completed', startTime: '09:00', endTime: '10:00' });
+    localStorage.setItem(key(/^crm_.*_customers$/), JSON.stringify(customers)); localStorage.setItem(key(/^crm_.*_reservations$/), JSON.stringify(reservations));
+  });
+  await page.goto('/');
+  await page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByTestId('kpi-rebook-link').click();
   await expect(page).toHaveURL(/\/customers/); // ?norebook=1 은 초기값으로만 쓰고 바로 URL 에서 지워진다(187 리뷰 M-1) — 칩으로 판정
-  await expect(page.getByTestId('norebook-chip').filter({ visible: true }).first()).toContainText('재예약 없음');
+  await expect(page.getByTestId('norebook-chip').filter({ visible: true }).first()).toContainText('재예약 없음 1');
+  await expect(page.getByText('재예약없음고객').filter({ visible: true }).first()).toBeVisible(); // PC·모바일 2중 DOM
+  // 칩 옆 "이 고객들에게 발송" → 발송 창이 '재예약 없음 (1명)' 세그먼트로 열린다 (202)
+  await page.getByTestId('norebook-send').filter({ visible: true }).first().click();
+  await expect(page).toHaveURL(/\/messaging/);
+  const norebookSend = page.getByRole('dialog', { name: '메시지 발송' });
+  await expect(norebookSend.getByRole('button', { name: '재예약 없음 (1명)' })).toHaveClass(/bg-primary-600/);
+  await page.keyboard.press('Escape');
   await page.goto('/');
   await page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByTestId('kpi-util-link').click();
   await expect(page).toHaveURL(/\/reservations/);

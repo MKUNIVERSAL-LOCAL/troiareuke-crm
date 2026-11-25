@@ -11,6 +11,7 @@ import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
+import { getNoRebookCustomerIds } from '../../lib/todayTasks';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import type { SavedSegment } from '../../lib/segmentFilterRule';
 import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -31,7 +32,7 @@ import CampaignsCard from '../../components/campaigns/CampaignsCard';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | `tag:${string}` | `saved:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18) / saved:<id> — 저장 세그먼트 (166)
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | 'norebook' | `tag:${string}` | `saved:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18) / saved:<id> — 저장 세그먼트 (166)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
 const SEGMENT_LABELS: Record<string, string> = {
@@ -41,7 +42,8 @@ const SEGMENT_LABELS: Record<string, string> = {
   novisit: '미방문 60일+',
   revisit: '재방문 권장',
   churn: '이탈 위험', // 이 고객의 방문 주기 2배 이상 안 왔고 다음 예약 없음 (136, churnRule)
-  loyal: '충성 고객', // RFM 최근성·빈도 상위 (136, rfmRule) // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
+  loyal: '충성 고객', // RFM 최근성·빈도 상위 (136, rfmRule)
+  norebook: '재예약 없음', // 이달 방문했지만 다음 예약 없음 — 대시보드 재예약률 타일·고객 목록 칩과 같은 기준 (184 kpiRule, 202) // 대시보드 재방문 리마인더 카드와 같은 기준(권장일 또는 방문 주기) — 카드의 [단체 발송]이 여기로 온다 (3차 UX 점검 2026-11-19)
 };
 
 function segmentLabel(seg: Segment, saved: SavedSegment[] = []): string {
@@ -58,11 +60,14 @@ function savedSegmentSets(): { list: SavedSegment[]; sets: Map<string, Set<strin
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 /** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
 function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
-function segmentFilter(seg: Segment, revisitIds?: Set<string>, segIds?: { churn: Set<string>; loyal: Set<string> }, savedSets?: Map<string, Set<string>>): (c: Customer) => boolean {
+type SegmentIdSets = { churn: Set<string>; loyal: Set<string>; norebook: Set<string> };
+/** 이탈 위험·충성(136) + 재예약 없음(202) id 집합 — 전수 스캔이라 호출하는 쪽에서 useMemo 로 한 번만 */
+function allSegmentIdSets(): SegmentIdSets { return { ...segmentIdSets(), norebook: getNoRebookCustomerIds() }; }
+function segmentFilter(seg: Segment, revisitIds?: Set<string>, segIds?: SegmentIdSets, savedSets?: Map<string, Set<string>>): (c: Customer) => boolean {
   if (seg.startsWith('saved:')) { const ids = savedSets?.get(seg.slice(6)); return ids ? c => ids.has(c.id) : () => false; } // 삭제된 세그먼트는 아무에게도 (166)
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
   if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
-  if (seg === 'churn' || seg === 'loyal') { const sets = segIds ?? segmentIdSets(); const ids = sets[seg]; return c => ids.has(c.id); }
+  if (seg === 'churn' || seg === 'loyal' || seg === 'norebook') { const sets = segIds ?? allSegmentIdSets(); const ids = sets[seg]; return c => ids.has(c.id); }
   return Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg) ? SEGMENT_FILTERS[seg] : () => false; // 모르는 세그먼트('constructor' 같은 프로토타입 키 포함)는 '아무에게도' — 전체 발송 사고 방지
 }
 
@@ -109,7 +114,7 @@ export default function Messaging() {
   useEffect(() => {
     // 대시보드 재방문 리마인더 [단체 발송](?segment=revisit)·생일 카드(?segment=birthday) → 그 대상이 걸린 발송 모달 (3차·5차 UX 점검 2026-11-19)
     const seg = searchParams.get('segment');
-    if (seg && (seg === 'revisit' || seg === 'churn' || seg === 'loyal' || seg.startsWith('saved:') || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // saved:<id> 는 고객 목록 세그먼트 칩에서 (166) // churn·loyal 도 딥링크 허용 (139 #L7) // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
+    if (seg && (seg === 'revisit' || seg === 'churn' || seg === 'loyal' || seg === 'norebook' || seg.startsWith('saved:') || Object.prototype.hasOwnProperty.call(SEGMENT_FILTERS, seg))) { // saved:<id> 는 고객 목록 세그먼트 칩에서 (166) // churn·loyal 도 딥링크 허용 (139 #L7) // 'constructor' 같은 프로토타입 키가 전체 발송 대상이 되지 않게
       setSendCustomerId(null);
       setSendSegment(seg as Segment);
       setShowSendModal(true);
@@ -802,7 +807,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
 
   // 세그먼트 필터 적용 대상 (빠른발송 카드와 동일 기준). 재방문 집합은 창이 열릴 때 한 번만 — 글자 입력마다 전수 스캔하지 않게 (리뷰 63)
   const revisitIds = useMemo(() => revisitIdSet(), []);
-  const segIds = useMemo(() => segmentIdSets(), []); // 이탈 위험·충성 (136) — 전수 스캔 1회
+  const segIds = useMemo(() => allSegmentIdSets(), []); // 이탈 위험·충성 (136)·재예약 없음 (202) — 전수 스캔 1회
   const saved = useMemo(() => savedSegmentSets(), []); // 저장 세그먼트 (166)
   const targetCustomers = useMemo(
     () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds, saved.sets))),
@@ -1032,7 +1037,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             ) : (
             <div className="flex gap-2 flex-wrap">
               {(() => {
-                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
+                const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal', 'norebook'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
                 if ((recipientMode.startsWith('tag:') || recipientMode.startsWith('saved:')) && !keys.includes(recipientMode)) keys.push(recipientMode);
                 return keys;
