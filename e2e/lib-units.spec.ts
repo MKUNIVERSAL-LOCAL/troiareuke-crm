@@ -41,6 +41,7 @@ import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumIn
 import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
 import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
 import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
+import { buildReceipt, receiptFileName } from '../src/lib/receiptRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1559,4 +1560,74 @@ test('수당 비율 — 숫자가 아닌 예외 값은 기본값으로 돌아간
   expect(describeCommissionBasis({ serviceRate: 999, productRate: -5 }))
     .toBe('시술 50% × 실결제액 + 제품 0% × 제품 판매액 (원 단위 내림)');
   expect(computeCommission({ paidAmount: 1_000_000 }, { serviceRate: 999, productRate: 0 }).service).toBe(500_000);
+});
+
+// ── 결제 영수증 (235, GAP P-9) ───────────────────────────────────
+// 고객 손에 가는 돈 문서라 과장·누락이 바로 문제가 된다. 세금계산서가 아니라는 사실을 숨기면 안 된다.
+
+const SHOP = { name: '아르케스파', phone: '02-123-4567', address: '서울 강남구 1', businessNumber: '123-45-67890', ownerName: '홍길동' };
+
+test('영수증 — 머리말·내역·합계, 세금계산서가 아니라고 분명히 적는다 (235)', () => {
+  const r = buildReceipt({
+    payment: { paymentDate: '2026-11-25', amount: 90_000, paymentMethod: '카드', typeLabel: '단건 시술', status: 'completed' },
+    customerName: '김고객',
+    shop: SHOP,
+    issuedOn: '2026-11-25',
+  });
+  expect(r.title).toBe('영수증');
+  expect(r.isRefund).toBe(false);
+  expect(r.shopLines).toEqual(['아르케스파', '사업자등록번호 123-45-67890 · 대표 홍길동', '02-123-4567 · 서울 강남구 1']);
+  expect(r.customerLine).toBe('김고객 고객님');
+  expect(r.totalLabel).toBe('결제 금액');
+  expect(r.totalValue).toBe('90,000원');
+  expect(r.rows.map(x => x.label)).toEqual(['결제일', '구분', '결제 수단']);
+  expect(r.rows.find(x => x.label === '결제 수단')!.value).toBe('카드');
+  expect(r.notes[0]).toMatch(/세금계산서·현금영수증은 포함되지 않으며/);
+  expect(r.notes).toHaveLength(1); // 사업자 정보가 있으면 보완 안내를 띄우지 않는다
+});
+
+test('영수증 — 할인은 정가·할인 줄로 나누고, 발행일이 다르면 함께 적는다 (235)', () => {
+  const r = buildReceipt({
+    payment: { paymentDate: '2026-11-20', amount: 80_000, discountAmount: 20_000, paymentMethod: '현금', typeLabel: '프로그램', status: 'completed', memo: '첫 방문 할인' },
+    customerName: '김고객', shop: SHOP, issuedOn: '2026-11-25',
+  });
+  const by = (label: string) => r.rows.find(x => x.label === label)?.value;
+  expect(by('정가')).toBe('100,000원');   // 할인 전 금액을 되살려 적는다
+  expect(by('할인')).toBe('-20,000원');
+  expect(by('메모')).toBe('첫 방문 할인');
+  expect(by('발행일')).toBeTruthy();       // 결제일과 다른 날 뽑으면 발행일을 밝힌다
+  expect(r.totalValue).toBe('80,000원');
+});
+
+test('영수증 — 환불 건은 환불 영수증, 대기 건은 예정 내역서 (235)', () => {
+  const refund = buildReceipt({ payment: { paymentDate: '2026-11-25', amount: 50_000, status: 'refunded', paymentMethod: '카드', typeLabel: '단건 시술' }, customerName: '김고객', shop: SHOP });
+  expect(refund.title).toBe('환불 영수증');
+  expect(refund.isRefund).toBe(true);
+  expect(refund.totalLabel).toBe('환불 금액');
+  expect(refund.totalValue).toBe('-50,000원');   // 결제 영수증처럼 보이지 않게
+  expect(refund.notes.some(n => n.includes('환불 처리된 결제'))).toBe(true);
+
+  const pending = buildReceipt({ payment: { paymentDate: '2026-11-25', amount: 50_000, status: 'pending' }, customerName: '김고객', shop: SHOP });
+  expect(pending.title).toBe('결제 예정 내역서');
+  expect(pending.isPending).toBe(true);
+  expect(pending.totalLabel).toBe('결제 예정 금액');
+  expect(pending.notes.some(n => n.includes('아직 입금이 확인되지 않은'))).toBe(true);
+});
+
+test('영수증 — 빈 매장 정보는 줄을 빼고 설정 안내를 붙인다, 고객 미지정도 말한다 (235)', () => {
+  const r = buildReceipt({
+    payment: { paymentDate: '2026-11-25', amount: 30_000, status: 'completed' },
+    shop: { name: '아르케스파' }, // 전화·주소·사업자번호 없음
+  });
+  expect(r.shopLines).toEqual(['아르케스파']);          // 빈 줄을 인쇄하지 않는다
+  expect(r.customerLine).toBe('고객 미지정');
+  expect(r.rows.find(x => x.label === '결제 수단')!.value).toBe('미지정');
+  expect(r.rows.find(x => x.label === '구분')!.value).toBe('기타');
+  expect(r.notes.some(n => n.includes('사업자등록번호가 설정되어 있지 않아'))).toBe(true);
+});
+
+test('영수증 파일 이름 — 매장·고객·날짜, 경로 금지 문자 제거 (235)', () => {
+  expect(receiptFileName('아르케스파', '김고객', '2026-11-25')).toBe('아르케스파_김고객_영수증_2026-11-25.pdf');
+  expect(receiptFileName('아르케 / 스파', '김 고객', '2026-11-25', true)).toBe('아르케  스파_김고객_환불영수증_2026-11-25.pdf');
+  expect(receiptFileName(undefined, undefined, '2026-11-25')).toBe('CRM_고객_영수증_2026-11-25.pdf');
 });

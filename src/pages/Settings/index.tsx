@@ -3,6 +3,7 @@ import { sanitizeStorageSnapshot } from '../../lib/backupSanitize';
 import { markBackupSaved } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
+import { getPreference, setPreference } from '../../lib/shopPreferences'; // 영수증 인쇄 정보 (235)
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
@@ -418,6 +419,17 @@ export default function Settings() {
   // ─── Shop Info ────────────────────────────────────────────
   // 서버 프로필 갱신(await)이 끝나기 전 연타로 두 번 저장되는 것 방지 (2026-11-18)
   const [shopSaving, setShopSaving] = useState(false);
+  // 영수증 인쇄 정보 — 설정 행(NAS 동기). 사업자등록번호는 코어 AuthUser 에 있어 화면에서 쓸 수 없다 (235, GAP P-9)
+  const [receiptInfo, setReceiptInfo] = useState<{ businessNumber?: string; ownerName?: string }>(() => getPreference('receiptInfo') ?? {});
+  const saveReceiptInfo = () => {
+    const next = {
+      businessNumber: receiptInfo.businessNumber?.trim() || undefined,
+      ownerName: receiptInfo.ownerName?.trim() || undefined,
+    };
+    setPreference('receiptInfo', next);
+    setReceiptInfo(next);
+    notify('영수증 인쇄 정보를 저장했습니다.');
+  };
   const handleShopSave = async () => {
     if (shopSaving) return;
     setShopSaving(true);
@@ -718,6 +730,25 @@ export default function Settings() {
                     >
                       {shopSaving ? '저장 중...' : '저장하기'}
                     </button>
+                  </div>
+                  {/* 영수증 인쇄 정보 — 고객에게 주는 영수증에 찍힌다. 사업자등록번호는 가입 계정(코어)에 있어 여기서 따로 받는다 (235, GAP P-9) */}
+                  <div className="pt-6 border-t border-gray-100" data-testid="settings-receipt-info">
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">영수증 인쇄 정보</h4>
+                    <p className="text-xs text-gray-400 mb-3">매출 &gt; 결제 내역의 [영수증]으로 저장하는 PDF 머리말에 찍힙니다. 비워 두면 그 줄을 빼고 인쇄하고, 영수증에 안내가 함께 나옵니다. 세금계산서·현금영수증은 이 영수증으로 대체되지 않습니다.</p>
+                    <div className="space-y-4">
+                      <FormRow label="사업자등록번호">
+                        <input type="text" aria-label="사업자등록번호" value={receiptInfo.businessNumber ?? ''}
+                          onChange={e => setReceiptInfo(v => ({ ...v, businessNumber: e.target.value }))}
+                          className="form-input" placeholder="000-00-00000" maxLength={20} />
+                      </FormRow>
+                      <FormRow label="대표자명">
+                        <input type="text" aria-label="대표자명" value={receiptInfo.ownerName ?? ''}
+                          onChange={e => setReceiptInfo(v => ({ ...v, ownerName: e.target.value }))}
+                          className="form-input" placeholder="예: 홍길동" maxLength={30} />
+                      </FormRow>
+                      <button type="button" onClick={saveReceiptInfo}
+                        className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors">영수증 정보 저장</button>
+                    </div>
                   </div>
                   {/* 결제수단 — 결제 창을 열지 않고도 미리 준비(PILOT-CHECKLIST 24). 추가·삭제는 누른 즉시 지점 설정에 저장돼 같은 지점 모든 PC 에 보인다 (210) */}
                   <div className="pt-6 border-t border-gray-100" data-testid="settings-payment-methods">
