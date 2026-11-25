@@ -4,7 +4,7 @@ import { getStaffMonthReport, recentMonths, buildStaffReportMessage, staffReport
 import { formatPrice } from '../lib/format';
 import MessageDraftPanel from './ui/MessageDraftPanel';
 // 인센티브(수당) — 규칙은 순수 모듈, 비율은 설정 행(NAS 동기) (233, GAP S-1)
-import { computeCommission, ratesFor, commissionConfigured, parseRate, describeCommissionBasis, COMMISSION_CAVEATS, MAX_COMMISSION_RATE, type CommissionConfig } from '../lib/commissionRule';
+import { computeCommission, ratesFor, commissionConfigured, parseRate, isBlankRate, hasOwnRates, describeCommissionBasis, COMMISSION_CAVEATS, MAX_COMMISSION_RATE, type CommissionConfig } from '../lib/commissionRule';
 import { getCommissionConfig, saveCommissionConfig } from '../lib/staffCommission';
 import { notify } from '../lib/notify';
 
@@ -24,16 +24,31 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
   const showCommission = commissionConfigured(commission);
   const commissionTotal = report.rows.reduce((sum, r) => sum + computeCommission(r, ratesFor(r.staffId, commission)).total, 0);
   const draftKey = (staffId: string, field: 'serviceRate' | 'productRate') => `${staffId}:${field}`;
+  /** 입력칸에 보일 값 — 직원 줄은 '예외가 걸린 값' 만 적고, 상속 중이면 비운다(placeholder 로 기본값 안내) */
   const rateValue = (staffId: string, field: 'serviceRate' | 'productRate'): string => {
     const key = draftKey(staffId, field);
     if (key in rateDraft) return rateDraft[key];
-    const rates = staffId === 'default' ? commission : ratesFor(staffId, commission);
-    return String(rates[field] ?? 0);
+    if (staffId === 'default') return String(commission[field] ?? 0);
+    const own = commission.perStaff?.[staffId]?.[field];
+    return typeof own === 'number' ? String(own) : '';
   };
+  const inheritedRate = (field: 'serviceRate' | 'productRate'): string => `기본 ${commission[field] ?? 0}`;
+  /** 직원별 예외 요약 — 표의 금액과 근거가 맞는지 화면에서 확인할 수 있게 (리뷰 H-3) */
+  const exceptionLines = report.rows
+    .filter(r => hasOwnRates(r.staffId, commission))
+    .map(r => `${r.name}${r.isActive ? '' : '(퇴사)'} ${describeCommissionBasis(ratesFor(r.staffId, commission))}`);
   function saveRates() {
     const next: CommissionConfig = { serviceRate: commission.serviceRate, productRate: commission.productRate, perStaff: { ...(commission.perStaff ?? {}) } };
     for (const [key, raw] of Object.entries(rateDraft)) {
       const [staffId, field] = key.split(':') as [string, 'serviceRate' | 'productRate'];
+      // 직원 줄을 비우면 "예외 해제 → 매장 기본값 상속". 전에는 빈 칸이 0% 예외로 저장돼 그 직원 수당이 영구 0원이 됐다 (234, 리뷰 M-3)
+      if (isBlankRate(raw)) {
+        if (staffId === 'default') { next[field] = 0; continue; }
+        const own = { ...next.perStaff?.[staffId] };
+        delete own[field];
+        next.perStaff = { ...next.perStaff, [staffId]: own };
+        continue;
+      }
       const value = parseRate(raw);
       if (value === null) { notify(`비율은 0~${MAX_COMMISSION_RATE} 사이 숫자로 입력해주세요(소수점 한 자리까지).`); return; } // 잘못된 값은 하나도 저장하지 않는다
       if (staffId === 'default') next[field] = value;
@@ -44,7 +59,16 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
     setRateDraft({});
     notify('인센티브 비율을 저장했습니다.');
   }
-  const draft = useMemo(() => (draftOpen ? buildStaffReportMessage(report) : null), [draftOpen, report]);
+  const draft = useMemo(() => {
+    if (!draftOpen) return null;
+    if (!commissionConfigured(commission)) return buildStaffReportMessage(report);
+    return buildStaffReportMessage(report, {
+      amountOf: staffId => computeCommission(report.rows.find(r => r.staffId === staffId) ?? {}, ratesFor(staffId, commission)).total,
+      describeOf: staffId => describeCommissionBasis(ratesFor(staffId, commission)),
+      total: report.rows.reduce((sum, r) => sum + computeCommission(r, ratesFor(r.staffId, commission)).total, 0),
+      caveats: COMMISSION_CAVEATS,
+    });
+  }, [draftOpen, report, commission]);
   const caveats = staffReportCaveats(report);
   const label = (ym: string) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5))}월`;
   const th = 'text-right font-medium px-3 py-2 whitespace-nowrap';
@@ -69,7 +93,7 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
           </button>
         </div>
       </div>
-      <p id="staff-perf-scroll-hint" className="sm:hidden px-4 pt-2 text-xs text-gray-400">표를 옆으로 밀면 응대 고객·남은 일정까지 보입니다.</p>
+      <p id="staff-perf-scroll-hint" className="sm:hidden px-4 pt-2 text-xs text-gray-400">표를 옆으로 밀면 응대 고객{showCommission ? '·수당' : ''}·남은 일정까지 보입니다.</p>
       <div className="overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-600" role="region" aria-labelledby="staff-perf-title" aria-describedby="staff-perf-scroll-hint" tabIndex={0}>
         <table className="w-full text-sm">
           <thead>
@@ -104,9 +128,12 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
                 <td className={td}>{formatPrice(r.productAmount)}</td>
                 <td className={td}>{r.customers}명</td>
                 {showCommission && (
-                  <td className={`${td} font-semibold text-emerald-700`} data-testid="perf-commission"
-                    title={describeCommissionBasis(ratesFor(r.staffId, commission))}>
+                  <td className={`${td} font-semibold text-emerald-700`} data-testid="perf-commission">
                     {formatPrice(computeCommission(r, ratesFor(r.staffId, commission)).total)}
+                    <span className="block text-[11px] font-normal text-gray-400" data-testid="perf-commission-rate">
+                      시술 {ratesFor(r.staffId, commission).serviceRate}% · 제품 {ratesFor(r.staffId, commission).productRate}%
+                      {hasOwnRates(r.staffId, commission) ? ' (예외)' : ''}
+                    </span>
                   </td>
                 )}
                 <td className={`${td} pr-4 sm:pr-6 text-gray-500`} title={r.pendingCompletion > 0 ? `완료 처리 안 된 지난 예약 ${r.pendingCompletion}건` : undefined}>
@@ -125,13 +152,16 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
         {showCommission && (
           <>
             <p className="text-xs text-gray-500" data-testid="commission-total">수당 합계(참고) {formatPrice(commissionTotal)} — 매장 기본 {describeCommissionBasis(commission)}</p>
+            {exceptionLines.length > 0 && (
+              <p className="text-xs text-gray-500" data-testid="commission-exceptions">직원별 예외 — {exceptionLines.join(' / ')}</p>
+            )}
             {COMMISSION_CAVEATS.map(c => <p key={c} className="text-xs text-gray-400">{c}</p>)}
           </>
         )}
         {ratePanel && (
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3" data-testid="commission-panel">
             <p className="text-sm font-semibold text-gray-800">인센티브 비율 (0~{MAX_COMMISSION_RATE}%, 소수점 한 자리)</p>
-            <p className="text-xs text-gray-500">매장 기본값을 정하고, 다르게 주는 직원만 그 줄에서 바꾸면 됩니다. 비율을 전부 0으로 두면 수당 열이 표시되지 않습니다.</p>
+            <p className="text-xs text-gray-500">매장 기본값을 정하고, 다르게 주는 직원만 그 줄에 적으면 됩니다. 직원 줄을 <b>비우면 매장 기본값을 따릅니다</b>(0을 적으면 그 직원만 0%). 비율을 전부 0으로 두면 수당 열이 표시되지 않습니다. 퇴사 직원도 그 달 기록이 있으면 함께 조정할 수 있습니다.</p>
             <div className="overflow-x-auto">
               <table className="text-sm">
                 <thead>
@@ -152,13 +182,13 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
                       </td>
                     ))}
                   </tr>
-                  {report.rows.filter(r => r.isActive).map(r => (
+                  {report.rows.map(r => (
                     <tr key={r.staffId}>
-                      <td className="py-1 pr-4 text-gray-700">{r.name}</td>
+                      <td className="py-1 pr-4 text-gray-700">{r.name}{!r.isActive && ' (퇴사)'}</td>
                       {(['serviceRate', 'productRate'] as const).map(field => (
                         <td key={field} className="py-1 px-2">
                           <input value={rateValue(r.staffId, field)} onChange={e => setRateDraft(d => ({ ...d, [draftKey(r.staffId, field)]: e.target.value }))}
-                            inputMode="decimal" aria-label={`${r.name} ${field === 'serviceRate' ? '시술' : '제품'} 비율`}
+                            inputMode="decimal" placeholder={inheritedRate(field)} aria-label={`${r.name} ${field === 'serviceRate' ? '시술' : '제품'} 비율`}
                             className="w-20 px-2 py-1.5 text-right text-sm border border-gray-200 rounded-lg" />
                         </td>
                       ))}

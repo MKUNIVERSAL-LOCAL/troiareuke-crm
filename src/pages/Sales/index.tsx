@@ -619,9 +619,10 @@ export default function Sales() {
       </div>
 
       {rebook && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-2xl" data-testid="rebook-prompt" role="status" aria-live="polite">
+        <div className="mb-4 flex flex-wrap items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-2xl" data-testid="rebook-prompt">
           <CalendarPlus size={16} className="text-[#1a3a8f]" />
-          <p className="text-sm text-blue-900">
+          {/* 라이브 영역에는 상태 문장만 둔다 — 버튼을 함께 넣으면 낭독이 어긋난다 (234, 리뷰 L-1) */}
+          <p className="text-sm text-blue-900" role="status" aria-live="polite">
             <b>{rebook.customerName}</b> 님 다음 방문 추천 — <b data-testid="rebook-date">{formatDate(rebook.suggestion.date)}</b>
             <span className="text-blue-700"> · {rebook.suggestion.reason}</span>
           </p>

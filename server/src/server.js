@@ -11,7 +11,7 @@ import pg from 'pg';
 // 입력 검증·마스킹은 순수 모듈로 분리해 테스트한다 (225, GAP Q-3) — npm run test:server
 import {
   maskEmail, normalizeEmail, isEmail, isStrongPassword, isUuid, isValidId, isValidBranchId, isValidText,
-  FLAG_SCOPE_RE, validateFlagsInput, APP_VERSION_RE,
+  FLAG_SCOPE_RE, validateFlagsInput, APP_VERSION_RE, MAX_EMAIL_LENGTH,
 } from './validate.js';
 import { publicUser } from './mappers.js';
 // 재배포 확인용 코드 지문 (229, 리뷰 H-1) — /health 로 알려 배포 스크립트가 구 컨테이너를 구분한다
@@ -165,7 +165,8 @@ const loginEmailLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: false,
   legacyHeaders: false,
-  keyGenerator: req => `email:${normalizeEmail(req.body?.email) || 'missing'}`,
+  // 라우트 검증보다 먼저 돌므로 길이를 여기서도 자른다 — 미인증 요청으로 수 KB 키를 메모리 스토어에 꽂지 못하게 (234, 리뷰 L-7)
+  keyGenerator: req => `email:${normalizeEmail(req.body?.email).slice(0, MAX_EMAIL_LENGTH) || 'missing'}`,
   handler: (req, res, _next, options) => {
     log('warn', 'rate_limit_email', { path: req.path, email: maskEmail(normalizeEmail(req.body?.email)), ip: req.ip });
     res.status(options.statusCode).json({ error: '로그인 시도가 너무 많습니다. 15분 후 다시 시도해주세요.' });

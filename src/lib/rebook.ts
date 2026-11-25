@@ -3,6 +3,7 @@
 // 전수 인덱스(buildCustomerStatsIndex)는 결제 한 건 저장할 때마다 쓰기엔 과하다 — 고객 하나만 훑는다.
 import { CustomerStore, ReservationStore, TreatmentLogStore } from './store';
 import { getRevisitCycleDays } from './reminderEngine';
+import { todayISO } from './format';
 import { suggestRebook, type RebookSuggestion } from './rebookRule';
 
 export interface RebookTarget {
@@ -30,6 +31,7 @@ export function suggestRebookFor(customerId: string, paymentDate: string): Reboo
 
   const suggestion = suggestRebook({
     paymentDate,
+    today: todayISO(), // 지난 결제를 뒤늦게 입력해도 추천일은 오늘 뒤 (234, 리뷰 H-2)
     lastVisitDate,
     nextAppointment: lastLog?.nextAppointment ?? null,
     visitDays,

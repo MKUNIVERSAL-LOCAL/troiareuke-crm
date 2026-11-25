@@ -173,14 +173,29 @@ export function staffReportCaveats(report: StaffMonthReport): string[] {
   return out;
 }
 
-/** 오너 보고용 문구 — 복사/공유 */
-export function buildStaffReportMessage(report: StaffMonthReport): string {
+/** 보고 문구에 함께 넣을 수당 정보 (233·234) — 화면이 비율 설정을 들고 있으므로 주입받는다 */
+export interface StaffReportCommission {
+  /** 그 직원 수당 합계(원) */
+  amountOf: (staffId: string) => number;
+  /** 그 직원에게 적용된 비율 설명 */
+  describeOf: (staffId: string) => string;
+  /** 전 직원 수당 합계 */
+  total: number;
+  /** 수당 한계 문구 */
+  caveats: string[];
+}
+
+/** 오너 보고용 문구 — 복사/공유. 수당 비율을 설정한 매장은 수당도 함께 들어간다(리뷰 H-3: 표만 보고는 검증이 안 된다) */
+export function buildStaffReportMessage(report: StaffMonthReport, commission?: StaffReportCommission): string {
   const [y, m] = report.yearMonth.split('-');
   const lines = [`[${y}년 ${Number(m)}월 직원별 실적]`];
   for (const r of report.rows) {
-    lines.push(`• ${r.name}${r.isActive ? '' : '(퇴사)'}: 완료 예약 ${r.completedReservations}건(예약액 ${formatPrice(r.reservationAmount)} · 실결제 ${formatPrice(r.paidAmount)}) · 시술 ${r.treatments}건 · 제품 ${formatPrice(r.productAmount)} · 고객 ${r.customers}명`);
+    const pay = commission ? ` · 수당(참고) ${formatPrice(commission.amountOf(r.staffId))}(${commission.describeOf(r.staffId)})` : '';
+    lines.push(`• ${r.name}${r.isActive ? '' : '(퇴사)'}: 완료 예약 ${r.completedReservations}건(예약액 ${formatPrice(r.reservationAmount)} · 실결제 ${formatPrice(r.paidAmount)}) · 시술 ${r.treatments}건 · 제품 ${formatPrice(r.productAmount)} · 고객 ${r.customers}명${pay}`);
   }
+  if (commission) lines.push(`• 수당 합계(참고) ${formatPrice(commission.total)}`);
   for (const c of staffReportCaveats(report)) lines.push(`• ${c}`);
+  if (commission) for (const c of commission.caveats) lines.push(`• ${c}`);
   lines.push('※ 예약액은 완료 처리된 예약의 정가(회차권 차감·할인 미반영), 실결제는 그 예약에 연결된 완료 결제 합(환불 제외) · 취소·노쇼 제외');
   return lines.join('\n');
 }

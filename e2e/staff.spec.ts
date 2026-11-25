@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, isNearMidnightSeoul, dismissToasts, visibleButton } from './helpers';
 import { staffScenario } from './scenarios';
+import { addReservation, completeReservation } from './flows';
 
 /**
  * 직원 흐름 E2E (PC 폭, 2026-11-19 ㉙) — 직원을 추가하면 예약 담당 선택지에 바로 뜨고, 완료 예약이 실적 표에 잡히며, 이름을 바꿔도(staffId 연결) 실적이 유지되고,
@@ -10,6 +11,7 @@ import { staffScenario } from './scenarios';
 
 const acc = makeAccount('ST');
 const acc2 = makeAccount('ST2'); // 인센티브 비율 (233)
+const acc3 = makeAccount('ST3'); // 수당 금액 (234, 리뷰 M-6)
 
 test('직원 추가 → 예약 담당 → 실적 → 이름 변경 → 퇴사·복직이 맞게 반영된다', async ({ page }) => {
   test.slow();
@@ -54,4 +56,46 @@ test('인센티브 비율을 정하면 직원별 수당 열이 생기고, 잘못
   await expect(page.getByTestId('staff-performance').getByText('수당(참고)')).toBeVisible();
   await visibleButton(page, '인센티브 비율').click();
   await expect(page.getByTestId('commission-panel').getByLabel('매장 기본 시술 비율')).toHaveValue('12.5');
+});
+
+test('실결제가 있는 직원의 수당 금액과 보고 문구가 비율대로 나온다 (234, 리뷰 M-6)', async ({ page }) => {
+  test.slow();
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 예약을 만든 날과 실적의 이번 달이 달라질 수 있다');
+  page.on('dialog', d => d.accept());
+  await signupAndOnboard(page, acc3);
+  await createCustomer(page, acc3);
+
+  // 50,000원 시술 예약 → 완료 + 결제 등록 → 실결제 50,000원
+  await page.goto('/reservations');
+  await addReservation(page, acc3, '11:00');
+  await completeReservation(page, '11:00', true);
+
+  await page.goto('/staff');
+  const card = page.getByTestId('staff-performance');
+  const row = card.locator('tbody tr').first();
+  await expect(row.getByTestId('perf-paid')).toHaveText('50,000원');
+
+  // 시술 10% → 수당 5,000원 (원 단위 내림)
+  await card.getByRole('button', { name: '인센티브 비율' }).click();
+  const panel = page.getByTestId('commission-panel');
+  await panel.getByLabel('매장 기본 시술 비율').fill('10');
+  await panel.getByRole('button', { name: '비율 저장' }).click();
+  await expect(page.getByText('인센티브 비율을 저장했습니다.')).toBeVisible();
+  await dismissToasts(page);
+  await expect(row.getByTestId('perf-commission')).toContainText('5,000원');
+  await expect(row.getByTestId('perf-commission-rate')).toContainText('시술 10% · 제품 0%'); // 근거가 툴팁이 아니라 글자로 보인다 (리뷰 H-3)
+  await expect(card.getByTestId('commission-total')).toContainText('5,000원');
+
+  // 12.5% 로 바꾸면 6,250원 — 소수점 비율도 금액이 맞는다
+  await panel.getByLabel('매장 기본 시술 비율').fill('12.5');
+  await panel.getByRole('button', { name: '비율 저장' }).click();
+  await dismissToasts(page);
+  await expect(row.getByTestId('perf-commission')).toContainText('6,250원');
+
+  // 보고 문구에도 수당과 한계가 들어간다 (리뷰 H-3 — 표만 보고는 검증이 안 된다)
+  await card.getByRole('button', { name: '보고 문구' }).click();
+  const draft = card.locator('pre').first(); // 보고 문구는 pre 로 그린다(MessageDraftPanel)
+  await expect(draft).toContainText('수당(참고) 6,250원');
+  await expect(draft).toContainText('수당 합계(참고) 6,250원');
+  await expect(draft).toContainText('예약 없이 등록한 결제');
 });

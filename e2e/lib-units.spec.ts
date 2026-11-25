@@ -39,8 +39,8 @@ import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalog
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
 import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
 import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
-import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
-import { parseRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
+import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
+import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -1351,7 +1351,7 @@ test('사진 백업 파일 파싱 — 형식·버전·기록 키를 검사하고
 // 결제한 자리에서 다음 예약을 잡게 하는 흐름. 틀리면 이미 예약이 있는 고객을 또 부르거나 과거 날짜를 권한다.
 
 test('재예약 추천 — 다가오는 예약이 있으면 추천하지 않는다(취소·노쇼는 예약으로 보지 않는다) (231)', () => {
-  const base = { paymentDate: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-11-25'] };
+  const base = { paymentDate: '2026-11-25', today: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-11-25'] };
   expect(suggestRebook({ ...base, reservations: [{ date: '2026-12-10', status: 'confirmed' }] })).toBeNull();
   expect(suggestRebook({ ...base, reservations: [{ date: '2026-11-25', status: 'confirmed' }] })).toBeNull(); // 오늘 아직 안 끝난 예약
   // 취소·노쇼·지난 예약·오늘 완료분은 "다음 예약" 이 아니다 → 추천한다
@@ -1362,31 +1362,31 @@ test('재예약 추천 — 다가오는 예약이 있으면 추천하지 않는�
 });
 
 test('재예약 추천 — 시술 기록의 다음 방문 권장일이 앞에 있으면 그 날짜 (231)', () => {
-  const r = suggestRebook({ paymentDate: '2026-11-25', nextAppointment: '2026-12-09', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  const r = suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', nextAppointment: '2026-12-09', shopCycleDays: 28, visitDays: ['2026-11-25'] });
   expect(r).toEqual({ date: '2026-12-09', basis: 'recommended', days: 14, reason: '시술 기록의 다음 방문 권장일' });
   // 지난 권장일은 쓰지 않는다(과거 날짜로 예약을 권하지 않게) → 주기로
-  const past = suggestRebook({ paymentDate: '2026-11-25', nextAppointment: '2026-10-01', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  const past = suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', nextAppointment: '2026-10-01', shopCycleDays: 28, visitDays: ['2026-11-25'] });
   expect(past?.basis).toBe('shop');
   expect(past?.date).toBe('2026-12-23');
 });
 
 test('재예약 추천 — 방문이 쌓이면 그 고객 평균 주기, 아니면 매장 기본 주기 (231)', () => {
   // 3주 간격으로 네 번 다녀간 고객 → 개인 주기 21일
-  const personal = suggestRebook({ paymentDate: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-09-30', '2026-10-21', '2026-11-11', '2026-11-25'] });
+  const personal = suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-09-30', '2026-10-21', '2026-11-11', '2026-11-25'] });
   expect(personal?.basis).toBe('personal');
   expect(personal?.days).toBe(21);          // 간격 21·21·14 의 중앙값
   expect(personal?.date).toBe(addDaysISO('2026-11-25', personal!.days));
-  expect(personal?.reason).toMatch(/이 고객 평균 주기/);
+  expect(personal?.reason).toMatch(/이 고객 방문 주기 21일\(방문 4회의 중간값\)/); // 평균이 아니라 중간값 (234, 리뷰 L-2)
   // 첫 방문이라 간격이 모자라면 매장 기본
-  const shop = suggestRebook({ paymentDate: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  const shop = suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-11-25'] });
   expect(shop).toEqual({ date: '2026-12-23', basis: 'shop', days: 28, reason: '매장 기본 주기 28일' });
   // 주기를 모르면(0) 추천하지 않는다 — 아무 날짜나 권하지 않는다
-  expect(suggestRebook({ paymentDate: '2026-11-25', shopCycleDays: 0, visitDays: [] })).toBeNull();
-  expect(suggestRebook({ paymentDate: '어제', shopCycleDays: 28, visitDays: [] })).toBeNull();
+  expect(suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', shopCycleDays: 0, visitDays: [] })).toBeNull();
+  expect(suggestRebook({ paymentDate: '어제', today: '2026-11-25', shopCycleDays: 28, visitDays: [] })).toBeNull();
 });
 
 test('재예약 추천 — 마지막 방문이 결제일보다 뒤면(선결제) 그 방문일 기준 (231)', () => {
-  const r = suggestRebook({ paymentDate: '2026-11-01', lastVisitDate: '2026-11-20', shopCycleDays: 28, visitDays: ['2026-11-20'] });
+  const r = suggestRebook({ paymentDate: '2026-11-01', today: '2026-11-01', lastVisitDate: '2026-11-20', shopCycleDays: 28, visitDays: ['2026-11-20'] });
   expect(r?.date).toBe('2026-12-18'); // 11-20 + 28일
   expect(describeRebook(r!, iso => iso)).toBe('2026-12-18 · 매장 기본 주기 28일');
 });
@@ -1401,7 +1401,7 @@ function addDaysISO(iso: string, days: number): string {
 // 예약·시술 자리에서 금기를 못 보면 사람이 다친다. 반대로 메모 전문을 띄우면 아무도 읽지 않는다.
 
 test('메모 주의 줄 — 키워드가 든 줄만, 중복 제거, 80자에서 자른다 (232)', () => {
-  expect(memoCautionLines('레티놀 주의\n커피 좋아함\n임신 중')).toEqual(['레티놀 주의', '임신 중']);
+  expect(memoCautionLines('레티놀 주의\n커피 좋아함\n임신 중')).toEqual(['임신 중', '레티놀 주의']); // 234: 위험한 줄 먼저
   expect(memoCautionLines('커피 좋아함\n친구 소개')).toEqual([]);      // 경고가 없으면 만들지 않는다
   expect(memoCautionLines('')).toEqual([]);
   expect(memoCautionLines(null)).toEqual([]);
@@ -1416,6 +1416,7 @@ test('메모 주의 줄 — 키워드가 든 줄만, 중복 제거, 80자에서 
 test('현장 경고 — 알레르기 먼저, 메모 주의 줄, 노쇼는 2회부터 (232)', () => {
   const a = buildCustomerAlert({ allergies: '레티놀 자극', memo: '임신 중\n커피 좋아함', noshowCount: 3 });
   expect(a.lines).toEqual(['알레르기·주의: 레티놀 자극', '임신 중', '노쇼 3회 — 예약 확인 전화를 권합니다']);
+  expect(a.hiddenCount).toBe(0);
   expect(a.allergies).toBe('레티놀 자극');
   expect(a.noshow).toBe(3);
   expect(hasCustomerAlert(a)).toBe(true);
@@ -1431,10 +1432,12 @@ test('현장 경고 — 올릴 것이 없으면 아무 줄도 만들지 않는�
   expect(hasCustomerAlert(null)).toBe(false);
 });
 
-test('현장 경고 — 줄은 최대 3개, 알레르기와 같은 말을 두 번 띄우지 않는다 (232)', () => {
+test('현장 경고 — 한 번에 3줄, 넘친 줄은 수를 알려 주고 사라지지 않는다 (232·234 리뷰 H-1)', () => {
   const many = buildCustomerAlert({ allergies: '견과류', memo: '주의1\n주의2\n주의3\n주의4', noshowCount: 5 });
   expect(many.lines.length).toBe(MAX_ALERT_LINES);
   expect(many.lines[0]).toBe('알레르기·주의: 견과류');
+  expect(many.hiddenCount).toBe(many.allLines.length - MAX_ALERT_LINES);
+  expect(many.allLines.length).toBe(6); // 알레르기 + 메모 4 + 노쇼 — 하나도 버리지 않는다
   const dup = buildCustomerAlert({ allergies: '견과류 알레르기', memo: '견과류 알레르기' });
   expect(dup.lines).toEqual(['알레르기·주의: 견과류 알레르기']);
 });
@@ -1447,12 +1450,13 @@ test('수당 비율 입력 — 0~50%, 소수점 한 자리, 잘못된 값은 nul
   expect(parseRate('12.5')).toBe(12.5);
   expect(parseRate('12.5%')).toBe(12.5);
   expect(parseRate(' 7 ')).toBe(7);
-  expect(parseRate('')).toBe(0);
+  expect(parseRate('')).toBeNull();  // 234: 빈 칸은 "예외 해제" 라 값이 아니다
   expect(parseRate('0')).toBe(0);
   expect(parseRate(String(MAX_COMMISSION_RATE))).toBe(MAX_COMMISSION_RATE);
   expect(parseRate('50.1')).toBeNull();      // 상한 밖
   expect(parseRate('-5')).toBeNull();
-  expect(parseRate('12.55')).toBeNull();     // 소수점 두 자리
+  expect(parseRate('12.55')).toBeNull();     // 소수점 둘째 자리가 살아 있는 값
+  expect(parseRate('12.50')).toBe(12.5);     // 끝의 0 은 사람이 흔히 쓴다 (234, 리뷰 L-8)
   expect(parseRate('열 퍼센트')).toBeNull();
   expect(parseRate('1e2')).toBeNull();
   expect(parseRate(null)).toBeNull();
@@ -1486,4 +1490,73 @@ test('수당 표시 여부·기준 문구 — 전부 0이면 열을 띄우지 �
   expect(commissionConfigured({ serviceRate: 10, productRate: 0 })).toBe(true);
   expect(describeCommissionBasis({ serviceRate: 10, productRate: 5 }))
     .toBe('시술 10% × 실결제액 + 제품 5% × 제품 판매액 (원 단위 내림)');
+});
+
+// ── 234 리뷰 반영: 경고 위험도·부정 표현, 추천일 오늘 기준, 수당 비율 상속·검증 ──
+
+test('현장 경고 — "시술 불가" 같은 금기가 상한 때문에 밀려나지 않는다 (234, 리뷰 H-1)', () => {
+  const a = buildCustomerAlert({
+    allergies: '레티놀',
+    memo: '민감한 편\n켈로이드 체질\n항생제 복용 중\n시술 불가 부위: 눈가',
+  });
+  // 위험한 줄부터 3줄 — 전에는 메모 원문 순서라 '시술 불가' 가 아무 표시 없이 사라졌다
+  expect(a.lines).toEqual(['알레르기·주의: 레티놀', '시술 불가 부위: 눈가', '켈로이드 체질']);
+  expect(a.allLines).toContain('항생제 복용 중');
+  expect(a.allLines).toContain('민감한 편');
+  expect(a.hiddenCount).toBe(2);
+});
+
+test('현장 경고 — "없음·아님" 이 붙은 줄은 경고로 올리지 않는다 (234, 리뷰 M-5)', () => {
+  expect(isNegatedCaution('특별한 주의사항 없음')).toBe(true);
+  expect(isNegatedCaution('임신 계획 없음')).toBe(true);
+  expect(isNegatedCaution('민감하지 않은 편')).toBe(true);
+  expect(isNegatedCaution('임신 중')).toBe(false);
+  const a = buildCustomerAlert({ memo: '특별한 주의사항 없음\n임신 계획 없음\n민감하지 않은 편' });
+  expect(a.allLines).toEqual([]);          // 늑대 소년 금지 — 전에는 3줄 전부 경고로 떴다
+  expect(hasCustomerAlert(a)).toBe(false);
+  // 부정 표현 줄이 상한을 차지해 진짜 금기를 밀어내지도 않는다
+  const b = buildCustomerAlert({ memo: '주의사항 없음\n임신 중' });
+  expect(b.lines).toEqual(['임신 중']);
+});
+
+test('재예약 추천 — 지난 결제를 뒤늦게 입력해도 추천일은 오늘 뒤 (234, 리뷰 H-2)', () => {
+  const today = '2026-11-25';
+  // 9월 결제를 지금 입력 → 9월 29일을 권하면 과거 예약이 생긴다
+  const late = suggestRebook({ paymentDate: '2026-09-01', today, shopCycleDays: 28, visitDays: ['2026-09-01'] });
+  expect(late?.date).toBe('2026-12-23'); // 오늘 + 28일
+  expect(late!.date > today).toBe(true);
+  // 지난 권장일도 쓰지 않는다
+  const pastRecommended = suggestRebook({ paymentDate: '2026-09-01', today, nextAppointment: '2026-09-20', shopCycleDays: 28, visitDays: ['2026-09-01'] });
+  expect(pastRecommended?.basis).toBe('shop');
+  expect(pastRecommended!.date > today).toBe(true);
+  // 앞으로 남은 권장일은 그대로 쓴다
+  expect(suggestRebook({ paymentDate: '2026-11-25', today, nextAppointment: '2026-12-09', shopCycleDays: 28, visitDays: ['2026-11-25'] })?.date).toBe('2026-12-09');
+  // 오늘 이후 예약이 이미 있으면(결제일 기준이 아니라 오늘 기준) 추천하지 않는다
+  expect(suggestRebook({ paymentDate: '2026-09-01', today, shopCycleDays: 28, visitDays: ['2026-09-01'], reservations: [{ date: '2026-12-01', status: 'confirmed' }] })).toBeNull();
+});
+
+test('수당 비율 — 빈 칸은 "기본값 상속", 0은 "그 직원만 0%" (234, 리뷰 M-3)', () => {
+  expect(parseRate('')).toBeNull();      // 빈 칸은 값이 아니다
+  expect(isBlankRate('')).toBe(true);
+  expect(isBlankRate('  %  ')).toBe(true);
+  expect(isBlankRate('0')).toBe(false);
+  expect(parseRate('0')).toBe(0);
+  expect(parseRate('12.50')).toBe(12.5); // 사람이 쓰는 표기 (리뷰 L-8)
+  expect(parseRate('12.5 %')).toBe(12.5);
+  expect(parseRate('12.55')).toBeNull();
+  // 예외가 걸렸는지 화면이 구분할 수 있다
+  const config = { serviceRate: 10, productRate: 5, perStaff: { s2: { serviceRate: 20 } } };
+  expect(hasOwnRates('s2', config)).toBe(true);
+  expect(hasOwnRates('s1', config)).toBe(false);
+});
+
+test('수당 비율 — 숫자가 아닌 예외 값은 기본값으로 돌아간다(조용한 0원 금지) (234, 리뷰 M-1)', () => {
+  const broken = { serviceRate: 10, productRate: 5, perStaff: { s9: { serviceRate: '15' as unknown as number } } };
+  expect(ratesFor('s9', broken)).toEqual({ serviceRate: 10, productRate: 5 });
+  expect(clampRate('15')).toBe(0);        // 문자열은 비율로 쓰지 않는다
+  expect(clampRate(999)).toBe(MAX_COMMISSION_RATE);
+  // 금액과 근거가 같은 값을 말한다 (리뷰 M-2)
+  expect(describeCommissionBasis({ serviceRate: 999, productRate: -5 }))
+    .toBe('시술 50% × 실결제액 + 제품 0% × 제품 판매액 (원 단위 내림)');
+  expect(computeCommission({ paidAmount: 1_000_000 }, { serviceRate: 999, productRate: 0 }).service).toBe(500_000);
 });

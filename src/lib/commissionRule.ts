@@ -28,14 +28,25 @@ export interface CommissionConfig extends CommissionRates {
 
 export const DEFAULT_COMMISSION: CommissionConfig = { serviceRate: 0, productRate: 0 };
 
-/** 입력칸 값 → 비율. 숫자가 아니거나 범위를 벗어나면 null(저장하지 않고 사유를 보여 준다) */
+/**
+ * 입력칸 값 → 비율. 숫자가 아니거나 범위를 벗어나면 null(저장하지 않고 사유를 보여 준다).
+ * '12.5' · '12.50' · '12.5%' · '12.5 %' 를 모두 받는다 — 사람이 쓰는 표기를 거절 메시지로 돌려보내지 않는다 (234, 리뷰 L-8).
+ * 빈 칸은 0 이 아니라 null 로 본다 — 호출 쪽이 "비워 두면 기본값 상속" 과 "0% 로 고정" 을 구분한다 (234, 리뷰 M-3).
+ */
 export function parseRate(input: unknown): number | null {
   if (typeof input === 'number') return normalizeRate(input);
   if (typeof input !== 'string') return null;
-  const t = input.trim().replace(/%$/, '').trim();
-  if (t === '') return 0;
-  if (!/^\d{1,3}(\.\d)?$/.test(t)) return null; // 소수점 한 자리까지, 음수·지수 표기 거부
-  return normalizeRate(Number(t));
+  const t = input.trim().replace(/%\s*$/, '').trim();
+  if (t === '') return null;
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(t)) return null; // 음수·지수·문자 거부
+  const n = Number(t);
+  if (Math.abs(n * 10 - Math.round(n * 10)) > 1e-9) return null; // 소수점 둘째 자리가 살아 있으면 거절(12.50 은 통과, 12.55 는 거절)
+  return normalizeRate(n);
+}
+
+/** 입력칸이 비어 있는가 — '예외 해제' 와 잘못된 값을 구분한다 */
+export function isBlankRate(input: unknown): boolean {
+  return typeof input === 'string' && input.trim().replace(/%\s*$/, '').trim() === '';
 }
 
 function normalizeRate(n: number): number | null {
@@ -43,13 +54,33 @@ function normalizeRate(n: number): number | null {
   return Math.round(n * 10) / 10;
 }
 
-/** 그 직원에게 적용할 비율 — 직원별 예외가 있으면 그것, 없으면 매장 기본값 */
+/**
+ * 그 직원에게 적용할 비율 — 직원별 예외가 있으면 그것, 없으면 매장 기본값.
+ * 예외 값이 숫자가 아니면(설정 수동 편집·옛 포맷·다른 기기의 쓰기) 기본값으로 돌아간다 —
+ * 전에는 문자열 '15' 가 nullish 가 아니라서 그 직원 수당이 조용히 0원이 됐다 (234, 리뷰 M-1).
+ */
 export function ratesFor(staffId: string, config: CommissionConfig = DEFAULT_COMMISSION): CommissionRates {
   const own = config.perStaff?.[staffId];
   return {
-    serviceRate: clamp(own?.serviceRate ?? config.serviceRate),
-    productRate: clamp(own?.productRate ?? config.productRate),
+    serviceRate: clamp(numOr(own?.serviceRate, config.serviceRate)),
+    productRate: clamp(numOr(own?.productRate, config.productRate)),
   };
+}
+
+function numOr(value: unknown, fallback: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return typeof fallback === 'number' && Number.isFinite(fallback) ? fallback : 0;
+}
+
+/** 저장값을 화면·계산에 쓸 수 있는 비율로 (범위 밖은 깎는다) */
+export function clampRate(value: unknown): number {
+  return clamp(value);
+}
+
+/** 그 직원에게 직원별 예외가 걸려 있는가 (숫자 값이 하나라도 있으면) */
+export function hasOwnRates(staffId: string, config: CommissionConfig = DEFAULT_COMMISSION): boolean {
+  const own = config.perStaff?.[staffId];
+  return typeof own?.serviceRate === 'number' || typeof own?.productRate === 'number';
 }
 
 function clamp(n: unknown): number {
@@ -82,11 +113,15 @@ export function commissionConfigured(config: CommissionConfig = DEFAULT_COMMISSI
 
 /** 화면·보고 문구에 붙는 기준 설명 */
 export function describeCommissionBasis(rates: CommissionRates): string {
-  return `시술 ${rates.serviceRate}% × 실결제액 + 제품 ${rates.productRate}% × 제품 판매액 (원 단위 내림)`;
+  // 계산은 clamp 한 값으로 하므로 설명도 같은 값을 쓴다 — 전에는 저장값 999% 가 문구에만 그대로 나와
+  // 금액과 근거가 서로 다른 값을 말했다 (234, 리뷰 M-2)
+  return `시술 ${clamp(rates.serviceRate)}% × 실결제액 + 제품 ${clamp(rates.productRate)}% × 제품 판매액 (원 단위 내림)`;
 }
 
 /** 수당을 신뢰하기 전에 알아야 하는 한계 — 표 아래에 그대로 띄운다 */
 export const COMMISSION_CAVEATS = [
   '수당은 참고 계산입니다. 시술 수당은 완료 예약에 연결된 결제만 세므로, 예약 없이 등록한 결제·회차권 선결제는 빠집니다.',
   '제품 수당은 담당 직원이 기록된 판매만 셉니다(취소분 제외).',
+  // 234 리뷰 M-4 — 지급한 급여와 어긋날 수 있는 길을 분명히 적는다(스냅샷 저장은 오너 승인 항목)
+  '지난달 결제를 나중에 환불하면 그달 수당도 다시 계산됩니다. 지급한 금액은 따로 기록해 두시고, 월 마감을 쓰면 지난달 결제 수정이 막힙니다.',
 ];

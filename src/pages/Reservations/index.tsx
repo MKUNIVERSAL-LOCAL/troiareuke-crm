@@ -1278,6 +1278,8 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       ...(overlap ? [`${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.`] : []),
       ...(bufferOverlap ? [`${staff.name} 담당자의 준비·정리 시간(앞 ${pad.b}분·뒤 ${pad.a}분)을 넣으면 ${bufferOverlap.startTime}~${bufferOverlap.endTime} 예약과 겹칩니다.`] : []),
       ...staffWarnings,
+      // 지난 날짜 예약은 실수로 들어가면 "완료 처리 안 된 지난 예약" 으로 쌓여 실적·수당까지 흐린다 (234, 리뷰 H-2)
+      ...(!isEdit && date < todayISO() ? [`${formatDate(date)}는 지난 날짜입니다. 과거 예약으로 저장하면 완료 처리가 필요한 지난 예약으로 남습니다.`] : []),
       ...(freeHint ? [freeHint] : []),
       ...hoursWarnings.map(w => w.message),
     ];

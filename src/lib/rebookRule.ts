@@ -7,8 +7,11 @@
 // 규칙:
 //   1) 이미 결제일 이후의 살아 있는 예약이 있으면 추천하지 않는다(같은 말을 두 번 하지 않는다).
 //   2) 시술 기록의 "다음 방문 권장일"이 결제일 이후면 그 날짜 (basis 'recommended').
-//   3) 아니면 기준일(결제일과 마지막 방문일 중 나중) + 주기. 방문 3회 이상이면 그 고객의 평균 주기(personal),
+//   3) 아니면 기준일(결제일·마지막 방문일·오늘 중 가장 나중) + 주기. 방문 3회 이상이면 그 고객의 방문 주기(중간값, personal),
 //      아니면 매장 기본 주기(shop) — 어느 쪽인지 화면에 그대로 적는다(추정을 확정처럼 말하지 않기).
+//   4) 주기를 모르면 추천하지 않는다(아무 날짜나 권하지 않는다).
+//   5) 추천일은 항상 오늘보다 뒤다 — 지난주 결제를 뒤늦게 입력하면 "9월 29일" 같은 과거 날짜를 권하고
+//      그 날짜로 지난 예약이 저장돼 실적의 "완료 처리 안 된 지난 예약" 까지 오염됐다 (234, 리뷰 H-2).
 // 날짜는 전부 로컬 YYYY-MM-DD (revisitRule 과 같은 규칙 — toISOString 은 KST 자정~09시에 전날로 어긋난다).
 // e2e/lib-units.spec.ts 가 브라우저 없이 직접 import 해 검증한다.
 // ═══════════════════════════════════════════════════════════════
@@ -20,6 +23,8 @@ import { isUpcomingReservation } from './upcomingRule';
 export interface RebookInput {
   /** 기준일 — 방금 등록한 결제의 결제일 */
   paymentDate: string;
+  /** 오늘(YYYY-MM-DD) — 추천일은 이보다 뒤여야 한다. 넘기지 않으면 기기 날짜 */
+  today?: string;
   /** 고객의 마지막 방문일(완료 예약 ∪ 시술 기록) */
   lastVisitDate?: string | null;
   /** 최근 시술 기록의 "다음 방문 권장일" */
@@ -46,14 +51,17 @@ export interface RebookSuggestion {
 /** 다음 방문 추천 — 추천할 것이 없으면 null */
 export function suggestRebook(i: RebookInput): RebookSuggestion | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(i.paymentDate)) return null;
-  const base = i.lastVisitDate && i.lastVisitDate > i.paymentDate ? i.lastVisitDate : i.paymentDate;
+  const today = i.today && /^\d{4}-\d{2}-\d{2}$/.test(i.today) ? i.today : localToday();
+  const visit = i.lastVisitDate && i.lastVisitDate > i.paymentDate ? i.lastVisitDate : i.paymentDate;
+  // 지난 결제를 뒤늦게 입력한 경우 주기는 마지막 방문일에서 세지만, 추천일은 오늘 뒤로 민다 (234, 리뷰 H-2)
+  const base = visit > today ? visit : today;
 
   // 1) 이미 다가오는 예약이 있으면 묻지 않는다 (취소·노쇼 제외, 오늘 완료분 제외 — upcomingRule 과 같은 정의)
   for (const r of i.reservations ?? []) {
-    if (isUpcomingReservation(r, i.paymentDate)) return null;
+    if (isUpcomingReservation(r, today)) return null;
   }
 
-  // 2) 시술 기록의 다음 방문 권장일이 앞으로 남아 있으면 그 날짜
+  // 2) 시술 기록의 다음 방문 권장일이 앞으로(오늘 뒤로) 남아 있으면 그 날짜
   if (i.nextAppointment && /^\d{4}-\d{2}-\d{2}$/.test(i.nextAppointment) && i.nextAppointment > base) {
     return { date: i.nextAppointment, basis: 'recommended', days: diffDays(base, i.nextAppointment), reason: '시술 기록의 다음 방문 권장일' };
   }
@@ -67,15 +75,21 @@ export function suggestRebook(i: RebookInput): RebookSuggestion | null {
     date: addDays(base, days),
     basis: personal ? 'personal' : 'shop',
     days,
-    reason: personal ? `이 고객 평균 주기 ${personal.days}일(방문 ${personal.intervals + 1}회 기준)` : `매장 기본 주기 ${days}일`,
+    reason: personal ? `이 고객 방문 주기 ${personal.days}일(방문 ${personal.intervals + 1}회의 중간값)` : `매장 기본 주기 ${days}일`,
   };
+}
+
+/** 로컬(KST) 오늘 — toISOString 은 UTC 라 자정~09시에 전날이 된다 */
+function localToday(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 function diffDays(fromISO: string, toISO: string): number {
   return Math.round((new Date(toISO + 'T00:00:00').getTime() - new Date(fromISO + 'T00:00:00').getTime()) / 86_400_000);
 }
 
-/** 화면 한 줄 — "12월 18일(목) · 이 고객 평균 주기 21일" */
+/** 화면 한 줄 — "12월 18일(목) · 이 고객 방문 주기 21일(방문 4회의 중간값)" */
 export function describeRebook(s: RebookSuggestion, formatDate: (iso: string) => string): string {
   return `${formatDate(s.date)} · ${s.reason}`;
 }
