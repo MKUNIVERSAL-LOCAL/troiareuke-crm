@@ -9,7 +9,7 @@
 - **전체 Playwright 는 20:50 시스템 메모리 부족으로 중단된 뒤 자동 재실행 금지 규칙에 따라 돌리지 않았다** — 156 이후 묶음은 경량 게이트(tsc·build·build:e2e·distribution·routes·updater·outbox·mobile) + 대상 스펙(lib-units·campaigns·marketing-consent·messaging·ai-briefing·admin-nas·routes·a11y) 통과로 커밋. 오너 지시 뒤 `npx playwright test --workers=3` 전체 재실행 필요.
 
 ## 오너 결정·승인 대기(코드가 멈춘 곳)
-- **B-7** NAS SSH/DSM 작업 — 지점 자동 업데이트 채널이 1.0.59 에 멈춤(가장 급함).
+- **B-7** 11-25 09:41 부분 해결 — 오너 DSM 로그인 뒤 `CRM-publish-update` 활성(매일 00:00)·즉시 실행, 채널 v1.0.61(`verify:nas` 5/5). 남은 결정: `CRM-server-update`(서버 재배포 매일 00:00) 활성 여부, SSH 공개키 등록(무인 릴리스).
 - **B-2·A-15** 서버 무결성·코어 카운터(133 설계), **A-16** Reservation.resourceId, **A-17/D-13** AI 키 safeStorage, **B-4** 캠페인 서버 디스패처(기기 간 멱등키·무인 발송·동의 재검사·KST), **C-7** 본사 AI 공식 API 프로젝트·예산(100 매장 월 17만 원 제안), **C-8** AI 요금제(가설 4,900/9,900/19,900 유지 가능 — 163 분석), **C-9** 실고객 자동 마케팅 개시, **결정 #9** 환불 모델(148 준비분 연결).
 - 상세 표: `OWNER-APPROVAL-QUEUE.md`, 설계서: `SERVER-INTEGRITY-DESIGN-2026-11-24.md`·`AI-SECURITY-POLICY.md`·`AI-GATEWAY-ARCHITECTURE.md`·`REFUND-MODEL-DESIGN-2026-11-24.md`·`AI-PRICING-AND-COST-ANALYSIS.md`.
 

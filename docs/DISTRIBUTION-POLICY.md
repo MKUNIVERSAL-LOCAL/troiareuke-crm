@@ -73,7 +73,7 @@
 
 15. **NAS 자동화는 PC 없이 돌아야 한다 — 그러나 릴리스 순간에는 PC가 직접 게시한다 (2026-09-09 사고 후).**
     09-07~09 이틀간 DSM 스케줄이 돌지 않아 채널이 v1.0.48에 머문 원인은 두 작업의 반복 설정이 **"매일"이 아니라 "2026-09-07 1회"** 로 저장된 것이었다(NAS crontab `0 0 7 9 *`).
-    - 무인 경로(정본): DSM `CRM-publish-update` / `CRM-server-update` **매일 00:00** — 오너가 반복 설정을 "매일"로 바꿔야 유효. 확인은 SSH에서 `grep synoschedtask /etc/crontab` 의 두 작업 줄이 `0 0 * * *`인지.
+    - 무인 경로(정본): DSM `CRM-publish-update` / `CRM-server-update` **매일 00:00** — 오너가 반복 설정을 "매일"로 바꿔야 유효. **실사고 2026-11-23~25**: 두 작업이 비활성(체크 해제) 상태여서 v1.0.60·v1.0.61 이 채널에 안 올라가 지점이 1.0.59 에 48시간 멈춤 → 11-25 09:41 오너 DSM 로그인 뒤 `CRM-publish-update` 활성·즉시 실행으로 복구. 릴리스 체크리스트에 "DSM 작업 활성 상태 확인(`verify:nas` 채널 버전)"을 릴리스 직후 필수로. 확인은 SSH에서 `grep synoschedtask /etc/crontab` 의 두 작업 줄이 `0 0 * * *`인지.
     - 즉시 경로(보조): `release:all` 마지막에 `publish-nas-channel.mjs`(SSH, 해시 검증 후 원자적 교체)와 `deploy-nas-server.mjs`가 실행된다. 빌드 때문에 PC가 켜져 있는 순간이므로 채널이 즉시 최신이 된다. 서버 재배포는 root가 필요해 오너가 1회 `scripts/nas-tasks/grant-deploy-sudo.sh`를 DSM(root)에서 실행해 주면 이후 자동, 아니면 안내만 출력하고 릴리스는 성공 처리.
 
 ## 근거 구조 (v1.0.40 확립, v1.0.48 강화)
