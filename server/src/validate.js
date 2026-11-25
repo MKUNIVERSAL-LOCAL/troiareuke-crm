@@ -4,6 +4,11 @@
 
 export const MAX_TEXT_LENGTH = 10_000;
 export const MAX_ID_LENGTH = 200;
+/**
+ * 이메일 최대 길이 (230, 리뷰 L-4) — RFC 5321 한도(local 64 + @ + domain 255 = 320)보다 보수적인 실무 값.
+ * 한도가 없으면 3000자 이메일이 가입 검증을 통과해 Postgres 인덱스 한도(2704B)에서 터지고, 사용자는 400 대신 500 을 본다.
+ */
+export const MAX_EMAIL_LENGTH = 254;
 
 /** 로그·어드민 화면용 이메일 가림 — 'abcd@x.com' → 'ab***@x.com' */
 export function maskEmail(value) {
@@ -17,6 +22,7 @@ export function normalizeEmail(value) {
 }
 
 export function isEmail(value) {
+  if (typeof value !== 'string' || value.length > MAX_EMAIL_LENGTH) return false; // 230: 길이 먼저 (DB 인덱스 한도에서 500 이 나던 경로)
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
@@ -48,6 +54,12 @@ export function isValidText(value, { required = false, max = MAX_TEXT_LENGTH } =
 // ── 기능 플래그 (본사 → 전 지점 원격 기능 제어, 219 의 PIN 초기화 라우트도 같은 스코프 규칙) (226) ──
 export const FLAG_SCOPE_RE = /^[A-Za-z0-9_:-]{1,64}$/; // 'global' 또는 branch_id
 export const FLAG_KEY_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+/**
+ * 기능 id 로 쓸 수 없는 이름 (230, 리뷰 L-5) — 객체 키로 다루는 순간 값이 사라지거나 프로토타입을 건드린다.
+ * 전에는 '__proto__' 가 FLAG_KEY_RE 를 통과해 out['__proto__'] = true 가 setter 로 흘러
+ * 서버가 200 + flags:{} 로 응답했다(저장된 것이 없는데 성공 — 가짜 성공).
+ */
+export const RESERVED_FLAG_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 
 /**
  * 어드민이 보낸 flags 입력 검증 — 통과하면 { value }, 아니면 { error }.
@@ -60,13 +72,14 @@ export function validateFlagsInput(body) {
   }
   const entries = Object.entries(flags);
   if (entries.length > 100) return { error: '기능 항목이 너무 많습니다. (100개 이하)' };
-  const out = {};
+  const out = Object.create(null); // 예약어가 들어와도 프로토타입을 건드리지 않게
   for (const [key, value] of entries) {
     if (!FLAG_KEY_RE.test(key)) return { error: `기능 id 형식이 올바르지 않습니다: ${key.slice(0, 80)}` };
+    if (RESERVED_FLAG_KEYS.has(key)) return { error: `기능 id 로 쓸 수 없는 이름입니다: ${key}` };
     if (typeof value !== 'boolean') return { error: `기능 값은 true/false여야 합니다: ${key}` };
     out[key] = value;
   }
-  return { value: out };
+  return { value: { ...out } }; // 평범한 객체로 돌려준다(JSON 응답·전개에 그대로 쓰인다)
 }
 
 // ── 프로그램 버전 헤더 (클라이언트가 매 요청에 X-App-Version 으로 보낸다 — 구버전 지점 추적) (227) ──

@@ -4,9 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  MAX_TEXT_LENGTH, MAX_ID_LENGTH,
+  MAX_TEXT_LENGTH, MAX_ID_LENGTH, MAX_EMAIL_LENGTH,
   maskEmail, normalizeEmail, isEmail, isStrongPassword, isUuid, isValidId, isValidBranchId, isValidText,
-  FLAG_SCOPE_RE, FLAG_KEY_RE, validateFlagsInput, APP_VERSION_RE,
+  FLAG_SCOPE_RE, FLAG_KEY_RE, validateFlagsInput, APP_VERSION_RE, RESERVED_FLAG_KEYS,
 } from './validate.js';
 
 test('normalizeEmail — 공백 제거·소문자', () => {
@@ -22,6 +22,12 @@ test('isEmail — @ 와 점이 있는 형태만', () => {
   assert.ok(!isEmail('owner shop@x.kr'));     // 공백
   assert.ok(!isEmail('@x.kr'));
   assert.ok(!isEmail(''));
+  // 길이 한도 (230, 리뷰 L-4) — 없으면 긴 이메일이 검증을 통과해 DB 인덱스 한도에서 500 이 난다
+  const longLocal = 'a'.repeat(MAX_EMAIL_LENGTH - '@shop.kr'.length);
+  assert.ok(isEmail(longLocal + '@shop.kr'));          // 254자 경계는 통과
+  assert.ok(!isEmail('a' + longLocal + '@shop.kr'));   // 255자는 거부
+  assert.ok(!isEmail('a'.repeat(3000) + '@shop.kr'));  // 가입 라우트에서 500 이 나던 입력
+  assert.ok(!isEmail(undefined));
 });
 
 test('isStrongPassword — 8~128자', () => {
@@ -117,6 +123,25 @@ test('validateFlagsInput — boolean 만 받고, 모양이 틀리면 사유를 �
   assert.equal(Object.keys(validateFlagsInput({ flags: hundred }).value).length, 100);
   const many = Object.fromEntries(Array.from({ length: 101 }, (_, i) => ['k' + i, true]));
   assert.match(validateFlagsInput({ flags: many }).error, /너무 많습니다/);
+});
+
+test('validateFlagsInput — __proto__ 같은 예약어는 거부하고, 통과한 값은 평범한 객체로 (230, 리뷰 L-5)', () => {
+  // 전에는 '__proto__' 가 형식 검사를 통과해 out['__proto__'] = true 가 setter 로 흘렀고,
+  // 저장된 것이 없는데 서버가 200 + flags:{} 로 응답했다(가짜 성공).
+  for (const key of RESERVED_FLAG_KEYS) {
+    const r = validateFlagsInput({ flags: { [key]: true } });
+    assert.match(r.error, /쓸 수 없는 이름/);
+    assert.equal(r.value, undefined);
+  }
+  // 실제 요청 경로 그대로 — express 의 JSON 파서가 만드는 객체에서는 __proto__ 가 "자기 속성" 이다
+  //   (객체 리터럴의 __proto__: 는 프로토타입 지정이라 이 결함을 재현하지 못한다)
+  const fromBody = JSON.parse('{"module.sales":true,"__proto__":true}');
+  assert.match(validateFlagsInput({ flags: fromBody }).error, /쓸 수 없는 이름/);
+  // 정상 입력은 프로토타입 없는 내부 객체가 아니라 평범한 객체로 나온다(JSON 응답·전개에 쓰인다)
+  const ok = validateFlagsInput({ flags: { 'module.sales': true } }).value;
+  assert.equal(Object.getPrototypeOf(ok), Object.prototype);
+  assert.deepEqual({ ...ok }, { 'module.sales': true });
+  assert.equal(JSON.stringify(ok), '{"module.sales":true}');
 });
 
 test('APP_VERSION_RE — 1.0.63 형태만, 긴 꼬리·문자 버전 거부 (227)', () => {
