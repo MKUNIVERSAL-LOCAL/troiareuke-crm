@@ -26,7 +26,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const checklist = page.getByTestId('setup-checklist').filter({ visible: true }).first();
   await expect(checklist).toBeVisible();
   await expect(checklist).toContainText('첫 고객 등록');
-  await expect(checklist).toContainText('3/4 완료'); // 온보딩으로 매장 이름·직원·시술 메뉴는 끝난 상태
+  await expect(checklist).toContainText('3/7 완료'); // 온보딩으로 매장 이름·직원·시술 메뉴는 끝난 상태, 파일럿 준비 3항목(080·근무표·시나리오)은 남음 (190)
   await checklist.getByRole('button', { name: /첫 고객 등록/ }).click();
   await expect(page).toHaveURL(/\/customers$/); // ?new=1 캡처 후 정리
   const quickAddDialog = page.getByRole('dialog', { name: '고객 추가' });
@@ -37,10 +37,13 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(page).toHaveURL(/\/settings$/);
 
   await createCustomer(page, acc);
-  // 마지막 항목(첫 고객)까지 끝나면 체크리스트는 사라진다
+  // 기본 4항목이 끝나도 "파일럿 준비" 3항목이 남아 체크리스트는 유지된다(숨기기 가능) (190)
   await page.goto('/');
   await expect(page.getByText('오늘 예약 현황').filter({ visible: true }).first()).toBeVisible();
-  await expect(page.getByTestId('setup-checklist')).toHaveCount(0);
+  const checklist2 = page.getByTestId('setup-checklist').filter({ visible: true }).first();
+  await expect(checklist2).toContainText('4/7 완료');
+  await expect(checklist2).toContainText('파일럿 준비');
+  await expect(checklist2.getByRole('button', { name: /광고 수신거부 080 번호/ })).toBeVisible();
   await page.goto('/customers'); // 아래 검색 품질 검증은 고객 화면에서
 
   // 검색 품질: 전화 뒷자리 4자리·초성으로도 찾힌다 (2026-11-17)

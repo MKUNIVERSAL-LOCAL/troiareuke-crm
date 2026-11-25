@@ -57,6 +57,11 @@ test('수신 동의·거부가 광고 대상에 반영되고 (광고)·080 표�
   await card.getByLabel('무료수신거부 번호').fill('080-123-4567');
   await card.getByRole('button', { name: '저장', exact: true }).click();
   await expect(card).toContainText('현재 080-123-4567');
+  // 첫 설정 체크리스트의 "광고 수신거부 080 번호" 가 완료로 바뀐다 (190)
+  await page.goto('/');
+  const setup = page.getByTestId('setup-checklist').filter({ visible: true }).first();
+  await expect(setup).toContainText('광고 수신거부 080 번호');
+  await expect(setup.getByRole('button', { name: /광고 수신거부 080 번호/ })).toHaveCount(0);
 
   // 발송 창: 미리보기에 (광고)·무료수신거부 080 자동
   await page.goto('/messaging');
