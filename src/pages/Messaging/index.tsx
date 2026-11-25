@@ -13,7 +13,7 @@ import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
 import { buildCustomerStatsIndex } from '../../lib/customerStats';
 import { getNoRebookCustomerIds } from '../../lib/todayTasks';
-import { rememberRecipients, recipientIndex } from '../../lib/messageRecipients';
+import { rememberRecipients, recipientIndex, recipientsOf } from '../../lib/messageRecipients';
 import { isGatewayPendingHistory } from '../../lib/messageHistoryRule';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import type { SavedSegment } from '../../lib/segmentFilterRule';
@@ -35,7 +35,7 @@ import CampaignsCard from '../../components/campaigns/CampaignsCard';
 import clsx from 'clsx';
 
 type Tab = 'send' | 'templates' | 'history';
-type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | 'norebook' | `tag:${string}` | `saved:${string}`; // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18) / saved:<id> — 저장 세그먼트 (166)
+type Segment = 'all' | 'vip' | 'birthday' | 'novisit' | 'revisit' | 'churn' | 'loyal' | 'norebook' | `tag:${string}` | `saved:${string}` | `resend:${string}`; // resend:<이력 id> — 발송 이력 "다시 보내기" 의 같은 수신 고객 (207) // tag:<태그명> — 고객 태그 세그먼트 (2026-11-18) / saved:<id> — 저장 세그먼트 (166)
 
 // ── 수신 대상 세그먼트 필터 (빠른발송 카드와 발송 모달이 공유) ──────────
 const SEGMENT_LABELS: Record<string, string> = {
@@ -50,6 +50,7 @@ const SEGMENT_LABELS: Record<string, string> = {
 };
 
 function segmentLabel(seg: Segment, saved: SavedSegment[] = []): string {
+  if (seg.startsWith('resend:')) return '다시 보내기';
   if (seg.startsWith('saved:')) return saved.find(sg => sg.id === seg.slice(6))?.name ?? '삭제된 세그먼트';
   return seg.startsWith('tag:') ? `#${seg.slice(4)}` : (SEGMENT_LABELS[seg] ?? seg);
 }
@@ -66,7 +67,8 @@ function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().m
 type SegmentIdSets = { churn: Set<string>; loyal: Set<string>; norebook: Set<string> };
 /** 이탈 위험·충성(136) + 재예약 없음(202) id 집합 — 전수 스캔이라 호출하는 쪽에서 useMemo 로 한 번만. 통계 인덱스는 한 번 만들어 둘이 공유 (203) */
 function allSegmentIdSets(): SegmentIdSets { const stats = buildCustomerStatsIndex(); return { ...segmentIdSets(stats), norebook: getNoRebookCustomerIds(stats) }; }
-function segmentFilter(seg: Segment, revisitIds: Set<string> | undefined, segIds: SegmentIdSets, savedSets?: Map<string, Set<string>>): (c: Customer) => boolean { // segIds 는 호출자 2곳이 모두 넘긴다 — 폴백 전수 스캔 분기 제거 (203)
+function segmentFilter(seg: Segment, revisitIds: Set<string> | undefined, segIds: SegmentIdSets, savedSets?: Map<string, Set<string>>, resendIds?: Set<string>): (c: Customer) => boolean { // segIds 는 호출자 2곳이 모두 넘긴다 — 폴백 전수 스캔 분기 제거 (203)
+  if (seg.startsWith('resend:')) return resendIds ? c => resendIds.has(c.id) : () => false; // 이력의 수신 고객 집합 — 없으면 아무에게도 (207)
   if (seg.startsWith('saved:')) { const ids = savedSets?.get(seg.slice(6)); return ids ? c => ids.has(c.id) : () => false; } // 삭제된 세그먼트는 아무에게도 (166)
   if (seg.startsWith('tag:')) { const tag = seg.slice(4); return c => (c.tags || []).includes(tag); }
   if (seg === 'revisit') { const ids = revisitIds ?? revisitIdSet(); return c => ids.has(c.id); }
@@ -109,6 +111,7 @@ const MSG_TYPE_COLORS: Record<string, string> = {
 export default function Messaging() {
   const [tab, setTab] = useState<Tab>('send');
   const [historyCustomerId, setHistoryCustomerId] = useState<string | null>(null); // 고객 활동 타임라인 메시지 줄 → 그 고객 발송만 (205)
+  const [resendSource, setResendSource] = useState<MessageHistory | null>(null); // 발송 이력 "다시 보내기" 원본 — 같은 대상·본문·유형으로 발송 창 (207)
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendSegment, setSendSegment] = useState<Segment>('all');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -202,15 +205,16 @@ export default function Messaging() {
 
         {tab === 'send' && <SendPanel onSend={openSendModal} onSent={reload} reloadKey={reloadKey} />}
         {tab === 'templates' && <TemplatesPanel onSelect={(id) => { setSelectedTemplate(id); setShowSendModal(true); }} reloadKey={reloadKey} onReload={reload} />}
-        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} customerId={historyCustomerId} onClearCustomer={() => setHistoryCustomerId(null)} />}
+        {tab === 'history' && <HistoryPanel reloadKey={reloadKey} onSend={() => openSendModal('all')} customerId={historyCustomerId} onClearCustomer={() => setHistoryCustomerId(null)} onResend={h => { setResendSource(h); setSendCustomerId(null); openSendModal(`resend:${h.id}`); }} />}
       </div>
 
       {showSendModal && (
         <SendMessageModal
-          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); setSendCustomerId(null); }}
+          onClose={() => { setShowSendModal(false); setSelectedTemplate(null); setSendCustomerId(null); setResendSource(null); }}
           initialTemplate={selectedTemplate}
           initialSegment={sendSegment}
           initialCustomerId={sendCustomerId}
+          resendSource={resendSource}
           onSent={reload}
         />
       )}
@@ -641,7 +645,7 @@ function formatSentAt(value: string): string {
   return isNaN(d.getTime()) ? value : formatDateTime(value);
 }
 
-function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void }) {
+function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, onResend }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void; onResend: (h: MessageHistory) => void }) {
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
   const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
@@ -771,6 +775,11 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer }: { relo
                 </div>
               </div>
               <p className="text-xs text-gray-500 mt-2 ml-11 bg-gray-50 rounded-lg px-3 py-2 line-clamp-2">{h.content}</p>
+              {(recipients.get(h.id)?.length ?? 0) > 0 && ( /* 수신 고객이 사이드맵에 남은 건(204·206 부터, 이 PC)만 — 같은 대상·본문으로 발송 창을 연다. 미연동으로 못 나간 건을 발송사 연결 뒤 다시 보낼 때 (207) */
+                <div className="mt-2 ml-11">
+                  <button type="button" onClick={() => onResend(h)} className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" aria-label={`${h.templateName || '직접 작성'} 같은 대상에게 다시 보내기`} data-testid="history-resend">같은 대상에게 다시 보내기</button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -780,12 +789,12 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer }: { relo
   );
 }
 
-function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; onSent: () => void }) {
+function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCustomerId, resendSource, onSent }: { onClose: () => void; initialTemplate: string | null; initialSegment?: Segment; initialCustomerId?: string | null; resendSource?: MessageHistory | null; onSent: () => void }) {
   const { user: authUser } = useAuth(); // 수신 대상 미리보기 전화번호 마스킹 기준 (13차 #M12)
-  const [msgType, setMsgType] = useState<MessageType>('sms');
+  const [msgType, setMsgType] = useState<MessageType>(resendSource ? (resendSource.type === 'lms' ? 'lms' : resendSource.type.startsWith('kakao') ? resendSource.type : 'sms') : 'sms'); // 다시 보내기는 원본 유형 (207)
   const [recipientMode, setRecipientMode] = useState<Segment>(initialSegment ?? 'all');
-  const [content, setContent] = useState('');
-  const [title, setTitle] = useState('');
+  const [content, setContent] = useState(resendSource?.content ?? '');
+  const [title, setTitle] = useState(resendSource?.title ?? '');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(initialTemplate);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
@@ -827,9 +836,10 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
   const revisitIds = useMemo(() => revisitIdSet(), []);
   const segIds = useMemo(() => allSegmentIdSets(), []); // 이탈 위험·충성 (136)·재예약 없음 (202) — 전수 스캔 1회
   const saved = useMemo(() => savedSegmentSets(), []); // 저장 세그먼트 (166)
+  const resendIds = useMemo(() => { const ids = resendSource ? recipientsOf(resendSource.id) : undefined; return ids ? new Set(ids) : undefined; }, [resendSource]); // 다시 보내기 수신 고객 — 사이드맵(이 PC) (207)
   const targetCustomers = useMemo(
-    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds, saved.sets))),
-    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds, saved],
+    () => (blockedCustomer ? [] : onlyCustomer ? [onlyCustomer] : customers.filter(segmentFilter(recipientMode, revisitIds, segIds, saved.sets, resendIds))),
+    [blockedCustomer, onlyCustomer, customers, recipientMode, revisitIds, segIds, saved, resendIds],
   );
   const recipientCount = targetCustomers.length;
   // 광고성이면 수신 동의가 있고 이 채널을 거부하지 않은 고객만 (155)
@@ -1057,11 +1067,11 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
               {(() => {
                 const keys: Segment[] = [...(['all', 'vip', 'birthday', 'novisit', 'revisit', 'churn', 'loyal', 'norebook'] as Segment[]), ...saved.list.map(sg => `saved:${sg.id}` as Segment), ...topTags(customers, 8).map(t => `tag:${t.tag}` as Segment)];
                 // 빠른 발송 카드에서 넘어온 태그가 상위 8 밖이거나 그 사이 사라졌으면 칩을 하나 더 그려 (0명)으로 보이게 — 아무 칩도 안 켜진 채 조용히 0명 발송이 되지 않게
-                if ((recipientMode.startsWith('tag:') || recipientMode.startsWith('saved:')) && !keys.includes(recipientMode)) keys.push(recipientMode);
+                if ((recipientMode.startsWith('tag:') || recipientMode.startsWith('saved:') || recipientMode.startsWith('resend:')) && !keys.includes(recipientMode)) keys.push(recipientMode); // resend: 다시 보내기 칩 (207)
                 return keys;
               })().map(key => ({
                 key,
-                label: `${segmentLabel(key, saved.list)} (${customers.filter(segmentFilter(key, revisitIds, segIds, saved.sets)).length}명)`,
+                label: `${segmentLabel(key, saved.list)} (${customers.filter(segmentFilter(key, revisitIds, segIds, saved.sets, resendIds)).length}명)`,
               })).map(r => (
                 <button
                   key={r.key}

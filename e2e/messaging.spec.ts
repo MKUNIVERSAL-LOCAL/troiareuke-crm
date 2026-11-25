@@ -58,4 +58,12 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
   await expect(page.getByText(/내일 방문 예정입니다/).first()).toBeVisible();
   await page.getByTestId('history-customer-chip').click();
   await expect(page.getByTestId('history-customer-chip')).toHaveCount(0);
+
+  // ── "같은 대상에게 다시 보내기" → 같은 수신 고객(1명)·같은 본문으로 발송 창 (207) ──
+  await page.getByTestId('history-resend').first().click();
+  const resend = page.getByRole('dialog', { name: '메시지 발송' });
+  await expect(resend.getByRole('button', { name: '다시 보내기 (1명)' })).toHaveClass(/bg-primary-600/);
+  await expect(resend.locator('textarea')).toHaveValue(/내일 방문 예정입니다/);
+  await page.keyboard.press('Escape');
+  await expect(resend).toHaveCount(0);
 });
