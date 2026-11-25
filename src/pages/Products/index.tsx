@@ -57,8 +57,10 @@ export default function Products() {
   useEffect(() => {
     const id = searchParams.get('stock');
     const tabParam = searchParams.get('tab'); // 고객 타임라인 제품 판매 → 판매 기록 탭 (139 #M9 — 링크만 있고 탭이 안 바뀌던 것)
-    if (!id && tabParam !== 'sales') return;
+    const wantReorder = searchParams.get('reorder') === '1'; // 대시보드 "재고 부족 제품 입고" 딥링크 (257)
+    if (!id && tabParam !== 'sales' && !wantReorder) return;
     if (tabParam === 'sales') setTab('sales');
+    if (wantReorder) { setTab('inventory'); setShowReorder(true); }
     if (id) {
       const p = ProductStore.getAll().find(x => x.id === id);
       if (p) setStockProduct(p); else notify('제품을 찾을 수 없습니다. 삭제됐거나 다른 매장의 제품입니다.');
@@ -293,7 +295,7 @@ export default function Products() {
                 {/* 모바일(lg 미만): 카드 목록 — 표는 900px 폭 (2026-11-17) */}
                 <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="products-mobile-list">
                   {filtered.map(p => {
-                    const isLow = p.stock <= p.minStock;
+                    const isLow = isLowStock(p); // 헤더 수·'재고 부족만 보기' 와 같은 규칙 — 단종 제품에 부족 색을 입히지 않는다 (257)
                     const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
                     return (
                       <li key={p.id} data-testid="product-row" className={clsx('px-4 py-3', isLow && 'bg-orange-50/40')}>
@@ -342,7 +344,7 @@ export default function Products() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {filtered.map(p => {
-                      const isLow = p.stock <= p.minStock;
+                      const isLow = isLowStock(p); // (257) PC 표도 같은 규칙
                       const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
 
                       return (
@@ -868,7 +870,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
               <span className="text-xs text-gray-400">·</span>
               <span className="text-xs font-medium text-[#1a3a8f]">정가 {formatPrice(product.price)}</span>
               <span className="text-xs text-gray-400">·</span>
-              <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-700' : 'text-gray-600')}>
+              <span className={clsx('text-xs font-medium', isLowStock(product) ? 'text-red-700' : 'text-gray-600')}>
                 재고 {product.stock}{product.unit}
               </span>
             </div>

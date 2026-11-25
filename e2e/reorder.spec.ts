@@ -52,4 +52,16 @@ test('발주 제안 — 판매 속도로 수량을 제안하고 근거를 적고
   expect(copied).toContain('[발주 요청]');
   expect(copied).toContain('발주앰플');
   expect(copied).toContain('수량은 매장이 확인 후 확정합니다');
+
+  // 257: 대시보드 "재고 부족 제품 입고" 을 누르면 제품 화면에서 **발주 제안 창**이 바로 열린다.
+  // 그전에는 제품 목록만 열려, 몇 개를 주문할지는 다시 [발주 제안] 을 찾아 눌러야 했다.
+  await page.goto('/');
+  const stockTask = page.getByTestId('today-tasks-card').filter({ visible: true }).first()
+    .getByRole('button', { name: /재고 부족 제품 입고/ });
+  await expect(stockTask).toBeVisible();
+  await expect(stockTask).toContainText('발주 제안 창이 열립니다');
+  await stockTask.click();
+  await expect(page.getByTestId('reorder')).toBeVisible();
+  await expect(page.getByTestId('reorder-row').filter({ hasText: '발주팩' })).toBeVisible();
+  await expect(page).toHaveURL(/\/products$/); // 1회 캡처 후 URL 비움(프리필 관례)
 });

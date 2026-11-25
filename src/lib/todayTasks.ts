@@ -68,7 +68,8 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
   }
   if (opts.productsOn) {
     const low = ProductStore.getAll().filter(isLowStock).length;
-    if (low > 0) out.push({ key: 'stock', label: '재고 부족 제품 입고', count: low, href: '/products', tone: 'normal' });
+    // 누르면 제품 화면에서 **발주 제안 창**이 바로 열린다 — 몇 개 주문할지까지 한 걸음에 (257)
+    if (low > 0) out.push({ key: 'stock', label: '재고 부족 제품 입고', count: low, detail: '발주 제안 창이 열립니다', href: '/products?reorder=1', tone: 'normal' });
   }
   if (opts.messagingOn && isAuthApiConfigured) { // 발송 경로가 붙은 매장만 — 서버 모드 백업을 로컬 모드 PC 에 복원해 성공 이력이 들어온 경우의 헛걸음 방지 (210, 208 리뷰 L-6)
     // 나가지 않은 문자(미연동·발송사 거절) — 그 뒤 성공 건이 생겨 발송 경로가 살아난 것이 확인된 매장에만, 수신 고객이 기록된 건(이 PC)만. 누르면 발송 이력이 실패·미연동만으로 열린다 (208, 207 다시 보내기)
