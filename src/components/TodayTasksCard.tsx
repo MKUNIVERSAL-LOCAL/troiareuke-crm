@@ -76,10 +76,11 @@ export default function TodayTasksCard({ compact = false, data }: { compact?: bo
             <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-revisit">{pct(kpi.revisitRate)}</p>
             <p className="text-xs text-gray-500">{kpi.returning}/{kpi.visitors}명</p>
           </div>
-          <button type="button" onClick={() => navigate('/customers?norebook=1')} title={`${KPI_FORMULA.rebook} — 누르면 다음 예약이 없는 이달 방문 고객 목록`} aria-label="재예약률 — 다음 예약이 없는 이달 방문 고객 목록 열기" className="text-center rounded-lg hover:bg-gray-50 min-h-[44px] px-1" data-testid="kpi-rebook-link">{/* 숫자에서 바로 "빠진 사람"에게 (184, GAP D-1) */}
-            <p className="text-xs text-gray-500">재예약률 <span aria-hidden="true" className="text-gray-400">›</span></p>
-            <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-rebook">{pct(kpi.rebookRate)}</p>
-            <p className="text-xs text-gray-500">{kpi.rebooked}/{kpi.visitors}명</p>
+          <button type="button" onClick={() => navigate('/customers?norebook=1')} title={`${KPI_FORMULA.rebook} — 누르면 다음 예약이 없는 이달 방문 고객 목록`} className="text-center rounded-lg hover:bg-gray-50 min-h-[44px] px-1" data-testid="kpi-rebook-link">{/* 숫자에서 바로 "빠진 사람"에게 (184, GAP D-1). 접근 이름 = 내용(값 포함) + sr-only 설명, button 안은 phrasing 요소만 (187 리뷰 M-2·L-1) */}
+            <span className="block text-xs text-gray-500">재예약률 <span aria-hidden="true" className="text-gray-400">›</span></span>
+            <span className="block text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-rebook">{pct(kpi.rebookRate)}</span>
+            <span className="block text-xs text-gray-500">{kpi.rebooked}/{kpi.visitors}명</span>
+            <span className="sr-only">— 누르면 다음 예약이 없는 이달 방문 고객 목록</span>
           </button>
           {salesOn && (
             <div title={KPI_FORMULA.ticket} className="text-center">
@@ -90,10 +91,11 @@ export default function TodayTasksCard({ compact = false, data }: { compact?: bo
           )}
           </>)}
           {showUtil && util && (
-            <button type="button" onClick={() => navigate('/reservations')} title={`${KPI_FORMULA.util} — 누르면 예약 화면`} aria-label="가동률 — 예약 화면 열기" className="text-center rounded-lg hover:bg-gray-50 min-h-[44px] px-1" data-testid="kpi-util-link">
-              <p className="text-xs text-gray-500">가동률 <span aria-hidden="true" className="text-gray-400">›</span></p>
-              <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-util">{util.rate}%</p>
-              <p className="text-xs text-gray-500">{formatHours(util.bookedMin)}/{formatHours(util.availableMin)}시간</p>
+            <button type="button" onClick={() => navigate('/reservations')} title={`${KPI_FORMULA.util} — 누르면 예약 화면`} className="text-center rounded-lg hover:bg-gray-50 min-h-[44px] px-1" data-testid="kpi-util-link">
+              <span className="block text-xs text-gray-500">가동률 <span aria-hidden="true" className="text-gray-400">›</span></span>
+              <span className="block text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-util">{util.rate}%</span>
+              <span className="block text-xs text-gray-500">{formatHours(util.bookedMin)}/{formatHours(util.availableMin)}시간</span>
+              <span className="sr-only">— 누르면 예약 화면</span>
             </button>
           )}
         </div>

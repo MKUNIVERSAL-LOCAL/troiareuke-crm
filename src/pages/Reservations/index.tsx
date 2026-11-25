@@ -1516,7 +1516,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     ReservationStore.updateStatus(r.id, 'cancelled');
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     // 빈 자리를 원한 대기 요청이 있으면 바로 안내 — 요청함을 열어 보지 않아도 알 수 있게 (185, GAP R-10)
-    void newRequests().then(list => { const msg = describeWaitlist(waitlistFor(list, r.date, r.startTime), formatDate(r.date)); if (msg) notify.info(msg); }).catch(() => undefined);
+    if (r.date >= todayISO()) void newRequests().then(list => { const msg = describeWaitlist(waitlistFor(list, r.date, r.startTime), formatDate(r.date)); if (msg) notify.info(msg); }).catch(() => undefined); // 지난 날짜 자리는 안내하지 않는다 (187 리뷰 L-4)
     onUpdate();
   };
   // 노쇼 — 상세에서 바로 처리 (2026-11-18). 고객 상세 "노쇼 N회"·직원 실적 제외·완료 누락 카드에서 빠진다.

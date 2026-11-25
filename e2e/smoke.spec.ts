@@ -297,7 +297,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);
   // 드릴다운 (184): 재예약률 타일 → 다음 예약 없는 이달 방문 고객 목록(필터 칩), 가동률 타일 → 예약 화면
   await kpiCard.getByTestId('kpi-rebook-link').click();
-  await expect(page).toHaveURL(/\/customers\?norebook=1/);
+  await expect(page).toHaveURL(/\/customers/); // ?norebook=1 은 초기값으로만 쓰고 바로 URL 에서 지워진다(187 리뷰 M-1) — 칩으로 판정
   await expect(page.getByTestId('norebook-chip').filter({ visible: true }).first()).toContainText('재예약 없음');
   await page.goto('/');
   await page.getByTestId('today-tasks-card').filter({ visible: true }).first().getByTestId('kpi-util-link').click();

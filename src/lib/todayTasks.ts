@@ -9,7 +9,7 @@ import { isUpcomingReservation } from './upcomingRule';
 import { getPendingCompletionReservations } from './pendingCompletion';
 import { getTomorrowReservations } from './reservationReminder';
 import { isLowStock } from './stockRule';
-import { buildCustomerStatsIndex } from './customerStats';
+import { buildCustomerStatsIndex, type CustomerStatsIndex } from './customerStats';
 import { monthlyKpis, noRebookIds, type KpiInput, type MonthlyKpis } from './kpiRule';
 import { toISO } from './revisitRule';
 import { selectEnabledCampaigns, type CampaignSelection } from './campaignCandidates';
@@ -28,8 +28,8 @@ export interface TodayTaskOptions { customersOn: boolean; reservationsOn: boolea
 /** @param campaigns 이미 고른 캠페인 대상(브리핑처럼 같은 화면에서 또 쓰는 쪽이 넘긴다) — 없으면 여기서 1회 계산 (178 리뷰 M-3) */
 export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSelection[]): TodayTask[] {
   const out: TodayTask[] = [];
-  if (opts.customersOn) {
-    const stats = buildCustomerStatsIndex(); // 이탈 위험·재방문 권장이 같은 인덱스를 쓴다 (139 #M8)
+  const stats = opts.customersOn ? buildCustomerStatsIndex() : null; // 이탈 위험·재방문 권장·재예약 권유가 같은 인덱스를 쓴다 (139 #M8, 187 L-2)
+  if (opts.customersOn && stats) {
     const seg = buildSegmentIndex(stats);
     let churn = 0, atRisk = 0;
     for (const v of seg.values()) if (v.churn?.level === 'high') { churn++; atRisk += v.atRisk90; }
@@ -53,7 +53,7 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
   }
   if (opts.customersOn && opts.reservationsOn) {
     // 이달 방문했지만 다음 예약이 없는 고객 — 재예약률 타일의 "빠진 사람"에게 바로 연락 (184, GAP D-1)
-    const noRebook = getNoRebookCustomerIds().size;
+    const noRebook = getNoRebookCustomerIds(stats ?? undefined).size; // 위에서 만든 통계 인덱스 재사용 — 대시보드 새로고침당 전수 스캔 1회 감소 (187 리뷰 L-2)
     if (noRebook > 0) out.push({ key: 'norebook', label: '이달 방문 뒤 다음 예약 없는 고객 재예약 권유', count: noRebook, href: '/customers?norebook=1', tone: 'normal' });
   }
   if (opts.productsOn) {
@@ -70,10 +70,9 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
 }
 
 /** 이달 지표 입력 — 지표·재예약 권유 목록이 같은 분모(집계 대상 고객·방문일·다음 예약)를 쓴다 (184) */
-function kpiInput(): KpiInput {
+function kpiInput(stats: CustomerStatsIndex = buildCustomerStatsIndex()): KpiInput {
   const today = toISO(new Date());
   const month = today.slice(0, 7);
-  const stats = buildCustomerStatsIndex();
   const upcoming = new Set<string>();
   for (const r of ReservationStore.getAll()) if (isUpcomingReservation(r, today)) upcoming.add(r.customerId); // (139 #H3)
   // 샘플·익명화·삭제 고객의 남은 기록이 방문 고객·재방문율에 들어가지 않게 — 집계 대상 고객만 (139 #M6)
@@ -89,8 +88,8 @@ export function getMonthlyKpis(): MonthlyKpis {
 }
 
 /** 이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률 타일·오늘 할 일에서 고객 목록(?norebook=1)으로 (184) */
-export function getNoRebookCustomerIds(): Set<string> {
-  return new Set(noRebookIds(kpiInput()));
+export function getNoRebookCustomerIds(stats?: CustomerStatsIndex): Set<string> {
+  return new Set(noRebookIds(kpiInput(stats)));
 }
 
 /** 이달(오늘까지) 가동률 — 날마다 활성 직원의 근무 창(근무표 또는 영업시간, 매장 휴일은 창 없음) 대비 확정·완료 예약 시간. 규칙은 utilizationRule(순수) (180, GAP R-10) */

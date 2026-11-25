@@ -380,7 +380,7 @@ export default function Customers() {
   });
   useEffect(() => {
     // ?grade=는 첫 진입의 초기값으로만 쓰고 URL에서 지운다 — 남겨 두면 [필터 초기화] 뒤 보존기간 토글(URL 복사)·새로고침에 VIP로 되돌아간다 (리뷰 63)
-    const keys = ['grade', 'churn', 'revisit', 'programAlert'].filter(k => searchParams.get(k)); // 대시보드 딥링크 3종도 초기값으로만 (139 #M1)
+    const keys = ['grade', 'churn', 'revisit', 'programAlert', 'norebook'].filter(k => searchParams.get(k)); // 대시보드 딥링크 4종도 초기값으로만 — 칩 해제 뒤 새로고침에 되살아나지 않게 (139 #M1, 187 리뷰 M-1)
     if (keys.length === 0) return;
     const next = new URLSearchParams(searchParams);
     for (const k of keys) next.delete(k);
@@ -1095,7 +1095,7 @@ export default function Customers() {
     const tags = tagOptions;
     if (tags.length === 0) return null;
     return (
-      <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible gap-1.5 pb-1 -mx-1 px-1" role="group" aria-label="태그 필터" data-testid="tag-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
+      <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible gap-1.5 py-1 -my-1 -mx-1 px-1" role="group" aria-label="태그 필터" data-testid="tag-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
         {tags.map(({ tag, count }) => (
           <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
             className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
@@ -1107,7 +1107,7 @@ export default function Customers() {
   })();
   // 저장 세그먼트 칩 행 — 선택하면 조건으로 좁히고, 선택된 칩 옆에 [편집]. 만들기는 관리자(customer.pii 와 같은 관리자 묶음) (166)
   const savedSegmentRow = (savedSegments.length > 0 || canManage) ? (
-    <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible items-center gap-1.5 pb-1 -mx-1 px-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
+    <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible items-center gap-1.5 py-1 -my-1 -mx-1 px-1" role="group" aria-label="저장 세그먼트" data-testid="segment-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
       {savedSegments.map(sg => {
         const n = segmentCounts.get(sg.id) ?? 0;
         const on = segmentFilterId === sg.id;
