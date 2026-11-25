@@ -9,7 +9,7 @@ import Modal from '../../components/ui/Modal';
 import StaffPerformanceCard from '../../components/StaffPerformanceCard';
 import { StaffStore, ReservationStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
 import { DAY_KEYS, BUFFER_OPTIONS, defaultSchedule, dayWindow, describeWindow, sameSchedule } from '../../lib/staffScheduleRule';
-import { getStaffSchedule, saveStaffSchedule, removeStaffSchedule } from '../../lib/staffScheduleStore';
+import { getStaffSchedule, saveStaffSchedule, removeStaffSchedule, allStaffSchedules } from '../../lib/staffScheduleStore';
 import { ConsultationStore } from '../../lib/consultationStore';
 import { recordStaffAlias } from '../../lib/staffAliases';
 import { resyncGcalEvents } from '../../lib/gcalEventMap';
@@ -451,6 +451,14 @@ function StaffDetailModal({
   // 근무표·휴게·준비/정리 버퍼 — 설정 행(preferences.staffSchedules)에 저장돼 NAS 동기 (141, GAP R-4)
   const [schedule, setSchedule] = useState<StaffSchedule>(() => getStaffSchedule(staff.id) ?? defaultSchedule(staff.id));
   const setShift = (d: DayKey, patch: Partial<DayShift>) => setSchedule(sc => ({ ...sc, weekly: { ...sc.weekly, [d]: { ...sc.weekly[d], ...patch } } }));
+  // 다른 직원의 저장된 근무표를 복사 — 직원마다 요일 7개를 다시 찍지 않게 (194, PILOT-CHECKLIST 25)
+  const copySources = (() => { const all = allStaffSchedules(); return StaffStore.getAll().filter(st => st.isActive && st.id !== staff.id && !!all[st.id]).map(st => ({ id: st.id, name: st.name })); })();
+  const copyFrom = (fromId: string) => {
+    const src = getStaffSchedule(fromId);
+    if (!src) return;
+    setSchedule({ ...src, weekly: { ...src.weekly }, staffId: staff.id, updatedAt: new Date().toISOString() });
+    notify.info(`${StaffStore.getAll().find(st => st.id === fromId)?.name ?? '직원'} 근무표를 가져왔습니다. [저장]을 눌러야 반영됩니다.`);
+  };
   const shopHours = SettingsStore.get().businessHours || {};
   const scheduleSummary = schedule.useShopHours
     ? [{ day: '', text: '매장 영업시간과 같음' }]
@@ -656,7 +664,15 @@ function StaffDetailModal({
           </div>
 
           <div className="space-y-2" data-testid="staff-schedule-editor">
-            <p className="text-xs font-medium text-gray-600">근무표</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-gray-600">근무표</p>
+              {copySources.length > 0 && (
+                <select aria-label="다른 직원 근무표 가져오기" value="" onChange={e => { if (e.target.value) copyFrom(e.target.value); }} className="px-2 py-1 text-xs border border-gray-200 rounded-lg bg-white text-gray-700" data-testid="schedule-copy-from">
+                  <option value="">다른 직원 근무표 가져오기…</option>
+                  {copySources.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+                </select>
+              )}
+            </div>
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={schedule.useShopHours} onChange={e => setSchedule(sc => ({ ...sc, useShopHours: e.target.checked }))} className="rounded" />
               매장 영업시간과 같음

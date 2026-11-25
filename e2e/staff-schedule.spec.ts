@@ -47,6 +47,27 @@ test('직원 근무표·휴게·정리 버퍼가 직원 상세·직원별 열·�
   await page.keyboard.press('Escape');
   await expect(detail).toHaveCount(0);
 
+  // 1-2) 두 번째 직원은 "다른 직원 근무표 가져오기" 로 김테스트 근무표를 복사해 저장 (194)
+  await visibleButton(page, '직원 추가').click();
+  const addDialog = dialog(page, '직원 추가');
+  await addDialog.getByLabel('이름').fill('이복사');
+  await addDialog.getByPlaceholder('010-0000-0000').fill('010-4444-5555');
+  await addDialog.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(addDialog).toHaveCount(0);
+  await page.getByRole('heading', { name: /^이복사/ }).first().click();
+  const detail2 = dialog(page, '직원 상세');
+  await detail2.getByRole('button', { name: '수정' }).click();
+  const edit2 = dialog(page, '직원 수정');
+  await edit2.getByTestId('schedule-copy-from').selectOption({ label: '김테스트' });
+  await expect(edit2.getByLabel('월요일 시작')).toHaveValue('11:00'); // 복사됨(저장 전)
+  await edit2.getByRole('button', { name: '저장', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('heading', { name: /^이복사/ }).first().click();
+  await expect(detail2.getByTestId('staff-schedule-summary')).toContainText('11:00~18:00 · 휴게 13:00~14:00');
+  await page.keyboard.press('Escape');
+  await expect(detail2).toHaveCount(0);
+
   // 2) 예약표 일간 → 직원별 열: 머리글에 근무 창
   await page.goto('/reservations');
   await page.getByRole('button', { name: '일간' }).click();
