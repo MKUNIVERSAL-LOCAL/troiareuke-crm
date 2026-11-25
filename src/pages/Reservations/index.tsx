@@ -1,6 +1,9 @@
 ﻿import { useState, useCallback, useEffect, useMemo, type CSSProperties, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { askConfirm } from '../../lib/confirmDialog';
+import { askConfirm, askConfirmWithChoice } from '../../lib/confirmDialog';
+// 취소·노쇼 사유 (244, GAP R-10 후속) — 규칙은 순수 cancelReasonRule, 저장은 설정 행(cancelReasons)
+import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary } from '../../lib/cancelReasonRule';
+import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons';
 import { createSubmitLock } from '../../lib/submitLock';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
@@ -330,6 +333,18 @@ export default function Reservations() {
   // 모바일 전용 상태
   // (mobileTab·mobileMonthOffset 선언은 위 Google 로드 앞으로 옮김)
   const mobileMonthDate = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + mobileMonthOffset); return d; })();
+  // 보고 있는 달의 취소·노쇼 사유 한 줄 (244, GAP R-10 후속) — 사유를 적지 않은 건수까지 함께 말한다.
+  // PC 는 주간·일간 머리글의 달, 모바일은 '이번달' 탭이 보고 있는 달 기준.
+  const cancelLines = useMemo(() => {
+    const line = (month: string) => {
+      const facts = monthCancelFacts(month);
+      return describeReasonSummary(summarizeReasons(facts.totals, facts.records));
+    };
+    return {
+      pc: line(format(viewMode === 'week' ? startOfWeek(currentDate, { weekStartsOn: 1 }) : currentDate, 'yyyy-MM')),
+      mobile: line(format(mobileMonthDate, 'yyyy-MM')),
+    };
+  }, [currentDate, viewMode, mobileMonthOffset, reservations]);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const normalizedSearch = search.trim().toLowerCase();
@@ -414,6 +429,12 @@ export default function Reservations() {
               <button type="button" onClick={() => setMobileMonthOffset(0)} data-testid="mobile-month-label" className="text-sm font-semibold text-gray-800">{format(mobileMonthDate, 'yyyy년 M월')}{mobileMonthOffset !== 0 && <span className="ml-1 text-xs font-normal text-[#1a3a8f]">(이번달로)</span>}</button>
               <button type="button" onClick={() => setMobileMonthOffset(o => o + 1)} aria-label="다음 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronRight size={16} /></button>
             </div>
+          )}
+          {/* 이달 취소·노쇼 사유 — '이번달' 탭에서만(오늘·이번주 탭의 달과 어긋나지 않게) (244) */}
+          {mobileTab === 'month' && cancelLines.mobile && (
+            <p className="mt-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs text-gray-600" data-testid="cancel-reason-summary">
+              {cancelLines.mobile}
+            </p>
           )}
           <div className="flex gap-2 mt-2">
             <label className="relative flex-1">
@@ -647,6 +668,13 @@ export default function Reservations() {
             );
           })}
         </div>
+
+        {/* 이달 취소·노쇼 사유 — 취소가 없으면 줄 자체가 없다 (244, GAP R-10 후속) */}
+        {cancelLines.pc && viewMode !== 'list' && (
+          <p className="mb-4 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs text-gray-600" data-testid="cancel-reason-summary">
+            {cancelLines.pc}
+          </p>
+        )}
 
         {/* Calendar Views */}
         {viewMode === 'week' && (
@@ -1524,8 +1552,10 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     const warn = r.status === 'completed' && paidForThis.length > 0
       ? `\n\n이 예약은 완료 처리됐고 등록된 결제 ${formatPrice(paidAmount)}은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.`
       : '';
-    if (!(await askConfirm({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기' }))) return; // 앱 확인창 (15차 #H3)
+    const answer = await askConfirmWithChoice({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기', choices: reasonOptions('cancelled'), choiceTitle: '취소 사유 (선택 — 이달 집계에 쌓입니다)' }); // 앱 확인창 (15차 #H3)
+    if (!answer.ok) return;
     ReservationStore.updateStatus(r.id, 'cancelled');
+    if (answer.choice) saveReason(r.id, 'cancelled', answer.choice); // 사유 저장 실패는 취소 처리를 되돌리지 않는다 (244)
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     // 빈 자리를 원한 대기 요청이 있으면 바로 안내 — 요청함을 열어 보지 않아도 알 수 있게 (185, GAP R-10)
     if (r.date >= todayISO()) void newRequests().then(list => { const msg = describeWaitlist(waitlistFor(list, r.date, r.startTime), formatDate(r.date)); if (msg) notify.info(msg); }).catch(() => undefined); // 지난 날짜 자리는 안내하지 않는다 (187 리뷰 L-4)
@@ -1536,10 +1566,12 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const canNoShow = r.date <= todayISO() && r.status !== 'cancelled' && r.status !== 'noshow' && r.status !== 'completed';
   // 잘못 취소·노쇼 처리한 예약을 되돌리는 길 — 상태만 '예약확정'으로, 취소 때 지운 Google 캘린더 일정은 다시 만든다 (리뷰 2026-11-19)
   const isClosed = r.status === 'cancelled' || r.status === 'noshow';
+  const savedReason = isClosed ? reasonOf(r.id) : null; // 취소·노쇼가 아닌 예약에는 사유를 보여 주지 않는다 (244)
   const handleRestore = async () => {
     const google = isGoogleCalendarConnected();
     if (!(await askConfirm({ title: '예약 복구', confirmLabel: '복구', message: `이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}` }))) return;
     ReservationStore.updateStatus(r.id, 'confirmed');
+    saveReason(r.id, 'cancelled', ''); // 취소·노쇼가 아니게 됐으니 사유도 지운다 — 남겨 두면 이달 집계가 맞지 않는다 (244)
     if (google) {
       createCalendarEvent({ ...r, status: 'confirmed' })
         .then(ev => rememberGcalEvent(r.id, ev.id))
@@ -1549,8 +1581,10 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     onUpdate();
   };
   const handleNoShow = async () => {
-    if (!(await askConfirm({ title: '노쇼 처리', message: `${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`, confirmLabel: '노쇼 기록', cancelLabel: '닫기' }))) return;
+    const answer = await askConfirmWithChoice({ title: '노쇼 처리', message: `${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`, confirmLabel: '노쇼 기록', cancelLabel: '닫기', choices: reasonOptions('noshow'), choiceTitle: '노쇼 사유 (선택 — 이달 집계에 쌓입니다)' });
+    if (!answer.ok) return;
     ReservationStore.updateStatus(r.id, 'noshow');
+    if (answer.choice) saveReason(r.id, 'noshow', answer.choice);
     cleanupGcalEvent(r.id);
     notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
     onUpdate();
@@ -1640,6 +1674,13 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
           <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-xl">
             <span className="w-2 h-2 bg-green-500 rounded-full"></span>
             <span className="text-xs text-green-700 font-medium">네이버 예약 ID: {r.naverBookingId}</span>
+          </div>
+        )}
+
+        {savedReason && (
+          <div data-testid="reservation-reason">
+            <p className="text-xs font-medium text-gray-500 mb-1">{savedReason.kind === 'noshow' ? '노쇼 사유' : '취소 사유'}</p>
+            <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">{labelFor(savedReason.kind, savedReason.reason)}</p>
           </div>
         )}
 

@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, expectNoHorizontalOverflow, visibleButton } from './helpers';
-import { registerPayment } from './flows';
+import { registerPayment, addReservation, openReservationDetail } from './flows';
 
 /**
- * 폰 폭에서 새 기능 점검 (241) — 228~240 으로 들어온 화면은 PC 스펙만 있었다.
+ * 폰 폭에서 새 기능 점검 (241·244) — 228~244 으로 들어온 화면은 PC 스펙만 있었다.
  * 매장은 태블릿·폰으로 쓰는 일이 많아(UI 품질 절대 기준) 영수증·수당·태그·등급·사진 백업이
  * 폰에서 눌릴 수 있고 가로로 넘치지 않아야 한다. 창 안쪽 가로 넘침까지 본다.
  */
@@ -85,4 +85,21 @@ test('폰 폭: 영수증·사진 백업·태그·등급·수당 화면이 눌리
   // ── 등급 제안 패널 (236·238) — 후보가 없으면 버튼이 없다(장식 UI 금지) ──
   await expect(page.getByTestId('grade-suggest-open')).toHaveCount(0);
   await expectNoHorizontalOverflow(page, '고객 목록(폰)');
+
+  // ── 취소 사유 칩이 폰에서 눌리고, '이번달' 탭에 집계 줄이 보인다 (244) ──
+  await page.goto('/reservations');
+  await addReservation(page, acc, '11:00');
+  await dismissToasts(page);
+  const detail = await openReservationDetail(page, '11:00');
+  await detail.getByRole('button', { name: '취소처리' }).click();
+  const confirmDialog = page.getByRole('dialog', { name: '예약 취소 처리' });
+  await expect(confirmDialog).toBeVisible();
+  await expectNoHorizontalOverflow(page, '취소 사유 확인창(폰)');
+  await confirmDialog.getByTestId('confirm-choices').getByRole('button', { name: '매장 사정(직원·설비)' }).click();
+  await confirmDialog.getByRole('button', { name: '취소 처리' }).click();
+  await expect(confirmDialog).toHaveCount(0);
+  await dismissToasts(page); // 취소 처리 뒤 상세는 닫힌다 — 사유 표시는 PC 스펙(cancel-reason)이 담당
+  await page.getByRole('button', { name: '이번달' }).click();
+  await expect(page.getByTestId('cancel-reason-summary').filter({ visible: true }).first()).toContainText('매장 사정(직원·설비) 1건');
+  await expectNoHorizontalOverflow(page, '예약 화면 이번달 탭(취소 사유 줄)');
 });

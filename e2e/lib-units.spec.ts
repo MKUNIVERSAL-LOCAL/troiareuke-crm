@@ -3,6 +3,7 @@ import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, 
 import { splitPercent } from '../src/lib/percent';
 import { renameTagInSegments } from '../src/lib/segmentFilterRule';
 import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
+import { reasonOptions, labelFor, normalizeReasonText, summarizeReasons, describeReasonSummary, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
@@ -1930,4 +1931,53 @@ test('재예약 기록 — 설정 행에 무한정 쌓이지 않는다 (243)', (
   expect(trimmed[trimmed.length - 1].id).toBe(String(MAX_REBOOK_LOG + 29)); // 최근 것이 남는다
   // 보관 기간이 지난 기록은 건수와 무관하게 버린다
   expect(trimRebookLog([shown('old', 'c1', '2026-12-10', '2026-01-02T00:00:00.000Z')], '2026-06-01')).toEqual([]);
+});
+
+// ── 244: 취소·노쇼 사유 (GAP R-10 후속) ──
+
+test('취소 사유 — 목록 id 는 라벨로, 직접 입력은 정리해서 보여 준다 (244)', () => {
+  expect(labelFor('cancelled', 'shop-schedule')).toBe('매장 사정(직원·설비)');
+  expect(labelFor('noshow', 'no-contact')).toBe('연락 없이 오지 않음');
+  expect(labelFor('cancelled', '  차가   고장났다 ')).toBe('차가 고장났다'); // 직접 입력
+  expect(normalizeReasonText('  ')).toBe('');
+  expect(normalizeReasonText(null)).toBe('');
+  expect(normalizeReasonText('가'.repeat(50))).toHaveLength(MAX_REASON_TEXT);
+  // 취소·노쇼 보기는 서로 다르다(같은 id 를 쓰지 않는다)
+  const ids = new Set(reasonOptions('cancelled').map(o => o.id));
+  expect(reasonOptions('noshow').some(o => ids.has(o.id))).toBe(false);
+});
+
+test('취소 사유 집계 — 사유를 적지 않은 건수를 숨기지 않는다 (244)', () => {
+  const s = summarizeReasons({ cancelled: 5, noshow: 2 }, [
+    { kind: 'cancelled', reason: 'customer-schedule' },
+    { kind: 'cancelled', reason: 'customer-schedule' },
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'noshow', reason: 'no-contact' },
+    { kind: 'noshow', reason: '직접 쓴 사유' },
+  ]);
+  expect(s.cancelled).toBe(5);
+  expect(s.noshow).toBe(2);
+  expect(s.recorded).toBe(5);
+  expect(s.missing).toBe(2);           // 7건 중 5건만 사유가 있다
+  expect(s.shopSide).toBe(1);          // 매장 쪽 사유(직원·설비)
+  expect(s.top[0]).toEqual({ label: '고객 일정 변경', count: 2, by: 'customer' });
+  const line = describeReasonSummary(s);
+  expect(line).toContain('이달 취소 5건 · 노쇼 2건');
+  expect(line).toContain('고객 일정 변경 2건');
+  expect(line).toContain('사유 미기록 2건');
+});
+
+test('취소 사유 집계 — 취소가 없으면 아무 말도 하지 않고, 기록이 예약보다 많으면 예약을 믿는다 (244)', () => {
+  expect(describeReasonSummary(summarizeReasons({ cancelled: 0, noshow: 0 }, []))).toBeNull();
+  // 지워진 예약의 사유가 남아 있어도 집계 건수는 예약 쪽을 따른다(미기록이 음수가 되지 않는다)
+  const s = summarizeReasons({ cancelled: 1, noshow: 0 }, [
+    { kind: 'cancelled', reason: 'duplicate' },
+    { kind: 'cancelled', reason: 'duplicate' },
+    { kind: 'cancelled', reason: 'duplicate' },
+  ]);
+  expect(s.recorded).toBe(1);
+  expect(s.missing).toBe(0);
+  // 사유가 하나도 안 적힌 달은 "사유 미기록" 만 말한다
+  const none = summarizeReasons({ cancelled: 3, noshow: 1 }, []);
+  expect(describeReasonSummary(none)).toBe('이달 취소 3건 · 노쇼 1건 — 사유 미기록 4건');
 });
