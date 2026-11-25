@@ -49,6 +49,8 @@ import { getCustomerRevisitInfo, getCustomerVisitCycle, getRevisitDueCustomers }
 import { getProgramAlerts } from '../../lib/programAlerts';
 import { getNoRebookCustomerIds } from '../../lib/todayTasks';
 import { rememberRecipients } from '../../lib/messageRecipients';
+import { countAnonymizeResidue } from '../../lib/anonymizeResidueCount';
+import { describeAnonymizeResidue } from '../../lib/anonymizeResidue';
 import { buildSegmentIndex } from '../../lib/customerSegments';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
@@ -1134,7 +1136,8 @@ export default function Customers() {
     if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
     const targets = filtered.filter(c => expiredIds.has(c.id) && !isAnonymized(c));
     if (targets.length === 0) return;
-    if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
+    const residueBulk = describeAnonymizeResidue(countAnonymizeResidue(targets.map(c => c.id))); // 발송 이력 본문·제품 판매 이름은 코어 수정 수단이 없어 남는다 — 사실대로 (216)
+    if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.${residueBulk ? `\n${residueBulk}` : ''}`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
     const n = anonymizeCustomers(targets.map(c => c.id));
     recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' }); // 파기 대장 (9차 점검 #29)
     notify(`고객 ${n}명을 익명화했습니다.`);
@@ -1448,7 +1451,8 @@ export default function Customers() {
   async function handleAnonymizeOne() {
     if (!selected || isAnonymized(selected)) return;
     if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
-    if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.`, confirmLabel: '익명화', danger: true, returnFocusTo: menuAnchor() }))) return;
+    const residueOne = describeAnonymizeResidue(countAnonymizeResidue([selected.id])); // (216)
+    if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.${residueOne ? `\n${residueOne}` : ''}`, confirmLabel: '익명화', danger: true, returnFocusTo: menuAnchor() }))) return;
     const n = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
     recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });

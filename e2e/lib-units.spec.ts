@@ -58,6 +58,7 @@ import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
 import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
 import { isGatewayPendingHistory, countResendable } from '../src/lib/messageHistoryRule';
 import { looksLikeAdMessage, undecorateAdMessage } from '../src/lib/adComplianceRule';
+import { anonymizeResidue, describeAnonymizeResidue } from '../src/lib/anonymizeResidue';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -1237,4 +1238,13 @@ test('광고 본문 판정·꾸밈 벗기기 — 재발송이 광고를 광고�
   expect(decorateAdMessage(undecorateAdMessage(decorated), '080-333-4444')).toBe('(광고) 가을 이벤트 안내입니다.\n무료수신거부 080-333-4444');
   // 광고가 아닌 본문은 그대로
   expect(undecorateAdMessage('내일 예약 안내입니다.')).toBe('내일 예약 안내입니다.');
+});
+
+test('익명화 잔존 안내 — 남는 것만 세고, 없으면 문장을 만들지 않는다 (216)', () => {
+  expect(anonymizeResidue({ messageHistory: 0, productSales: 0 })).toEqual([]);
+  expect(describeAnonymizeResidue([])).toBeNull(); // 남는 것이 없으면 없는 걱정을 만들지 않는다
+  const both = anonymizeResidue({ messageHistory: 2, productSales: 1 });
+  expect(both.map(i => i.count)).toEqual([2, 1]);
+  expect(describeAnonymizeResidue(both)).toBe('다만 문자·카카오 발송 이력의 본문·제목 2건, 제품 판매 기록의 이름 1건에 적힌 이름은 이번에 지워지지 않습니다(프로그램 보관 기록).');
+  expect(describeAnonymizeResidue(anonymizeResidue({ messageHistory: 0, productSales: 3 }))).toBe('다만 제품 판매 기록의 이름 3건에 적힌 이름은 이번에 지워지지 않습니다(프로그램 보관 기록).');
 });
