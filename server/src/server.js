@@ -8,6 +8,11 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
+// 입력 검증·마스킹은 순수 모듈로 분리해 테스트한다 (225, GAP Q-3) — npm run test:server
+import {
+  MAX_TEXT_LENGTH, MAX_ID_LENGTH,
+  maskEmail, normalizeEmail, isEmail, isStrongPassword, isUuid, isValidId, isValidBranchId, isValidText,
+} from './validate.js';
 
 const { Pool } = pg;
 
@@ -16,8 +21,6 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
 const SESSION_DAYS = envInteger('SESSION_DAYS', 30, 1, 365);
 const RESET_TOKEN_MINUTES = envInteger('RESET_TOKEN_MINUTES', 30, 5, 1440);
-const MAX_TEXT_LENGTH = 10_000;
-const MAX_ID_LENGTH = 200;
 // 상용 배포 기본값: 관리자 발급 계정만 허용 (공개 가입 차단)
 const BOOTSTRAP_ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 const BOOTSTRAP_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -198,44 +201,6 @@ const dataLimiter = rateLimit({
   },
 });
 
-function maskEmail(value) {
-  if (!value || !value.includes('@')) return value || null;
-  const [local, domain] = value.split('@');
-  return `${local.slice(0, 2)}***@${domain}`;
-}
-
-function normalizeEmail(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function isEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isStrongPassword(value) {
-  return typeof value === 'string' && value.length >= 8 && value.length <= 128;
-}
-
-function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
-}
-
-function isValidId(value) {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_ID_LENGTH;
-}
-
-function isValidBranchId(value) {
-  return isValidId(value) && /^[a-z0-9._:-]+$/i.test(value);
-}
-
-function isValidText(value, { required = false, max = MAX_TEXT_LENGTH } = {}) {
-  if (value === undefined || value === null) return !required;
-  if (typeof value !== 'string' || value.length > max) return false;
-  // U+FFFD(치환 문자)는 인코딩이 깨진 입력의 흔적 — 저장하면 어드민 화면에 '�'로 보인다 (2026-09-22 실측: CP949 터미널 curl).
-  // 정상 클라이언트(브라우저 fetch)는 항상 UTF-8이라 이 문자를 만들지 않는다.
-  if (value.includes('�')) return false;
-  return !required || value.trim().length > 0;
-}
 
 function tokenHash(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
