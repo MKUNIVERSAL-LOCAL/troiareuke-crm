@@ -3,6 +3,7 @@ import { sanitizeStorageSnapshot } from '../../lib/backupSanitize';
 import { markBackupSaved } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
+import { normalizeGreeting, MAX_GREETING } from '../../lib/receiptRule'; // 영수증 인사말 (256)
 import { getPreference, setPreference } from '../../lib/shopPreferences'; // 영수증 인쇄 정보 (235)
 // 고객 주의사항 키워드 — 매장이 쓰는 말을 더한다 (240, GAP C-11)
 import { getCautionKeywords, saveCautionKeywords } from '../../lib/cautionKeywords';
@@ -423,7 +424,7 @@ export default function Settings() {
   // 서버 프로필 갱신(await)이 끝나기 전 연타로 두 번 저장되는 것 방지 (2026-11-18)
   const [shopSaving, setShopSaving] = useState(false);
   // 영수증 인쇄 정보 — 설정 행(NAS 동기). 사업자등록번호는 코어 AuthUser 에 있어 화면에서 쓸 수 없다 (235, GAP P-9)
-  const [receiptInfo, setReceiptInfo] = useState<{ businessNumber?: string; ownerName?: string }>(() => getPreference('receiptInfo') ?? {});
+  const [receiptInfo, setReceiptInfo] = useState<{ businessNumber?: string; ownerName?: string; greeting?: string }>(() => getPreference('receiptInfo') ?? {});
   // 주의 키워드 — 추가·삭제는 누른 즉시 설정 행에 저장(결제수단과 같은 방식) (240)
   const [cautionWords, setCautionWords] = useState<string[]>(() => getCautionKeywords());
   const [cautionDraft, setCautionDraft] = useState('');
@@ -447,6 +448,7 @@ export default function Settings() {
     const next = {
       businessNumber: receiptInfo.businessNumber?.trim() || undefined,
       ownerName: receiptInfo.ownerName?.trim() || undefined,
+      greeting: normalizeGreeting(receiptInfo.greeting) ?? undefined, // 공백 축약·60자 (256)
     };
     setPreference('receiptInfo', next);
     setReceiptInfo(next);
@@ -792,6 +794,11 @@ export default function Settings() {
                         <input type="text" aria-label="대표자명" value={receiptInfo.ownerName ?? ''}
                           onChange={e => setReceiptInfo(v => ({ ...v, ownerName: e.target.value }))}
                           className="form-input" placeholder="예: 홍길동" maxLength={30} />
+                      </FormRow>
+                      <FormRow label="인사말 (선택)">
+                        <input type="text" aria-label="영수증 인사말" value={receiptInfo.greeting ?? ''}
+                          onChange={e => setReceiptInfo(v => ({ ...v, greeting: e.target.value }))}
+                          className="form-input" placeholder="예: 오늘도 찾아주셔서 감사합니다" maxLength={MAX_GREETING} />
                       </FormRow>
                       <button type="button" onClick={saveReceiptInfo}
                         className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors">영수증 정보 저장</button>

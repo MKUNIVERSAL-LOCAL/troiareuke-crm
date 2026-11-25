@@ -225,7 +225,7 @@ export interface ShopPreferences {
   /** 자주 쓰는 태그 목록(태그 마스터) — 고객 창에서 눌러 넣는다 (237) */
   tagMaster?: string[];
   /** 영수증에 인쇄할 사업자 정보 (235) — 가입 계정의 사업자등록번호는 코어 AuthUser 에 없어 매장이 직접 적는다 */
-  receiptInfo?: { businessNumber?: string; ownerName?: string };
+  receiptInfo?: { businessNumber?: string; ownerName?: string; greeting?: string };
   /** 직원 인센티브(수당) 비율 — 매장 기본값 + 직원별 예외. 설정 행이라 NAS 동기, PC 교체와 무관 (233) */
   staffCommission?: { serviceRate: number; productRate: number; perStaff?: Record<string, { serviceRate?: number; productRate?: number }> };
   /** 직원별 근무표·휴게·준비/정리 버퍼 staffId → 근무표 — 새 컬렉션(서버 화이트리스트 승인 B-2) 대신 설정 행으로 동기화 (141) */

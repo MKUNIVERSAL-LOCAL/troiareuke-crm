@@ -23,6 +23,8 @@ export interface ReceiptShop {
   businessNumber?: string;
   /** 대표자명 — 매장이 설정에 적으면 사업자등록번호 줄에 함께 인쇄된다 */
   ownerName?: string;
+  /** 인사말 — 매장이 설정에 적은 한 줄(예: "오늘도 찾아주셔서 감사합니다"). 비우면 인쇄하지 않는다 (256) */
+  greeting?: string;
 }
 
 export interface ReceiptPayment {
@@ -51,6 +53,8 @@ export interface ReceiptModel {
   rows: { label: string; value: string }[];
   totalLabel: string;
   totalValue: string;
+  /** 매장 인사말 — 없으면 null(빈 줄을 만들지 않는다) */
+  greeting: string | null;
   /** 꼬리말 — 세금계산서 안내, 설정 보완 안내 등 */
   notes: string[];
 }
@@ -104,6 +108,8 @@ export function buildReceipt(i: ReceiptInput): ReceiptModel {
   if (isPending) notes.push('※ 아직 입금이 확인되지 않은 결제입니다. 영수증이 아니라 예정 내역서입니다.');
 
   return {
+    // 환불·예정 내역서에는 인사말을 붙이지 않는다 — "감사합니다" 가 환불 문서에 찍히면 조롱처럼 읽힌다 (256)
+    greeting: !isRefund && !isPending ? normalizeGreeting(i.shop.greeting) : null,
     title: isRefund ? '환불 영수증' : isPending ? '결제 예정 내역서' : '영수증',
     isRefund,
     isPending,
@@ -149,4 +155,13 @@ export function receiptFileName(shopName: string | undefined, customerName: stri
   const shop = (shopName || 'CRM').replace(CLEAN, '').trim() || 'CRM';
   const who = (customerName || '고객').replace(CLEAN, '').replace(/\s+/g, '') || '고객';
   return `${shop}_${who}_${isRefund ? '환불영수증' : '영수증'}_${paymentDate}.pdf`;
+}
+
+export const MAX_GREETING = 60;
+
+/** 인사말 정리 — 공백 축약·줄바꿈 제거·60자. 빈 값이면 null (256) */
+export function normalizeGreeting(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const clean = value.replace(/\s+/g, ' ').trim().slice(0, MAX_GREETING);
+  return clean || null;
 }

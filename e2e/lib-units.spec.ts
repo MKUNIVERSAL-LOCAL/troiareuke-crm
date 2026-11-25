@@ -50,7 +50,7 @@ import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumIn
 import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
 import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, sanitizeCautionKeywords, CAUTION_KEYWORDS, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
 import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
-import { buildReceipt, receiptFileName, splitPaymentNote } from '../src/lib/receiptRule';
+import { buildReceipt, receiptFileName, splitPaymentNote , normalizeGreeting, MAX_GREETING } from '../src/lib/receiptRule';
 import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT, VIP_RFM_MIN_VISITS, VIP_RFM_MIN_SPENT, GOLD_RFM_MIN_VISITS } from '../src/lib/gradeSuggestRule';
 import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, MAX_TAG_NAME, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER, CHIP_LIMIT } from '../src/lib/tagMasterRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
@@ -2489,4 +2489,23 @@ test('고객 변경 이력 — 날짜 모양이 아닌 기록은 버린다(영�
   const broken = [{ id: 'x', customerId: 'c1', at: 'not-a-date', kind: 'edit' as const, changes: [{ label: '등급', from: '일반', to: 'VIP' }] }];
   expect(sanitizeCustomerHistory(broken)).toEqual([]);
   expect(trimCustomerHistory(sanitizeCustomerHistory(broken), '2026-06-01')).toEqual([]);
+});
+
+// ── 256: 영수증 인사말 ──
+
+test('영수증 인사말 — 정리하고, 환불·예정 내역서에는 붙이지 않는다 (256)', () => {
+  expect(normalizeGreeting('  오늘도  찾아주셔서' + String.fromCharCode(10) + '감사합니다 ')).toBe('오늘도 찾아주셔서 감사합니다');
+  expect(normalizeGreeting('   ')).toBeNull();
+  expect(normalizeGreeting(undefined)).toBeNull();
+  expect(normalizeGreeting('가'.repeat(80))).toHaveLength(MAX_GREETING);
+  const shop = { name: '테스트샵', phone: '02-0000-0000', businessNumber: '000-00-00000', greeting: '오늘도 감사합니다' };
+  const paid = buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 90_000, paymentMethod: '카드', status: 'completed' }, shop, customerName: '홍길동' });
+  expect(paid.greeting).toBe('오늘도 감사합니다');
+  // 환불 영수증·예정 내역서에는 붙지 않는다("감사합니다" 가 환불 문서에 찍히지 않게)
+  const refund = buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 90_000, paymentMethod: '카드', status: 'refunded' }, shop });
+  expect(refund.greeting).toBeNull();
+  const pending = buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 90_000, paymentMethod: '카드', status: 'pending' }, shop });
+  expect(pending.greeting).toBeNull();
+  // 설정에 인사말이 없으면 null — 빈 줄을 만들지 않는다
+  expect(buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 1000, paymentMethod: '현금', status: 'completed' }, shop: { name: '샵' } }).greeting).toBeNull();
 });

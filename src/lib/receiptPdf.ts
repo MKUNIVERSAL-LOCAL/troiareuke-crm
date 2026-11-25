@@ -24,6 +24,7 @@ export async function exportReceiptPdf(payment: ReceiptPayment, customerName?: s
       address: settings.address,
       businessNumber: receiptInfo.businessNumber,
       ownerName: receiptInfo.ownerName,
+      greeting: receiptInfo.greeting, // 매장 인사말 (256)
     },
     issuedOn: todayISO(),
   });
@@ -90,6 +91,18 @@ export async function exportReceiptPdf(payment: ReceiptPayment, customerName?: s
   doc.setTextColor(model.isRefund ? 185 : 26, model.isRefund ? 28 : 58, model.isRefund ? 28 : 143);
   doc.text(model.totalValue, W - M, y + 2, { align: 'right' });
   y += 34;
+
+  // 매장 인사말 — 환불·예정 내역서에는 붙지 않는다(규칙이 null 로 준다) (256)
+  if (model.greeting) {
+    doc.setFontSize(10);
+    doc.setTextColor(55, 65, 81);
+    for (const wrapped of doc.splitTextToSize(model.greeting, CW) as string[]) {
+      if (y > H - M) break;
+      doc.text(wrapped, M, y);
+      y += 14;
+    }
+    y += 6;
+  }
 
   // 꼬리말 — 세금계산서·설정 안내
   doc.setFontSize(8.5);
