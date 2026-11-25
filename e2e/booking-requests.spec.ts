@@ -93,6 +93,24 @@ test('예약 요청 접수 → 예약으로 등록(폼 프리필·고객 자동 
   await page.keyboard.press('Escape');
   await visibleButton(page, /예약 요청함/).click();
   await expect(inbox).toBeVisible();
+  // 날짜가 지난 처리 전 요청은 "지난 날짜" 배지 + 한 번에 거절로 정리 (197) — 입력 폼은 지난 날짜를 막으므로 기록을 심는다
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_booking_requests$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const y = new Date(); y.setDate(y.getDate() - 3);
+    const date = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+    list.push({ id: 'stale_' + Date.now(), channel: 'phone', customerName: '지난요청', phone: '010-7777-8888', serviceId: '', serviceName: '테스트관리', durationMin: 60, date, startTime: '11:00', privacyConsent: true, createdAt: new Date().toISOString(), status: 'new' });
+    localStorage.setItem(key, JSON.stringify(list));
+  });
+  await page.keyboard.press('Escape');
+  await expect(inbox).toHaveCount(0);
+  await visibleButton(page, /예약 요청함/).click();
+  await expect(item).toHaveCount(2);
+  await expect(item.filter({ hasText: '지난요청' })).toContainText('지난 날짜');
+  await inbox.getByTestId('booking-request-clear-stale').click();
+  await acceptAppConfirm(page, '지난 요청 정리', '정리');
+  await expect(item).toHaveCount(1);
+  await expect(item).not.toContainText('지난요청');
   await item.getByRole('button', { name: '거절' }).click();
   await acceptAppConfirm(page, '요청 거절', '거절');
   await expect(item).toHaveCount(0);

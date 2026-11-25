@@ -54,6 +54,21 @@ export default function BookingRequestsModal({ onClose, onRegister }: { onClose:
     }
   };
 
+  // 날짜가 지난 처리 전 요청 — 거절도 등록도 안 하면 요청함·대시보드 건수에 영구히 남는다(191 리뷰 L-3) → 배지 + 한 번에 정리 (197)
+  const stale = list.filter(r => r.date < todayISO());
+  const clearStale = async () => {
+    if (stale.length === 0) return;
+    if (!(await askConfirm({ title: '지난 요청 정리', confirmLabel: '정리', cancelLabel: '닫기', message: `날짜가 지난 처리 전 요청 ${stale.length}건을 전부 거절로 처리할까요?\n거절한 요청의 이름·전화는 7일 뒤 삭제됩니다.` }))) return;
+    try {
+      for (const r of stale) await rejectRequest(r.id);
+      await reload();
+      notify.info(`지난 요청 ${stale.length}건을 거절로 정리했습니다.`);
+    } catch {
+      notify.error('일부 요청을 처리하지 못했습니다. 다시 시도해주세요.');
+      await reload();
+    }
+  };
+
   const reject = async (req: BookingRequest) => {
     if (!(await askConfirm({ title: '요청 거절', confirmLabel: '거절', cancelLabel: '닫기', message: `${req.customerName} 고객의 ${req.date} ${req.startTime} ${req.serviceName} 요청을 거절할까요? 고객에게는 직접 연락해주세요. 거절한 요청의 이름·전화는 7일 뒤 지워집니다.` }))) return;
     try {
@@ -117,6 +132,12 @@ export default function BookingRequestsModal({ onClose, onRegister }: { onClose:
 
         <div className="space-y-2">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Inbox size={14} /> 처리 전 요청 {list.length > 0 && <span className="text-[#1a3a8f]">{list.length}건</span>}</p>
+          {stale.length > 0 && (
+            <div className="flex items-center justify-between gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+              <span>날짜가 지난 요청 {stale.length}건이 남아 있습니다.</span>
+              <button type="button" onClick={() => void clearStale()} className="px-2.5 py-1 min-h-[32px] rounded-lg bg-white border border-amber-200 font-medium hover:bg-amber-100" data-testid="booking-request-clear-stale">지난 요청 {stale.length}건 거절로 정리</button>
+            </div>
+          )}
           {list.length === 0 ? (
             <p className="text-sm text-gray-500">처리 전 요청이 없습니다.</p>
           ) : (
@@ -128,6 +149,7 @@ export default function BookingRequestsModal({ onClose, onRegister }: { onClose:
                     <span className="text-xs text-gray-500">{maskPhone(req.phone, maskRole)}</span>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{CHANNEL_LABEL[req.channel]}</span>
                     {!findCustomerByPhone(req.phone) && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">신규 고객</span>}
+                    {req.date < todayISO() && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">지난 날짜</span>}
                   </div>
                   <p className="text-xs text-gray-600 mt-0.5">{req.date} {req.startTime} · {req.serviceName}{req.memo ? ` · ${req.memo}` : ''}</p>
                   <div className="flex gap-2 mt-2">
