@@ -2720,21 +2720,21 @@ export default function Customers() {
               {(selectedSeg || selectedCycle || selectedValue) && (
                 <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-gray-50" data-testid="customer-analytics">
                   {selectedSeg && (
-                    <div>
+                    <div data-testid="rfm-segment">{/* (269) */}
                       <p className="text-xs text-gray-500">고객 구분</p>
                       <p className="text-sm font-semibold text-gray-900">{selectedSeg.rfm.segment}{selectedSeg.churn && <span className={`ml-1 text-xs font-medium ${selectedSeg.churn.level === 'high' ? 'text-rose-700' : selectedSeg.churn.level === 'medium' ? 'text-amber-700' : 'text-gray-500'}`}>· 이탈 위험 {CHURN_LABEL[selectedSeg.churn.level]}</span>}</p>
                       <p className="text-xs text-gray-500">최근성 {selectedSeg.rfm.r}·빈도 {selectedSeg.rfm.f}·금액 {selectedSeg.rfm.m} (최근 1년, 매장 내 5분위)</p>
                     </div>
                   )}
                   {selectedCycle && (
-                    <div>
+                    <div data-testid="visit-cycle">{/* 테스트 훅 — 모바일 상세에만 있어 PC 스펙이 닿지 못했다 (269) */}
                       <p className="text-xs text-gray-500">방문 주기</p>
                       <p className="text-sm font-semibold text-gray-900 tabular-nums">{selectedCycle.days}일 <span className="text-xs font-normal text-gray-500">{selectedCycle.basis === 'personal' ? '이 고객 기준' : '매장 기준'}</span></p>
                       <p className="text-xs text-gray-500">{selectedCycle.basis === 'personal' ? `방문 간격 ${selectedCycle.intervals}개의 중앙값` : '방문 3회 미만이라 매장 기본 주기'}</p>
                     </div>
                   )}
                   {selectedValue && (
-                    <div>
+                    <div data-testid="realized-revenue">{/* (269) */}
                       <p className="text-xs text-gray-500">실현 매출</p>
                       <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatPrice(selectedValue.realizedRevenue)}</p>
                       <p className="text-xs text-gray-500">회차권은 사용한 회차만큼(기간제 전액)</p>

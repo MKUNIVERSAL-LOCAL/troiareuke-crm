@@ -59,3 +59,40 @@ test('재고 실사 — 적은 제품만 맞추고, 빈칸은 그대로 두고, 
   await expect(ledger.getByTestId('stock-entry').filter({ hasText: '실사 조정' })).toContainText('11월 말 실사');
   await expect(ledger.getByTestId('stock-reconcile')).toContainText('일치'); // 원장 합 = 현재 재고
 });
+
+test('재고 실사 — 세는 동안 다른 PC 가 재고를 바꾸면 그 사실을 알려 준다 (269)', async ({ page, context }) => {
+  test.slow();
+  page.on('dialog', d => d.accept());
+  const accTab = makeAccount('SC2');
+  await signupAndOnboard(page, accTab);
+  await addProduct(page, { name: '동시앰플', price: 20000, stock: 10 });
+  await dismissToasts(page);
+
+  // 실사 창을 열어 수량을 적는 중
+  await page.getByTestId('stock-count-open').click();
+  const count = page.getByTestId('stock-count');
+  await expect(count).toBeVisible();
+  await count.getByLabel('동시앰플 실제 수량').fill('9');
+  await expect(count.getByTestId('stock-count-changed')).toHaveCount(0); // 아직 아무 일도 없다
+
+  // 그 사이 다른 탭(=다른 PC)에서 판매·입고로 재고가 바뀐다 → storage 이벤트로 이 탭이 알아챈다
+  const other = await context.newPage();
+  await other.goto('/products');
+  await other.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_products$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const p = list.find((x: { name: string }) => x.name === '동시앰플');
+    p.stock = 6; // 다른 PC 에서 4개 판매
+    localStorage.setItem(key, JSON.stringify(list));
+  });
+  await expect(count.getByTestId('stock-count-changed')).toContainText('제품 1종의 재고가 다른 곳에서 바뀌었습니다', { timeout: 10_000 });
+  await expect(count.getByTestId('stock-count-changed')).toContainText('다시 세어주세요');
+  await other.close();
+
+  // 반영을 눌러도 그 제품은 건너뛴다 — 옛 숫자로 덮지 않는다(246 리뷰 M-5)
+  await count.getByRole('button', { name: /실사 반영/ }).click();
+  // 확인창과 실사 창이 같은 이름을 쓰므로 confirm-dialog 로 집는다
+  await page.getByTestId('confirm-dialog').getByRole('button', { name: '실사 반영', exact: true }).click();
+  await expect(page.getByText(/그 사이 재고가 바뀌어 건너뛰었습니다|맞출 제품이 없었습니다/).first()).toBeVisible();
+  await expectStock(page, '동시앰플', 6); // 다른 PC 가 적은 6 이 그대로 남는다(9 로 덮지 않는다)
+});

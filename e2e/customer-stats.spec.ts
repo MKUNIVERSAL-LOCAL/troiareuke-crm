@@ -51,6 +51,16 @@ test('같은 날 예약 완료 + 시술 기록은 방문 1회, 환불은 누적 
   expect(c?.totalVisits).toBe(1); // 코어의 +1(완료) +1(시술)을 재계산이 1로
   expect(c?.totalSpent).toBe(50000);
 
+  // 269: 고객 상세의 **가치 3칸**(실현 매출·고객 구분·방문 주기)은 어떤 스펙도 보지 않고 있었다.
+  // 사장이 이 숫자로 사람을 판단하므로, 근거 문구까지 함께 고정한다.
+  await expect(desk.getByTestId('realized-revenue')).toContainText('50,000원');
+  await expect(desk.getByTestId('realized-revenue')).toContainText('회차권은 사용한 회차만큼'); // 정의를 화면에 적는다
+  await expect(desk.getByTestId('rfm-segment')).toContainText('최근성');                        // R·F·M 근거 줄
+  await expect(desk.getByTestId('rfm-segment')).toContainText('매장 내 5분위');                  // 상대 순위라는 사실
+  const cycle = desk.getByTestId('visit-cycle');
+  await expect(cycle).toContainText('매장 기준');                                               // 방문 3회 미만이면 매장 기본 주기
+  await expect(cycle).toContainText('방문 3회 미만이라 매장 기본 주기');
+
   // 환불 → 누적 결제액 0 (방문은 그대로 1)
   await page.goto('/sales');
   await refundFirstPayment(page);

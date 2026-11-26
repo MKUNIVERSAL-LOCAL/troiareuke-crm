@@ -79,3 +79,19 @@ test('발주 제안 — 판매 속도로 수량을 제안하고 근거를 적고
   await expect(page.getByTestId('reorder')).toBeVisible();
   await expect(page.getByTestId('reorder').getByLabel('며칠분을 채울지')).toHaveValue('60');
 });
+
+test('발주 제안 — 재고가 넉넉하면 "주문할 제품이 없다" 고 말한다 (269, 빈 상태)', async ({ page }) => {
+  test.slow();
+  page.on('dialog', d => d.accept());
+  const accFull = makeAccount('RO2');
+  await signupAndOnboard(page, accFull);
+  await addProduct(page, { name: '넉넉앰플', price: 30000, stock: 200 }); // 안전재고 기본 5 보다 훨씬 많다
+  await dismissToasts(page);
+
+  await page.getByTestId('reorder-open').click();
+  const panel = page.getByTestId('reorder');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByTestId('reorder-empty')).toContainText('지금 주문할 제품이 없습니다');
+  await expect(panel.getByTestId('reorder-row')).toHaveCount(0);
+  await expect(panel.getByTestId('reorder-copy')).toHaveCount(0); // 복사할 목록이 없으면 버튼도 없다(장식 UI 금지)
+});
