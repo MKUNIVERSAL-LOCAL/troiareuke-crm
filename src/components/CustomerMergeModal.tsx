@@ -86,7 +86,7 @@ export default function CustomerMergeModal({ target, onClose, onMerged }: { targ
       if (logLanded === 'lost') notify.error(PRIVACY_LOG_LOST);
       else if (logLanded === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN);
       // 304: 옮길 수 없는 제품 판매를 되짚는 표가 안 남으면 그 판매 행이 "삭제된 고객" 으로 보인다(판매 0건이면 말하지 않는다)
-      const mapLost = describeMergedMapLoss(moved.mergedMapLanded, moved.productSales);
+      const mapLost = describeMergedMapLoss(moved.mergedMapLanded, moved.productSales, moved.mergedMapRechained);
       if (mapLost) notify.error(mapLost);
       notify(`'${source.name}' 고객을 병합했습니다. 기록 ${n}건을 옮겼습니다.`);
       onMerged();

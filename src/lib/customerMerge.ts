@@ -67,9 +67,12 @@ function later(a?: string, b?: string): string | undefined {
 
 const GRADE_RANK: Record<CustomerGrade, number> = { 신규: 0, 일반: 1, 골드: 2, VIP: 3 };
 
-/** source의 기록을 target으로 옮기고 source를 삭제한다. 되돌릴 수 없다. @returns 이동한 기록 수 */
-/** 병합 실행. 돌려주는 값은 옮긴 건수(= previewMerge 와 같은 모양) + **되짚는 표가 남았는지**(304) */
-export function mergeCustomers(targetId: string, sourceId: string): MergePreview & { mergedMapLanded: PrefLanded } {
+/**
+ * 병합 실행. 돌려주는 값은 옮긴 건수(= `previewMerge` 와 같은 모양) + **되짚는 표가 남았는지**(304)
+ * + 이번 저장이 다시 가리키게 만든 옛 id 수(311). 311(리뷰 L-5): 여기 JSDoc 이 두 개 겹쳐 있었고
+ * 앞 블록의 `@returns 이동한 기록 수` 는 304 뒤로 불완전한 설명이었다 — 하나로 합쳤다.
+ */
+export function mergeCustomers(targetId: string, sourceId: string): MergePreview & { mergedMapLanded: PrefLanded; mergedMapRechained: number } {
   if (targetId === sourceId) throw new Error('같은 고객입니다.');
   const target = CustomerStore.getById(targetId);
   const source = CustomerStore.getById(sourceId);
@@ -117,8 +120,11 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   CustomerStore.delete(sourceId);
   // 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 — 병합이 끝난 뒤에만 기록(중간 예외 시 유령 매핑 방지) (11차 #M10, 리뷰 #M9)
   // 304: 그 기록이 남았는지도 돌려준다 — 안 남으면 그 고객의 제품 판매가 "삭제된 고객" 으로 보인다
-  const mergedMapLanded = recordMergedCustomer(sourceId, targetId);
-  return { ...preview, mergedMapLanded };
+  // 311(리뷰 M-4): 사슬 병합(A→B 뒤 B→C)에서 이 저장이 안 남으면 **A 의 제품 판매**도 "삭제된 고객" 이
+  // 된다 — 그런데 `productSales` 는 source 의 판매 수라 0일 수 있어 304 판은 그때 침묵했다.
+  // 다시 가리키게 된 옛 id 가 하나라도 있으면 판매 수가 0이어도 알린다.
+  const merged = recordMergedCustomer(sourceId, targetId);
+  return { ...preview, mergedMapLanded: merged.landed, mergedMapRechained: merged.rechained };
 }
 
 /** 합집합 태그의 동의 예약어를 한 상태로 정리 — 동의+거부가 공존하면 거부 우선(consentFromTags), 동의일은 하나만 (165 리뷰 L-15) */

@@ -17,7 +17,9 @@
  *   (278 에서 ALLOWED 사유 네 개가 사실과 달랐던 일이 있었다).
  *
  * 한계(정직하게): 글을 보는 검사다. 판정을 받아서 **아무것도 안 하는** 코드(`const landed = …;` 뒤에
- *   아무 쓰임이 없는 경우)는 잡지 못한다 — 그 종류는 `tsc` 의 미사용 변수 검사와 리뷰가 본다.
+ *   아무 쓰임이 없는 경우)는 잡지 못한다 — **311(303~308 리뷰 M-5) 정정**: 304 는 이 자리에 "그 종류는
+ *   `tsc` 의 미사용 변수 검사가 본다" 고 적었는데 사실이 아니다. `tsconfig.json` 은 `noUnusedLocals: false`
+ *   이고 이 저장소에는 eslint 설정·lint 스크립트가 없다 — **그 안전망은 없고, 리뷰가 본다**.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,7 +51,40 @@ const files = [];
   }
 })(SRC);
 
-/** 한 줄에서 `setPreference(` 앞의 글을 보고 "답을 쓰는가" 를 가린다 */
+/**
+ * 주석·문자열을 **같은 길이의 공백**으로 바꾼다 (311, 리뷰 M-5).
+ * 304 판은 "줄이 `*`·`//` 로 시작하는가" 만 봐서 ① 한 줄 블록 주석 `/* … setPreference('x', v); … *\/` 과
+ * ② 문자열 리터럴 `'setPreference('` 을 **판정 버림으로 신고**했고(거짓 경보), ③ 줄 앞쪽에 문자열 안의
+ * `//` 가 있으면 그 줄을 아예 건너뛰어 **진짜 버림을 놓쳤다**. 305·306 의 스캐너와 같은 방식으로 지운다.
+ */
+function blankCommentsAndStrings(text) {
+  const out = text.split('');
+  let mode = 'code';
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    const n = text[i + 1];
+    if (mode === 'code') {
+      if (c === '/' && n === '/') { mode = 'line'; out[i] = ' '; out[i + 1] = ' '; i += 1; continue; }
+      if (c === '/' && n === '*') { mode = 'block'; out[i] = ' '; out[i + 1] = ' '; i += 1; continue; }
+      if (c === "'" || c === '"' || c === '`') { mode = c; continue; }
+      continue;
+    }
+    if (mode === 'line') { if (c === '\n') mode = 'code'; else out[i] = ' '; continue; }
+    if (mode === 'block') {
+      if (c === '*' && n === '/') { out[i] = ' '; out[i + 1] = ' '; i += 1; mode = 'code'; continue; }
+      if (c !== '\n') out[i] = ' ';
+      continue;
+    }
+    // 문자열 — 내용을 공백으로 지운다(그 안의 `setPreference(` 를 호출로 세지 않게)
+    if (c === '\\') { out[i] = ' '; out[i + 1] = ' '; i += 1; continue; }
+    if (c === mode) { mode = 'code'; continue; }
+    if (c === '\n') { mode = 'code'; continue; } // 홀따옴표·쌍따옴표는 줄을 넘지 못한다
+    out[i] = ' ';
+  }
+  return out.join('');
+}
+
+/** 호출 앞의 글을 보고 "답을 쓰는가" 를 가린다 — 여러 줄 대입도 이어 본다 (311, 리뷰 M-5) */
 function usesResult(before) {
   const t = before.trimEnd();
   if (t.endsWith('=') || t.endsWith('=>')) return true;        // const landed = … / () => …
@@ -60,23 +95,30 @@ function usesResult(before) {
   return false;
 }
 
+/** 판정을 돌려주는 함수들 — `setPreference` 뿐 아니라 304 가 만든 래퍼도 본다 (311, 리뷰 L-8) */
+const JUDGING_CALLS = ['setPreference(', 'setReservationPolicy(', 'setOptOutNumber(', 'setDeviceFeatureEnabled(', 'setBeaconConsultationEnabled('];
+
 const discarded = [];
 for (const full of files) {
   const rel = path.relative(ROOT, full).replace(/\\/g, '/');
-  const text = fs.readFileSync(full, 'utf8');
+  const raw = fs.readFileSync(full, 'utf8');
+  const text = blankCommentsAndStrings(raw);   // 주석·문자열은 코드가 아니다
   const lines = text.split(/\r?\n/);
+  const rawLines = raw.split(/\r?\n/);
   lines.forEach((line, i) => {
-    if (line.includes('export function setPreference')) return;
-    let at = line.indexOf('setPreference(');
-    while (at >= 0) {
-      const before = line.slice(0, at);
-      // 주석 줄은 보지 않는다 — 설명에 적힌 이름을 호출로 세면 거짓 경보가 된다
-      const codeOnly = before.replace(/\/\/.*$/, '');
-      if (!/^\s*(\*|\/\/)/.test(before) && codeOnly === before && !usesResult(before)) {
-        const keyMatch = line.slice(at).match(/setPreference\(\s*'([^']+)'/);
-        discarded.push({ file: rel, line: i + 1, key: keyMatch ? keyMatch[1] : '?' });
+    if (/export function (setPreference|setReservationPolicy|setOptOutNumber|setDeviceFeatureEnabled|setBeaconConsultationEnabled)/.test(rawLines[i])) return;
+    for (const call of JUDGING_CALLS) {
+      let at = line.indexOf(call);
+      while (at >= 0) {
+        // 311(리뷰 M-5): 호출 앞에 코드가 없으면 **위 줄까지 이어** 본다 — 여러 줄 대입이 거짓 경보였다
+        let before = line.slice(0, at);
+        for (let k = i - 1; k >= 0 && before.trim() === ''; k -= 1) before = lines[k];
+        if (!usesResult(before)) {
+          const keyMatch = rawLines[i].match(new RegExp(call.replace('(', '\\(') + "\\s*'([^']+)'"));
+          discarded.push({ file: rel, line: i + 1, key: keyMatch ? keyMatch[1] : call.replace('(', '') });
+        }
+        at = line.indexOf(call, at + 1);
       }
-      at = line.indexOf('setPreference(', at + 1);
     }
   });
 }
@@ -106,11 +148,16 @@ if (process.argv.includes('--selftest')) {
   ok('if 뒤', !usesResult('    if (removed > 0) '));
   ok('try 블록', !usesResult('  try { '));
   ok('세미콜론 뒤', !usesResult('  doSomething(); '));
+  // 311(리뷰 M-5): 주석·문자열은 코드가 아니다 / 여러 줄 대입은 버림이 아니다
+  const probe = blankCommentsAndStrings("/* setPreference('a', 1); */\nconst s = 'setPreference(';\nconst landed =\n  setPreference('b', 2);");
+  if (probe.includes("setPreference('a'")) { console.error('[selftest] 블록 주석 지우기 덫 실패'); process.exit(1); }
+  if (probe.split('setPreference(').length - 1 !== 1) { console.error('[selftest] 문자열 지우기 덫 실패: ' + probe.split('setPreference(').length); process.exit(1); }
+  ok('여러 줄 대입', usesResult('const landed ='));
   // 지금 저장소 상태
   ok('지금 버리는 자리는 전부 이유가 있다', problems.length === 0 || (console.error(problems.join('\n')), false));
   ok('ALLOWED 가 비어 있지 않다', ALLOWED.length > 0);
   ok('호출 자리를 실제로 찾았다', discarded.length >= ALLOWED.length);
-  console.log(`[check-save-judgment] selftest OK — 덫 9개(대입·반환·인자·객체 값·삼항·문장·if 뒤·try 블록·세미콜론 뒤) + 지금 상태 통과`);
+  console.log(`[check-save-judgment] selftest OK — 덫 12개(블록 주석·문자열·여러 줄 대입·대입·반환·인자·객체 값·삼항·문장·if 뒤·try 블록·세미콜론 뒤) + 지금 상태 통과`);
   process.exit(0);
 }
 

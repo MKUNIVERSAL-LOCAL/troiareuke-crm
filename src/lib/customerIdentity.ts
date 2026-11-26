@@ -58,14 +58,18 @@ const MERGED_MAP_MAX = 500;
 
 /** 병합으로 사라진 고객 id 를 기록 — 옮길 수 없는 제품 판매 행(코어)을 읽을 때 되짚는다 (11차 #M10). 사슬은 기록 시점에 평탄화하고, 오래된 항목부터 500개까지만.
  *  304: 저장 판정을 돌려준다 — 이 표가 안 남으면 그 고객의 제품 판매가 "삭제된 고객" 으로 보인다(`saleCustomerNameResolver`). */
-export function recordMergedCustomer(sourceId: string, targetId: string): PrefLanded {
+export function recordMergedCustomer(sourceId: string, targetId: string): { landed: PrefLanded; rechained: number } {
   const map = mergedCustomerIds();
   const next: Record<string, string> = {};
-  for (const [k, v] of Object.entries(map)) next[k] = v === sourceId ? targetId : v; // 이전에 source 로 합쳐진 것도 target 으로
+  let rechained = 0; // 311(303~308 리뷰 M-4): 이번 저장이 **다시 가리키게 만든 옛 id 수**
+  for (const [k, v] of Object.entries(map)) {
+    if (v === sourceId) rechained += 1;
+    next[k] = v === sourceId ? targetId : v; // 이전에 source 로 합쳐진 것도 target 으로
+  }
   next[sourceId] = targetId;
   const keys = Object.keys(next);
   for (const k of keys.slice(0, Math.max(0, keys.length - MERGED_MAP_MAX))) delete next[k];
-  return setPreference('mergedCustomerIds', next);
+  return { landed: setPreference('mergedCustomerIds', next), rechained };
 }
 
 function mergedCustomerIds(): Record<string, string> {

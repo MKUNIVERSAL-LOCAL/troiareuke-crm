@@ -52,8 +52,11 @@ function tablesOf(text) {
   const tables = [];
   const lines = text.split(/\r?\n/);
   let current = null;
+  let inFence = false; // 311(303~308 리뷰 L-1): 펜스 안의 예시 표를 진짜 표로 세어 거짓 경보가 났다
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
+    if (/^\s*```/.test(line)) { inFence = !inFence; current = null; continue; }
+    if (inFence) continue;
     if (!line.trim().startsWith('|')) { current = null; continue; }
     const row = cells(line);
     if (!row) { current = null; continue; }
@@ -93,7 +96,11 @@ function checkGap({ gap, roadmap, pkg, hasServerTests, specExists, scriptExists,
         if (!STATUS_MARKS.some(m => status.startsWith(m))) {
           problems.push(`${GAP}:${line} 상태 칸이 "${status.slice(0, 20)}" 로 시작한다 — 머리말이 정의한 기호(${STATUS_MARKS.join(' ')}) 중 하나로 시작해야 한다`);
         }
-        for (const no of status.match(/\b\d{3}\b/g) || []) {
+        // 311(리뷰 L-2): 상태 칸의 세 자리 숫자를 **전부** 묶음 번호로 봐서 `409`(HTTP)·`080`(수신거부
+        // 번호)·`500행` 같은 값이 들어가면 거짓 경보가 났다 — 뒤에 단위가 붙은 숫자는 묶음이 아니다.
+        const statusNos = [...status.matchAll(/\b(\d{3})\b(\s*(?:행|건|개|번|자|%|원|초|분|시간|칸))?/g)]
+          .filter(m => !m[2]).map(m => m[1]);
+        for (const no of statusNos) {
           if (!new RegExp(`^- \\[x\\] ${no} `, 'm').test(roadmap)) {
             problems.push(`${GAP}:${line} 상태 칸이 묶음 ${no} 를 근거로 적었는데 로드맵에 그 묶음이 없다`);
           }
@@ -185,6 +192,9 @@ function selftest() {
   ok('서버 테스트가 정말 없으면 0건은 사실', !checkGap({ ...base, gap: base.gap.replace('서버 자동 테스트는 node 내장 러너 **35건**', '서버 자동 테스트 0건'), hasServerTests: false }).some(p => /사실이 아니다/.test(p)));
   // 요약의 유령 코드
   bite('요약의 유령 항목', { gap: base.gap.replace('5. C-8/M-4 수신 동의', '5. C-99/M-4 수신 동의') }, /요약\(8절\)이 C-99/);
+  // 311(리뷰 L-1·L-2): 펜스 안 예시 표와 단위가 붙은 숫자는 잡지 않는다
+  ok('코드 펜스 면제', !with_({ gap: base.gap + '\n\n```markdown\n| # | 항목 | 상태 |\n|---|---|---|\n| X-1 | 예시 | 대기 |\n```\n' }).some(p => /상태 칸이|칸이 밀리면/.test(p)));
+  ok('단위 붙은 숫자 면제', !with_({ gap: base.gap.replace('✅ 221·264·279·302·305', '✅ 221·264·279·302·305 (표는 500행까지)') }).some(p => /묶음 500/.test(p)));
   // 처음 짰을 때 낸 거짓 경보 두 가지가 다시 생기지 않게
   ok('이스케이프한 파이프는 칸을 나누지 않는다', !with_({}).some(p => /칸이 밀리면/.test(p)));
   ok('승인 번호는 유령 항목이 아니다', !with_({}).some(p => /A-15|B-2/.test(p)));
@@ -192,7 +202,7 @@ function selftest() {
   const live = with_({});
   ok('지금 표는 통과', live.length === 0 || (console.error(live.join('\n')), false));
 
-  console.log('[check-gap-claims] selftest OK — 덫 13개(밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건) 통과');
+  console.log('[check-gap-claims] selftest OK — 덫 15개(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건) 통과');
 }
 
 const problems = (() => {

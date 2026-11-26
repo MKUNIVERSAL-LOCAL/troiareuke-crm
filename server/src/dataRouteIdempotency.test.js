@@ -121,6 +121,16 @@ export function functionBodyOf(source, name) {
   return null;
 }
 
+/** `{` 짝이 닫히는 자리 — 없으면 끝까지 (311) */
+function closeBrace(code, openAt) {
+  let depth = 0;
+  for (let i = openAt; i < code.length; i += 1) {
+    if (code[i] === '{') depth += 1;
+    else if (code[i] === '}') { depth -= 1; if (depth === 0) return i + 1; }
+  }
+  return code.length;
+}
+
 /** 멱등성 계약 위반 목록(빈 배열 = 통과) */
 export function checkIdempotency(source) {
   const problems = [];
@@ -152,9 +162,11 @@ export function checkIdempotency(source) {
       // 305(리뷰 M-2): `/BEGIN/` 존재만 보던 탓에 **로그 문구로만** 남겨도 통과했다
       problems.push(`PUT 의 트랜잭션이 BEGIN ${begins}·COMMIT ${commits}·ROLLBACK ${rollbacks} 이다 — 각각 한 번씩 실제 쿼리로 있어야 한다(청크 중간에 끊기면 일부만 저장되고 재전송 결과가 달라진다)`);
     }
+    // 305(300~302 리뷰 M-2)는 반복문 끝을 `indexOf('}')` 로 찾아 **중첩 블록이 하나만 있어도** 그 블록
+    // 끝으로 줄어들어 뒤의 COMMIT 을 못 봤다(311, 303~308 리뷰 M-3) — 중괄호 균형으로 센다.
     const loopAt = put.search(/for \(const row of rows\)/);
     const commitAt = put.indexOf("client.query('COMMIT')");
-    const loopEnd = loopAt >= 0 ? put.indexOf('}', put.indexOf('{', loopAt)) : -1;
+    const loopEnd = loopAt >= 0 ? closeBrace(put, put.indexOf('{', loopAt)) : -1;
     if (loopAt >= 0 && commitAt >= 0 && commitAt < loopEnd) {
       problems.push('PUT 이 행 반복 안에서 COMMIT 한다 — 중간에 끊기면 일부만 커밋돼 한 트랜잭션이 아니다');
     }
@@ -164,6 +176,11 @@ export function checkIdempotency(source) {
     if (/\bscope\s*=[^=]/.test(put.replace(/const scope\s*=/, 'const scope:'))) {
       // 305(리뷰 M-2): `scope` 재대입(`scope = req.body.branchId`)이 조용히 통과했다
       problems.push('PUT 에서 scope 를 다시 대입한다 — 세션 범위를 요청 값으로 바꿔치기할 수 있다');
+    }
+    // 311(리뷰 M-3): 선언만 고정하던 탓에 **쿼리 인자**를 `req.body.branchId || scope` 로 바꾸면 통과했다 —
+    // upsert 의 첫 파라미터가 그 `scope` 인지까지 본다.
+    if (!/\[scope, req\.params\.collection, id, row\]/.test(squeezed)) {
+      problems.push('PUT 의 upsert 첫 인자가 세션 scope 가 아니다 — 다른 지점 자료를 덮을 수 있다');
     }
   }
 
@@ -290,6 +307,22 @@ for (const [name, [kind, target], mutate, expected] of TRAPS) {
       `덫을 놓쳤다: ${name} → ${problems.join(' / ') || '문제 0건'}`);
   });
 }
+
+test('덫 — 반복 안 중첩 블록 뒤의 COMMIT(311, 리뷰 M-3)', () => {
+  // 305 판은 반복문 끝을 첫 `}` 로 봐서 중첩 블록이 하나 있으면 뒤의 COMMIT 을 못 봤다
+  const broken = mutateIn(SOURCE, 'route', ['put', '/api/data/:collection'], s => s
+    .replace("        `, [scope, req.params.collection, id, row]);", "        `, [scope, req.params.collection, id, row]);\n        if (row.x) { await client.query('SELECT 1'); }\n        await client.query('COMMIT');")
+    .replace("      await client.query('COMMIT');\n    } catch (error) {", "    } catch (error) {"));
+  const problems = checkIdempotency(broken);
+  assert.ok(problems.some(p => /행 반복 안에서 COMMIT/.test(p)), `놓쳤다 → ${problems.join(' / ') || '문제 0건'}`);
+});
+
+test('덫 — scope 를 쿼리 인자에서 바꿔치기(311, 리뷰 M-3)', () => {
+  const broken = mutateIn(SOURCE, 'route', ['put', '/api/data/:collection'],
+    s => s.replace('[scope, req.params.collection, id, row]', '[req.body.branchId || scope, req.params.collection, id, row]'));
+  const problems = checkIdempotency(broken);
+  assert.ok(problems.some(p => /upsert 첫 인자가 세션 scope 가 아니다/.test(p)), `놓쳤다 → ${problems.join(' / ') || '문제 0건'}`);
+});
 
 test('덫 — 라우트를 통째로 주석 처리(305, 리뷰 M-1)', () => {
   // 302 판은 생 텍스트를 봐서 **주석 처리된 라우트도 "지켜지고 있다"** 고 했다.

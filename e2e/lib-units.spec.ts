@@ -3138,4 +3138,11 @@ test('고객 병합 뒤 되짚는 표가 안 남았을 때 할 말 — 제품 �
   expect(unknown).toContain('남았는지 확인할 수 없었습니다');
   expect(unknown).toContain('제품 판매 5건');
   expect(unknown).not.toContain('저장 공간이 모자랍니다'); // 확인 불가를 실패로 단정하지 않는다
+  // 311(303~308 리뷰 M-4): **사슬 병합** — source 의 판매가 0이어도, 다시 가리키게 된 옛 id 가 있으면 알린다
+  expect(describeMergedMapLoss('lost', 0, 0)).toBeNull();
+  const chained = describeMergedMapLoss('lost', 0, 2);
+  expect(chained).toContain('예전에 이 고객으로 합쳐 둔 고객 2명의 제품 판매');
+  expect(chained).toContain('병합을 다시 할 필요는 없습니다');
+  expect(describeMergedMapLoss('landed', 0, 3)).toBeNull(); // 남았으면 할 말이 없다
+  expect(describeMergedMapLoss('lost', 4, 2)).toContain('제품 판매 4건'); // 판매가 있으면 그 수를 먼저 말한다
 });

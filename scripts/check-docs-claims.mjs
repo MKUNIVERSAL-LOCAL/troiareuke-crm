@@ -255,6 +255,8 @@ function selftest() {
   if (tbl.length !== 1 || !/칸이 4개다/.test(tbl[0])) { console.error('[selftest] 표 열 수 덫 실패: ' + JSON.stringify(tbl)); process.exit(1); }
   if (tableProblems('| # | 값 |\n|---|---|\n| 1 | data \\| jsonb |', 'x.md').length !== 0) { console.error('[selftest] 이스케이프 파이프 면제 덫 실패'); process.exit(1); }
   if (tableProblems('| 이건 표가 아니다 |\n그냥 글', 'x.md').length !== 0) { console.error('[selftest] 구분 줄 없는 표 면제 덫 실패'); process.exit(1); }
+  // 311(리뷰 L-1): 코드 펜스 안의 표는 보기용이라 검사하지 않는다
+  if (tableProblems('```markdown\n| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |\n```', 'x.md').length !== 0) { console.error('[selftest] 코드 펜스 면제 덫 실패'); process.exit(1); }
   // 310: 중간 칸이 비면 잡는다(마지막 칸이 비는 것은 "아직 없음" 이라 잡지 않는다)
   const midEmpty = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 |  | 미반영 |', 'x.md');
   if (midEmpty.length !== 1 || !/2번 칸이 비어 있다/.test(midEmpty[0])) { console.error('[selftest] 중간 빈 칸 덫 실패: ' + JSON.stringify(midEmpty)); process.exit(1); }
@@ -274,7 +276,7 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 34개(중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
+  console.log('[check-docs-claims] selftest OK — 덫 36개(코드 펜스·화면 칸 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -442,8 +444,11 @@ function tableProblems(text, rel) {
   const lines = text.split(/\r?\n/);
   const cellsOf = line => line.split(/(?<!\\)\|/).slice(1, -1);
   let header = null;
+  let inFence = false; // 311(303~308 리뷰 L-1): ``` 펜스 안의 "표" 는 보기용 예시다 — 거짓 경보였다
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i].trim();
+    if (/^```/.test(line)) { inFence = !inFence; header = null; continue; }
+    if (inFence) continue;
     if (!line.startsWith('|')) { header = null; continue; }
     const next = (lines[i + 1] || '').trim();
     if (!header) {

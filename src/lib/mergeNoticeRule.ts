@@ -10,14 +10,24 @@
 // 문구 원칙(296 의 파기 대장과 같다): 되돌릴 수 없는 처리라 "다시 저장해주세요" 는 쓸 수 없다.
 //     **처리는 끝났고 되짚는 표만 없다**는 사실과, 그래서 화면에서 무엇이 달라 보이는지를 적는다.
 // 제품 판매가 0건이면 아무 말도 하지 않는다 — 그때는 표가 없어도 화면이 달라지지 않는다(없는 피해를 알리면 그것도 거짓이다).
+// **311(303~308 리뷰 M-4)**: 단, 사슬 병합(A→B 뒤 B→C)에서는 source 의 판매가 0이어도 피해가 있다 —
+// 이 저장은 예전에 source 로 합쳐 둔 id 들을 target 으로 다시 가리키게 만들고, 그것이 안 남으면
+// **그 옛 id 의 제품 판매**가 이미 지워진 id 를 가리켜 "삭제된 고객" 이 된다. 그래서 `rechained`(다시
+// 가리키게 된 옛 id 수)가 있으면 판매 수가 0이어도 알린다.
 // e2e/lib-units.spec.ts 가 브라우저 없이 직접 import 해 검증한다.
 // ═══════════════════════════════════════════════════════════════
 import type { PrefLanded } from './prefLandedRule';
 
-export function describeMergedMapLoss(state: PrefLanded, productSales: number): string | null {
-  if (productSales <= 0) return null;
+export function describeMergedMapLoss(state: PrefLanded, productSales: number, rechained = 0): string | null {
+  // 311(303~308 리뷰 M-4): **사슬 병합**에서는 source 의 판매가 0이어도 피해가 있다 — 이 저장은 예전에
+  // source 로 합쳐졌던 id 들을 target 으로 **다시 가리키게** 만들고, 그것이 안 남으면 그 옛 id 의 제품
+  // 판매가 "삭제된 고객" 이 된다(디스크에는 이미 지워진 id 를 가리키는 줄이 남는다).
+  if (productSales <= 0 && rechained <= 0) return null;
   if (state === 'landed' || state === 'invalid') return null;
-  const tail = `제품 판매 ${productSales}건의 고객 이름이 "삭제된 고객" 으로 보일 수 있습니다. 병합을 다시 할 필요는 없습니다 — 그 판매 내역은 제품 화면에서 확인해주세요.`;
+  const what = productSales > 0
+    ? `제품 판매 ${productSales}건`
+    : `예전에 이 고객으로 합쳐 둔 고객 ${rechained}명의 제품 판매`;
+  const tail = `${what}의 고객 이름이 "삭제된 고객" 으로 보일 수 있습니다. 병합을 다시 할 필요는 없습니다 — 그 판매 내역은 제품 화면에서 확인해주세요.`;
   if (state === 'unknown') {
     return `병합은 끝났지만, 옮길 수 없는 제품 판매를 합친 고객으로 되짚는 표가 이 PC 에 남았는지 확인할 수 없었습니다. ${tail}`;
   }

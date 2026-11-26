@@ -34,7 +34,16 @@ export function getOptOutNumber(): string {
   const v = getPreference('adsOptOutNumber');
   return typeof v === 'string' ? v : '';
 }
-/** 304: 저장 판정을 돌려준다 — 이 번호가 없으면 광고 발송이 막히고, 지운 것이 안 남으면 다시 열 때 번호가 **돌아온다**(법정 표기다) */
+/**
+ * 304: 저장 판정을 돌려준다 — 이 번호가 없으면 광고 발송이 막히고, 지운 것이 안 남으면 다시 열 때 번호가 **돌아온다**(법정 표기다).
+ * 311(303~308 리뷰 L-3): **번호가 애초에 없던 PC** 에서 빈 값을 저장하면 되읽은 값이 `undefined` 라
+ * 판정이 `lost` 가 되고 "다시 열면 그 항목이 돌아옵니다" 가 나갔다 — 돌아올 번호가 없으므로 거짓이다
+ * (297·300 이 마감 배지에서 막은 "주장이 비면 잃은 것도 없다" 와 같은 모양).
+ */
 export function setOptOutNumber(n: string): PrefLanded {
-  return setPreference('adsOptOutNumber', n.trim());
+  const value = n.trim();
+  const had = getOptOutNumber() !== '';
+  const landed = setPreference('adsOptOutNumber', value);
+  if (value === '' && !had && landed !== 'landed') return 'landed'; // 지울 것이 없었다
+  return landed;
 }

@@ -101,4 +101,18 @@ test('설정 저장이 실패하면 성공이라 말하지 않고, 사라진다�
   await expect(page.getByRole('dialog', { name: '결제 등록' })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('crm_custom_payment_methods'))).toContain('무통장입금');
   expect(await page.evaluate(() => Object.keys(localStorage).some(k => /^crm_.*_settings$/.test(k)))).toBe(false); // 행은 여전히 없다(= 확인 불가였다)
+
+  // ── ⑦ 311(303~308 리뷰 L-4): 토스트가 사라진 뒤에도 **남는 표시** ──
+  // 무료수신거부 번호는 광고 발송의 법정 표기다. 저장이 안 남았는데 "현재 080-…" 만 남으면
+  // 다음에 보는 사람은 등록된 줄 안다 — 그 옆에 "이 PC 에 저장 안 됨" 을 함께 적는다.
+  await page.goto('/settings?tab=notifications');
+  const optOut = page.getByTestId('ad-optout-card');
+  await expect(optOut).toBeVisible();
+  await optOut.getByLabel('무료수신거부 번호').fill('080-123-4567');
+  await optOut.getByRole('button', { name: '저장', exact: true }).click();
+  // ⑥ 에서 설정 행 자체를 지웠으므로 되읽기가 null = **확인 불가** 다(쓰기도 막혀 있다).
+  // "사라진다" 고 단정하지 않고 "확인할 수 없었다" 고 말하는 것이 이 상태의 사실이다(285·290 의 규칙).
+  await expect(page.getByText(/무료수신거부 번호/).filter({ visible: true }).first()).toContainText('확인할 수 없었습니다');
+  await expect(optOut.getByTestId('ad-optout-unsaved')).toContainText('이 PC 에서 확인 못 함'); // 토스트가 사라져도 남는다
+  await expect(optOut).toContainText('현재 080-123-4567'); // 화면 표시와 그 한계가 함께 보인다
 });
