@@ -28,7 +28,8 @@ export function getPreference<K extends PrefKey>(key: K): ShopPreferences[K] | u
 export function setPreference<K extends PrefKey>(key: K, value: ShopPreferences[K]): PrefLanded {
   const next: ShopPreferences = { ...readAll(), [key]: value };
   SettingsStore.save({ preferences: next });
-  return prefLanded(readPersistedPreference(key) ?? null, value ?? null);
+  // `?? null` 로 접지 않는다 — undefined(키가 없다 = 확인된 실패)와 null(행을 못 읽었다 = 확인 불가)은 다른 답이다 (285, 리뷰 M-1)
+  return prefLanded(readPersistedPreference(key), value);
 }
 
 /**

@@ -3050,17 +3050,21 @@ test('설정 저장 판정 — 남음·사라짐·확인 불가를 가린다 (28
   expect(prefLanded(['2026-11'], ['2026-11'])).toBe('landed');
   expect(prefLanded({ serviceRate: 12.5, productRate: 5 }, { productRate: 5, serviceRate: 12.5 })).toBe('landed'); // 키 순서는 보지 않는다
   // 다르면 사라졌다 — 화면이 "저장했습니다" 라고 말하면 거짓이 된다
+  // 285(리뷰 M-1): 설정 행은 읽혔는데 그 키가 없다 = **확인된 실패**(처음 저장하는 칸이 안 남은 경우가 이것이다)
   expect(prefLanded(undefined, 30)).toBe('lost');
   expect(prefLanded([], ['2026-11'])).toBe('lost');
   expect(prefLanded({ serviceRate: 10 }, { serviceRate: 12.5 })).toBe('lost');
   // 설정 행 자체를 읽을 수 없으면(프라이빗 모드 등) **실패로 단정하지 않는다** — 없는 실패를 알리면 그것도 거짓이다
   expect(prefLanded(null, 30)).toBe('unknown');
-  expect(prefLanded(null, null)).toBe('landed'); // 지우려 했고 없는 상태 — 뜻대로 됐다
+  // 285(리뷰 M-1): 행을 못 읽으면 **지웠는지도** 확인할 수 없다 — 284 는 이것을 'landed' 라고 했다
+  expect(prefLanded(null, null)).toBe('unknown');
+  expect(prefLanded(undefined, undefined)).toBe('landed'); // 지우려 했고 키가 없다 — 뜻대로 됐다
 
   // undefined 칸은 비교에서 빼서 "있던 키가 사라진 것" 과 "애초에 없던 키" 를 섞지 않는다
   expect(sameValue({ a: 1, b: undefined }, { a: 1 })).toBe(true);
   expect(sameValue({ a: 1 }, { a: 1, b: 2 })).toBe(false);
   expect(sameValue([1, 2], [2, 1])).toBe(false); // 배열은 순서가 뜻이다(마감 월 목록)
+  expect(sameValue(NaN, NaN)).toBe(true);        // 285(리뷰 LOW): 되읽은 NaN 을 '사라짐' 으로 말하지 않는다
 
   // 화면 문구 — 남았으면 아무 말도 하지 않고, 사라졌으면 **지금 값이 사라진다는 사실**까지 적는다
   expect(describePrefLoss('landed', '월 마감')).toBeNull();

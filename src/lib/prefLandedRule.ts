@@ -14,17 +14,20 @@
 export type PrefLanded = 'landed' | 'lost' | 'unknown';
 
 /**
- * @param persisted 되읽은 값. `null` 은 설정 행 자체를 읽을 수 없었다는 뜻(확인 불가).
+ * @param persisted 되읽은 값 — `readPersistedPreference` 의 세 가지 답을 **그대로** 받는다:
+ *   `null` = 설정 행 자체를 읽을 수 없었다(확인 불가), `undefined` = 행은 읽혔는데 **그 키가 없다**(= 확인된 실패),
+ *   그 밖 = 저장된 값. 285 전에는 호출 쪽이 `?? null` 로 둘을 접어, **아는 실패를 "확인 불가" 로 말했다**(리뷰 M-1).
  * @param wanted 저장하려던 값
  */
 export function prefLanded(persisted: unknown, wanted: unknown): PrefLanded {
-  if (persisted === null && wanted !== null) return 'unknown'; // 읽기 자체가 안 됐다 — 실패로 단정하지 않는다
+  // 행을 못 읽으면 아무것도 단정할 수 없다 — 지웠는지도 확인할 수 없다(285, 리뷰 M-1)
+  if (persisted === null) return 'unknown';
   return sameValue(persisted, wanted) ? 'landed' : 'lost';
 }
 
 /** 설정 값 비교 — 객체·배열은 내용으로, 나머지는 값으로. 키 순서는 보지 않는다 */
 export function sameValue(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
+  if (Object.is(a, b)) return true; // NaN 끼리도 같다고 본다 — 되읽은 NaN 을 "사라짐" 으로 말하지 않는다 (285, 리뷰 LOW)
   if (typeof a !== typeof b) return false;
   if (a === null || b === null || typeof a !== 'object') return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;

@@ -59,7 +59,8 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
     setCommission(getCommissionConfig());
     setRateDraft({});
     // 급여 근거라 "저장했습니다" 가 거짓이면 그대로 임금 분쟁이 된다 (284)
-    notify(lostRates ?? '인센티브 비율을 저장했습니다.');
+    if (lostRates) notify.error(lostRates); // 급여 근거라 실패를 성공과 같은 톤으로 보내지 않는다 (285, 리뷰 LOW)
+    else notify('인센티브 비율을 저장했습니다.');
   }
   const draft = useMemo(() => {
     if (!draftOpen) return null;

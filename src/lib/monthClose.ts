@@ -16,7 +16,8 @@ export function isMonthClosed(month: string): boolean {
 
 /** @returns 마감이 **정말 저장됐는지** — 화면이 "마감했습니다" 를 말하기 전에 확인한다 (284) */
 export function closeMonth(month: string): PrefLanded {
-  if (!/^\d{4}-\d{2}$/.test(month) || isMonthClosed(month)) return 'landed'; // 이미 그 상태다
+  if (!/^\d{4}-\d{2}$/.test(month)) return 'lost';      // 아무 일도 하지 않았다 — "마감했습니다" 라고 말하면 거짓 (285, 리뷰 LOW)
+  if (isMonthClosed(month)) return 'landed';             // 이미 그 상태다(뜻대로 됐다)
   return setPreference('closedMonths', [...closedMonths(), month].sort());
 }
 
