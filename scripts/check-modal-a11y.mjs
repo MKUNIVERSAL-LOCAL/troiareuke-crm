@@ -177,47 +177,79 @@ function dialogSites(sources) {
   return sites;
 }
 
-/** 주석을 **같은 길이의 공백**으로 바꾼 코드 — 줄 번호·위치가 그대로 남는다 (298) */
+/**
+ * 주석을 **같은 길이의 공백**으로 바꾼다 — 줄 번호·위치가 그대로 남는다 (298 → 301 에서 스캐너로).
+ * 301(297~299 리뷰 M-6): 298 은 정규식으로 블록 주석을 먼저 지웠다. 그래서 **줄 주석 안의 `/*`**
+ * (예: `// 정본은 /api/photos/* 에 있다`)부터 다음 `*\/` 까지가 통째로 공백이 되어 **그 사이의 진짜 창이
+ * 사라졌다** — 가드가 조용히 놓치는 자리를 298 이 새로 만든 것이다. 문자열·템플릿·주석 상태를 들고
+ * 한 문자씩 훑으면 그 혼동이 없다. 길이를 유지하므로 `dialogSites` 와 `gateStrings` 가 같은 함수를 쓴다.
+ */
 function blankComments(text) {
-  const blank = s => s.replace(/[^\n]/g, ' ');
-  let out = text.replace(/\/\*[\s\S]*?\*\//g, blank);
-  out = out.split('\n').map(line => {
-    for (let i = 0; i < line.length - 1; i++) {
-      if (line[i] === '/' && line[i + 1] === '/' && !insideString(line, i)) return line.slice(0, i) + ' '.repeat(line.length - i);
+  let out = '';
+  let i = 0;
+  let mode = 'code'; // code | line | block | sq | dq | tpl
+  while (i < text.length) {
+    const c = text[i], d = text[i + 1];
+    if (mode === 'code') {
+      if (c === '/' && d === '/') { mode = 'line'; out += '  '; i += 2; continue; }
+      if (c === '/' && d === '*') { mode = 'block'; out += '  '; i += 2; continue; }
+      if (c === "'") mode = 'sq';
+      else if (c === '"') mode = 'dq';
+      else if (c === '`') mode = 'tpl';
+      out += c; i += 1; continue;
     }
-    return line;
-  }).join('\n');
+    if (mode === 'line') {
+      if (c === '\n') { mode = 'code'; out += c; } else out += ' ';
+      i += 1; continue;
+    }
+    if (mode === 'block') {
+      if (c === '*' && d === '/') { mode = 'code'; out += '  '; i += 2; continue; }
+      out += c === '\n' ? c : ' '; i += 1; continue;
+    }
+    // 문자열·템플릿 — 이스케이프를 건너뛰고 닫는 짝에서 code 로 돌아온다
+    if (c === '\\') { out += text.slice(i, i + 2); i += 2; continue; }
+    if ((mode === 'sq' && c === "'") || (mode === 'dq' && c === '"') || (mode === 'tpl' && c === '`')) mode = 'code';
+    out += c; i += 1; continue;
+  }
   return out;
 }
 
-/** 주석을 떼어 낸 코드 — 문자열 안의 `//`(`http://`)는 주석이 아니다 */
-function stripComments(text) {
-  let out = text.replace(/\/\*[\s\S]*?\*\//g, ' ');
-  out = out.split('\n').map(line => {
-    for (let i = 0; i < line.length - 1; i++) {
-      if (line[i] === '/' && line[i + 1] === '/' && !insideString(line, i)) return line.slice(0, i);
-    }
-    return line;
-  }).join('\n');
-  return out;
+/** `(` 짝이 닫히는 자리 — 없으면 끝까지 */
+function closeParen(code, openAt) {
+  let depth = 0;
+  for (let i = openAt; i < code.length; i++) {
+    if (code[i] === '(') depth += 1;
+    else if (code[i] === ')') { depth -= 1; if (depth === 0) return i + 1; }
+  }
+  return code.length;
 }
 
 /**
- * `test.skip(`·`test.fixme(` 로 시작하는 블록을 **괄호 짝까지** 지운다 (298, 리뷰 LOW-5).
- * 건너뛴 테스트 안의 창 이름은 "axe 로 봤다" 가 아니다.
+ * 건너뛴 테스트의 창 이름은 "axe 로 봤다" 가 아니다 — 그 블록을 괄호 짝까지 지운다 (298 → 301 에서 넓힘).
+ * 301(297~299 리뷰 M-5): 298 은 `test.skip('제목', fn)` 만 봤다. 이 저장소가 실제로 끄는 방법은 둘 더 있다 —
+ *  ① `test.describe.skip('묶음', fn)` ② 테스트 본문 첫 줄의 **런타임 skip** `test.skip(true, '이유')`.
+ * ②는 괄호가 그 문장에서 닫히므로 298 판은 **뒤의 창 이름을 전부 "덮였다" 로 남겼다** — 가장 쉬운 끄는
+ * 방법에 그대로 열려 있었다. 상수 조건(`true`·인자 없음·`process.env`)이면 **그 테스트 블록째** 지운다.
+ * 조건부(`isNearMidnightSeoul()` 처럼 때에 따라 도는 것)는 지우지 않는다 — 그건 "끈 것" 이 아니다.
  */
 function dropSkipped(code) {
   let out = code;
-  for (const kind of ['test.skip(', 'test.fixme(']) {
+  for (const kind of ['test.describe.skip(', 'test.describe.fixme(', 'test.skip(', 'test.fixme(']) {
     let at = out.indexOf(kind);
     while (at >= 0) {
       const open = at + kind.length - 1;
-      let depth = 0, end = out.length;
-      for (let i = open; i < out.length; i++) {
-        if (out[i] === '(') depth += 1;
-        else if (out[i] === ')') { depth -= 1; if (depth === 0) { end = i + 1; break; } }
+      const end = closeParen(out, open);
+      const arg = out.slice(open + 1, Math.min(end, open + 40)).trimStart();
+      const constantSkip = /^(true\b|\)|!?process\.env)/.test(arg);
+      if (constantSkip && kind === 'test.skip(') {
+        // 런타임 skip — 이 문장이 속한 `test(` 블록 전체를 지운다
+        const testAt = out.lastIndexOf('test(', at);
+        const blockEnd = testAt >= 0 ? closeParen(out, out.indexOf('(', testAt)) : end;
+        const from = testAt >= 0 ? testAt : at;
+        out = out.slice(0, from) + ' '.repeat(blockEnd - from) + out.slice(blockEnd);
+      } else {
+        out = out.slice(0, at) + ' '.repeat(end - at) + out.slice(end);
       }
-      out = out.slice(0, at) + ' '.repeat(end - at) + out.slice(end);
       at = out.indexOf(kind);
     }
   }
@@ -240,7 +272,7 @@ function gateStrings(gates) {
   for (const { text } of gates) {
     // 298(리뷰 LOW-5): `test.skip`·`test.fixme` 블록의 창 이름까지 "덮였다" 로 세고 있었다 —
     // 흔들리는 접근성 테스트를 건너뛰면 가드가 초록으로 남는다. 그 블록은 빼고 센다.
-    const code = dropSkipped(stripComments(text));
+    const code = dropSkipped(blankComments(text));
     for (const re of PATTERNS) for (const m of code.matchAll(re)) used.add(m[1] ?? m[2] ?? m[3]);
   }
   return used;
@@ -308,6 +340,16 @@ function selftest() {
   // 298(리뷰 LOW-3): 줄 앞쪽 아포스트로피(주석 안)에 속아 진짜 창을 건너뛰지 않는다
   const apos = dialogSites([{ file: 'src/pages/D.tsx', text: "{/* 직원's 목록 */}<Modal isOpen title=\"놓치던 창\">" }]);
   if (apos.length !== 1 || apos[0].names[0] !== '놓치던 창') { console.error(`[selftest] 아포스트로피 덫 실패: ${JSON.stringify(apos.map(s => s.names))}`); process.exit(1); }
+  // 301(리뷰 M-6): 줄 주석 안의 `/*` 가 뒤의 진짜 창을 삼키지 않는다
+  const globComment = dialogSites([{ file: 'src/pages/G.tsx', text: '// 정본은 /api/photos/* 에 있다\n<Modal isOpen title="삼켜지면 안 되는 창">x</Modal>\n{/* 여기서 닫힌다 */}' }]);
+  if (globComment.length !== 1 || globComment[0].names[0] !== '삼켜지면 안 되는 창') { console.error(`[selftest] 줄 주석 속 glob 덫 실패: ${JSON.stringify(globComment.map(s => s.names))}`); process.exit(1); }
+  // 301(리뷰 M-5): describe.skip 과 런타임 skip 도 "덮였다" 가 아니다
+  const describeSkip = gateStrings([{ text: "test.describe.skip('묶음', () => { await expect(page.getByRole('dialog', { name: '건너뛴 묶음 창' })).toBeVisible(); });" }]);
+  if (describeSkip.has('건너뛴 묶음 창')) { console.error('[selftest] describe.skip 덫 실패'); process.exit(1); }
+  const runtimeSkip = gateStrings([{ text: "test('창 묶음', async ({ page }) => {\n  test.skip(true, '흔들려서 끔');\n  await expect(page.getByRole('dialog', { name: '런타임으로 끈 창' })).toBeVisible();\n});" }]);
+  if (runtimeSkip.has('런타임으로 끈 창')) { console.error(`[selftest] 런타임 skip 덫 실패: ${[...runtimeSkip].join(',')}`); process.exit(1); }
+  const condSkip = gateStrings([{ text: "test('창 묶음', async ({ page }) => {\n  test.skip(isNearMidnightSeoul(), '자정 근처');\n  await expect(page.getByRole('dialog', { name: '조건부로만 건너뛰는 창' })).toBeVisible();\n});" }]);
+  if (!condSkip.has('조건부로만 건너뛰는 창')) { console.error('[selftest] 조건부 skip 는 지우지 않는다 덫 실패'); process.exit(1); }
   // 298(리뷰 LOW-5): 건너뛴 테스트의 창 이름은 덮인 것이 아니다
   const skipped = gateStrings([{ text: "test.skip('x', async ({ page }) => { await expect(page.getByRole('dialog', { name: '건너뛴 창' })).toBeVisible(); });\nawait expect(page.getByRole('dialog', { name: '진짜로 연 창' })).toBeVisible();" }]);
   if (skipped.has('건너뛴 창') || !skipped.has('진짜로 연 창')) { console.error(`[selftest] test.skip 덫 실패: ${[...skipped].join(',')}`); process.exit(1); }
@@ -325,7 +367,7 @@ function selftest() {
   // 부분 문자열은 참조가 아니다 — '맨손 창가' 가 '맨손 창' 을 덮지 않는다
   const used2 = gateStrings([{ text: "dialog('맨손 창가')" }]);
   if (!findUncovered([{ file: 'a.tsx', line: 1, names: ['맨손 창'] }], used2).length) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-modal-a11y] selftest OK — 덫 14개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름·주석 속 창·아포스트로피·test.skip) 통과');
+  console.log('[check-modal-a11y] selftest OK — 덫 18개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름·주석 속 창·아포스트로피·test.skip·줄 주석 속 glob·describe.skip·런타임 skip·조건부 skip 보존) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }

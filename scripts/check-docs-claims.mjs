@@ -78,9 +78,10 @@ function hashOf(line) {
 /**
  * 그 자리가 "과거다" 라고 밝힌 자리인지 — **그 숫자 바로 앞**에 "당시" 가 있을 때만 과거 숫자다 (291, 리뷰 M-7).
  * 294(288~292 리뷰 M-5): 앞뒤 20자를 보던 탓에 **"11-24 당시 54모듈 → 지금 99모듈"** 처럼 적으면
- * 뒤의 **현재 숫자까지 함께 면제**됐다 — 가드가 존재하는 이유를 정면으로 비켜 간다. 앞쪽 12자만 본다.
+ * 뒤의 **현재 숫자까지 함께 면제**됐다 — 가드가 존재하는 이유를 정면으로 비켜 간다. **앞쪽 24자만** 본다
+ * (298 에서 `당시(11-24)`·`당시 기준` 까지 받아들이려고 12 → 24자로 넓혔다. 301, 리뷰 LOW-3: 주석이 12자로 남아 있었다).
  */
-function markedPast(text, at, len) {
+function markedPast(text, at) {
   // 298(리뷰 LOW-6): `당시(11-24) 54모듈`·`당시 기준 54모듈` 도 과거다 — 괄호·"기준" 까지 허용한다
   return /당시[\s)\]]*$|당시\s*\([^)]*\)\s*$|당시 기준\s*$/.test(text.slice(Math.max(0, at - 24), at));
 }
@@ -106,7 +107,7 @@ function claimedNumbers(text) {
     // 중 하나도 없으면 검사하지 않았다. 그래서 "지금까지 218~290 을 끝냈습니다" 처럼 **조금만 다르게 쓰면
     // 낡은 주장이 그대로 통과**했다(리뷰가 샌드박스로 재현). 이제 "묶음" 이 있는 줄의 범위는 **기본으로 검사**하고,
     // **참조 표시**가 있는 자리만 면제한다 — 294 가 덫으로 고정한 거짓 경고 7건(리뷰·exe·주기)은 그 목록이 그대로 막는다.
-    const SCOPE_HINT = /완료 묶음|묶음 범위|출장 기간|지점이 보는 변화/;
+    const SCOPE_HINT = /완료 묶음|묶음 범위|출장 기간|지점이 보는 변화|끝낸 묶음|마친 묶음|진행 묶음|지금까지|현재까지/;
     // 개수 표기는 **그 앞의 가장 가까운 범위**에만 붙인다 — 한 줄에 범위가 둘이면(`155~264 묶음 110개 … (263~265 리뷰)`)
     // 모두에 붙여 엉뚱한 자리를 "맞지 않는다" 고 말했다 (294, 넓히면서 생긴 거짓 경고)
     // `3~4묶음마다` 는 개수가 아니라 **주기**다 — 개수로 세면 엉뚱한 범위에 붙는다 (294)
@@ -126,7 +127,10 @@ function claimedNumbers(text) {
       // 298 에서 "표시가 없으면 기본 검사" 로 뒤집어 봤더니 **역사 줄에 거짓 경고 10건**이 났다
       // (`(완료 278~282)`·`155~183 은 v1.0.62 로 릴리스됨`·갭 표의 `225~230`). 낡은 주장을 막으려고
       // 과거 기록을 고치게 만드는 것은 이 가드가 금지하는 바로 그 일이다(리뷰 M-7 과 같은 이유).
-      // 리뷰 M-4 의 진짜 걱정("표시 없는 새 문장이 빠져나간다")은 **표시가 사라지는 것**을 검사 ⑥ 에서 막는다.
+      // 301(297~299 리뷰 M-7): 298 은 이 자리에 "리뷰 M-4 의 걱정은 검사 ⑥ 에서 막는다" 고 적었는데 **사실과 다르다** —
+      // ⑥ 은 "표시된 범위가 **하나라도** 있는지" 만 본다. 올바른 한 줄이 이미 있으면 ⑥ 은 만족되고, 같은 문서에
+      // **표시 없는 낡은 자기 주장을 새로 적어도** 아무 검사가 없다. 그래서 자기 범위를 뜻하는 말을 넓혔다
+      // (끝낸/마친 묶음·지금까지·현재까지·진행 묶음) — 그래도 "표시 없이 적으면 ② 밖" 이라는 한계는 남는다.
       const prefixed = /묶음\s*$/.test(line.slice(Math.max(0, m.index - 4), m.index));
       const hinted = SCOPE_HINT.test(line.slice(Math.max(0, m.index - 30), m.index));
       if (!owned && !prefixed && !hinted) continue;
@@ -191,6 +195,9 @@ function selftest() {
   if (b.length !== 2 || b[0].no !== 243) { console.error(`[selftest] 묶음 줄 추출 실패: ${JSON.stringify(b.map(x => x.no))}`); process.exit(1); }
   if (hashOf(b[0].line) !== 'abc1234' || hashOf(b[1].line) !== null) { console.error('[selftest] 해시 추출 실패'); process.exit(1); }
   // 291(리뷰 M-4·M-7): 묶음 범위·누계·리뷰 건수와 "당시" 면제
+  // 301(리뷰 M-7): 넓힌 자기 범위 말
+  const widened = claimedNumbers('- 끝낸 묶음: 218~290');
+  if (widened.ranges.length !== 1) { console.error('[selftest] 넓힌 자기 범위 말 덫 실패'); process.exit(1); }
   const n291 = claimedNumbers('묶음 218~290 진행. 묶음 155~290(136개). docs/REVIEW-*.md 31건.');
   if (n291.ranges.length !== 1 || n291.ranges[0].end !== 290) { console.error(`[selftest] 묶음 범위 추출 실패: ${JSON.stringify(n291.ranges)}`); process.exit(1); }
   // 294(리뷰 M-4): 어순이 반대인 "출장 기간에 218~290 묶음 73개" 도 범위·개수로 잡는다
@@ -203,7 +210,11 @@ function selftest() {
   if (ref.ranges.length !== 0) { console.error(`[selftest] 참조 면제 덫 실패: ${JSON.stringify(ref.ranges)}`); process.exit(1); }
   // 298(리뷰 M-4): 표시가 없는 범위는 ② 가 보지 않는다(역사 줄을 고치게 만들지 않으려고) —
   // 그 대신 검사 ⑥ 이 "표시된 범위가 문서에 하나도 없으면" 실패한다. 둘이 짝이다.
-  const plain = claimedNumbers('지금까지 218~290 을 끝냈습니다(묶음 목록은 로드맵에).');
+  // 301(리뷰 M-7): '지금까지' 는 이제 자기 범위 말이다 — 298 때 빠져나간 그 문장이 검사에 들어온다
+  const nowChecked = claimedNumbers('지금까지 218~290 을 끝냈습니다(묶음 목록은 로드맵에).');
+  if (nowChecked.ranges.length !== 1) { console.error('[selftest] 넓힌 말이 검사에 들어와야 한다'); process.exit(1); }
+  // 그래도 아무 말도 없는 문장은 ② 밖이다 — 그 한계는 머리말에 적어 둔다
+  const plain = claimedNumbers('그동안 218~290 을 했습니다(묶음 목록은 로드맵에).');
   if (plain.ranges.length !== 0) { console.error(`[selftest] 표시 없는 범위는 ② 밖이어야 한다: ${JSON.stringify(plain.ranges)}`); process.exit(1); }
   const marked = claimedNumbers('- **완료 묶음**: 218~290');
   if (marked.ranges.length !== 1) { console.error('[selftest] 표시된 범위 수집 실패'); process.exit(1); }
@@ -230,7 +241,7 @@ function selftest() {
   // 291(리뷰 M-5): 브랜치 이름 뒤 마침표를 먹지 않는다
   const br = /feat\/[A-Za-z0-9_\/-]+(?:\.[A-Za-z0-9_\/-]+)*/.exec('브랜치 feat/post-v1.0.63-2026-11-25.');
   if (br[0] !== 'feat/post-v1.0.63-2026-11-25') { console.error(`[selftest] 브랜치 마침표 덫 실패: ${br[0]}`); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 23개(숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
+  console.log('[check-docs-claims] selftest OK — 덫 24개(넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -247,6 +258,10 @@ const problems = [];
     if (no < HASH_FROM || no === newest) continue;
     const h = hashOf(line);
     if (!h) { problems.push(`${ROADMAP}: 묶음 ${no} 에 커밋 해시가 없다 — 그 묶음의 주장을 되짚을 수 없다`); continue; }
+    // 301(리뷰 LOW-2): 해시를 두 번 적어 둔 줄이 네 개 있었다(기록 커밋이 이미 있던 해시를 또 붙였다).
+    // `hashOf` 는 첫 매치만 보므로 조용히 통과했다 — 한 줄에 둘이면 실패한다.
+    const hashCount = (line.match(/커밋 [0-9a-f]{7,40}/g) || []).length;
+    if (hashCount > 1) problems.push(`${ROADMAP}: 묶음 ${no} 줄에 커밋 해시가 ${hashCount}개다 — 하나만 남기세요`);
     const r = spawnSync('git', ['cat-file', '-e', `${h}^{commit}`], { cwd: ROOT });
     if (r.status !== 0) { problems.push(`${ROADMAP}: 묶음 ${no} 의 커밋 ${h} 가 이 저장소에 없다`); continue; }
     // 리베이스로 버려진 커밋도 `cat-file -e` 는 통과한다 — 지금 HEAD 에서 닿는지까지 본다 (291, 리뷰 LOW-9)
@@ -368,7 +383,11 @@ const problems = [];
 // 대신 **표시 자체가 사라지는 것**을 막는다: 아래 문서들은 "완료 묶음: NNN~MMM"·"묶음 NNN~MMM"·
 // "NNN~MMM 묶음 N개" 같은 표시된 범위를 적어도 하나 가져야 한다. 그 한 줄이 ② 의 검사 대상이다.
 {
-  const SCOPED_DOCS = ['docs/NEXT-ACTION.md', 'docs/OWNER-BRIEFING-2026-11-30.md', 'docs/MASTER-DEVELOPMENT-STATUS.md'];
+  // 301(리뷰 LOW-6): 브리핑은 날짜가 파일명에 있어 다음 브리핑으로 바뀌면 **조용히 검사 밖**이 됐다 —
+  // 글롭으로 잡고, 하나도 없으면 그것 자체를 문제로 적는다(면제가 기본이 되지 않게).
+  const briefings = fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^OWNER-BRIEFING-.*\.md$/.test(f)).map(f => `docs/${f}`);
+  if (briefings.length === 0) problems.push('docs/OWNER-BRIEFING-*.md 가 없다 — 복귀 브리핑은 자기 범위를 적는 문서다(검사 ⑥)');
+  const SCOPED_DOCS = ['docs/NEXT-ACTION.md', 'docs/MASTER-DEVELOPMENT-STATUS.md', ...briefings.slice(-1)];
   for (const rel of SCOPED_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
     if (claimedNumbers(read(rel)).ranges.length === 0) {

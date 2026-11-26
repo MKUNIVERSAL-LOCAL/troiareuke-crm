@@ -29,8 +29,14 @@ const notesPath = path.join(root, 'docs', 'RELEASE-NOTES-CURRENT.md');
 const notes = (() => {
   if (!fs.existsSync(notesPath)) return '';
   const lines = fs.readFileSync(notesPath, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const head = lines.find((l) => l.startsWith('■'))?.replace(/^■\s*/, '') || '';
-  const first = lines.find((l) => l.startsWith('•'))?.replace(/^•\s*/, '') || '';
+  // 301(297~299 리뷰 LOW-10): 앱 사용자에게 가는 한 줄이라 **PC 전용 항목은 건너뛴다** —
+  // 299 가 노트 순서를 바꾼 뒤 요약이 "예약 화면(PC)에 월간 보기가 생겼습니다" 가 됐다(앱에는 없는 기능).
+  const isPcOnly = (l) => /\(PC\)|PC 전용/.test(l);
+  const firstLine = lines.find((l) => l.startsWith('•') && !isPcOnly(l)) || lines.find((l) => l.startsWith('•')) || '';
+  const firstAt = lines.indexOf(firstLine);
+  const head = [...lines.slice(0, firstAt < 0 ? lines.length : firstAt)].reverse().find((l) => l.startsWith('■'))?.replace(/^■\s*/, '')
+    || lines.find((l) => l.startsWith('■'))?.replace(/^■\s*/, '') || '';
+  const first = firstLine.replace(/^•\s*/, '');
   return [head, first].filter(Boolean).join(' — ').slice(0, 200);
 })();
 const releaseBase = `https://github.com/MKUNIVERSAL-LOCAL/troiareuke-crm/releases/download/v${version}`;

@@ -2,15 +2,7 @@
 // 세무 신고 뒤 숫자가 바뀌면 안 되는 달을 잠근다. 지점 설정 행(preferences.closedMonths)에 두어 NAS 동기·모든 기기에 적용.
 // 코어 저장소는 못 막으므로(코어 잠금) 사용자가 거치는 저장 경로(결제·지출·제품 판매/취소·예약 완료 결제·회차권 등록/취소·입고 지출)에서 막는다.
 import { getPreference, setPreference, persistedPreference } from './shopPreferences';
-import type { PrefLanded } from './prefLandedRule';
-
-/** 디스크에 남아 있는 마감 월 목록 — 읽을 수 없으면 null (300) */
-function persistedClosedMonths(): string[] | null {
-  const v = persistedPreference('closedMonths');
-  if (v === null) return null;       // 행 자체를 못 읽었다
-  if (v === undefined) return [];    // 그 칸이 아직 없다 = 마감한 적이 없다
-  return Array.isArray(v) ? v : [];
-}
+import { prefLandedMember, type PrefLanded } from './prefLandedRule';
 
 function closedMonths(): string[] {
   const v = getPreference('closedMonths');
@@ -39,10 +31,8 @@ export function closeMonth(month: string): PrefLanded {
  * "저장 안 됨" 이 떴다(지점은 "이번 달 마감이 안 됐다" 로 읽는다). 카드는 달마다 열리므로 판정도 달마다 한다.
  */
 export function monthCloseSavedFor(month: string): PrefLanded {
-  const wanted = isMonthClosed(month);
-  const persisted = persistedClosedMonths();
-  if (persisted === null) return wanted ? 'unknown' : 'landed'; // 행을 못 읽어도 주장이 없으면 잃은 것이 없다
-  return persisted.includes(month) === wanted ? 'landed' : 'lost';
+  // 판정은 순수 규칙에 있다(301) — 이 파일은 "무엇을 묻는지" 만 안다
+  return prefLandedMember(persistedPreference('closedMonths'), month, isMonthClosed(month));
 }
 
 export function reopenMonth(month: string): PrefLanded {

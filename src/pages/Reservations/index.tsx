@@ -1742,7 +1742,9 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (!(await askConfirm({ title: '예약 복구', confirmLabel: '복구', message: `이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}` }))) return;
     const okRestore = ReservationStore.updateStatus(r.id, 'confirmed');
     if (okRestore) logReservationStatus(r.id, r.status, 'confirmed', user?.name);
-    saveReason(r.id, 'cancelled', ''); // 취소·노쇼가 아니게 됐으니 사유도 지운다 — 남겨 두면 이달 집계가 맞지 않는다 (244)
+    // 취소·노쇼가 아니게 됐으니 사유도 지운다 (244). 정리가 안 남아도 알리지 않는다 — 301(리뷰 LOW-9)에서 확인:
+    // `monthCancelFacts` 가 **예약 상태로 먼저 걸러** 세므로 고아 사유가 집계를 틀리게 하지 않고, 다음 저장에서 걷힌다.
+    saveReason(r.id, 'cancelled', '');
     if (google) {
       createCalendarEvent({ ...r, status: 'confirmed' })
         .then(ev => rememberGcalEvent(r.id, ev.id))

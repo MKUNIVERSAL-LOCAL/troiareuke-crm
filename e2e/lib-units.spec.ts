@@ -43,7 +43,7 @@ import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLe
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
 import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, describeDrillFooter, describeDrillTruncation, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
-import { prefLanded, prefLandedWithAbsent, sameValue, describePrefLoss, describePrefRemovalLoss, prefLossNote } from '../src/lib/prefLandedRule';
+import { prefLanded, prefLandedMember, sameValue, describePrefLoss, describePrefRemovalLoss, prefLossNote } from '../src/lib/prefLandedRule';
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
@@ -3090,13 +3090,17 @@ test('설정 저장 판정 — 남음·사라짐·확인 불가를 가린다 (28
   expect(describePrefLoss('invalid', '월 마감', 'local-only')).toContain('형식이 올바르지 않아');
   expect(describePrefLoss('invalid', '월 마감', 'local-only')).not.toContain('저장 공간');
 
-  // 297(293~296 리뷰 H-1): **아무것도 주장하지 않았으면 잃은 것도 없다** — 294 가 "렌더마다 되읽기" 로
-  // 바꾸면서, 마감을 한 번도 하지 않은 매장(디스크에 그 칸이 없다)에 "저장 안 됨" 배지가 떠 있었다
-  expect(prefLandedWithAbsent(undefined, [], [])).toBe('landed');  // 칸이 아직 없고 주장도 빈 목록
-  expect(prefLandedWithAbsent(null, [], [])).toBe('landed');       // 행 자체를 못 읽어도 주장이 없으면 잃은 것이 없다
-  expect(prefLandedWithAbsent(undefined, ['2026-11'], [])).toBe('lost');     // 마감을 했는데 칸이 없다 = 안 남았다
-  expect(prefLandedWithAbsent(['2026-11'], [], [])).toBe('lost');            // 디스크엔 남았는데 메모리는 비었다 = 마감 해제가 안 남았다
-  expect(prefLandedWithAbsent(['2026-11'], ['2026-11'], [])).toBe('landed');
+  // 297(293~296 리뷰 H-1)·301(297~299 리뷰 M-2): **그 달만** 본다 — 294 는 목록 전체를 비교해
+  // 마감을 한 번도 하지 않은 매장에 "저장 안 됨" 배지를 띄웠고, 297 은 그것만 막아 **다른 달의 실패를
+  // 이 달 카드에 적는 일**이 남았다. 판정은 "그 달이 디스크 목록에 있는지" 와 "화면의 주장" 을 맞춘다.
+  expect(prefLandedMember(undefined, '2026-11', false)).toBe('landed'); // 칸이 아직 없고 주장도 없다 = 마감한 적 없다
+  expect(prefLandedMember(null, '2026-11', false)).toBe('landed');      // 행을 못 읽어도 주장이 없으면 잃은 것이 없다
+  expect(prefLandedMember(null, '2026-11', true)).toBe('unknown');      // 마감했다고 주장하는데 행을 못 읽었다
+  expect(prefLandedMember(undefined, '2026-11', true)).toBe('lost');    // 마감했는데 칸이 없다 = 안 남았다
+  expect(prefLandedMember(['2026-11'], '2026-11', true)).toBe('landed');
+  expect(prefLandedMember(['2026-11'], '2026-11', false)).toBe('lost'); // 마감 해제가 안 남았다
+  expect(prefLandedMember(['2026-10'], '2026-11', false)).toBe('landed'); // **다른 달**의 마감은 이 달 판정에 끼지 않는다
+  expect(prefLandedMember(['2026-10'], '2026-11', true)).toBe('lost');
 
   // 297(리뷰 M-3): 삭제 자리에 "다시 저장해주세요 … 사라집니다" 가 나가던 것 — 할 일도, 결과도 반대다
   expect(describePrefRemovalLoss('landed', '세그먼트', 'local-only')).toBeNull();

@@ -35,15 +35,19 @@ export function prefLanded(persisted: unknown, wanted: unknown): PrefLanded {
 }
 
 /**
- * 되읽은 값이 **없을 때**(그 칸이 아직 없거나 행을 못 읽음) 주장이 "없음과 같다" 면 **잃은 것이 없다** (297, 293~296 리뷰 H-1).
- * 왜: 294 가 "렌더마다 되읽기" 로 바꾸면서, **마감을 한 번도 하지 않은 매장**의 매출 카드에 빨간
- * "이 PC 에 저장 안 됨" 배지가 떴다 — 메모리는 `[]`, 디스크에는 그 칸이 아예 없어 `'lost'` 로 갈렸다.
- * 아무것도 저장하려 하지 않은 자리에서 "저장 안 됨" 이라고 말하면 그것이 거짓이고, 늑대 소년이 된다.
- * 되읽은 값이 있으면(예: 디스크엔 마감이 남았는데 메모리는 비었다 = 마감 해제가 안 남았다) 그대로 비교한다.
+ * **목록 안의 한 항목**이 디스크에 남아 있는지 (301, 300 의 달 단위 판정을 순수 규칙으로).
+ * 왜 목록 전체를 비교하지 않는가: 294 는 `closedMonths` 목록 전체를 비교해 **마감을 한 번도 하지 않은 매장**에
+ * 빨간 배지를 띄웠고(297 리뷰 H-1), 297 은 "주장이 비면 손실 없음" 으로 그것만 막아 **다른 달의 실패를 이 달
+ * 카드에 적는 일**이 남았다(300 리뷰 M-2). 카드는 달마다 열리므로 판정도 그 달만 본다.
+ * @param persistedList 되읽은 목록 — `null` = 행을 못 읽음, `undefined` = 그 칸이 아직 없음(= 아무것도 넣은 적 없다)
+ * @param member 그 달(또는 항목)
+ * @param wanted 지금 화면이 주장하는 소속 여부
  */
-export function prefLandedWithAbsent(persisted: unknown, wanted: unknown, absentIs: unknown): PrefLanded {
-  if ((persisted === null || persisted === undefined) && sameValue(wanted, absentIs)) return 'landed';
-  return prefLanded(persisted, wanted);
+export function prefLandedMember(persistedList: unknown, member: string, wanted: boolean): PrefLanded {
+  // 행을 못 읽어도 **주장이 없으면** 잃은 것이 없다 — 아무것도 저장하려 하지 않은 자리에 "저장 안 됨" 은 거짓이다
+  if (persistedList === null) return wanted ? 'unknown' : 'landed';
+  const list = Array.isArray(persistedList) ? persistedList : [];
+  return list.includes(member) === wanted ? 'landed' : 'lost';
 }
 
 /** 설정 값 비교 — 객체·배열은 내용으로, 나머지는 값으로. 키 순서는 보지 않는다 */

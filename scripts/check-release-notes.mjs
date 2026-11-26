@@ -10,7 +10,7 @@
  *      옛 머리글은 2000자 밖이라 가드가 **구조적으로 침묵**했다 — 이 파일 전체가 GitHub 릴리스 본문(`--notes-file`)이라
  *      공개 페이지에서 v1.0.63 내용이 아무 표시 없이 이어졌다.
  *   4) 배너에 **절(■)이 둘 이상** 보인다 — 한 주제가 2000자를 삼키면 나머지는 직원에게 닿지 않는다 (299)
- *   5) 한 절에 항목이 **12개를 넘지 않는다** — 묶음을 거듭하며 아무 절에나 붙이다 보면 "■ 영수증" 아래에
+ *   5) 한 절에 항목(`•`·`·`·`-` 로 시작하는 줄)이 **12개를 넘지 않는다** — 묶음을 거듭하며 아무 절에나 붙이다 보면 "■ 영수증" 아래에
  *      예약·재고·발송 이야기가 25개 쌓인다(299 에서 실제로 그랬다). 직원이 제목으로 찾을 수 없게 된다.
  * 실패하면 비 0 으로 끝난다. 자체 점검: node scripts/check-release-notes.mjs --selftest
  */
@@ -90,7 +90,8 @@ export function checkReleaseNotes(text, pkgVersion) {
       if (section && count > MAX_PER_SECTION) tooBig.push([section, count]);
       section = h[1].trim(); count = 0; continue;
     }
-    if (line.trimStart().startsWith('•')) count += 1;
+    // 301(297~299 리뷰 LOW-5): `•` 만 세어 `- 항목`·`· 항목` 으로 바꾸면 우회됐다 — 글머리표 세 종류를 센다
+    if (/^\s*[•·-]\s/.test(line)) count += 1;
   }
   if (section && count > MAX_PER_SECTION) tooBig.push([section, count]);
   for (const [name, n] of tooBig) {

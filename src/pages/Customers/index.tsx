@@ -503,7 +503,8 @@ export default function Customers() {
         if (movedSegments.length > 0) setSavedSegments(listSavedSegments());
         notify(`목록의 태그 이름만 바꿨습니다(이 태그가 붙은 고객은 없습니다): ${renameFrom} → ${target}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개도 함께` : ''}`);
         // 296: 목록·세그먼트 중 하나라도 이 PC 에 남지 않았으면 그 사실을 함께 적는다
-        const lostRename = describePrefLoss(savedMaster.landed, '태그 목록', prefSaveMode()) ?? describePrefLoss(moved.landed, '세그먼트 조건', prefSaveMode());
+        // 301(297~299 리뷰 LOW-8): 둘 다 실패하면 **둘 다** 적는다(앞의 하나만 알리던 것)
+        const lostRename = [describePrefLoss(savedMaster.landed, '태그 목록', prefSaveMode()), describePrefLoss(moved.landed, '세그먼트 조건', prefSaveMode())].filter(Boolean).join(' ');
         if (lostRename) notify.error(lostRename);
         setRenameFrom(null);
         return;
@@ -551,7 +552,7 @@ export default function Customers() {
         setRenameFrom(null);
         // 297(293~296 리뷰 H-2): "붙은 고객이 없다" 갈래만 알리고 **본 경로는 판정을 버렸다** —
         // 고객 태그는 코어 고객 표에 저장되지만 태그 목록·세그먼트 조건은 설정 행이라 따로 실패할 수 있다
-        const lostBulk = describePrefLoss(savedMaster2.landed, '태그 목록', prefSaveMode()) ?? describePrefLoss(moved2.landed, '세그먼트 조건', prefSaveMode());
+        const lostBulk = [describePrefLoss(savedMaster2.landed, '태그 목록', prefSaveMode()), describePrefLoss(moved2.landed, '세그먼트 조건', prefSaveMode())].filter(Boolean).join(' ');
         const skipped = ids.length - applied;
         notify(`고객 ${applied}명의 태그를 "${target}" 으로 바꿨습니다${preview.merges > 0 ? ` (${preview.merges}명은 기존 태그와 합쳐짐)` : ''}${skipped > 0 ? ` · ${skipped}명은 그 사이 바뀌어 건너뜀` : ''}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개 조건도 함께 바꿈` : ''}.`);
         if (lostBulk) notify.error(lostBulk); // 297(리뷰 H-2): 고객 태그는 바뀌었어도 목록·세그먼트 조건이 안 남았으면 그 사실을 적는다
