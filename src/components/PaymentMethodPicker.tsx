@@ -1,4 +1,6 @@
 import { isImeKey } from '../lib/ime';
+import { describePrefLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (296)
+import { prefSaveMode } from '../lib/prefSaveMode';
 import { notify } from '../lib/notify';
 import { josa } from '../lib/josa';
 import { useState } from 'react';
@@ -22,14 +24,15 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
   const customs = getCustomPaymentMethods();
 
   const handleAdd = () => {
-    if (addCustomPaymentMethod(newName)) {
-      setMethods(getAllPaymentMethods());
-      if (selectable) onChange(newName.trim()); // 관리 전용 블록에서는 고르지 않는다 (210)
-      setNewName('');
-      setAdding(false);
-    } else {
-      notify('이미 있는 이름이거나 사용할 수 없는 이름입니다. (20자 이내)');
-    }
+    const landed = addCustomPaymentMethod(newName);
+    if (landed === 'invalid') { notify('이미 있는 이름이거나 사용할 수 없는 이름입니다. (20자 이내)'); return; }
+    setMethods(getAllPaymentMethods());
+    if (selectable) onChange(newName.trim()); // 관리 전용 블록에서는 고르지 않는다 (210)
+    setNewName('');
+    setAdding(false);
+    // 296: 전에는 "쓸 수 없는 이름" 과 "저장 실패" 가 같은 답이었다 — 저장 실패는 아예 알 수 없었다
+    const lost = describePrefLoss(landed, '결제수단', prefSaveMode());
+    if (lost) notify.error(lost);
   };
 
   return (

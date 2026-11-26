@@ -442,13 +442,18 @@ export default function Settings() {
     if (CAUTION_KEYWORDS.includes(cautionDraft.trim())) { notify(`"${cautionDraft.trim()}" 는 기본 키워드라 이미 경고로 올라갑니다.`); return; }
     if (cautionWords.includes(word)) { notify(`이미 있는 키워드입니다: ${word}`); return; }
     const next = saveCautionKeywords([...cautionWords, word]);
-    if (!next.includes(word)) { notify('키워드를 저장하지 못했습니다. 글자 수·개수(20개)를 확인해주세요.'); return; } // 조용히 사라지지 않게
-    setCautionWords(next);
+    if (!next.list.includes(word)) { notify('키워드를 저장하지 못했습니다. 글자 수·개수(20개)를 확인해주세요.'); return; } // 20개 상한에서 잘린 경우
+    setCautionWords(next.list);
     setCautionDraft('');
-    notify('주의 키워드를 추가했습니다.');
+    // 296: 목록에는 들어갔지만 이 PC 에 남지 않았으면 그 사실을 적는다(다시 열면 경고가 안 뜬다)
+    const lostCaution = describePrefLoss(next.landed, '주의 키워드', prefSaveMode());
+    if (lostCaution) notify.error(lostCaution); else notify('주의 키워드를 추가했습니다.');
   };
   const dropCautionWord = (word: string) => {
-    setCautionWords(saveCautionKeywords(cautionWords.filter(w => w !== word)));
+    const next = saveCautionKeywords(cautionWords.filter(w => w !== word));
+    setCautionWords(next.list);
+    const lost = describePrefLoss(next.landed, '주의 키워드', prefSaveMode()); // 296
+    if (lost) notify.error(lost);
   };
   const saveReceiptInfo = async () => {
     const next = {

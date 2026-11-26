@@ -1,5 +1,7 @@
 // CampaignsCard — 문자/카카오 발송 > 자동 발송(캠페인) 목록 (비코어, 156, GAP M-3). 옛 "자동 발송 준비 중" 장식 블록을 대체
 import { useMemo, useState } from 'react';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 import { Zap, Pencil, Trash2, Plus, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
@@ -35,9 +37,11 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
   const missing = missingPresets(campaigns.map(c => c.name)).length;
   const segmentNames = useMemo(() => new Map(listSavedSegments().map(sg => [sg.id, sg.name])), [campaigns]); // 행에 세그먼트 이름 (167) // eslint-disable-line react-hooks/exhaustive-deps
   const addPresets = () => {
-    const n = addMissingPresets();
+    const { added, landed } = addMissingPresets();
     refresh();
-    notify.success(n ? `기본 시나리오 ${n}개를 추가했습니다. 문구와 일수는 수정에서 바꿀 수 있어요.` : '기본 시나리오가 모두 들어 있습니다.');
+    const lost = describePrefLoss(landed, '기본 시나리오', prefSaveMode()); // 296
+    if (lost) notify.error(lost);
+    else notify.success(added ? `기본 시나리오 ${added}개를 추가했습니다. 문구와 일수는 수정에서 바꿀 수 있어요.` : '기본 시나리오가 모두 들어 있습니다.');
   };
   // 성과 추정 — 이 기기의 발송 성공 기록 기준, 14일 창 (157, GAP M-6, ANALYTICS-DEFINITIONS). 목록이 바뀔 때만 다시 계산 (159 리뷰 L-7)
   const perfs = useMemo(() => {
@@ -48,7 +52,9 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
 
   const remove = async (c: Campaign) => {
     if (!(await askConfirm({ title: '캠페인 삭제', message: `"${c.name}" 캠페인을 삭제할까요? 발송 기록은 남습니다.`, confirmLabel: '삭제', danger: true }))) return;
-    deleteCampaign(c.id); refresh(); notify.success('캠페인을 삭제했습니다.');
+    const lostDelete = describePrefLoss(deleteCampaign(c.id), '캠페인 삭제', prefSaveMode()); // 296
+    refresh();
+    if (lostDelete) notify.error(lostDelete); else notify.success('캠페인을 삭제했습니다.');
   };
 
   return (

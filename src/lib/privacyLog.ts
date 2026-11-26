@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { getPreference, setPreference } from './shopPreferences';
+import type { PrefLanded } from './prefLandedRule';
 import type { ShopPreferences } from '../types';
 
 export type PrivacyAction = NonNullable<ShopPreferences['privacyActions']>[number];
@@ -16,15 +17,27 @@ export type PrivacyActionType = PrivacyAction['type'];
 
 const MAX_KEEP = 100; // 설정 payload 를 작게 — 100건이면 1년치 파기 대장으로 충분
 
+/**
+ * 대장이 이 PC 에 남지 않았을 때 화면이 적는 말 (296).
+ * `describePrefLoss` 를 쓰지 않는다 — 그 문구는 "공간을 비운 뒤 다시 저장해주세요" 라고 하는데,
+ * 익명화·병합은 **되돌릴 수 없어** 다시 할 수 없다. 처리는 끝났고 기록만 없다는 사실을 그대로 적는다.
+ */
+export const PRIVACY_LOG_LOST = '개인정보 처리는 끝났지만 파기 대장 기록이 이 PC 에 남지 않았습니다(저장 공간). 공간을 비운 뒤 설정 > 알림 설정의 파기 대장에서 확인해주세요 — 그 처리를 다시 할 필요는 없습니다.';
+
+
 export function listPrivacyActions(): PrivacyAction[] {
   const list = getPreference('privacyActions');
   return Array.isArray(list) ? list : [];
 }
 
-export function recordPrivacyAction(a: Omit<PrivacyAction, 'id' | 'at'>): void {
-  if (a.count <= 0) return;
+/**
+ * @returns 그 기록이 **이 PC 에 남았는지** (296). 개인정보 파기·병합은 되돌릴 수 없으므로, 대장이 남지
+ * 않았으면 화면이 그 사실을 말해야 한다 — "기록했다" 고만 말하면 나중에 증빙이 없다.
+ */
+export function recordPrivacyAction(a: Omit<PrivacyAction, 'id' | 'at'>): PrefLanded {
+  if (a.count <= 0) return 'landed'; // 적을 것이 없었다(뜻대로)
   const entry: PrivacyAction = { id: `pa_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`, at: new Date().toISOString(), ...a };
-  setPreference('privacyActions', [entry, ...listPrivacyActions()].slice(0, MAX_KEEP));
+  return setPreference('privacyActions', [entry, ...listPrivacyActions()].slice(0, MAX_KEEP));
 }
 
 /** 기록용 이름 가림 — '홍길동' → '홍○○' (한 글자 이름은 '○') */

@@ -10,7 +10,7 @@ import { isNasDataConfigured } from '../lib/nasData';
 import { matchesSearch, formatPrice } from '../lib/format';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
-import { recordPrivacyAction, maskNameForLog } from '../lib/privacyLog';
+import { recordPrivacyAction, maskNameForLog, PRIVACY_LOG_LOST } from '../lib/privacyLog';
 import { askConfirm } from '../lib/confirmDialog';
 import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
@@ -80,7 +80,8 @@ export default function CustomerMergeModal({ target, onClose, onMerged }: { targ
     try {
       const moved = mergeCustomers(target.id, source.id);
       const n = moved.reservations + moved.treatments + moved.programs + moved.payments + moved.consultations;
-      recordPrivacyAction({ type: 'merge', count: 1, actor: user?.name || user?.email || '알 수 없음', detail: `${maskNameForLog(source.name)} → ${maskNameForLog(target.name)} (기록 ${n}건)` }); // 파기 대장 — 이름은 가려서 (9차 점검 #29, 리뷰)
+      const logLanded = recordPrivacyAction({ type: 'merge', count: 1, actor: user?.name || user?.email || '알 수 없음', detail: `${maskNameForLog(source.name)} → ${maskNameForLog(target.name)} (기록 ${n}건)` }); // 파기 대장 — 이름은 가려서 (9차 점검 #29, 리뷰)
+      if (logLanded === 'lost') notify(PRIVACY_LOG_LOST); // 296 — 병합은 되돌릴 수 없다. 기록만 없다는 사실을 적는다
       notify(`'${source.name}' 고객을 병합했습니다. 기록 ${n}건을 옮겼습니다.`);
       onMerged();
     } catch (e) {

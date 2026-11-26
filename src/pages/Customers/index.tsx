@@ -1,4 +1,6 @@
 import { isImeKey } from '../../lib/ime';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 ﻿import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { monthCloseBlock } from '../../lib/monthClose';
 import { createPortal } from 'react-dom';
@@ -70,7 +72,7 @@ import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule'
 import SegmentEditorModal from '../../components/SegmentEditorModal';
 import { CHURN_LABEL, CHURN_HIGH_RATIO } from '../../lib/churnRule';
 import { getCustomerValue } from '../../lib/customerValue';
-import { recordPrivacyAction } from '../../lib/privacyLog';
+import { recordPrivacyAction, PRIVACY_LOG_LOST } from '../../lib/privacyLog';
 import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
@@ -469,8 +471,12 @@ export default function Customers() {
   function addToMaster() {
     const r = addMasterTag(tagMaster, tagDraft);
     if (r.error) { notify(r.error); return; }
-    setTagMaster(saveTagMaster(r.list));
+    const saved = saveTagMaster(r.list);
+    setTagMaster(saved.list);
     setTagDraft('');
+    // 296: 저장이 안 남았는데 칩만 생기면 다시 열 때 사라진다 — 그 사실을 적는다
+    const lost = describePrefLoss(saved.landed, '태그 목록', prefSaveMode());
+    if (lost) notify.error(lost);
   }
   // 태그 이름 일괄 변경 (239) — 이미 갈라진 태그("민감"·"민감성피부")를 손으로 고치려면 고객을 하나씩 열어야 해서 아무도 안 한다
   const [renameFrom, setRenameFrom] = useState<string | null>(null);
@@ -490,10 +496,15 @@ export default function Customers() {
       const segments = segmentsUsingTag(renameFrom); // 세그먼트 조건도 함께 바꾼다 (242, 리뷰 H-1)
       if (preview.affected === 0) {
         // 고객에게 붙은 태그가 없으면 목록 이름만 바꾼다 — "바꿨습니다" 를 거짓으로 말하지 않게 그대로 알린다
-        setTagMaster(saveTagMaster(renameTagInList(getTagMaster(), renameFrom, target)));
-        const movedSegments = renameTagInSavedSegments(renameFrom, target);
+        const savedMaster = saveTagMaster(renameTagInList(getTagMaster(), renameFrom, target));
+        setTagMaster(savedMaster.list);
+        const moved = renameTagInSavedSegments(renameFrom, target);
+        const movedSegments = moved.affected;
         if (movedSegments.length > 0) setSavedSegments(listSavedSegments());
-        notify(`목록의 태그 이름만 바꿨습니다(이 태그가 붙은 고객은 없습니다): ${renameFrom} → ${target}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개 조건도 함께 바꿨습니다` : ''}`);
+        notify(`목록의 태그 이름만 바꿨습니다(이 태그가 붙은 고객은 없습니다): ${renameFrom} → ${target}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개도 함께` : ''}`);
+        // 296: 목록·세그먼트 중 하나라도 이 PC 에 남지 않았으면 그 사실을 함께 적는다
+        const lostRename = describePrefLoss(savedMaster.landed, '태그 목록', prefSaveMode()) ?? describePrefLoss(moved.landed, '세그먼트 조건', prefSaveMode());
+        if (lostRename) notify.error(lostRename);
         setRenameFrom(null);
         return;
       }
@@ -530,8 +541,10 @@ export default function Customers() {
         }
         done += 25;
         if (done < ids.length) { setTimeout(step, 0); return; }
-        setTagMaster(saveTagMaster(renameTagInList(getTagMaster(), renameFrom, target))); // 적용 중 추가된 태그를 덮지 않게 다시 읽는다 (242, 리뷰 L-4)
-        const movedSegments = renameTagInSavedSegments(renameFrom, target);
+        const savedMaster2 = saveTagMaster(renameTagInList(getTagMaster(), renameFrom, target)); // 적용 중 추가된 태그를 덮지 않게 다시 읽는다 (242, 리뷰 L-4)
+        setTagMaster(savedMaster2.list);
+        const moved2 = renameTagInSavedSegments(renameFrom, target);
+        const movedSegments = moved2.affected;
         if (movedSegments.length > 0) setSavedSegments(listSavedSegments());
         setRenaming(false);
         logCustomerEditBatch(renameRows, user?.name); // 태그 일괄 변경도 고객마다 이력에(저장은 한 번) (254 리뷰 H-2)
@@ -547,7 +560,10 @@ export default function Customers() {
     }
   }
   function dropFromMaster(tag: string) {
-    setTagMaster(saveTagMaster(removeMasterTag(tagMaster, tag)));
+    const dropped = saveTagMaster(removeMasterTag(tagMaster, tag));
+    setTagMaster(dropped.list);
+    const lostDrop = describePrefLoss(dropped.landed, '태그 목록', prefSaveMode()); // 296 — 지운 태그가 다시 돌아오는 것을 말없이 두지 않는다
+    if (lostDrop) notify.error(lostDrop);
   }
   const [gradePanel, setGradePanel] = useState(false);
   const [gradePicked, setGradePicked] = useState<Set<string>>(new Set());
@@ -1344,8 +1360,10 @@ export default function Customers() {
     const residueBulk = describeAnonymizeResidue(countAnonymizeResidue(targets.map(c => c.id))); // 발송 이력 본문·제품 판매 이름은 코어 수정 수단이 없어 남는다 — 사실대로 (216)
     if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.${residueBulk ? `\n${residueBulk}` : ''}`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
     const n = anonymizeCustomers(targets.map(c => c.id));
-    recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' }); // 파기 대장 (9차 점검 #29)
+    // 파기 대장(설정 > 알림 설정)에 남긴다 — 누가·몇 명을 (P4). 296: 기록이 안 남았으면 그 사실도 말한다
+    const logLanded = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' });
     notify(`고객 ${n}명을 익명화했습니다.`);
+    if (logLanded === 'lost') notify.error(PRIVACY_LOG_LOST);
     setSelected(null);
     loadAll();
   }
@@ -1664,8 +1682,9 @@ export default function Customers() {
     if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.${residueOne ? `\n${residueOne}` : ''}`, confirmLabel: '익명화', danger: true, returnFocusTo: menuAnchor() }))) return;
     const n = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
-    recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
+    const logLandedOne = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
     notify('고객을 익명화했습니다.');
+    if (logLandedOne === 'lost') notify.error(PRIVACY_LOG_LOST); // 296
     const updated = CustomerStore.getById(selected.id);
     setSelected(updated ?? null);
     loadAll();

@@ -3,6 +3,7 @@
 // 서버 컬렉션(`campaign_sends`, 승인 B-4)이 정답 — 그 전까지는 기기별 기록이라 "다른 PC 에서 보낸 것"은 모른다(실행 창에 안내).
 import { getShopId, safeSetItem } from './store';
 import { getPreference, setPreference } from './shopPreferences';
+import type { PrefLanded } from './prefLandedRule';
 import type { Campaign } from './campaignRule';
 import { TRIGGER_DAYS, TRIGGER_DEFAULT_REPEAT, type CampaignTrigger } from './campaignRule';
 import { missingPresets } from './campaignPresets';
@@ -18,31 +19,32 @@ export function listCampaigns(): Campaign[] {
 
 export type CampaignInput = Omit<Campaign, 'id' | 'createdAt' | 'updatedAt'>;
 
-export function saveCampaign(input: CampaignInput, id?: string): Campaign {
+/** @returns 저장된 캠페인과 **이 PC 에 남았는지** (296) — 캠페인은 자동 발송 정의라 사라지면 아무것도 나가지 않는다 */
+export function saveCampaign(input: CampaignInput, id?: string): { saved: Campaign; landed: PrefLanded } {
   const list = listCampaigns();
   const now = new Date().toISOString();
   const existing = id ? list.find(c => c.id === id) : undefined;
   const saved: Campaign = existing ? { ...existing, ...input, updatedAt: now } : { ...input, id: genId(), createdAt: now, updatedAt: now };
-  setPreference('campaigns', existing ? list.map(c => (c.id === saved.id ? saved : c)) : [...list, saved]);
-  return saved;
+  const landed = setPreference('campaigns', existing ? list.map(c => (c.id === saved.id ? saved : c)) : [...list, saved]);
+  return { saved, landed };
 }
 
-export function deleteCampaign(id: string): void {
-  setPreference('campaigns', listCampaigns().filter(c => c.id !== id));
+export function deleteCampaign(id: string): PrefLanded {
+  return setPreference('campaigns', listCampaigns().filter(c => c.id !== id));
 }
 
-export function setCampaignEnabled(id: string, enabled: boolean): void {
-  setPreference('campaigns', listCampaigns().map(c => (c.id === id ? { ...c, enabled, updatedAt: new Date().toISOString() } : c)));
+export function setCampaignEnabled(id: string, enabled: boolean): PrefLanded {
+  return setPreference('campaigns', listCampaigns().map(c => (c.id === id ? { ...c, enabled, updatedAt: new Date().toISOString() } : c)));
 }
 
-/** 기본 시나리오 16개 중 아직 없는 것(이름 기준)을 한 번에 추가 — 추가된 수를 돌려준다 (157) */
-export function addMissingPresets(): number {
+/** 기본 시나리오 16개 중 아직 없는 것(이름 기준)을 한 번에 추가 — 추가된 수와 **남았는지** 를 돌려준다 (157·296) */
+export function addMissingPresets(): { added: number; landed: PrefLanded } {
   const list = listCampaigns();
   const add = missingPresets(list.map(c => c.name));
-  if (!add.length) return 0;
+  if (!add.length) return { added: 0, landed: 'landed' }; // 더할 것이 없었다(뜻대로)
   const now = new Date().toISOString();
-  setPreference('campaigns', [...list, ...add.map(({ key: _key, group: _group, ...p }) => ({ ...p, id: genId(), createdAt: now, updatedAt: now }))]);
-  return add.length;
+  const landed = setPreference('campaigns', [...list, ...add.map(({ key: _key, group: _group, ...p }) => ({ ...p, id: genId(), createdAt: now, updatedAt: now }))]);
+  return { added: add.length, landed };
 }
 
 /** 새 캠페인 초안 — 트리거별 기본 일수·반복 */
