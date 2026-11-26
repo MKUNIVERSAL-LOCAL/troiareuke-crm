@@ -91,6 +91,35 @@ export function zeroingRows(rows: CountRow[]): CountRow[] {
   return rowsToSave(rows).filter(r => r.counted === 0);
 }
 
+/**
+ * 세는 동안 **다른 곳에서** 재고가 바뀐 제품을 화면에 알리는 문장 (275 — 274 가 화면 안에 적어 둔 세 갈래를 규칙으로).
+ * 세 갈래를 구분하는 이유가 다르다: 내가 센 제품은 반영에서 빠지니 **다시 세어야** 하고,
+ * 안 센 제품은 애초에 반영 대상이 아니라 알려만 주면 되고, **삭제된** 제품은 다시 셀 곳이 없다.
+ * (274 전에는 삭제된 제품에도 "다시 세어주세요" 라고 해서 직원이 없는 제품을 찾으러 갔다.)
+ */
+export interface StockDrift { counted: number; untouched: number; removed: number }
+export function describeStockDrift(d: StockDrift): string | null {
+  const parts: string[] = [];
+  if (d.counted > 0) parts.push(`세는 동안 제품 ${d.counted}종의 재고가 다른 곳에서 바뀌었습니다(판매·입고). 그 제품은 반영에서 건너뛰니 다시 세어주세요.`);
+  // "N종도" 는 앞 갈래가 함께 있을 때만 — 혼자 뜨면 무엇에 이어지는 말인지 알 수 없다 (274, 리뷰 L-2)
+  if (d.untouched > 0) parts.push(`아직 세지 않은 제품 ${d.untouched}종${d.counted > 0 ? '도' : '은'} 그 사이 재고가 바뀌었습니다(빈칸이라 반영에는 영향이 없습니다).`);
+  if (d.removed > 0) parts.push(`그 사이 삭제된 제품 ${d.removed}종은 반영되지 않습니다(다시 세지 않아도 됩니다).`);
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+/**
+ * 반영에서 건너뛴 제품을 **이유별로** 적는다 (275 — 274 의 분기를 규칙으로).
+ * 한 숫자로 뭉개면 "다시 세어주세요" 가 삭제된 제품·이미 맞던 제품에도 붙어 거짓이 된다.
+ */
+export interface StockSkips { changed: number; gone: number; same: number }
+export function describeStockSkips(s: StockSkips): string {
+  return [
+    s.changed > 0 ? `${s.changed}종은 그 사이 재고가 바뀌어 건너뛰었습니다(다시 세어주세요).` : '',
+    s.gone > 0 ? `${s.gone}종은 그 사이 삭제돼 건너뛰었습니다.` : '',
+    s.same > 0 ? `${s.same}종은 이미 적은 수량과 같아 그대로 뒀습니다.` : '',
+  ].filter(Boolean).join(' ');
+}
+
 /** 원장 행에 남길 설명 — 실사 날짜·실제 수량·메모 */
 export function countNote(row: { counted: number; unit: string }, date: string, memo?: string): string {
   const base = `실사 ${row.counted}${row.unit} (${date})`;

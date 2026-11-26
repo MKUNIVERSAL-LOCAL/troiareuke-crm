@@ -4,7 +4,7 @@ import { splitPercent } from '../src/lib/percent';
 import { renameTagInSegments } from '../src/lib/segmentFilterRule';
 import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry, entryDay } from '../src/lib/rebookStatsRule';
 import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, previousMonth, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
-import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows } from '../src/lib/stockCountRule';
+import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows, describeStockDrift, describeStockSkips } from '../src/lib/stockCountRule';
 import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
 import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
 import { resultLabel, defaultSnoozeDays, addDays as addDaysFollowUp, isSnoozed, sanitizeFollowUps, pruneFollowUps, snoozedIdSet, describeFollowUp, describeHidden } from '../src/lib/followUpRule';
@@ -42,7 +42,7 @@ import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
-import { newCustomerRows, discountRows, unusedBalanceRows, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
+import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
@@ -2838,4 +2838,68 @@ test('발송 성과 요약 — 매출 권한이 없으면 금액 없이 사람 �
   expect(describePerformance(p2, won, false)).not.toContain('120,000');  // 직원 — 금액을 빼고
   expect(describePerformance(p2, won, false)).toContain('결제 1명');      // 사람 수는 그대로
   expect(describePerformance({ ...p2, sent: 0 }, won, false)).toBeNull(); // 발송이 없으면 줄 자체가 없다
+});
+
+// ── 275: 274 가 화면 안에 적어 둔 문장·정렬을 규칙으로 옮기고 여기서 고정한다 (GAP Q-3) ──
+
+test('실사 경고 — 센 제품·안 센 제품·삭제된 제품을 다른 말로 알린다 (275, 274 리뷰 M-4·L-2)', () => {
+  expect(describeStockDrift({ counted: 0, untouched: 0, removed: 0 })).toBeNull(); // 바뀐 것이 없으면 줄 자체가 없다
+
+  // 내가 센 제품만 — 반영에서 빠지므로 다시 세어야 한다
+  const a = describeStockDrift({ counted: 2, untouched: 0, removed: 0 })!;
+  expect(a).toContain('제품 2종의 재고가 다른 곳에서 바뀌었습니다');
+  expect(a).toContain('다시 세어주세요');
+
+  // 안 센 제품만 — 혼자 뜨면 "도" 가 허공에 걸린다(274, 리뷰 L-2)
+  const b = describeStockDrift({ counted: 0, untouched: 3, removed: 0 })!;
+  expect(b).toContain('아직 세지 않은 제품 3종은');
+  expect(b).not.toContain('3종도');
+  expect(b).not.toContain('다시 세어주세요');  // 빈칸은 애초에 반영 대상이 아니다
+  expect(describeStockDrift({ counted: 1, untouched: 3, removed: 0 })!).toContain('3종도'); // 앞 갈래가 있으면 "도"
+
+  // 삭제된 제품 — 다시 셀 곳이 없다. 274 전에는 이 제품에도 "다시 세어주세요" 라고 했다
+  const c = describeStockDrift({ counted: 0, untouched: 0, removed: 1 })!;
+  expect(c).toContain('삭제된 제품 1종');
+  expect(c).toContain('다시 세지 않아도 됩니다');
+  expect(c).not.toContain('다시 세어주세요.');
+
+  // 세 갈래가 함께 뜨면 한 문단으로 이어진다(한 번에 낭독된다)
+  const all = describeStockDrift({ counted: 1, untouched: 2, removed: 3 })!;
+  expect(all.indexOf('다른 곳에서')).toBeLessThan(all.indexOf('아직 세지 않은'));
+  expect(all.indexOf('아직 세지 않은')).toBeLessThan(all.indexOf('삭제된 제품'));
+});
+
+test('실사 결과 — 건너뛴 이유를 뭉개지 않는다 (275, 274 리뷰 M-4)', () => {
+  expect(describeStockSkips({ changed: 0, gone: 0, same: 0 })).toBe(''); // 건너뛴 제품이 없으면 덧말이 없다
+  expect(describeStockSkips({ changed: 2, gone: 0, same: 0 })).toContain('2종은 그 사이 재고가 바뀌어');
+  expect(describeStockSkips({ changed: 2, gone: 0, same: 0 })).toContain('다시 세어주세요');
+  // 삭제된 제품에는 "다시 세어주세요" 를 붙이지 않는다 — 없는 제품을 찾으러 가게 된다
+  const gone = describeStockSkips({ changed: 0, gone: 1, same: 0 });
+  expect(gone).toContain('1종은 그 사이 삭제돼');
+  expect(gone).not.toContain('다시 세어주세요');
+  // 이미 같던 제품은 "건너뛰었다" 가 아니라 "그대로 뒀다"
+  expect(describeStockSkips({ changed: 0, gone: 0, same: 4 })).toContain('4종은 이미 적은 수량과 같아');
+  const mixed = describeStockSkips({ changed: 1, gone: 2, same: 3 });
+  expect(mixed).toContain('1종은');
+  expect(mixed).toContain('2종은');
+  expect(mixed).toContain('3종은');
+});
+
+test('금액 숨김 정렬 — 화면에 보이는 이름 순이고, 입력을 건드리지 않는다 (275, 274 리뷰 M-2·L-8)', () => {
+  const rows = [
+    { key: 'zzz', label: '최영희', detail: '', amount: 300000 },
+    { key: 'aaa', label: '강민수', detail: '', amount: 0 },
+    { key: 'mmm', label: '박지현', detail: '', amount: 120000 },
+  ];
+  const sorted = sortRowsByLabel(rows);
+  expect(sorted.map(r => r.label)).toEqual(['강민수', '박지현', '최영희']); // 금액 순(최영희 먼저)이 아니다
+  expect(rows.map(r => r.key)).toEqual(['zzz', 'aaa', 'mmm']);             // 입력 배열은 그대로(합계를 같은 배열로 구한다)
+
+  // 같은 이름(동명이인·"삭제된 고객")이면 키로 가른다 — 같은 입력이면 항상 같은 순서여야 화면이 깜빡이지 않는다
+  const same = sortRowsByLabel([
+    { key: 'b', label: '삭제된 고객', detail: '', amount: 0 },
+    { key: 'a', label: '삭제된 고객', detail: '', amount: 0 },
+  ]);
+  expect(same.map(r => r.key)).toEqual(['a', 'b']);
+  expect(sortRowsByLabel([])).toEqual([]);
 });

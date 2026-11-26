@@ -6,16 +6,7 @@
 import { ReservationStore, PaymentStore, CustomerStore } from './store';
 import { recipientsOf } from './messageRecipients';
 import { estimatePerformance, describePerformance, performanceRows, type CampaignPerformance } from './campaignPerformanceRule';
-import { DRILL_MAX_ROWS, type DrillResult, type DrillRow } from './revenueDrilldownRule';
-
-/**
- * 금액을 숨기는 화면의 줄 순서 — **화면에 보이는 이름 순**(274, 리뷰 M-2).
- * 271 은 `customerId` 로 정렬했는데 그 값은 난수라(=순서가 없다) 안내문의 "이름 순" 과 달랐다.
- * 금액 순을 쓰면 맨 위가 최다 결제자라는 사실이 드러나므로, 금액을 숨길 때만 이름 순으로 바꾼다.
- */
-function sortForHiddenAmount(rows: DrillRow[]): DrillRow[] {
-  return [...rows].sort((a, b) => a.label.localeCompare(b.label, 'ko') || a.key.localeCompare(b.key));
-}
+import { DRILL_MAX_ROWS, sortRowsByLabel, type DrillResult, type DrillRow } from './revenueDrilldownRule';
 
 /**
  * 이력 1건의 성과 추정. 수신 고객 기록이 없으면(204·206 전 이력·다른 PC 발송) null — 값을 만들지 않는다.
@@ -68,7 +59,7 @@ export function historyPerformanceDrill(historyId: string, sentAt: string, known
     amount: r.amount,
   }));
   // 금액을 숨길 때만 이름 순으로(그 뒤 자른다) — 금액 순 그대로면 맨 위가 최다 결제자다 (274, 리뷰 M-2)
-  const rows = (opts.showMoney === false ? sortForHiddenAmount(labeled) : labeled).slice(0, DRILL_MAX_ROWS);
+  const rows = (opts.showMoney === false ? sortRowsByLabel(labeled) : labeled).slice(0, DRILL_MAX_ROWS);
   return {
     rows,
     total,
@@ -108,7 +99,7 @@ export function campaignPerformanceDrill(sends: { customerId: string; at: string
     amount: r.amount,
   }));
   // 금액을 숨길 때만 이름 순으로(그 뒤 자른다) — 금액 순 그대로면 맨 위가 최다 결제자다 (274, 리뷰 M-2)
-  const rows = (opts.showMoney === false ? sortForHiddenAmount(labeled) : labeled).slice(0, DRILL_MAX_ROWS);
+  const rows = (opts.showMoney === false ? sortRowsByLabel(labeled) : labeled).slice(0, DRILL_MAX_ROWS);
   return {
     rows,
     total,

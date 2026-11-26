@@ -6,7 +6,7 @@ import { persistedStockMap } from '../lib/persistedStock'; // 재고가 정말 �
 import { todayISO } from '../lib/format';
 import { notify } from '../lib/notify';
 import { askConfirm } from '../lib/confirmDialog';
-import { buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows, parseCountedQty, type CountItem } from '../lib/stockCountRule';
+import { buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows, parseCountedQty, describeStockDrift, describeStockSkips, type CountItem } from '../lib/stockCountRule';
 import type { Product } from '../types';
 
 /**
@@ -52,6 +52,7 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
     }
     return { counted, untouched, removed };
   }, [products, items, inputs]);
+  const driftNote = describeStockDrift(changed); // 문장은 순수 규칙에서 — lib-units 가 세 갈래를 고정한다 (275)
   const rows = buildCountRows(items, inputs);
   const summary = countSummary(rows);
   const toSave = rowsToSave(rows);
@@ -133,12 +134,8 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
         if (a.threw || (a.entryId && savedEntries && !savedEntries.has(a.entryId))) ledgerFailed += 1;
       }
       const saved = applied - stockFailed;
-      // 건너뛴 이유를 뭉개지 않는다 — "다시 세어주세요" 는 재고가 바뀐 제품에만 해당한다 (274, 리뷰 M-4)
-      const skipNote = [
-        skippedChanged > 0 ? `${skippedChanged}종은 그 사이 재고가 바뀌어 건너뛰었습니다(다시 세어주세요).` : '',
-        skippedGone > 0 ? `${skippedGone}종은 그 사이 삭제돼 건너뛰었습니다.` : '',
-        skippedSame > 0 ? `${skippedSame}종은 이미 적은 수량과 같아 그대로 뒀습니다.` : '',
-      ].filter(Boolean).join(' ');
+      // 건너뛴 이유를 뭉개지 않는다 — "다시 세어주세요" 는 재고가 바뀐 제품에만 해당한다 (274, 리뷰 M-4 / 275 규칙으로)
+      const skipNote = describeStockSkips({ changed: skippedChanged, gone: skippedGone, same: skippedSame });
       if (saved > 0) {
         notify.success(`제품 ${saved}종의 재고를 실사 수량으로 맞췄습니다.${skipNote ? ' ' + skipNote : ''}`);
       } else if (skipNote) {
@@ -159,12 +156,9 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
         <p className="text-sm text-gray-700">
           제품을 직접 세어 실제 수량을 적어주세요. <b>빈칸은 세지 않은 제품</b>으로 두고 건드리지 않습니다.
         </p>
-        {(changed.counted > 0 || changed.untouched > 0 || changed.removed > 0) && (
+        {driftNote && (
           <p className="text-sm text-amber-800 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" role="status" aria-live="polite" data-testid="stock-count-changed">
-            {changed.counted > 0 && <>세는 동안 제품 {changed.counted}종의 재고가 다른 곳에서 바뀌었습니다(판매·입고). 그 제품은 반영에서 건너뛰니 다시 세어주세요. </>}
-            {/* "N종도" 는 센 제품 경고가 함께 있을 때만 — 혼자 뜨면 무엇에 이어지는 말인지 알 수 없다 (274, 리뷰 L-2) */}
-            {changed.untouched > 0 && <>아직 세지 않은 제품 {changed.untouched}종{changed.counted > 0 ? '도' : '은'} 그 사이 재고가 바뀌었습니다(빈칸이라 반영에는 영향이 없습니다). </>}
-            {changed.removed > 0 && <>그 사이 삭제된 제품 {changed.removed}종은 반영되지 않습니다(다시 세지 않아도 됩니다).</>}
+            {driftNote}
           </p>
         )}
         {items.length === 0 ? (

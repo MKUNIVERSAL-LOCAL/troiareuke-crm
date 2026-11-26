@@ -40,10 +40,15 @@ function log(text) {
   fs.appendFileSync(logPath, text.endsWith('\n') ? text : text + '\n');
 }
 
-/** 한 단계 실행 — 출력은 로그 파일로, 돌려주는 값은 종료 코드 */
+/**
+ * 한 단계 실행 — 출력은 로그 파일로, 돌려주는 값은 종료 코드.
+ * 명령을 **한 문자열**로 합쳐 넘긴다: `shell: true` 에 인자 배열을 함께 주면 Node 가 DEP0190 경고를 띄운다
+ * (셸이 인자를 다시 해석하므로). 여기 인자는 모두 이 파일에 적힌 고정 값이고 바깥 입력이 섞이지 않는다.
+ */
 function step(flag, title, cmd, args) {
   log(`\n===== [${flag}] ${title} :: ${cmd} ${args.join(' ')} =====`);
-  const r = spawnSync(cmd, args, { cwd: ROOT, shell: process.platform === 'win32', encoding: 'utf8' });
+  const line = [cmd, ...args].join(' ');
+  const r = spawnSync(line, { cwd: ROOT, shell: true, encoding: 'utf8' });
   log((r.stdout || '') + (r.stderr || ''));
   const code = r.status === null ? 1 : r.status; // 신호로 죽은 경우(메모리 등)도 실패다 — 조용히 0 으로 만들지 않는다
   process.stdout.write(`${flag} ${title}: ${code === 0 ? 'ok' : 'FAIL(' + code + ')'}\n`);

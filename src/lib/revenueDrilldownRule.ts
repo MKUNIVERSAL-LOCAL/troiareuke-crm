@@ -52,6 +52,17 @@ export const DRILL_MAX_ROWS = 100;
 const NO_CUSTOMER = '고객 정보 없음'; // 연결하지 않았거나 그 뒤 삭제된 고객 — 둘을 구분할 자료가 없다 (리뷰 L-4)
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
 
+/**
+ * 금액을 숨기는 화면의 줄 순서 — **화면에 보이는 이름 순** (274, 리뷰 M-2 / 275 순수 모듈로 이동).
+ * 금액 순을 그대로 쓰면 금액 칸이 없어도 맨 위가 최다 결제자라는 사실이 드러난다.
+ * 271 은 `customerId` 로 세웠는데 그 값은 난수라(= 순서가 없다) 안내문의 "이름 순" 과 달랐다.
+ * 이름이 같으면 키로 가른다 — 같은 입력이면 항상 같은 순서여야 화면이 깜빡이지 않는다.
+ * 입력 배열은 건드리지 않는다(호출 쪽이 같은 배열로 합계를 구한다).
+ */
+export function sortRowsByLabel(rows: DrillRow[]): DrillRow[] {
+  return [...rows].sort((a, b) => a.label.localeCompare(b.label, 'ko') || a.key.localeCompare(b.key));
+}
+
 function finish(rows: DrillRow[], total: number, empty: string, caveat?: string): DrillResult {
   rows.sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label));
   if (rows.length > DRILL_MAX_ROWS) {
