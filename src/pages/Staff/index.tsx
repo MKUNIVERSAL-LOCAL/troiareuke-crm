@@ -1,6 +1,8 @@
 ﻿import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (292)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { readableTextOn } from '../../lib/color';
 import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
@@ -519,7 +521,11 @@ function StaffDetailModal({
       hireDate,
     });
     // 근무표를 실제로 바꿨을 때만 저장 — 전화·색만 고쳐도 기본값 행이 생겨 체크리스트가 "직원 근무표 ✓" 로 보이던 것 (191 리뷰 M-2)
-    if (!sameSchedule(schedule, getStaffSchedule(staff.id) ?? defaultSchedule(staff.id))) saveStaffSchedule(schedule);
+    // 근무표가 안 남으면 예약 화면의 빈 시간·경고가 옛 근무표로 계산된다 — 조용히 두지 않는다 (292, 리뷰 M-3)
+    if (!sameSchedule(schedule, getStaffSchedule(staff.id) ?? defaultSchedule(staff.id))) {
+      const lostSchedule = describePrefLoss(saveStaffSchedule(schedule), '근무표', prefSaveMode());
+      if (lostSchedule) notify.error(lostSchedule);
+    }
     onUpdate();
   };
 

@@ -1517,7 +1517,11 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       // 무엇이 바뀌었는지 남긴다 — "나는 3시로 바꿨는데" 를 매장이 확인할 수 있게 (247).
       // 저장이 안 됐으면(다른 기기가 지운 예약) 이력도 남기지 않는다 (250 리뷰 L-4)
       if (savedEdit) logReservationEdit(editing.id, editing, reservation, authUser?.name);
-      if (resources.length > 0) assignResource(editing.id, resourceId); // 자원 배정은 설정 행에 (142). 자원이 없으면 기존 배정은 그대로 (144 리뷰 M-1)
+      // 자원 배정은 설정 행에 (142). 안 남으면 그 예약은 자원 없이 남아 같은 시간 중복을 못 막는다 (292, 리뷰 M-3)
+      if (resources.length > 0) {
+        const lostRes = describePrefLoss(assignResource(editing.id, resourceId), '자원 배정', prefSaveMode());
+        if (lostRes) notify.error(lostRes);
+      } // 자원이 없으면 기존 배정은 그대로 (144 리뷰 M-1)
       // Google 캘린더에 옛 정보가 남지 않도록 기존 이벤트 삭제 후 재생성
       const oldEventId = getGcalMap()[editing.id];
       if (oldEventId && isGoogleCalendarConnected()) {
@@ -1529,7 +1533,10 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     } else {
       const saved = ReservationStore.save({ ...reservation, status: 'confirmed' });
       logReservationCreate(saved.id, reservation, authUser?.name);
-      if (saved && resourceId) assignResource(saved.id, resourceId); // 자원 배정은 설정 행에 (142)
+      if (saved && resourceId) {
+        const lostRes = describePrefLoss(assignResource(saved.id, resourceId), '자원 배정', prefSaveMode());
+        if (lostRes) notify.error(lostRes);
+      }
       if (saved) onSaved?.(saved.id);
       // Google Calendar에도 추가 — 이벤트 id를 기억해 취소/삭제 시 정리 가능하게
       if (addToGoogle && googleAvailable && saved) {

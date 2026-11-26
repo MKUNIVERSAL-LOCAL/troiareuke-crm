@@ -3,6 +3,7 @@
 // shop_settings 한 행으로 NAS 에 동기화되고 PC 교체·로그아웃 wipe 와 무관(staffAliases 와 같은 방식).
 // 직원 수 × 요일 7 의 작은 데이터라 설정 행에 충분하다. 두 기기가 동시에 저장하면 마지막 저장이 남는다(설정 전체가 그렇다 — S-1 승인 뒤 개선).
 import { getPreference, setPreference } from './shopPreferences';
+import type { PrefLanded } from './prefLandedRule';
 import type { StaffSchedule } from '../types';
 
 export function allStaffSchedules(): Record<string, StaffSchedule> {
@@ -14,15 +15,16 @@ export function getStaffSchedule(staffId: string): StaffSchedule | null {
   return allStaffSchedules()[staffId] ?? null;
 }
 
-export function saveStaffSchedule(schedule: StaffSchedule): void {
-  setPreference('staffSchedules', { ...allStaffSchedules(), [schedule.staffId]: { ...schedule, updatedAt: new Date().toISOString() } });
+/** @returns 근무표가 **정말 남았는지** — 안 남으면 예약 화면의 빈 시간·경고가 옛 근무표로 계산된다 (292, 리뷰 M-3) */
+export function saveStaffSchedule(schedule: StaffSchedule): PrefLanded {
+  return setPreference('staffSchedules', { ...allStaffSchedules(), [schedule.staffId]: { ...schedule, updatedAt: new Date().toISOString() } });
 }
 
 /** 직원 삭제 시 근무표도 함께 (설정 행에 고아 데이터를 남기지 않게) */
-export function removeStaffSchedule(staffId: string): void {
+export function removeStaffSchedule(staffId: string): PrefLanded {
   const all = allStaffSchedules();
-  if (!(staffId in all)) return;
+  if (!(staffId in all)) return 'landed'; // 이미 없다(뜻대로 됐다)
   const next = { ...all };
   delete next[staffId];
-  setPreference('staffSchedules', next);
+  return setPreference('staffSchedules', next);
 }

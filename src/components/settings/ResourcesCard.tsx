@@ -5,6 +5,8 @@ import { Plus, Trash2 } from 'lucide-react';
 import { notify } from '../../lib/notify';
 import { askConfirm } from '../../lib/confirmDialog';
 import { josa } from '../../lib/josa';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (292, 리뷰 M-3)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 import { allResources, saveResources, removeResource, newResourceId } from '../../lib/resourceStore';
 import { RESOURCE_KIND_LABEL } from '../../lib/resourceRule';
 import type { Resource } from '../../types';
@@ -21,25 +23,31 @@ export default function ResourcesCard() {
     if (!n) { notify('자원 이름을 입력해주세요.'); return; }
     if (list.some(r => r.name === n)) { notify('같은 이름의 자원이 이미 있습니다.'); return; }
     const next = [...list, { id: newResourceId(), name: n, kind, isActive: true }];
-    saveResources(next);
+    const lost = describePrefLoss(saveResources(next), '자원 목록', prefSaveMode());
     setList(next);
     setName('');
-    notify.success(`${josa(n, '을/를')} 추가했습니다.`);
+    if (lost) notify.error(lost); else notify.success(`${josa(n, '을/를')} 추가했습니다.`);
   };
   const toggle = (id: string) => {
     const next = list.map(r => (r.id === id ? { ...r, isActive: !r.isActive } : r));
-    saveResources(next);
+    const lost = describePrefLoss(saveResources(next), '자원 목록', prefSaveMode());
     setList(next);
+    if (lost) notify.error(lost); // 끈 자원이 다시 켜져 돌아오는 것을 말없이 두지 않는다
   };
   const remove = async (r: Resource) => {
     const first = removeResource(r.id);
     if (!first.removed) {
       const ok = await askConfirm({ title: '자원 삭제', confirmLabel: '삭제', cancelLabel: '닫기', message: `'${r.name}'은(는) 앞으로의 예약 ${first.upcoming}건에 배정돼 있습니다. 삭제하면 그 예약들은 자원 없이 남습니다. 삭제할까요?` });
       if (!ok) return;
-      removeResource(r.id, true);
+      const forced = removeResource(r.id, true);
+      setList(allResources());
+      const lostForced = describePrefLoss(forced.landed, '자원 삭제', prefSaveMode());
+      if (lostForced) notify.error(lostForced); else notify.info(`${josa(r.name, '을/를')} 삭제했습니다.`);
+      return;
     }
     setList(allResources());
-    notify.info(`${josa(r.name, '을/를')} 삭제했습니다.`);
+    const lost = describePrefLoss(first.landed, '자원 삭제', prefSaveMode());
+    if (lost) notify.error(lost); else notify.info(`${josa(r.name, '을/를')} 삭제했습니다.`);
   };
 
   return (
