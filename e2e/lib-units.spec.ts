@@ -34,7 +34,7 @@ import { monthlyKpis, noRebookIds } from '../src/lib/kpiRule';
 import { waitlistFor, describeWaitlist } from '../src/lib/waitlistRule';
 import { utilization, formatHours } from '../src/lib/utilizationRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
-import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes, toMinutes, fromMinutes } from '../src/lib/schedulingRule';
+import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
 import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
 import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule, defaultShift, dayKeyOf, sameSchedule, DAY_KEYS } from '../src/lib/staffScheduleRule';
 import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
@@ -64,7 +64,7 @@ import { DEFAULT_CATALOG as GW_CATALOG } from '../src/lib/ai/catalog';
 import type { AiProvider as GwProvider } from '../src/lib/ai/types';
 import { routeModel, tierFor } from '../src/lib/ai/modelRouterRule';
 import { applyEntry, ledgerState, creditsForCost, expireEntry, MONTHLY_GRANT, type LedgerEntry } from '../src/lib/ai/creditLedgerRule';
-import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, allocateShops, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
+import { costPerCall, simulatePlan, simulate, scenarios, priceForMargin, budgetCapKrw, allocateShops, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
 import { setupChecks, setupCompletionPct, utilizationPct, activityLevel, pilotSummary, type BranchCounts } from '../src/lib/pilotMetricsRule';
 import { matchesSegment, validateSegment, describeSegment, isEmptyCondition, type CustomerFacts } from '../src/lib/segmentFilterRule';
 import { requestOtp, verifyOtp, isValidOtpCode, portalSummaryOf, EMPTY_OTP, OTP_TTL_MS, OTP_RESEND_GAP_MS, OTP_LOCK_MS, PORTAL_SESSION_MS, type OtpState } from '../src/lib/portalRule';
@@ -2714,7 +2714,12 @@ test('중복 결제 의심 — 등록 시각이 미래인 결제(시계 어긋�
   const future = [{ id: 'f1', ...base, createdAt: '2026-11-26T05:10:00.000Z', paymentMethod: '카드' }]; // 10분 뒤로 적힌 결제
   const hits = findDuplicateSuspects(base, future, now);
   expect(hits.map(h => h.id)).toEqual(['f1']);
-  expect(hits[0].minutesAgo).toBe(0); // "방금" 으로 말한다(음수 분을 보여 주지 않는다)
+  expect(hits[0].minutesAgo).toBe(0);
+  // 270(리뷰 M-5): "방금" 이라고 단정하지 않는다 — 몇 분 전인지 모르는 기록이므로 시계가 어긋났다는 사실을 적는다
+  expect(hits[0].futureSkewMinutes).toBe(10);
+  const skewText = describeDuplicateWarning(hits, { amount: 70000, customerName: '시계' }, n => `${n}원`);
+  expect(skewText).toContain('시각이 어긋난 기록(이 PC 보다 10분 뒤)');
+  expect(skewText).not.toContain('방금 등록');
   // 창을 크게 벗어난 미래(시계가 하루 틀린 PC)는 넣지 않는다 — 엉뚱한 경고를 만들지 않는다
   const farFuture = [{ id: 'f2', ...base, createdAt: '2026-11-27T05:00:00.000Z' }];
   expect(findDuplicateSuspects(base, farFuture, now)).toEqual([]);
@@ -2725,23 +2730,23 @@ test('중복 결제 의심 — 등록 시각이 미래인 결제(시계 어긋�
 // ════════════════════════════════════════════════════════════════
 
 test('시간 변환 — HH:mm ↔ 분, 자정·잘못된 값 (268, schedulingRule)', () => {
-  expect(toMinutes('10:30')).toBe(630);
-  expect(toMinutes('9:05')).toBe(545);          // 한 자리 시
-  expect(toMinutes('00:00')).toBe(0);
-  expect(toMinutes('24:00')).toBe(1440);        // 마감 자정은 24:00 으로 받는다(영업시간 계산이 이 값을 쓴다)
-  expect(toMinutes('25:00')).toBeNull();
-  expect(toMinutes('10:75')).toBeNull();
-  expect(toMinutes('열시')).toBeNull();
-  expect(toMinutes('')).toBeNull();
-  expect(toMinutes(undefined)).toBeNull();
-  expect(toMinutes(null)).toBeNull();
+  expect(schedToMinutes('10:30')).toBe(630);
+  expect(schedToMinutes('9:05')).toBe(545);          // 한 자리 시
+  expect(schedToMinutes('00:00')).toBe(0);
+  expect(schedToMinutes('24:00')).toBe(1440);        // 마감 자정은 24:00 으로 받는다(영업시간 계산이 이 값을 쓴다)
+  expect(schedToMinutes('25:00')).toBeNull();
+  expect(schedToMinutes('10:75')).toBeNull();
+  expect(schedToMinutes('열시')).toBeNull();
+  expect(schedToMinutes('')).toBeNull();
+  expect(schedToMinutes(undefined)).toBeNull();
+  expect(schedToMinutes(null)).toBeNull();
   // 되돌리기 — 하루를 넘거나 음수여도 24시간 안으로 감는다(자정 넘김 예약의 시작 시각 표기)
-  expect(fromMinutes(630)).toBe('10:30');
-  expect(fromMinutes(0)).toBe('00:00');
-  expect(fromMinutes(1440)).toBe('00:00');
-  expect(fromMinutes(1500)).toBe('01:00');
-  expect(fromMinutes(-30)).toBe('23:30');
-  expect(fromMinutes(toMinutes('19:05') as number)).toBe('19:05'); // 왕복
+  expect(schedFromMinutes(630)).toBe('10:30');
+  expect(schedFromMinutes(0)).toBe('00:00');
+  expect(schedFromMinutes(1440)).toBe('00:00');
+  expect(schedFromMinutes(1500)).toBe('01:00');
+  expect(schedFromMinutes(-30)).toBe('23:30');
+  expect(schedFromMinutes(schedToMinutes('19:05') as number)).toBe('19:05'); // 왕복
 });
 
 test('근무표 — 기본 근무·요일 판정·같은 근무표 비교 (268, staffScheduleRule)', () => {
@@ -2801,4 +2806,36 @@ test('날짜 문자열 — 로컬 기준으로 자른다(UTC 로 밀리지 않�
   // 자정 직전·직후가 같은 날로 뭉치지 않는다
   expect(toISO(new Date(2026, 10, 26, 0, 0))).toBe('2026-11-26');
   expect(toISO(new Date(2026, 10, 25, 23, 59))).toBe('2026-11-25');
+});
+
+// ── 270 (리뷰 M-7): 268 가드가 하위 폴더를 안 봐서 비어 있던 자리 — 요금 시나리오 표 ──
+
+test('AI 원가·요금 시나리오 표 — 매장 수마다 같은 계산을 쌓는다 (270, costSimulatorRule.scenarios)', () => {
+  const a: SimAssumptions = { usagePerShop: DEFAULT_USAGE, tokens: DEFAULT_TOKENS, fxKrwPerUsd: 1400, planPriceKrw: DEFAULT_PLAN_PRICE_KRW, catalog: GW_CATALOG, available: ['claude', 'openai', 'gemini'] };
+  const rows = scenarios([10, 100, 1000], DEFAULT_PLAN_MIX, a);
+  expect(rows.map(r => r.shops)).toEqual([10, 100, 1000]);
+  // 각 줄은 simulate 와 같은 값이어야 한다(표가 따로 계산하지 않는다)
+  for (const r of rows) {
+    const one = simulate(r.shops, DEFAULT_PLAN_MIX, a);
+    expect(r.totalCostKrw).toBe(one.totalCostKrw);
+    expect(r.totalRevenueKrw).toBe(one.totalRevenueKrw);
+    expect(r.marginPct).toBe(one.marginPct);
+  }
+  // 매장이 10배면 매출·원가도 10배(비례) — 표를 보고 요금을 정하므로 선형이 깨지면 안 된다
+  expect(rows[1].totalRevenueKrw).toBe(rows[0].totalRevenueKrw * 10);
+  expect(rows[2].totalCostKrw).toBeGreaterThan(rows[1].totalCostKrw);
+  expect(scenarios([], DEFAULT_PLAN_MIX, a)).toEqual([]); // 빈 입력은 빈 표
+});
+
+// ── 270 (리뷰 M-1): 성과 요약 줄도 매출 권한에 따라 금액을 뺀다 ──
+
+test('발송 성과 요약 — 매출 권한이 없으면 금액 없이 사람 수만 말한다 (270, 리뷰 M-1)', () => {
+  const sends = [{ customerId: 'm1', at: '2026-11-10T01:00:00.000Z' }, { customerId: 'm2', at: '2026-11-10T01:00:00.000Z' }];
+  const payments = [{ customerId: 'm1', paymentDate: '2026-11-12', amount: 120000, status: 'completed' as const }];
+  const p2 = estimatePerformance(sends, [], payments);
+  const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+  expect(describePerformance(p2, won)).toContain('120,000원');          // 관리자
+  expect(describePerformance(p2, won, false)).not.toContain('120,000');  // 직원 — 금액을 빼고
+  expect(describePerformance(p2, won, false)).toContain('결제 1명');      // 사람 수는 그대로
+  expect(describePerformance({ ...p2, sent: 0 }, won, false)).toBeNull(); // 발송이 없으면 줄 자체가 없다
 });

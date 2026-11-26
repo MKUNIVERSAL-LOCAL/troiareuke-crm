@@ -29,7 +29,9 @@ export interface DupExisting extends DupCandidate {
 
 export interface DupSuspect {
   id: string;
-  minutesAgo: number;           // 몇 분 전에 들어온 결제인지(음수 없음)
+  minutesAgo: number;           // 몇 분 전에 들어온 결제인지(시계가 어긋난 기록은 0)
+  /** 이 PC 시계보다 **뒤**(미래)로 적힌 기록이면 그 분 차이 — "방금" 으로 단정하지 않고 사실을 적는다 (270, 리뷰 M-5) */
+  futureSkewMinutes?: number;
   paymentDate: string;          // 그 결제의 업무 날짜 — 늦은 완료 처리는 오늘이 아닐 수 있다 (266, 리뷰 M-3)
   paymentMethod?: string;
   typeLabel?: string;
@@ -61,9 +63,17 @@ export function findDuplicateSuspects(
     if (Number.isNaN(t)) continue;                        // 등록 시각을 모르면 "몇 분 전" 을 지어내지 않는다
     const minutes = Math.floor((nowMs - t) / 60_000);
     if (minutes > windowMinutes) continue;
-    // 기기 시계가 앞서 있으면 "미래에 등록된" 결제가 생긴다 — 창 안이면 0분(방금)으로 보고 넘기지 않는다 (267, 리뷰 L-6)
+    // 기기 시계가 어긋나면 "미래에 등록된" 결제가 생긴다(267). 창 안이면 넘기지 않지만,
+    // 몇 분 전인지 **모른다** — "방금" 이라고 단정하지 않고 시계가 어긋났다는 사실을 적는다 (270, 리뷰 M-5)
     if (minutes < 0 && -minutes > windowMinutes) continue;
-    out.push({ id: p.id, minutesAgo: Math.max(0, minutes), paymentDate: p.paymentDate, paymentMethod: p.paymentMethod, typeLabel: p.typeLabel });
+    out.push({
+      id: p.id,
+      minutesAgo: Math.max(0, minutes),
+      ...(minutes < 0 ? { futureSkewMinutes: -minutes } : {}),
+      paymentDate: p.paymentDate,
+      paymentMethod: p.paymentMethod,
+      typeLabel: p.typeLabel,
+    });
   }
   return out.sort((a, b) => a.minutesAgo - b.minutesAgo);
 }
@@ -80,7 +90,10 @@ export function describeDuplicateWarning(
   if (suspects.length === 0) return '';
   const who = candidate.customerName ? `${candidate.customerName} 고객` : '같은 고객';
   const lines = suspects.slice(0, 3).map(s => {
-    const when = s.minutesAgo <= 0 ? '방금' : `${s.minutesAgo}분 전`;
+    // 시계가 어긋난 기록은 "몇 분 전" 을 지어내지 않는다 — 원인(이 PC 시계)까지 적어 직원이 판단하게 (270, 리뷰 M-5)
+    const when = s.futureSkewMinutes
+      ? `시각이 어긋난 기록(이 PC 보다 ${s.futureSkewMinutes}분 뒤)`
+      : s.minutesAgo <= 0 ? '방금' : `${s.minutesAgo}분 전`;
     const what = [s.typeLabel, s.paymentMethod].filter(Boolean).join(' · ');
     // 결제일을 함께 적는다 — 늦은 완료 처리는 오늘이 아닌 날짜로 들어간다 (266, 리뷰 M-3)
     return `· ${when} 등록${what ? ` (${what})` : ''} · 결제일 ${s.paymentDate}`;

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Zap, Pencil, Trash2, Plus, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDataRefreshed } from '../../hooks/useDataRefreshed'; // 요약 줄 갱신 (270, 리뷰 M-2)
 import { canDo } from '../../lib/permissions';
 import { askConfirm } from '../../lib/confirmDialog';
 import { notify } from '../../lib/notify';
@@ -26,6 +27,10 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
   const [editing, setEditing] = useState<Campaign | null | 'new'>(null);
   const [running, setRunning] = useState<Campaign | null>(null);
   const [perfDrill, setPerfDrill] = useState<{ title: string; result: DrillResult } | null>(null); // 성과 근거 (267)
+  // 다른 창·다른 탭에서 예약·결제가 생기면 요약 줄도 다시 계산한다 — 근거 창은 클릭 시 실시간이라
+  // 구독이 없으면 둘이 어긋난다 (270, 리뷰 M-2)
+  const [perfTick, setPerfTick] = useState(0);
+  useDataRefreshed(() => { setCampaigns(listCampaigns()); setPerfTick(t => t + 1); });
   const refresh = () => setCampaigns(listCampaigns());
   const missing = missingPresets(campaigns.map(c => c.name)).length;
   const segmentNames = useMemo(() => new Map(listSavedSegments().map(sg => [sg.id, sg.name])), [campaigns]); // 행에 세그먼트 이름 (167) // eslint-disable-line react-hooks/exhaustive-deps
@@ -37,8 +42,9 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
   // 성과 추정 — 이 기기의 발송 성공 기록 기준, 14일 창 (157, GAP M-6, ANALYTICS-DEFINITIONS). 목록이 바뀔 때만 다시 계산 (159 리뷰 L-7)
   const perfs = useMemo(() => {
     const resv = ReservationStore.getAll(), pays = PaymentStore.getAll();
-    return new Map(campaigns.map(c => [c.id, describePerformance(estimatePerformance(sendsOf(c.id), resv, pays), formatPrice)]));
-  }, [campaigns]);
+    const money = canDo(user?.role, 'sales.view'); // 매출 권한 없으면 요약 줄도 사람 수만 (270, 리뷰 M-1)
+    return new Map(campaigns.map(c => [c.id, describePerformance(estimatePerformance(sendsOf(c.id), resv, pays), formatPrice, money)]));
+  }, [campaigns, perfTick]);
 
   const remove = async (c: Campaign) => {
     if (!(await askConfirm({ title: '캠페인 삭제', message: `"${c.name}" 캠페인을 삭제할까요? 발송 기록은 남습니다.`, confirmLabel: '삭제', danger: true }))) return;

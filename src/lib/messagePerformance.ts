@@ -26,10 +26,10 @@ export function estimateHistoryPerformance(historyId: string, sentAt: string, kn
  * 화면 문구 — 부분 실패 발송은 사이드맵에 대상 전원이 적혀 있어 "발송 N명" 이 과대다(게이트웨이가 건수만 돌려줘 실패자를 가릴 수 없다).
  * 실패가 있으면 "대상 N명(성공 M·실패 K)" 으로 바꿔 같은 행의 "실패 K명" 과 모순되지 않게 한다 (215, 211 리뷰 H-1 — 가짜 성공 금지)
  */
-export function describeHistoryPerformance(p: CampaignPerformance, h: { successCount: number; failCount: number }, formatPrice: (n: number) => string): string | null {
-  if (h.failCount <= 0) return describePerformance(p, formatPrice);
+export function describeHistoryPerformance(p: CampaignPerformance, h: { successCount: number; failCount: number }, formatPrice: (n: number) => string, showMoney = true): string | null {
+  if (h.failCount <= 0) return describePerformance(p, formatPrice, showMoney);
   if (p.sent === 0) return null;
-  const money = p.revenue > 0 ? ` ${formatPrice(p.revenue)}` : '';
+  const money = showMoney && p.revenue > 0 ? ` ${formatPrice(p.revenue)}` : ''; // 매출 권한 없으면 금액을 빼고 사람 수만 (270, 리뷰 M-1)
   return `[추정] 대상 ${p.sent}명(성공 ${h.successCount}명·실패 ${h.failCount}명) → ${p.windowDays}일 내 예약 ${p.reserved}명 · 결제 ${p.paid}명${money}`;
 }
 
@@ -54,21 +54,21 @@ export function historyPerformanceDrill(historyId: string, sentAt: string, known
     detail: [
       `발송 ${r.sentOn} · 창 ${r.windowEnd} 까지`,
       r.reservedOn ? `예약 ${r.reservedOn}` : '예약 없음',
-      opts.showMoney === false ? (r.amount > 0 ? '결제 있음' : '결제 없음') : (r.paidOn ? `결제 ${r.paidOn}` : '결제 없음'),
+      r.paidOn ? `결제 ${r.paidOn}` : '결제 없음', // 0원 완료 결제도 결제다 — 금액으로 판정하지 않는다 (270, 리뷰 M-4)
     ].join(' · '),
-    // 금액을 볼 권한이 없는 화면에서는 0 으로 — 문자 화면은 직원도 쓴다 (266, 리뷰 M-4)
-    amount: opts.showMoney === false ? 0 : r.amount,
+    amount: r.amount,
   }));
   return {
     rows,
-    total: opts.showMoney === false ? 0 : total,
+    total,
     ...(all.length > DRILL_MAX_ROWS ? { truncatedFrom: all.length } : {}),
+    // 금액을 0 으로 바꿔 넘기지 않는다 — 칸 자체를 숨긴다(0 원이라고 적으면 거짓) (270, 리뷰 H-1)
+    ...(opts.showMoney === false ? { hideAmount: true } : {}),
     caveat: [
-      '이 발송의 **수신 고객 전원**입니다 — 예약·결제가 없던 분도 함께 보여 줍니다(누가 움직이지 않았는지도 사실이라서).',
       '창 안에 예약·결제가 있었다는 사실만 보여 줍니다. 이 문자 때문이라는 뜻은 아닙니다(추정).',
       '보낸 뒤 실패한 수신자도 이 목록에 있습니다(게이트웨이가 건수만 돌려줘 실패자를 가릴 수 없습니다).',
       '다른 PC 에서 보낸 건과 사이드맵 기록 이전 발송은 빠집니다.',
-      opts.showMoney === false ? '금액은 매출 권한이 있는 계정에서만 보입니다.' : '',
+      opts.showMoney === false ? '결제 금액은 매출 권한이 있는 계정에서만 보입니다.' : '',
     ].filter(Boolean).join(' '),
     empty: '이 발송의 수신 고객 기록이 없습니다.',
   };
@@ -92,19 +92,19 @@ export function campaignPerformanceDrill(sends: { customerId: string; at: string
     detail: [
       `발송 ${r.sentOn} · 창 ${r.windowEnd} 까지`,
       r.reservedOn ? `예약 ${r.reservedOn}` : '예약 없음',
-      opts.showMoney === false ? (r.amount > 0 ? '결제 있음' : '결제 없음') : (r.paidOn ? `결제 ${r.paidOn}` : '결제 없음'),
+      r.paidOn ? `결제 ${r.paidOn}` : '결제 없음', // 0원 완료 결제도 결제다 (270, 리뷰 M-4)
     ].join(' · '),
-    amount: opts.showMoney === false ? 0 : r.amount,
+    amount: r.amount,
   }));
   return {
     rows,
-    total: opts.showMoney === false ? 0 : total,
+    total,
     ...(all.length > DRILL_MAX_ROWS ? { truncatedFrom: all.length } : {}),
+    ...(opts.showMoney === false ? { hideAmount: true } : {}), // (270, 리뷰 H-1)
     caveat: [
-      '이 캠페인으로 **문자가 나간 고객 전원**입니다 — 예약·결제가 없던 분도 함께 보여 줍니다.',
       '창 안에 예약·결제가 있었다는 사실만 보여 줍니다. 이 캠페인 때문이라는 뜻은 아닙니다(추정).',
       '이 PC 의 발송 기록 기준입니다 — 다른 PC 에서 보낸 건은 빠집니다(서버 보관은 승인 뒤).',
-      opts.showMoney === false ? '금액은 매출 권한이 있는 계정에서만 보입니다.' : '',
+      opts.showMoney === false ? '결제 금액은 매출 권한이 있는 계정에서만 보입니다.' : '',
     ].filter(Boolean).join(' '),
     empty: '이 캠페인으로 보낸 기록이 아직 없습니다.',
   };

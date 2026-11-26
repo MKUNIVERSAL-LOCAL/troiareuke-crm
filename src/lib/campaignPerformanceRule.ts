@@ -83,8 +83,12 @@ export function performanceRows(sends: SendRef[], reservations: ReservationRef[]
     || a.customerId.localeCompare(b.customerId));
 }
 
-/** 한 줄 요약 — 발송이 없으면 null(값을 만들지 않는다) */
-export function describePerformance(p: CampaignPerformance, formatPrice: (n: number) => string): string | null {
+/**
+ * 한 줄 요약 — 발송이 없으면 null(값을 만들지 않는다).
+ * @param money false 면 금액을 빼고 사람 수만 — 매출 권한이 없는 계정도 보는 화면(문자·캠페인)이라 (270, 리뷰 M-1)
+ */
+export function describePerformance(p: CampaignPerformance, formatPrice: (n: number) => string, money = true): string | null {
   if (p.sent === 0) return null;
-  return `[추정] 발송 ${p.sent}명 → ${p.windowDays}일 내 예약 ${p.reserved}명 · 결제 ${p.paid}명${p.revenue > 0 ? ` ${formatPrice(p.revenue)}` : ''}`;
+  const amount = money && p.revenue > 0 ? ` ${formatPrice(p.revenue)}` : '';
+  return `[추정] 발송 ${p.sent}명 → ${p.windowDays}일 내 예약 ${p.reserved}명 · 결제 ${p.paid}명${amount}`;
 }

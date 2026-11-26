@@ -39,6 +39,11 @@ export interface DrillResult {
   truncatedFrom?: number;
   /** 화면에 그대로 적는 한계(없으면 적지 않는다) */
   caveat?: string;
+  /**
+   * 금액 칸을 아예 보여 주지 않는다 — 권한이 없어 금액을 못 보는 화면용 (270, 리뷰 H-1).
+   * 금액을 0 으로 **바꿔서** 넘기면 "합계 0원" 이라는 거짓이 된다(같은 줄의 요약은 실제 금액을 말한다).
+   */
+  hideAmount?: boolean;
   /** 줄이 하나도 없을 때 보여 줄 말 */
   empty: string;
 }

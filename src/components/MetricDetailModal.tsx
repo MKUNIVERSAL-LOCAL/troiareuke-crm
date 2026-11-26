@@ -15,7 +15,7 @@ export default function MetricDetailModal({ title, note, result, onClose }: {
   result: DrillResult;
   onClose: () => void;
 }) {
-  const { rows, total, truncatedFrom, caveat, empty } = result;
+  const { rows, total, truncatedFrom, caveat, empty, hideAmount } = result;
   return (
     <Modal isOpen onClose={onClose} title={title} size="lg">
       <div className="space-y-3" data-testid="metric-detail">
@@ -32,16 +32,17 @@ export default function MetricDetailModal({ title, note, result, onClose }: {
                       <span className="block text-sm font-medium text-gray-900">{r.label}</span>
                       <span className="block text-xs text-gray-500 break-keep">{r.detail}</span>
                     </span>
-                    <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">{formatPrice(r.amount)}</span>
+                    {!hideAmount && <span className="text-sm font-bold text-gray-900 whitespace-nowrap tabular-nums">{formatPrice(r.amount)}</span>}
                   </li>
                 ))}
               </ul>
             </div>
             <div className="flex items-baseline justify-between gap-3 pt-2 border-t border-gray-200">
               <span className="text-sm font-medium text-gray-600">
-                합계{truncatedFrom ? ` (전체 ${truncatedFrom}줄 기준)` : ` (${rows.length}줄)`}
+                {hideAmount ? `${rows.length}명` : `합계${truncatedFrom ? ` (전체 ${truncatedFrom}줄 기준)` : ` (${rows.length}줄)`}`}
               </span>
-              <span className="text-base font-bold text-[#1a3a8f] tabular-nums" data-testid="metric-detail-total">{formatPrice(total)}</span>
+              {/* 금액을 못 보는 화면에서는 합계 칸을 만들지 않는다 — 0 원이라고 적으면 거짓이다 (270, 리뷰 H-1) */}
+              {!hideAmount && <span className="text-base font-bold text-[#1a3a8f] tabular-nums" data-testid="metric-detail-total">{formatPrice(total)}</span>}
             </div>
             {truncatedFrom && (
               <p className="text-xs text-amber-800 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl">
