@@ -570,7 +570,9 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   lowStockProducts.map(p => (
-                    <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)} aria-label={`${p.name} 재고 ${p.stock}${p.unit} 입고`}
+                    // 295: aria-label 로 이름을 덮으면 보이는 글(분류·최소 재고)과 **다른 말**이 읽힌다(axe label-content-name-mismatch).
+                    // 이름은 보이는 글에서 만들고 동작 힌트는 title 로 남긴다.
+                    <button key={p.id} type="button" onClick={() => navigate(`/products?stock=${encodeURIComponent(p.id)}`)}
                       className="w-full flex items-center justify-between px-5 py-3 hover:bg-amber-50/60 text-left" title="입고 창 열기">
                       <span className="block">
                         <span className="block text-xs font-semibold text-gray-800">{p.name}</span>

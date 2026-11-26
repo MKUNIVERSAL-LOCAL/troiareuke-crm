@@ -1,13 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, dismissToasts, solidPng } from './helpers';
 import { assertNoBlocking, makeStep, type Row } from './a11y-shared';
-import { addProgram, addProduct } from './flows';
+import { addProgram, addProduct, registerPayment } from './flows';
 
 /**
  * 창 접근성 게이트 2편 (289) — 어느 접근성 게이트도 **한 번도 열지 않던 창**들을 axe 로 본다.
  * 전용 기능 스펙은 이 창들을 이미 돌리고 있었지만(예약 요청함·고객 병합·재고 이동 이력·시술 기록 상세 모두
  * 자기 스펙이 있다) **대비·이름·포커스를 검사한 적은 없었다**. 어느 창이 게이트 밖인지는 눈으로 세지 않는다 —
  * `npm run check:modal-a11y` 가 창 자리와 게이트를 대조한다.
+ *
+ * 295: 사유에 "다음 창 묶음에서 옮긴다" 고 적어 둔 창들을 여기 넣었다 — 사진 크게 보기·등급 올릴 후보·
+ * 재방문 안내 초안·앱 잠금, 그리고 로그인 전 비밀번호 재설정 창(가입 전 상태라 **별도 테스트**).
+ * 상태를 만드는 값(사진 1장·방문 2회·주기 7일·PIN)은 전용 스펙들이 쓰는 길을 그대로 따랐다.
  *
  * 1편(a11y-modals.spec)에 이어 붙이지 않은 이유는 **시간이 아니다**(재 보니 1편 43초·이 파일 18초로
  * 둘 다 180초 예산에 한참 못 미친다). `makeStep` 은 창을 열다 실패하면 그것을 기록으로 남기고 **삼킨다** —
@@ -81,6 +85,13 @@ test('게이트 밖에 있던 창들에 serious·critical 접근성 위반이 �
   await expect(dialog('시술 기록 추가')).toBeVisible();
   await pickCustomer(page, acc.customer);
   await dialog('시술 기록 추가').getByRole('checkbox', { name: '테스트관리' }).check();
+  // 사진 한 장을 붙여 둔다 — 상세에서 썸네일을 눌러 "사진 크게 보기" 창을 열기 위해 (295)
+  await page.locator('input[type="file"][accept="image/*"]').first().setInputFiles([
+    { name: 'before.png', mimeType: 'image/png', buffer: solidPng(64, [214, 120, 120]) },
+  ]);
+  await expect(page.getByLabel('시술 전후 구분')).toHaveCount(1);
+  // 지난 날짜로 적는다 — 마지막 방문이 오늘이면 아래 "재방문 안내 초안" 대상이 되지 않는다 (295)
+  await dialog('시술 기록 추가').getByLabel('시술일').fill('2026-11-05');
   await dialog('시술 기록 추가').getByRole('button', { name: '저장', exact: true }).click();
   // 231 흐름이 바뀌어 결제 창이 안 열리면 `closeDialog` 는 조용히 통과한다 — 열렸음을 먼저 확인한다 (293, 리뷰 LOW-11)
   await expect(dialog('결제 등록')).toBeVisible();
@@ -90,6 +101,12 @@ test('게이트 밖에 있던 창들에 serious·critical 접근성 위반이 �
     await page.getByRole('button').filter({ hasText: acc.customer }).filter({ visible: true }).first().click();
     await expect(dialog('시술 기록 상세')).toBeVisible();
   });
+  await step('/treatments 사진 크게 보기', async () => { // 295 — 사진을 올린 뒤에만 열리는 창
+    await dialog('시술 기록 상세').getByRole('button').filter({ has: page.getByAltText('시술 사진') }).first().click();
+    await expect(dialog('사진 크게 보기')).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(dialog('사진 크게 보기')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(dialog('시술 기록 상세')).toHaveCount(0);
 
@@ -101,5 +118,68 @@ test('게이트 밖에 있던 창들에 serious·critical 접근성 위반이 �
   });
   await closeDialog('재고 이동 이력');
 
+  // ── 295: 등급 올릴 후보 — 결제 1건 + 서로 다른 날 시술 2건이 있어야 후보가 생긴다(grade-suggest 스펙과 같은 길) ──
+  await registerPayment(page, acc, 900000);
+  await dismissToasts(page);
+  await page.goto('/treatments');
+  await page.getByRole('button', { name: '시술 기록 추가' }).click();
+  await pickCustomer(page, acc.customer);
+  await dialog('시술 기록 추가').getByLabel('시술일').fill('2026-11-10');
+  await dialog('시술 기록 추가').getByRole('checkbox', { name: '테스트관리' }).check();
+  await dialog('시술 기록 추가').getByRole('button', { name: '저장', exact: true }).click();
+  await closeDialog('결제 등록'); // 저장 뒤 결제 창(231)
+  await dismissToasts(page);
+  await page.goto('/customers');
+  await step('/customers 등급 올릴 후보 (236)', async () => {
+    await page.getByTestId('grade-suggest-open').filter({ visible: true }).first().click();
+    await expect(dialog('등급 올릴 후보')).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(dialog('등급 올릴 후보')).toHaveCount(0);
+
+  // ── 295: 재방문 안내 초안 — 주기를 7일로 줄이면 11-10 방문이 권장일을 지난다 ──
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();
+  const cycle = page.getByLabel('재방문 주기(일)');
+  await cycle.fill('7');
+  await cycle.locator('..').getByRole('button', { name: '저장', exact: true }).click(); // 같은 칸의 [저장] — 설정 화면에 저장 버튼이 여럿이다
+  await dismissToasts(page);
+  await page.goto('/');
+  await step('/ 재방문 안내 초안', async () => {
+    await page.getByRole('button', { name: '초안', exact: true }).filter({ visible: true }).first().click();
+    // 창 이름에 고객 이름이 들어가므로 정규식으로 집는다(가드도 이 형태를 센다, 295)
+    await expect(page.getByRole('dialog', { name: /재방문 안내 초안/ })).toBeVisible();
+    await expect(dialog(`${acc.customer}님 재방문 안내 초안`)).toBeVisible();
+  });
+  await closeDialog(`${acc.customer}님 재방문 안내 초안`);
+
+  // ── 295: 앱 잠금 — PIN 을 켜고 잠그면 전체 화면 오버레이가 뜬다(screen-lock 스펙과 같은 길). 화면을 막으므로 맨 끝 ──
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '백업·보안', exact: true }).filter({ visible: true }).first().click();
+  const lockCard = page.getByTestId('app-lock-card');
+  await lockCard.getByLabel('새 PIN').fill('4242');
+  await lockCard.getByLabel('PIN 확인').fill('4242');
+  await lockCard.getByLabel('잠금 대기 시간').selectOption('15');
+  await lockCard.getByRole('button', { name: '잠금 켜기' }).click();
+  await dismissToasts(page);
+  await step('앱 잠금 화면 (218)', async () => {
+    // 전체 잠금이 켜져 있으면 **프로그램을 다시 열 때** 잠금 화면으로 시작한다(AppLockOverlay 의 첫 상태)
+    await page.reload();
+    await expect(page.getByTestId('app-lock')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: '앱 잠금' })).toBeVisible(); // 창 이름으로도 — 창 커버리지 가드가 이 자리를 센다
+  });
+
+  assertNoBlocking(rows);
+});
+
+test('로그인 전 비밀번호 재설정 창에 serious·critical 접근성 위반이 없다', async ({ page }) => {
+  // 창 게이트는 가입·온보딩을 지난 뒤부터 도는데, 이 창은 **로그인 전** 화면에만 있다 (295)
+  const rows: Row[] = [];
+  const step = makeStep(page, rows);
+  await page.goto('/login');
+  await step('/login 비밀번호 재설정 안내', async () => {
+    await page.getByRole('button', { name: '비밀번호 찾기' }).click();
+    await expect(page.getByRole('dialog', { name: '비밀번호 재설정 안내' })).toBeVisible();
+  });
   assertNoBlocking(rows);
 });

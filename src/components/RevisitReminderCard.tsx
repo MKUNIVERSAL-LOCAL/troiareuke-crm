@@ -50,7 +50,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
           <BellRing size={16} className="text-rose-500" />
           재방문 리마인더
           {due.length > 0 && (
-            <span className="ml-1 px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full text-xs font-bold">{due.length}명</span>
+            <span className="ml-1 px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full text-xs font-bold">{due.length}명</span>
           )}
         </h3>
         {due.length > 0 && (
@@ -111,6 +111,7 @@ function RevisitReminderCardInner({ compact = false, refreshKey = 0 }: { compact
           <div className="space-y-3">
               <textarea
                 readOnly
+                aria-label={`${draftFor.customer.name}님에게 보낼 재방문 안내 문구`}
                 value={buildReminderMessage(draftFor.customer)}
                 rows={6}
                 className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 resize-none focus:outline-none"

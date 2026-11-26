@@ -63,7 +63,7 @@ const MARKER = {
   'src/components/MetricDetailModal.tsx': 'metric-detail',
   'src/components/campaigns/CampaignRunModal.tsx': '캠페인 실행',
   'src/components/RevisitReminderCard.tsx': '재방문 안내 초안',
-  'src/pages/Auth/Login.tsx': '비밀번호 재설정',
+  'src/pages/Auth/Login.tsx': '비밀번호 재설정 안내', // aria-labelledby 가 가리키는 제목이 창 이름이다 (295)
   'src/pages/Admin/AiService.tsx': '크레딧 지급',
   'src/pages/Admin/Subscriptions.tsx': '구독 수정',
   'src/components/admin/BackupRestoreView.tsx': '백업으로 복원',
@@ -87,12 +87,7 @@ const ALLOWED = {
   'src/pages/Admin/AiService.tsx': '어드민 크레딧 지급 창 — 서버 AI 사용량·크레딧 행이 있어야 열린다(승인 대기)',
   'src/pages/Admin/Subscriptions.tsx': '어드민 구독 수정 창 — 서버 구독 행이 있어야 열린다',
   'src/components/admin/BackupRestoreView.tsx': '어드민 백업 복원 창 — 서버 백업 목록이 있어야 열린다',
-  '등급 올릴 후보': '방문·결제가 쌓인 고객이 있어야 후보가 생긴다 — 자료를 만드는 길이 grade-suggest 스펙에 있다 — 다음 창 묶음에서 옮긴다',
-  '사진 크게 보기': '사진을 올린 뒤에만 열린다(가짜 파일로 올리는 길은 before-after 스펙에 있다) — 다음 창 묶음에서 옮긴다',
-  '앱 잠금': 'PIN 을 켠 뒤 잠겨야 뜬다(screen-lock 스펙이 그 길을 돈다) — 다음 창 묶음에서 옮긴다',
   'src/components/campaigns/CampaignRunModal.tsx': '캠페인을 실제로 실행해야 열린다 — 발송 흉내까지 필요해 다음 창 묶음으로 미룬다',
-  'src/components/RevisitReminderCard.tsx': '재방문 권장 대상이 있어야 초안 창이 열린다 — 다음 창 묶음에서 옮긴다',
-  'src/pages/Auth/Login.tsx': '로그인 전 비밀번호 재설정 창 — 창 게이트는 가입·온보딩을 지난 뒤부터 돈다(라우트 게이트가 /login 화면 자체는 본다) — 로그인 전 상태를 따로 여는 묶음이 필요하다',
 };
 
 function listFiles(dir, out = []) {
@@ -195,6 +190,8 @@ function gateStrings(gates) {
   const used = new Set();
   const PATTERNS = [
     /getByRole\(\s*['"]dialog['"]\s*,\s*\{\s*name:\s*(?:'([^'\n]+)'|"([^"\n]+)"|`([^`\n$]+)`)/g,
+    // 이름에 고객 이름 같은 값이 섞이는 창은 정규식으로 집는다 — 그 조각이 MARKER 다 (295)
+    /getByRole\(\s*['"]dialog['"]\s*,\s*\{\s*name:\s*\/([^/\n]+)\//g,
     /\bdialog\(\s*(?:'([^'\n]+)'|"([^"\n]+)"|`([^`\n$]+)`)/g,
     /getByTestId\(\s*(?:'([^'\n]+)'|"([^"\n]+)"|`([^`\n$]+)`)/g,
   ];
@@ -258,6 +255,9 @@ function selftest() {
     console.error(`[selftest] 이름 없는 창 판정 실패: ${dynUn.map(u => u.key).join(',')}`); process.exit(1);
   }
   if (!dynUn.find(u => u.file === 'src/components/NewOne.tsx')?.unmapped) { console.error('[selftest] MARKER 누락 덫 실패'); process.exit(1); }
+  // 295: 정규식 이름도 창을 여는 자리다
+  const byRe = gateStrings([{ text: "await expect(page.getByRole('dialog', { name: /재방문 안내 초안/ })).toBeVisible();" }]);
+  if (!byRe.has('재방문 안내 초안')) { console.error('[selftest] 정규식 이름 수집 실패'); process.exit(1); }
   // 293(리뷰 M-3): 주석에만 적힌 이름은 "열었다" 가 아니다
   const commented = gateStrings([{ text: "// 289: '새로 들어온 창' 은 다음 묶음에서 연다\nawait page.goto('/x');" }]);
   if (commented.has('새로 들어온 창')) { console.error('[selftest] 주석 우회 덫 실패'); process.exit(1); }
@@ -272,7 +272,7 @@ function selftest() {
   // 부분 문자열은 참조가 아니다 — '맨손 창가' 가 '맨손 창' 을 덮지 않는다
   const used2 = gateStrings([{ text: "dialog('맨손 창가')" }]);
   if (!findUncovered([{ file: 'a.tsx', line: 1, names: ['맨손 창'] }], used2).length) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-modal-a11y] selftest OK — 덫 10개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀) 통과');
+  console.log('[check-modal-a11y] selftest OK — 덫 11개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
