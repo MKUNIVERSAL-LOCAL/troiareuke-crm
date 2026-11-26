@@ -24,11 +24,29 @@ try {
   if (res.ok) previous = await res.json();
 } catch { /* 채널에 아직 없음 */ }
 
+/**
+ * 요약을 **문장 경계**에서 자른다 (306, 300~302 리뷰 LOW-8).
+ * 전에는 `slice(0, 200)` 이라 앱 알림이 "…메모는 내용 대신" 처럼 문장 중간에서 끊겼다.
+ * 200자 안에 문장 끝이 없으면 마지막 공백에서 자르고 … 을 붙인다.
+ */
+function cutAtSentence(text, max) {
+  if (text.length <= max) return text;
+  const head = text.slice(0, max);
+  const end = Math.max(head.lastIndexOf('. '), head.lastIndexOf('다.'), head.lastIndexOf('요.'), head.lastIndexOf('니다.'));
+  if (end > max * 0.4) return head.slice(0, end + (head[end] === '.' ? 1 : 2)).trim();
+  const space = head.lastIndexOf(' ');
+  return `${(space > max * 0.5 ? head.slice(0, space) : head).trim()}…`;
+}
+
 const notesPath = path.join(root, 'docs', 'RELEASE-NOTES-CURRENT.md');
 // 릴리스 노트의 첫 항목(■ 제목 + 첫 •)을 요약으로 — 첫 줄("vX 업데이트 내용")은 제목이라 제외
 const notes = (() => {
   if (!fs.existsSync(notesPath)) return '';
-  const lines = fs.readFileSync(notesPath, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const all = fs.readFileSync(notesPath, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  // 306(300~302 리뷰 LOW-8): **이번 버전 구간만** 본다 — 구분선(214) 아래는 이미 적용된 지난 내용이라
+  // 새 절의 항목이 모두 PC 전용이면 옛 버전 항목이 "새 소식" 으로 올라갈 수 있었다.
+  const pastAt = all.findIndex((l) => /아래는 이미 적용된 지난 업데이트/.test(l) || /^v\d+\.\d+\.\d+ 업데이트 내용/.test(l));
+  const lines = pastAt > 0 ? all.slice(0, pastAt) : all;
   // 301(297~299 리뷰 LOW-10): 앱 사용자에게 가는 한 줄이라 **PC 전용 항목은 건너뛴다** —
   // 299 가 노트 순서를 바꾼 뒤 요약이 "예약 화면(PC)에 월간 보기가 생겼습니다" 가 됐다(앱에는 없는 기능).
   const isPcOnly = (l) => /\(PC\)|PC 전용/.test(l);
@@ -36,8 +54,9 @@ const notes = (() => {
   const firstAt = lines.indexOf(firstLine);
   const head = [...lines.slice(0, firstAt < 0 ? lines.length : firstAt)].reverse().find((l) => l.startsWith('■'))?.replace(/^■\s*/, '')
     || lines.find((l) => l.startsWith('■'))?.replace(/^■\s*/, '') || '';
-  const first = firstLine.replace(/^•\s*/, '');
-  return [head, first].filter(Boolean).join(' — ').slice(0, 200);
+  // 306(리뷰 LOW-8): 폰에서 읽는 글이라 "이 PC" 는 틀린 말이다(그 기능은 **그 기기**에 남는다)
+  const first = firstLine.replace(/^•\s*/, '').replace(/이 PC에서/g, '이 기기에서').replace(/이 PC 에서/g, '이 기기에서').replace(/이 PC/g, '이 기기');
+  return cutAtSentence([head, first].filter(Boolean).join(' — '), 200);
 })();
 const releaseBase = `https://github.com/MKUNIVERSAL-LOCAL/troiareuke-crm/releases/download/v${version}`;
 

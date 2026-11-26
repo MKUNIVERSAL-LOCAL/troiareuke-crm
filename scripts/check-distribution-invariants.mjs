@@ -91,5 +91,25 @@ check('E2E 모바일 폭 프로젝트 존재 (Pixel 7) — 릴리스 게이트',
 check('안드로이드 CI 빌드 워크플로 존재 (릴리스마다 APK/AAB)', fs.existsSync(path.join(root, '.github/workflows/mobile-android.yml')) && /TroiareukeCRM-android\.apk/.test(read('.github/workflows/mobile-android.yml')));
 check('버전 헤더가 모바일 모드(android/ios)도 보고', authApi.includes('APP_MODE_HEADER'));
 
+// 306(300~302 리뷰 LOW-8): 앱 알림에 가는 한 줄 요약을 **실제로 만들어** 본다 — 전에는 200자에서
+// 그냥 잘라 "…메모는 내용 대신" 처럼 문장 중간에서 끊겼고, 폰에서 읽는 글에 "이 PC" 가 들어갔다.
+// prepare-mobile-update.mjs 와 같은 규칙을 여기서 다시 쓰지 않고 그 파일의 함수·블록을 그대로 평가한다.
+const mobileSummary = (() => {
+  const src = read('scripts/prepare-mobile-update.mjs');
+  const fn = src.match(/function cutAtSentence[\s\S]*?\n}\n/);
+  const block = src.match(/const notes = \(\(\) => \{[\s\S]*?\n\}\)\(\);/);
+  if (!fn || !block) return null;
+  const notesPath = path.join(root, 'docs', 'RELEASE-NOTES-CURRENT.md');
+  // eslint-disable-next-line no-new-func
+  return Function('fs', 'notesPath', `${fn[0]}${block[0]}return notes;`)(fs, notesPath);
+})();
+check('앱 한 줄 요약을 만들 수 있다(요약 계산 블록이 그 자리에 있다)', typeof mobileSummary === 'string' && mobileSummary.length > 0);
+if (typeof mobileSummary === 'string' && mobileSummary.length > 0) {
+  check('앱 요약이 문장(또는 …)으로 끝난다 — 문장 중간에서 끊기지 않는다', /(\.|…|요|다)$/.test(mobileSummary.trim()), mobileSummary.slice(-40));
+  check('앱 요약 길이 200자 이하', mobileSummary.length <= 200, `${mobileSummary.length}자`);
+  check('앱 요약에 PC 전용 표시가 없다', !/\(PC\)|PC 전용/.test(mobileSummary), mobileSummary);
+  check('앱 요약이 폰 사용자에게 "이 PC" 라고 하지 않는다', !/이 PC/.test(mobileSummary), mobileSummary);
+}
+
 if (failures) { console.error(`\n배포 불변 원칙 점검 실패 ${failures}건 — docs/DISTRIBUTION-POLICY.md 참조`); process.exit(1); }
 console.log('\n✅ 배포 불변 원칙 점검 전부 통과');

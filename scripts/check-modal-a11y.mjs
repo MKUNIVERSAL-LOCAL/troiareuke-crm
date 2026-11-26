@@ -188,15 +188,20 @@ function dialogSites(sources) {
 function blankComments(text) {
   let out = '';
   let i = 0;
-  let mode = 'code'; // code | line | block | sq | dq | tpl
+  let mode = 'code'; // code | line | block | sq | dq | tpl | regex
+  let prev = '';     // 코드에서 마지막으로 본 뜻 있는 글자 — 정규식 자리인지 가린다
   while (i < text.length) {
     const c = text[i], d = text[i + 1];
     if (mode === 'code') {
       if (c === '/' && d === '/') { mode = 'line'; out += '  '; i += 2; continue; }
       if (c === '/' && d === '*') { mode = 'block'; out += '  '; i += 2; continue; }
+      // 306(300~302 리뷰 LOW-1): 정규식 리터럴 안의 `/*`·따옴표에 속아 **진짜 창을 삼켰다**
+      // (`const re = /[/*]/;` 뒤의 창이 사라졌다). 정규식은 한 상태로 따로 들고 간다.
+      if (c === '/' && '=(,:[!&|?{};+-*%~^<>'.includes(prev)) { mode = 'regex'; out += c; i += 1; continue; }
       if (c === "'") mode = 'sq';
       else if (c === '"') mode = 'dq';
       else if (c === '`') mode = 'tpl';
+      if (!/\s/.test(c)) prev = c;
       out += c; i += 1; continue;
     }
     if (mode === 'line') {
@@ -207,10 +212,27 @@ function blankComments(text) {
       if (c === '*' && d === '/') { mode = 'code'; out += '  '; i += 2; continue; }
       out += c === '\n' ? c : ' '; i += 1; continue;
     }
+    if (mode === 'regex') {
+      if (c === '\\') { out += text.slice(i, i + 2); i += 2; continue; }
+      if (c === '[') { // 문자 클래스 안의 / 는 끝이 아니다
+        while (i < text.length && text[i] !== ']') { out += text[i]; if (text[i] === '\\') { out += text[i + 1] ?? ''; i += 1; } i += 1; }
+        continue;
+      }
+      if (c === '/' || c === '\n') { mode = 'code'; prev = '/'; }
+      out += c; i += 1; continue;
+    }
     // 문자열·템플릿 — 이스케이프를 건너뛰고 닫는 짝에서 code 로 돌아온다
     if (c === '\\') { out += text.slice(i, i + 2); i += 2; continue; }
-    if ((mode === 'sq' && c === "'") || (mode === 'dq' && c === '"') || (mode === 'tpl' && c === '`')) mode = 'code';
+    // 306(리뷰 LOW-1): `'`·`"` 문자열은 **줄을 넘지 못한다**(JS 문법). JSX 본문의 아포스트로피
+    // (`<p>Let's go</p>`)에 걸려 상태가 파일 끝까지 이어지면 뒤의 주석 속 창이 진짜로 세어지거나
+    // 진짜 창이 사라졌다 — 301 판의 폭발 반경이 298 판보다 컸던 이유다. 줄바꿈에서 코드로 돌아온다.
+    if (c === '\n' && (mode === 'sq' || mode === 'dq')) { mode = 'code'; prev = ''; out += c; i += 1; continue; }
+    if ((mode === 'sq' && c === "'") || (mode === 'dq' && c === '"') || (mode === 'tpl' && c === '`')) { mode = 'code'; prev = c; }
     out += c; i += 1; continue;
+  }
+  // 템플릿·블록 주석이 끝까지 닫히지 않았다면 이 결과를 믿을 수 없다 — 조용히 틀린 답을 주지 않는다
+  if (mode === 'tpl' || mode === 'block') {
+    throw new Error(`blankComments: 파일 끝에서 '${mode}' 상태로 남았다 — 백틱·주석 짝이 맞지 않거나 스캐너가 못 보는 모양이 있다`);
   }
   return out;
 }
@@ -235,15 +257,30 @@ function closeParen(code, openAt) {
  */
 function dropSkipped(code) {
   let out = code;
+  // 306(300~302 리뷰 LOW-2): `test.only` 가 있으면 **나머지 테스트가 아예 돌지 않는다** — 그 파일의
+  // 창 이름을 "덮였다" 로 세면 가드가 통째로 거짓이 된다. 게이트 파일에 `.only` 는 사고이므로 즉시 멈춘다.
+  if (/\btest(?:\.describe)?\.only\(/.test(out)) {
+    throw new Error('접근성 게이트 파일에 test.only 가 있다 — 나머지 테스트가 돌지 않으므로 커버리지 수를 믿을 수 없다. .only 를 지우세요.');
+  }
+  // 306: `beforeEach/beforeAll` 안의 상수 skip 은 **그 파일 전체**를 끈다(`lastIndexOf('test(')` 로는 못 찾았다)
+  for (const hook of ['test.beforeEach(', 'test.beforeAll(']) {
+    let h = out.indexOf(hook);
+    while (h >= 0) {
+      const hookEnd = closeParen(out, out.indexOf('(', h));
+      const body = out.slice(h, hookEnd);
+      const m = body.match(/test\.(?:skip|fixme)\(\s*([^,)\n]*)/);
+      if (m && isConstantSkipArg(m[1])) return ' '.repeat(out.length); // 이 파일은 아무 창도 열지 않는다
+      h = out.indexOf(hook, hookEnd);
+    }
+  }
   for (const kind of ['test.describe.skip(', 'test.describe.fixme(', 'test.skip(', 'test.fixme(']) {
     let at = out.indexOf(kind);
     while (at >= 0) {
       const open = at + kind.length - 1;
       const end = closeParen(out, open);
       const arg = out.slice(open + 1, Math.min(end, open + 40)).trimStart();
-      const constantSkip = /^(true\b|\)|!?process\.env)/.test(arg);
-      if (constantSkip && kind === 'test.skip(') {
-        // 런타임 skip — 이 문장이 속한 `test(` 블록 전체를 지운다
+      // 306: 런타임 `test.fixme(true, …)` 도 끄는 방법이다 — 301 은 `test.skip(` 만 블록째 지웠다
+      if (isConstantSkipArg(arg) && (kind === 'test.skip(' || kind === 'test.fixme(')) {
         const testAt = out.lastIndexOf('test(', at);
         const blockEnd = testAt >= 0 ? closeParen(out, out.indexOf('(', testAt)) : end;
         const from = testAt >= 0 ? testAt : at;
@@ -255,6 +292,22 @@ function dropSkipped(code) {
     }
   }
   return out;
+}
+
+/**
+ * 그 skip 조건이 **항상 참**인가 — 그러면 그 테스트는 끈 것이다.
+ * 조건부(`isNearMidnightSeoul()`)는 때에 따라 돌므로 끈 것이 아니다(그 창은 실제로 검사된다).
+ * 306(리뷰 LOW-2): 301 은 `true`·인자 없음·`process.env` 만 봤다. 아래 모양도 끄는 방법이다.
+ * 한계: `test.skip(flag)` 처럼 **다른 곳에 정의된 소문자 값**은 글만 보고는 알 수 없다 — 대문자 상수처럼
+ * 보이는 이름은 끈 것으로 보고(안전한 쪽), 소문자 호출·식은 조건부로 둔다.
+ */
+function isConstantSkipArg(arg) {
+  const a = String(arg).trim();
+  if (/^(true\b|\)|!{0,2}process\.env)/.test(a)) return true;
+  if (/^!{0,2}(true|1)\b/.test(a)) return true;
+  if (/^\d+\s*(===?|!==?|>=?|<=?)\s*\d+/.test(a)) return true;     // 1 === 1
+  if (/^[A-Z][A-Z0-9_]{1,}\s*[,)]?$/.test(a)) return true;          // SKIP_FLAG
+  return false;
 }
 
 /**
@@ -365,10 +418,32 @@ function selftest() {
   // 293(리뷰 M-1): 어드민 창틀을 쓰는 자리도 창으로 센다
   const adm = dialogSites([{ file: 'src/pages/Admin/Z.tsx', text: '<AdminDialog title="새 지점 추가" onClose={x}>' }]);
   if (adm.length !== 1 || adm[0].names[0] !== '새 지점 추가') { console.error('[selftest] 어드민 창틀 덫 실패'); process.exit(1); }
+  // 306(300~302 리뷰 LOW-1): 정규식 리터럴 안의 `/*` 가 뒤의 진짜 창을 삼키지 않는다
+  const reLiteral = dialogSites([{ file: 'src/pages/R.tsx', text: 'const re = /[/*]/;\n<Modal isOpen title="정규식 뒤의 창">x</Modal>' }]);
+  if (reLiteral.length !== 1 || reLiteral[0].names[0] !== '정규식 뒤의 창') { console.error(`[selftest] 정규식 리터럴 덫 실패: ${JSON.stringify(reLiteral.map(s => s.names))}`); process.exit(1); }
+  // 306(리뷰 LOW-1): JSX 본문의 아포스트로피가 **다음 줄까지** 문자열을 끌고 가지 않는다
+  const jsxApos = dialogSites([{ file: 'src/pages/J.tsx', text: "<p>Let's go</p>\n{/* <Modal isOpen title=\"주석 속 가짜 창\"> */}\n<Modal isOpen title=\"아포스트로피 뒤의 진짜 창\">x</Modal>" }]);
+  if (jsxApos.length !== 1 || jsxApos[0].names[0] !== '아포스트로피 뒤의 진짜 창') { console.error(`[selftest] JSX 아포스트로피 덫 실패: ${JSON.stringify(jsxApos.map(s => s.names))}`); process.exit(1); }
+  // 306(리뷰 LOW-2): 런타임 `test.fixme(true, …)` 도 끈 것이다
+  const runtimeFixme = gateStrings([{ text: "test('창 묶음', async ({ page }) => {\n  test.fixme(true, '고치는 중');\n  await expect(page.getByRole('dialog', { name: 'fixme 로 끈 창' })).toBeVisible();\n});" }]);
+  if (runtimeFixme.has('fixme 로 끈 창')) { console.error(`[selftest] 런타임 fixme 덫 실패: ${[...runtimeFixme].join(',')}`); process.exit(1); }
+  // 306(리뷰 LOW-2): beforeEach 안의 상수 skip 은 **그 파일 전체**를 끈다
+  const hookSkip = gateStrings([{ text: "test.beforeEach(async () => { test.skip(true, '환경 없음'); });\ntest('창', async ({ page }) => { await expect(page.getByRole('dialog', { name: '훅으로 끈 창' })).toBeVisible(); });" }]);
+  if (hookSkip.has('훅으로 끈 창')) { console.error(`[selftest] beforeEach skip 덫 실패: ${[...hookSkip].join(',')}`); process.exit(1); }
+  // 306(리뷰 LOW-2): `.only` 는 나머지를 안 돌리므로 커버리지 수를 믿을 수 없다 — 멈춘다
+  let onlyThrew = false;
+  try { gateStrings([{ text: "test.only('하나만', async ({ page }) => { await expect(page.getByRole('dialog', { name: '하나만 연 창' })).toBeVisible(); });" }]); }
+  catch { onlyThrew = true; }
+  if (!onlyThrew) { console.error('[selftest] test.only 덫 실패'); process.exit(1); }
+  // 306: 닫히지 않은 백틱은 조용히 넘기지 않는다
+  let unclosedThrew = false;
+  try { dialogSites([{ file: 'src/pages/T.tsx', text: 'const t = `열고 안 닫음\n<Modal isOpen title="삼켜진 창">' }]); }
+  catch { unclosedThrew = true; }
+  if (!unclosedThrew) { console.error('[selftest] 닫히지 않은 템플릿 덫 실패'); process.exit(1); }
   // 부분 문자열은 참조가 아니다 — '맨손 창가' 가 '맨손 창' 을 덮지 않는다
   const used2 = gateStrings([{ text: "dialog('맨손 창가')" }]);
   if (!findUncovered([{ file: 'a.tsx', line: 1, names: ['맨손 창'] }], used2).length) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-modal-a11y] selftest OK — 덫 18개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름·주석 속 창·아포스트로피·test.skip·줄 주석 속 glob·describe.skip·런타임 skip·조건부 skip 보존) 통과');
+  console.log('[check-modal-a11y] selftest OK — 덫 24개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름·주석 속 창·아포스트로피·test.skip·줄 주석 속 glob·describe.skip·런타임 skip·조건부 skip 보존·정규식 리터럴·JSX 아포스트로피·런타임 fixme·beforeEach skip·test.only·닫히지 않은 템플릿) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
