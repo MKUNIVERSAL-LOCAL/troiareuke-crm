@@ -131,7 +131,11 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await payForm2.getByRole('button', { name: '결제 등록' }).click();
   // 264: 같은 고객·같은 금액(50,000)을 30분 안에 또 등록하므로 중복 경고가 뜬다 — 시술 기록에서 넘어온
   // 의도한 등록이니 [그대로 등록] 을 고른다(막지 않고 묻는다는 것을 이 흐름이 보여 준다)
-  await page.getByRole('dialog', { name: '같은 금액 결제가 이미 있습니다' }).getByRole('button', { name: '그대로 등록' }).click();
+  const dupDialog = page.getByRole('dialog', { name: '같은 금액 결제가 이미 있습니다' });
+  // 274(리뷰 L-6): 이 확인창은 DUP_WINDOW_MINUTES(30분) 설정에 달려 있다 — 창을 줄이면 선택자 타임아웃으로만
+  // 깨져 원인이 안 보인다. 창이 말하는 "N분 전" 을 함께 단언해 설정과 이 단계를 묶어 둔다.
+  await expect(dupDialog.getByTestId('confirm-dialog')).toContainText(/방금|\d+분 전/);
+  await dupDialog.getByRole('button', { name: '그대로 등록' }).click();
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
 
   // ── 6. 데이터가 새로고침 후에도 남는다 (로컬 저장 회귀) ──
@@ -300,8 +304,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('가동률 = 이달 오늘까지 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간');
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('재방문율 =');
   // 273: 재방문율·객단가 타일도 숫자를 말해야 한다(이달 방문이 있으니 '-' 가 아니다)
-  await expect(kpiCard.getByTestId('kpi-revisit')).toHaveText(/^(\d+%|-)$/);
-  await expect(kpiCard.getByTestId('kpi-ticket')).not.toHaveText('');
+  await expect(kpiCard.getByTestId('kpi-revisit')).toHaveText(/^\d+%$/);
+  await expect(kpiCard.getByTestId('kpi-ticket')).toHaveText(/^[\d,]+원$/);
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);
   // 드릴다운 (184): 재예약률 타일 → 다음 예약 없는 이달 방문 고객 목록(필터 칩), 가동률 타일 → 예약 화면
@@ -703,7 +707,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();
   const privacyLog = page.getByTestId('retention-policy-card').getByTestId('privacy-action-log');
   await expect(privacyLog).toBeVisible();
-  await expect(privacyLog).toContainText('익명화 1명');
+  // 274: 줄 하나가 **언제·무엇·누가** 를 다 적는지 본다(라벨만 보면 빈 기록도 통과한다) (리뷰 LOW)
+  await expect(privacyLog.getByRole('listitem').first()).toHaveText(/^\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}\s*익명화 1명\s*\S+/);
   await expect(privacyLog).toContainText('지점 설정에 보관');
   await page.goto('/customers');
   await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
@@ -720,6 +725,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   expect(anonId).not.toBe('');
   await page.goto(`/messaging?customer=${anonId}`);
   await expect(page.getByTestId('recipient-blocked')).toContainText('발송 대상이 아닙니다');
+  // 274: 글로만 막는 화면일 수도 있다 — 발송 버튼이 실제로 눌리지 않는지까지 본다 (리뷰 LOW)
+  await expect(page.getByTestId('send-submit')).toBeDisabled();
   // 딥링크 확인 뒤 다시 그 고객 상세로 돌아온다(이어지는 단계가 상세 화면을 본다)
   await page.goto('/customers');
   await page.getByText('탈퇴고객').filter({ visible: true }).first().click();

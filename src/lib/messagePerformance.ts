@@ -9,6 +9,15 @@ import { estimatePerformance, describePerformance, performanceRows, type Campaig
 import { DRILL_MAX_ROWS, type DrillResult, type DrillRow } from './revenueDrilldownRule';
 
 /**
+ * 금액을 숨기는 화면의 줄 순서 — **화면에 보이는 이름 순**(274, 리뷰 M-2).
+ * 271 은 `customerId` 로 정렬했는데 그 값은 난수라(=순서가 없다) 안내문의 "이름 순" 과 달랐다.
+ * 금액 순을 쓰면 맨 위가 최다 결제자라는 사실이 드러나므로, 금액을 숨길 때만 이름 순으로 바꾼다.
+ */
+function sortForHiddenAmount(rows: DrillRow[]): DrillRow[] {
+  return [...rows].sort((a, b) => a.label.localeCompare(b.label, 'ko') || a.key.localeCompare(b.key));
+}
+
+/**
  * 이력 1건의 성과 추정. 수신 고객 기록이 없으면(204·206 전 이력·다른 PC 발송) null — 값을 만들지 않는다.
  * @param known 호출 쪽이 이미 가진 수신 고객(발송 이력 화면의 목록 색인) — 사이드맵을 다시 읽지 않게 (215, 211 리뷰 L-2)
  */
@@ -47,10 +56,8 @@ export function historyPerformanceDrill(historyId: string, sentAt: string, known
   const pays = PaymentStore.getAll().filter(p => !!p.customerId && set.has(p.customerId));
   const nameOf = new Map(CustomerStore.getAll().map(c => [c.id, c.name]));
   const all = performanceRows(ids.map(id => ({ customerId: id, at: sentAt })), resv, pays);
-  // 금액을 숨기는 화면에서는 금액 순 정렬도 숨겨야 한다 — 맨 위가 최다 결제자라는 사실이 드러난다 (271, 리뷰 LOW)
-  if (opts.showMoney === false) all.sort((a, b) => a.customerId.localeCompare(b.customerId));
   const total = all.reduce((a, r) => a + r.amount, 0);     // 자른 줄도 합계에는 들어간다 (260 규약)
-  const rows: DrillRow[] = all.slice(0, DRILL_MAX_ROWS).map(r => ({
+  const labeled: DrillRow[] = all.map(r => ({
     key: r.customerId,
     label: nameOf.get(r.customerId) || '삭제된 고객',
     detail: [
@@ -60,6 +67,8 @@ export function historyPerformanceDrill(historyId: string, sentAt: string, known
     ].join(' · '),
     amount: r.amount,
   }));
+  // 금액을 숨길 때만 이름 순으로(그 뒤 자른다) — 금액 순 그대로면 맨 위가 최다 결제자다 (274, 리뷰 M-2)
+  const rows = (opts.showMoney === false ? sortForHiddenAmount(labeled) : labeled).slice(0, DRILL_MAX_ROWS);
   return {
     rows,
     total,
@@ -87,9 +96,8 @@ export function campaignPerformanceDrill(sends: { customerId: string; at: string
   const pays = PaymentStore.getAll().filter(p => !!p.customerId && set.has(p.customerId));
   const nameOf = new Map(CustomerStore.getAll().map(c => [c.id, c.name]));
   const all = performanceRows(sends, resv, pays);
-  if (opts.showMoney === false) all.sort((a, b) => a.customerId.localeCompare(b.customerId)); // (271, 리뷰 LOW)
   const total = all.reduce((a, r) => a + r.amount, 0);
-  const rows: DrillRow[] = all.slice(0, DRILL_MAX_ROWS).map(r => ({
+  const labeled: DrillRow[] = all.map(r => ({
     key: r.customerId,
     label: nameOf.get(r.customerId) || '삭제된 고객',
     detail: [
@@ -99,6 +107,8 @@ export function campaignPerformanceDrill(sends: { customerId: string; at: string
     ].join(' · '),
     amount: r.amount,
   }));
+  // 금액을 숨길 때만 이름 순으로(그 뒤 자른다) — 금액 순 그대로면 맨 위가 최다 결제자다 (274, 리뷰 M-2)
+  const rows = (opts.showMoney === false ? sortForHiddenAmount(labeled) : labeled).slice(0, DRILL_MAX_ROWS);
   return {
     rows,
     total,

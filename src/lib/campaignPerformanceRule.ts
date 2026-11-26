@@ -26,10 +26,17 @@ function addDaysISO(date: string, n: number): string {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }
 
-/** 고객별 첫 발송일 — 같은 고객에게 여러 번 갔으면 가장 이른 발송부터 창을 연다 */
+/**
+ * 고객별 첫 발송일 — 같은 고객에게 여러 번 갔으면 가장 이른 발송부터 창을 연다.
+ * 고객 id 가 빈 발송은 세지 않는다 — 아래 `indexBy` 가 빈 키를 버리므로, 담아 두면 그 사람은
+ * "발송 N명" 에는 들어가면서 예약·결제가 영원히 0이 되어 요약과 목록의 기준이 어긋난다 (274, 리뷰 L-1).
+ */
 function firstSendByCustomer(sends: SendRef[]): Map<string, string> {
   const first = new Map<string, string>();
-  for (const s of sends) { const d = dateOf(s.at); const cur = first.get(s.customerId); if (!cur || d < cur) first.set(s.customerId, d); }
+  for (const s of sends) {
+    if (!s.customerId) continue;
+    const d = dateOf(s.at); const cur = first.get(s.customerId); if (!cur || d < cur) first.set(s.customerId, d);
+  }
   return first;
 }
 /**

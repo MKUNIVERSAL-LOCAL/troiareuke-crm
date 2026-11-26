@@ -1311,6 +1311,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             )}
             <button
               onClick={handleSend}
+              data-testid="send-submit"
               disabled={sending || !content.trim() || recipientCount === 0 || recipientPhones.length === 0}
               className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >

@@ -41,3 +41,6 @@ dist-mobile
 android/app/release.keystore
 *.keystore
 *.jks
+
+# 경량 게이트 로그(scripts/gate-light.mjs) — 묶음마다 새로 쓰이는 검사 기록
+.gate

@@ -39,14 +39,22 @@ export default function MetricDetailModal({ title, note, result, onClose }: {
             </div>
             <div className="flex items-baseline justify-between gap-3 pt-2 border-t border-gray-200">
               <span className="text-sm font-medium text-gray-600">
-                {hideAmount ? `${rows.length}명` : `합계${truncatedFrom ? ` (전체 ${truncatedFrom}줄 기준)` : ` (${rows.length}줄)`}`}
+                {/* 금액을 못 보는 화면: 합계 대신 사람 수. 줄을 잘랐으면 **전체 몇 명 중 몇 명**인지 말한다
+                    — 잘린 수(100)만 적으면 같은 화면의 "발송 2,000명" 과 충돌한다 (274, 리뷰 M-1) */}
+                {hideAmount
+                  ? (truncatedFrom ? `전체 ${truncatedFrom}명 중 ${rows.length}명` : `${rows.length}명`)
+                  : `합계${truncatedFrom ? ` (전체 ${truncatedFrom}줄 기준)` : ` (${rows.length}줄)`}`}
               </span>
               {/* 금액을 못 보는 화면에서는 합계 칸을 만들지 않는다 — 0 원이라고 적으면 거짓이다 (270, 리뷰 H-1) */}
               {!hideAmount && <span className="text-base font-bold text-[#1a3a8f] tabular-nums" data-testid="metric-detail-total">{formatPrice(total)}</span>}
             </div>
             {truncatedFrom && (
               <p className="text-xs text-amber-800 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl">
-                줄이 많아 금액이 큰 {rows.length}줄만 보여 줍니다. 위 합계는 전체 {truncatedFrom}줄 기준입니다.
+                {/* 금액을 숨긴 창은 금액 순으로 세우지 않는다(최다 결제자가 드러나므로) — 그런데 안내문은
+                    "금액이 큰 100줄" 이라고 말해 271 이 막으려던 추론을 되살렸다 (274, 리뷰 H-1) */}
+                {hideAmount
+                  ? <>줄이 많아 이름 순으로 {rows.length}줄만 보여 줍니다(전체 {truncatedFrom}명). 금액은 매출 권한이 있는 계정에서만 보입니다.</>
+                  : <>줄이 많아 금액이 큰 {rows.length}줄만 보여 줍니다. 위 합계는 전체 {truncatedFrom}줄 기준입니다.</>}
               </p>
             )}
           </>

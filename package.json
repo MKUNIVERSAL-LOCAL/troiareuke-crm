@@ -17,6 +17,7 @@
     "verify:nas": "node scripts/verify-nas-deploy.mjs",
     "check:routes": "node scripts/check-routes.mjs",
     "check:rules": "node scripts/check-rule-coverage.mjs",
+    "gate:light": "node scripts/gate-light.mjs",
     "check:e2e-types": "tsc -p e2e --noEmit",
     "electron:installer": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis",
     "electron:build:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir",

@@ -57,8 +57,7 @@ test('인센티브 비율을 정하면 직원별 수당 열이 생기고, 잘못
   await panel.getByRole('button', { name: '비율 저장' }).click();
   await dismissToasts(page);
   await expect(card.getByTestId('commission-exceptions')).toContainText('직원별 예외');
-  await expect(card.getByTestId('commission-exceptions')).toContainText('김테스트');
-  await expect(card.getByTestId('commission-exceptions')).toContainText('20');
+  await expect(card.getByTestId('commission-exceptions')).toContainText('김테스트 시술 20% × 실결제액'); // (274, 리뷰 LOW)
 
   // ── 새로고침해도 비율이 남는다(설정 행 저장) ──
   await page.reload();
@@ -66,7 +65,7 @@ test('인센티브 비율을 정하면 직원별 수당 열이 생기고, 잘못
   await visibleButton(page, '인센티브 비율').click();
   await expect(page.getByTestId('commission-panel').getByLabel('매장 기본 시술 비율')).toHaveValue('12.5');
   await expect(page.getByTestId('commission-panel').getByLabel('김테스트 시술 비율')).toHaveValue('20'); // 예외도 남는다
-  await expect(page.getByTestId('staff-performance').getByTestId('commission-exceptions')).toContainText('김테스트');
+  await expect(page.getByTestId('staff-performance').getByTestId('commission-exceptions')).toContainText('김테스트 시술 20%');
 });
 
 test('실결제가 있는 직원의 수당 금액과 보고 문구가 비율대로 나온다 (234, 리뷰 M-6)', async ({ page }) => {

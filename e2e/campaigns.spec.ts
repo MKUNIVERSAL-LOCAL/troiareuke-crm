@@ -138,7 +138,8 @@ test('캠페인 성과 근거 — 세어진 고객을 보여 주고, 직원 계�
     const settings = JSON.parse(localStorage.getItem(`crm_${shop}_settings`) || '{}');
     const id = settings?.preferences?.campaigns?.[0]?.id;
     if (!id) throw new Error('캠페인이 없습니다 — 기본 시나리오를 먼저 넣어야 합니다');
-    localStorage.setItem(`crm_${shop}_campaign_sends`, JSON.stringify([{ key: `${id}:${cid}:1`, campaignId: id, customerId: cid, at: new Date().toISOString() }]));
+    // 키 모양은 실제 규칙과 같게 — `캠페인|고객|버킷` (campaignRule.sendKey) (274, 리뷰 LOW)
+    localStorage.setItem(`crm_${shop}_campaign_sends`, JSON.stringify([{ key: `${id}|${cid}|1`, campaignId: id, customerId: cid, at: new Date().toISOString() }]));
   }, customerId);
   await page.reload();
 

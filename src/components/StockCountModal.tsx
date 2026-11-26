@@ -43,12 +43,14 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
     const now = new Map(snapshot(products).map(p => [p.id, p.stock] as const));
     let counted = 0;
     let untouched = 0;
+    let removed = 0; // 그 사이 **삭제된** 제품 — 다시 세러 가라고 말하면 없는 제품을 찾는다 (274, 리뷰 M-4)
     for (const it of items) {
-      if (!now.has(it.id) || now.get(it.id) === it.stock) continue;
+      if (!now.has(it.id)) { removed += 1; continue; }
+      if (now.get(it.id) === it.stock) continue;
       if (parseCountedQty(inputs[it.id] ?? '') === null) untouched += 1; // 빈칸(안 센 제품)
       else counted += 1;
     }
-    return { counted, untouched };
+    return { counted, untouched, removed };
   }, [products, items, inputs]);
   const rows = buildCountRows(items, inputs);
   const summary = countSummary(rows);
@@ -85,18 +87,20 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
     const date = todayISO();
     let done = 0;
     let applied = 0;
-    let skipped = 0;
+    let skippedChanged = 0; // 그 사이 재고가 바뀐 제품 — 다시 세어야 한다
+    let skippedGone = 0;    // 그 사이 삭제된 제품 — 다시 셀 필요가 없다 (274, 리뷰 M-4)
+    let skippedSame = 0;    // 이미 적은 수량과 같아 바꿀 것이 없던 제품
     // 맞춘 제품 한 줄씩 — 끝에 **재고와 원장 둘 다** 정말 저장됐는지 되읽어 확인한다 (250 리뷰 L-9, 255~257 리뷰 H-1)
     const appliedRows: { id: string; counted: number; entryId: string | null; threw: boolean }[] = [];
     const step = () => {
       try {
         for (const r of toSave.slice(done, done + 25)) {
           const fresh = ProductStore.getAll().find(p => p.id === r.id);
-          if (!fresh) { skipped += 1; continue; }            // 그 사이 삭제됐다
-          if (fresh.stock !== r.stock) { skipped += 1; continue; } // 그 사이 판매·입고로 바뀌었다 — 옛 숫자로 덮지 않는다
-          if (fresh.stock === r.counted) { skipped += 1; continue; }
+          if (!fresh) { skippedGone += 1; continue; }              // 그 사이 삭제됐다
+          if (fresh.stock !== r.stock) { skippedChanged += 1; continue; } // 그 사이 판매·입고로 바뀌었다 — 옛 숫자로 덮지 않는다
+          if (fresh.stock === r.counted) { skippedSame += 1; continue; }
           const updated = ProductStore.update(r.id, { stock: r.counted as number });
-          if (!updated) { skipped += 1; continue; }
+          if (!updated) { skippedGone += 1; continue; } // 코어가 못 찾은 제품 — 삭제와 같은 처리
           let entryId: string | null = null;
           let threw = false;
           try {
@@ -129,10 +133,16 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
         if (a.threw || (a.entryId && savedEntries && !savedEntries.has(a.entryId))) ledgerFailed += 1;
       }
       const saved = applied - stockFailed;
+      // 건너뛴 이유를 뭉개지 않는다 — "다시 세어주세요" 는 재고가 바뀐 제품에만 해당한다 (274, 리뷰 M-4)
+      const skipNote = [
+        skippedChanged > 0 ? `${skippedChanged}종은 그 사이 재고가 바뀌어 건너뛰었습니다(다시 세어주세요).` : '',
+        skippedGone > 0 ? `${skippedGone}종은 그 사이 삭제돼 건너뛰었습니다.` : '',
+        skippedSame > 0 ? `${skippedSame}종은 이미 적은 수량과 같아 그대로 뒀습니다.` : '',
+      ].filter(Boolean).join(' ');
       if (saved > 0) {
-        notify.success(`제품 ${saved}종의 재고를 실사 수량으로 맞췄습니다.${skipped > 0 ? ` ${skipped}종은 그 사이 재고가 바뀌어 건너뛰었습니다(다시 세어주세요).` : ''}`);
-      } else if (skipped > 0) {
-        notify(`맞출 제품이 없었습니다. ${skipped}종은 그 사이 재고가 바뀌어 건너뛰었습니다(다시 세어주세요).`);
+        notify.success(`제품 ${saved}종의 재고를 실사 수량으로 맞췄습니다.${skipNote ? ' ' + skipNote : ''}`);
+      } else if (skipNote) {
+        notify(`맞출 제품이 없었습니다. ${skipNote}`);
       }
       // 저장 공간이 꽉 찬 PC — "맞췄습니다" 가 거짓이 되지 않게 몇 종이 안 남았는지 말한다 (리뷰 H-1)
       if (stockFailed > 0) notify(`${stockFailed}종은 이 PC 저장 공간이 모자라 재고가 저장되지 않았습니다(프로그램을 다시 열면 옛 수량이 보입니다). 저장 공간을 비운 뒤 다시 세어주세요.`);
@@ -149,10 +159,12 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
         <p className="text-sm text-gray-700">
           제품을 직접 세어 실제 수량을 적어주세요. <b>빈칸은 세지 않은 제품</b>으로 두고 건드리지 않습니다.
         </p>
-        {(changed.counted > 0 || changed.untouched > 0) && (
+        {(changed.counted > 0 || changed.untouched > 0 || changed.removed > 0) && (
           <p className="text-sm text-amber-800 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" role="status" aria-live="polite" data-testid="stock-count-changed">
             {changed.counted > 0 && <>세는 동안 제품 {changed.counted}종의 재고가 다른 곳에서 바뀌었습니다(판매·입고). 그 제품은 반영에서 건너뛰니 다시 세어주세요. </>}
-            {changed.untouched > 0 && <>아직 세지 않은 제품 {changed.untouched}종도 그 사이 재고가 바뀌었습니다(빈칸이라 반영에는 영향이 없습니다).</>}
+            {/* "N종도" 는 센 제품 경고가 함께 있을 때만 — 혼자 뜨면 무엇에 이어지는 말인지 알 수 없다 (274, 리뷰 L-2) */}
+            {changed.untouched > 0 && <>아직 세지 않은 제품 {changed.untouched}종{changed.counted > 0 ? '도' : '은'} 그 사이 재고가 바뀌었습니다(빈칸이라 반영에는 영향이 없습니다). </>}
+            {changed.removed > 0 && <>그 사이 삭제된 제품 {changed.removed}종은 반영되지 않습니다(다시 세지 않아도 됩니다).</>}
           </p>
         )}
         {items.length === 0 ? (
