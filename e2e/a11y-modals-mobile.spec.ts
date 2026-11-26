@@ -225,5 +225,14 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     });
   }
 
+  // ── 289: 폰 아래 탭의 [더보기] 시트 — 어느 접근성 게이트도 열지 않던 창이다(폰에만 있다).
+  // 창이 열려 있는 자리에서는 누를 수 없다(아래 탭이 오버레이에 덮인다) — 그래서 설정 탭을 다 돈 뒤에 둔다.
+  await step('m 더보기 메뉴', async () => {
+    await page.getByRole('button', { name: '더보기 메뉴 열기' }).click({ timeout: 15_000 });
+    await expect(page.getByRole('dialog', { name: '더보기 메뉴' })).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '더보기 메뉴' })).toHaveCount(0);
+
   assertNoBlocking(rows);
 });
