@@ -75,6 +75,15 @@ export function preferenceLanded<K extends PrefKey>(key: K, wanted: ShopPreferen
 }
 
 /**
+ * 디스크에 남아 있는 그 칸의 값 — `null` = 행을 못 읽음, `undefined` = 칸이 없음 (300).
+ * 목록의 **일부**(그 달만)를 판정해야 하는 자리를 위해 되읽은 값을 그대로 넘긴다 — 판정을 또 한 벌
+ * 만들지 않는다(286 이 네 벌을 한 곳으로 모은 뜻을 지킨다).
+ */
+export function persistedPreference<K extends PrefKey>(key: K): ShopPreferences[K] | null | undefined {
+  return readPersistedPreference(key);
+}
+
+/**
  * 설정 행이 **디스크에 실제로** 저장됐는지 확인한다 (254 리뷰 M-1).
  * SettingsStore.get() 은 메모리 캐시를 먼저 돌려주고 safeSetItem 은 용량 초과를 삼키므로,
  * 캐시를 되읽는 확인은 저장 실패를 잡지 못한다 — localStorage 원본을 직접 본다.

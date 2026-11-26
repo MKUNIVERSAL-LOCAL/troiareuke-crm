@@ -1,5 +1,5 @@
 import { isImeKey } from '../../lib/ime';
-import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296)
+import { describePrefLoss, describePrefRemovalLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296·300)
 import { prefSaveMode } from '../../lib/prefSaveMode';
 ﻿import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { monthCloseBlock } from '../../lib/monthClose';
@@ -566,7 +566,8 @@ export default function Customers() {
   function dropFromMaster(tag: string) {
     const dropped = saveTagMaster(removeMasterTag(tagMaster, tag));
     setTagMaster(dropped.list);
-    const lostDrop = describePrefLoss(dropped.landed, '태그 목록', prefSaveMode()); // 296 — 지운 태그가 다시 돌아오는 것을 말없이 두지 않는다
+    // 300(297~299 리뷰 M-1): 삭제인데 저장형 문구("다시 저장해주세요 … 사라집니다")가 나갔다 — 지운 태그가 돌아온다
+    const lostDrop = describePrefRemovalLoss(dropped.landed, '태그', prefSaveMode());
     if (lostDrop) notify.error(lostDrop);
   }
   const [gradePanel, setGradePanel] = useState(false);

@@ -5,7 +5,7 @@ import { notify } from '../lib/notify';
 import { askConfirm } from '../lib/confirmDialog';
 import { formatPrice } from '../lib/format';
 import { parseAmount } from '../lib/inputRules';
-import { closeMonth, monthCloseSaved, reopenMonth, saveMonthlyTarget } from '../lib/monthClose';
+import { closeMonth, monthCloseSavedFor, reopenMonth, saveMonthlyTarget } from '../lib/monthClose';
 import { describePrefLoss, prefLossNote } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (284·290)
 import { prefSaveMode } from '../lib/prefSaveMode'; // 서버 모드에서는 "다시 열면 사라집니다" 가 거짓일 수 있다 (290)
 import type { MonthMetrics } from '../lib/revenueMetricsRule';
@@ -68,7 +68,8 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged, dril
   // 토스트는 4초면 사라진다 — 마감 저장이 이 PC 에 남지 않았다는 사실은 화면에 남겨 둔다 (290, 리뷰 M-2).
   // 294(288~292 리뷰 M-6): 판정을 state 로 들었더니 **달을 바꾸거나 화면을 다시 열면 사라졌다**
   // (이 카드는 `key={viewMonth}` 로 리마운트된다) — 그러면 거짓인 "마감됨" 배지만 남는다. 렌더마다 되읽는다.
-  const lockNote = prefLossNote(monthCloseSaved(), prefSaveMode());
+  // 300(297~299 리뷰 M-2): **그 달** 기준으로 묻는다 — 다른 달의 실패를 이 달 카드에 적지 않는다
+  const lockNote = prefLossNote(monthCloseSavedFor(m.month), prefSaveMode());
   // **종류만** 기억한다 — 값을 복사해 두면 자료가 갱신된 뒤 "합계=카드" 가 깨진다 (리뷰 M-1)
   const [drillKind, setDrillKind] = useState<DrillKind | null>(null);
   const [y, mo] = m.month.split('-');

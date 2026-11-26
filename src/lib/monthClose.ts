@@ -1,8 +1,16 @@
 // monthClose — 월 마감 잠금·월 목표 (비코어, 147, GAP P-7·P-6)
 // 세무 신고 뒤 숫자가 바뀌면 안 되는 달을 잠근다. 지점 설정 행(preferences.closedMonths)에 두어 NAS 동기·모든 기기에 적용.
 // 코어 저장소는 못 막으므로(코어 잠금) 사용자가 거치는 저장 경로(결제·지출·제품 판매/취소·예약 완료 결제·회차권 등록/취소·입고 지출)에서 막는다.
-import { getPreference, setPreference, preferenceLanded } from './shopPreferences';
+import { getPreference, setPreference, persistedPreference } from './shopPreferences';
 import type { PrefLanded } from './prefLandedRule';
+
+/** 디스크에 남아 있는 마감 월 목록 — 읽을 수 없으면 null (300) */
+function persistedClosedMonths(): string[] | null {
+  const v = persistedPreference('closedMonths');
+  if (v === null) return null;       // 행 자체를 못 읽었다
+  if (v === undefined) return [];    // 그 칸이 아직 없다 = 마감한 적이 없다
+  return Array.isArray(v) ? v : [];
+}
 
 function closedMonths(): string[] {
   const v = getPreference('closedMonths');
@@ -25,10 +33,16 @@ export function closeMonth(month: string): PrefLanded {
  * 지금 메모리의 마감 목록이 **이 PC 에 남아 있는지** (294, 288~292 리뷰 M-6).
  * 토스트는 몇 초 뒤 사라지고 잠금 배지는 남으므로, 화면이 **렌더마다** 이 값을 물어 사실을 함께 적는다.
  */
-export function monthCloseSaved(): PrefLanded {
-  // 297(293~296 리뷰 H-1): 마감을 한 번도 하지 않은 매장은 디스크에 그 칸이 **아예 없다** —
-  // 그 상태를 "저장 안 됨" 으로 말하면 거짓이다(배지가 매일 떠 있었다). 주장이 빈 목록이면 잃은 것이 없다.
-  return preferenceLanded('closedMonths', closedMonths(), { absentIs: [] });
+/**
+ * **그 달**의 마감 상태가 이 PC 에 남아 있는지 (300, 297~299 리뷰 M-2).
+ * 297 은 목록 전체를 비교했다 — 그래서 **다른 달**의 마감 해제가 안 남은 PC 에서 11월 카드에도
+ * "저장 안 됨" 이 떴다(지점은 "이번 달 마감이 안 됐다" 로 읽는다). 카드는 달마다 열리므로 판정도 달마다 한다.
+ */
+export function monthCloseSavedFor(month: string): PrefLanded {
+  const wanted = isMonthClosed(month);
+  const persisted = persistedClosedMonths();
+  if (persisted === null) return wanted ? 'unknown' : 'landed'; // 행을 못 읽어도 주장이 없으면 잃은 것이 없다
+  return persisted.includes(month) === wanted ? 'landed' : 'lost';
 }
 
 export function reopenMonth(month: string): PrefLanded {

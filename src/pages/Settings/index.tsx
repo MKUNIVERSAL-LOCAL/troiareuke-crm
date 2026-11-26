@@ -5,7 +5,7 @@ import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { normalizeGreeting, MAX_GREETING } from '../../lib/receiptRule'; // 영수증 인사말 (256)
 import { getPreference, setPreference } from '../../lib/shopPreferences';
-import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (286)
+import { describePrefLoss, describePrefRemovalLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (290·300)
 import { prefSaveMode } from '../../lib/prefSaveMode'; // 290
 import MemoPresetManager from '../../components/MemoPresetManager'; // 자주 쓰는 메모 문구 관리 (259)
 import { memoPresets } from '../../lib/memoPresets'; // 영수증 인쇄 정보 (235)
@@ -452,7 +452,7 @@ export default function Settings() {
   const dropCautionWord = (word: string) => {
     const next = saveCautionKeywords(cautionWords.filter(w => w !== word));
     setCautionWords(next.list);
-    const lost = describePrefLoss(next.landed, '주의 키워드', prefSaveMode()); // 296
+    const lost = describePrefRemovalLoss(next.landed, '주의 키워드', prefSaveMode()); // 296·300(리뷰 M-1)
     if (lost) notify.error(lost);
   };
   const saveReceiptInfo = async () => {

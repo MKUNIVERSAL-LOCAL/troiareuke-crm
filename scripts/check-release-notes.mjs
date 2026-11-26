@@ -5,7 +5,10 @@
  * v1.0.62 뒤 추가분이 옛 섹션에 섞여 들어가 배너가 "이미 적용된 내용" 만 보여줄 상태였던 일(214)을 막는다:
  *   1) 첫 줄은 "v<버전> 업데이트 내용" — package.json 버전이거나 아직 올리지 않은 다음 패치 버전(릴리스 준비 전)
  *   2) 맨 위 섹션에 항목(• 로 시작하는 줄)이 한 줄 이상 있다
- *   3) 배너 구간에 옛 버전 머리글이 들어오면 그 앞에 "지난 업데이트" 구분선이 있어야 한다 — 직원이 새 내용의 끝을 알 수 있게
+ *   3) **노트 안에 옛 버전 머리글이 있으면** 그 앞에 "지난 업데이트" 구분선이 있어야 한다 — 직원이 새 내용의 끝을 알 수 있게.
+ *      300(297~299 리뷰 H-1): 전에는 **배너(앞 2000자) 안에 있을 때만** 봤다. 299 가 재구성하면서 그 줄을 지웠고
+ *      옛 머리글은 2000자 밖이라 가드가 **구조적으로 침묵**했다 — 이 파일 전체가 GitHub 릴리스 본문(`--notes-file`)이라
+ *      공개 페이지에서 v1.0.63 내용이 아무 표시 없이 이어졌다.
  *   4) 배너에 **절(■)이 둘 이상** 보인다 — 한 주제가 2000자를 삼키면 나머지는 직원에게 닿지 않는다 (299)
  *   5) 한 절에 항목이 **12개를 넘지 않는다** — 묶음을 거듭하며 아무 절에나 붙이다 보면 "■ 영수증" 아래에
  *      예약·재고·발송 이야기가 25개 쌓인다(299 에서 실제로 그랬다). 직원이 제목으로 찾을 수 없게 된다.
@@ -43,22 +46,36 @@ export function checkReleaseNotes(text, pkgVersion) {
   if (topItems.length === 0) problems.push('맨 위 섹션에 항목(• 로 시작하는 줄)이 없습니다');
 
   if (heads.length > 1) {
-    const banner = body.trim().slice(0, BANNER_CHARS); // 업데이터와 같은 기준(문자 수, trim 뒤) — prepare-portable-update.mjs
-    const oldHeadAt = banner.indexOf(heads[1][0]);
-    if (oldHeadAt >= 0) {
-      const markAt = banner.indexOf(PAST_MARK);
-      if (markAt < 0 || markAt > oldHeadAt) {
-        problems.push(`배너(앞 ${BANNER_CHARS}자)에 옛 버전(${heads[1][1]}) 내용이 "${PAST_MARK}" 구분선 없이 이어집니다 — 새 항목을 맨 위로 모으고 구분선을 넣으세요`);
-      }
+    // 300(리뷰 H-1): 배너 안이든 밖이든 **노트 안에** 옛 머리글이 있으면 그 앞에 구분선이 있어야 한다
+    const oldHeadAt = body.indexOf(heads[1][0]);
+    const markAt = body.indexOf(PAST_MARK);
+    if (markAt < 0 || markAt > oldHeadAt) {
+      const inBanner = oldHeadAt < BANNER_CHARS;
+      problems.push(`옛 버전(${heads[1][1]}) 내용이 "${PAST_MARK}" 구분선 없이 이어집니다${inBanner ? ` — 배너(앞 ${BANNER_CHARS}자)에도 들어갑니다` : ' — 이 파일 전체가 GitHub 릴리스 본문입니다'}. 새 항목을 맨 위로 모으고 구분선을 넣으세요`);
     }
   }
-  // ④ 배너를 한 주제가 삼키지 않는가 (299)
+  // ④ 배너를 한 주제가 삼키지 않는가 (299 → 300 에서 측정값 교체)
+  //
+  // 299 는 "배너에 절이 하나뿐이면 실패" 로 셌다. 그런데 **299 가 고친 그 사고**(첫 절이 2000자의 60%를
+  // 먹어 매일 쓰는 변화가 잘렸다)는 배너에 절이 셋이어서 그 규칙으로는 잡히지 않았다(리뷰 M-3 가 실측).
+  // 피해는 "첫 절이 배너를 얼마나 먹었나" 이므로 그것을 센다. 절 머리말이 배너에 **하나도 없는** 경우도
+  // 같은 피해(한 주제가 통째로 삼킴)이므로 실패로 본다.
   const bannerText = body.trim().slice(0, BANNER_CHARS);
   const bannerSections = [...bannerText.matchAll(/^■ (.+)$/gm)];
-  // 맨 위 절이 배너보다 길 때만 본다 — 노트가 짧으면 잘리는 것이 없고, 절 하나로도 충분하다 (299)
   const topTrimmed = body.slice(0, topEnd).trim().length;
-  if (topTrimmed > BANNER_CHARS && bannerSections.length === 1) {
-    problems.push(`배너(앞 ${BANNER_CHARS}자)에 절이 하나뿐입니다("■ ${bannerSections[0][1].trim()}") — 지점이 매일 쓰는 변화가 뒤로 밀립니다. 절을 나누고 중요한 것을 위로 올리세요`);
+  const MAX_FIRST_SHARE = 0.55;
+  if (topTrimmed > BANNER_CHARS) {
+    if (bannerSections.length === 0) {
+      problems.push(`배너(앞 ${BANNER_CHARS}자)에 절 머리말(■)이 하나도 없습니다 — 한 주제가 배너를 통째로 차지합니다. 절을 나누고 중요한 것을 위로 올리세요`);
+    } else {
+      const firstAt = bannerSections[0].index;
+      const secondAt = bannerSections.length > 1 ? bannerSections[1].index : bannerText.length;
+      const share = (secondAt - firstAt) / BANNER_CHARS;
+      const totalSections = [...body.slice(0, topEnd).matchAll(/^■ /gm)].length;
+      if (share > MAX_FIRST_SHARE && totalSections > 1) {
+        problems.push(`배너(앞 ${BANNER_CHARS}자)의 ${Math.round(share * 100)}%가 첫 절("■ ${bannerSections[0][1].trim()}") 하나입니다(최대 ${Math.round(MAX_FIRST_SHARE * 100)}%) — 지점이 매일 쓰는 변화가 뒤로 밀립니다. 그 절을 줄이거나 다른 절을 위로 올리세요`);
+      }
+    }
   }
 
   // ⑤ 한 절에 몰아넣지 않는가 (299)
@@ -86,15 +103,22 @@ export function checkReleaseNotes(text, pkgVersion) {
 if (process.argv.includes('--selftest')) {
   const pad = n => '\n'.repeat(n);
   const cases = [
-    ['정상(새 섹션이 배너를 채움)', 'v1.0.63 업데이트 내용\n\n■ 문자\n• 새 항목\n' + pad(2100) + 'v1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
+    ['정상(새 섹션이 배너를 채움 + 구분선)', 'v1.0.63 업데이트 내용\n\n■ 문자\n• 새 항목\n' + pad(2100) + '— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
     ['정상(짧은 새 섹션 + 구분선)', 'v1.0.63 업데이트 내용\n\n• 새 항목\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
     ['구분선 없이 옛 버전이 배너에', 'v1.0.63 업데이트 내용\n\n• 새 항목\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 1],
     ['머리글 버전 불일치', 'v9.9.9 업데이트 내용\n• 새 항목\n', '1.0.62', 1],
     ['맨 위 섹션에 항목 없음', 'v1.0.63 업데이트 내용\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 1],
     ['첫 줄 형식 아님', '릴리스 노트\n• 항목\n', '1.0.62', 1],
+    // 300(리뷰 H-1): 옛 머리글이 배너 밖이어도 구분선이 없으면 알린다 — 299 가 지운 그 줄
+    ['옛 머리글이 배너 밖인데 구분선 없음', 'v1.0.63 업데이트 내용\n\n■ 첫 주제\n• ' + 'ㄱ'.repeat(900) + '\n\n■ 둘째 주제\n• ' + 'ㄴ'.repeat(1300) + '\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 1],
+    ['옛 머리글이 배너 밖 + 구분선 있음', 'v1.0.63 업데이트 내용\n\n■ 첫 주제\n• ' + 'ㄱ'.repeat(900) + '\n\n■ 둘째 주제\n• ' + 'ㄴ'.repeat(1300) + '\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
+    // 300(리뷰 M-3): 299 가 고친 모양 — 절은 셋인데 첫 절이 배너의 60%를 먹는다
+    ['첫 절이 배너의 60%', 'v1.0.63 업데이트 내용\n\n■ 한 주제\n• ' + 'ㄱ'.repeat(1250) + '\n\n■ 둘째\n• ' + 'ㄴ'.repeat(400) + '\n\n■ 셋째\n• ' + 'ㄷ'.repeat(600) + '\n', '1.0.62', 1],
+    ['첫 절이 배너의 40%는 통과', 'v1.0.63 업데이트 내용\n\n■ 한 주제\n• ' + 'ㄱ'.repeat(760) + '\n\n■ 둘째\n• ' + 'ㄴ'.repeat(700) + '\n\n■ 셋째\n• ' + 'ㄷ'.repeat(700) + '\n', '1.0.62', 0],
+    ['배너에 절 머리말이 없음', 'v1.0.63 업데이트 내용\n\n• ' + 'ㄱ'.repeat(2200) + '\n\n■ 뒤에 오는 절\n• 항목\n', '1.0.62', 1],
     // 299: 배너를 한 절이 삼키면 알린다(절 하나 + 긴 항목)
-    ['배너에 절이 하나뿐', 'v1.0.63 업데이트 내용\n\n■ 한 주제\n• ' + 'ㄱ'.repeat(2100) + '\n', '1.0.62', 1],
-    ['배너에 절이 둘', 'v1.0.63 업데이트 내용\n\n■ 첫 주제\n• ' + 'ㄱ'.repeat(1000) + '\n\n■ 둘째 주제\n• ' + 'ㄴ'.repeat(1200) + '\n', '1.0.62', 0],
+    ['배너에 절이 하나뿐(= 첫 절이 전부)', 'v1.0.63 업데이트 내용\n\n■ 한 주제\n• ' + 'ㄱ'.repeat(2100) + '\n\n■ 뒤에 오는 절\n• 항목\n', '1.0.62', 1],
+    ['배너에 절이 둘(반반)', 'v1.0.63 업데이트 내용\n\n■ 첫 주제\n• ' + 'ㄱ'.repeat(1000) + '\n\n■ 둘째 주제\n• ' + 'ㄴ'.repeat(1200) + '\n', '1.0.62', 0],
     // 299: 한 절에 13개를 넣으면 알린다
     ['한 절에 13개', 'v1.0.63 업데이트 내용\n\n■ 몰아넣은 절\n' + '• 항목\n'.repeat(13), '1.0.62', 1],
     ['한 절에 12개는 통과', 'v1.0.63 업데이트 내용\n\n■ 괜찮은 절\n' + '• 항목\n'.repeat(12), '1.0.62', 0],
