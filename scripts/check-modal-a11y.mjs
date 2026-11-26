@@ -17,8 +17,8 @@
  *    섞으면 멀쩡한 화면을 미시험으로 적게 된다(278·277 리뷰 M-6 과 같은 종류의 잘못).
  *
  * 세는 방법:
- *  - 창 자리: `<Modal …>` 여는 태그와, 문자열 안이 아닌 `role="dialog"` 속성. 이름은 `title=`·`aria-label=`
- *    의 **리터럴**(삼항 두 갈래·템플릿 포함)을 모은다.
+ *  - 창 자리: `<Modal …>`(창틀 태그) 여는 태그와, 문자열 안이 아닌 `role="dialog"` 속성. 이름은 `title=`·`aria-label=`
+ *    의 **리터럴**(삼항 두 갈래·템플릿 포함)을 모은다. 주석은 먼저 공백으로 바꿔 세지 않는다(298).
  *  - 이름을 코드가 만드는 창(`title={title}`·`` title={`… ${name}`} ``·`aria-labelledby`)은 이름으로 찾을 수 없다 —
  *    `MARKER` 에 그 창을 게이트가 무엇으로 집는지(testid·제목 조각) 적고, 그 문자열이 게이트에 있어야 덮인 것으로 센다.
  *  - 공용 창틀(`src/components/ui/Modal.tsx`)은 창 자리가 아니다 — 이름은 부르는 쪽이 준다.
@@ -111,7 +111,11 @@ function openTag(text, at) {
   return null;
 }
 
-/** 그 자리가 문자열 안인지 — `closest('[role="dialog"]')` 같은 선택자를 창으로 세지 않기 위해 */
+/**
+ * 그 자리가 문자열 안인지 — `closest('[role="dialog"]')` 같은 선택자를 창으로 세지 않기 위해.
+ * 298(293~296 리뷰 LOW-3): 줄 앞쪽의 **홀수 따옴표**(주석 안의 아포스트로피 같은 것)에 속아 진짜 창을 건너뛸 수 있었다.
+ * 그래서 창을 세기 전에 **주석을 먼저 떼고**(`stripComments`) 이 검사를 쓴다 — 아포스트로피는 대개 주석 안에 있다.
+ */
 function insideString(text, at) {
   const lineStart = text.lastIndexOf('\n', at) + 1;
   const before = text.slice(lineStart, at);
@@ -151,8 +155,11 @@ function attrLiterals(tag, attr) {
 /** 창 자리 수집 — { file, line, names[] } (names 가 비면 이름을 코드가 만드는 창) */
 function dialogSites(sources) {
   const sites = [];
-  for (const { file, text } of sources) {
+  for (const { file, text: raw } of sources) {
     if (FRAMES.includes(file)) continue;
+    // 298(리뷰 LOW-4): 주석 속 `<Modal …>`·`role="dialog"` 를 창으로 세고 있었다(머리말은 "세지 않는다" 고 적혀 있었다).
+    // 주석을 떼면 줄 번호가 흔들리지 않게 **같은 길이의 공백**으로 바꾼다.
+    const text = blankComments(raw);
     const add = (at, names) => sites.push({ file, line: text.slice(0, at).split('\n').length, names });
     for (const m of text.matchAll(new RegExp(`<(?:${FRAME_TAGS.join('|')})[\\s>]`, 'g'))) {
       if (insideString(text, m.index)) continue; // 주석·문자열 속 태그는 창이 아니다 (293, 리뷰 LOW-10)
@@ -170,6 +177,19 @@ function dialogSites(sources) {
   return sites;
 }
 
+/** 주석을 **같은 길이의 공백**으로 바꾼 코드 — 줄 번호·위치가 그대로 남는다 (298) */
+function blankComments(text) {
+  const blank = s => s.replace(/[^\n]/g, ' ');
+  let out = text.replace(/\/\*[\s\S]*?\*\//g, blank);
+  out = out.split('\n').map(line => {
+    for (let i = 0; i < line.length - 1; i++) {
+      if (line[i] === '/' && line[i + 1] === '/' && !insideString(line, i)) return line.slice(0, i) + ' '.repeat(line.length - i);
+    }
+    return line;
+  }).join('\n');
+  return out;
+}
+
 /** 주석을 떼어 낸 코드 — 문자열 안의 `//`(`http://`)는 주석이 아니다 */
 function stripComments(text) {
   let out = text.replace(/\/\*[\s\S]*?\*\//g, ' ');
@@ -179,6 +199,28 @@ function stripComments(text) {
     }
     return line;
   }).join('\n');
+  return out;
+}
+
+/**
+ * `test.skip(`·`test.fixme(` 로 시작하는 블록을 **괄호 짝까지** 지운다 (298, 리뷰 LOW-5).
+ * 건너뛴 테스트 안의 창 이름은 "axe 로 봤다" 가 아니다.
+ */
+function dropSkipped(code) {
+  let out = code;
+  for (const kind of ['test.skip(', 'test.fixme(']) {
+    let at = out.indexOf(kind);
+    while (at >= 0) {
+      const open = at + kind.length - 1;
+      let depth = 0, end = out.length;
+      for (let i = open; i < out.length; i++) {
+        if (out[i] === '(') depth += 1;
+        else if (out[i] === ')') { depth -= 1; if (depth === 0) { end = i + 1; break; } }
+      }
+      out = out.slice(0, at) + ' '.repeat(end - at) + out.slice(end);
+      at = out.indexOf(kind);
+    }
+  }
   return out;
 }
 
@@ -196,7 +238,9 @@ function gateStrings(gates) {
     /getByTestId\(\s*(?:'([^'\n]+)'|"([^"\n]+)"|`([^`\n$]+)`)/g,
   ];
   for (const { text } of gates) {
-    const code = stripComments(text);
+    // 298(리뷰 LOW-5): `test.skip`·`test.fixme` 블록의 창 이름까지 "덮였다" 로 세고 있었다 —
+    // 흔들리는 접근성 테스트를 건너뛰면 가드가 초록으로 남는다. 그 블록은 빼고 센다.
+    const code = dropSkipped(stripComments(text));
     for (const re of PATTERNS) for (const m of code.matchAll(re)) used.add(m[1] ?? m[2] ?? m[3]);
   }
   return used;
@@ -258,6 +302,15 @@ function selftest() {
   // 295: 정규식 이름도 창을 여는 자리다
   const byRe = gateStrings([{ text: "await expect(page.getByRole('dialog', { name: /재방문 안내 초안/ })).toBeVisible();" }]);
   if (!byRe.has('재방문 안내 초안')) { console.error('[selftest] 정규식 이름 수집 실패'); process.exit(1); }
+  // 298(리뷰 LOW-4): 주석 속 창은 창이 아니다
+  const inComment = dialogSites([{ file: 'src/pages/C.tsx', text: '// <Modal isOpen title="주석 속 창">\n<Modal isOpen title="진짜 창">' }]);
+  if (inComment.length !== 1 || inComment[0].names[0] !== '진짜 창') { console.error(`[selftest] 주석 속 창 덫 실패: ${JSON.stringify(inComment.map(s => s.names))}`); process.exit(1); }
+  // 298(리뷰 LOW-3): 줄 앞쪽 아포스트로피(주석 안)에 속아 진짜 창을 건너뛰지 않는다
+  const apos = dialogSites([{ file: 'src/pages/D.tsx', text: "{/* 직원's 목록 */}<Modal isOpen title=\"놓치던 창\">" }]);
+  if (apos.length !== 1 || apos[0].names[0] !== '놓치던 창') { console.error(`[selftest] 아포스트로피 덫 실패: ${JSON.stringify(apos.map(s => s.names))}`); process.exit(1); }
+  // 298(리뷰 LOW-5): 건너뛴 테스트의 창 이름은 덮인 것이 아니다
+  const skipped = gateStrings([{ text: "test.skip('x', async ({ page }) => { await expect(page.getByRole('dialog', { name: '건너뛴 창' })).toBeVisible(); });\nawait expect(page.getByRole('dialog', { name: '진짜로 연 창' })).toBeVisible();" }]);
+  if (skipped.has('건너뛴 창') || !skipped.has('진짜로 연 창')) { console.error(`[selftest] test.skip 덫 실패: ${[...skipped].join(',')}`); process.exit(1); }
   // 293(리뷰 M-3): 주석에만 적힌 이름은 "열었다" 가 아니다
   const commented = gateStrings([{ text: "// 289: '새로 들어온 창' 은 다음 묶음에서 연다\nawait page.goto('/x');" }]);
   if (commented.has('새로 들어온 창')) { console.error('[selftest] 주석 우회 덫 실패'); process.exit(1); }
@@ -272,7 +325,7 @@ function selftest() {
   // 부분 문자열은 참조가 아니다 — '맨손 창가' 가 '맨손 창' 을 덮지 않는다
   const used2 = gateStrings([{ text: "dialog('맨손 창가')" }]);
   if (!findUncovered([{ file: 'a.tsx', line: 1, names: ['맨손 창'] }], used2).length) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-modal-a11y] selftest OK — 덫 11개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름) 통과');
+  console.log('[check-modal-a11y] selftest OK — 덫 14개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름·주석 속 창·아포스트로피·test.skip) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }

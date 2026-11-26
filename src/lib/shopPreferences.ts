@@ -40,7 +40,8 @@ export function setPreference<K extends PrefKey>(key: K, value: ShopPreferences[
  * **293(288~292 리뷰 H-1)**: 290 은 `!== 'lost'` 로 막아 **'확인 불가' 갈래가 열려 있었다** — 설정 행을 아예
  * 읽을 수 없으면(그 지점 행이 아직 없는 PC·백업 복원 직후) 판정은 `'unknown'` 이고, 그때도 원본을 지웠다.
  * "남았는지 모른다" 는 "남았다" 가 아니다 — **`'landed'` 일 때만** 지운다. 확인이 안 되면 이중 진실이 잠깐
- * 남을 뿐이고(다음 호출이 다시 이관한다), 되돌릴 수 없는 쪽은 삭제다.
+ * 남을 뿐이고(**프로그램을 다시 열면** 다시 이관한다 — 같은 세션에서는 메모리에 값이 들어가 조기 반환된다),
+ * 되돌릴 수 없는 쪽은 삭제다. (298, 리뷰 LOW-8)
  */
 export function migrateLegacyPreference<K extends PrefKey>(
   key: K,

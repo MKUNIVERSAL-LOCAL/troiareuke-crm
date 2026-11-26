@@ -30,7 +30,6 @@ export const PRIVACY_LOG_LOST = '개인정보 처리는 끝났지만 파기 대�
  */
 export const PRIVACY_LOG_UNKNOWN = '개인정보 처리는 끝났지만 파기 대장에 남았는지 이 PC 에서 확인할 수 없었습니다. 설정 > 알림 설정의 파기 대장에서 확인해주세요 — 그 처리를 다시 할 필요는 없습니다.';
 
-
 export function listPrivacyActions(): PrivacyAction[] {
   const list = getPreference('privacyActions');
   return Array.isArray(list) ? list : [];

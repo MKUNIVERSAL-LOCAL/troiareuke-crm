@@ -15,8 +15,8 @@
  *  ② "지금 상태" 문서의 숫자 — 아래 CURRENT_DOCS 안의 `N모듈·M함수`·`N칸 중 M칸`·`lib-units N개`,
  *     그리고 **가장 빨리 낡는 세 가지**(291, 리뷰 M-4 / 294 에서 어순·개수까지): **문서가 말하는 자기 범위**
  *     `NNN~MMM`(끝 번호 = 로드맵의 마지막 묶음, 같은 줄의 `묶음 N개`·`N묶음` 은 **그 범위의 실제 묶음 수**).
- *     자기 범위의 표시는 개수 동반·바로 앞의 "묶음"·같은 줄의 "완료 묶음/묶음 범위/출장 기간/지점이 보는 변화" 다 —
- *     그 표시가 없는 범위는 **참조**(리뷰·exe 에 포함된 묶음)이므로 검사하지 않는다,
+ *     표시(개수 동반·앞의 "묶음"·"완료 묶음/묶음 범위/출장 기간/지점이 보는 변화")가 있는 자리만 본다 —
+ *     298 에서 "표시 없으면 기본 검사" 로 뒤집어 봤으나 **역사 줄에 거짓 경고 10건**이 나 되돌렸다(아래 ⑥ 과 짝),
  *     `묶음 155~NNN(MMM개)`·`누계 155~NNN 묶음 MMM개`(로드맵이 스스로 적은 누계와 같아야 한다),
  *     `REVIEW-*.md N건`(실제 파일 수). 로드맵·REVIEW-* 처럼 날짜가 붙은 **문서 전체**는 그때의 사실이라
  *     검사하지 않는다 — 과거 기록을 고치는 것은 역사 조작이다.
@@ -27,6 +27,9 @@
  *  ③ 문서가 가리키는 파일 — 문서 안의 `docs/X.md`·`scripts/Y.mjs` 는 실재해야 한다(깨진 포인터 금지).
  *  ④ 리뷰 기록의 반영 표시 — `docs/REVIEW-*.md` 머리말(앞 3줄)에 "반영" 상태가 적혀 있어야 한다.
  *     조용히 묻힌 리뷰가 없다는 뜻이다.
+ *  ⑥ 자기 범위 표시가 사라지지 않는가 — `NEXT-ACTION`·`OWNER-BRIEFING`·`MASTER-DEVELOPMENT-STATUS` 는
+ *     **표시된 범위**("완료 묶음: NNN~MMM" 같은 것)를 하나 이상 가져야 한다(298, 리뷰 M-4). 표시를 지우고
+ *     "지금까지 …를 끝냈습니다" 로 바꿔 적으면 ② 가 보지 못하므로, **표시 자체가 없어지는 것**을 막는다.
  *  ⑤ 버전·브랜치 — "지금 상태" 문서가 적은 `vX.Y.Z` 와 `feat/...` 브랜치 이름이 **실물과 같아야** 한다.
  *     291(리뷰 M-5): `MASTER-DEVELOPMENT-STATUS.md` 에는 `(package.json)` 표기가 **적어도 하나** 있어야 한다 —
  *     그 표기가 없으면 버전 검사가 **아무것도 보지 않는** 상태가 된다(마커를 안 적으면 검사 밖인 구조).
@@ -78,7 +81,8 @@ function hashOf(line) {
  * 뒤의 **현재 숫자까지 함께 면제**됐다 — 가드가 존재하는 이유를 정면으로 비켜 간다. 앞쪽 12자만 본다.
  */
 function markedPast(text, at, len) {
-  return /당시[\s)\]]*$/.test(text.slice(Math.max(0, at - 12), at));
+  // 298(리뷰 LOW-6): `당시(11-24) 54모듈`·`당시 기준 54모듈` 도 과거다 — 괄호·"기준" 까지 허용한다
+  return /당시[\s)\]]*$|당시\s*\([^)]*\)\s*$|당시 기준\s*$/.test(text.slice(Math.max(0, at - 24), at));
 }
 
 /** 문서가 주장하는 숫자들 */
@@ -98,15 +102,16 @@ function claimedNumbers(text) {
   // 같은 줄에 "묶음" 이 있으면 범위로 보고, 같은 줄의 `묶음 N개`·`N묶음` 은 **그 범위의 묶음 수**와 맞춘다.
   for (const line of text.split(/\r?\n/)) {
     if (!line.includes('묶음')) continue;
-    // **문서가 말하는 자기 범위**만 본다. 범위를 전부 보면 "리뷰(196~198)"·"exe 재빌드(288~290 포함)" 처럼
-    // 특정 묶음 묶음을 가리키는 **참조**까지 "낡았다" 고 말한다(294 에서 실제로 거짓 경고 7건). 표시는 셋이다:
-    //  ① 개수를 함께 적었다(`218~293 묶음 76개`) ② 바로 앞이 "묶음"(`묶음 218~293`) ③ 자기 범위를 뜻하는 말이 같은 줄에 있다
+    // 298(293~296 리뷰 M-4): 294 는 **면제가 기본**이었다 — 자기 범위 표시 셋(개수 동반·앞의 "묶음"·힌트)
+    // 중 하나도 없으면 검사하지 않았다. 그래서 "지금까지 218~290 을 끝냈습니다" 처럼 **조금만 다르게 쓰면
+    // 낡은 주장이 그대로 통과**했다(리뷰가 샌드박스로 재현). 이제 "묶음" 이 있는 줄의 범위는 **기본으로 검사**하고,
+    // **참조 표시**가 있는 자리만 면제한다 — 294 가 덫으로 고정한 거짓 경고 7건(리뷰·exe·주기)은 그 목록이 그대로 막는다.
     const SCOPE_HINT = /완료 묶음|묶음 범위|출장 기간|지점이 보는 변화/;
     // 개수 표기는 **그 앞의 가장 가까운 범위**에만 붙인다 — 한 줄에 범위가 둘이면(`155~264 묶음 110개 … (263~265 리뷰)`)
     // 모두에 붙여 엉뚱한 자리를 "맞지 않는다" 고 말했다 (294, 넓히면서 생긴 거짓 경고)
     // `3~4묶음마다` 는 개수가 아니라 **주기**다 — 개수로 세면 엉뚱한 범위에 붙는다 (294)
     const counts = [...line.matchAll(/묶음 (\d+)개|(?<![~\d])(\d+)묶음(?!마다)/g)].map(c => ({ at: c.index, n: Number(c[1] ?? c[2]), raw: c[0] }));
-    const ranges = [...line.matchAll(/(\d{3})\s*~\s*(\d{3})/g)];
+    const ranges = [...line.matchAll(/(\d{3,4})\s*~\s*(\d{3,4})/g)]; // 298(리뷰 LOW-7): 네 자리가 되면 `1000~1002` 를 `000~100` 으로 읽었다
     for (const m of ranges) {
       if (/^\s*\(\d+개\)/.test(line.slice(m.index + m[0].length, m.index + m[0].length + 12))) continue; // 누계 표기는 cumulative 가 센다
       if (/누계 155~/.test(line.slice(Math.max(0, m.index - 6), m.index + 4))) continue;
@@ -117,10 +122,14 @@ function claimedNumbers(text) {
       // 멀리 떨어진 개수를 끌어다 쓰면 엉뚱한 자리를 "맞지 않는다" 고 말한다 (294)
       const near = after.length > 0 && after[0].at - end <= 15 && !ranges.some(r => r.index > m.index && r.index < after[0].at);
       const owned = near ? after[0] : null;
+      // **자기 범위 표시**가 있는 자리만 본다 — 개수 동반·바로 앞의 "묶음"·앞 30자의 자기 범위 말.
+      // 298 에서 "표시가 없으면 기본 검사" 로 뒤집어 봤더니 **역사 줄에 거짓 경고 10건**이 났다
+      // (`(완료 278~282)`·`155~183 은 v1.0.62 로 릴리스됨`·갭 표의 `225~230`). 낡은 주장을 막으려고
+      // 과거 기록을 고치게 만드는 것은 이 가드가 금지하는 바로 그 일이다(리뷰 M-7 과 같은 이유).
+      // 리뷰 M-4 의 진짜 걱정("표시 없는 새 문장이 빠져나간다")은 **표시가 사라지는 것**을 검사 ⑥ 에서 막는다.
       const prefixed = /묶음\s*$/.test(line.slice(Math.max(0, m.index - 4), m.index));
-      // 자기 범위를 뜻하는 말도 **그 범위 앞 30자 안**에 있을 때만 — 줄 뒤쪽의 리뷰 참조까지 끌려오지 않게
       const hinted = SCOPE_HINT.test(line.slice(Math.max(0, m.index - 30), m.index));
-      if (!owned && !prefixed && !hinted) continue; // 참조는 검사하지 않는다
+      if (!owned && !prefixed && !hinted) continue;
       out.ranges.push({
         start: Number(m[1]), end: Number(m[2]), raw: m[0],
         count: owned ? owned.n : null,
@@ -192,6 +201,19 @@ function selftest() {
   // 294: 특정 묶음 묶음을 가리키는 **참조**는 자기 범위가 아니다 — 검사하지 않는다
   const ref = claimedNumbers('exe 재빌드(288~290 포함, 묶음 기록). 독립 리뷰(196~198) 반영.');
   if (ref.ranges.length !== 0) { console.error(`[selftest] 참조 면제 덫 실패: ${JSON.stringify(ref.ranges)}`); process.exit(1); }
+  // 298(리뷰 M-4): 표시가 없는 범위는 ② 가 보지 않는다(역사 줄을 고치게 만들지 않으려고) —
+  // 그 대신 검사 ⑥ 이 "표시된 범위가 문서에 하나도 없으면" 실패한다. 둘이 짝이다.
+  const plain = claimedNumbers('지금까지 218~290 을 끝냈습니다(묶음 목록은 로드맵에).');
+  if (plain.ranges.length !== 0) { console.error(`[selftest] 표시 없는 범위는 ② 밖이어야 한다: ${JSON.stringify(plain.ranges)}`); process.exit(1); }
+  const marked = claimedNumbers('- **완료 묶음**: 218~290');
+  if (marked.ranges.length !== 1) { console.error('[selftest] 표시된 범위 수집 실패'); process.exit(1); }
+  // 298(리뷰 LOW-6·LOW-7)
+  const past2 = claimedNumbers('당시(11-24) 54모듈 이었다');
+  if (past2.rules.length !== 0) { console.error('[selftest] 당시(괄호) 덫 실패'); process.exit(1); }
+  const past3 = claimedNumbers('당시 기준 54모듈 이었다');
+  if (past3.rules.length !== 0) { console.error('[selftest] 당시 기준 덫 실패'); process.exit(1); }
+  const four = claimedNumbers('묶음 1000~1002 진행');
+  if (four.ranges.length !== 1 || four.ranges[0].end !== 1002) { console.error(`[selftest] 네 자리 묶음 덫 실패: ${JSON.stringify(four.ranges)}`); process.exit(1); }
   const mixedLine = claimedNumbers('- **완료 묶음**: 218~293 (PR #58). 리뷰 반영(285~287)·3~4묶음마다 exe');
   if (mixedLine.ranges.length !== 1 || mixedLine.ranges[0].end !== 293) { console.error(`[selftest] 한 줄에 섞인 참조 덫 실패: ${JSON.stringify(mixedLine.ranges)}`); process.exit(1); }
   const scoped = claimedNumbers('- **완료 묶음**: 218~293 (PR #58, 묶음 기록)');
@@ -208,7 +230,7 @@ function selftest() {
   // 291(리뷰 M-5): 브랜치 이름 뒤 마침표를 먹지 않는다
   const br = /feat\/[A-Za-z0-9_\/-]+(?:\.[A-Za-z0-9_\/-]+)*/.exec('브랜치 feat/post-v1.0.63-2026-11-25.');
   if (br[0] !== 'feat/post-v1.0.63-2026-11-25') { console.error(`[selftest] 브랜치 마침표 덫 실패: ${br[0]}`); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 18개(숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조) 통과');
+  console.log('[check-docs-claims] selftest OK — 덫 23개(숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -339,6 +361,22 @@ const problems = [];
   }
 }
 
+// ⑥ 자기 범위를 말하는 문서는 **표시된 범위**를 하나 이상 가져야 한다 (298, 293~296 리뷰 M-4)
+//
+// ② 는 "자기 범위 표시가 있는 자리" 만 본다 — 표시 없이 "지금까지 218~290 을 끝냈습니다" 로 바꿔 적으면
+// 검사 밖이 된다(리뷰가 샌드박스로 재현). 표시를 **기본 검사**로 뒤집으면 역사 줄에 거짓 경고가 쏟아지므로,
+// 대신 **표시 자체가 사라지는 것**을 막는다: 아래 문서들은 "완료 묶음: NNN~MMM"·"묶음 NNN~MMM"·
+// "NNN~MMM 묶음 N개" 같은 표시된 범위를 적어도 하나 가져야 한다. 그 한 줄이 ② 의 검사 대상이다.
+{
+  const SCOPED_DOCS = ['docs/NEXT-ACTION.md', 'docs/OWNER-BRIEFING-2026-11-30.md', 'docs/MASTER-DEVELOPMENT-STATUS.md'];
+  for (const rel of SCOPED_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    if (claimedNumbers(read(rel)).ranges.length === 0) {
+      problems.push(`${rel}: 자기 범위를 **표시된 형태**로 적은 자리가 없다 — "완료 묶음: NNN~MMM" 처럼 적으세요(그러면 검사 ② 가 그 범위를 지킵니다)`);
+    }
+  }
+}
+
 // ⑤-2 "지금 상태" 문서에 버전 마커가 하나도 없으면 ⑤ 의 버전 검사가 비어 있다 (291, 리뷰 M-5)
 {
   const STATUS = 'docs/MASTER-DEVELOPMENT-STATUS.md';
@@ -353,4 +391,4 @@ if (problems.length > 0) {
   console.error('  → 기록을 사실로 고치세요(과거 날짜 기록은 그대로 두고, "지금 상태" 문서만 갱신합니다).');
   process.exit(1);
 }
-console.log('[check-docs-claims] OK — 묶음 해시 실재·지금 상태 숫자·문서 포인터·리뷰 반영 표시·버전/브랜치 전부 확인');
+console.log('[check-docs-claims] OK — 묶음 해시 실재·지금 상태 숫자·문서 포인터·리뷰 반영 표시·버전/브랜치·자기 범위 표시 전부 확인');
