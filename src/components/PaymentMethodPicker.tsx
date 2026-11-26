@@ -1,5 +1,5 @@
 import { isImeKey } from '../lib/ime';
-import { describePrefLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (296)
+import { describePrefLoss, describePrefRemovalLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (296·297)
 import { prefSaveMode } from '../lib/prefSaveMode';
 import { notify } from '../lib/notify';
 import { josa } from '../lib/josa';
@@ -61,8 +61,10 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
                 aria-label={`${m} 삭제`}
                 onClick={() => {
                   if (!confirm(`결제수단 ${josa(`'${m}'`, '을/를')} 목록에서 삭제할까요? (기존 결제 기록은 유지됩니다)`)) return;
-                  removeCustomPaymentMethod(m);
+                  // 297(리뷰 M-2): 추가만 고치고 같은 화면의 삭제는 판정을 버렸다 — 다시 열면 지운 칩이 돌아온다
+                  const lostRemove = describePrefRemovalLoss(removeCustomPaymentMethod(m), '결제수단', prefSaveMode());
                   setMethods(getAllPaymentMethods());
+                  if (lostRemove) notify.error(lostRemove);
                   if (selectable && value === m) onChange('카드');
                 }}
                 className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${selectable && value === m ? 'text-white/70 hover:text-white' : 'text-gray-300 hover:text-red-600'}`}

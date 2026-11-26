@@ -4,7 +4,7 @@
 // 규칙은 memoPresetRule.ts(순수).
 import { getPreference, setPreference } from './shopPreferences';
 import { sanitizePresets, addPreset, removePreset } from './memoPresetRule';
-import { describePrefLoss } from './prefLandedRule';
+import { describePrefLoss, describePrefRemovalLoss } from './prefLandedRule';
 import { prefSaveMode } from './prefSaveMode';
 
 export function memoPresets(): string[] {
@@ -33,7 +33,7 @@ export function deleteMemoPreset(value: string): { list: string[]; error?: strin
   const next = removePreset(memoPresets(), value);
   try {
     const landed = setPreference('memoPresets', next); // (286) 판정은 한 곳에서
-    const lost = describePrefLoss(landed, '문구 삭제', prefSaveMode()); // 296
+    const lost = describePrefRemovalLoss(landed, '문구', prefSaveMode()); // 296·297(리뷰 M-3)
     if (lost) return { list: memoPresets(), error: lost };
     return { list: memoPresets() };
   } catch {

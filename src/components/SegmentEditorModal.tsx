@@ -1,6 +1,6 @@
 // SegmentEditorModal — 저장 세그먼트(조건 조합) 만들기·수정 (비코어, 166, GAP C-6·M-2). 규칙 segmentFilterRule, 보관 savedSegments
 import { useMemo, useState } from 'react';
-import { describePrefLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (296)
+import { describePrefLoss, describePrefRemovalLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (296·297)
 import { prefSaveMode } from '../lib/prefSaveMode';
 import Modal from './ui/Modal';
 import { notify } from '../lib/notify';
@@ -39,7 +39,7 @@ export default function SegmentEditorModal({ segment, facts, tagOptions, onClose
   const remove = async () => {
     if (!segment) return;
     if (!(await askConfirm({ title: '세그먼트 삭제', message: `"${segment.name}" 세그먼트를 삭제할까요? 고객 자료는 그대로입니다.`, confirmLabel: '삭제', danger: true }))) return;
-    const lostDelete = describePrefLoss(deleteSegment(segment.id), '세그먼트 삭제', prefSaveMode()); // 296
+    const lostDelete = describePrefRemovalLoss(deleteSegment(segment.id), '세그먼트', prefSaveMode()); // 296·297(리뷰 M-3)
     if (lostDelete) notify.error(lostDelete); else notify.success('세그먼트를 삭제했습니다.');
     onSaved();
   };

@@ -34,6 +34,18 @@ export function prefLanded(persisted: unknown, wanted: unknown): PrefLanded {
   return sameValue(persisted, wanted) ? 'landed' : 'lost';
 }
 
+/**
+ * 되읽은 값이 **없을 때**(그 칸이 아직 없거나 행을 못 읽음) 주장이 "없음과 같다" 면 **잃은 것이 없다** (297, 293~296 리뷰 H-1).
+ * 왜: 294 가 "렌더마다 되읽기" 로 바꾸면서, **마감을 한 번도 하지 않은 매장**의 매출 카드에 빨간
+ * "이 PC 에 저장 안 됨" 배지가 떴다 — 메모리는 `[]`, 디스크에는 그 칸이 아예 없어 `'lost'` 로 갈렸다.
+ * 아무것도 저장하려 하지 않은 자리에서 "저장 안 됨" 이라고 말하면 그것이 거짓이고, 늑대 소년이 된다.
+ * 되읽은 값이 있으면(예: 디스크엔 마감이 남았는데 메모리는 비었다 = 마감 해제가 안 남았다) 그대로 비교한다.
+ */
+export function prefLandedWithAbsent(persisted: unknown, wanted: unknown, absentIs: unknown): PrefLanded {
+  if ((persisted === null || persisted === undefined) && sameValue(wanted, absentIs)) return 'landed';
+  return prefLanded(persisted, wanted);
+}
+
 /** 설정 값 비교 — 객체·배열은 내용으로, 나머지는 값으로. 키 순서는 보지 않는다 */
 export function sameValue(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true; // NaN 끼리도 같다고 본다 — 되읽은 NaN 을 "사라짐" 으로 말하지 않는다 (285, 리뷰 LOW)
@@ -63,6 +75,22 @@ export function describePrefLoss(state: PrefLanded, what: string, mode: PrefSave
     return `${josa(what, '이/가')} 이 PC 에 저장되지 않았습니다(저장 공간이 모자랍니다). 중앙 서버에는 올라갔을 수 있어 사라진다고 단정할 수 없습니다 — 공간을 비우고 프로그램을 다시 열어 값이 남았는지 확인해주세요.`;
   }
   return `${josa(what, '이/가')} 이 PC 에 저장되지 않았습니다(저장 공간이 모자랍니다). 공간을 비운 뒤 다시 저장해주세요 — 지금 화면의 값은 프로그램을 다시 열면 사라집니다.`;
+}
+
+/**
+ * 지운 것이 남지 않았을 때의 말 (297, 293~296 리뷰 M-3).
+ * `describePrefLoss` 는 "공간을 비운 뒤 **다시 저장**해주세요 — 지금 화면의 값은 다시 열면 **사라집니다**" 라고
+ * 적는다. 삭제 자리에서는 둘 다 틀린 말이다 — 사용자가 할 일은 "다시 지우기" 고, 다시 열면 **지운 것이 돌아온다**.
+ * 296 이 파기 대장에서만 이것을 알아보고 전용 문구를 만들었는데, 삭제형 여섯 자리에는 적용하지 않았다.
+ */
+export function describePrefRemovalLoss(state: PrefLanded, what: string, mode: PrefSaveMode): string | null {
+  if (state === 'landed') return null;
+  if (state === 'invalid') return `${josa(what, '을/를')} 지우지 못했습니다 — 넘어온 값의 형식이 올바르지 않아 아무것도 바꾸지 않았습니다.`;
+  if (state === 'unknown') return `${josa(what, '을/를')} 지웠지만 이 PC 에서 확인할 수 없었습니다(저장 공간·브라우저 설정). 프로그램을 다시 열어 정말 지워졌는지 확인해주세요.`;
+  if (mode === 'server-backed') {
+    return `${josa(what, '을/를')} 지운 것이 이 PC 에 저장되지 않았습니다(저장 공간이 모자랍니다). 중앙 서버에는 올라갔을 수 있어 단정할 수 없습니다 — 공간을 비우고 프로그램을 다시 열어 확인해주세요.`;
+  }
+  return `${josa(what, '을/를')} 지운 것이 이 PC 에 저장되지 않았습니다(저장 공간이 모자랍니다). 공간을 비운 뒤 다시 지워주세요 — 프로그램을 다시 열면 그 항목이 돌아옵니다.`;
 }
 
 /**

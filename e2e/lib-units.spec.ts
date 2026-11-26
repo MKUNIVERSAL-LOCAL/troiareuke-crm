@@ -43,7 +43,7 @@ import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLe
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
 import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, describeDrillFooter, describeDrillTruncation, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
-import { prefLanded, sameValue, describePrefLoss, prefLossNote } from '../src/lib/prefLandedRule';
+import { prefLanded, prefLandedWithAbsent, sameValue, describePrefLoss, describePrefRemovalLoss, prefLossNote } from '../src/lib/prefLandedRule';
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
@@ -3089,6 +3089,24 @@ test('설정 저장 판정 — 남음·사라짐·확인 불가를 가린다 (28
   // 290(리뷰 LOW-7): 형식이 틀려 **아무것도 바꾸지 않은 것**을 "저장 공간" 탓으로 말하지 않는다
   expect(describePrefLoss('invalid', '월 마감', 'local-only')).toContain('형식이 올바르지 않아');
   expect(describePrefLoss('invalid', '월 마감', 'local-only')).not.toContain('저장 공간');
+
+  // 297(293~296 리뷰 H-1): **아무것도 주장하지 않았으면 잃은 것도 없다** — 294 가 "렌더마다 되읽기" 로
+  // 바꾸면서, 마감을 한 번도 하지 않은 매장(디스크에 그 칸이 없다)에 "저장 안 됨" 배지가 떠 있었다
+  expect(prefLandedWithAbsent(undefined, [], [])).toBe('landed');  // 칸이 아직 없고 주장도 빈 목록
+  expect(prefLandedWithAbsent(null, [], [])).toBe('landed');       // 행 자체를 못 읽어도 주장이 없으면 잃은 것이 없다
+  expect(prefLandedWithAbsent(undefined, ['2026-11'], [])).toBe('lost');     // 마감을 했는데 칸이 없다 = 안 남았다
+  expect(prefLandedWithAbsent(['2026-11'], [], [])).toBe('lost');            // 디스크엔 남았는데 메모리는 비었다 = 마감 해제가 안 남았다
+  expect(prefLandedWithAbsent(['2026-11'], ['2026-11'], [])).toBe('landed');
+
+  // 297(리뷰 M-3): 삭제 자리에 "다시 저장해주세요 … 사라집니다" 가 나가던 것 — 할 일도, 결과도 반대다
+  expect(describePrefRemovalLoss('landed', '세그먼트', 'local-only')).toBeNull();
+  expect(describePrefRemovalLoss('lost', '세그먼트', 'local-only')).toContain('지운 것이 이 PC 에 저장되지 않았습니다');
+  expect(describePrefRemovalLoss('lost', '세그먼트', 'local-only')).toContain('다시 지워주세요');
+  expect(describePrefRemovalLoss('lost', '세그먼트', 'local-only')).toContain('그 항목이 돌아옵니다');
+  expect(describePrefRemovalLoss('lost', '세그먼트', 'local-only')).not.toContain('다시 저장해주세요');
+  expect(describePrefRemovalLoss('lost', '자원', 'server-backed')).toContain('중앙 서버에는 올라갔을 수 있어');
+  expect(describePrefRemovalLoss('unknown', '문구', 'local-only')).toContain('정말 지워졌는지 확인해주세요');
+  expect(describePrefRemovalLoss('lost', '결제수단', 'local-only')).toContain('결제수단을 지운 것이'); // 조사도 josa 로
 
   // 290(리뷰 M-2): 토스트는 사라지므로 화면에 남겨 두는 짧은 표시 — 남았으면 아무것도 적지 않는다
   expect(prefLossNote('landed', 'local-only')).toBeNull();

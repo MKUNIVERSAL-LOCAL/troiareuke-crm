@@ -5,7 +5,7 @@
 // 한 번 이관(migrate)한 뒤 (3) 저장은 항상 SettingsStore.save로 해 서버에 반영한다.
 // localStorage는 오프라인·즉시 반응용 캐시로만 남긴다.
 import { SettingsStore, getShopId } from './store';
-import { prefLanded, type PrefLanded } from './prefLandedRule';
+import { prefLanded, prefLandedWithAbsent, type PrefLanded } from './prefLandedRule';
 import type { ShopPreferences } from '../types';
 
 type PrefKey = keyof ShopPreferences;
@@ -66,8 +66,11 @@ export function migrateLegacyPreference<K extends PrefKey>(
  * 저장 직후 판정을 state 로 들고 있으면 **창을 다시 그릴 때 사라진다** — 그러면 거짓인 잠금 배지만 남는다.
  * 렌더마다 이 함수로 되읽으면 리마운트·재방문에도 사실이 유지된다.
  */
-export function preferenceLanded<K extends PrefKey>(key: K, wanted: ShopPreferences[K]): PrefLanded {
-  return prefLanded(readPersistedPreference(key), wanted);
+export function preferenceLanded<K extends PrefKey>(key: K, wanted: ShopPreferences[K], opts?: { absentIs: ShopPreferences[K] }): PrefLanded {
+  const persisted = readPersistedPreference(key);
+  // 297(293~296 리뷰 H-1): 그 칸이 아직 없는데 주장도 "없음과 같다" 면 잃은 것이 없다
+  if (opts) return prefLandedWithAbsent(persisted, wanted, opts.absentIs);
+  return prefLanded(persisted, wanted);
 }
 
 /**

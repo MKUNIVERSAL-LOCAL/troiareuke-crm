@@ -9,6 +9,13 @@ import { dialog, registerPayment, registerExpense, expectSales, toast } from './
 
 const acc = makeAccount('RM');
 
+/**
+ * 297(293~296 리뷰 H-1): 마감을 한 번도 하지 않은 매장에 "이 PC 에 저장 안 됨" 배지가 떠 있었다 —
+ * 294 가 표시를 "렌더마다 되읽기" 로 바꾸면서 **빈 주장**(메모리 `[]` vs 디스크에 칸 없음)을 손실로 읽었다.
+ * 아무것도 저장하려 하지 않은 자리에서 "저장 안 됨" 을 띄우면 그 화면이 거짓이고, 정작 진짜 실패 때
+ * 아무도 믿지 않는다. 그래서 **쓰기를 막지 않은 보통 상태에서는 그 배지가 없어야 한다**.
+ */
+
 test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ page, context }) => {
   test.slow();
   test.skip(isNearMidnightSeoul(), '자정 경계 — 결제일과 보는 달이 달라진다');
@@ -19,6 +26,8 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await expectSales(page, { total: '50,000원' });
 
   const card = page.getByTestId('revenue-metrics');
+  // 297: 아무것도 저장하려 하지 않은 상태 — '이 PC 에 저장 안 됨' 배지는 없어야 한다(리뷰 H-1)
+  await expect(card.getByTestId('month-close-unsaved')).toHaveCount(0);
   await expect(card).toBeVisible();
   await expect(card.getByTestId('metric-achievement')).toHaveText('—');
   // 282(리뷰 L-9): 분모·내역 줄에 testid 가 없어 가드도 스펙도 안 보던 돈 칸 7개 — **그 칸이 말해야 하는 값**으로 고정한다.
@@ -86,6 +95,7 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await card.getByRole('button', { name: '월 마감' }).click();
   await page.getByRole('dialog', { name: '월 마감', exact: true }).getByRole('button', { name: '마감', exact: true }).click();
   await expect(card.getByTestId('month-closed-badge')).toBeVisible();
+  await expect(card.getByTestId('month-close-unsaved')).toHaveCount(0); // 297: 제대로 저장됐으면 경고도 없다
   await visibleButton(page, '결제 등록').click();
   const pay = dialog(page, '결제 등록');
   await expect(pay).toBeVisible();
@@ -113,6 +123,7 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await card.getByRole('button', { name: '마감 해제' }).click();
   await page.getByRole('dialog', { name: '월 마감 해제', exact: true }).getByRole('button', { name: '마감 해제', exact: true }).click();
   await expect(card.getByTestId('month-closed-badge')).toHaveCount(0);
+  await expect(card.getByTestId('month-close-unsaved')).toHaveCount(0); // 297: 마감 해제도 남았다
   await registerPayment(page, acc, 10000);
   await expectSales(page, { total: '60,000원' });
   await expect(card.getByTestId('metric-achievement')).toHaveText('60%');

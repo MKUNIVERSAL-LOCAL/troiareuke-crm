@@ -26,7 +26,9 @@ export function closeMonth(month: string): PrefLanded {
  * 토스트는 몇 초 뒤 사라지고 잠금 배지는 남으므로, 화면이 **렌더마다** 이 값을 물어 사실을 함께 적는다.
  */
 export function monthCloseSaved(): PrefLanded {
-  return preferenceLanded('closedMonths', closedMonths());
+  // 297(293~296 리뷰 H-1): 마감을 한 번도 하지 않은 매장은 디스크에 그 칸이 **아예 없다** —
+  // 그 상태를 "저장 안 됨" 으로 말하면 거짓이다(배지가 매일 떠 있었다). 주장이 빈 목록이면 잃은 것이 없다.
+  return preferenceLanded('closedMonths', closedMonths(), { absentIs: [] });
 }
 
 export function reopenMonth(month: string): PrefLanded {

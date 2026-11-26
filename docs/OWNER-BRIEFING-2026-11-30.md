@@ -66,7 +66,7 @@ B-2(서버 배포 묶음) · B-4(캠페인 서버 디스패처) · C-7/C-8(본�
 
 | 장치 | 무엇을 막는가 | 어디서 돌아가는가 |
 |---|---|---|
-| `npm run check:rules` | **테스트가 한 번도 부르지 않는 공식**(순수 규칙 55모듈·235함수 전부 호출 확인) | client-ci · release:all · release:checks · 묶음 게이트 |
+| `npm run check:rules` | **테스트가 한 번도 부르지 않는 공식**(순수 규칙 55모듈·237함수 전부 호출 확인) | client-ci · release:all · release:checks · 묶음 게이트 |
 | `npm run check:testids` | **스펙이 한 번도 보지 않는 화면 칸**(223칸 중 218칸 덮임, 남은 5칸은 사유를 스크립트에 적음) | 같음 |
 | `npm run check:modal-a11y` | **접근성 검사가 한 번도 열지 않는 창**(창 자리 56개 중 42자리 덮임, 남은 10개는 사유를 적음 — 289 신설) | 같음 |
 | `npm run gate:light` | 묶음마다 tsc·빌드·불변 검사·스모크·코어 잠금을 한 번에(`.gate/gateNN.log`) | 세션에서 수동 |

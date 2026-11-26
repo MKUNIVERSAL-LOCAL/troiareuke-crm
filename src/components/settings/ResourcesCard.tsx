@@ -5,7 +5,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { notify } from '../../lib/notify';
 import { askConfirm } from '../../lib/confirmDialog';
 import { josa } from '../../lib/josa';
-import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (292, 리뷰 M-3)
+import { describePrefLoss, describePrefRemovalLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (292·297)
 import { prefSaveMode } from '../../lib/prefSaveMode';
 import { allResources, saveResources, removeResource, newResourceId } from '../../lib/resourceStore';
 import { RESOURCE_KIND_LABEL } from '../../lib/resourceRule';
@@ -41,12 +41,12 @@ export default function ResourcesCard() {
       if (!ok) return;
       const forced = removeResource(r.id, true);
       setList(allResources());
-      const lostForced = describePrefLoss(forced.landed, '자원 삭제', prefSaveMode());
+      const lostForced = describePrefRemovalLoss(forced.landed, '자원', prefSaveMode()); // 297(리뷰 M-3)
       if (lostForced) notify.error(lostForced); else notify.info(`${josa(r.name, '을/를')} 삭제했습니다.`);
       return;
     }
     setList(allResources());
-    const lost = describePrefLoss(first.landed, '자원 삭제', prefSaveMode());
+    const lost = describePrefRemovalLoss(first.landed, '자원', prefSaveMode()); // 297(리뷰 M-3)
     if (lost) notify.error(lost); else notify.info(`${josa(r.name, '을/를')} 삭제했습니다.`);
   };
 

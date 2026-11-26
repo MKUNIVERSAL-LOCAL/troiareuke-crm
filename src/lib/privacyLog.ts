@@ -24,6 +24,12 @@ const MAX_KEEP = 100; // 설정 payload 를 작게 — 100건이면 1년치 파�
  */
 export const PRIVACY_LOG_LOST = '개인정보 처리는 끝났지만 파기 대장 기록이 이 PC 에 남지 않았습니다(저장 공간). 공간을 비운 뒤 설정 > 알림 설정의 파기 대장에서 확인해주세요 — 그 처리를 다시 할 필요는 없습니다.';
 
+/**
+ * 대장이 남았는지 **확인할 수 없었을** 때 (297, 293~296 리뷰 LOW-1).
+ * 296 은 `'lost'` 만 알렸다 — 설정 행을 읽을 수 없는 PC 에서는 되돌릴 수 없는 처리를 하고도 **아무 말도 하지 않았다**.
+ */
+export const PRIVACY_LOG_UNKNOWN = '개인정보 처리는 끝났지만 파기 대장에 남았는지 이 PC 에서 확인할 수 없었습니다. 설정 > 알림 설정의 파기 대장에서 확인해주세요 — 그 처리를 다시 할 필요는 없습니다.';
+
 
 export function listPrivacyActions(): PrivacyAction[] {
   const list = getPreference('privacyActions');

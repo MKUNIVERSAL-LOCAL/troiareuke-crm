@@ -1,6 +1,6 @@
 // CampaignsCard — 문자/카카오 발송 > 자동 발송(캠페인) 목록 (비코어, 156, GAP M-3). 옛 "자동 발송 준비 중" 장식 블록을 대체
 import { useMemo, useState } from 'react';
-import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296)
+import { describePrefLoss, describePrefRemovalLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296·297)
 import { prefSaveMode } from '../../lib/prefSaveMode';
 import { Zap, Pencil, Trash2, Plus, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
@@ -52,7 +52,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
 
   const remove = async (c: Campaign) => {
     if (!(await askConfirm({ title: '캠페인 삭제', message: `"${c.name}" 캠페인을 삭제할까요? 발송 기록은 남습니다.`, confirmLabel: '삭제', danger: true }))) return;
-    const lostDelete = describePrefLoss(deleteCampaign(c.id), '캠페인 삭제', prefSaveMode()); // 296
+    const lostDelete = describePrefRemovalLoss(deleteCampaign(c.id), '캠페인', prefSaveMode()); // 296·297(리뷰 M-3)
     refresh();
     if (lostDelete) notify.error(lostDelete); else notify.success('캠페인을 삭제했습니다.');
   };
@@ -112,7 +112,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 {canManage && (
-                  <label className="text-xs text-gray-600 flex items-center gap-1 mr-1"><input type="checkbox" checked={c.enabled} onChange={e => { setCampaignEnabled(c.id, e.target.checked); refresh(); }} className="rounded" aria-label={`${c.name} 사용`} />사용</label>
+                  <label className="text-xs text-gray-600 flex items-center gap-1 mr-1"><input type="checkbox" checked={c.enabled} onChange={e => { const lostToggle = describePrefLoss(setCampaignEnabled(c.id, e.target.checked), e.target.checked ? '캠페인 사용' : '캠페인 중지', prefSaveMode()); refresh(); if (lostToggle) notify.error(lostToggle); }} className="rounded" aria-label={`${c.name} 사용`} />사용</label>
                 )}
                 <button type="button" onClick={() => setRunning(c)} disabled={!c.enabled} className="px-3 py-1.5 text-xs font-medium text-[#1a3a8f] bg-blue-50 rounded-lg hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed">대상 확인·발송</button>
                 {canManage && (

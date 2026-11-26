@@ -72,7 +72,7 @@ import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule'
 import SegmentEditorModal from '../../components/SegmentEditorModal';
 import { CHURN_LABEL, CHURN_HIGH_RATIO } from '../../lib/churnRule';
 import { getCustomerValue } from '../../lib/customerValue';
-import { recordPrivacyAction, PRIVACY_LOG_LOST } from '../../lib/privacyLog';
+import { recordPrivacyAction, PRIVACY_LOG_LOST, PRIVACY_LOG_UNKNOWN } from '../../lib/privacyLog';
 import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
@@ -549,8 +549,12 @@ export default function Customers() {
         setRenaming(false);
         logCustomerEditBatch(renameRows, user?.name); // 태그 일괄 변경도 고객마다 이력에(저장은 한 번) (254 리뷰 H-2)
         setRenameFrom(null);
+        // 297(293~296 리뷰 H-2): "붙은 고객이 없다" 갈래만 알리고 **본 경로는 판정을 버렸다** —
+        // 고객 태그는 코어 고객 표에 저장되지만 태그 목록·세그먼트 조건은 설정 행이라 따로 실패할 수 있다
+        const lostBulk = describePrefLoss(savedMaster2.landed, '태그 목록', prefSaveMode()) ?? describePrefLoss(moved2.landed, '세그먼트 조건', prefSaveMode());
         const skipped = ids.length - applied;
         notify(`고객 ${applied}명의 태그를 "${target}" 으로 바꿨습니다${preview.merges > 0 ? ` (${preview.merges}명은 기존 태그와 합쳐짐)` : ''}${skipped > 0 ? ` · ${skipped}명은 그 사이 바뀌어 건너뜀` : ''}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개 조건도 함께 바꿈` : ''}.`);
+        if (lostBulk) notify.error(lostBulk); // 297(리뷰 H-2): 고객 태그는 바뀌었어도 목록·세그먼트 조건이 안 남았으면 그 사실을 적는다
         loadAll();
       };
       setTimeout(step, 0);
@@ -1364,6 +1368,7 @@ export default function Customers() {
     const logLanded = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' });
     notify(`고객 ${n}명을 익명화했습니다.`);
     if (logLanded === 'lost') notify.error(PRIVACY_LOG_LOST);
+    else if (logLanded === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN); // 297(리뷰 LOW-1)
     setSelected(null);
     loadAll();
   }
@@ -1685,6 +1690,7 @@ export default function Customers() {
     const logLandedOne = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
     notify('고객을 익명화했습니다.');
     if (logLandedOne === 'lost') notify.error(PRIVACY_LOG_LOST); // 296
+    else if (logLandedOne === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN); // 297(리뷰 LOW-1)
     const updated = CustomerStore.getById(selected.id);
     setSelected(updated ?? null);
     loadAll();
