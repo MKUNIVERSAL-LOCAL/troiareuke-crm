@@ -15,13 +15,14 @@ import MetricDetailModal from './MetricDetailModal';
  * 전에는 `${testId}-open` 으로 만들어서 화면 칸 커버리지 가드(276)가 그 버튼을 아예 못 봤다
  * (그래서 미사용 회원권 잔액 근거 버튼이 어느 스펙에도 없는데 가드가 침묵했다 — 277, 리뷰 M-2).
  */
-function Item({ label, value, sub, tip, testId, openTestId, tone, onOpen }: { label: string; value: string; sub?: string; tip: string; testId?: string; openTestId?: string; tone?: 'up' | 'down' | 'warn'; onOpen?: () => void }) {
+function Item({ label, value, sub, subTestId, tip, testId, openTestId, tone, onOpen }: { label: string; value: string; sub?: string; subTestId?: string; tip: string; testId?: string; openTestId?: string; tone?: 'up' | 'down' | 'warn'; onOpen?: () => void }) {
   const valueClass = `text-lg font-bold mt-0.5 ${tone === 'up' ? 'text-green-700' : tone === 'down' ? 'text-red-600' : tone === 'warn' ? 'text-amber-700' : 'text-gray-900'}`;
   const body = (
     <>
       <span className="block text-xs text-gray-400">{label}</span>
       <span className={`block ${valueClass}`} data-testid={testId}>{value}</span>
-      {sub && <span className="block text-2xs text-gray-500 mt-0.5 break-keep">{sub}</span>}
+      {/* 분모를 스펙이 함께 읽어 **그 숫자가 맞는지** 계산해 보게 한다 (278 — kpi 타일과 같은 방식) */}
+      {sub && <span className="block text-2xs text-gray-500 mt-0.5 break-keep" data-testid={subTestId}>{sub}</span>}
     </>
   );
   // 근거를 볼 수 있는 칸만 버튼이다 — 눌러도 아무 일 없는 칸을 버튼으로 만들지 않는다(장식 UI 금지, 260)
@@ -118,7 +119,7 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged, dril
         <Item label="미사용 회원권 잔액" value={formatPrice(m.unusedBalance)} sub="진행 중 회차권의 잔여 회차 × 회당 가격" tip="고객이 이미 낸 돈 중 아직 서비스하지 않은 몫(시점값)" tone={m.unusedBalance > 0 ? 'warn' : undefined} testId="metric-unused" openTestId="metric-unused-open"
           onOpen={openDrill('unused')} />
         <Item label="손익분기 매출" value={m.breakEven === null || m.sga === 0 ? '—' : formatPrice(m.breakEven)} sub={m.sga === 0 ? '판관비(임대료·인건비 등) 지출이 없으면 계산하지 않습니다' : `원가 ${formatPrice(m.cogs)} · 판관비 ${formatPrice(m.sga)}`} tip="판관비 ÷ (1 − 매출원가율). 판관비 0 또는 원가가 매출 이상이면 —" testId="metric-bep" />
-        <Item label="시간당 매출" value={m.perHour === null ? '—' : formatPrice(m.perHour)} sub={m.openHours === null ? '영업시간 설정 필요' : `영업 ${m.openHours}시간`} tip="매출 ÷ 영업시간(설정 > 영업시간, 휴무·지정 휴일 제외, 이달은 오늘까지)" />
+        <Item label="시간당 매출" value={m.perHour === null ? '—' : formatPrice(m.perHour)} testId="metric-per-hour" subTestId="metric-per-hour-sub" sub={m.openHours === null ? '영업시간 설정 필요' : `영업 ${m.openHours}시간`} tip="매출 ÷ 영업시간(설정 > 영업시간, 휴무·지정 휴일 제외, 이달은 오늘까지)" />
         <Item label={m.isCurrentMonth ? '월말 예상(예측)' : '월 매출'} value={m.isCurrentMonth ? (m.projected === null ? '—' : formatPrice(m.projected)) : formatPrice(m.total)} sub={m.isCurrentMonth ? `${m.daysElapsed}/${m.daysInMonth}일 경과 · 일평균 × 일수` : undefined} tip="이달에만: 지금까지 매출 ÷ 지난 일수 × 그 달 일수 — 예측값" testId="metric-projected" />
       </div>
       {canLock && (

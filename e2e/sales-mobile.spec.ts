@@ -1,5 +1,5 @@
-import { test } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer } from './helpers';
+import { test, expect } from '@playwright/test';
+import { makeAccount, signupAndOnboard, createCustomer, visibleButton } from './helpers';
 import { salesScenario } from './scenarios';
 
 /**
@@ -15,4 +15,14 @@ test('모바일 폭에서도 결제 → 지출 → 손익계산서 → 환불이
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
   await salesScenario(page, acc);
+
+  // 278(GAP Q-3): 이 파일 머리말이 `expense-mobile-list` 를 이름까지 적어 두고도 스펙은 그 목록을 보지 않았다
+  // (가드는 "스펙이 아직 없다" 고 셌지만, 사실은 흐름은 돌리고 **카드 한 줄의 내용**만 안 보던 것).
+  await visibleButton(page, /지출 내역 \(1\)/).click();
+  const expenses = page.getByTestId('expense-mobile-list');
+  await expect(expenses).toBeVisible();
+  await expect(expenses.getByRole('listitem')).toHaveCount(1);
+  await expect(expenses).toContainText('앰플 20개 매입');
+  await expect(expenses).toContainText('임대료');   // 시나리오가 바꾼 분류가 카드에도 보인다
+  await expect(expenses).toContainText('20,000원');
 });
