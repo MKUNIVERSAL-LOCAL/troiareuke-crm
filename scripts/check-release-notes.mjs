@@ -6,6 +6,9 @@
  *   1) 첫 줄은 "v<버전> 업데이트 내용" — package.json 버전이거나 아직 올리지 않은 다음 패치 버전(릴리스 준비 전)
  *   2) 맨 위 섹션에 항목(• 로 시작하는 줄)이 한 줄 이상 있다
  *   3) 배너 구간에 옛 버전 머리글이 들어오면 그 앞에 "지난 업데이트" 구분선이 있어야 한다 — 직원이 새 내용의 끝을 알 수 있게
+ *   4) 배너에 **절(■)이 둘 이상** 보인다 — 한 주제가 2000자를 삼키면 나머지는 직원에게 닿지 않는다 (299)
+ *   5) 한 절에 항목이 **12개를 넘지 않는다** — 묶음을 거듭하며 아무 절에나 붙이다 보면 "■ 영수증" 아래에
+ *      예약·재고·발송 이야기가 25개 쌓인다(299 에서 실제로 그랬다). 직원이 제목으로 찾을 수 없게 된다.
  * 실패하면 비 0 으로 끝난다. 자체 점검: node scripts/check-release-notes.mjs --selftest
  */
 import { readFile } from 'node:fs/promises';
@@ -49,6 +52,34 @@ export function checkReleaseNotes(text, pkgVersion) {
       }
     }
   }
+  // ④ 배너를 한 주제가 삼키지 않는가 (299)
+  const bannerText = body.trim().slice(0, BANNER_CHARS);
+  const bannerSections = [...bannerText.matchAll(/^■ (.+)$/gm)];
+  // 맨 위 절이 배너보다 길 때만 본다 — 노트가 짧으면 잘리는 것이 없고, 절 하나로도 충분하다 (299)
+  const topTrimmed = body.slice(0, topEnd).trim().length;
+  if (topTrimmed > BANNER_CHARS && bannerSections.length === 1) {
+    problems.push(`배너(앞 ${BANNER_CHARS}자)에 절이 하나뿐입니다("■ ${bannerSections[0][1].trim()}") — 지점이 매일 쓰는 변화가 뒤로 밀립니다. 절을 나누고 중요한 것을 위로 올리세요`);
+  }
+
+  // ⑤ 한 절에 몰아넣지 않는가 (299)
+  const MAX_PER_SECTION = 12;
+  const topEndLine = heads.length > 1 ? body.slice(0, topEnd).split('\n').length : lines.length;
+  let section = null, count = 0;
+  const tooBig = [];
+  for (let i = 0; i < topEndLine; i++) {
+    const line = lines[i] ?? '';
+    const h = /^■ (.+)$/.exec(line);
+    if (h) {
+      if (section && count > MAX_PER_SECTION) tooBig.push([section, count]);
+      section = h[1].trim(); count = 0; continue;
+    }
+    if (line.trimStart().startsWith('•')) count += 1;
+  }
+  if (section && count > MAX_PER_SECTION) tooBig.push([section, count]);
+  for (const [name, n] of tooBig) {
+    problems.push(`"■ ${name}" 절에 항목이 ${n}개입니다(최대 ${MAX_PER_SECTION}) — 주제별로 나누세요. 직원은 제목으로 찾습니다`);
+  }
+
   return problems;
 }
 
@@ -61,6 +92,12 @@ if (process.argv.includes('--selftest')) {
     ['머리글 버전 불일치', 'v9.9.9 업데이트 내용\n• 새 항목\n', '1.0.62', 1],
     ['맨 위 섹션에 항목 없음', 'v1.0.63 업데이트 내용\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 1],
     ['첫 줄 형식 아님', '릴리스 노트\n• 항목\n', '1.0.62', 1],
+    // 299: 배너를 한 절이 삼키면 알린다(절 하나 + 긴 항목)
+    ['배너에 절이 하나뿐', 'v1.0.63 업데이트 내용\n\n■ 한 주제\n• ' + 'ㄱ'.repeat(2100) + '\n', '1.0.62', 1],
+    ['배너에 절이 둘', 'v1.0.63 업데이트 내용\n\n■ 첫 주제\n• ' + 'ㄱ'.repeat(1000) + '\n\n■ 둘째 주제\n• ' + 'ㄴ'.repeat(1200) + '\n', '1.0.62', 0],
+    // 299: 한 절에 13개를 넣으면 알린다
+    ['한 절에 13개', 'v1.0.63 업데이트 내용\n\n■ 몰아넣은 절\n' + '• 항목\n'.repeat(13), '1.0.62', 1],
+    ['한 절에 12개는 통과', 'v1.0.63 업데이트 내용\n\n■ 괜찮은 절\n' + '• 항목\n'.repeat(12), '1.0.62', 0],
   ];
   let bad = 0;
   for (const [name, text, version, expected] of cases) {
@@ -83,4 +120,4 @@ if (problems.length > 0) {
   console.error(`배너는 앞 ${BANNER_CHARS}자만 보여줍니다 — 새 릴리스 항목을 맨 위 섹션에 두세요.`);
   process.exit(1);
 }
-console.log('[check-release-notes] OK — 첫 줄 버전·맨 위 섹션 항목·배너 구분선 확인');
+console.log('[check-release-notes] OK — 첫 줄 버전·맨 위 섹션 항목·배너 구분선·배너 절 수·절 크기 확인');
