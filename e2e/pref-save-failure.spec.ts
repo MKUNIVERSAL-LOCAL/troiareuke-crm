@@ -81,4 +81,16 @@ test('설정 저장이 실패하면 성공이라 말하지 않고, 사라진다�
   await expect(page.getByRole('dialog', { name: '결제 등록' })).toBeVisible();
   await expect(page.getByRole('dialog', { name: '결제 등록' })).toContainText('무통장입금'); // 이관 값은 화면에 보인다
   expect(await page.evaluate(() => localStorage.getItem('crm_custom_payment_methods'))).toContain('무통장입금'); // 유일한 사본이 그대로 있다
+
+  // ── ⑥ 293(288~292 리뷰 H-1): **설정 행을 아예 읽을 수 없을 때**(판정 '확인 불가')도 예전 값을 지우지 않는다 ──
+  // 290 은 "사라짐이 아니면 지운다" 로 막아 이 갈래가 열려 있었다 — 그 지점 설정 행이 아직 없는 PC(백업 복원 직후·새 지점)
+  // 에서는 되읽기가 null 이고 판정은 '확인 불가' 다. "남았는지 모른다" 는 "남았다" 가 아니다.
+  await page.evaluate(() => {
+    for (const k of Object.keys(localStorage)) if (/^crm_.*_settings$/.test(k)) localStorage.removeItem(k);
+  });
+  await page.goto('/sales'); // 설정 행이 없고 쓰기도 막혀 있다 → 되읽기 null → '확인 불가'
+  await page.getByRole('button', { name: '결제 등록' }).first().click();
+  await expect(page.getByRole('dialog', { name: '결제 등록' })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('crm_custom_payment_methods'))).toContain('무통장입금');
+  expect(await page.evaluate(() => Object.keys(localStorage).some(k => /^crm_.*_settings$/.test(k)))).toBe(false); // 행은 여전히 없다(= 확인 불가였다)
 });

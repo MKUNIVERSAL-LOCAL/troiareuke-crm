@@ -10,7 +10,7 @@ import { scan, assertNoBlocking, makeStep, type Row } from './a11y-shared';
 
 const ADMIN_ROUTES = [
   '/admin/dashboard', '/admin/branches', '/admin/users', '/admin/subscriptions', '/admin/subscriptions?view=ai',
-  '/admin/announcements', '/admin/statistics', '/admin/features', '/admin/login-logs',
+  '/admin/announcements', '/admin/statistics', '/admin/statistics?view=data', '/admin/features', '/admin/login-logs',
 ];
 
 const acc = makeAccount('AA');

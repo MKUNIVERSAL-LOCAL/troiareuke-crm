@@ -133,6 +133,7 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
   await page.goto('/products');
   await step('/products 제품 추가', async () => {
     await page.getByRole('button', { name: '제품 추가' }).first().click();
+    await expect(dialog('제품 추가')).toBeVisible(); // 창 이름으로도 확인 — 창 커버리지 가드가 이 자리를 센다 (293)
     await expect(page.getByPlaceholder('제품명 입력')).toBeVisible();
     await page.getByPlaceholder('제품명 입력').fill('접근성 세럼');
     await page.getByLabel('판매가').fill('30000');

@@ -3,12 +3,15 @@
  * 창 접근성 게이트 커버리지 가드 — **접근성 게이트(axe)가 한 번도 열지 않는 창**을 센다 (289, GAP Q-3).
  *
  * 왜: 288 에서 "실사 삭제 줄·매출 분모 줄은 접근성 쓸이 밖" 이라는 285 의 기록을 사실로 바꿨지만,
- * 그때 쓴 방법은 **게이트 파일을 눈으로 읽는 것**이었다. 창은 48자리에서 열린다 — 눈으로 세면
+ * 그때 쓴 방법은 **게이트 파일을 눈으로 읽는 것**이었다. 창은 수십 자리에서 열린다 — 눈으로 세면
  * 다음 창이 들어올 때 또 빠진다. 세는 방법을 여기 고정한다(276 화면 칸 가드와 같은 이유).
+ * 실행값(지금)은 `--list` 가 말한다 — 머리말에 숫자를 적어 두면 그 숫자가 먼저 낡는다(293, 리뷰 LOW-4).
  *
  * **이 가드가 세는 것과 세지 않는 것**(278 실수를 되풀이하지 않기 위해 분명히 적는다):
- *  - 세는 것: 아래 `GATES` 의 파일들이 그 창을 **열어 axe 로 보는지**. 그 파일들만 창을 연다
- *    (`a11y.spec`·`a11y-mobile.spec` 은 라우트만 돈다).
+ *  - 세는 것: 아래 `GATES` 의 파일들이 그 창을 **여는 자리에서 이름으로 집는지**. 그 파일들만 창을 연다
+ *    (`a11y.spec`·`a11y-mobile.spec` 은 라우트만 돈다). 293 전에는 게이트 파일의 **모든 문자열**을 긁어
+ *    **주석 한 줄만 적어도 통과**했다(리뷰 M-3 가 샌드박스로 재현). 이제 주석을 떼고
+ *    `getByRole('dialog', { name: … })`·`dialog('…')`·`getByTestId('…')` 에서만 모은다.
  *  - 세지 않는 것: 그 창이 **기능 스펙으로 시험되는지**. 예약 요청함·고객 병합·재고 이동 이력은
  *    전용 스펙이 이미 돌린다 — 다만 **대비·이름·포커스를 axe 로 본 적이 없다**. 사유를 적을 때 이 둘을
  *    섞으면 멀쩡한 화면을 미시험으로 적게 된다(278·277 리뷰 M-6 과 같은 종류의 잘못).
@@ -45,8 +48,14 @@ const GATES = [
   'e2e/a11y-admin.spec.ts',
 ];
 
-/** 공용 창틀 — 이름을 부르는 쪽이 주므로 창 자리로 세지 않는다 */
-const FRAMES = ['src/components/ui/Modal.tsx'];
+/**
+ * 공용 창틀 — 이름을 **부르는 쪽**이 주므로 창 자리로 세지 않고, 그 태그를 쓰는 자리를 창으로 센다.
+ * 293(리뷰 M-1): `AdminDialog` 를 창 하나로 접어 두었더니 어드민 창 10곳이 1자리로 보였고,
+ * 그 1자리에 적은 MARKER(`admin-dialog`)는 **어디에도 없는 문자열**이었다(= 영원히 미커버).
+ */
+const FRAMES = ['src/components/ui/Modal.tsx', 'src/components/admin/AdminDialog.tsx', 'src/components/admin/DangerConfirmModal.tsx'];
+/** 창틀 태그 — `<Modal …>`·`<AdminDialog …>`·`<DangerConfirmModal …>` 의 `title` 이 창 이름이 된다 */
+const FRAME_TAGS = ['Modal', 'AdminDialog', 'DangerConfirmModal'];
 
 /** 이름을 코드가 만드는 창 → 게이트가 그 창을 집는 문자열(testid 또는 제목 조각) */
 const MARKER = {
@@ -54,8 +63,10 @@ const MARKER = {
   'src/components/MetricDetailModal.tsx': 'metric-detail',
   'src/components/campaigns/CampaignRunModal.tsx': '캠페인 실행',
   'src/components/RevisitReminderCard.tsx': '재방문 안내 초안',
-  'src/components/admin/AdminDialog.tsx': 'admin-dialog',
   'src/pages/Auth/Login.tsx': '비밀번호 재설정',
+  'src/pages/Admin/AiService.tsx': '크레딧 지급',
+  'src/pages/Admin/Subscriptions.tsx': '구독 수정',
+  'src/components/admin/BackupRestoreView.tsx': '백업으로 복원',
 };
 
 /**
@@ -64,9 +75,18 @@ const MARKER = {
  */
 const ALLOWED = {
   '결제 요청': 'NAS 서버 모드 전용 창(PG 계약 전, GAP P-8·결정 #4) — 로컬 모드 게이트로는 띄울 수 없다',
-  '카메라 촬영': '앱(Capacitor) 카메라 오버레이 — 가짜 카메라로 여는 길은 before-after 스펙에만 있고, 그 상태에서 axe 를 돌리면 비디오 트랙이 떠 대비 측정이 흔들린다',
-  '상세 보기': '어드민 자료 탐색기 창 — 서버에 실제 자료가 있어야 줄을 눌러 열 수 있다(어드민 게이트는 라우트만 돈다)',
-  'src/components/admin/AdminDialog.tsx': '어드민 공용 창 — 지점 정지·요금제 변경처럼 서버 응답이 있어야 열린다(승인 대기)',
+  '카메라 촬영': '앱(Capacitor) 카메라 오버레이 — 가짜 카메라로 여는 길은 mobile·screenshots 스펙에 있다(before-after 가 아니다, 293 리뷰 M-2). 그 상태에서 axe 를 돌리면 비디오 트랙이 떠 대비 측정이 흔들린다',
+  '상세 보기': '어드민 자료 탐색기 창 — 그 화면(`/admin/statistics?view=data`)을 293 에서 어드민 라우트 쓸이에 넣었고, 줄을 눌러 창을 여는 것은 **서버에 실제 자료가 있어야** 된다',
+  '공지 수정': '어드민 공지 작성·수정 창 — 백엔드 공지 API 가 있어야 열린다(a11y-admin 머리말에 적어 둔 그 이유)',
+  '임시 비밀번호 발급됨': '어드민 사용자 창 — 인증 API 가 실제로 임시 비밀번호를 발급해야 뜬다',
+  '지점 신청 검토': '어드민 사용자 창 — 서버에 지점 신청 행이 있어야 열린다',
+  '사용기간 설정': '어드민 사용자 창 — 서버 계정 행이 있어야 열린다',
+  '관리자 초대': '어드민 사용자 창 — 인증 API 가 있어야 열린다',
+  '지점 완전 삭제': '어드민 위험 확인 창 — 서버 지점 행이 있어야 열린다(이름을 "지점 정지" 로 적었다가 가드가 "목록이 낡았다" 로 잡아 고쳤다)',
+  '계정 완전 삭제': '어드민 위험 확인 창 — 서버 계정 행이 있어야 열린다',
+  'src/pages/Admin/AiService.tsx': '어드민 크레딧 지급 창 — 서버 AI 사용량·크레딧 행이 있어야 열린다(승인 대기)',
+  'src/pages/Admin/Subscriptions.tsx': '어드민 구독 수정 창 — 서버 구독 행이 있어야 열린다',
+  'src/components/admin/BackupRestoreView.tsx': '어드민 백업 복원 창 — 서버 백업 목록이 있어야 열린다',
   '등급 올릴 후보': '방문·결제가 쌓인 고객이 있어야 후보가 생긴다 — 자료를 만드는 길이 grade-suggest 스펙에 있다 — 다음 창 묶음에서 옮긴다',
   '사진 크게 보기': '사진을 올린 뒤에만 열린다(가짜 파일로 올리는 길은 before-after 스펙에 있다) — 다음 창 묶음에서 옮긴다',
   '앱 잠금': 'PIN 을 켠 뒤 잠겨야 뜬다(screen-lock 스펙이 그 길을 돈다) — 다음 창 묶음에서 옮긴다',
@@ -109,13 +129,19 @@ function insideString(text, at) {
 
 function literals(expr) {
   const out = [];
-  for (const m of expr.matchAll(/"([^"\n]+)"|'([^'\n]+)'|`([^`\n${]+)`/g)) out.push(m[1] ?? m[2] ?? m[3]);
+  for (const m of expr.matchAll(/"([^"\n]+)"|'([^'\n]+)'|`([^`\n${]+)`/g)) {
+    const v = m[1] ?? m[2] ?? m[3];
+    // 템플릿 안의 따옴표까지 긁으면 `"${target.label}" 백업으로 복원` 에서 **변수 이름**이 창 이름이 된다 (293, 리뷰 발견)
+    if (v.includes('${') || /^\s*$/.test(v)) continue;
+    out.push(v);
+  }
   return out;
 }
 
 /** `attr=` 값을 태그에서 꺼낸다 — 리터럴이면 문자열들, `{…}` 면 그 안의 리터럴들(없으면 빈 배열) */
 function attrLiterals(tag, attr) {
-  const m = new RegExp(`${attr}=("[^"]*"|'[^']*'|\\{)`).exec(tag);
+  // `title=` 가 `subtitle=` 에 먼저 걸려 **부제목을 창 이름으로** 모으던 것을 막는다 (293, 리뷰 LOW-10)
+  const m = new RegExp(`(?:^|[\\s{])${attr}=("[^"]*"|'[^']*'|\\{)`).exec(tag);
   if (!m) return null;
   if (m[1] !== '{') return literals(m[1]);
   const start = tag.indexOf(m[0]) + m[0].length - 1;
@@ -133,7 +159,8 @@ function dialogSites(sources) {
   for (const { file, text } of sources) {
     if (FRAMES.includes(file)) continue;
     const add = (at, names) => sites.push({ file, line: text.slice(0, at).split('\n').length, names });
-    for (const m of text.matchAll(/<Modal[\s>]/g)) {
+    for (const m of text.matchAll(new RegExp(`<(?:${FRAME_TAGS.join('|')})[\\s>]`, 'g'))) {
+      if (insideString(text, m.index)) continue; // 주석·문자열 속 태그는 창이 아니다 (293, 리뷰 LOW-10)
       const tag = openTag(text, m.index);
       if (tag === null) continue;
       add(m.index, attrLiterals(tag, 'title') ?? []);
@@ -148,10 +175,33 @@ function dialogSites(sources) {
   return sites;
 }
 
-/** 게이트가 집는 문자열 전부(넓게 본다 — 변수에 담아 쓰는 경우를 놓치지 않게) */
+/** 주석을 떼어 낸 코드 — 문자열 안의 `//`(`http://`)는 주석이 아니다 */
+function stripComments(text) {
+  let out = text.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  out = out.split('\n').map(line => {
+    for (let i = 0; i < line.length - 1; i++) {
+      if (line[i] === '/' && line[i + 1] === '/' && !insideString(line, i)) return line.slice(0, i);
+    }
+    return line;
+  }).join('\n');
+  return out;
+}
+
+/**
+ * 게이트가 **창을 여는 자리에서** 집는 이름 — `getByRole('dialog', { name })`·`dialog('…')`·`getByTestId('…')`.
+ * 293(리뷰 M-3): 전에는 파일의 모든 문자열을 긁어 **주석 한 줄("'새 창' 은 다음에 연다")만 적어도 통과**했다.
+ */
 function gateStrings(gates) {
   const used = new Set();
-  for (const { text } of gates) for (const v of literals(text)) used.add(v);
+  const PATTERNS = [
+    /getByRole\(\s*['"]dialog['"]\s*,\s*\{\s*name:\s*(?:'([^'\n]+)'|"([^"\n]+)"|`([^`\n$]+)`)/g,
+    /\bdialog\(\s*(?:'([^'\n]+)'|"([^"\n]+)"|`([^`\n$]+)`)/g,
+    /getByTestId\(\s*(?:'([^'\n]+)'|"([^"\n]+)"|`([^`\n$]+)`)/g,
+  ];
+  for (const { text } of gates) {
+    const code = stripComments(text);
+    for (const re of PATTERNS) for (const m of code.matchAll(re)) used.add(m[1] ?? m[2] ?? m[3]);
+  }
   return used;
 }
 
@@ -208,10 +258,21 @@ function selftest() {
     console.error(`[selftest] 이름 없는 창 판정 실패: ${dynUn.map(u => u.key).join(',')}`); process.exit(1);
   }
   if (!dynUn.find(u => u.file === 'src/components/NewOne.tsx')?.unmapped) { console.error('[selftest] MARKER 누락 덫 실패'); process.exit(1); }
+  // 293(리뷰 M-3): 주석에만 적힌 이름은 "열었다" 가 아니다
+  const commented = gateStrings([{ text: "// 289: '새로 들어온 창' 은 다음 묶음에서 연다\nawait page.goto('/x');" }]);
+  if (commented.has('새로 들어온 창')) { console.error('[selftest] 주석 우회 덫 실패'); process.exit(1); }
+  const opened = gateStrings([{ text: "await expect(page.getByRole('dialog', { name: '새로 들어온 창' })).toBeVisible();" }]);
+  if (!opened.has('새로 들어온 창')) { console.error('[selftest] 창 여는 자리 수집 실패'); process.exit(1); }
+  // 293(리뷰 LOW-10): subtitle= 이 title= 보다 앞에 있어도 창 이름은 title 이다
+  const sub = dialogSites([{ file: 'src/pages/Y.tsx', text: '<Modal subtitle="부제목" title="진짜 이름">' }]);
+  if (sub.length !== 1 || sub[0].names[0] !== '진짜 이름') { console.error(`[selftest] subtitle 덫 실패: ${JSON.stringify(sub[0]?.names)}`); process.exit(1); }
+  // 293(리뷰 M-1): 어드민 창틀을 쓰는 자리도 창으로 센다
+  const adm = dialogSites([{ file: 'src/pages/Admin/Z.tsx', text: '<AdminDialog title="새 지점 추가" onClose={x}>' }]);
+  if (adm.length !== 1 || adm[0].names[0] !== '새 지점 추가') { console.error('[selftest] 어드민 창틀 덫 실패'); process.exit(1); }
   // 부분 문자열은 참조가 아니다 — '맨손 창가' 가 '맨손 창' 을 덮지 않는다
   const used2 = gateStrings([{ text: "dialog('맨손 창가')" }]);
   if (!findUncovered([{ file: 'a.tsx', line: 1, names: ['맨손 창'] }], used2).length) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-modal-a11y] selftest OK — 덫 6개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열) 통과');
+  console.log('[check-modal-a11y] selftest OK — 덫 10개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }

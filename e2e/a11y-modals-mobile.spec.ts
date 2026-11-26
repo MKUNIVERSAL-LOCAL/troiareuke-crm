@@ -104,6 +104,7 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
   await page.goto('/products');
   await step('m/products 제품 추가', async () => {
     await vis('제품 추가').click();
+    await expect(dialog('제품 추가')).toBeVisible(); // 창 이름으로도 확인 (293)
     await expect(page.getByPlaceholder('제품명 입력')).toBeVisible();
     await page.getByPlaceholder('제품명 입력').fill('모바일세럼');
     await page.getByLabel('판매가').fill('30000');

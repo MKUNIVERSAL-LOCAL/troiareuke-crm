@@ -82,6 +82,8 @@ test('게이트 밖에 있던 창들에 serious·critical 접근성 위반이 �
   await pickCustomer(page, acc.customer);
   await dialog('시술 기록 추가').getByRole('checkbox', { name: '테스트관리' }).check();
   await dialog('시술 기록 추가').getByRole('button', { name: '저장', exact: true }).click();
+  // 231 흐름이 바뀌어 결제 창이 안 열리면 `closeDialog` 는 조용히 통과한다 — 열렸음을 먼저 확인한다 (293, 리뷰 LOW-11)
+  await expect(dialog('결제 등록')).toBeVisible();
   await closeDialog('결제 등록'); // 시술을 저장하면 결제 창이 바로 열린다(231) — 여기서는 결제하지 않는다
   await page.goto('/treatments'); // ?new=1 을 떼고 목록으로 — 저장된 줄을 눌러야 상세가 열린다
   await step('/treatments 시술 기록 상세', async () => {
