@@ -428,6 +428,7 @@ export default function Settings() {
   // 영수증 인쇄 정보 — 설정 행(NAS 동기). 사업자등록번호는 코어 AuthUser 에 있어 화면에서 쓸 수 없다 (235, GAP P-9)
   const [receiptInfo, setReceiptInfo] = useState<{ businessNumber?: string; ownerName?: string; greeting?: string }>(() => getPreference('receiptInfo') ?? {});
   const [memoPresetList, setMemoPresetList] = useState<string[]>(() => memoPresets()); // 자주 쓰는 메모 문구 (259, 리뷰 L-4)
+  useDataRefreshed(() => setMemoPresetList(memoPresets())); // 시술 기록 창·다른 PC 변경을 따라간다 (262, 리뷰 L-6)
   // 주의 키워드 — 추가·삭제는 누른 즉시 설정 행에 저장(결제수단과 같은 방식) (240)
   const [cautionWords, setCautionWords] = useState<string[]>(() => getCautionKeywords());
   const [cautionDraft, setCautionDraft] = useState('');
@@ -823,7 +824,7 @@ export default function Settings() {
                   <div className="pt-6 border-t border-gray-100" data-testid="settings-memo-presets">
                     <h4 className="text-sm font-bold text-gray-900 mb-1">자주 쓰는 메모 문구</h4>
                     <p className="text-xs text-gray-400 mb-3">시술 기록 메모·상담 소견·예약 메모·고객 한 줄 메모에서 눌러 넣는 문장입니다. 시술 기록 창에서도 바로 관리할 수 있습니다.</p>
-                    <MemoPresetManager presets={memoPresetList} onChange={setMemoPresetList} />
+                    <MemoPresetManager presets={memoPresetList} onChange={setMemoPresetList} beforeSave={syncBeforeSave} />
                   </div>
                   {/* 결제수단 — 결제 창을 열지 않고도 미리 준비(PILOT-CHECKLIST 24). 추가·삭제는 누른 즉시 지점 설정에 저장돼 같은 지점 모든 PC 에 보인다 (210) */}
                   <div className="pt-6 border-t border-gray-100" data-testid="settings-payment-methods">

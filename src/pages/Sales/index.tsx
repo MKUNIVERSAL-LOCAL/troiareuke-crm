@@ -606,7 +606,7 @@ export default function Sales() {
   const drills = useMemo(() => {
     const programs = CustomerProgramStore.getAll();
     const nameOf = new Map(customers.map(c => [c.id, c.name]));
-    const payRows = payments.map(p => ({ id: p.id, paymentDate: p.paymentDate, status: p.status, amount: p.amount, discountAmount: p.discountAmount, customerId: p.customerId, customerName: p.customerId ? nameOf.get(p.customerId) : undefined, type: p.type }));
+    const payRows = payments.map(p => ({ id: p.id, paymentDate: p.paymentDate, status: p.status, amount: p.amount, discountAmount: p.discountAmount, customerId: p.customerId, customerName: p.customerId ? nameOf.get(p.customerId) : undefined }));
     return {
       newCustomer: newCustomerRows(viewMonth, payRows, customers.map(c => ({ id: c.id, name: c.name, registeredAt: c.registeredAt }))),
       discount: discountRows(viewMonth, payRows),

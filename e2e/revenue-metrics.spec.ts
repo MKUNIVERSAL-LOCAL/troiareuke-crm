@@ -39,10 +39,8 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await detail.getByRole('button', { name: '닫기' }).click();
   await expect(page.getByTestId('metric-detail')).toHaveCount(0);
 
-  // 할인 없는 달은 "없다" 고 말한다(0원이라고 꾸미지 않는다)
-  await card.getByTestId('metric-discount-open').click();
-  await expect(page.getByTestId('metric-detail-empty')).toBeVisible();
-  await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
+  // 262(리뷰 L-2): 할인이 없으면 "근거 보기" 를 걸지 않는다 — 눌러서 "없습니다" 만 보는 길을 만들지 않는다
+  await expect(card.getByTestId('metric-discount-open')).toHaveCount(0);
 
   // 지출 20,000(기본 분류 '제품 매입'은 원가) → 판관비는 여전히 0 → —
   await registerExpense(page, '앰플 매입', 20000);

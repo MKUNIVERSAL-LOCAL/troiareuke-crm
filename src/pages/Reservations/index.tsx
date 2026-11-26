@@ -383,6 +383,18 @@ export default function Reservations() {
   // 월간 보기 — 주/일과 같은 필터(직원·상태·검색)를 쓴다 (261, GAP R-1)
   const monthKey = format(currentDate, 'yyyy-MM');
   const monthReservations = useMemo(() => filteredReservations.filter(r => r.date.startsWith(monthKey)), [filteredReservations, monthKey]);
+  // 격자는 월~일로 채우느라 앞뒤 주(지난달 말·다음달 초)까지 그린다 — 그 칸 자료도 넘겨야 한다.
+  // 261 은 그 달만 넘겨, 10/26~10/31·12/1~12/6 처럼 **예약이 있는데 빈 칸으로 보이는 날**이 매달 10칸 넘게 생겼다 (259~261 리뷰 H-1)
+  const monthGridRange: readonly [string, string] = [
+    format(startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+    format(endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+  ];
+  const monthGridReservations = useMemo(
+    () => filteredReservations.filter(r => r.date >= monthGridRange[0] && r.date <= monthGridRange[1]),
+    [filteredReservations, monthGridRange[0], monthGridRange[1]],
+  );
+  // 머리글 건수는 그 달 기준 — 취소·노쇼가 섞여 "바쁜 달" 로 읽히지 않게 따로 적는다 (리뷰 L-11)
+  const monthOffCount = useMemo(() => monthReservations.filter(r => r.status === 'cancelled' || r.status === 'noshow').length, [monthReservations]);
   const mobileRange: readonly [string, string] = (() => {
     if (mobileTab === 'today') return [todayStr, todayStr];
     if (mobileTab === 'week') return [format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'), format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')];
@@ -579,7 +591,7 @@ export default function Reservations() {
               {viewMode === 'list'
                 ? `전체 예약 ${filteredReservations.length}건 · 날짜순`
                 : viewMode === 'month'
-                  ? `${format(currentDate, 'yyyy년 M월', { locale: ko })} · 예약 ${monthReservations.length}건`
+                  ? `${format(currentDate, 'yyyy년 M월', { locale: ko })} · 예약 ${monthReservations.length}건${monthOffCount > 0 ? ` (취소·노쇼 ${monthOffCount}건 포함)` : ''}`
                   : viewMode === 'week'
                     ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
                     : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
@@ -699,7 +711,7 @@ export default function Reservations() {
         {viewMode === 'month' && (
           <MonthView
             month={currentDate}
-            reservations={monthReservations}
+            reservations={monthGridReservations}
             staffList={staffList}
             googleEvents={googleEvents}
             onSelect={setSelectedReservation}
@@ -756,6 +768,7 @@ export default function Reservations() {
 
 /**
  * 월간 보기 (261, GAP R-1) — 모바일에는 '이번달' 탭이 있는데 PC 에는 한 달을 한눈에 보는 화면이 없었다.
+ * 격자는 월~일로 채우므로 **앞뒤 주(지난달 말·다음달 초) 예약도 함께** 받는다(262 — 그 칸이 비어 보이던 결함).
  * 주간·일간과 **같은 필터**(직원·상태·검색)를 쓰고, 칸이 좁아 하루 3건까지만 보여 준 뒤 나머지는
  * "+N건" 으로 밝힌다(숨기지 않는다 — 누르면 그 날 일간 보기로 간다).
  * 취소·노쇼는 취소선과 흐린 색으로 구분해, 바쁜 날이 실제로 바빴는지 착각하지 않게 한다.
@@ -783,7 +796,11 @@ function MonthView({ month, reservations, staffList, googleEvents = [], onSelect
     list.push(r);
     byDay.set(r.date, list);
   }
-  for (const list of byDay.values()) list.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.customerName.localeCompare(b.customerName));
+  // 칸에 3건만 보여 주므로 **살아 있는 예약이 먼저** 와야 한다 — 261 은 시작 시간 순이라 취소·노쇼가 확정 예약을 밀어냈다 (리뷰 M-2)
+  const isOff = (r: Reservation) => r.status === 'cancelled' || r.status === 'noshow';
+  for (const list of byDay.values()) {
+    list.sort((a, b) => Number(isOff(a)) - Number(isOff(b)) || a.startTime.localeCompare(b.startTime) || a.customerName.localeCompare(b.customerName));
+  }
   const googleByDay = new Map<string, number>();
   for (const ge of googleEvents) {
     const key = (ge.date || '').slice(0, 10);
@@ -814,10 +831,9 @@ function MonthView({ month, reservations, staffList, googleEvents = [], onSelect
                   title={`${format(day, 'M월 d일')} 일간 보기`}>
                   {format(day, 'd')}
                 </button>
-                {inMonth && (
-                  <button type="button" onClick={() => onAdd(day)} aria-label={`${format(day, 'M월 d일')} 예약 추가`}
-                    className="px-1.5 py-0.5 rounded-lg text-xs text-gray-300 hover:text-[#1a3a8f] hover:bg-blue-50">＋</button>
-                )}
+                {/* 달 밖 칸도 그 날 예약을 보여 주고 바로 넣을 수 있어야 한다(리뷰 H-1). 글자 대비는 AA 기준 (리뷰 M-4) */}
+                <button type="button" onClick={() => onAdd(day)} aria-label={`${format(day, 'M월 d일')} 예약 추가`}
+                  className="px-1.5 py-0.5 rounded-lg text-xs text-gray-500 hover:text-[#1a3a8f] hover:bg-blue-50">＋</button>
               </div>
               {list.slice(0, MAX_CHIPS).map(r => {
                 const staff = staffList.find(s2 => s2.id === r.staffId);
@@ -825,26 +841,26 @@ function MonthView({ month, reservations, staffList, googleEvents = [], onSelect
                 return (
                   <button key={r.id} type="button" onClick={() => onSelect(r)} data-testid="month-chip"
                     title={`${r.startTime} ${r.customerName} · ${r.services[0]?.serviceName ?? ''} ${off ? '(취소·노쇼)' : ''}`}
-                    className={clsx('text-left px-1.5 py-1 rounded-md text-2xs font-medium truncate hover:opacity-80', off && 'line-through')}
-                    style={off ? { backgroundColor: '#F1F5F9', color: '#64748B' } : { backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6') }}>
+                    className={clsx('text-left px-1.5 py-1 rounded-md text-xs font-medium truncate hover:opacity-80', off && 'line-through')}
+                    style={off ? { backgroundColor: '#F1F5F9', color: '#475569' } : { backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6') }}>
                     {r.startTime} {r.customerName}
                   </button>
                 );
               })}
               {list.length > MAX_CHIPS && (
                 <button type="button" onClick={() => onPickDay(day)} data-testid="month-more"
-                  className="text-left px-1.5 text-2xs font-medium text-[#1a3a8f] hover:underline">
+                  className="text-left px-1.5 text-xs font-medium text-[#1a3a8f] hover:underline">
                   +{list.length - MAX_CHIPS}건 더 보기
                 </button>
               )}
-              {gcount > 0 && <span className="px-1.5 text-2xs text-gray-400">Google 일정 {gcount}건</span>}
+              {gcount > 0 && <span className="px-1.5 text-xs text-gray-500">Google 일정 {gcount}건</span>}
             </div>
           );
         })}
       </div>
       {reservations.length === 0 && (
         <p className="py-6 text-center text-sm text-gray-500" data-testid="month-empty">
-          {format(month, 'yyyy년 M월', { locale: ko })}에는 (지금 필터로) 예약이 없습니다. 날짜의 ＋ 를 눌러 바로 넣을 수 있습니다.
+          {format(month, 'yyyy년 M월', { locale: ko })} 앞뒤 주까지 (지금 필터로) 예약이 없습니다. 날짜의 ＋ 를 눌러 바로 넣을 수 있습니다.
         </p>
       )}
     </div>

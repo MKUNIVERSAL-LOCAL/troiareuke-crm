@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, becomeStaff } from './helpers';
 import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
+import { registerPayment } from './flows'; // 지표 근거 보기 창은 결제가 있어야 줄이 생긴다 (262)
 
 /**
  * 모달·상세 패널 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉜) — 라우트 게이트(a11y.spec)는 첫 화면만 보므로
@@ -167,6 +168,15 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await page.getByRole('button', { name: '지출 등록' }).first().click();
     await expect(dialog('지출(매입) 등록')).toBeVisible();
   });
+
+  // ── 매출 지표 "근거 보기" 창 — 260 에서 새로 생긴 창이 게이트에 닿지 않았다 (262, 리뷰 M-3) ──
+  await closeDialog('지출(매입) 등록');
+  await registerPayment(page, acc, 50000); // 줄이 없으면 "근거 보기" 를 걸지 않으므로(리뷰 L-2) 결제를 하나 만든다
+  await step('/sales 지표 근거 보기', async () => {
+    await page.getByTestId('metric-new-share-open').click();
+    await expect(page.getByTestId('metric-detail')).toBeVisible();
+  });
+  await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
 
   // ── 직원: 추가 창, 상세 창, 수정 창 ──
   await page.goto('/staff');

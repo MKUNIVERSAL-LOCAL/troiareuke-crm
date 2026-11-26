@@ -5,7 +5,7 @@ import { canceledSaleIds } from '../lib/saleCancel';
 import { copyText } from '../lib/clipboard';
 import { todayISO } from '../lib/format';
 import { notify } from '../lib/notify';
-import { reorderSuggestions, reorderListText, DEFAULT_WINDOW_DAYS, DEFAULT_COVER_DAYS, REORDER_CAVEAT, REORDER_EMPTY } from '../lib/reorderRule';
+import { reorderSuggestions, reorderListText, DEFAULT_WINDOW_DAYS, REORDER_CAVEAT, REORDER_EMPTY } from '../lib/reorderRule';
 import type { Product } from '../types';
 
 /**
@@ -15,13 +15,15 @@ import type { Product } from '../types';
  * 규칙은 순수 reorderRule(소비 속도·남은 일수·권장 수량). 여기서는 판매·취소 자료를 모아 넘기고 복사만 한다.
  * 공식과 한계를 화면에 그대로 적는다 — 숫자만 주면 매장이 근거를 확인할 수 없다.
  */
-export default function ReorderModal({ products, onClose, onReceive }: {
+export default function ReorderModal({ products, onClose, onReceive, coverDays, onCoverDaysChange }: {
   products: Product[];
   onClose: () => void;
-  /** 그 제품의 입고·조정 창을 연다 — 할 일 이름이 "입고" 인데 이 창에서는 입고를 못 하던 것 (리뷰 L-5) */
-  onReceive?: (productId: string) => void;
+  /** 그 제품의 입고·조정 창을 연다 — 할 일 이름이 "입고" 인데 이 창에서는 입고를 못 하던 것 (259, 리뷰 L-5) */
+  onReceive: (productId: string) => void;
+  /** 며칠분을 채울지 — 입고 창을 다녀와도 유지되게 부모가 들고 있다 (262, 리뷰 M-6) */
+  coverDays: number;
+  onCoverDaysChange: (days: number) => void;
 }) {
-  const [coverDays, setCoverDays] = useState(DEFAULT_COVER_DAYS);
   const today = todayISO();
   const rows = useMemo(() => {
     const sales = ProductSaleStore.getAll();
@@ -50,7 +52,7 @@ export default function ReorderModal({ products, onClose, onReceive }: {
           {/* 보이는 글자와 음성 안내가 같아야 한다 — aria-label 로 다른 말을 하면 안 된다 (250 리뷰 L-7) */}
           <label className="text-sm text-gray-700">
             며칠분을 채울지
-            <select value={coverDays} onChange={e => setCoverDays(Number(e.target.value))}
+            <select value={coverDays} onChange={e => onCoverDaysChange(Number(e.target.value))}
               className="ml-2 border border-gray-200 rounded-xl px-2 py-1.5 min-h-[40px] text-sm bg-white outline-none">
               {[14, 30, 45, 60].map(d => <option key={d} value={d}>{d}일분</option>)}
             </select>
@@ -71,13 +73,11 @@ export default function ReorderModal({ products, onClose, onReceive }: {
                       <p className="text-sm font-bold text-[#1a3a8f] whitespace-nowrap">{r.suggestQty}{r.unit} 주문 권장</p>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{r.reason}</p>
-                    {onReceive && (
                       <button type="button" onClick={() => onReceive(r.id)} data-testid="reorder-receive"
                         aria-label={`${r.name} 입고 기록`}
                         className="mt-2 px-3 min-h-[36px] rounded-lg bg-slate-100 text-gray-700 text-xs font-medium hover:bg-slate-200">
                         입고 기록
                       </button>
-                    )}
                   </li>
                 ))}
               </ul>

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, isNearMidnightSeoul, dismissToasts } from './helpers';
-import { addReservation, dialog } from './flows';
+import { addReservation, dialog, setReservationStatus } from './flows';
 
 /**
  * PC 월간 보기 (261, GAP R-1) — 모바일에는 '이번달' 탭이 있는데 PC 에는 한 달을 한눈에 보는 화면이 없었다.
@@ -59,7 +59,42 @@ test('월간 보기 — 하루 3건까지 칩, 나머지는 +N건, 날짜·칩·
   await expect(add.getByLabel('예약 날짜')).toHaveValue(todayKey);
   await page.keyboard.press('Escape');
 
-  // 이전 달로 가면 그 달 예약이 없다는 사실을 그대로 말한다(0건을 꾸미지 않는다)
+  // 262(리뷰 M-2): 10:00 을 취소하면 **칸에서 뒤로 밀린다** — 취소가 확정 예약 자리를 차지하면
+  // 하루 3건 미리보기가 "그 날 뭐가 있는지" 를 거짓으로 말한다.
+  await page.getByRole('button', { name: '주간' }).click();
+  await setReservationStatus(page, '10:00', '취소처리');
+  await dismissToasts(page);
+  await page.getByRole('button', { name: '월간' }).click();
+  const cell2 = page.locator(`[data-testid="month-cell"][data-date="${todayKey}"]`);
+  const chipTexts = await cell2.getByTestId('month-chip').allInnerTexts();
+  expect(chipTexts).toHaveLength(3);
+  expect(chipTexts.join(' ')).not.toContain('10:00'); // 취소는 "+1건 더 보기" 쪽으로
+  expect(chipTexts.join(' ')).toContain('11:00');
+  await expect(cell2.getByTestId('month-more')).toContainText('+1건 더 보기');
+
+  // 262(리뷰 H-1): 격자는 월~일로 채워 앞뒤 주(지난달 말·다음달 초)까지 그린다 —
+  // 그 칸 예약이 보이지 않으면 "그 날은 비었다" 는 거짓이 된다. 다음 달 1일 예약을 만들어 확인한다.
+  const firstNext = nextMonthFirst();
+  await page.getByRole('button', { name: '주간' }).click();     // 날짜 프리필로 예약을 만든다
+  await addReservation(page, acc, '09:00', { date: firstNext });
+  await dismissToasts(page);
+  await page.getByRole('button', { name: '월간' }).click();
+  const nextCell = page.locator(`[data-testid="month-cell"][data-date="${firstNext}"]`);
+  if (await nextCell.count() > 0) {                              // 1일이 이번 달 격자의 마지막 주에 걸릴 때만
+    await expect(nextCell.getByTestId('month-chip')).toHaveCount(1);
+  }
+  // 그 달 머리글 건수는 달 기준 — 격자에 보이는 다음 달 예약은 세지 않는다
+  await expect(page.getByRole('heading', { level: 3 })).toContainText('예약 4건');
+
+  // 이전 달로 가면 (앞뒤 주까지) 예약이 없다는 사실을 그대로 말한다(0건을 꾸미지 않는다)
   await page.getByRole('button', { name: '이전' }).click();
+  await page.getByRole('button', { name: '이전' }).click();      // 두 달 전 — 앞뒤 주에도 예약이 없다
   await expect(page.getByTestId('month-empty')).toBeVisible();
 });
+
+/** 다음 달 1일(YYYY-MM-DD) */
+function nextMonthFirst(): string {
+  const n = new Date();
+  const d = new Date(n.getFullYear(), n.getMonth() + 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}

@@ -66,8 +66,16 @@ test('발주 제안 — 판매 속도로 수량을 제안하고 근거를 적고
   await expect(page).toHaveURL(/\/products$/); // 1회 캡처 후 URL 비움(프리필 관례)
 
   // 259(리뷰 L-5): 할 일 이름이 "입고" 인데 이 창에서는 입고를 못 했다 — 줄의 [입고 기록]이 그 제품의 입고 창을 연다
+  // 며칠분을 60일분으로 바꿔 둔다 — 입고 창을 다녀와도 유지되는지 보려고 (262, 리뷰 M-6)
+  await page.getByTestId('reorder').getByLabel('며칠분을 채울지').selectOption('60');
   await page.getByTestId('reorder-row').filter({ hasText: '발주팩' }).getByTestId('reorder-receive').click();
   const stockIn = page.getByRole('dialog').filter({ visible: true }).first();
   await expect(stockIn).toContainText('발주팩');
   await expect(page.getByTestId('reorder')).toHaveCount(0); // 발주 창은 닫힌다(창 두 겹 금지)
+
+  // 262(리뷰 M-6): 입고 창을 닫으면 **발주 제안으로 돌아온다** — 3종을 넣으려고 창을 세 번 다시 열던 것.
+  // 며칠분(60일분) 설정도 그대로여야 한다(돌아올 때마다 14일분으로 되돌아가면 숫자가 바뀐다).
+  await stockIn.getByRole('button', { name: '닫기' }).first().click();
+  await expect(page.getByTestId('reorder')).toBeVisible();
+  await expect(page.getByTestId('reorder').getByLabel('며칠분을 채울지')).toHaveValue('60');
 });

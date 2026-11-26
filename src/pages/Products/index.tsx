@@ -16,7 +16,8 @@ import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil,
 import StockAdjustModal from '../../components/StockAdjustModal';
 import StockLedgerModal from '../../components/StockLedgerModal';
 import StockCountModal from '../../components/StockCountModal'; // 전 제품 재고 실사 (245, GAP P-5 후속)
-import ReorderModal from '../../components/ReorderModal'; // 발주 제안 (248, GAP P-5 계열)
+import ReorderModal from '../../components/ReorderModal';
+import { DEFAULT_COVER_DAYS } from '../../lib/reorderRule'; // 며칠분 기본값 (262) // 발주 제안 (248, GAP P-5 계열)
 import { recordStockMovement, removeStockEntries } from '../../lib/stockLedger';
 import { monthCloseBlock } from '../../lib/monthClose';
 import Header from '../../components/layout/Header';
@@ -52,6 +53,8 @@ export default function Products() {
   const [ledgerProduct, setLedgerProduct] = useState<Product | null>(null); // 재고 이동 이력·대조 (145)
   const [showCount, setShowCount] = useState(false); // 전 제품 실사 (245)
   const [showReorder, setShowReorder] = useState(false); // 발주 제안 (248)
+  const [reorderCover, setReorderCover] = useState(DEFAULT_COVER_DAYS); // 며칠분 — 입고 창을 다녀와도 유지 (262, 리뷰 M-6)
+  const [backToReorder, setBackToReorder] = useState(false);            // 입고 창을 닫으면 발주 제안으로 돌아간다 (262, 리뷰 M-6)
   // 대시보드 재고 부족 알림(?stock=<id>) → 입고 모달 바로 열기. 1회 캡처 후 URL 비움(프리필 관례)
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -572,7 +575,12 @@ export default function Products() {
         />
       )}
       {stockProduct && (
-        <StockAdjustModal product={stockProduct} actor={user?.name} onClose={() => setStockProduct(null)} onDone={() => { setStockProduct(null); refresh(); }} />
+        <StockAdjustModal
+          product={stockProduct}
+          actor={user?.name}
+          onClose={() => { setStockProduct(null); if (backToReorder) { setBackToReorder(false); setShowReorder(true); } }}
+          onDone={() => { setStockProduct(null); refresh(); if (backToReorder) { setBackToReorder(false); setShowReorder(true); } }}
+        />
       )}
       {ledgerProduct && (
         <StockLedgerModal product={ledgerProduct} actor={user?.name} onClose={() => setLedgerProduct(null)} onChanged={refresh} />
@@ -580,13 +588,17 @@ export default function Products() {
       {showReorder && (
         <ReorderModal
           products={products}
+          coverDays={reorderCover}
+          onCoverDaysChange={setReorderCover}
           onClose={() => setShowReorder(false)}
           onReceive={id => {
-            // 제안을 보고 바로 입고까지 — 창을 닫고 그 제품의 입고·조정 창을 연다 (259, 리뷰 L-5)
+            // 제안을 보고 바로 입고까지 — 창을 닫고 그 제품의 입고·조정 창을 연다 (259, 리뷰 L-5).
+            // 입고 창을 닫으면 발주 제안으로 **돌아온다** — 3종을 넣으려고 창을 세 번 다시 열던 것 (262, 리뷰 M-6)
             const p = ProductStore.getAll().find(x => x.id === id);
+            if (!p) { notify('제품을 찾을 수 없습니다. 그 사이 삭제됐을 수 있습니다.'); return; }
             setShowReorder(false);
-            if (p) setStockProduct(p);
-            else notify('제품을 찾을 수 없습니다. 그 사이 삭제됐을 수 있습니다.');
+            setBackToReorder(true);
+            setStockProduct(p);
           }}
         />
       )}

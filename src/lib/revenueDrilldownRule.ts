@@ -18,7 +18,6 @@ export interface DrillPayment {
   discountAmount?: number;
   customerId?: string;
   customerName?: string;
-  type?: 'program' | 'product' | 'single_treatment' | 'other';
 }
 export interface DrillCustomer { id: string; name?: string; registeredAt: string }
 export interface DrillProgram {
@@ -45,7 +44,7 @@ export interface DrillResult {
 }
 
 export const DRILL_MAX_ROWS = 100;
-const NO_CUSTOMER = '고객 미연결';
+const NO_CUSTOMER = '고객 정보 없음'; // 연결하지 않았거나 그 뒤 삭제된 고객 — 둘을 구분할 자료가 없다 (리뷰 L-4)
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
 
 function finish(rows: DrillRow[], total: number, empty: string, caveat?: string): DrillResult {
