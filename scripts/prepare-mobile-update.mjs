@@ -32,7 +32,8 @@ try {
 function cutAtSentence(text, max) {
   if (text.length <= max) return text;
   const head = text.slice(0, max);
-  const end = Math.max(head.lastIndexOf('. '), head.lastIndexOf('다.'), head.lastIndexOf('요.'), head.lastIndexOf('니다.'));
+  // 310(리뷰 L-6): `'니다.'` 는 `'다.'` 가 항상 1 크므로 Math.max 에서 이길 수 없었다(죽은 분기) — 뺀다
+  const end = Math.max(head.lastIndexOf('. '), head.lastIndexOf('다.'), head.lastIndexOf('요.'));
   if (end > max * 0.4) return head.slice(0, end + (head[end] === '.' ? 1 : 2)).trim();
   const space = head.lastIndexOf(' ');
   return `${(space > max * 0.5 ? head.slice(0, space) : head).trim()}…`;
@@ -45,7 +46,10 @@ const notes = (() => {
   const all = fs.readFileSync(notesPath, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   // 306(300~302 리뷰 LOW-8): **이번 버전 구간만** 본다 — 구분선(214) 아래는 이미 적용된 지난 내용이라
   // 새 절의 항목이 모두 PC 전용이면 옛 버전 항목이 "새 소식" 으로 올라갈 수 있었다.
-  const pastAt = all.findIndex((l) => /아래는 이미 적용된 지난 업데이트/.test(l) || /^v\d+\.\d+\.\d+ 업데이트 내용/.test(l));
+  // 310(303~308 리뷰 M-1): `findIndex` 가 **노트 첫 줄("v1.0.64 업데이트 내용")에 먼저 걸려** pastAt=0 이 되고,
+  // `pastAt > 0` 이 거짓이라 구간 자르기가 전혀 걸리지 않았다 — 306 이 막았다고 적은 갈래가 열려 있었다
+  // (이번 절 항목이 전부 PC 전용이면 구분선 아래 v1.0.63 항목이 앱 "새 소식" 으로 올라간다).
+  const pastAt = all.findIndex((l, i) => i > 0 && (/아래는 이미 적용된 지난 업데이트/.test(l) || /^v\d+\.\d+\.\d+ 업데이트 내용/.test(l)));
   const lines = pastAt > 0 ? all.slice(0, pastAt) : all;
   // 301(297~299 리뷰 LOW-10): 앱 사용자에게 가는 한 줄이라 **PC 전용 항목은 건너뛴다** —
   // 299 가 노트 순서를 바꾼 뒤 요약이 "예약 화면(PC)에 월간 보기가 생겼습니다" 가 됐다(앱에는 없는 기능).

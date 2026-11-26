@@ -49,6 +49,11 @@ const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
 /** 해시 규약이 시작된 묶음 — 그 앞은 기록 당시 규약이 없었다 */
 const HASH_FROM = 243;
 /** "지금 상태" 를 말하는 문서 — 숫자가 낡으면 읽는 사람이 틀린 상태를 믿는다 */
+/** 일부러 비운 칸 — 이유가 사실이어야 한다 */
+const EMPTY_CELL_ALLOWED = [
+  { rel: 'docs/RESEARCH-MESSAGING-BILLING.md', line: 73, why: '요금 비교 표에서 해당 없는 칸을 비워 둔 자리(값이 없다는 뜻이 맞다)' },
+];
+
 const CURRENT_DOCS = [
   'docs/GLOBAL-CRM-GAP-ANALYSIS.md',
   'docs/NEXT-ACTION.md',
@@ -250,6 +255,10 @@ function selftest() {
   if (tbl.length !== 1 || !/칸이 4개다/.test(tbl[0])) { console.error('[selftest] 표 열 수 덫 실패: ' + JSON.stringify(tbl)); process.exit(1); }
   if (tableProblems('| # | 값 |\n|---|---|\n| 1 | data \\| jsonb |', 'x.md').length !== 0) { console.error('[selftest] 이스케이프 파이프 면제 덫 실패'); process.exit(1); }
   if (tableProblems('| 이건 표가 아니다 |\n그냥 글', 'x.md').length !== 0) { console.error('[selftest] 구분 줄 없는 표 면제 덫 실패'); process.exit(1); }
+  // 310: 중간 칸이 비면 잡는다(마지막 칸이 비는 것은 "아직 없음" 이라 잡지 않는다)
+  const midEmpty = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 |  | 미반영 |', 'x.md');
+  if (midEmpty.length !== 1 || !/2번 칸이 비어 있다/.test(midEmpty[0])) { console.error('[selftest] 중간 빈 칸 덫 실패: ' + JSON.stringify(midEmpty)); process.exit(1); }
+  if (tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |  |', 'x.md').length !== 0) { console.error('[selftest] 마지막 빈 칸 면제 덫 실패'); process.exit(1); }
   // 309: 릴리스 단계 대조 — 지금 안내는 통과해야 하고, 빠진 단계·순서 어긋남은 잡아야 한다
   if (releaseStepProblems().length !== 0) { console.error('[selftest] 릴리스 단계 대조 실패: ' + releaseStepProblems().join(' / ')); process.exit(1); }
   const runnerSrc = "{ id: 'preflight' }, { id: 'checks' }, { id: 'build' }, { id: 'verify' }";
@@ -265,7 +274,7 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 32개(릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
+  console.log('[check-docs-claims] selftest OK — 덫 34개(중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -431,7 +440,7 @@ const problems = [];
 function tableProblems(text, rel) {
   const out = [];
   const lines = text.split(/\r?\n/);
-  const cellsOf = line => line.split(/(?<!\\)\|/).slice(1, -1).length;
+  const cellsOf = line => line.split(/(?<!\\)\|/).slice(1, -1);
   let header = null;
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i].trim();
@@ -439,13 +448,21 @@ function tableProblems(text, rel) {
     const next = (lines[i + 1] || '').trim();
     if (!header) {
       // 머리글은 **구분 줄**(|---|---|)이 바로 뒤에 와야 표다 — 그냥 파이프가 있는 글은 표가 아니다
-      if (/^\|(\s*:?-{3,}:?\s*\|)+$/.test(next)) header = { cols: cellsOf(line), line: i + 1 };
+      if (/^\|(\s*:?-{3,}:?\s*\|)+$/.test(next)) header = { cols: cellsOf(line).length, line: i + 1 };
       continue;
     }
     if (/^\|(\s*:?-{3,}:?\s*\|)+$/.test(line)) continue; // 구분 줄
-    const cols = cellsOf(line);
-    if (cols !== header.cols) {
-      out.push(`${rel}:${i + 1} 표 행의 칸이 ${cols}개다(머리글 ${header.cols}개, ${header.line}줄) — 마크다운이 뒤쪽 칸을 버려 **화면에서 사라진다**`);
+    const cells = cellsOf(line);
+    if (cells.length !== header.cols) {
+      out.push(`${rel}:${i + 1} 표 행의 칸이 ${cells.length}개다(머리글 ${header.cols}개, ${header.line}줄) — 마크다운이 뒤쪽 칸을 버려 **화면에서 사라진다**`);
+      continue;
+    }
+    // 310(303~308 리뷰 H-1): 칸 수만 맞으면 통과하던 탓에 **뜻이 어긋난 줄**을 놓쳤다 — 308 이 파이프를
+    // 거꾸로 이스케이프해 수정 방향 칸이 비고 상태 칸에 본문 800자가 들어간 줄이 여덟 개 있었다.
+    // 마지막이 아닌 칸이 비면 읽는 사람에게 "그 칸은 내용이 없다" 는 거짓이 된다.
+    const emptyAt = cells.slice(0, -1).findIndex(c => c.trim() === '');
+    if (emptyAt >= 0 && !EMPTY_CELL_ALLOWED.some(a => a.rel === rel && a.line === i + 1)) {
+      out.push(`${rel}:${i + 1} 표 행의 ${emptyAt + 1}번 칸이 비어 있다 — 칸이 밀렸는지 보세요(일부러 비운 칸이면 EMPTY_CELL_ALLOWED 에 이유를 적으세요)`);
     }
   }
   return out;

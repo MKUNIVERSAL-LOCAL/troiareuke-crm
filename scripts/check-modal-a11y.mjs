@@ -197,7 +197,12 @@ function blankComments(text) {
       if (c === '/' && d === '*') { mode = 'block'; out += '  '; i += 2; continue; }
       // 306(300~302 리뷰 LOW-1): 정규식 리터럴 안의 `/*`·따옴표에 속아 **진짜 창을 삼켰다**
       // (`const re = /[/*]/;` 뒤의 창이 사라졌다). 정규식은 한 상태로 따로 들고 간다.
-      if (c === '/' && '=(,:[!&|?{};+-*%~^<>'.includes(prev)) { mode = 'regex'; out += c; i += 1; continue; }
+      // 310(303~308 리뷰 M-2): `<` 를 정규식 자리로 보던 탓에 **JSX 닫는 태그 `</span>` 의 `/`** 가
+      // 정규식 시작이 되고, 같은 줄 뒤쪽 `{/* … */}` 의 `/` 가 그것을 닫아 **주석이 주석으로 안 보였다**
+      // (주석 속 가짜 창이 진짜 창으로 세어졌다 — 거짓 경보). `<`·`>` 를 빼고, 같은 줄에서 닫히는
+      // `/` 가 있을 때만 정규식으로 본다(정규식 리터럴은 한 줄 안에서 닫힌다).
+      const closesOnLine = c === '/' && /^[^\n]*[^\\]\//.test(text.slice(i + 1, text.indexOf('\n', i) < 0 ? undefined : text.indexOf('\n', i)));
+      if (c === '/' && '=(,:[!&|?{};+-*%~^'.includes(prev) && closesOnLine) { mode = 'regex'; out += c; i += 1; continue; }
       if (c === "'") mode = 'sq';
       else if (c === '"') mode = 'dq';
       else if (c === '`') mode = 'tpl';
@@ -302,11 +307,13 @@ function dropSkipped(code) {
  * 보이는 이름은 끈 것으로 보고(안전한 쪽), 소문자 호출·식은 조건부로 둔다.
  */
 function isConstantSkipArg(arg) {
-  const a = String(arg).trim();
+  // 310(303~308 리뷰 M-6): 대문자 상수 규칙이 `$` 앵커 때문에 **사유가 붙은 평범한 모양**
+  // `test.skip(SKIP_FLAG, '이유')` 에서 걸리지 않았다 — 첫 인자만 떼어 본다.
+  const a = String(arg).split(',')[0].trim();
   if (/^(true\b|\)|!{0,2}process\.env)/.test(a)) return true;
   if (/^!{0,2}(true|1)\b/.test(a)) return true;
   if (/^\d+\s*(===?|!==?|>=?|<=?)\s*\d+/.test(a)) return true;     // 1 === 1
-  if (/^[A-Z][A-Z0-9_]{1,}\s*[,)]?$/.test(a)) return true;          // SKIP_FLAG
+  if (/^!{0,2}[A-Z][A-Z0-9_]+\)?$/.test(a)) return true;            // SKIP_FLAG, !SKIP_FLAG
   return false;
 }
 
@@ -430,6 +437,12 @@ function selftest() {
   // 306(리뷰 LOW-2): beforeEach 안의 상수 skip 은 **그 파일 전체**를 끈다
   const hookSkip = gateStrings([{ text: "test.beforeEach(async () => { test.skip(true, '환경 없음'); });\ntest('창', async ({ page }) => { await expect(page.getByRole('dialog', { name: '훅으로 끈 창' })).toBeVisible(); });" }]);
   if (hookSkip.has('훅으로 끈 창')) { console.error(`[selftest] beforeEach skip 덫 실패: ${[...hookSkip].join(',')}`); process.exit(1); }
+  // 310(리뷰 M-6): 사유가 붙은 대문자 상수 skip 도 끈 것이다
+  const constSkip = gateStrings([{ text: "const SKIP_FLAG = true;\ntest('창 묶음', async ({ page }) => {\n  test.skip(SKIP_FLAG, '조건부');\n  await expect(page.getByRole('dialog', { name: '상수로 끈 창' })).toBeVisible();\n});" }]);
+  if (constSkip.has('상수로 끈 창')) { console.error(`[selftest] 대문자 상수 skip 덫 실패: ${[...constSkip].join(',')}`); process.exit(1); }
+  // 310(리뷰 M-2): JSX 닫는 태그 뒤의 블록 주석은 주석으로 본다(가짜 창을 세지 않는다)
+  const jsxClose = dialogSites([{ file: 'src/components/P.tsx', text: '<span>x</span> {/* <Modal isOpen title="주석 속 가짜 창">y</Modal> */}\n<Modal isOpen title="진짜 창">z</Modal>' }]);
+  if (jsxClose.length !== 1 || jsxClose[0].names[0] !== '진짜 창') { console.error(`[selftest] JSX 닫는 태그 덫 실패: ${JSON.stringify(jsxClose.map(s => s.names))}`); process.exit(1); }
   // 306(리뷰 LOW-2): `.only` 는 나머지를 안 돌리므로 커버리지 수를 믿을 수 없다 — 멈춘다
   let onlyThrew = false;
   try { gateStrings([{ text: "test.only('하나만', async ({ page }) => { await expect(page.getByRole('dialog', { name: '하나만 연 창' })).toBeVisible(); });" }]); }
@@ -443,7 +456,7 @@ function selftest() {
   // 부분 문자열은 참조가 아니다 — '맨손 창가' 가 '맨손 창' 을 덮지 않는다
   const used2 = gateStrings([{ text: "dialog('맨손 창가')" }]);
   if (!findUncovered([{ file: 'a.tsx', line: 1, names: ['맨손 창'] }], used2).length) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-modal-a11y] selftest OK — 덫 24개(리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름·주석 속 창·아포스트로피·test.skip·줄 주석 속 glob·describe.skip·런타임 skip·조건부 skip 보존·정규식 리터럴·JSX 아포스트로피·런타임 fixme·beforeEach skip·test.only·닫히지 않은 템플릿) 통과');
+  console.log('[check-modal-a11y] selftest OK — 덫 26개(JSX 닫는 태그·대문자 상수 skip·리터럴·삼항·맨손 창·문자열 안 선택자·창틀 제외·이름 없는 창/MARKER 누락·부분 문자열·주석 우회·창 여는 자리·subtitle·어드민 창틀·정규식 이름·주석 속 창·아포스트로피·test.skip·줄 주석 속 glob·describe.skip·런타임 skip·조건부 skip 보존·정규식 리터럴·JSX 아포스트로피·런타임 fixme·beforeEach skip·test.only·닫히지 않은 템플릿) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
