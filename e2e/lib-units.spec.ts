@@ -43,6 +43,7 @@ import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLe
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
 import { newCustomerRows, discountRows, unusedBalanceRows, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
+import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
 import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
 import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
@@ -2604,4 +2605,48 @@ test('매출 지표 근거 — 목록 합계가 카드 숫자와 1원도 어긋�
   expect(big.rows).toHaveLength(DRILL_MAX_ROWS);
   expect(big.truncatedFrom).toBe(DRILL_MAX_ROWS + 5);
   expect(big.total).toBe(many.reduce((s2, r) => s2 + (r.discountAmount || 0), 0)); // 자른 줄도 합계에는 들어간다
+});
+
+// ── 263: 발송 성과 근거 목록(누가 세어졌나) ──
+
+test('발송 성과 근거 — 요약 숫자와 같은 창·같은 조건으로 고른다 (263, GAP M-6)', () => {
+  const sends = [
+    { customerId: 'c1', at: '2026-11-10T01:00:00.000Z' },
+    { customerId: 'c1', at: '2026-11-12T01:00:00.000Z' }, // 같은 고객 두 번 — 첫 발송부터 창을 연다
+    { customerId: 'c2', at: '2026-11-10T01:00:00.000Z' },
+    { customerId: 'c3', at: '2026-11-10T01:00:00.000Z' },
+  ];
+  const sentOn = (() => { const t = new Date('2026-11-10T01:00:00.000Z'); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; })();
+  const reservations = [
+    { customerId: 'c1', date: '2026-11-12', status: 'confirmed' },
+    { customerId: 'c2', date: '2026-11-11', status: 'cancelled' },   // 취소는 세지 않는다
+    { customerId: 'c3', date: '2026-12-20', status: 'confirmed' },   // 창(14일) 밖
+  ];
+  const payments = [
+    { customerId: 'c1', paymentDate: '2026-11-13', amount: 120000, status: 'completed' as const },
+    { customerId: 'c1', paymentDate: '2026-11-14', amount: 30000, status: 'completed' as const },
+    { customerId: 'c2', paymentDate: '2026-11-13', amount: 50000, status: 'refunded' as const }, // 환불은 세지 않는다
+  ];
+  const sum = estimatePerformance(sends, reservations, payments);
+  const rows = performanceRows(sends, reservations, payments);
+
+  expect(rows).toHaveLength(3);                       // 발송 고객 수(중복 제거) 와 같다
+  expect(rows.length).toBe(sum.sent);
+  expect(rows[0].customerId).toBe('c1');              // 결제 금액 큰 순
+  expect(rows[0].sentOn).toBe(sentOn);                // 첫 발송일 기준(로컬 날짜)
+  expect(rows[0].reservedOn).toBe('2026-11-12');
+  expect(rows[0].paidOn).toBe('2026-11-13');          // 창 안 첫 결제일
+  expect(rows[0].amount).toBe(150000);
+  // 요약과 목록이 같은 조건 — 합계·인원이 어긋나지 않는다
+  expect(rows.reduce((a, r) => a + r.amount, 0)).toBe(sum.revenue);
+  expect(rows.filter(r => r.reservedOn).length).toBe(sum.reserved);
+  expect(rows.filter(r => r.amount > 0).length).toBe(sum.paid);
+  // 취소·창 밖만 있는 고객은 "없음" 으로 남는다(줄을 지우지 않는다 — 누가 안 움직였는지도 사실이다)
+  const c2 = rows.find(r => r.customerId === 'c2')!;
+  expect(c2.reservedOn).toBeNull();
+  expect(c2.paidOn).toBeNull();
+  expect(c2.amount).toBe(0);
+  const c3 = rows.find(r => r.customerId === 'c3')!;
+  expect(c3.reservedOn).toBeNull();
+  expect(c3.windowEnd > c3.sentOn).toBe(true);
 });

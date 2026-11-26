@@ -103,4 +103,14 @@ test('템플릿 작성 → 발송 시도 → 미연동 안내와 발송 이력 �
   await page.getByLabel('발송 이력 검색').fill('');
   await page.getByTestId('history-perf').first().click(); // 실제로 나간 건에만 있는 버튼
   await expect(page.getByTestId('history-perf-line')).toContainText('[추정] 발송 1명 → 14일 내 예약 1명');
+
+  // 263(GAP M-6): 숫자만 주면 "그 문자 덕" 인지 확인할 수 없다 — [누가 세어졌나] 가 세어진 고객을 그대로 보여 준다
+  await page.getByTestId('history-perf-rows').first().click();
+  const perfRows = page.getByTestId('metric-detail');
+  await expect(perfRows).toBeVisible();
+  await expect(perfRows.getByTestId('metric-detail-row')).toHaveCount(1);
+  await expect(perfRows.getByTestId('metric-detail-row')).toContainText('예약 ');
+  await expect(perfRows).toContainText('이 문자 때문이라는 뜻은 아닙니다'); // 추정임을 그대로 적는다
+  await perfRows.getByRole('button', { name: '닫기' }).click();
+  await expect(page.getByTestId('metric-detail')).toHaveCount(0);
 });

@@ -16,7 +16,9 @@ import { buildCustomerStatsIndex } from '../../lib/customerStats';
 import { getNoRebookCustomerIds } from '../../lib/todayTasks';
 import { rememberRecipients, recipientIndex, recipientsOf } from '../../lib/messageRecipients';
 import { isGatewayPendingHistory } from '../../lib/messageHistoryRule';
-import { estimateHistoryPerformance, describeHistoryPerformance } from '../../lib/messagePerformance';
+import { estimateHistoryPerformance, describeHistoryPerformance, historyPerformanceDrill } from '../../lib/messagePerformance';
+import MetricDetailModal from '../../components/MetricDetailModal'; // 성과 근거 목록 (263)
+import type { DrillResult } from '../../lib/revenueDrilldownRule';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import type { SavedSegment } from '../../lib/segmentFilterRule';
 import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -680,6 +682,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
     return names.length === 1 ? names[0] : `${names[0]} 외 ${names.length - 1}명`;
   };
   const [perf, setPerf] = useState<Record<string, string>>({}); // 누른 행만 성과 추정 — 행마다 예약·결제 전수 스캔을 하지 않게 (211)
+  const [perfDrill, setPerfDrill] = useState<{ title: string; result: DrillResult } | null>(null); // 성과 근거 목록 (263, GAP M-6)
   useEffect(() => { setPerf({}); }, [reloadKey]); // 발송이 생기면 옛 추정치를 지운다
   const customerOnlyCount = customerId ? history.filter(h => recipients.get(h.id)?.includes(customerId)).length : 0; // 칩 건수는 고객 필터만 적용한 수 — 상태·검색과 섞이지 않게 (리뷰 L-2)
   const [search, setSearch] = useState('');
@@ -823,13 +826,33 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
                 </div>
               )}
               {perf[h.id] && ( /* 발송 뒤 14일 창 예약·결제 — 추정이지 인과가 아니라 [추정] 라벨을 붙인 그대로 보여 준다 (211, GAP M-6, ANALYTICS-DEFINITIONS) */
-                <p className="mt-2 ml-11 text-xs text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" data-testid="history-perf-line">{perf[h.id]}</p>
+                <div className="mt-2 ml-11 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" data-testid="history-perf-line">{perf[h.id]}</p>
+                  {/* 숫자만 주면 "그 문자 덕" 인지 확인할 수 없다 — 세어진 고객을 그대로 보여 준다 (263, GAP M-6) */}
+                  <button type="button" data-testid="history-perf-rows"
+                    onClick={() => {
+                      const d = historyPerformanceDrill(h.id, h.sentAt, recipients.get(h.id));
+                      if (!d) { notify('이 발송의 수신 고객 기록이 없어 근거를 보여 줄 수 없습니다.'); return; }
+                      setPerfDrill({ title: `${h.templateName || '직접 작성'} 성과 근거`, result: d });
+                    }}
+                    className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50">
+                    누가 세어졌나
+                  </button>
+                </div>
               )}
             </div>
           );
         })}
       </div>
     </div>
+    {perfDrill && (
+      <MetricDetailModal
+        title={perfDrill.title}
+        note="발송 뒤 14일 안에 예약·결제가 있었던 고객입니다(금액은 그 기간 결제 합)."
+        result={perfDrill.result}
+        onClose={() => setPerfDrill(null)}
+      />
+    )}
     </div>
   );
 }
