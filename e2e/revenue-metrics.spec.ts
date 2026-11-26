@@ -28,6 +28,22 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await expect(card.getByTestId('metric-projected')).not.toHaveText('—'); // 이달 월말 예상(예측)
   await expect(card.getByTestId('metric-bep')).toHaveText('—'); // 판관비 없음 → 계산하지 않음 (149 L-8)
 
+  // 260(GAP P-6): 숫자를 눌러 **근거 목록**을 본다 — 합계가 카드 숫자와 같아야 한다(확인할 수 없는 숫자는 쓰이지 않는다)
+  await card.getByTestId('metric-new-share-open').click();
+  const detail = page.getByTestId('metric-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail.getByTestId('metric-detail-row')).toHaveCount(1);
+  await expect(detail.getByTestId('metric-detail-row')).toContainText(acc.customer);
+  await expect(detail.getByTestId('metric-detail-total')).toHaveText('50,000원'); // 카드의 "신규 50,000원" 과 같다
+  await expect(detail).toContainText('기존 고객 매출');                            // 고객 미연결 결제가 어디 있는지 밝힌다
+  await detail.getByRole('button', { name: '닫기' }).click();
+  await expect(page.getByTestId('metric-detail')).toHaveCount(0);
+
+  // 할인 없는 달은 "없다" 고 말한다(0원이라고 꾸미지 않는다)
+  await card.getByTestId('metric-discount-open').click();
+  await expect(page.getByTestId('metric-detail-empty')).toBeVisible();
+  await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
+
   // 지출 20,000(기본 분류 '제품 매입'은 원가) → 판관비는 여전히 0 → —
   await registerExpense(page, '앰플 매입', 20000);
   await visibleButton(page, '매출 현황').click();

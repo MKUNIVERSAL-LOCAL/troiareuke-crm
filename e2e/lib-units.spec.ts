@@ -42,6 +42,7 @@ import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
+import { newCustomerRows, discountRows, unusedBalanceRows, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
 import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
 import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
@@ -2537,4 +2538,70 @@ test('한 줄 메모 문구 — 문구에 구분자가 들어 있어도 실제�
   expect(oneLineHas('자극 없음 · 홈케어 안내', '자극 없음', both)).toBe(false);
   expect(toggleOneLine('자극 없음 · 홈케어 안내', '자극 없음', both)).toBe('자극 없음 · 홈케어 안내 · 자극 없음');
   expect(toggleOneLine('자극 없음 · 홈케어 안내 · 자극 없음', '자극 없음', both)).toBe('자극 없음 · 홈케어 안내');
+});
+
+// ── 260: 매출 지표 근거 보기(드릴다운) — 목록 합이 카드 숫자와 같아야 한다 ──
+
+test('매출 지표 근거 — 목록 합계가 카드 숫자와 1원도 어긋나지 않는다 (260, GAP P-6)', () => {
+  const payments = [
+    { id: 'pay1', paymentDate: '2026-11-03', type: 'program' as const, status: 'completed' as const, amount: 300000, discountAmount: 20000, customerId: 'c-new', customerName: '김신규' },
+    { id: 'pay2', paymentDate: '2026-11-09', type: 'product' as const, status: 'completed' as const, amount: 50000, customerId: 'c-new', customerName: '김신규' },
+    { id: 'pay3', paymentDate: '2026-11-10', type: 'single_treatment' as const, status: 'completed' as const, amount: 100000, discountAmount: 5000, customerId: 'c-old', customerName: '박기존' },
+    { id: 'pay4', paymentDate: '2026-11-12', type: 'product' as const, status: 'refunded' as const, amount: 70000, discountAmount: 7000, customerId: 'c-old', customerName: '박기존' }, // 환불은 어느 목록에도 없다
+    { id: 'pay5', paymentDate: '2026-11-15', type: 'other' as const, status: 'completed' as const, amount: 40000 },                                                                  // 고객 미연결 — 신규가 아니다
+    { id: 'pay6', paymentDate: '2026-10-20', type: 'single_treatment' as const, status: 'completed' as const, amount: 200000, customerId: 'c-new', customerName: '김신규' },          // 다른 달
+  ];
+  const customers = [
+    { id: 'c-new', name: '김신규', registeredAt: '2026-11-02T00:00:00.000Z' },
+    { id: 'c-old', name: '박기존', registeredAt: '2026-05-01T00:00:00.000Z' },
+  ];
+  const programs = [
+    { id: 'g1', customerName: '김신규', programName: '등 관리 10회', pricePaid: 300000, totalSessions: 10, usedSessions: 2 },
+    { id: 'g2', customerName: '박기존', programName: '완료권', pricePaid: 100000, totalSessions: 4, usedSessions: 4, isCompleted: true },  // 완료 제외
+    { id: 'g3', customerName: '박기존', programName: '기간제', pricePaid: 90000, totalSessions: null, usedSessions: 0 },                   // 회차 없음 제외
+    { id: 'g4', customerName: '최만료', programName: '만료권', pricePaid: 90000, totalSessions: 3, usedSessions: 0, expiryDate: '2026-11-01' }, // 만료 제외
+    { id: 'g5', customerName: '이잔여', programName: '7회권', pricePaid: 100000, totalSessions: 3, usedSessions: 1 },                      // 회당 33,333.33… 반올림
+  ];
+  const m = monthMetrics({ month: '2026-11', today: '2026-11-20', payments, expenses: [], programs, logs: [], customers, target: null });
+
+  // 신규 고객 매출 — 고객별로 묶고, 합은 카드와 같다
+  const nc = newCustomerRows('2026-11', payments, customers);
+  expect(nc.total).toBe(m.newCustomerRevenue);
+  expect(nc.rows).toHaveLength(1);
+  expect(nc.rows[0].label).toBe('김신규');
+  expect(nc.rows[0].amount).toBe(350000);        // 30만 + 5만(10월 결제·환불은 제외)
+  expect(nc.rows[0].detail).toContain('결제 2건');
+  expect(nc.caveat).toContain('기존 고객 매출');  // 고객 미연결 결제가 어디 있는지 밝힌다
+  expect(nc.rows.reduce((s2, r) => s2 + r.amount, 0)).toBe(nc.total);
+
+  // 할인 합계 — 완료 결제만, 줄 합 = 카드
+  const dc = discountRows('2026-11', payments);
+  expect(dc.total).toBe(m.discount);
+  expect(dc.rows).toHaveLength(2);
+  expect(dc.rows.map(r => r.key)).toEqual(['pay1', 'pay3']); // 금액 큰 순
+  expect(dc.rows.reduce((s2, r) => s2 + r.amount, 0)).toBe(dc.total);
+
+  // 미사용 잔액 — 완료·기간제·만료를 빼고, 반올림까지 카드와 같다
+  const ub = unusedBalanceRows('2026-11-20', programs);
+  expect(ub.total).toBe(m.unusedBalance);
+  expect(ub.rows.map(r => r.key)).toEqual(['g1', 'g5']);
+  expect(ub.rows.reduce((s2, r) => s2 + r.amount, 0)).toBe(ub.total);
+  expect(ub.rows[1].detail).toContain('잔여 2회');
+  expect(ub.caveat).toContain('만료');
+
+  // 빈 상태는 "없다" 를 말한다(0원이라고 꾸미지 않는다)
+  const empty = newCustomerRows('2026-12', payments, customers);
+  expect(empty.rows).toHaveLength(0);
+  expect(empty.total).toBe(0);
+  expect(empty.empty).toContain('없습니다');
+
+  // 줄이 많으면 상위 DRILL_MAX_ROWS 줄만 보여 주고 합계는 전체 기준
+  const many = Array.from({ length: DRILL_MAX_ROWS + 5 }, (_, i) => ({
+    id: `big${i}`, paymentDate: '2026-11-05', type: 'other' as const, status: 'completed' as const,
+    amount: 10000, discountAmount: 1000 + i, customerName: `고객${i}`,
+  }));
+  const big = discountRows('2026-11', many);
+  expect(big.rows).toHaveLength(DRILL_MAX_ROWS);
+  expect(big.truncatedFrom).toBe(DRILL_MAX_ROWS + 5);
+  expect(big.total).toBe(many.reduce((s2, r) => s2 + (r.discountAmount || 0), 0)); // 자른 줄도 합계에는 들어간다
 });

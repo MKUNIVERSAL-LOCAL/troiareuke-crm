@@ -16,6 +16,7 @@ const PnlTrendChart = lazy(() => import('../../components/charts/PnlTrendChart')
 import { PaymentStore, CustomerStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
 import RevenueMetricsCard from '../../components/RevenueMetricsCard';
 import { monthMetrics } from '../../lib/revenueMetricsRule';
+import { newCustomerRows, discountRows, unusedBalanceRows } from '../../lib/revenueDrilldownRule'; // 지표 근거 보기 (260)
 import { monthCloseBlock, isMonthClosed, monthlyTarget } from '../../lib/monthClose';
 import { isAdminRole } from '../../lib/permissions';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
@@ -601,6 +602,17 @@ export default function Sales() {
     const st = SettingsStore.get();
     return monthMetrics({ month: viewMonth, today: today(), payments, expenses, programs: CustomerProgramStore.getAll(), logs: TreatmentLogStore.getAll(), customers, target: monthlyTarget(viewMonth), businessHours: st.businessHours, holidays: st.holidays, cogsCategories: [...COGS_CATEGORIES] });
   }, [viewMonth, payments, expenses, customers, metricsTick]);
+  // 지표 근거 보기 — 카드 숫자를 만든 줄들(같은 입력·같은 정의라 합계가 카드와 같다) (260, GAP P-6)
+  const drills = useMemo(() => {
+    const programs = CustomerProgramStore.getAll();
+    const nameOf = new Map(customers.map(c => [c.id, c.name]));
+    const payRows = payments.map(p => ({ id: p.id, paymentDate: p.paymentDate, status: p.status, amount: p.amount, discountAmount: p.discountAmount, customerId: p.customerId, customerName: p.customerId ? nameOf.get(p.customerId) : undefined, type: p.type }));
+    return {
+      newCustomer: newCustomerRows(viewMonth, payRows, customers.map(c => ({ id: c.id, name: c.name, registeredAt: c.registeredAt }))),
+      discount: discountRows(viewMonth, payRows),
+      unused: unusedBalanceRows(today(), programs.map(p => ({ id: p.id, customerName: p.customerId ? nameOf.get(p.customerId) : undefined, programName: p.programName, pricePaid: p.pricePaid, totalSessions: p.totalSessions, usedSessions: p.usedSessions, isCompleted: p.isCompleted, expiryDate: p.expiryDate }))),
+    };
+  }, [viewMonth, payments, customers, metricsTick]);
   const monthClosed = useMemo(() => isMonthClosed(viewMonth), [viewMonth, metricsTick]);
   // 체크아웃 재예약 안내 성과 (243, GAP R-11 후속) — 추천이 없었던 달에는 줄 자체를 보여 주지 않는다
   const rebookStatsLine = useMemo(() => { const r = rebookStatsFor(viewMonth); return describeRebookSummary(r.summary, r.truncated); }, [viewMonth, payments, rebookTick]);
@@ -729,7 +741,7 @@ export default function Sales() {
             </div>
           </div>
 
-          <RevenueMetricsCard key={viewMonth} m={metrics} closed={monthClosed} canLock={isAdminRole(authUser?.role)} onChanged={() => setMetricsTick(t => t + 1)} />
+          <RevenueMetricsCard key={viewMonth} m={metrics} closed={monthClosed} canLock={isAdminRole(authUser?.role)} onChanged={() => setMetricsTick(t => t + 1)} drills={drills} />
 
           {rebookStatsLine && (
             <div className="bg-white rounded-2xl border border-gray-100 p-5" data-testid="rebook-stats">
