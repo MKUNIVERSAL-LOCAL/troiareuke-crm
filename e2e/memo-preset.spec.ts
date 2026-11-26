@@ -74,6 +74,31 @@ test('시술 기록 메모에 자주 쓰는 문구를 저장해 눌러 넣는다
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   const quickChips = page.getByTestId('memo-preset-chips').filter({ visible: true }).first();
-  await quickChips.getByRole('button', { name: '자극 없음 · 홈케어 안내' }).click();
-  await expect(page.getByLabel('빠른 메모').filter({ visible: true }).first()).toHaveValue('자극 없음 · 홈케어 안내');
+  const quickChip = quickChips.getByRole('button', { name: '자극 없음 · 홈케어 안내' });
+  const quickMemo = page.getByLabel('빠른 메모').filter({ visible: true }).first();
+  await quickChip.click();
+  await expect(quickMemo).toHaveValue('자극 없음 · 홈케어 안내');
+  // 258(리뷰 H-2): 문구 자체에 가운뎃점이 있어도 눌린 표시가 되고, 다시 누르면 빠진다(전에는 두 번·세 번 쌓였다)
+  await expect(quickChip).toHaveAttribute('aria-pressed', 'true');
+  await quickChip.click();
+  await expect(quickMemo).toHaveValue('');
+  await quickChip.click();
+  await expect(quickMemo).toHaveValue('자극 없음 · 홈케어 안내');
+
+  // ── 259(리뷰 L-4): 문구 관리는 설정 > 매장 정보에도 있다(시술 기록 창을 열지 않고도) ──
+  await page.goto('/settings?tab=shop');
+  const presetBox = page.getByTestId('settings-memo-presets').filter({ visible: true }).first();
+  await expect(presetBox).toBeVisible();
+  const settingsEditor = presetBox.getByTestId('memo-preset-editor');
+  await settingsEditor.getByLabel('새 문구').fill('마스크팩 10분');
+  await settingsEditor.getByRole('button', { name: '추가' }).click();
+  await dismissToasts(page);
+  await expect(settingsEditor.getByRole('button', { name: '마스크팩 10분 문구 삭제' })).toBeVisible();
+  // 설정에서 넣은 문구가 예약 메모 칩에도 나온다
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click();
+  const add3 = page.getByRole('dialog', { name: '예약 추가' });
+  await expect(add3).toBeVisible();
+  await add3.getByTestId('memo-presets').getByRole('button', { name: '마스크팩 10분' }).click();
+  await expect(add3.getByLabel('메모')).toHaveValue('마스크팩 10분');
 });

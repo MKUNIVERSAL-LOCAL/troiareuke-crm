@@ -578,7 +578,17 @@ export default function Products() {
         <StockLedgerModal product={ledgerProduct} actor={user?.name} onClose={() => setLedgerProduct(null)} onChanged={refresh} />
       )}
       {showReorder && (
-        <ReorderModal products={products} onClose={() => setShowReorder(false)} />
+        <ReorderModal
+          products={products}
+          onClose={() => setShowReorder(false)}
+          onReceive={id => {
+            // 제안을 보고 바로 입고까지 — 창을 닫고 그 제품의 입고·조정 창을 연다 (259, 리뷰 L-5)
+            const p = ProductStore.getAll().find(x => x.id === id);
+            setShowReorder(false);
+            if (p) setStockProduct(p);
+            else notify('제품을 찾을 수 없습니다. 그 사이 삭제됐을 수 있습니다.');
+          }}
+        />
       )}
       {showCount && (
         <StockCountModal products={products} actor={user?.name} onClose={() => setShowCount(false)} onDone={() => { setShowCount(false); refresh(); }} />

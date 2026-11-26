@@ -64,4 +64,10 @@ test('발주 제안 — 판매 속도로 수량을 제안하고 근거를 적고
   await expect(page.getByTestId('reorder')).toBeVisible();
   await expect(page.getByTestId('reorder-row').filter({ hasText: '발주팩' })).toBeVisible();
   await expect(page).toHaveURL(/\/products$/); // 1회 캡처 후 URL 비움(프리필 관례)
+
+  // 259(리뷰 L-5): 할 일 이름이 "입고" 인데 이 창에서는 입고를 못 했다 — 줄의 [입고 기록]이 그 제품의 입고 창을 연다
+  await page.getByTestId('reorder-row').filter({ hasText: '발주팩' }).getByTestId('reorder-receive').click();
+  const stockIn = page.getByRole('dialog').filter({ visible: true }).first();
+  await expect(stockIn).toContainText('발주팩');
+  await expect(page.getByTestId('reorder')).toHaveCount(0); // 발주 창은 닫힌다(창 두 겹 금지)
 });

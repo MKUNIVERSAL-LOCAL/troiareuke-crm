@@ -4,7 +4,9 @@ import { markBackupSaved } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { normalizeGreeting, MAX_GREETING } from '../../lib/receiptRule'; // 영수증 인사말 (256)
-import { getPreference, setPreference, readPersistedPreference } from '../../lib/shopPreferences'; // 영수증 인쇄 정보 (235)
+import { getPreference, setPreference, readPersistedPreference } from '../../lib/shopPreferences';
+import MemoPresetManager from '../../components/MemoPresetManager'; // 자주 쓰는 메모 문구 관리 (259)
+import { memoPresets } from '../../lib/memoPresets'; // 영수증 인쇄 정보 (235)
 // 고객 주의사항 키워드 — 매장이 쓰는 말을 더한다 (240, GAP C-11)
 import { getCautionKeywords, saveCautionKeywords } from '../../lib/cautionKeywords';
 import { CAUTION_KEYWORDS, sanitizeCautionKeywords } from '../../lib/customerAlertRule';
@@ -425,6 +427,7 @@ export default function Settings() {
   const [shopSaving, setShopSaving] = useState(false);
   // 영수증 인쇄 정보 — 설정 행(NAS 동기). 사업자등록번호는 코어 AuthUser 에 있어 화면에서 쓸 수 없다 (235, GAP P-9)
   const [receiptInfo, setReceiptInfo] = useState<{ businessNumber?: string; ownerName?: string; greeting?: string }>(() => getPreference('receiptInfo') ?? {});
+  const [memoPresetList, setMemoPresetList] = useState<string[]>(() => memoPresets()); // 자주 쓰는 메모 문구 (259, 리뷰 L-4)
   // 주의 키워드 — 추가·삭제는 누른 즉시 설정 행에 저장(결제수단과 같은 방식) (240)
   const [cautionWords, setCautionWords] = useState<string[]>(() => getCautionKeywords());
   const [cautionDraft, setCautionDraft] = useState('');
@@ -815,6 +818,12 @@ export default function Settings() {
                       <button type="button" onClick={saveReceiptInfo}
                         className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors">영수증 정보 저장</button>
                     </div>
+                  </div>
+                  {/* 자주 쓰는 메모 문구 — 251~255 는 관리 패널이 시술 기록 창에만 있어 나머지 세 곳이 막다른 길이었다 (259, 리뷰 L-4) */}
+                  <div className="pt-6 border-t border-gray-100" data-testid="settings-memo-presets">
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">자주 쓰는 메모 문구</h4>
+                    <p className="text-xs text-gray-400 mb-3">시술 기록 메모·상담 소견·예약 메모·고객 한 줄 메모에서 눌러 넣는 문장입니다. 시술 기록 창에서도 바로 관리할 수 있습니다.</p>
+                    <MemoPresetManager presets={memoPresetList} onChange={setMemoPresetList} />
                   </div>
                   {/* 결제수단 — 결제 창을 열지 않고도 미리 준비(PILOT-CHECKLIST 24). 추가·삭제는 누른 즉시 지점 설정에 저장돼 같은 지점 모든 PC 에 보인다 (210) */}
                   <div className="pt-6 border-t border-gray-100" data-testid="settings-payment-methods">
