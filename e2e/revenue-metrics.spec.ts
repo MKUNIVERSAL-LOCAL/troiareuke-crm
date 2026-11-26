@@ -33,6 +33,9 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await expect(card.getByTestId('metric-mom')).toHaveText('—');
   await expect(card.getByTestId('metric-yoy')).toHaveText('—');
   await expect(card.getByTestId('metric-discount')).toHaveText('0원'); // 할인 없이 받은 50,000
+  // 262(리뷰 L-2): 할인이 없으면 "근거 보기" 를 걸지 않는다 — 눌러서 "없습니다" 만 보는 길을 만들지 않는다
+  await expect(card.getByTestId('metric-discount-open')).toHaveCount(0);
+
   await expect(card.getByTestId('metric-program')).toHaveText('0원');  // 회차권 판매 없음
   await expect(card.getByTestId('metric-unused')).toHaveText('0원');   // 미사용 잔액 없음
 
@@ -96,6 +99,25 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await registerPayment(page, acc, 10000);
   await expectSales(page, { total: '60,000원' });
   await expect(card.getByTestId('metric-achievement')).toHaveText('60%');
+
+  // 281(리뷰 M-5): 할인 합계 근거 창을 어떤 스펙도 열지 않았다(있던 단언은 "할인이 없으면 버튼이 없다" 하나).
+  // **테스트 끝**에서 넣는다 — 중간에 결제를 더하면 앞의 달성률·시간당 매출 단언(50,000 기준)이 깨진다.
+  await visibleButton(page, '결제 등록').click();
+  const disc = dialog(page, '결제 등록');
+  await pickCustomer(page, acc.customer, disc);
+  await disc.getByLabel('결제 금액').fill('30000');
+  await disc.getByLabel('할인 금액').fill('5000');
+  await disc.getByRole('button', { name: '결제 등록' }).click();
+  await expect(disc).toHaveCount(0);
+  await visibleButton(page, '매출 현황').click();
+  await expect(card.getByTestId('metric-discount')).toHaveText('5,000원');
+  await card.getByTestId('metric-discount-open').click();
+  const discDrill = page.getByTestId('metric-detail');
+  await expect(discDrill.getByTestId('metric-detail-row')).toHaveCount(1);
+  await expect(discDrill.getByTestId('metric-detail-row')).toContainText(acc.customer);
+  await expect(discDrill.getByTestId('metric-detail-total')).toHaveText('5,000원'); // 목록 합계 = 카드 숫자
+  await discDrill.getByRole('button', { name: '닫기' }).click();
+  await expect(page.getByTestId('metric-detail')).toHaveCount(0);
 
   // ── 278: 근거 창의 **빈 상태** — 카드는 줄이 있을 때만 버튼을 걸므로, 창이 열린 동안 ──
   // 다른 기기가 그 자료를 지우는 경우에만 뜬다. 모달이 자료를 매 렌더 읽고(RevenueMetricsCard)

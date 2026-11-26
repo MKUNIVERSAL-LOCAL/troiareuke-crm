@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, visibleButton } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, visibleButton, isNearMidnightSeoul } from './helpers';
 import { addProgram, sellProgramToCustomer, refundFirstPayment, expectSales, openCustomer, expectProgramBadge, expectTreatmentLinkState, openProgramManage, logTreatment } from './flows';
 
 /**
@@ -21,6 +21,7 @@ async function readTable<T>(page: import('@playwright/test').Page, table: string
 
 test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료되고 매출·차감 경로에서 사라진다', async ({ page }) => {
   test.slow();
+  test.skip(isNearMidnightSeoul(), '자정·월말 경계 — 277 이 더한 metric-program 은 이달 범위라 결제일과 보는 달이 달라지면 0원이 된다 (281, 리뷰 L-6)');
   page.on('dialog', d => d.accept()); // 남은 질문형 confirm 수락 — 파괴적 확인은 앱 창이라 아래에서 직접 단언
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);

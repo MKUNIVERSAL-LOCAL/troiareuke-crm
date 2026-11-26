@@ -10,7 +10,10 @@ import { findDuplicateSuspects, describeDuplicateWarning, type DupCandidate } fr
  * 중복으로 보이면 확인창을 띄운다.
  * @returns 저장해도 되는가 — 의심이 없으면 true(창을 띄우지 않는다), 직원이 [그대로 등록] 을 고르면 true
  */
-export async function confirmIfDuplicatePayment(candidate: DupCandidate & { customerName?: string }): Promise<boolean> {
+export async function confirmIfDuplicatePayment(
+  // 281(리뷰 M-2): 지금 등록할 결제의 유형·수단·할인도 받아 창에 한 줄 적는다(비교 상대가 화면에 있어야 한다)
+  candidate: DupCandidate & { customerName?: string; typeLabel?: string; paymentMethod?: string; discountAmount?: number },
+): Promise<boolean> {
   const suspects = findDuplicateSuspects(
     candidate,
     PaymentStore.getAll().map(p => ({

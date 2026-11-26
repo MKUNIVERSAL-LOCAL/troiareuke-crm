@@ -511,6 +511,8 @@ export default function Sales() {
     if (!editingId && !(await confirmIfDuplicatePayment({
       customerId: payload.customerId, customerName: payload.customerName,
       amount: payload.amount, paymentDate: payload.paymentDate, status: payload.status,
+      // 281(리뷰 M-2): 지금 등록할 결제도 창에 한 줄 적어 기존 결제와 비교하게 한다
+      typeLabel: payload.typeLabel, paymentMethod: payload.paymentMethod, discountAmount: payload.discountAmount,
     }))) return;
     // 이중 제출 — 검증을 모두 통과한 뒤에만 잠근다. 앞에서 잠그면 조기 반환마다 풀어야 해서 하나라도 빠지면 버튼이 조용히 죽는다 (224, 221 리뷰 H-2)
     if (!saveLock.current.acquire()) return;

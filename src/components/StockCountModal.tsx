@@ -188,9 +188,10 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
                       <td className="py-2 pr-2 text-gray-900">
                         {r.name}
                         {/* 277(리뷰 M-4): 반영되지 않을 제품이라는 사실을 그 줄에 적는다 — 경고만 띄우고 입력은 받던 자리 */}
-                        {r.removed && <span className="ml-1.5 px-1.5 py-0.5 text-2xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded" data-testid="stock-count-removed">삭제됨</span>}
+                        {r.removed && <span id={`gone-${r.id}`} className="ml-1.5 px-1.5 py-0.5 text-2xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded" data-testid="stock-count-removed">삭제됨 · 반영되지 않음</span>}
                       </td>
-                      <td className="py-2 text-right text-gray-500 whitespace-nowrap">{r.stock}{r.unit}</td>
+                      {/* 삭제된 제품의 "현재고" 는 창을 열 때 동결된 옛 숫자다 — 그대로 적으면 없는 재고를 말한다 (281, 리뷰 L-10) */}
+                      <td className="py-2 text-right text-gray-500 whitespace-nowrap">{r.removed ? `삭제 전 ${r.stock}${r.unit}` : `${r.stock}${r.unit}`}</td>
                       <td className="py-2 text-right">
                         <input
                           inputMode="numeric"
@@ -199,6 +200,7 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
                           aria-label={`${r.name} 실제 수량`}
                           aria-invalid={r.error ? true : undefined}
                           disabled={r.removed}  // 적어도 반영될 곳이 없다 — 받아 두고 버리지 않는다 (277, 리뷰 M-4)
+                          aria-describedby={r.removed ? `gone-${r.id}` : undefined} // 낭독에서도 "반영되지 않음" 이 함께 들리게 (281, 리뷰 L-10)
                           placeholder="-"
                           className={`w-24 px-2 py-2 min-h-[44px] text-sm text-right border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30 disabled:bg-gray-50 disabled:text-gray-400 ${r.error ? 'border-rose-400' : 'border-gray-200'}`}
                         />

@@ -89,13 +89,22 @@ export function findDuplicateSuspects(
  * 확인창에 쓸 말 — 숫자만 주면 직원이 판단할 수 없어 "언제·무엇으로" 를 함께 적는다.
  * @param formatPrice 금액 표기는 화면 규칙을 그대로 쓴다
  */
+/** 한 결제를 "유형 · 수단 · 할인" 한 줄로 — 기존 결제와 지금 등록할 결제를 같은 모양으로 적는다 (281, 리뷰 M-2) */
+function describeOne(p: { typeLabel?: string; paymentMethod?: string; discountAmount?: number }): string {
+  return [p.typeLabel, p.paymentMethod, p.discountAmount && p.discountAmount > 0 ? `할인 ${p.discountAmount.toLocaleString('ko-KR')}원` : '']
+    .filter(Boolean).join(' · ');
+}
+
 export function describeDuplicateWarning(
   suspects: DupSuspect[],
-  candidate: { amount: number; customerName?: string },
+  candidate: { amount: number; customerName?: string; typeLabel?: string; paymentMethod?: string; discountAmount?: number },
   formatPrice: (n: number) => string,
 ): string {
   if (suspects.length === 0) return '';
   const who = candidate.customerName ? `${candidate.customerName} 고객` : '같은 고객';
+  // 279 는 **기존 결제**만 적어서, 직원이 "다른 결제" 라고 판단할 **비교 상대**가 화면에 없었다 (281, 리뷰 M-2).
+  // 창이 폼을 덮으므로 지금 등록하려는 결제도 같은 모양으로 한 줄 적는다.
+  const mine = describeOne(candidate);
   const lines = suspects.slice(0, 3).map(s => {
     // 시계가 어긋난 기록은 "몇 분 전" 을 지어내지 않는다 — 원인(이 PC 시계)까지 적어 직원이 판단하게 (270, 리뷰 M-5)
     const when = s.futureSkewMinutes
@@ -103,14 +112,14 @@ export function describeDuplicateWarning(
       : s.minutesAgo <= 0 ? '방금' : `${s.minutesAgo}분 전`;
     // 279(GAP P-4): **실결제액이 같으면 유형·할인이 달라도 묻는다**(좁히면 진짜 이중 등록을 놓친다) —
     // 대신 유형·수단·할인을 한 줄에 적어 직원이 "다른 결제" 와 "두 번 받은 돈" 을 눈으로 가를 수 있게 한다.
-    const what = [s.typeLabel, s.paymentMethod, s.discountAmount && s.discountAmount > 0 ? `할인 ${s.discountAmount.toLocaleString('ko-KR')}원` : '']
-      .filter(Boolean).join(' · ');
+    const what = describeOne(s);
     // 결제일을 함께 적는다 — 늦은 완료 처리는 오늘이 아닌 날짜로 들어간다 (266, 리뷰 M-3)
     return `· ${when} 등록${what ? ` (${what})` : ''} · 결제일 ${s.paymentDate}`;
   });
   const more = suspects.length > 3 ? `· 그 밖에 ${suspects.length - 3}건` : null;
   return [
     `${who}의 ${formatPrice(candidate.amount)} 결제가 이미 ${suspects.length}건 있습니다.`,
+    mine ? `지금 등록: ${mine}` : null,
     ...lines,
     more,
     '',

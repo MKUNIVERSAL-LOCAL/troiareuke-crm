@@ -49,7 +49,8 @@ export interface DrillResult {
 }
 
 export const DRILL_MAX_ROWS = 100;
-const NO_CUSTOMER = '고객 정보 없음'; // 연결하지 않았거나 그 뒤 삭제된 고객 — 둘을 구분할 자료가 없다 (리뷰 L-4)
+const NO_CUSTOMER = '고객 정보 없음'; // **연결하지 않은** 결제 — 그 뒤 삭제된 고객과 구분할 자료가 없다 (리뷰 L-4)
+const NO_NAME = '이름 없음';          // 고객은 있는데 **이름만** 비어 있다(엑셀 가져오기) — 둘을 섞어 쓰지 않는다 (281, 리뷰 L-8)
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
 
 /**
@@ -106,11 +107,13 @@ export function newCustomerRows(month: string, payments: DrillPayment[], custome
     const c = newOnes.get(p.customerId);
     if (!c) continue;
     total += p.amount;
-    const prev = byCustomer.get(p.customerId) ?? { amount: 0, count: 0, name: c.name || '이름 없음', registeredAt: (c.registeredAt || '').slice(0, 10) };
+    // registeredAt 이 비면 localMonthOf('') === '' 이라 이 고객은 애초에 newOnes 에 들어오지 않는다 —
+    // 그래서 폴백('날짜 미상')은 도달할 수 없었다. 죽은 분기를 두지 않는다 (281, 리뷰 L-7)
+    const prev = byCustomer.get(p.customerId) ?? { amount: 0, count: 0, name: c.name || '이름 없음', registeredAt: c.registeredAt.slice(0, 10) };
     byCustomer.set(p.customerId, { ...prev, amount: prev.amount + p.amount, count: prev.count + 1 });
   }
   const rows: DrillRow[] = [];
-  for (const [id, v] of byCustomer) rows.push({ key: id, label: v.name, detail: `결제 ${v.count}건 · 등록 ${v.registeredAt || '날짜 미상'}`, amount: v.amount });
+  for (const [id, v] of byCustomer) rows.push({ key: id, label: v.name, detail: `결제 ${v.count}건 · 등록 ${v.registeredAt}`, amount: v.amount });
   return finish(rows, total, '이달 등록한 고객의 결제가 아직 없습니다.',
     '고객을 연결하지 않은 결제는 신규에 넣지 않고 기존 고객 매출로 셉니다.');
 }
@@ -144,7 +147,8 @@ export function unusedBalanceRows(today: string, programs: DrillProgram[]): Dril
     total += amount;
     rows.push({
       key: p.id,
-      label: p.customerName || NO_CUSTOMER,
+      // 회차권은 고객에 붙어 있으므로 "고객 정보 없음" 이 아니라 "이름 없음" 이다 (281, 리뷰 L-8)
+      label: p.customerName || NO_NAME,
       detail: `${p.programName || '회차권'} · 잔여 ${remain}회 × 회당 ${won(per)}`,
       amount,
     });

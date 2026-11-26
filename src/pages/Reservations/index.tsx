@@ -2033,6 +2033,8 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
       // ② 다른 예약·단건으로 같은 금액이 방금 들어왔는지 (264, GAP P-4)
       customerId: basePayment.customerId, customerName: basePayment.customerName,
       amount: r.totalPrice, paymentDate: basePayment.paymentDate, status: basePayment.status,
+      // 281(리뷰 M-2): 예약 완료 결제는 코어가 할인을 0 으로 적는다 — 유형·수단만 비교에 쓴다
+      typeLabel: basePayment.typeLabel, discountAmount: basePayment.discountAmount,
     }))) return;
     // 이중 제출 — 검증을 모두 지난 뒤에만 잠근다 (224, 221 리뷰 M-1)
     if (!saveLock.current.acquire()) return;

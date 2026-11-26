@@ -24,5 +24,6 @@ test('모바일 폭에서도 결제 → 지출 → 손익계산서 → 환불이
   await expect(expenses.getByRole('listitem')).toHaveCount(1);
   await expect(expenses).toContainText('앰플 20개 매입');
   await expect(expenses).toContainText('임대료');   // 시나리오가 바꾼 분류가 카드에도 보인다
-  await expect(expenses).toContainText('20,000원');
+  // 281(리뷰 M-4): 금액은 자리까지 맞춘다 — 부분 문자열은 다른 금액에도 맞는다
+  await expect(expenses.getByRole('listitem').first()).toHaveText(/−?20,000원/);
 });

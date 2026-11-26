@@ -865,6 +865,8 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
     if (form.customerId && totalPrice > 0 && !(await confirmIfDuplicatePayment({
       customerId: form.customerId, customerName: selectedCustomer?.name,
       amount: totalPrice, paymentDate: form.saleDate, status: 'completed',
+      // 281(리뷰 M-2): 제품 판매도 코어가 할인 0 으로 적는다 — 유형·수단으로 구별하게 한다
+      typeLabel: `제품 · ${product.name}`, paymentMethod: form.paymentMethod,
     }))) return;
     if (!saleLock.current.acquire()) return; // 이중 제출 — 같은 판매가 두 건 기록되지 않게 (221, GAP P-4)
     setSaving(true);

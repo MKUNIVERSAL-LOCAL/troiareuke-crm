@@ -15,6 +15,13 @@ import MetricDetailModal from './MetricDetailModal';
  * 전에는 `${testId}-open` 으로 만들어서 화면 칸 커버리지 가드(276)가 그 버튼을 아예 못 봤다
  * (그래서 미사용 회원권 잔액 근거 버튼이 어느 스펙에도 없는데 가드가 침묵했다 — 277, 리뷰 M-2).
  */
+/**
+ * 지표 한 칸. 근거를 볼 수 있는 칸만 버튼이고, 그 버튼의 testid 는 **리터럴**(`openTestId`)로 받는다 —
+ * 보간(`${testId}-open`)은 화면 칸 커버리지 가드가 보지 못한다(277, 리뷰 M-2).
+ * 다만 리터럴을 빠뜨리면 버튼에 testid 가 아예 없어지므로(281, 리뷰 L-1) **보간을 폴백으로 남긴다** —
+ * 타입으로 강제하지 못하는 이유: `openDrill` 은 줄이 없으면 `undefined` 를 돌려주므로 호출 쪽의
+ * `onOpen` 은 항상 "있을 수도 없을 수도" 다(유니온으로 묶으면 정상 호출이 타입 오류가 된다).
+ */
 function Item({ label, value, sub, subTestId, tip, testId, openTestId, tone, onOpen }: { label: string; value: string; sub?: string; subTestId?: string; tip: string; testId?: string; openTestId?: string; tone?: 'up' | 'down' | 'warn'; onOpen?: () => void }) {
   const valueClass = `text-lg font-bold mt-0.5 ${tone === 'up' ? 'text-green-700' : tone === 'down' ? 'text-red-600' : tone === 'warn' ? 'text-amber-700' : 'text-gray-900'}`;
   const body = (
@@ -28,7 +35,7 @@ function Item({ label, value, sub, subTestId, tip, testId, openTestId, tone, onO
   // 근거를 볼 수 있는 칸만 버튼이다 — 눌러도 아무 일 없는 칸을 버튼으로 만들지 않는다(장식 UI 금지, 260)
   if (onOpen) { // <p> 를 버튼 안에 넣지 않는다 — 비표준 중첩 (리뷰 L-5)
     return (
-      <button type="button" onClick={onOpen} title={tip} data-testid={openTestId}
+      <button type="button" onClick={onOpen} title={tip} data-testid={openTestId ?? (testId ? `${testId}-open` : undefined)}
         className="text-left bg-white rounded-2xl border border-gray-100 p-3.5 hover:border-[#1a3a8f]/40 hover:bg-blue-50/30 transition-colors">
         {body}
         <span className="mt-1 block text-2xs font-medium text-[#1a3a8f]">근거 보기 →</span>

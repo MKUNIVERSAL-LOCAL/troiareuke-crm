@@ -58,28 +58,47 @@ function listFiles(dir, exts = ['.ts', '.tsx'], out = []) {
 }
 
 /** 화면 쪽 정의 — { ids: Map<id, file>, dynamic: string[] } */
+/** `{` 에서 시작해 짝이 맞는 `}` 까지 — 여러 줄·중첩 중괄호도 끊지 않고 그대로 읽는다 (281, 리뷰 L-2·L-4) */
+function braced(text, openAt) {
+  let depth = 0;
+  for (let i = openAt; i < text.length; i++) {
+    if (text[i] === '{') depth += 1;
+    else if (text[i] === '}') { depth -= 1; if (depth === 0) return text.slice(openAt + 1, i); }
+  }
+  return null;
+}
+
 function definedTestIds(sources) {
   const ids = new Map();
   const dynamic = [];
+  const passthrough = []; // 프로퍼티로 받은 리터럴을 그대로 내려 주는 자리 — 사각지대가 아니다
   for (const { file, text } of sources) {
     // data-testid="x" | data-testid={'x'} | data-testid={`x`}
     for (const m of text.matchAll(/data-testid=(?:"([^"]+)"|'([^']+)'|\{\s*(?:"([^"]+)"|'([^']+)'|`([^`${]+)`)\s*\})/g)) {
       const id = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5];
       if (!ids.has(id)) ids.set(id, file);
     }
-    // 값을 런타임에 만드는 자리 — 세지 않고 전부 따로 보고한다. 보간 템플릿(`x-${v}`)·식별자·삼항 모두 (277, 리뷰 M-2)
-    for (const m of text.matchAll(/data-testid=\{(?!\s*(?:"[^"]*"|'[^']*'|`[^`$]*`)\s*\})([^}\n]*)\}/g)) {
+    // 값을 런타임에 만드는 자리 — 세지 않고 따로 보고한다. 보간 템플릿(`x-${v}`)·삼항 모두 (277, 리뷰 M-2).
+    // 단, `{xxxTestId}` 처럼 **프로퍼티로 받은 리터럴을 그대로 내려 주는 자리**는 사각지대가 아니다 —
+    // 같은 파일의 `xxxTestId="…"` 에서 이미 수집된다. 그것까지 세면 사각지대를 과대 보고한다 (281, 리뷰 L-2)
+    for (const m of text.matchAll(/data-testid=\{(?!\s*(?:"[^"]*"|'[^']*'|`[^`$]*`)\s*\})/g)) {
+      const inner = braced(text, m.index + m[0].length - 1);
+      if (inner === null) continue;
       const line = text.slice(0, m.index).split('\n').length;
-      dynamic.push(`${file}:${line}  data-testid={${m[1].trim()}}`);
+      if (/^[A-Za-z_$][\w$]*$/.test(inner.trim()) && /[tT]estId$/.test(inner.trim())) {
+        passthrough.push(`${file}:${line}  {${inner.trim()}}`);
+        continue;
+      }
+      dynamic.push(`${file}:${line}  data-testid={${inner.trim()}}`);
     }
     // testId="x"·openTestId="x" — data-testid 로 내려가는 프로퍼티는 **이름이 무엇이든** 모은다.
     // 277 전에는 `\btestId=` 만 찾아서 `openTestId="metric-unused-open"` 을 놓쳤다 — 리터럴로 바꾼 보람이 없었다.
-    for (const m of text.matchAll(/\b\w*[tT]estId=(?:"([^"]+)"|'([^']+)'|\{\s*(?:"([^"]+)"|'([^']+)'|`([^`${]+)`)\s*\})/g)) {
+    for (const m of text.matchAll(/(?:^|[\s{])(?:testId|[a-z][A-Za-z]*TestId)=(?:"([^"]+)"|'([^']+)'|\{\s*(?:"([^"]+)"|'([^']+)'|`([^`${]+)`)\s*\})/gm)) {
       const id = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5];
       if (!ids.has(id)) ids.set(id, file);
     }
   }
-  return { ids, dynamic };
+  return { ids, dynamic, passthrough };
 }
 
 /** 스펙 쪽 참조 — 따옴표 안의 모든 문자열(넓게 본다) */
@@ -122,6 +141,13 @@ function selftest() {
   // 보간 템플릿도 "값을 모르는 칸" 으로 잡힌다 (277, 리뷰 M-2)
   const interp = definedTestIds([{ file: 'y.tsx', text: '<div data-testid={`row-${i}`} />' }]);
   if (interp.ids.size !== 0 || interp.dynamic.length !== 1) { console.error('[selftest] 보간 덫 실패'); process.exit(1); }
+  // 281(리뷰 L-2·L-3·L-4): 여러 줄 정의·중첩 중괄호·프로퍼티 전달·이름이 우연히 맞는 프로퍼티
+  const multi = definedTestIds([{ file: 'z.tsx', text: '<div\n  data-testid={\n    cond ? { a: 1 }.a : other\n  }\n/>' }]);
+  if (multi.dynamic.length !== 1 || multi.dynamic[0].includes('\n')) { console.error(`[selftest] 여러 줄 덫 실패: ${JSON.stringify(multi.dynamic)}`); process.exit(1); }
+  const pass = definedTestIds([{ file: 'w.tsx', text: '<Item openTestId="lit" />\n<span data-testid={openTestId} />' }]);
+  if (pass.ids.size !== 1 || pass.dynamic.length !== 0 || pass.passthrough.length !== 1) { console.error('[selftest] 프로퍼티 전달 덫 실패'); process.exit(1); }
+  const near = definedTestIds([{ file: 'v.tsx', text: '<Row latestId="not-a-testid" />' }]);
+  if (near.ids.size !== 0) { console.error(`[selftest] 이름 경계 덫 실패: ${[...near.ids.keys()]}`); process.exit(1); }
 
   const used = referencedNames([{ file: 's.ts', text: `getByTestId('plain'); locator('[data-testid="braced"]'); const k = \`tpl\`;` }]);
   const un = findUncovered(ids, used);
@@ -129,20 +155,21 @@ function selftest() {
   // 부분 문자열이 참조로 세어지지 않는다 — 'plain-open' 은 'plain' 과 다른 칸이다
   const used2 = referencedNames([{ file: 's.ts', text: `getByTestId('plain-open')` }]);
   if (!findUncovered(new Map([['plain', 'x']]), used2).includes('plain')) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-testid-coverage] selftest OK — 덫 6개(변수·삼항·프로퍼티 이름·보간 템플릿·부분 문자열·낡은 목록) 통과');
+  console.log('[check-testid-coverage] selftest OK — 덫 9개(변수·삼항·프로퍼티·보간·부분 문자열·낡은 목록·여러 줄·프로퍼티 전달·이름 경계) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
 
 const read = files => files.map(file => ({ file: path.relative(ROOT, file).replace(/\\/g, '/'), text: fs.readFileSync(file, 'utf8') }));
-const { ids, dynamic } = definedTestIds(read(listFiles(path.join(ROOT, 'src'))));
+const { ids, dynamic, passthrough } = definedTestIds(read(listFiles(path.join(ROOT, 'src'))));
 const used = referencedNames(read(listFiles(path.join(ROOT, 'e2e'))));
 const uncovered = findUncovered(ids, used);
 
 if (process.argv.includes('--list')) {
   for (const id of uncovered) console.log(`${id}\t${ids.get(id)}\t${ALLOWED[id] ?? '(사유 없음)'}`);
-  console.log(`\n정의 ${ids.size}개 · 미참조 ${uncovered.length}개 · 값을 모르는 칸 ${dynamic.length}개(아래)`);
+  console.log(`\n정의 ${ids.size}개 · 미참조 ${uncovered.length}개 · 값을 모르는 칸 ${dynamic.length}개(아래) · 프로퍼티 전달 ${passthrough.length}개`);
   for (const d of dynamic) console.log(`  ~ ${d}`);
+  for (const p of passthrough) console.log(`  = ${p}`);
   process.exit(0);
 }
 

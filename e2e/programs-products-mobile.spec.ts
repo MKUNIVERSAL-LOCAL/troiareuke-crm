@@ -25,5 +25,6 @@ test('모바일 폭에서도 회차권 판매 → 시술 차감 → 제품 판�
   await expect(sales).toContainText('1개 × 48,000원');
   await expect(sales).toContainText('취소(환불)');
   await expect(sales).toContainText('표시분 합계(최근 60건)');
-  await expect(sales.getByRole('listitem').last()).toContainText('0원'); // 취소분은 합계에 넣지 않는다
+  // 281(리뷰 M-4): `toContainText('0원')` 은 "48,000원" 안의 "0원" 에도 맞아, 취소분을 매출로 세도 통과했다
+  await expect(sales.getByRole('listitem').last()).toHaveText(/^표시분 합계\(최근 60건\)0원$/);
 });

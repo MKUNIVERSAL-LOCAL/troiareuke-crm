@@ -27,8 +27,28 @@ import { isCore } from './core-lock.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
-const label = (argv.find(a => /^\d+$/.test(a)) ?? new Date().toISOString().slice(0, 10)).toString();
+// 라벨은 플래그 **값이 아닌** 첫 숫자 인자 — `--base 1234567 281` 에서 sha 를 라벨로 집던 것 (281, 리뷰 L-5)
+const label = (() => {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--base' || argv[i] === '--out') { i += 1; continue; }
+    if (/^\d+$/.test(argv[i])) return argv[i];
+  }
+  return new Date().toISOString().slice(0, 10);
+})();
 const noSmoke = argv.includes('--no-smoke');
+// 모르는 인자를 받으면 **그냥 전체 게이트를 시작하지 않는다** — 리뷰어가 `--help` 를 줬다가
+// 앱·e2e 빌드가 돌았다(메모리 규칙상 돌리지 말아야 할 단계다) (281, 리뷰 L-5)
+const USAGE = `사용: node scripts/gate-light.mjs <묶음번호> [--no-smoke] [--base <sha>] [--out <dir>]
+  <묶음번호>   로그·플래그 파일 이름 (예: 281 → .gate/gate281.log)
+  --no-smoke   스모크 생략(코드를 안 건드린 문서 묶음)
+  --base <sha> 코어 잠금 검사의 기준점 (기본: origin/main 과의 merge-base)
+  --out <dir>  로그를 둘 폴더 (기본: .gate/)`;
+if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(USAGE + '\n'); process.exit(0); }
+{
+  const known = new Set(['--no-smoke', '--base', '--out']);
+  const bad = argv.filter(a => a.startsWith('-') && !known.has(a));
+  if (bad.length > 0) { process.stderr.write(`모르는 인자: ${bad.join(', ')}\n${USAGE}\n`); process.exit(2); }
+}
 const baseAt = argv.indexOf('--base');
 const baseArg = baseAt >= 0 ? argv[baseAt + 1] : null;
 const outAt = argv.indexOf('--out');
@@ -71,18 +91,30 @@ function coreLockViolations() {
     base = mb.status === 0 ? (mb.stdout || '').trim() : null;
   }
   const names = new Set();
-  const sources = [['diff', '--name-only', 'HEAD'], ['ls-files', '--others', '--exclude-standard']];
-  if (base) sources.unshift(['diff', '--name-only', `${base}...HEAD`]);
-  for (const args of sources) {
-    const r = git(args);
-    for (const line of (r.stdout || '').split('\n')) if (line.trim()) names.add(line.trim());
-  }
+  const collect = args => {
+    const before = names.size;
+    for (const line of (git(args).stdout || '').split('\n')) if (line.trim()) names.add(line.trim());
+    return names.size - before;
+  };
+  const branchCount = base ? collect(['diff', '--name-only', `${base}...HEAD`]) : 0;
+  const treeBefore = names.size;
+  collect(['diff', '--name-only', 'HEAD']);
+  collect(['ls-files', '--others', '--exclude-standard']);
+  const treeCount = names.size - treeBefore;
   const hits = [...names].filter(isCore);
-  const scope = base ? `기준점 ${base.slice(0, 7)}..HEAD + 작업 트리` : '작업 트리만(기준점을 찾지 못했다 — origin/main 없음)';
-  log(`\n===== [L] 코어 잠금 =====\n범위: ${scope}\n변경 파일 ${names.size}개, 코어 위반 ${hits.length}개\n${hits.join('\n')}`);
-  if (hits.length > 0) process.stdout.write(`L 코어 잠금: FAIL — ${hits.join(', ')}\n`);
-  else process.stdout.write(`L 코어 잠금: ok (${scope}, 변경 ${names.size}개)\n`);
-  return hits.length === 0 ? 0 : 1;
+  // 범위를 **나눠 적는다** — merge-base..HEAD 는 브랜치 누적(지금 커밋 100개대)이라 한 숫자로 적으면
+  // "이 묶음이 몇 개를 건드렸나" 로 읽혀 틀린다 (281, 리뷰 L-11)
+  const scope = base ? `브랜치 누적 ${branchCount}개(${base.slice(0, 7)}..HEAD) + 작업 트리 ${treeCount}개` : `작업 트리 ${treeCount}개만(기준점을 찾지 못했다 — origin/main 없음)`;
+  log(`\n===== [L] 코어 잠금 =====\n범위: ${scope}\n코어 위반 ${hits.length}개\n${hits.join('\n')}`);
+  if (hits.length === 0) { process.stdout.write(`L 코어 잠금: ok (${scope})\n`); return 0; }
+  // 오너 승인으로 코어를 고친 묶음이 있으면 그 뒤 모든 묶음이 영구히 빨개진다 — 숨기지도, 막지도 않고 적는다
+  if (process.env.CORE_EDIT === '1') {
+    log(`CORE_EDIT=1 — 승인된 코어 편집으로 보고 통과시킨다(파일 목록은 위)`);
+    process.stdout.write(`L 코어 잠금: WARN(승인됨, CORE_EDIT=1) — ${hits.join(', ')}\n`);
+    return 0;
+  }
+  process.stdout.write(`L 코어 잠금: FAIL — ${hits.join(', ')}\n`);
+  return 1;
 }
 
 if (fs.existsSync(path.join(ROOT, '.env.local'))) {

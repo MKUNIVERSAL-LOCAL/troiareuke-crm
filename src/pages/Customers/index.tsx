@@ -1723,6 +1723,8 @@ export default function Customers() {
     if (pricePaid > 0 && !(await confirmIfDuplicatePayment({
       customerId: selected.id, customerName: selected.name,
       amount: pricePaid, paymentDate: progForm.purchaseDate, status: 'completed',
+      // 281(리뷰 M-2): 회차권 등록은 코어가 할인 0 으로 적는다 — 유형·수단으로 구별하게 한다
+      typeLabel: `회차권 · ${prog.name}`, paymentMethod: progForm.paymentMethod,
     }))) return;
     CustomerProgramStore.save({
       customerId: selected.id,

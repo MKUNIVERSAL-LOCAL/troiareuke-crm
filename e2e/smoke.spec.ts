@@ -294,6 +294,24 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     return { status, linked: linked.length, amount: linked[0]?.amount };
   }, pendingId);
   expect(pendingAfter).toEqual({ status: 'completed', linked: 1, amount: 30000 }); // 예약 id로 연결된 결제 1건
+  // 281(리뷰 M-1): 277 의 교차검증은 **타일 ↔ 그 카드의 분모·분자** 자기 일관성만 본다 — 이 흐름의 자료는
+  // 전부 오늘·어제라 `returning=0`·`visitors=1` → `0/1명`·`0%` 로 통과했고, 그것이 바로 277 주석이
+  // "옛 증상" 이라 지목한 값이었다. **지난달 완료 예약 1건**을 심어 재방문율이 100% 여야 하게 만든다.
+  await page.evaluate(() => {
+    const ck = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const cust = JSON.parse(localStorage.getItem(ck) || '[]') as { id: string; name: string; phone?: string }[];
+    const c = cust[0];
+    const last = new Date(); last.setDate(1); last.setMonth(last.getMonth() - 1);
+    const day = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-15`;
+    const rk = ck.replace(/_customers$/, '_reservations');
+    const resv = JSON.parse(localStorage.getItem(rk) || '[]');
+    resv.push({
+      id: `seed-last-month-${Date.now()}`, customerId: c.id, customerName: c.name, customerPhone: c.phone || '',
+      staffId: '', staffName: '', services: [], date: day, startTime: '10:00', endTime: '11:00',
+      status: 'completed', source: 'walk-in', totalPrice: 0,
+    });
+    localStorage.setItem(rk, JSON.stringify(resv));
+  });
   await page.goto('/');
   await expect(page.getByTestId('pending-completion-card')).toHaveCount(0);
   // 가동률 (180): 이달 완료·확정 예약 시간 ÷ 직원 근무 가용 시간 — 오늘 완료 예약이 있으니 "이달 운영 지표"에 %로 뜬다
@@ -303,9 +321,8 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('가동률 = 이달 오늘까지 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간');
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('재방문율 =');
-  // 273: 재방문율·객단가 타일도 숫자를 말해야 한다(이달 방문이 있으니 '-' 가 아니다)
-  // 277(리뷰 M-1): 타일은 `visitors > 0` 일 때만 뜨므로 /^\d+%$/ 는 **도달 가능한 값 전부**와 맞는다 —
-  // 재방문율이 100 이어야 할 자리에 0 이 찍혀도 통과했다. 분모·분자 줄을 함께 읽어 **그 비율이 맞는지** 본다.
+  // 273·277·281: 타일이 그 카드의 분모·분자와 어긋나지 않는지 본다(값 자체는 픽스처가 고정한다 — 아래 100%).
+  // 두 값은 같은 `monthlyKpis()` 결과에서 나오므로 교차검증만으로는 분자가 틀린 것을 잡지 못한다 (리뷰 M-1).
   const expectRatio = async (valueId: string, subId: string) => {
     const sub = (await kpiCard.getByTestId(subId).innerText()).trim();
     const m = sub.match(/^(\d+)\/(\d+)명$/);
@@ -316,6 +333,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   };
   await expectRatio('kpi-revisit', 'kpi-revisit-sub');
   await expectRatio('kpi-rebook', 'kpi-rebook-sub');
+  // 값 고정 — 이달 방문 1명이 지난달에도 왔으므로 재방문율은 100% 여야 한다(0% 로는 통과할 수 없다)
+  await expect(kpiCard.getByTestId('kpi-revisit-sub')).toHaveText('1/1명');
+  await expect(kpiCard.getByTestId('kpi-revisit')).toHaveText('100%');
   // 객단가는 이 카드에 분자(이달 결제 합)가 없다 — 방문 수가 1 이상이고 이달 완료 결제가 있으므로 **0원은 아니어야** 한다
   await expect(kpiCard.getByTestId('kpi-ticket-sub')).toHaveText(/^방문 [1-9]\d*명$/);
   await expect(kpiCard.getByTestId('kpi-ticket')).toHaveText(/^[\d,]+원$/);
