@@ -740,6 +740,7 @@ Codex 서머리에서 CRM에 직접 관련된 것은 (1) `F:\dev\troiareuke-crm`
 - 2026-11-26 16:04 275차 재검증(272, HEAD b32e8c5, PR #58): tsc 0·tsc -p e2e 0·build·build:e2e(두 빌드), Playwright staff 3/3·smoke 2/2(**게이트 편입**)·follow-up 1/1, check:rules·check:distribution·check:routes·test:updater·test:outbox 9/9·mobile:prepare 통과, core-lock 위반 0, 릴리스 노트 가드 통과. exe 는 11:00 중단 상태 그대로
 - 2026-11-26 16:40 276차 재검증(273, HEAD 762624a, PR #58): tsc 0·tsc -p e2e 0·build·build:e2e(두 빌드), Playwright smoke 2/2·follow-up 1/1, check:rules·check:distribution·check:routes·test:updater·test:outbox 9/9·mobile:prepare 통과, core-lock 위반 0, 릴리스 노트 가드 통과. exe 는 11:00 중단 상태 그대로
 - 2026-11-26 17:15 277차 재검증(274, HEAD ec2d3e5, PR #58): tsc 0·tsc -p e2e 0·build·build:e2e(두 빌드), Playwright lib-units 157/157·stock-count 2/2·campaigns 2/2·smoke 2/2·follow-up 1/1·staff 3/3, check:rules·check:distribution·check:routes·test:updater·test:outbox 9/9·mobile:prepare 통과, **코어 잠금 검사가 게이트 안으로 들어왔다**(L 칸, 변경 파일 전수 `isCore` 대조 → 위반 0). exe 는 11:00 중단 상태 그대로
+- 2026-11-26 17:22 **테스트 exe 재빌드 완료(274 포함)**: 지점 17:21·어드민 17:22, asar 마커 NAS=3·SB=0·버전 5·Pretendard 3786, CDP `isAdminBuild` false/true PASS, 폰트 로드 PASS, 잔존 Electron 프로세스 0. 11:00 시도가 시스템 메모리 회수로 지점만 끝났던 상태를 여기서 닫았다(바탕화면 테스트 바로가기도 이 빌드를 가리킨다)
 - 남은 것: PR #54 머지 → `npm run release:all`(게이트 전부 통과 상태) → NAS 채널 게시·서버 재배포(오너).
 
 ## 4. 릴리스 운영 원칙 (변경 없음)
