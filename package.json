@@ -37,6 +37,7 @@
     "check:distribution": "node scripts/check-distribution-invariants.mjs",
     "check:notes": "node scripts/check-release-notes.mjs --selftest && node scripts/check-release-notes.mjs",
     "test:server": "node scripts/run-server-tests.mjs",
+    "release:rehearse": "node scripts/release-rehearse.mjs",
     "release:checks": "npm run test:server && node scripts/check-routes.mjs && npm run check:rules && npm run check:testids && npm run check:docs && npm run check:gap && npm run check:save && npm run check:modal-a11y && npm run check:e2e-types && node scripts/check-distribution-invariants.mjs && npm run check:notes && node scripts/test-updater-helpers.mjs && node scripts/test-nas-outbox.mjs && npm run build:e2e && npm run test:e2e",
     "release:run": "node scripts/release-run.mjs",
     "electron:build:release": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis portable",
