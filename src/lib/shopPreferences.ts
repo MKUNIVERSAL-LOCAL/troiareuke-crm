@@ -61,8 +61,9 @@ export function migrateLegacyPreference<K extends PrefKey>(
  * SettingsStore.get() 은 메모리 캐시를 먼저 돌려주고 safeSetItem 은 용량 초과를 삼키므로,
  * 캐시를 되읽는 확인은 저장 실패를 잡지 못한다 — localStorage 원본을 직접 본다.
  * 읽을 수 없으면(프라이빗 모드 등) null 을 돌려주고 호출 쪽이 "확인 불가" 로 다룬다.
+ * 286 부터 **이 파일 안에서만** 쓴다 — 되읽기 판정이 네 벌로 갈라져 있던 것을 `setPreference` 한 곳으로 모았다(미사용 export 금지).
  */
-export function readPersistedPreference<K extends PrefKey>(key: K): ShopPreferences[K] | null | undefined {
+function readPersistedPreference<K extends PrefKey>(key: K): ShopPreferences[K] | null | undefined {
   try {
     const raw = localStorage.getItem(`crm_${getShopId()}_settings`);
     if (!raw) return null;
