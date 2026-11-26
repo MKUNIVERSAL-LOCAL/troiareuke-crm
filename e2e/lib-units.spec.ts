@@ -2705,3 +2705,17 @@ test('발송 성과 근거 — 0원 완료 결제도 결제한 사람으로 센�
   expect(rows[0].amount).toBe(0);
   expect(rows.filter(r => r.paidOn !== null).length).toBe(sum.paid); // 금액으로 세면 0원 건이 빠진다
 });
+
+// ── 267: 기기 시계가 앞선 PC 에서도 중복을 놓치지 않는다 (리뷰 L-6) ──
+
+test('중복 결제 의심 — 등록 시각이 미래인 결제(시계 어긋남)도 창 안이면 잡는다 (267)', () => {
+  const now = '2026-11-26T05:00:00.000Z';
+  const base = { customerId: 'c9', amount: 70000, paymentDate: '2026-11-26', status: 'completed' as const };
+  const future = [{ id: 'f1', ...base, createdAt: '2026-11-26T05:10:00.000Z', paymentMethod: '카드' }]; // 10분 뒤로 적힌 결제
+  const hits = findDuplicateSuspects(base, future, now);
+  expect(hits.map(h => h.id)).toEqual(['f1']);
+  expect(hits[0].minutesAgo).toBe(0); // "방금" 으로 말한다(음수 분을 보여 주지 않는다)
+  // 창을 크게 벗어난 미래(시계가 하루 틀린 PC)는 넣지 않는다 — 엉뚱한 경고를 만들지 않는다
+  const farFuture = [{ id: 'f2', ...base, createdAt: '2026-11-27T05:00:00.000Z' }];
+  expect(findDuplicateSuspects(base, farFuture, now)).toEqual([]);
+});

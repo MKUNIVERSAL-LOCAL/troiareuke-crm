@@ -60,8 +60,10 @@ export function findDuplicateSuspects(
     const t = new Date(p.createdAt).getTime();
     if (Number.isNaN(t)) continue;                        // 등록 시각을 모르면 "몇 분 전" 을 지어내지 않는다
     const minutes = Math.floor((nowMs - t) / 60_000);
-    if (minutes < 0 || minutes > windowMinutes) continue;
-    out.push({ id: p.id, minutesAgo: minutes, paymentDate: p.paymentDate, paymentMethod: p.paymentMethod, typeLabel: p.typeLabel });
+    if (minutes > windowMinutes) continue;
+    // 기기 시계가 앞서 있으면 "미래에 등록된" 결제가 생긴다 — 창 안이면 0분(방금)으로 보고 넘기지 않는다 (267, 리뷰 L-6)
+    if (minutes < 0 && -minutes > windowMinutes) continue;
+    out.push({ id: p.id, minutesAgo: Math.max(0, minutes), paymentDate: p.paymentDate, paymentMethod: p.paymentMethod, typeLabel: p.typeLabel });
   }
   return out.sort((a, b) => a.minutesAgo - b.minutesAgo);
 }

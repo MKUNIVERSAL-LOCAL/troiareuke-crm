@@ -10,6 +10,9 @@ import { formatDateTime, formatPrice } from '../../lib/format';
 import { listCampaigns, deleteCampaign, setCampaignEnabled, lastRunOf, sendsOf, addMissingPresets } from '../../lib/campaignStore';
 import { ReservationStore, PaymentStore } from '../../lib/store';
 import { estimatePerformance, describePerformance } from '../../lib/campaignPerformanceRule';
+import { campaignPerformanceDrill } from '../../lib/messagePerformance'; // 성과 근거 목록 (267, GAP M-6)
+import MetricDetailModal from '../MetricDetailModal';
+import type { DrillResult } from '../../lib/revenueDrilldownRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../../lib/campaignPresets';
 import { listSavedSegments } from '../../lib/savedSegments';
 import { describeTrigger, REPEAT_LABELS, type Campaign } from '../../lib/campaignRule';
@@ -22,6 +25,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>(() => listCampaigns());
   const [editing, setEditing] = useState<Campaign | null | 'new'>(null);
   const [running, setRunning] = useState<Campaign | null>(null);
+  const [perfDrill, setPerfDrill] = useState<{ title: string; result: DrillResult } | null>(null); // 성과 근거 (267)
   const refresh = () => setCampaigns(listCampaigns());
   const missing = missingPresets(campaigns.map(c => c.name)).length;
   const segmentNames = useMemo(() => new Map(listSavedSegments().map(sg => [sg.id, sg.name])), [campaigns]); // 행에 세그먼트 이름 (167) // eslint-disable-line react-hooks/exhaustive-deps
@@ -78,7 +82,20 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
                     {!c.enabled && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">꺼짐</span>}
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">{describeTrigger(c)} · {REPEAT_LABELS[c.repeat]}{c.segmentId ? ` · 세그먼트 ${segmentNames.get(c.segmentId) ?? '삭제됨(아무에게도 안 감)'}` : ''}{last ? ` · 마지막 발송 ${formatDateTime(last)}` : ''}</p>
-                  {perf && <p className="text-xs text-gray-600 mt-0.5" data-testid="campaign-perf">{perf}</p>}
+                  {perf && (
+                    <p className="text-xs text-gray-600 mt-0.5 flex flex-wrap items-center gap-2" data-testid="campaign-perf">
+                      {perf}
+                      {/* 숫자만 주면 "이 캠페인 덕" 인지 확인할 수 없다 — 세어진 고객을 그대로 보여 준다 (267, GAP M-6) */}
+                      <button type="button" data-testid="campaign-perf-rows"
+                        onClick={() => setPerfDrill({
+                          title: `${c.name} 성과 근거`,
+                          result: campaignPerformanceDrill(sendsOf(c.id).map(r => ({ customerId: r.customerId, at: r.at })), { showMoney: canDo(user?.role, 'sales.view') }),
+                        })}
+                        className="px-2 py-1 min-h-[32px] rounded-lg text-xs font-medium text-[#1a3a8f] bg-blue-50 hover:bg-blue-100">
+                        누가 세어졌나
+                      </button>
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -99,6 +116,14 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
       </div>
       {editing !== null && <CampaignEditModal campaign={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); refresh(); }} />}
       {running && <CampaignRunModal campaign={running} onClose={() => setRunning(null)} onSent={() => { refresh(); onSent(); }} />}
+      {perfDrill && (
+        <MetricDetailModal
+          title={perfDrill.title}
+          note="이 캠페인으로 문자가 나간 고객 전원입니다 — 예약·결제가 없던 분도 함께 보여 줍니다."
+          result={perfDrill.result}
+          onClose={() => setPerfDrill(null)}
+        />
+      )}
     </div>
   );
 }

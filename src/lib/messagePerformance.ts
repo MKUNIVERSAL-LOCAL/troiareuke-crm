@@ -73,3 +73,39 @@ export function historyPerformanceDrill(historyId: string, sentAt: string, known
     empty: '이 발송의 수신 고객 기록이 없습니다.',
   };
 }
+
+/**
+ * 캠페인 성과 근거 목록 (267, GAP M-6) — 발송 이력 쪽(263)과 **같은 규칙·같은 모양**.
+ * 캠페인은 고객마다 발송 시각이 달라(회차·조건에 따라) 고객별 첫 발송일부터 창을 연다.
+ * 발송 기록이 없으면 빈 목록 + 빈 상태 문구를 돌려준다(버튼은 성과 줄이 있을 때만 보이므로 실제로는 비지 않는다).
+ */
+export function campaignPerformanceDrill(sends: { customerId: string; at: string }[], opts: { showMoney?: boolean } = {}): DrillResult {
+  const set = new Set(sends.map(s => s.customerId));
+  const resv = ReservationStore.getAll().filter(r => set.has(r.customerId));
+  const pays = PaymentStore.getAll().filter(p => !!p.customerId && set.has(p.customerId));
+  const nameOf = new Map(CustomerStore.getAll().map(c => [c.id, c.name]));
+  const all = performanceRows(sends, resv, pays);
+  const total = all.reduce((a, r) => a + r.amount, 0);
+  const rows: DrillRow[] = all.slice(0, DRILL_MAX_ROWS).map(r => ({
+    key: r.customerId,
+    label: nameOf.get(r.customerId) || '삭제된 고객',
+    detail: [
+      `발송 ${r.sentOn} · 창 ${r.windowEnd} 까지`,
+      r.reservedOn ? `예약 ${r.reservedOn}` : '예약 없음',
+      opts.showMoney === false ? (r.amount > 0 ? '결제 있음' : '결제 없음') : (r.paidOn ? `결제 ${r.paidOn}` : '결제 없음'),
+    ].join(' · '),
+    amount: opts.showMoney === false ? 0 : r.amount,
+  }));
+  return {
+    rows,
+    total: opts.showMoney === false ? 0 : total,
+    ...(all.length > DRILL_MAX_ROWS ? { truncatedFrom: all.length } : {}),
+    caveat: [
+      '이 캠페인으로 **문자가 나간 고객 전원**입니다 — 예약·결제가 없던 분도 함께 보여 줍니다.',
+      '창 안에 예약·결제가 있었다는 사실만 보여 줍니다. 이 캠페인 때문이라는 뜻은 아닙니다(추정).',
+      '이 PC 의 발송 기록 기준입니다 — 다른 PC 에서 보낸 건은 빠집니다(서버 보관은 승인 뒤).',
+      opts.showMoney === false ? '금액은 매출 권한이 있는 계정에서만 보입니다.' : '',
+    ].filter(Boolean).join(' '),
+    empty: '이 캠페인으로 보낸 기록이 아직 없습니다.',
+  };
+}
