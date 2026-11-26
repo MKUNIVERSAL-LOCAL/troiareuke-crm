@@ -45,6 +45,32 @@ test('고객 상세에서 연락 결과를 적으면 남고, 미루기를 해제
   await expect(card.getByTestId('follow-up-last')).not.toContainText('까지 미룸');
   await expect(card.getByTestId('follow-up-clear')).toHaveCount(0);
 
+  // 273: 미뤄 둔 고객을 목록에서 숨기면 **숨겼다는 사실**을 칩으로 적는다(조용히 줄어든 숫자는 거짓말이다 — 249).
+  // 재방문 권장일이 지난 고객이어야 '연락할 고객' 필터에 들어오므로 마지막 방문일을 60일 전으로 심는다.
+  await page.evaluate(name => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const old = new Date(); old.setDate(old.getDate() - 60);
+    for (const c of list) if (c.name === name) { c.lastVisitDate = old.toISOString().slice(0, 10); c.totalVisits = 1; }
+    localStorage.setItem(key, JSON.stringify(list));
+  }, acc.customer);
+  await page.goto('/customers?revisit=1');
+  await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible(); // 필터에 들어왔다
+  await expect(page.getByTestId('follow-up-hidden').filter({ visible: true })).toHaveCount(0); // 아직 미루지 않았다
+
+  await openCustomer(page, acc);
+  const card2 = page.getByTestId('follow-up').filter({ visible: true }).first();
+  await card2.getByTestId('follow-up-open').click();
+  await card2.getByRole('radio', { name: '부재·연결 안 됨' }).click();
+  await card2.getByTestId('follow-up-save').click();
+  await dismissToasts(page);
+  await page.goto('/customers?revisit=1');
+  await expect(page.getByTestId('follow-up-hidden').filter({ visible: true }).first()).toContainText('미룬 1명 숨김');
+
+  await openCustomer(page, acc);
+  await card.getByTestId('follow-up-clear').click();
+  await dismissToasts(page);
+
   // "숨기지 않음(기록만)" 으로도 적을 수 있다 — 기록은 남고 할 일 목록에는 계속 보인다
   await card.getByTestId('follow-up-open').click();
   await card.getByRole('radio', { name: '문자·카톡 보냄' }).click();

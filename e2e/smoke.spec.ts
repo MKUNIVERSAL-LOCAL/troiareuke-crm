@@ -299,6 +299,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('가동률 = 이달 오늘까지 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간');
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('재방문율 =');
+  // 273: 재방문율·객단가 타일도 숫자를 말해야 한다(이달 방문이 있으니 '-' 가 아니다)
+  await expect(kpiCard.getByTestId('kpi-revisit')).toHaveText(/^(\d+%|-)$/);
+  await expect(kpiCard.getByTestId('kpi-ticket')).not.toHaveText('');
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);
   // 드릴다운 (184): 재예약률 타일 → 다음 예약 없는 이달 방문 고객 목록(필터 칩), 가동률 타일 → 예약 화면
@@ -708,6 +711,18 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await page.getByText('탈퇴고객').filter({ visible: true }).first().click();
   await expect(desk.getByText('익명화됨')).toBeVisible();
   await expect(desk.getByRole('button', { name: '메시지', exact: true })).toHaveCount(0);
+  // 273: 버튼이 없어도 **딥링크**로는 발송 창을 열 수 있다 — 그때 조용히 보내지 않고 대상이 아니라고 말한다
+  const anonId = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    return (list.find((c: { isActive?: boolean }) => c.isActive === false)?.id ?? '') as string;
+  });
+  expect(anonId).not.toBe('');
+  await page.goto(`/messaging?customer=${anonId}`);
+  await expect(page.getByTestId('recipient-blocked')).toContainText('발송 대상이 아닙니다');
+  // 딥링크 확인 뒤 다시 그 고객 상세로 돌아온다(이어지는 단계가 상세 화면을 본다)
+  await page.goto('/customers');
+  await page.getByText('탈퇴고객').filter({ visible: true }).first().click();
   await expect(desk.getByRole('button', { name: '예약 추가' })).toHaveCount(0);
   await expect(desk.getByRole('button', { name: '고객 익명화' })).toHaveCount(0); // 이미 익명화된 고객에는 [익명화] 없음
   // PC 상세의 병합·익명화·삭제는 [⋯ 더보기] 메뉴 안에 있다 (2026-11-18) — 열면 role=menu, 익명화 고객에는 [익명화] 항목이 없고 [고객 삭제]만, Esc로 닫힘
