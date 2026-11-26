@@ -24,7 +24,7 @@ const LIB = path.join(root, 'src', 'lib');
 const SPEC = path.join(root, 'e2e', 'lib-units.spec.ts');
 
 /** `src/lib` 아래 모든 `*Rule.ts` (하위 폴더 포함 — ai/ 가 268 판에서 빠졌다) */
-export function listRuleFiles(dir, base = dir) {
+function listRuleFiles(dir, base = dir) {
   const out = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -35,7 +35,7 @@ export function listRuleFiles(dir, base = dir) {
 }
 
 /** 모듈에서 내보내는 함수 이름 — function·async function·화살표 상수 모두 */
-export function exportedFunctions(src) {
+function exportedFunctions(src) {
   const names = new Set();
   for (const m of src.matchAll(/^export\s+(?:async\s+)?function\s+([A-Za-z0-9_]+)/gm)) names.add(m[1]);
   for (const m of src.matchAll(/^export\s+const\s+([A-Za-z0-9_]+)\s*(?::[^=]+)?=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_]+)\s*=>/gm)) names.add(m[1]);
@@ -46,7 +46,7 @@ export function exportedFunctions(src) {
  * 스펙이 그 모듈에서 가져온 심볼 → 지역 이름. `import { a, b as c, type D } from '<module>'`
  * 여러 import 문이 같은 모듈을 가리켜도 합친다.
  */
-export function importedNames(specText, moduleRelPath) {
+function importedNames(specText, moduleRelPath) {
   const modNoExt = moduleRelPath.replace(/\.ts$/, '');
   const map = new Map();
   const re = /import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
@@ -66,7 +66,7 @@ export function importedNames(specText, moduleRelPath) {
 }
 
 /** 호출처가 없는 `모듈.함수` 목록 */
-export function findUncalled(ruleSources, specText) {
+function findUncalled(ruleSources, specText) {
   const out = [];
   for (const [rel, src] of Object.entries(ruleSources)) {
     const imported = importedNames(specText, rel);

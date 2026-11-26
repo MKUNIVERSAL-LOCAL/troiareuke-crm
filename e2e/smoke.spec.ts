@@ -132,9 +132,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   // 264: 같은 고객·같은 금액(50,000)을 30분 안에 또 등록하므로 중복 경고가 뜬다 — 시술 기록에서 넘어온
   // 의도한 등록이니 [그대로 등록] 을 고른다(막지 않고 묻는다는 것을 이 흐름이 보여 준다)
   const dupDialog = page.getByRole('dialog', { name: '같은 금액 결제가 이미 있습니다' });
-  // 274(리뷰 L-6): 이 확인창은 DUP_WINDOW_MINUTES(30분) 설정에 달려 있다 — 창을 줄이면 선택자 타임아웃으로만
-  // 깨져 원인이 안 보인다. 창이 말하는 "N분 전" 을 함께 단언해 설정과 이 단계를 묶어 둔다.
-  await expect(dupDialog.getByTestId('confirm-dialog')).toContainText(/방금|\d+분 전/);
+  // 277(리뷰 L-5): 두 결제가 몇 초 차이라 이 문구는 항상 "방금" 이다 — 창 길이(30분)와는 묶이지 않는다.
+  // 창 설정은 lib-units 가 29분·31분 전 결제로 직접 고정한다. 여기서는 창이 **무엇을 말하는지**만 본다.
+  await expect(dupDialog.getByTestId('confirm-dialog')).toContainText('방금');
   await dupDialog.getByRole('button', { name: '그대로 등록' }).click();
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
 
@@ -304,9 +304,22 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('가동률 = 이달 오늘까지 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간');
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('재방문율 =');
   // 273: 재방문율·객단가 타일도 숫자를 말해야 한다(이달 방문이 있으니 '-' 가 아니다)
-  await expect(kpiCard.getByTestId('kpi-revisit')).toHaveText(/^\d+%$/);
-  await expect(kpiCard.getByTestId('kpi-rebook')).toHaveText(/^\d+%$/); // 276: 재예약률 타일도 숫자를 말한다
+  // 277(리뷰 M-1): 타일은 `visitors > 0` 일 때만 뜨므로 /^\d+%$/ 는 **도달 가능한 값 전부**와 맞는다 —
+  // 재방문율이 100 이어야 할 자리에 0 이 찍혀도 통과했다. 분모·분자 줄을 함께 읽어 **그 비율이 맞는지** 본다.
+  const expectRatio = async (valueId: string, subId: string) => {
+    const sub = (await kpiCard.getByTestId(subId).innerText()).trim();
+    const m = sub.match(/^(\d+)\/(\d+)명$/);
+    expect(m, `${subId} 가 "분자/분모명" 이 아니다: ${sub}`).not.toBeNull();
+    const [, num, den] = m!;
+    expect(Number(den)).toBeGreaterThan(0);
+    await expect(kpiCard.getByTestId(valueId)).toHaveText(`${Math.round((Number(num) / Number(den)) * 100)}%`);
+  };
+  await expectRatio('kpi-revisit', 'kpi-revisit-sub');
+  await expectRatio('kpi-rebook', 'kpi-rebook-sub');
+  // 객단가는 이 카드에 분자(이달 결제 합)가 없다 — 방문 수가 1 이상이고 이달 완료 결제가 있으므로 **0원은 아니어야** 한다
+  await expect(kpiCard.getByTestId('kpi-ticket-sub')).toHaveText(/^방문 [1-9]\d*명$/);
   await expect(kpiCard.getByTestId('kpi-ticket')).toHaveText(/^[\d,]+원$/);
+  await expect(kpiCard.getByTestId('kpi-ticket')).not.toHaveText('0원');
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);
   // 드릴다운 (184): 재예약률 타일 → 다음 예약 없는 이달 방문 고객 목록(필터 칩), 가동률 타일 → 예약 화면

@@ -63,6 +63,29 @@ export function sortRowsByLabel(rows: DrillRow[]): DrillRow[] {
   return [...rows].sort((a, b) => a.label.localeCompare(b.label, 'ko') || a.key.localeCompare(b.key));
 }
 
+/**
+ * 근거 창 바닥의 왼쪽 글자 (277 — 274 가 JSX 안에 적어 둔 것을 규칙으로).
+ * 금액을 못 보는 화면은 합계 칸 자체가 없으므로(270) 합계 대신 **사람 수**를 적고,
+ * 줄을 잘랐으면 "전체 M명 중 N명" 으로 — 잘린 수만 적으면 같은 화면의 "발송 2,000명" 과 충돌한다(274 리뷰 M-1).
+ * 금액을 보는 화면의 줄은 결제·고객·회차권이라 단위가 "줄" 이다(사람 수가 아니다).
+ */
+export function describeDrillFooter(i: { shown: number; truncatedFrom?: number; hideAmount?: boolean }): string {
+  if (i.hideAmount) return i.truncatedFrom ? `전체 ${i.truncatedFrom}명 중 ${i.shown}명` : `${i.shown}명`;
+  return `합계${i.truncatedFrom ? ` (전체 ${i.truncatedFrom}줄 기준)` : ` (${i.shown}줄)`}`;
+}
+
+/**
+ * 줄을 잘랐을 때의 안내 — 자르지 않았으면 null(띠 자체를 그리지 않는다).
+ * 금액을 숨긴 창은 금액 순으로 세우지 않으므로(최다 결제자가 드러난다) "금액이 큰" 이라고 적으면 거짓이고,
+ * 합계 칸이 없으므로 "위 합계" 를 가리켜도 거짓이다 (274 리뷰 H-1 이 고친 그 문장).
+ * 권한 안내는 여기서 반복하지 않는다 — 같은 창의 caveat 가 이미 말한다 (277, 리뷰 L-11).
+ */
+export function describeDrillTruncation(i: { shown: number; truncatedFrom?: number; hideAmount?: boolean }): string | null {
+  if (!i.truncatedFrom) return null;
+  if (i.hideAmount) return `줄이 많아 이름 순으로 ${i.shown}줄만 보여 줍니다(전체 ${i.truncatedFrom}명).`;
+  return `줄이 많아 금액이 큰 ${i.shown}줄만 보여 줍니다. 위 합계는 전체 ${i.truncatedFrom}줄 기준입니다.`;
+}
+
 function finish(rows: DrillRow[], total: number, empty: string, caveat?: string): DrillResult {
   rows.sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label));
   if (rows.length > DRILL_MAX_ROWS) {

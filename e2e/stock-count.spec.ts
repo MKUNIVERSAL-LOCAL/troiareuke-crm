@@ -102,3 +102,46 @@ test('재고 실사 — 세는 동안 다른 PC 가 재고를 바꾸면 그 사�
   await expect(page.getByText(/그 사이 재고가 바뀌어 건너뛰었습니다|맞출 제품이 없었습니다/).first()).toBeVisible();
   await expectStock(page, '동시앰플', 6); // 다른 PC 가 적은 6 이 그대로 남는다(9 로 덮지 않는다)
 });
+
+test('재고 실사 — 세는 동안 삭제된 제품은 그 줄에서 잠기고 반영 수에서도 빠진다 (277, 리뷰 M-4)', async ({ page, context }) => {
+  test.slow();
+  page.on('dialog', d => d.accept());
+  const accDel = makeAccount('SC3');
+  await signupAndOnboard(page, accDel);
+  await addProduct(page, { name: '사라질앰플', price: 20000, stock: 10 });
+  await addProduct(page, { name: '남을팩', price: 5000, stock: 30 });
+  await dismissToasts(page);
+
+  await page.getByTestId('stock-count-open').click();
+  const count = page.getByTestId('stock-count');
+  await count.getByLabel('사라질앰플 실제 수량').fill('9');
+  await count.getByLabel('남을팩 실제 수량').fill('29');
+  await expect(count.getByRole('button', { name: '2종 실사 반영' })).toBeVisible();
+
+  // 그 사이 다른 탭(=다른 PC)에서 제품을 지운다
+  const other = await context.newPage();
+  await other.goto('/products');
+  await other.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_products$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    localStorage.setItem(key, JSON.stringify(list.filter((x: { name: string }) => x.name !== '사라질앰플')));
+  });
+  await other.close();
+
+  // 274 는 경고 문구만 갈랐고 표·요약·버튼은 그 제품을 그대로 셌다 — 한 화면이 "반영되지 않습니다" 와 "2종 반영" 을 함께 말했다
+  await expect(count.getByTestId('stock-count-changed')).toContainText('삭제된 제품 1종', { timeout: 10_000 });
+  await expect(count.getByTestId('stock-count-changed')).toContainText('다시 세지 않아도 됩니다');
+  const goneRow = count.getByTestId('stock-count-row').filter({ has: page.getByTestId('stock-count-removed') });
+  await expect(goneRow).toHaveCount(1);
+  await expect(goneRow).toContainText('사라질앰플');
+  await expect(goneRow).toContainText('반영 안 됨');
+  await expect(count.getByLabel('사라질앰플 실제 수량')).toBeDisabled();  // 적어도 반영될 곳이 없다
+  await expect(count.getByTestId('stock-count-summary')).toContainText('맞출 제품 1종');
+  await expect(count.getByTestId('stock-count-summary')).toContainText('삭제된 제품 1종');
+  await expect(count.getByRole('button', { name: '1종 실사 반영' })).toBeVisible(); // 버튼 수 = 실제 반영 수
+
+  await count.getByRole('button', { name: '1종 실사 반영' }).click();
+  await page.getByTestId('confirm-dialog').getByRole('button', { name: '실사 반영', exact: true }).click();
+  await expect(page.getByText('제품 1종의 재고를 실사 수량으로 맞췄습니다.').first()).toBeVisible();
+  await expectStock(page, '남을팩', 29);
+});

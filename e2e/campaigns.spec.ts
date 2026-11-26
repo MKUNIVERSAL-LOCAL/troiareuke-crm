@@ -50,13 +50,13 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await row.getByRole('button', { name: '대상 확인·발송' }).click();
   const run = page.getByRole('dialog', { name: '캠페인 실행 — 예약 전날 안내' });
   await expect(run.getByTestId('campaign-ready-count')).toHaveText('1');
-  await expect(run.getByTestId('campaign-candidates')).toContainText(acc.customer); // 276: 대상 상자
   const cand = run.getByTestId('campaign-candidate');
   await expect(cand).toHaveCount(1);
   await expect(cand).toContainText(acc.customer);
   await expect(cand).toContainText(`${acc.customer}님, 내일`);
   await expect(cand).toContainText('14:00 예약을 기다리고 있어요');
   await expect(cand).not.toContainText('{');
+  await expect(run.getByTestId('campaign-candidates')).not.toContainText('오늘 보낼 대상이 없습니다'); // 277(리뷰 L-2)
   await run.getByTestId('campaign-approve').click();
   await expect(run.getByTestId('campaign-result')).toContainText('발송되지 않았습니다 (발송 서버 미연동)');
   await run.getByTestId('campaign-result').getByRole('button', { name: '닫기' }).click();
@@ -113,7 +113,8 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await card.getByTestId('campaign-row').filter({ hasText: '예약 당일 아침 안내' }).getByRole('button', { name: '대상 확인·발송' }).click();
   const todayRun = page.getByRole('dialog', { name: '캠페인 실행 — 예약 당일 아침 안내' });
   await expect(todayRun.getByTestId('campaign-ready-count')).toHaveText('0');
-  // 276: 대상이 0명이면 **빈 상자**가 아니라 없다고 말해야 한다(조용히 빈 목록은 "보낼 사람이 없다" 와 "불러오지 못했다" 를 구별해 주지 않는다)
+  // 276·277(리뷰 L-3): 0명이면 빈 상자가 아니라 "없다" 고 말한다 — 왜 빠졌는지는 위의 제외 줄이 말한다.
+  // (대상이 1명이던 위 실행에서는 같은 상자가 이 문구를 담지 않는 것까지 아래에서 함께 본다)
   await expect(todayRun.getByTestId('campaign-candidates')).toContainText('오늘 보낼 대상이 없습니다');
   await expect(todayRun.getByTestId('campaign-approve')).toBeDisabled();
 });
@@ -141,8 +142,8 @@ test('캠페인 성과 근거 — 세어진 고객을 보여 주고, 직원 계�
     const settings = JSON.parse(localStorage.getItem(`crm_${shop}_settings`) || '{}');
     const id = settings?.preferences?.campaigns?.[0]?.id;
     if (!id) throw new Error('캠페인이 없습니다 — 기본 시나리오를 먼저 넣어야 합니다');
-    // 키 모양은 실제 규칙과 같게 — `캠페인|고객|버킷` (campaignRule.sendKey) (274, 리뷰 LOW)
-    localStorage.setItem(`crm_${shop}_campaign_sends`, JSON.stringify([{ key: `${id}|${cid}|1`, campaignId: id, customerId: cid, at: new Date().toISOString() }]));
+    // 키 모양은 실제 규칙과 같게 — `캠페인|고객|버킷` (campaignRule.idempotencyKey). 버킷은 기존 픽스처와 같은 seed (277, 리뷰 L-6)
+    localStorage.setItem(`crm_${shop}_campaign_sends`, JSON.stringify([{ key: `${id}|${cid}|seed`, campaignId: id, customerId: cid, at: new Date().toISOString() }]));
   }, customerId);
   await page.reload();
 

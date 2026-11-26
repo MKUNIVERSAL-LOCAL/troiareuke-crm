@@ -70,7 +70,7 @@ test('고객 상세에서 연락 결과를 적으면 남고, 미루기를 해제
   }, acc.customer);
   await page.goto('/customers?revisit=1');
   // 274(리뷰 L-3): 이 테스트의 고객은 한 명뿐이라 **필터가 꺼져도** 똑같이 보인다 — 칩이 켜진 것을 함께 본다
-  await expect(page.getByLabel('재방문 권장 필터 해제').filter({ visible: true }).first()).toContainText('재방문 권장 1');
+  await expect(page.getByLabel('재방문 권장 필터 해제').filter({ visible: true }).first()).toHaveText(/^재방문 권장 1\s*✕$/); // 277(리뷰 L-10): '1' 접두 일치는 10·11명에도 걸렸다
   await expect(page.getByText(acc.customer).filter({ visible: true }).first()).toBeVisible(); // 필터에 들어왔다
   await expect(page.getByTestId('follow-up-hidden').filter({ visible: true })).toHaveCount(0); // 아직 미루지 않았다
 

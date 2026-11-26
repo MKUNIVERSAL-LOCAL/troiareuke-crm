@@ -64,7 +64,9 @@ test('알레르기·메모 주의사항이 예약 창·예약 상세·시술 기
   await page.goto('/customers');
   await page.getByText(acc.customer).filter({ visible: true }).first().click();
   await desk.getByRole('button', { name: '수정', exact: true }).click();
-  await edit.getByLabel('메모').fill('임신 중\n켈로이드 체질\n아스피린 복용 중\n민감성 피부\n커피 좋아함');
+  // 277(리뷰 L-4): 메모 순서를 **위험도와 반대로** 적는다 — 그래야 "위험한 줄부터 3줄" 이 깨질 때 깨진다
+  // (276 픽스처는 메모 순서가 이미 위험도 순이라 정렬을 지워도 보이는 3줄이 같았다)
+  await edit.getByLabel('메모').fill('민감성 피부\n아스피린 복용 중\n켈로이드 체질\n커피 좋아함\n임신 중');
   await edit.getByRole('button', { name: '저장', exact: true }).click();
   await expect(edit).toHaveCount(0);
   await dismissToasts(page);
@@ -78,6 +80,8 @@ test('알레르기·메모 주의사항이 예약 창·예약 상세·시술 기
   const more = many.getByTestId('customer-alert-more');
   await expect(more).toHaveText('+2개 더 보기');
   await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await expect(many).toContainText('임신 중');                       // 메모 **마지막 줄**이지만 1순위라 접힌 3줄에 들어온다
+  await expect(many).not.toContainText('민감성 피부');               // 3순위는 접힌 상태에서 밀려난다
   await expect(many).not.toContainText('커피 좋아함');               // 주의 줄이 아닌 메모는 접어도 펼쳐도 안 뜬다
 
   await more.click();

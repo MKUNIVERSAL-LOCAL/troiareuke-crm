@@ -3,15 +3,17 @@
  * 화면 칸 커버리지 가드 — 스펙이 한 번도 보지 않은 `data-testid` 를 센다 (276, GAP Q-3).
  *
  * 왜: 269·272·273 에서 "미참조 testid 23 → 18 → 10" 이라고 적어 왔지만 그 숫자는 그때그때
- * 손으로 센 값이었다. 276 에서 기계로 세 보니 **17개**였다 — `data-testid="x"` 만 찾으면 13개,
+ * 손으로 센 값이었다. 276 에서 기계로 세 보니 **17개**였다 — `data-testid="x"` 만 찾으면 12개,
  * 값을 물려주는 `testId="x"` 프로퍼티까지 세면 17개다(매출 지표 다섯 칸이 그쪽이었고, 돈 숫자인데도
  * 어떤 스펙도 보지 않고 있었다). 손으로 센 "10개" 는 그래서 과소였다. 세는 방법을 여기 고정한다
  * (274 가 경량 게이트를 저장소로 옮긴 것과 같은 이유 — 확인할 수 없는 말은 적지 않는다).
  *
  * 세는 방법:
  *  - 화면(src/**): `data-testid="x"`, `data-testid={'x'}`, `data-testid={\`x\`}`, 그리고 그 값을
- *    물려주는 `testId="x"` 프로퍼티(RevenueMetricsCard 의 Item 처럼). `data-testid={변수}` 는
- *    **값을 알 수 없으므로 세지 않는다**(dynamic 으로 따로 보고한다).
+ *    물려주는 프로퍼티(`testId="x"`·`openTestId="x"` — 이름이 `…testId`/`…TestId` 로 끝나면 모은다). 값을 런타임에 만드는 자리
+ *    (`data-testid={변수}`·`data-testid={\`x-\${v}\`}`·삼항)는 **세지 않고 "값을 모르는 칸" 으로 따로 보고한다** —
+ *    277 전에는 보간 템플릿이 어느 쪽에도 안 걸려 7곳이 조용히 빠졌고, 꼬리 숫자도 2개로 잘못 적혔다(리뷰 M-2).
+ *    파생 칸을 가드가 보게 하려면 보간하지 말고 리터럴로 넘긴다(`openTestId="metric-unused-open"` 처럼).
  *  - 스펙(e2e/**): `getByTestId('x')`·`[data-testid="x"]` 는 물론, 따옴표 안의 모든 문자열을 모은다.
  *    변수에 담아 쓰는 경우를 놓치지 않으려고 일부러 넓게 본다(= 덜 세는 쪽이 아니라 더 세는 쪽).
  *
@@ -20,6 +22,7 @@
  *  - 목록에 적힌 칸이 덮이거나 사라지면 "목록이 낡았다" 고 실패한다 — 사유만 남고 사실은 바뀌는 것을 막는다.
  *
  * 사용: node scripts/check-testid-coverage.mjs [--selftest] [--list]
+ * 이 파일의 함수는 밖으로 내보내지 않는다 — 부르는 곳은 같은 파일의 `--selftest` 뿐이다(미사용 export 금지, 리뷰 L-8).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,13 +40,13 @@ const ALLOWED = {
   'branch-pin-reset': '어드민 지점 PIN 초기화 — 본사 권한 + 서버 호출(승인 대기)',
   'mobile-update-banner': '모바일 앱 업데이트 띠 — 앱(Capacitor) 런타임에서만 뜬다',
   'nas-rejected-banner': 'NAS 거부 띠 — 서버가 실제로 거부해야 뜬다(흉내 서버로는 그 상태를 못 만든다)',
-  'metric-detail-empty': '근거 창의 빈 상태 — 카드는 줄이 있을 때만 버튼을 건다(openDrill 가드). 창이 열린 동안 다른 기기가 자료를 지운 경우에만 뜨고, 모달이 입력을 막아 그 상태를 스펙으로 만들 수 없다. 안전망으로 남겨 둔다',
+  'metric-detail-empty': '근거 창의 빈 상태 — 카드는 줄이 있을 때만 버튼을 건다(openDrill 가드)므로 창이 열린 동안 자료가 지워질 때만 뜬다. 모달이 drills 를 매 렌더 읽고 부모가 useDataRefreshed 로 다시 계산하므로 **둘째 탭에서 결제를 지우면 띄울 수 있다**(269 가 쓴 기법) — 스펙 후보이고, 지금 없다',
   'staff-schedule-editor': '근무표 편집기 — 닿을 수 있다. 스펙이 아직 없다(다음 묶음 후보)',
   'product-sales-mobile-list': '제품 판매 모바일 목록 — mobile 프로젝트에서 닿을 수 있다. 스펙이 아직 없다',
   'expense-mobile-list': '지출 모바일 목록 — mobile 프로젝트에서 닿을 수 있다. 스펙이 아직 없다',
 };
 
-export function listFiles(dir, exts = ['.ts', '.tsx'], out = []) {
+function listFiles(dir, exts = ['.ts', '.tsx'], out = []) {
   for (const name of fs.readdirSync(dir)) {
     const p = path.join(dir, name);
     const st = fs.statSync(p);
@@ -54,7 +57,7 @@ export function listFiles(dir, exts = ['.ts', '.tsx'], out = []) {
 }
 
 /** 화면 쪽 정의 — { ids: Map<id, file>, dynamic: string[] } */
-export function definedTestIds(sources) {
+function definedTestIds(sources) {
   const ids = new Map();
   const dynamic = [];
   for (const { file, text } of sources) {
@@ -63,10 +66,14 @@ export function definedTestIds(sources) {
       const id = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5];
       if (!ids.has(id)) ids.set(id, file);
     }
-    // data-testid={변수} — 값을 모른다. 세지 않고 따로 보고한다(아래 testId= 로 넘어온 값이 실제 칸이다)
-    for (const m of text.matchAll(/data-testid=\{\s*([A-Za-z_$][\w$]*)(?:\s*\?[^}]*)?\}/g)) dynamic.push(`${m[1]} @ ${file}`);
-    // testId="x" — data-testid 로 내려가는 프로퍼티
-    for (const m of text.matchAll(/\btestId=(?:"([^"]+)"|'([^']+)'|\{\s*(?:"([^"]+)"|'([^']+)'|`([^`${]+)`)\s*\})/g)) {
+    // 값을 런타임에 만드는 자리 — 세지 않고 전부 따로 보고한다. 보간 템플릿(`x-${v}`)·식별자·삼항 모두 (277, 리뷰 M-2)
+    for (const m of text.matchAll(/data-testid=\{(?!\s*(?:"[^"]*"|'[^']*'|`[^`$]*`)\s*\})([^}\n]*)\}/g)) {
+      const line = text.slice(0, m.index).split('\n').length;
+      dynamic.push(`${file}:${line}  data-testid={${m[1].trim()}}`);
+    }
+    // testId="x"·openTestId="x" — data-testid 로 내려가는 프로퍼티는 **이름이 무엇이든** 모은다.
+    // 277 전에는 `\btestId=` 만 찾아서 `openTestId="metric-unused-open"` 을 놓쳤다 — 리터럴로 바꾼 보람이 없었다.
+    for (const m of text.matchAll(/\b\w*[tT]estId=(?:"([^"]+)"|'([^']+)'|\{\s*(?:"([^"]+)"|'([^']+)'|`([^`${]+)`)\s*\})/g)) {
       const id = m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5];
       if (!ids.has(id)) ids.set(id, file);
     }
@@ -75,7 +82,7 @@ export function definedTestIds(sources) {
 }
 
 /** 스펙 쪽 참조 — 따옴표 안의 모든 문자열(넓게 본다) */
-export function referencedNames(specs) {
+function referencedNames(specs) {
   const used = new Set();
   for (const { text } of specs) {
     for (const m of text.matchAll(/'([^'\n]+)'|"([^"\n]+)"|`([^`\n${]+)`/g)) {
@@ -88,7 +95,7 @@ export function referencedNames(specs) {
   return used;
 }
 
-export function findUncovered(ids, used) {
+function findUncovered(ids, used) {
   return [...ids.keys()].filter(id => !used.has(id)).sort();
 }
 
@@ -102,22 +109,26 @@ function selftest() {
       '<div data-testid={dynamicVar} />',                 // 세지 않는다
       '<div data-testid={on ? "a" : "b"} />',             // 삼항도 변수처럼 — 세지 않는다
       '<Item testId="from-prop" />',
+      '<Item openTestId="from-open-prop" />',   // 이름이 달라도 모은다 (277, 리뷰 M-2)
       '<Item testId={undefined} />',
     ].join('\n'),
   }];
   const { ids, dynamic } = definedTestIds(src);
   const have = [...ids.keys()].sort().join(',');
-  const want = 'braced,from-prop,plain,tpl';
+  const want = 'braced,from-open-prop,from-prop,plain,tpl';
   if (have !== want) { console.error(`[selftest] 정의 수집 실패: ${have} ≠ ${want}`); process.exit(1); }
   if (dynamic.length !== 2) { console.error(`[selftest] dynamic 수집 실패: ${dynamic.length} ≠ 2`); process.exit(1); }
+  // 보간 템플릿도 "값을 모르는 칸" 으로 잡힌다 (277, 리뷰 M-2)
+  const interp = definedTestIds([{ file: 'y.tsx', text: '<div data-testid={`row-${i}`} />' }]);
+  if (interp.ids.size !== 0 || interp.dynamic.length !== 1) { console.error('[selftest] 보간 덫 실패'); process.exit(1); }
 
   const used = referencedNames([{ file: 's.ts', text: `getByTestId('plain'); locator('[data-testid="braced"]'); const k = \`tpl\`;` }]);
   const un = findUncovered(ids, used);
-  if (un.join(',') !== 'from-prop') { console.error(`[selftest] 미참조 판정 실패: ${un.join(',')}`); process.exit(1); }
+  if (un.join(',') !== 'from-open-prop,from-prop') { console.error(`[selftest] 미참조 판정 실패: ${un.join(',')}`); process.exit(1); }
   // 부분 문자열이 참조로 세어지지 않는다 — 'plain-open' 은 'plain' 과 다른 칸이다
   const used2 = referencedNames([{ file: 's.ts', text: `getByTestId('plain-open')` }]);
   if (!findUncovered(new Map([['plain', 'x']]), used2).includes('plain')) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-testid-coverage] selftest OK — 덫 4개(변수·삼항·프로퍼티·부분 문자열) 통과');
+  console.log('[check-testid-coverage] selftest OK — 덫 6개(변수·삼항·프로퍼티 이름·보간 템플릿·부분 문자열·낡은 목록) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -129,7 +140,8 @@ const uncovered = findUncovered(ids, used);
 
 if (process.argv.includes('--list')) {
   for (const id of uncovered) console.log(`${id}\t${ids.get(id)}\t${ALLOWED[id] ?? '(사유 없음)'}`);
-  console.log(`\n정의 ${ids.size}개 · 미참조 ${uncovered.length}개 · 값을 모르는 칸 ${dynamic.length}개`);
+  console.log(`\n정의 ${ids.size}개 · 미참조 ${uncovered.length}개 · 값을 모르는 칸 ${dynamic.length}개(아래)`);
+  for (const d of dynamic) console.log(`  ~ ${d}`);
   process.exit(0);
 }
 

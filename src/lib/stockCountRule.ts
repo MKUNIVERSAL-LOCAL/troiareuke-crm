@@ -18,6 +18,12 @@ export interface CountRow extends CountItem {
   diff: number;
   /** 입력이 잘못된 경우 사유 — 있으면 저장하지 않는다 */
   error?: string;
+  /**
+   * 세는 동안 **삭제된** 제품 — 반영할 곳이 없다 (277, 리뷰 M-4).
+   * 화면 경고만 갈라 놓고 반영 버튼 수·요약·입력칸은 그대로 세던 탓에, 한 화면이 위에서는
+   * "삭제된 제품 1종은 반영되지 않습니다", 아래에서는 "3종 실사 반영" 이라고 말했다.
+   */
+  removed?: boolean;
 }
 
 /** 입력 문자열 → 수량. 빈칸은 null, 숫자가 아니거나 음수·소수면 undefined(오류) */
@@ -29,8 +35,10 @@ export function parseCountedQty(raw: string): number | null | undefined {
   return Number.isSafeInteger(n) ? n : undefined;
 }
 
-export function buildCountRows(items: CountItem[], inputs: Record<string, string>): CountRow[] {
+/** @param removedIds 세는 동안 제품 목록에서 사라진 제품 — 반영 대상에서 빼고 화면에도 그렇게 적는다 (277) */
+export function buildCountRows(items: CountItem[], inputs: Record<string, string>, removedIds?: ReadonlySet<string>): CountRow[] {
   return items.map(it => {
+    if (removedIds?.has(it.id)) return { ...it, counted: null, diff: 0, removed: true };
     const parsed = parseCountedQty(inputs[it.id] ?? '');
     if (parsed === undefined) return { ...it, counted: null, diff: 0, error: '숫자만 입력해주세요(0 이상)' };
     if (parsed === null) return { ...it, counted: null, diff: 0 };
@@ -49,6 +57,8 @@ export interface CountSummary {
   untouched: number;
   /** 잘못 적은 제품 수 */
   invalid: number;
+  /** 세는 동안 삭제된 제품 수 — 반영 대상이 아니다 (277) */
+  removed: number;
   /** 늘어난 합 */
   plus: number;
   /** 줄어든 합(음수) */
@@ -56,8 +66,9 @@ export interface CountSummary {
 }
 
 export function countSummary(rows: CountRow[]): CountSummary {
-  const s: CountSummary = { entered: 0, matched: 0, changed: 0, untouched: 0, invalid: 0, plus: 0, minus: 0 };
+  const s: CountSummary = { entered: 0, matched: 0, changed: 0, untouched: 0, invalid: 0, removed: 0, plus: 0, minus: 0 };
   for (const r of rows) {
+    if (r.removed) { s.removed += 1; continue; } // 삭제된 제품은 "안 센 제품" 으로도 세지 않는다
     if (r.error) { s.invalid += 1; continue; }
     if (r.counted === null) { s.untouched += 1; continue; }
     s.entered += 1;
@@ -70,9 +81,9 @@ export function countSummary(rows: CountRow[]): CountSummary {
   return s;
 }
 
-/** 저장할 행만 — 차이가 있고 입력이 올바른 것 */
+/** 저장할 행만 — 차이가 있고 입력이 올바르고 **제품이 아직 있는** 것 (277, 리뷰 M-4) */
 export function rowsToSave(rows: CountRow[]): CountRow[] {
-  return rows.filter(r => !r.error && r.counted !== null && r.diff !== 0);
+  return rows.filter(r => !r.removed && !r.error && r.counted !== null && r.diff !== 0);
 }
 
 export function describeCountSummary(s: CountSummary): string {
@@ -80,6 +91,7 @@ export function describeCountSummary(s: CountSummary): string {
   if (s.matched > 0) parts.push(`일치 ${s.matched}종`);
   if (s.untouched > 0) parts.push(`아직 안 센 제품 ${s.untouched}종`);
   if (s.invalid > 0) parts.push(`잘못 적은 칸 ${s.invalid}개`);
+  if (s.removed > 0) parts.push(`삭제된 제품 ${s.removed}종`); // 버튼 수와 같은 기준으로 센다 (277)
   const delta: string[] = [];
   if (s.plus > 0) delta.push(`+${s.plus}`);
   if (s.minus < 0) delta.push(`${s.minus}`);

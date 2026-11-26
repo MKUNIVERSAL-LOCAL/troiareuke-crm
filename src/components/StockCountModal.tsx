@@ -52,8 +52,14 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
     }
     return { counted, untouched, removed };
   }, [products, items, inputs]);
+  /** 세는 동안 제품 목록에서 사라진 제품 — 경고·요약·버튼 수·입력칸이 **같은 판정**을 쓰게 한다 (277, 리뷰 M-4) */
+  const removedIds = useMemo(() => {
+    const now = new Set(snapshot(products).map(p => p.id));
+    return new Set(items.filter(it => !now.has(it.id)).map(it => it.id));
+  }, [products, items]);
   const driftNote = describeStockDrift(changed); // 문장은 순수 규칙에서 — lib-units 가 세 갈래를 고정한다 (275)
-  const rows = buildCountRows(items, inputs);
+  // 277(리뷰 M-4): 삭제된 제품을 경고만 하고 버튼 수·요약·입력칸에는 그대로 세던 것 — 같은 판정을 행에도 넘긴다
+  const rows = buildCountRows(items, inputs, removedIds);
   const summary = countSummary(rows);
   const toSave = rowsToSave(rows);
 
@@ -179,7 +185,11 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
                 <tbody>
                   {rows.map(r => (
                     <tr key={r.id} className="border-b border-gray-50" data-testid="stock-count-row" data-product={r.name}>
-                      <td className="py-2 pr-2 text-gray-900">{r.name}</td>
+                      <td className="py-2 pr-2 text-gray-900">
+                        {r.name}
+                        {/* 277(리뷰 M-4): 반영되지 않을 제품이라는 사실을 그 줄에 적는다 — 경고만 띄우고 입력은 받던 자리 */}
+                        {r.removed && <span className="ml-1.5 px-1.5 py-0.5 text-2xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded" data-testid="stock-count-removed">삭제됨</span>}
+                      </td>
                       <td className="py-2 text-right text-gray-500 whitespace-nowrap">{r.stock}{r.unit}</td>
                       <td className="py-2 text-right">
                         <input
@@ -188,12 +198,13 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
                           onChange={e => setInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
                           aria-label={`${r.name} 실제 수량`}
                           aria-invalid={r.error ? true : undefined}
+                          disabled={r.removed}  // 적어도 반영될 곳이 없다 — 받아 두고 버리지 않는다 (277, 리뷰 M-4)
                           placeholder="-"
-                          className={`w-24 px-2 py-2 min-h-[44px] text-sm text-right border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30 ${r.error ? 'border-rose-400' : 'border-gray-200'}`}
+                          className={`w-24 px-2 py-2 min-h-[44px] text-sm text-right border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1a3a8f]/30 disabled:bg-gray-50 disabled:text-gray-400 ${r.error ? 'border-rose-400' : 'border-gray-200'}`}
                         />
                       </td>
                       <td className={`py-2 text-right whitespace-nowrap font-medium ${r.error ? 'text-rose-600' : r.diff > 0 ? 'text-emerald-700' : r.diff < 0 ? 'text-rose-700' : 'text-gray-400'}`}>
-                        {r.error ? '입력 오류' : r.counted === null ? '-' : r.diff === 0 ? '일치' : `${r.diff > 0 ? '+' : ''}${r.diff}${r.unit}`}
+                        {r.removed ? '반영 안 됨' : r.error ? '입력 오류' : r.counted === null ? '-' : r.diff === 0 ? '일치' : `${r.diff > 0 ? '+' : ''}${r.diff}${r.unit}`}
                       </td>
                     </tr>
                   ))}

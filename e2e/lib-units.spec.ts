@@ -42,7 +42,7 @@ import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
-import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
+import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, describeDrillFooter, describeDrillTruncation, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
@@ -2032,7 +2032,7 @@ test('재고 실사 — 빈칸은 세지 않은 제품으로 두고 건드리지
 test('재고 실사 요약 — 일치·미입력·오류·증감 합을 숨기지 않는다 (245)', () => {
   const rows = buildCountRows(countItems, { p1: '12', p2: '38', p3: '5', p4: '' });
   const s = countSummary(rows);
-  expect(s).toEqual({ entered: 3, matched: 1, changed: 2, untouched: 1, invalid: 0, plus: 2, minus: -2 });
+  expect(s).toEqual({ entered: 3, matched: 1, changed: 2, untouched: 1, invalid: 0, removed: 0, plus: 2, minus: -2 }); // removed 는 277 에서 추가(삭제된 제품은 반영 대상이 아니다)
   const line = describeCountSummary(s);
   expect(line).toContain('맞출 제품 2종');
   expect(line).toContain('일치 1종');
@@ -2902,4 +2902,66 @@ test('금액 숨김 정렬 — 화면에 보이는 이름 순이고, 입력을 �
   ]);
   expect(same.map(r => r.key)).toEqual(['a', 'b']);
   expect(sortRowsByLabel([])).toEqual([]);
+});
+
+// ── 277: 274~276 리뷰 반영 — 화면에 남아 있던 문장과 판정을 규칙에서 고정한다 ──
+
+test('근거 창 문장 — 금액 공개·숨김 × 잘림·안잘림 네 조합 (277, 리뷰 M-5)', () => {
+  // 금액을 보는 화면: 줄 단위로 말하고, 잘랐으면 합계가 전체 기준이라고 밝힌다
+  expect(describeDrillFooter({ shown: 3 })).toBe('합계 (3줄)');
+  expect(describeDrillFooter({ shown: 100, truncatedFrom: 2000 })).toBe('합계 (전체 2000줄 기준)');
+  expect(describeDrillTruncation({ shown: 3 })).toBeNull();                       // 자르지 않았으면 띠가 없다
+  expect(describeDrillTruncation({ shown: 100, truncatedFrom: 2000 })).toContain('금액이 큰 100줄');
+  expect(describeDrillTruncation({ shown: 100, truncatedFrom: 2000 })).toContain('전체 2000줄 기준');
+
+  // 금액을 못 보는 화면: 합계 칸이 없으므로 **사람 수**로 말한다(270). 잘린 수만 적으면 "발송 2,000명" 과 충돌한다(274)
+  expect(describeDrillFooter({ shown: 3, hideAmount: true })).toBe('3명');
+  expect(describeDrillFooter({ shown: 100, truncatedFrom: 2000, hideAmount: true })).toBe('전체 2000명 중 100명');
+  const hidden = describeDrillTruncation({ shown: 100, truncatedFrom: 2000, hideAmount: true })!;
+  expect(hidden).toContain('이름 순으로 100줄');
+  expect(hidden).toContain('전체 2000명');
+  expect(hidden).not.toContain('금액이 큰');   // 금액 순으로 세우지 않으므로 거짓이 된다 (274 리뷰 H-1)
+  expect(hidden).not.toContain('위 합계');     // 그 화면에는 합계 칸이 없다
+  expect(hidden).not.toContain('매출 권한');   // 권한 안내는 같은 창의 caveat 한 곳에서만 (277, 리뷰 L-11)
+  expect(describeDrillTruncation({ shown: 3, hideAmount: true })).toBeNull();
+});
+
+test('실사 — 세는 동안 삭제된 제품은 반영 대상에서 빠지고 요약에도 따로 적힌다 (277, 리뷰 M-4)', () => {
+  const items = [
+    { id: 'a', name: '사라질앰플', unit: '개', stock: 10 },
+    { id: 'b', name: '남을팩', unit: '개', stock: 30 },
+  ];
+  const inputs = { a: '9', b: '29' };
+
+  // 삭제 전: 두 줄 모두 반영 대상
+  const before = buildCountRows(items, inputs);
+  expect(rowsToSave(before)).toHaveLength(2);
+  expect(countSummary(before).removed).toBe(0);
+
+  // 삭제 뒤: 그 줄은 removed 로 표시되고 반영 대상에서 빠진다 — 버튼 수가 실제 반영 수가 된다
+  const after = buildCountRows(items, inputs, new Set(['a']));
+  expect(after[0].removed).toBe(true);
+  expect(after[0].counted).toBeNull();        // 적어 둔 숫자를 들고 있지 않는다
+  expect(rowsToSave(after).map(r => r.id)).toEqual(['b']);
+  const sum = countSummary(after);
+  expect(sum.removed).toBe(1);
+  expect(sum.changed).toBe(1);
+  expect(sum.untouched).toBe(0);              // 삭제된 제품을 "안 센 제품" 으로도 세지 않는다
+  expect(describeCountSummary(sum)).toContain('맞출 제품 1종');
+  expect(describeCountSummary(sum)).toContain('삭제된 제품 1종');
+  expect(zeroingRows(after)).toHaveLength(0);
+  // 0 으로 맞추려던 제품이 삭제된 경우도 확인창 경고 대상이 아니다(반영되지 않으므로)
+  expect(zeroingRows(buildCountRows(items, { a: '0', b: '30' }, new Set(['a'])))).toHaveLength(0);
+});
+
+test('중복 결제 창 길이 — 30분이고, 29분 전은 잡고 31분 전은 놓아준다 (277, 리뷰 L-5)', () => {
+  expect(DUP_WINDOW_MINUTES).toBe(30); // smoke 의 "방금" 문구로는 창 길이가 묶이지 않는다
+  const now = '2026-11-26T12:00:00.000Z';
+  const candidate = { customerId: 'c1', amount: 50000, paymentDate: '2026-11-26', status: 'completed' as const };
+  const mk = (minutesAgo: number) => ({
+    id: `p${minutesAgo}`, customerId: 'c1', amount: 50000, status: 'completed' as const,
+    paymentDate: '2026-11-26', createdAt: new Date(Date.parse(now) - minutesAgo * 60_000).toISOString(),
+  });
+  expect(findDuplicateSuspects(candidate, [mk(29)], now).map(x => x.minutesAgo)).toEqual([29]);
+  expect(findDuplicateSuspects(candidate, [mk(31)], now)).toEqual([]);
 });
