@@ -250,10 +250,22 @@ function selftest() {
   if (tbl.length !== 1 || !/칸이 4개다/.test(tbl[0])) { console.error('[selftest] 표 열 수 덫 실패: ' + JSON.stringify(tbl)); process.exit(1); }
   if (tableProblems('| # | 값 |\n|---|---|\n| 1 | data \\| jsonb |', 'x.md').length !== 0) { console.error('[selftest] 이스케이프 파이프 면제 덫 실패'); process.exit(1); }
   if (tableProblems('| 이건 표가 아니다 |\n그냥 글', 'x.md').length !== 0) { console.error('[selftest] 구분 줄 없는 표 면제 덫 실패'); process.exit(1); }
+  // 309: 릴리스 단계 대조 — 지금 안내는 통과해야 하고, 빠진 단계·순서 어긋남은 잡아야 한다
+  if (releaseStepProblems().length !== 0) { console.error('[selftest] 릴리스 단계 대조 실패: ' + releaseStepProblems().join(' / ')); process.exit(1); }
+  const runnerSrc = "{ id: 'preflight' }, { id: 'checks' }, { id: 'build' }, { id: 'verify' }";
+  const okBrief = '| 단계 |\n|---|\n| preflight |\n| checks |\n| build |\n| verify |';
+  if (releaseStepProblems({ runner: runnerSrc, briefing: okBrief }).length !== 0) { console.error('[selftest] 단계 대조 거짓 경보'); process.exit(1); }
+  const missBrief = '| 단계 |\n|---|\n| preflight |\n| checks |\n| verify |';
+  if (!releaseStepProblems({ runner: runnerSrc, briefing: missBrief }).some(p => /build 가 안내에 없다/.test(p))) { console.error('[selftest] 빠진 단계 덫 실패'); process.exit(1); }
+  const orderBrief = '| 단계 |\n|---|\n| checks |\n| preflight |\n| build |\n| verify |';
+  if (!releaseStepProblems({ runner: runnerSrc, briefing: orderBrief }).some(p => /순서가 실제와 다르다/.test(p))) { console.error('[selftest] 단계 순서 덫 실패'); process.exit(1); }
+  // 309: 서버 테스트 수 주장 — 인용문·"당시" 는 주장이 아니고, 맨 주장은 모은다
+  const stc = serverTestClaims('서버 테스트 45개가 돈다.\n첫 실행에서 "서버 자동 테스트 0건" 을 잡았다.\n당시 서버 테스트 25개였다.', 'x.md');
+  if (stc.length !== 1 || stc[0].n !== 45) { console.error('[selftest] 서버 테스트 주장 수집 덫 실패: ' + JSON.stringify(stc)); process.exit(1); }
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 28개(표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
+  console.log('[check-docs-claims] selftest OK — 덫 32개(릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -451,6 +463,76 @@ function tableProblems(text, rel) {
     });
   })(path.join(ROOT, 'docs'));
   for (const rel of mdFiles) problems.push(...tableProblems(read(rel), rel));
+}
+
+
+// ⑧ **복귀 안내의 릴리스 단계 목록이 실제 단계와 같은 순서인가** (309)
+//
+// 왜: 오너는 복귀 당일 이 표를 보고 순서대로 누른다. 287 에서 손으로 대조해 **단계 이름 하나가 실제와
+//     다르고 배포 검증 항목 수가 틀린 것**을 찾았는데, 그 뒤로도 단계는 계속 바뀐다(302~305 가 검사를 더했다).
+//     손 대조는 다음에 또 낡으므로 기계가 본다 — 단계 id 와 **순서**까지 맞춘다.
+function releaseStepProblems(injected) {
+  const out = [];
+  const runner = 'scripts/release-run.mjs';
+  if (!injected && !fs.existsSync(path.join(ROOT, runner))) return [`${runner} 가 없다 — 복귀 안내가 가리키는 릴리스 명령이다`];
+  const real = [...(injected ? injected.runner : read(runner)).matchAll(/id: '([a-z]+)'/g)].map(m => m[1]);
+  const briefings = injected ? ['INJECTED'] : fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^OWNER-BRIEFING-.*\.md$/.test(f)).sort();
+  const rel = briefings.length > 0 ? `docs/${briefings[briefings.length - 1]}` : null;
+  if (!rel) return out; // ⑥ 이 "브리핑이 없다" 를 이미 말한다
+  const text = injected ? injected.briefing : read(rel);
+  // 표에서 `| id | …` 꼴 첫 칸만 모은다 — 단계 표는 id 를 그대로 쓴다
+  const listed = [...text.matchAll(/^\|\s*([a-z]{4,12})\s*\|/gm)].map(m => m[1]).filter(id => real.includes(id));
+  if (listed.length === 0) {
+    out.push(`${rel}: 릴리스 단계 표가 없다 — ${runner} 의 단계(${real.join('·')})를 순서대로 적으세요`);
+    return out;
+  }
+  const missing = real.filter(id => !listed.includes(id));
+  if (missing.length > 0) out.push(`${rel}: 릴리스 단계 ${missing.join('·')} 가 안내에 없다 — 오너가 그 단계를 모른 채 릴리스한다`);
+  const order = listed.filter((id, i) => listed.indexOf(id) === i);
+  const realOrder = real.filter(id => order.includes(id));
+  if (order.join('>') !== realOrder.join('>')) {
+    out.push(`${rel}: 릴리스 단계 순서가 실제와 다르다 — 안내 ${order.join('>')} vs 실제 ${realOrder.join('>')}`);
+  }
+  return out;
+}
+problems.push(...releaseStepProblems());
+
+// ⑨ **"서버 테스트 N개" 는 러너가 세는 수와 같아야 한다** (309)
+//
+// 왜: 복귀 안내·GAP 표가 이 수를 적는데 302·305 에서 25 → 35 → 45 로 늘었고 안내는 25 에 멈춰 있었다.
+//     `test(` 를 세는 방식으로는 맞출 수 없다(반복으로 만드는 덫 테스트가 있다) — **러너를 실제로 돌려** 센다.
+//     주장이 없는 저장소에서는 돌리지 않는다(검사가 느려질 이유가 없다).
+function serverTestClaims(text, rel) {
+  const out = [];
+  for (const m of text.matchAll(/서버(?: 자동)? 테스트 (\d+)(?:개|건)/g)) {
+    if (markedPast(text, m.index)) continue;
+    // 309: **인용문은 주장이 아니다** — "첫 실행에서 \"서버 자동 테스트 0건\" 을 잡았다" 처럼
+    // 가드가 찾아낸 옛 문구를 그대로 적은 자리를 처음엔 낡은 주장으로 읽었다(거짓 경보 2건).
+    const lineStart = text.lastIndexOf('\n', m.index) + 1;
+    const before = text.slice(lineStart, m.index);
+    if ((before.match(/"/g) || []).length % 2 === 1) continue;
+    out.push({ rel, raw: m[0], n: Number(m[1]) });
+  }
+  return out;
+}
+{
+  const claims = [];
+  for (const rel of CURRENT_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    claims.push(...serverTestClaims(read(rel), rel));
+  }
+  if (claims.length > 0) {
+    const r = spawnSync(process.execPath, ['scripts/run-server-tests.mjs'], { cwd: ROOT, encoding: 'utf8' });
+    const m = `${r.stdout || ''}${r.stderr || ''}`.match(/^# pass (\d+)/m) || `${r.stdout || ''}`.match(/pass (\d+)/);
+    if (!m) {
+      problems.push('서버 테스트 수를 세지 못했다 — scripts/run-server-tests.mjs 출력에서 pass 수를 찾을 수 없다');
+    } else {
+      const live = Number(m[1]);
+      for (const c of claims) {
+        if (c.n !== live) problems.push(`${c.rel}: "${c.raw}" 가 낡았다 — 지금은 ${live}개(npm run test:server)`);
+      }
+    }
+  }
 }
 
 // ⑤-2 "지금 상태" 문서에 버전 마커가 하나도 없으면 ⑤ 의 버전 검사가 비어 있다 (291, 리뷰 M-5)
