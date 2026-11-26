@@ -20,6 +20,8 @@ import { makeAccount, signupAndOnboard } from './helpers';
  * 290(285~287 리뷰 M-2): ③ 토스트는 4초면 사라지는데 배지는 남는다 — 그때 화면의 유일한 상태 표시가
  * "🔒 마감됨" 이면 그 화면은 사실이 아닌 말을 하고 있다. 배지 옆에 **"이 PC 에 저장 안 됨"** 이 함께
  * 남는 것을 본다.
+ * 294(288~292 리뷰 M-6): 그 표시를 **state 로 들고 있으면 카드가 다시 그려질 때 사라진다**(이 카드는
+ * `key={viewMonth}` 로 리마운트된다) — 달을 한 번 바꿔 돌아와도 남아 있는지까지 본다.
  * 한계: 이 스펙은 로컬 모드 빌드(dist-e2e)에서만 돈다. 서버 모드에서는 같은 실패에 **다른 문구**가
  * 나가야 하는데(리뷰 H-1 — 서버에는 올라갔을 수 있다), 그 문구는 lib-units 가 고정하고 **화면에서는
  * 아직 돌려 보지 않았다**(서버 모드 게이트는 흉내 서버라 설정 행 왕복을 흉내 내지 않는다).
@@ -62,6 +64,12 @@ test('설정 저장이 실패하면 성공이라 말하지 않고, 사라진다�
   // ── ③ 토스트가 사라져도 화면에 사실이 남는다 (290, 리뷰 M-2) ──
   await expect(card.getByTestId('month-closed-badge')).toBeVisible();              // 메모리 상태는 마감이다
   await expect(card.getByTestId('month-close-unsaved')).toHaveText('이 PC 에 저장 안 됨'); // 그런데 남지 않았다는 사실도 함께 적는다
+
+  // 294(리뷰 M-6): 달을 바꿔 카드가 리마운트돼도 그 사실은 남는다(토스트는 이미 사라졌고 배지만 남으면 거짓이 된다)
+  await page.getByRole('button', { name: '이전 달' }).click();
+  await page.getByRole('button', { name: '다음 달' }).click();
+  await expect(card.getByTestId('month-closed-badge')).toBeVisible();
+  await expect(card.getByTestId('month-close-unsaved')).toHaveText('이 PC 에 저장 안 됨');
 
   // ── ④ 경고가 사실인지 — 새로고침하면 둘 다 없다 ──
   await page.reload();

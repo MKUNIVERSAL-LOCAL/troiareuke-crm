@@ -1794,7 +1794,9 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (await askConfirm({ title: '예약 삭제', message: `이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`, confirmLabel: '삭제', danger: true })) {
       logReservationDelete(r.id, r, user?.name); // "그 예약 받은 적 없다" 분쟁의 핵심 경로 — 흔적을 남긴다 (250 리뷰 H-3)
       ReservationStore.delete(r.id);
-      assignResource(r.id, null); // 자원 배정도 함께 정리 (142)
+      // 자원 배정도 함께 정리 (142). 정리 실패는 알리지 않는다 — 예약이 사라졌으므로 남은 배정은
+      // `pruned` 가 다음 저장에서 걷어내고, 화면에 거짓을 만들지 않는다 (294, 리뷰 LOW-1)
+      assignResource(r.id, null);
       saveReason(r.id, 'cancelled', ''); // 취소·노쇼 사유도 함께 정리 — 삭제된 예약의 사유가 설정 행에 영구히 남았다 (246 리뷰 M-4)
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();

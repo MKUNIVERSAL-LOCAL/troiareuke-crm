@@ -554,7 +554,9 @@ function StaffDetailModal({
       : '';
     if (!(await askConfirm({ title: '직원 삭제', message: `'${staff.name}' 직원을 삭제할까요?${detail}\n복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
     StaffStore.delete(staff.id);
-    removeStaffSchedule(staff.id); // 설정 행에 고아 근무표를 남기지 않게 (141)
+    // 설정 행에 고아 근무표를 남기지 않게 (141). 정리 실패는 알리지 않는다 — 직원 삭제 자체는 끝났고,
+    // 남은 고아 근무표는 다음 저장에서 다시 지워지며 화면에 거짓을 만들지 않는다 (294, 리뷰 LOW-1)
+    removeStaffSchedule(staff.id);
     onDelete();
   };
 

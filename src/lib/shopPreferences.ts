@@ -62,6 +62,15 @@ export function migrateLegacyPreference<K extends PrefKey>(
 }
 
 /**
+ * 지금 화면이 들고 있는 값이 **디스크에 남아 있는지** 돌려준다 (294, 288~292 리뷰 M-6).
+ * 저장 직후 판정을 state 로 들고 있으면 **창을 다시 그릴 때 사라진다** — 그러면 거짓인 잠금 배지만 남는다.
+ * 렌더마다 이 함수로 되읽으면 리마운트·재방문에도 사실이 유지된다.
+ */
+export function preferenceLanded<K extends PrefKey>(key: K, wanted: ShopPreferences[K]): PrefLanded {
+  return prefLanded(readPersistedPreference(key), wanted);
+}
+
+/**
  * 설정 행이 **디스크에 실제로** 저장됐는지 확인한다 (254 리뷰 M-1).
  * SettingsStore.get() 은 메모리 캐시를 먼저 돌려주고 safeSetItem 은 용량 초과를 삼키므로,
  * 캐시를 되읽는 확인은 저장 실패를 잡지 못한다 — localStorage 원본을 직접 본다.

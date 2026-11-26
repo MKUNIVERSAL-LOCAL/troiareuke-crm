@@ -13,7 +13,10 @@
  *     `커밋 <7자 이상 hex>` 가 있고 그 커밋이 **이 저장소에 실재**해야 한다. 없으면 그 묶음의
  *     주장을 아무도 되짚을 수 없다.
  *  ② "지금 상태" 문서의 숫자 — 아래 CURRENT_DOCS 안의 `N모듈·M함수`·`N칸 중 M칸`·`lib-units N개`,
- *     그리고 **가장 빨리 낡는 세 가지**(291, 리뷰 M-4): `묶음 NNN~MMM`(끝 번호 = 로드맵의 마지막 묶음),
+ *     그리고 **가장 빨리 낡는 세 가지**(291, 리뷰 M-4 / 294 에서 어순·개수까지): **문서가 말하는 자기 범위**
+ *     `NNN~MMM`(끝 번호 = 로드맵의 마지막 묶음, 같은 줄의 `묶음 N개`·`N묶음` 은 **그 범위의 실제 묶음 수**).
+ *     자기 범위의 표시는 개수 동반·바로 앞의 "묶음"·같은 줄의 "완료 묶음/묶음 범위/출장 기간/지점이 보는 변화" 다 —
+ *     그 표시가 없는 범위는 **참조**(리뷰·exe 에 포함된 묶음)이므로 검사하지 않는다,
  *     `묶음 155~NNN(MMM개)`·`누계 155~NNN 묶음 MMM개`(로드맵이 스스로 적은 누계와 같아야 한다),
  *     `REVIEW-*.md N건`(실제 파일 수). 로드맵·REVIEW-* 처럼 날짜가 붙은 **문서 전체**는 그때의 사실이라
  *     검사하지 않는다 — 과거 기록을 고치는 것은 역사 조작이다.
@@ -69,9 +72,13 @@ function hashOf(line) {
   return m ? m[1] : null;
 }
 
-/** 그 자리가 "과거다" 라고 밝힌 자리인지 — 앞뒤 20자 안에 "당시" 가 있으면 과거 숫자다 (291, 리뷰 M-7) */
+/**
+ * 그 자리가 "과거다" 라고 밝힌 자리인지 — **그 숫자 바로 앞**에 "당시" 가 있을 때만 과거 숫자다 (291, 리뷰 M-7).
+ * 294(288~292 리뷰 M-5): 앞뒤 20자를 보던 탓에 **"11-24 당시 54모듈 → 지금 99모듈"** 처럼 적으면
+ * 뒤의 **현재 숫자까지 함께 면제**됐다 — 가드가 존재하는 이유를 정면으로 비켜 간다. 앞쪽 12자만 본다.
+ */
 function markedPast(text, at, len) {
-  return /당시/.test(text.slice(Math.max(0, at - 20), at + len + 20));
+  return /당시[\s)\]]*$/.test(text.slice(Math.max(0, at - 12), at));
 }
 
 /** 문서가 주장하는 숫자들 */
@@ -87,10 +94,39 @@ function claimedNumbers(text) {
   for (const m of text.matchAll(/누계 155~(\d+) 묶음 (\d+)개|묶음 155~(\d+)\s*\((\d+)개\)/g)) {
     if (fresh(m)) out.cumulative.push({ end: Number(m[1] ?? m[3]), count: Number(m[2] ?? m[4]), raw: m[0] });
   }
-  for (const m of text.matchAll(/묶음 (\d{3})~(\d{3})/g)) {
-    // 누계 표기(`묶음 155~290(136개)`)는 cumulative 로 이미 센다 — 범위로 또 세면 같은 자리를 두 번 말한다
-    if (/^\s*\(\d+개\)/.test(text.slice(m.index + m[0].length, m.index + m[0].length + 12))) continue;
-    if (fresh(m)) out.ranges.push({ start: Number(m[1]), end: Number(m[2]), raw: m[0] });
+  // 294(리뷰 M-4): 전에는 `묶음 NNN~MMM` 어순만 봐서 **"출장 기간에 218~290 묶음 73개"** 가 비켜 갔다.
+  // 같은 줄에 "묶음" 이 있으면 범위로 보고, 같은 줄의 `묶음 N개`·`N묶음` 은 **그 범위의 묶음 수**와 맞춘다.
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.includes('묶음')) continue;
+    // **문서가 말하는 자기 범위**만 본다. 범위를 전부 보면 "리뷰(196~198)"·"exe 재빌드(288~290 포함)" 처럼
+    // 특정 묶음 묶음을 가리키는 **참조**까지 "낡았다" 고 말한다(294 에서 실제로 거짓 경고 7건). 표시는 셋이다:
+    //  ① 개수를 함께 적었다(`218~293 묶음 76개`) ② 바로 앞이 "묶음"(`묶음 218~293`) ③ 자기 범위를 뜻하는 말이 같은 줄에 있다
+    const SCOPE_HINT = /완료 묶음|묶음 범위|출장 기간|지점이 보는 변화/;
+    // 개수 표기는 **그 앞의 가장 가까운 범위**에만 붙인다 — 한 줄에 범위가 둘이면(`155~264 묶음 110개 … (263~265 리뷰)`)
+    // 모두에 붙여 엉뚱한 자리를 "맞지 않는다" 고 말했다 (294, 넓히면서 생긴 거짓 경고)
+    // `3~4묶음마다` 는 개수가 아니라 **주기**다 — 개수로 세면 엉뚱한 범위에 붙는다 (294)
+    const counts = [...line.matchAll(/묶음 (\d+)개|(?<![~\d])(\d+)묶음(?!마다)/g)].map(c => ({ at: c.index, n: Number(c[1] ?? c[2]), raw: c[0] }));
+    const ranges = [...line.matchAll(/(\d{3})\s*~\s*(\d{3})/g)];
+    for (const m of ranges) {
+      if (/^\s*\(\d+개\)/.test(line.slice(m.index + m[0].length, m.index + m[0].length + 12))) continue; // 누계 표기는 cumulative 가 센다
+      if (/누계 155~/.test(line.slice(Math.max(0, m.index - 6), m.index + 4))) continue;
+      if (markedPast(line, m.index, m[0].length)) continue;
+      const end = m.index + m[0].length;
+      const after = counts.filter(c => c.at > m.index);
+      // 개수는 **바로 뒤**(15자 안)에 붙은 것만 그 범위의 것이다 — "271~273 뒤 … 3~4묶음마다" 처럼 한 줄에
+      // 멀리 떨어진 개수를 끌어다 쓰면 엉뚱한 자리를 "맞지 않는다" 고 말한다 (294)
+      const near = after.length > 0 && after[0].at - end <= 15 && !ranges.some(r => r.index > m.index && r.index < after[0].at);
+      const owned = near ? after[0] : null;
+      const prefixed = /묶음\s*$/.test(line.slice(Math.max(0, m.index - 4), m.index));
+      // 자기 범위를 뜻하는 말도 **그 범위 앞 30자 안**에 있을 때만 — 줄 뒤쪽의 리뷰 참조까지 끌려오지 않게
+      const hinted = SCOPE_HINT.test(line.slice(Math.max(0, m.index - 30), m.index));
+      if (!owned && !prefixed && !hinted) continue; // 참조는 검사하지 않는다
+      out.ranges.push({
+        start: Number(m[1]), end: Number(m[2]), raw: m[0],
+        count: owned ? owned.n : null,
+        countRaw: owned ? owned.raw : null,
+      });
+    }
   }
   for (const m of text.matchAll(/REVIEW-\*\.md[^\d]{0,4}(\d+)\s*건/g)) if (fresh(m)) out.reviews.push({ count: Number(m[1]), raw: m[0] });
   // lib-units 뒤에 공백·괄호·`.spec.ts` 가 끼어도 센다(개·건 둘 다)
@@ -113,6 +149,10 @@ function liveNumbers() {
   // 전수 집계를 할 수 없다. 기계가 지키는 것은 "다른 문서가 로드맵과 다른 숫자를 말하지 않는 것" 이다.
   const cums = [...roadmap.matchAll(/누계 155~(\d+) 묶음 (\d+)개/g)];
   const lastCum = cums.length > 0 ? cums[cums.length - 1] : null;
+  // 범위 안의 묶음 수는 셀 수 있다 — `- [x] NNN — ` 형식이 쓰이기 시작한 165 번부터 (294, 리뷰 M-4)
+  const batchNos = batchLines(roadmap).map(l => l.no);
+  const UNIFORM_FROM = 165;
+  const countInRange = (start, end) => batchNos.filter(n => n >= start && n <= end).length;
   const reviewFiles = fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-.*\.md$/.test(x)).length;
   if (!rules || !ids) {
     // 이 가드는 다른 두 가드의 출력을 세므로, 그쪽이 실패하면 여기서 숫자를 읽을 수 없다.
@@ -125,7 +165,7 @@ function liveNumbers() {
   }
   return {
     modules: Number(rules[1]), fns: Number(rules[2]), idTotal: Number(ids[1]), idCovered: Number(ids[2]), libUnits: units,
-    newestBatch, cumCount: lastCum ? Number(lastCum[2]) : null, reviewFiles,
+    newestBatch, cumCount: lastCum ? Number(lastCum[2]) : null, reviewFiles, countInRange, UNIFORM_FROM,
   };
 }
 
@@ -144,16 +184,31 @@ function selftest() {
   // 291(리뷰 M-4·M-7): 묶음 범위·누계·리뷰 건수와 "당시" 면제
   const n291 = claimedNumbers('묶음 218~290 진행. 묶음 155~290(136개). docs/REVIEW-*.md 31건.');
   if (n291.ranges.length !== 1 || n291.ranges[0].end !== 290) { console.error(`[selftest] 묶음 범위 추출 실패: ${JSON.stringify(n291.ranges)}`); process.exit(1); }
+  // 294(리뷰 M-4): 어순이 반대인 "출장 기간에 218~290 묶음 73개" 도 범위·개수로 잡는다
+  const wideOrder = claimedNumbers('출장 기간에 218~290 묶음 73개를 끝냈습니다.');
+  if (wideOrder.ranges.length !== 1 || wideOrder.ranges[0].count !== 73) { console.error(`[selftest] 어순 반대 범위 덫 실패: ${JSON.stringify(wideOrder.ranges)}`); process.exit(1); }
+  const noBatchWord = claimedNumbers('전화 218~290 사이로 연락');
+  if (noBatchWord.ranges.length !== 0) { console.error('[selftest] 묶음 없는 줄 덫 실패'); process.exit(1); }
+  // 294: 특정 묶음 묶음을 가리키는 **참조**는 자기 범위가 아니다 — 검사하지 않는다
+  const ref = claimedNumbers('exe 재빌드(288~290 포함, 묶음 기록). 독립 리뷰(196~198) 반영.');
+  if (ref.ranges.length !== 0) { console.error(`[selftest] 참조 면제 덫 실패: ${JSON.stringify(ref.ranges)}`); process.exit(1); }
+  const mixedLine = claimedNumbers('- **완료 묶음**: 218~293 (PR #58). 리뷰 반영(285~287)·3~4묶음마다 exe');
+  if (mixedLine.ranges.length !== 1 || mixedLine.ranges[0].end !== 293) { console.error(`[selftest] 한 줄에 섞인 참조 덫 실패: ${JSON.stringify(mixedLine.ranges)}`); process.exit(1); }
+  const scoped = claimedNumbers('- **완료 묶음**: 218~293 (PR #58, 묶음 기록)');
+  if (scoped.ranges.length !== 1 || scoped.ranges[0].end !== 293) { console.error(`[selftest] 자기 범위 덫 실패: ${JSON.stringify(scoped.ranges)}`); process.exit(1); }
+  // 294(리뷰 M-5): "당시" 는 **그 숫자 앞**만 면제한다 — 뒤의 현재 숫자는 계속 검사
+  const mixed = claimedNumbers('11-24 당시 54모듈 → 지금 99모듈');
+  if (mixed.rules.length !== 1 || mixed.rules[0].modules !== 99) { console.error(`[selftest] 당시 범위 덫 실패: ${JSON.stringify(mixed.rules)}`); process.exit(1); }
   if (n291.cumulative.length !== 1 || n291.cumulative[0].count !== 136) { console.error(`[selftest] 누계 추출 실패: ${JSON.stringify(n291.cumulative)}`); process.exit(1); }
   if (n291.reviews.length !== 1 || n291.reviews[0].count !== 31) { console.error(`[selftest] 리뷰 건수 추출 실패: ${JSON.stringify(n291.reviews)}`); process.exit(1); }
-  const past = claimedNumbers('11-24 당시 54모듈 이었다. 그때 묶음 155~285(131개) 였다.');
+  const past = claimedNumbers('11-24 당시 54모듈 이었다. 당시 묶음 155~285(131개) 였다.');
   if (past.rules.length !== 0 || past.cumulative.length !== 0) { console.error(`[selftest] "당시" 면제 실패: ${JSON.stringify(past)}`); process.exit(1); }
   const dated = claimedNumbers('11-25 저녁~ 묶음 218~285 를 했다');  // 날짜만 있으면 면제되지 않는다(M-4 가 찾은 자리)
   if (dated.ranges.length !== 1) { console.error('[selftest] 날짜만 있는 줄 면제 금지 실패'); process.exit(1); }
   // 291(리뷰 M-5): 브랜치 이름 뒤 마침표를 먹지 않는다
   const br = /feat\/[A-Za-z0-9_\/-]+(?:\.[A-Za-z0-9_\/-]+)*/.exec('브랜치 feat/post-v1.0.63-2026-11-25.');
   if (br[0] !== 'feat/post-v1.0.63-2026-11-25') { console.error(`[selftest] 브랜치 마침표 덫 실패: ${br[0]}`); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 11개(숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제·날짜만 면제 금지·브랜치 마침표) 통과');
+  console.log('[check-docs-claims] selftest OK — 덫 18개(숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -202,6 +257,11 @@ const problems = [];
     // 291(리뷰 M-4): 묶음 범위의 끝은 마지막 묶음이어야 한다("218~285" 로 멈춘 채 다섯 묶음이 지났다)
     for (const g of c.ranges) {
       if (g.start >= 155 && g.end !== live.newestBatch) problems.push(`${rel}: "${g.raw}" 가 낡았다 — 마지막 묶음은 ${live.newestBatch} (과거 범위면 "당시" 를 함께 적으세요)`);
+      // 294(리뷰 M-4): 범위와 묶음 수를 같은 줄에 적었으면 **그 범위의 실제 묶음 수**와 같아야 한다
+      if (g.count !== null && g.start >= live.UNIFORM_FROM) {
+        const real = live.countInRange(g.start, g.end);
+        if (g.count !== real) problems.push(`${rel}: "${g.raw} … ${g.countRaw}" 가 맞지 않는다 — 로드맵에 ${g.start}~${g.end} 묶음은 ${real}개`);
+      }
     }
     for (const u of c.cumulative) {
       if (u.end !== live.newestBatch || (live.cumCount !== null && u.count !== live.cumCount)) {

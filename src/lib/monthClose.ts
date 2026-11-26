@@ -1,7 +1,7 @@
 // monthClose — 월 마감 잠금·월 목표 (비코어, 147, GAP P-7·P-6)
 // 세무 신고 뒤 숫자가 바뀌면 안 되는 달을 잠근다. 지점 설정 행(preferences.closedMonths)에 두어 NAS 동기·모든 기기에 적용.
 // 코어 저장소는 못 막으므로(코어 잠금) 사용자가 거치는 저장 경로(결제·지출·제품 판매/취소·예약 완료 결제·회차권 등록/취소·입고 지출)에서 막는다.
-import { getPreference, setPreference } from './shopPreferences';
+import { getPreference, setPreference, preferenceLanded } from './shopPreferences';
 import type { PrefLanded } from './prefLandedRule';
 
 function closedMonths(): string[] {
@@ -19,6 +19,14 @@ export function closeMonth(month: string): PrefLanded {
   if (!/^\d{4}-\d{2}$/.test(month)) return 'invalid';
   if (isMonthClosed(month)) return 'landed';             // 이미 그 상태다(뜻대로 됐다)
   return setPreference('closedMonths', [...closedMonths(), month].sort());
+}
+
+/**
+ * 지금 메모리의 마감 목록이 **이 PC 에 남아 있는지** (294, 288~292 리뷰 M-6).
+ * 토스트는 몇 초 뒤 사라지고 잠금 배지는 남으므로, 화면이 **렌더마다** 이 값을 물어 사실을 함께 적는다.
+ */
+export function monthCloseSaved(): PrefLanded {
+  return preferenceLanded('closedMonths', closedMonths());
 }
 
 export function reopenMonth(month: string): PrefLanded {

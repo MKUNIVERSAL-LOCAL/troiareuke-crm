@@ -66,8 +66,10 @@ export function removeResource(resourceId: string, force = false): { removed: bo
   const next = pruned(resourceAssignments());
   for (const [rid, res] of Object.entries(next)) if (res === resourceId) delete next[rid];
   const mapLanded = setPreference('reservationResources', next);
-  // 둘 중 하나라도 안 남았으면 삭제는 이 PC 에 반영되지 않았다 — 나쁜 쪽을 돌려준다 (292, 리뷰 M-3)
-  const landed = [listLanded, mapLanded].includes('lost') ? 'lost' : ([listLanded, mapLanded].includes('unknown') ? 'unknown' : 'landed');
+  // 둘 중 하나라도 안 남았으면 삭제는 이 PC 에 반영되지 않았다 — 나쁜 쪽을 돌려준다 (292, 리뷰 M-3).
+  // 294(리뷰 LOW-2): **둘 다 'landed' 일 때만** 성공이다 — 새 판정값이 생겨도 조용히 "삭제됐다" 가 되지 않게.
+  const landed: PrefLanded = listLanded === 'landed' && mapLanded === 'landed' ? 'landed'
+    : ([listLanded, mapLanded].includes('lost') ? 'lost' : 'unknown');
   return { removed: true, upcoming, landed };
 }
 
