@@ -6,6 +6,7 @@ import { askConfirm } from '../lib/confirmDialog';
 import { formatPrice } from '../lib/format';
 import { parseAmount } from '../lib/inputRules';
 import { closeMonth, reopenMonth, saveMonthlyTarget } from '../lib/monthClose';
+import { describePrefLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (284)
 import type { MonthMetrics } from '../lib/revenueMetricsRule';
 import type { DrillResult } from '../lib/revenueDrilldownRule';
 import MetricDetailModal from './MetricDetailModal';
@@ -84,19 +85,22 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged, dril
     const raw = targetInput.trim();
     const n = raw === '' ? null : parseAmount(raw);
     if (raw !== '' && (n === null || n < 0)) { notify.error('목표는 0 이상 숫자로 입력해주세요.'); return; }
-    saveMonthlyTarget(m.month, n);
-    notify.success(n ? `${label} 목표를 ${formatPrice(n)}으로 저장했습니다.` : `${label} 목표를 지웠습니다.`);
+    const lost = describePrefLoss(saveMonthlyTarget(m.month, n), '월 매출 목표');
+    if (lost) notify(lost); // 저장 공간이 모자라면 "저장했습니다" 가 거짓이다 (284)
+    else notify.success(n ? `${label} 목표를 ${formatPrice(n)}으로 저장했습니다.` : `${label} 목표를 지웠습니다.`);
     onChanged();
   };
   const toggleLock = async () => {
     if (closed) {
       if (!(await askConfirm({ title: '월 마감 해제', confirmLabel: '마감 해제', cancelLabel: '닫기', message: `${label} 마감을 풀까요? 다시 결제·지출·판매를 바꿀 수 있게 됩니다. 신고를 마친 달이면 수정 뒤 다시 잠가주세요.` }))) return;
-      reopenMonth(m.month);
-      notify.info(`${label} 마감을 풀었습니다.`);
+      const lost = describePrefLoss(reopenMonth(m.month), `${label} 마감 해제`);
+      if (lost) notify(lost);
+      else notify.info(`${label} 마감을 풀었습니다.`);
     } else {
       if (!(await askConfirm({ title: '월 마감', confirmLabel: '마감', cancelLabel: '닫기', message: `${label}을 마감할까요? 그 달의 결제·지출·제품 판매·회차권 등록을 등록·수정·삭제할 수 없게 됩니다(모든 기기). 언제든 풀 수 있습니다.` }))) return;
-      closeMonth(m.month);
-      notify.success(`${label}을 마감했습니다. 이제 그 달 숫자는 바뀌지 않습니다.`);
+      const lostClose = describePrefLoss(closeMonth(m.month), `${label} 마감`);
+      if (lostClose) notify(lostClose); // 마감이 저장되지 않았는데 "마감했습니다" 라고 말하면 세무 신고가 흔들린다 (284)
+      else notify.success(`${label}을 마감했습니다. 이제 그 달 숫자는 바뀌지 않습니다.`);
     }
     onChanged();
   };

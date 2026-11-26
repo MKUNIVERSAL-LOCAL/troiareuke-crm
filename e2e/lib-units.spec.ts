@@ -43,6 +43,7 @@ import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLe
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
 import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, describeDrillFooter, describeDrillTruncation, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
+import { prefLanded, sameValue, describePrefLoss } from '../src/lib/prefLandedRule';
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
@@ -3039,4 +3040,32 @@ test('중복 결제 경고 — 고객명 없음·4건 이상·유형 없음, 그
   expect(mixed).toHaveLength(1);
   const mixedText = describeDuplicateWarning(mixed, { amount: 50000, customerName: '김' }, won);
   expect(mixedText).toContain('등 관리 · 카드 · 할인 10,000원'); // 같은 5만이라도 할인이 다르면 다른 결제일 수 있다
+});
+
+// ── 284: 설정 저장이 정말 남았는지 판정 — 저장 공간 초과를 safeSetItem 이 삼키므로 되읽어 비교한다 ──
+
+test('설정 저장 판정 — 남음·사라짐·확인 불가를 가린다 (284)', () => {
+  // 되읽은 값이 저장하려던 값과 같으면 남았다
+  expect(prefLanded(30, 30)).toBe('landed');
+  expect(prefLanded(['2026-11'], ['2026-11'])).toBe('landed');
+  expect(prefLanded({ serviceRate: 12.5, productRate: 5 }, { productRate: 5, serviceRate: 12.5 })).toBe('landed'); // 키 순서는 보지 않는다
+  // 다르면 사라졌다 — 화면이 "저장했습니다" 라고 말하면 거짓이 된다
+  expect(prefLanded(undefined, 30)).toBe('lost');
+  expect(prefLanded([], ['2026-11'])).toBe('lost');
+  expect(prefLanded({ serviceRate: 10 }, { serviceRate: 12.5 })).toBe('lost');
+  // 설정 행 자체를 읽을 수 없으면(프라이빗 모드 등) **실패로 단정하지 않는다** — 없는 실패를 알리면 그것도 거짓이다
+  expect(prefLanded(null, 30)).toBe('unknown');
+  expect(prefLanded(null, null)).toBe('landed'); // 지우려 했고 없는 상태 — 뜻대로 됐다
+
+  // undefined 칸은 비교에서 빼서 "있던 키가 사라진 것" 과 "애초에 없던 키" 를 섞지 않는다
+  expect(sameValue({ a: 1, b: undefined }, { a: 1 })).toBe(true);
+  expect(sameValue({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+  expect(sameValue([1, 2], [2, 1])).toBe(false); // 배열은 순서가 뜻이다(마감 월 목록)
+
+  // 화면 문구 — 남았으면 아무 말도 하지 않고, 사라졌으면 **지금 값이 사라진다는 사실**까지 적는다
+  expect(describePrefLoss('landed', '월 마감')).toBeNull();
+  expect(describePrefLoss('lost', '월 마감')).toContain('저장되지 않았습니다');
+  expect(describePrefLoss('lost', '월 마감')).toContain('다시 열면 사라집니다');
+  expect(describePrefLoss('unknown', '인센티브 비율')).toContain('확인할 수 없었습니다');
+  expect(describePrefLoss('unknown', '인센티브 비율')).not.toContain('저장되지 않았습니다'); // 없는 실패를 단정하지 않는다
 });

@@ -5,6 +5,7 @@ import { formatPrice } from '../lib/format';
 import MessageDraftPanel from './ui/MessageDraftPanel';
 // 인센티브(수당) — 규칙은 순수 모듈, 비율은 설정 행(NAS 동기) (233, GAP S-1)
 import { computeCommission, ratesFor, commissionConfigured, parseRate, isBlankRate, hasOwnRates, describeCommissionBasis, COMMISSION_CAVEATS, MAX_COMMISSION_RATE, type CommissionConfig } from '../lib/commissionRule';
+import { describePrefLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (284)
 import { getCommissionConfig, saveCommissionConfig } from '../lib/staffCommission';
 import { notify } from '../lib/notify';
 
@@ -54,10 +55,11 @@ export default function StaffPerformanceCard({ tick = 0 }: { tick?: number }) {
       if (staffId === 'default') next[field] = value;
       else next.perStaff = { ...next.perStaff, [staffId]: { ...next.perStaff?.[staffId], [field]: value } };
     }
-    saveCommissionConfig(next);
+    const lostRates = describePrefLoss(saveCommissionConfig(next), '인센티브 비율');
     setCommission(getCommissionConfig());
     setRateDraft({});
-    notify('인센티브 비율을 저장했습니다.');
+    // 급여 근거라 "저장했습니다" 가 거짓이면 그대로 임금 분쟁이 된다 (284)
+    notify(lostRates ?? '인센티브 비율을 저장했습니다.');
   }
   const draft = useMemo(() => {
     if (!draftOpen) return null;

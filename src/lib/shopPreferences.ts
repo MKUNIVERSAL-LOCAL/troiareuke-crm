@@ -5,6 +5,7 @@
 // 한 번 이관(migrate)한 뒤 (3) 저장은 항상 SettingsStore.save로 해 서버에 반영한다.
 // localStorage는 오프라인·즉시 반응용 캐시로만 남긴다.
 import { SettingsStore, getShopId } from './store';
+import { prefLanded, type PrefLanded } from './prefLandedRule';
 import type { ShopPreferences } from '../types';
 
 type PrefKey = keyof ShopPreferences;
@@ -18,9 +19,16 @@ export function getPreference<K extends PrefKey>(key: K): ShopPreferences[K] | u
   return readAll()[key];
 }
 
-export function setPreference<K extends PrefKey>(key: K, value: ShopPreferences[K]): void {
+/**
+ * 설정 한 칸을 저장하고 **정말 남았는지** 돌려준다 (284).
+ * `safeSetItem` 은 저장 공간 초과를 삼키므로 반환값·예외로는 실패를 알 수 없다 —
+ * 저장 직후 localStorage 원본을 되읽어 비교한다(254 리뷰 M-1 이 영수증 정보에서 쓴 방법을 한 곳으로).
+ * 쓰는 쪽이 이 값을 무시해도 동작은 전과 같다(void 로 쓰던 호출 39곳 그대로).
+ */
+export function setPreference<K extends PrefKey>(key: K, value: ShopPreferences[K]): PrefLanded {
   const next: ShopPreferences = { ...readAll(), [key]: value };
   SettingsStore.save({ preferences: next });
+  return prefLanded(readPersistedPreference(key) ?? null, value ?? null);
 }
 
 /**
