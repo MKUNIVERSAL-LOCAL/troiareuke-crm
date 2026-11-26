@@ -12,13 +12,21 @@
  *  ① 묶음 기록의 커밋 해시 — 로드맵의 `- [x] NNN — …` 항목(243 번부터 해시를 적는 규약, **가장 최근 묶음 하나는 면제** — 해시는 커밋 뒤에 적는다)마다
  *     `커밋 <7자 이상 hex>` 가 있고 그 커밋이 **이 저장소에 실재**해야 한다. 없으면 그 묶음의
  *     주장을 아무도 되짚을 수 없다.
- *  ② "지금 상태" 문서의 숫자 — 아래 CURRENT_DOCS 안의 `N모듈·M함수`·`N칸 중 M칸`·`lib-units N개`는
- *     **지금 세어 나오는 값**과 같아야 한다. 날짜가 붙은 기록(로드맵 묶음 항목·REVIEW-*)은 그때의
- *     사실이므로 검사하지 않는다 — 과거 기록을 고치는 것은 역사 조작이다.
+ *  ② "지금 상태" 문서의 숫자 — 아래 CURRENT_DOCS 안의 `N모듈·M함수`·`N칸 중 M칸`·`lib-units N개`,
+ *     그리고 **가장 빨리 낡는 세 가지**(291, 리뷰 M-4): `묶음 NNN~MMM`(끝 번호 = 로드맵의 마지막 묶음),
+ *     `묶음 155~NNN(MMM개)`·`누계 155~NNN 묶음 MMM개`(로드맵이 스스로 적은 누계와 같아야 한다),
+ *     `REVIEW-*.md N건`(실제 파일 수). 로드맵·REVIEW-* 처럼 날짜가 붙은 **문서 전체**는 그때의 사실이라
+ *     검사하지 않는다 — 과거 기록을 고치는 것은 역사 조작이다.
+ *     "지금 상태" 문서 **안에** 과거 숫자를 적고 싶으면 그 자리에 **"당시"** 를 함께 적는다
+ *     (예: "11-24 당시 54모듈"). 리뷰 M-7 은 "날짜가 있는 줄을 건너뛰자" 고 했지만 그러면
+ *     M-4 가 찾은 낡은 줄("출장 기간(11-25 저녁~) 218~285")이 **날짜 때문에 면제**된다 — 낡은 것을
+ *     숨기는 쪽이 아니라, 과거라고 밝힌 자리만 면제한다.
  *  ③ 문서가 가리키는 파일 — 문서 안의 `docs/X.md`·`scripts/Y.mjs` 는 실재해야 한다(깨진 포인터 금지).
  *  ④ 리뷰 기록의 반영 표시 — `docs/REVIEW-*.md` 머리말(앞 3줄)에 "반영" 상태가 적혀 있어야 한다.
  *     조용히 묻힌 리뷰가 없다는 뜻이다.
  *  ⑤ 버전·브랜치 — "지금 상태" 문서가 적은 `vX.Y.Z` 와 `feat/...` 브랜치 이름이 **실물과 같아야** 한다.
+ *     291(리뷰 M-5): `MASTER-DEVELOPMENT-STATUS.md` 에는 `(package.json)` 표기가 **적어도 하나** 있어야 한다 —
+ *     그 표기가 없으면 버전 검사가 **아무것도 보지 않는** 상태가 된다(마커를 안 적으면 검사 밖인 구조).
  *     286 에서 `MASTER-DEVELOPMENT-STATUS.md` 가 11-24 상태(v1.0.62·PR #56)에 멈춘 채 발견됐다 —
  *     CLAUDE.md 7절이 세션 시작에 읽으라고 하는 문서인데 그 사이 묶음 150개가 지났다. 사람이 아니라
  *     기계가 지켜야 하는 종류다(코드 버전은 package.json, 브랜치는 git 이 답을 안다).
@@ -61,14 +69,30 @@ function hashOf(line) {
   return m ? m[1] : null;
 }
 
+/** 그 자리가 "과거다" 라고 밝힌 자리인지 — 앞뒤 20자 안에 "당시" 가 있으면 과거 숫자다 (291, 리뷰 M-7) */
+function markedPast(text, at, len) {
+  return /당시/.test(text.slice(Math.max(0, at - 20), at + len + 20));
+}
+
 /** 문서가 주장하는 숫자들 */
 function claimedNumbers(text) {
-  const out = { rules: [], testids: [], libUnits: [] };
+  const out = { rules: [], testids: [], libUnits: [], ranges: [], cumulative: [], reviews: [] };
+  const fresh = m => !markedPast(text, m.index, m[0].length);
   // 285(리뷰 M-2): 문구를 좁게 보던 탓에 `lib-units.spec.ts 160건`·`lib-units(165개)`·맨 `231함수` 가
   // 전부 가드 밖이었다. 283 이 기계가 보던 표현을 지우고 못 보는 표현만 남겨 한 묶음 뒤 낡은 적도 있다.
-  for (const m of text.matchAll(/(\d+)\s*모듈/g)) out.rules.push({ modules: Number(m[1]), fns: null, raw: m[0] });
-  for (const m of text.matchAll(/(\d+)\s*함수/g)) out.rules.push({ modules: null, fns: Number(m[1]), raw: m[0] });
-  for (const m of text.matchAll(/(\d+)칸 중 (\d+)칸/g)) out.testids.push({ total: Number(m[1]), covered: Number(m[2]), raw: m[0] });
+  for (const m of text.matchAll(/(\d+)\s*모듈/g)) if (fresh(m)) out.rules.push({ modules: Number(m[1]), fns: null, raw: m[0] });
+  for (const m of text.matchAll(/(\d+)\s*함수/g)) if (fresh(m)) out.rules.push({ modules: null, fns: Number(m[1]), raw: m[0] });
+  for (const m of text.matchAll(/(\d+)칸 중 (\d+)칸/g)) if (fresh(m)) out.testids.push({ total: Number(m[1]), covered: Number(m[2]), raw: m[0] });
+  // 291(리뷰 M-4): 묶음 범위·누계·리뷰 건수 — 묶음마다 바뀌어 가장 빨리 낡는다
+  for (const m of text.matchAll(/누계 155~(\d+) 묶음 (\d+)개|묶음 155~(\d+)\s*\((\d+)개\)/g)) {
+    if (fresh(m)) out.cumulative.push({ end: Number(m[1] ?? m[3]), count: Number(m[2] ?? m[4]), raw: m[0] });
+  }
+  for (const m of text.matchAll(/묶음 (\d{3})~(\d{3})/g)) {
+    // 누계 표기(`묶음 155~290(136개)`)는 cumulative 로 이미 센다 — 범위로 또 세면 같은 자리를 두 번 말한다
+    if (/^\s*\(\d+개\)/.test(text.slice(m.index + m[0].length, m.index + m[0].length + 12))) continue;
+    if (fresh(m)) out.ranges.push({ start: Number(m[1]), end: Number(m[2]), raw: m[0] });
+  }
+  for (const m of text.matchAll(/REVIEW-\*\.md[^\d]{0,4}(\d+)\s*건/g)) if (fresh(m)) out.reviews.push({ count: Number(m[1]), raw: m[0] });
   // lib-units 뒤에 공백·괄호·`.spec.ts` 가 끼어도 센다(개·건 둘 다)
   for (const m of text.matchAll(/lib-units(?:\.spec\.ts)?[^\d]{0,4}(\d+)\s*(?:개|건)/g)) out.libUnits.push({ count: Number(m[1]), raw: m[0] });
   return out;
@@ -83,6 +107,13 @@ function liveNumbers() {
   const rules = /순수 규칙 (\d+)개 모듈, export 함수 (\d+)개/.exec(run(['scripts/check-rule-coverage.mjs']));
   const ids = /화면 칸 (\d+)개 중 스펙이 보는 것 (\d+)개/.exec(run(['scripts/check-testid-coverage.mjs']));
   const units = read('e2e/lib-units.spec.ts').split(/\r?\n/).filter(l => l.startsWith('test(')).length;
+  const roadmap = read(ROADMAP);
+  const newestBatch = Math.max(...batchLines(roadmap).map(l => l.no));
+  // 누계는 **로드맵이 스스로 적은 마지막 값**을 쓴다 — 묶음 155~164 는 기록 형식이 달라(`- [x] NNN — ` 아님)
+  // 전수 집계를 할 수 없다. 기계가 지키는 것은 "다른 문서가 로드맵과 다른 숫자를 말하지 않는 것" 이다.
+  const cums = [...roadmap.matchAll(/누계 155~(\d+) 묶음 (\d+)개/g)];
+  const lastCum = cums.length > 0 ? cums[cums.length - 1] : null;
+  const reviewFiles = fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-.*\.md$/.test(x)).length;
   if (!rules || !ids) {
     // 이 가드는 다른 두 가드의 출력을 세므로, 그쪽이 실패하면 여기서 숫자를 읽을 수 없다.
     // 남의 실패를 떠안고 스택 트레이스로 끝내지 않고 **무엇을 먼저 고쳐야 하는지** 적는다 (285, 리뷰 LOW)
@@ -92,7 +123,10 @@ function liveNumbers() {
     console.error('  이 가드는 그 두 출력을 세어 "지금 상태" 문서의 숫자와 맞춥니다.');
     process.exit(2);
   }
-  return { modules: Number(rules[1]), fns: Number(rules[2]), idTotal: Number(ids[1]), idCovered: Number(ids[2]), libUnits: units };
+  return {
+    modules: Number(rules[1]), fns: Number(rules[2]), idTotal: Number(ids[1]), idCovered: Number(ids[2]), libUnits: units,
+    newestBatch, cumCount: lastCum ? Number(lastCum[2]) : null, reviewFiles,
+  };
 }
 
 function selftest() {
@@ -107,7 +141,19 @@ function selftest() {
   const b = batchLines('- [x] 243 — 무언가 (11-26 10:00): 커밋 abc1234. 끝\n- [ ] 999 — 아직\n- [x] 100 — 옛 묶음 해시 없음');
   if (b.length !== 2 || b[0].no !== 243) { console.error(`[selftest] 묶음 줄 추출 실패: ${JSON.stringify(b.map(x => x.no))}`); process.exit(1); }
   if (hashOf(b[0].line) !== 'abc1234' || hashOf(b[1].line) !== null) { console.error('[selftest] 해시 추출 실패'); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 6개(숫자 3종·넓은 표현 2종·묶음 해시) 통과');
+  // 291(리뷰 M-4·M-7): 묶음 범위·누계·리뷰 건수와 "당시" 면제
+  const n291 = claimedNumbers('묶음 218~290 진행. 묶음 155~290(136개). docs/REVIEW-*.md 31건.');
+  if (n291.ranges.length !== 1 || n291.ranges[0].end !== 290) { console.error(`[selftest] 묶음 범위 추출 실패: ${JSON.stringify(n291.ranges)}`); process.exit(1); }
+  if (n291.cumulative.length !== 1 || n291.cumulative[0].count !== 136) { console.error(`[selftest] 누계 추출 실패: ${JSON.stringify(n291.cumulative)}`); process.exit(1); }
+  if (n291.reviews.length !== 1 || n291.reviews[0].count !== 31) { console.error(`[selftest] 리뷰 건수 추출 실패: ${JSON.stringify(n291.reviews)}`); process.exit(1); }
+  const past = claimedNumbers('11-24 당시 54모듈 이었다. 그때 묶음 155~285(131개) 였다.');
+  if (past.rules.length !== 0 || past.cumulative.length !== 0) { console.error(`[selftest] "당시" 면제 실패: ${JSON.stringify(past)}`); process.exit(1); }
+  const dated = claimedNumbers('11-25 저녁~ 묶음 218~285 를 했다');  // 날짜만 있으면 면제되지 않는다(M-4 가 찾은 자리)
+  if (dated.ranges.length !== 1) { console.error('[selftest] 날짜만 있는 줄 면제 금지 실패'); process.exit(1); }
+  // 291(리뷰 M-5): 브랜치 이름 뒤 마침표를 먹지 않는다
+  const br = /feat\/[A-Za-z0-9_\/-]+(?:\.[A-Za-z0-9_\/-]+)*/.exec('브랜치 feat/post-v1.0.63-2026-11-25.');
+  if (br[0] !== 'feat/post-v1.0.63-2026-11-25') { console.error(`[selftest] 브랜치 마침표 덫 실패: ${br[0]}`); process.exit(1); }
+  console.log('[check-docs-claims] selftest OK — 덫 11개(숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제·날짜만 면제 금지·브랜치 마침표) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -126,6 +172,9 @@ const problems = [];
     if (!h) { problems.push(`${ROADMAP}: 묶음 ${no} 에 커밋 해시가 없다 — 그 묶음의 주장을 되짚을 수 없다`); continue; }
     const r = spawnSync('git', ['cat-file', '-e', `${h}^{commit}`], { cwd: ROOT });
     if (r.status !== 0) { problems.push(`${ROADMAP}: 묶음 ${no} 의 커밋 ${h} 가 이 저장소에 없다`); continue; }
+    // 리베이스로 버려진 커밋도 `cat-file -e` 는 통과한다 — 지금 HEAD 에서 닿는지까지 본다 (291, 리뷰 LOW-9)
+    const reach = spawnSync('git', ['merge-base', '--is-ancestor', h, 'HEAD'], { cwd: ROOT });
+    if (reach.status !== 0) { problems.push(`${ROADMAP}: 묶음 ${no} 의 커밋 ${h} 는 지금 브랜치에서 닿지 않는다(리베이스로 버려진 커밋일 수 있다)`); continue; }
     // 실재만 보면 **남의 커밋 해시**를 적어도 통과한다 — 제목에 그 묶음 번호가 있는지까지 본다 (285, 리뷰 LOW)
     const subject = (spawnSync('git', ['show', '-s', '--format=%s', h], { cwd: ROOT, encoding: 'utf8' }).stdout || '').trim();
     if (!new RegExp(`(^|[^0-9])${no}([^0-9]|$)`).test(subject)) {
@@ -149,6 +198,18 @@ const problems = [];
     }
     for (const u of c.libUnits) {
       if (u.count !== live.libUnits) problems.push(`${rel}: "${u.raw}" 가 낡았다 — 지금은 lib-units ${live.libUnits}개`);
+    }
+    // 291(리뷰 M-4): 묶음 범위의 끝은 마지막 묶음이어야 한다("218~285" 로 멈춘 채 다섯 묶음이 지났다)
+    for (const g of c.ranges) {
+      if (g.start >= 155 && g.end !== live.newestBatch) problems.push(`${rel}: "${g.raw}" 가 낡았다 — 마지막 묶음은 ${live.newestBatch} (과거 범위면 "당시" 를 함께 적으세요)`);
+    }
+    for (const u of c.cumulative) {
+      if (u.end !== live.newestBatch || (live.cumCount !== null && u.count !== live.cumCount)) {
+        problems.push(`${rel}: "${u.raw}" 가 로드맵과 다르다 — 로드맵은 155~${live.newestBatch} 묶음 ${live.cumCount}개`);
+      }
+    }
+    for (const v of c.reviews) {
+      if (v.count !== live.reviewFiles) problems.push(`${rel}: "${v.raw}" 가 낡았다 — docs/REVIEW-*.md 는 ${live.reviewFiles}건`);
     }
   }
 }
@@ -209,11 +270,20 @@ const problems = [];
     for (const m of text.matchAll(/v(\d+\.\d+\.\d+)\*{0,2}\(package\.json\)/g)) {
       if (m[1] !== pkgVersion) problems.push(`${rel}: "${m[0]}" 가 실물과 다르다 — package.json 은 v${pkgVersion}`);
     }
-    for (const m of text.matchAll(/feat\/[A-Za-z0-9._\/-]+/g)) {
+    // `.` 를 문자 집합에 두면 문장 끝 마침표까지 먹어 "브랜치가 다르다" 는 거짓 실패가 난다 (291, 리뷰 M-5)
+    for (const m of text.matchAll(/feat\/[A-Za-z0-9_\/-]+(?:\.[A-Za-z0-9_\/-]+)*/g)) {
       if (!branch || branch === 'HEAD' || m[0] === branch) continue;
       if (/릴리스 완료|머지\(/.test(lineOf(text, m.index))) continue; // 지난 릴리스 기록 = 역사
       problems.push(`${rel}: 브랜치 "${m[0]}" 가 지금 브랜치와 다르다 — ${branch}`);
     }
+  }
+}
+
+// ⑤-2 "지금 상태" 문서에 버전 마커가 하나도 없으면 ⑤ 의 버전 검사가 비어 있다 (291, 리뷰 M-5)
+{
+  const STATUS = 'docs/MASTER-DEVELOPMENT-STATUS.md';
+  if (fs.existsSync(path.join(ROOT, STATUS)) && !/\(package\.json\)/.test(read(STATUS))) {
+    problems.push(`${STATUS}: 코드 버전을 "vX.Y.Z(package.json)" 형태로 적은 자리가 없다 — 그러면 버전 검사가 아무것도 보지 않는다`);
   }
 }
 
