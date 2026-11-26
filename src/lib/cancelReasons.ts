@@ -6,6 +6,7 @@ import { getPreference, setPreference } from './shopPreferences';
 import { ReservationStore } from './store';
 import { todayISO } from './format';
 import { normalizeReasonText, isPresetReason, type CancelKind } from './cancelReasonRule';
+import type { PrefLanded } from './prefLandedRule';
 
 const KEEP_DAYS = 365; // 1년치는 "작년 이맘때" 비교에 쓸 수 있다
 const MAX_REASONS = 500; // 삭제된 예약의 고아 기록까지 무한정 쌓이지 않게 (246 리뷰 M-4)
@@ -32,18 +33,19 @@ export function reasonOf(reservationId: string): StoredReason | null {
 
 /**
  * 사유 저장 — 빈 값이면 그 예약의 사유를 지운다(취소를 되돌릴 때).
- * 저장 실패(설정 행 오류)가 취소·노쇼 처리를 되돌리게 하지 않는다 → 예외를 삼키고 false 를 돌려준다.
+ * 저장 실패(설정 행 오류)가 취소·노쇼 처리를 되돌리게 하지 않는다 → 예외를 삼키고 `'lost'` 를 돌려준다.
+ * 290(285~287 리뷰 M-3): 전에는 `true` 를 그냥 돌려줘 **저장이 남았는지를 버렸다** — 사유는 월 집계·지난달
+ * 비교의 원천이라, 안 남은 사유를 적힌 것으로 세면 "매장 쪽 사유 +3" 같은 거짓이 나간다(254 리뷰와 같은 종류).
  */
-export function saveReason(reservationId: string, kind: CancelKind, reason: string): boolean {
+export function saveReason(reservationId: string, kind: CancelKind, reason: string): PrefLanded {
   try {
     const next = pruned(reasonMap());
     const clean = normalizeReasonText(reason);
     if (clean) next[reservationId] = { kind, reason: clean, at: new Date().toISOString() };
     else delete next[reservationId];
-    setPreference('reservationCancelReasons', next);
-    return true;
+    return setPreference('reservationCancelReasons', next);
   } catch {
-    return false;
+    return 'lost';
   }
 }
 

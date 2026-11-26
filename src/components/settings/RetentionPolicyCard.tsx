@@ -6,6 +6,8 @@ import {
   getRetentionPolicy, setRetentionPolicy, getExpiredCustomers,
   DEFAULT_RETENTION_YEARS, MIN_RETENTION_YEARS, MAX_RETENTION_YEARS,
 } from '../../lib/retentionPolicy';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (290, 리뷰 M-3)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 
 /**
  * 설정 > 알림 설정 > 개인정보 보존기간 (P4, 2026-11-17)
@@ -20,12 +22,16 @@ export default function RetentionPolicyCard() {
 
   function save(enabled: boolean) {
     const years = enabled ? parseInt(draftYears, 10) : policy.years; // 끌 때는 입력칸이 비어 있어도 된다
-    if (!setRetentionPolicy({ enabled, years })) {
+    const landed = setRetentionPolicy({ enabled, years });
+    if (landed === 'invalid') {
       setMessage({ tone: 'warn', text: `${MIN_RETENTION_YEARS}~${MAX_RETENTION_YEARS} 사이의 연수를 입력해주세요.` });
       return;
     }
     const next = { enabled, years };
     setPolicy(next);
+    // 290(리뷰 M-3): 개인정보 파기 기준이 이 PC 에 남지 않았는데 "저장했습니다" 라고 말하면 거짓이다
+    const lost = describePrefLoss(landed, '보존기간 정책', prefSaveMode());
+    if (lost) { setMessage({ tone: 'warn', text: lost }); return; }
     const expired = enabled ? getExpiredCustomers().length : 0;
     setMessage({
       tone: 'ok',

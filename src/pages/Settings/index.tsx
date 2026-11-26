@@ -6,6 +6,7 @@ import { notify } from '../../lib/notify';
 import { normalizeGreeting, MAX_GREETING } from '../../lib/receiptRule'; // 영수증 인사말 (256)
 import { getPreference, setPreference } from '../../lib/shopPreferences';
 import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (286)
+import { prefSaveMode } from '../../lib/prefSaveMode'; // 290
 import MemoPresetManager from '../../components/MemoPresetManager'; // 자주 쓰는 메모 문구 관리 (259)
 import { memoPresets } from '../../lib/memoPresets'; // 영수증 인쇄 정보 (235)
 // 고객 주의사항 키워드 — 매장이 쓰는 말을 더한다 (240, GAP C-11)
@@ -458,7 +459,7 @@ export default function Settings() {
     await syncBeforeSave(); // 설정은 행 전체 PUT — 다른 PC 가 바꾼 영업시간·휴일을 옛 캐시로 덮지 않게 (16차 #H1, 리뷰 M-4)
     // 되읽어 확인 — 저장 공간이 꽉 찬 PC 에서 "저장했습니다" 가 거짓이 되지 않게 (254 리뷰 M-1).
     // 286 부터 판정은 `setPreference` 한 곳에서 한다(전에는 칸마다 손으로 비교했다 — 칸이 늘면 빠뜨린다).
-    const lost = describePrefLoss(setPreference('receiptInfo', next), '영수증 인쇄 정보');
+    const lost = describePrefLoss(setPreference('receiptInfo', next), '영수증 인쇄 정보', prefSaveMode());
     setReceiptInfo(next);
     if (lost) notify.error(lost);
     else notify.success('영수증 인쇄 정보를 저장했습니다.');

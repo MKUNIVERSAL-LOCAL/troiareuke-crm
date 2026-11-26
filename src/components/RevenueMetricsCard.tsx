@@ -1,12 +1,13 @@
 // RevenueMetricsCard — 매출 화면 "이달 지표" (비코어, 147, GAP P-6·P-7): 전월/전년 대비·목표 달성률·신규/기존·할인·회원권 판매 vs 실현·미사용 잔액·BEP·시간당·월말 예상 + 월 목표·월 마감 잠금
 import { useState } from 'react';
-import { Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock, AlertTriangle } from 'lucide-react';
 import { notify } from '../lib/notify';
 import { askConfirm } from '../lib/confirmDialog';
 import { formatPrice } from '../lib/format';
 import { parseAmount } from '../lib/inputRules';
 import { closeMonth, reopenMonth, saveMonthlyTarget } from '../lib/monthClose';
-import { describePrefLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (284)
+import { describePrefLoss, prefLossNote, type PrefLanded } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (284·290)
+import { prefSaveMode } from '../lib/prefSaveMode'; // 서버 모드에서는 "다시 열면 사라집니다" 가 거짓일 수 있다 (290)
 import type { MonthMetrics } from '../lib/revenueMetricsRule';
 import type { DrillResult } from '../lib/revenueDrilldownRule';
 import MetricDetailModal from './MetricDetailModal';
@@ -64,6 +65,8 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged, dril
   drills: { newCustomer: DrillResult; discount: DrillResult; unused: DrillResult };
 }) {
   const [targetInput, setTargetInput] = useState(m.target ? String(m.target) : '');
+  // 토스트는 4초면 사라진다 — 마감 저장이 이 PC 에 남지 않았다는 사실은 화면에 남겨 둔다 (290, 리뷰 M-2)
+  const [lockSaved, setLockSaved] = useState<PrefLanded>('landed');
   // **종류만** 기억한다 — 값을 복사해 두면 자료가 갱신된 뒤 "합계=카드" 가 깨진다 (리뷰 M-1)
   const [drillKind, setDrillKind] = useState<DrillKind | null>(null);
   const [y, mo] = m.month.split('-');
@@ -80,7 +83,7 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged, dril
     const raw = targetInput.trim();
     const n = raw === '' ? null : parseAmount(raw);
     if (raw !== '' && (n === null || n < 0)) { notify.error('목표는 0 이상 숫자로 입력해주세요.'); return; }
-    const lost = describePrefLoss(saveMonthlyTarget(m.month, n), '월 매출 목표');
+    const lost = describePrefLoss(saveMonthlyTarget(m.month, n), '월 매출 목표', prefSaveMode());
     if (lost) notify.error(lost); // 저장 공간이 모자라면 "저장했습니다" 가 거짓이다. 톤도 실패로 (284·285 리뷰 LOW)
     else notify.success(n ? `${label} 목표를 ${formatPrice(n)}으로 저장했습니다.` : `${label} 목표를 지웠습니다.`);
     onChanged();
@@ -88,12 +91,16 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged, dril
   const toggleLock = async () => {
     if (closed) {
       if (!(await askConfirm({ title: '월 마감 해제', confirmLabel: '마감 해제', cancelLabel: '닫기', message: `${label} 마감을 풀까요? 다시 결제·지출·판매를 바꿀 수 있게 됩니다. 신고를 마친 달이면 수정 뒤 다시 잠가주세요.` }))) return;
-      const lost = describePrefLoss(reopenMonth(m.month), `${label} 마감 해제`);
+      const landed = reopenMonth(m.month);
+      setLockSaved(landed);
+      const lost = describePrefLoss(landed, `${label} 마감 해제`, prefSaveMode());
       if (lost) notify.error(lost);
       else notify.info(`${label} 마감을 풀었습니다.`);
     } else {
       if (!(await askConfirm({ title: '월 마감', confirmLabel: '마감', cancelLabel: '닫기', message: `${label}을 마감할까요? 그 달의 결제·지출·제품 판매·회차권 등록을 등록·수정·삭제할 수 없게 됩니다(모든 기기). 언제든 풀 수 있습니다.` }))) return;
-      const lostClose = describePrefLoss(closeMonth(m.month), `${label} 마감`);
+      const closedNow = closeMonth(m.month);
+      setLockSaved(closedNow);
+      const lostClose = describePrefLoss(closedNow, `${label} 마감`, prefSaveMode());
       if (lostClose) notify.error(lostClose); // 마감이 저장되지 않았는데 "마감했습니다" 라고 말하면 세무 신고가 흔들린다 (284)
       else notify.success(`${label}을 마감했습니다. 이제 그 달 숫자는 바뀌지 않습니다.`);
     }
@@ -107,6 +114,12 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged, dril
         <span className="text-2xs text-gray-400">각 칸에 마우스를 올리면 계산 공식이 보입니다 · 확정값, "예상"만 예측</span>
         <div className="flex-1" />
         {closed && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-800 text-white text-xs font-medium" data-testid="month-closed-badge"><Lock size={11} />마감됨</span>}
+        {/* 290(리뷰 M-2): 저장이 이 PC 에 남지 않았는데 배지만 보이면, 화면의 유일한 상태 표시가 거짓이 된다 */}
+        {prefLossNote(lockSaved, prefSaveMode()) && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 text-xs font-medium" data-testid="month-close-unsaved">
+            <AlertTriangle size={11} />{prefLossNote(lockSaved, prefSaveMode())}
+          </span>
+        )}
         {canLock && (
           <button type="button" onClick={() => void toggleLock()} aria-pressed={closed} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${closed ? 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50' : 'bg-gray-800 text-white border-gray-800 hover:bg-gray-700'}`}>
             {closed ? <><Unlock size={12} />마감 해제</> : <><Lock size={12} />월 마감</>}

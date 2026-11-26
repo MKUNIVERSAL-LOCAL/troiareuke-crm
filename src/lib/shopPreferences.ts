@@ -35,6 +35,8 @@ export function setPreference<K extends PrefKey>(key: K, value: ShopPreferences[
 /**
  * 예전 localStorage 값이 있고 서버 설정에는 아직 없으면 한 번 이관한다.
  * parse가 null을 돌려주면 이관하지 않는다. 이관 후 legacy 키는 지운다(이중 진실 방지).
+ * **290(285~287 리뷰 H-2)**: 새 자리에 남지 않았으면 **원본을 지우지 않는다**. 저장 공간이 모자란 PC 에서
+ * 판정을 버리고 지우면 로컬 모드에는 사본이 없어 그 설정이 **영구 소실**된다(결제수단·재방문 주기·가이드 상태).
  */
 export function migrateLegacyPreference<K extends PrefKey>(
   key: K,
@@ -48,8 +50,7 @@ export function migrateLegacyPreference<K extends PrefKey>(
     if (raw === null) return undefined;
     const parsed = parse(raw);
     if (parsed === null || parsed === undefined) return undefined;
-    setPreference(key, parsed);
-    localStorage.removeItem(legacyStorageKey);
+    if (setPreference(key, parsed) !== 'lost') localStorage.removeItem(legacyStorageKey);
     return parsed;
   } catch {
     return undefined;

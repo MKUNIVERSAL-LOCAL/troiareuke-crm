@@ -43,7 +43,7 @@ import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLe
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
 import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, describeDrillFooter, describeDrillTruncation, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
-import { prefLanded, sameValue, describePrefLoss } from '../src/lib/prefLandedRule';
+import { prefLanded, sameValue, describePrefLoss, prefLossNote } from '../src/lib/prefLandedRule';
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
@@ -3067,9 +3067,33 @@ test('설정 저장 판정 — 남음·사라짐·확인 불가를 가린다 (28
   expect(sameValue(NaN, NaN)).toBe(true);        // 285(리뷰 LOW): 되읽은 NaN 을 '사라짐' 으로 말하지 않는다
 
   // 화면 문구 — 남았으면 아무 말도 하지 않고, 사라졌으면 **지금 값이 사라진다는 사실**까지 적는다
-  expect(describePrefLoss('landed', '월 마감')).toBeNull();
-  expect(describePrefLoss('lost', '월 마감')).toContain('저장되지 않았습니다');
-  expect(describePrefLoss('lost', '월 마감')).toContain('다시 열면 사라집니다');
-  expect(describePrefLoss('unknown', '인센티브 비율')).toContain('확인할 수 없었습니다');
-  expect(describePrefLoss('unknown', '인센티브 비율')).not.toContain('저장되지 않았습니다'); // 없는 실패를 단정하지 않는다
+  expect(describePrefLoss('landed', '월 마감', 'local-only')).toBeNull();
+  expect(describePrefLoss('lost', '월 마감', 'local-only')).toContain('저장되지 않았습니다');
+  expect(describePrefLoss('lost', '월 마감', 'local-only')).toContain('다시 열면 사라집니다');
+  expect(describePrefLoss('unknown', '인센티브 비율', 'local-only')).toContain('확인할 수 없었습니다');
+  expect(describePrefLoss('unknown', '인센티브 비율', 'local-only')).not.toContain('저장되지 않았습니다'); // 없는 실패를 단정하지 않는다
+
+  // 290(285~287 리뷰 H-1): 서버 모드에서는 이 PC 쓰기가 실패해도 **사라진다고 단정하지 않는다**
+  expect(describePrefLoss('lost', '월 마감', 'server-backed')).toContain('저장되지 않았습니다');
+  expect(describePrefLoss('lost', '월 마감', 'server-backed')).toContain('중앙 서버에는 올라갔을 수 있어');
+  expect(describePrefLoss('lost', '월 마감', 'server-backed')).not.toContain('다시 열면 사라집니다');
+  // 확인 불가는 저장 방식과 무관하다(이 PC 에서 읽을 수 없었다는 사실뿐이다)
+  expect(describePrefLoss('unknown', '월 마감', 'server-backed')).toBe(describePrefLoss('unknown', '월 마감', 'local-only'));
+
+  // 290(리뷰 M-1): 조사를 받침으로 고른다 — 290 전에는 "월 매출 목표이"·"월 매출 목표을" 로 나갔다
+  expect(describePrefLoss('lost', '월 매출 목표', 'local-only')).toContain('월 매출 목표가 이 PC 에');
+  expect(describePrefLoss('lost', '2026년 11월 마감', 'local-only')).toContain('2026년 11월 마감이 이 PC 에');
+  expect(describePrefLoss('unknown', '월 매출 목표', 'local-only')).toContain('월 매출 목표를 저장했지만');
+  expect(describePrefLoss('unknown', '영수증 인쇄 정보', 'local-only')).toContain('영수증 인쇄 정보를 저장했지만');
+
+  // 290(리뷰 LOW-7): 형식이 틀려 **아무것도 바꾸지 않은 것**을 "저장 공간" 탓으로 말하지 않는다
+  expect(describePrefLoss('invalid', '월 마감', 'local-only')).toContain('형식이 올바르지 않아');
+  expect(describePrefLoss('invalid', '월 마감', 'local-only')).not.toContain('저장 공간');
+
+  // 290(리뷰 M-2): 토스트는 사라지므로 화면에 남겨 두는 짧은 표시 — 남았으면 아무것도 적지 않는다
+  expect(prefLossNote('landed', 'local-only')).toBeNull();
+  expect(prefLossNote('lost', 'local-only')).toBe('이 PC 에 저장 안 됨');
+  expect(prefLossNote('lost', 'server-backed')).toBe('이 PC 에 저장 안 됨(서버는 확인 필요)');
+  expect(prefLossNote('unknown', 'local-only')).toBe('이 PC 에서 확인 못 함');
+  expect(prefLossNote('invalid', 'local-only')).toBe('바뀌지 않음(형식 오류)');
 });

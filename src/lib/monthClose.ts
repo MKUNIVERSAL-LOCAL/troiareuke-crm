@@ -3,7 +3,6 @@
 // 코어 저장소는 못 막으므로(코어 잠금) 사용자가 거치는 저장 경로(결제·지출·제품 판매/취소·예약 완료 결제·회차권 등록/취소·입고 지출)에서 막는다.
 import { getPreference, setPreference } from './shopPreferences';
 import type { PrefLanded } from './prefLandedRule';
-import { describePrefLoss } from './prefLandedRule';
 
 function closedMonths(): string[] {
   const v = getPreference('closedMonths');
@@ -16,12 +15,15 @@ export function isMonthClosed(month: string): boolean {
 
 /** @returns 마감이 **정말 저장됐는지** — 화면이 "마감했습니다" 를 말하기 전에 확인한다 (284) */
 export function closeMonth(month: string): PrefLanded {
-  if (!/^\d{4}-\d{2}$/.test(month)) return 'lost';      // 아무 일도 하지 않았다 — "마감했습니다" 라고 말하면 거짓 (285, 리뷰 LOW)
+  // 아무 일도 하지 않았다 — "마감했습니다" 도 거짓이고, "저장 공간이 모자랍니다" 도 거짓이다 (290, 리뷰 LOW-7)
+  if (!/^\d{4}-\d{2}$/.test(month)) return 'invalid';
   if (isMonthClosed(month)) return 'landed';             // 이미 그 상태다(뜻대로 됐다)
   return setPreference('closedMonths', [...closedMonths(), month].sort());
 }
 
 export function reopenMonth(month: string): PrefLanded {
+  if (!/^\d{4}-\d{2}$/.test(month)) return 'invalid';   // 마감과 같은 가드 — 290 전에는 쓰레기 월을 넘기면 "마감을 풀었습니다" 라고 말했다
+  if (!isMonthClosed(month)) return 'landed';            // 이미 풀려 있다(뜻대로 됐다)
   return setPreference('closedMonths', closedMonths().filter(m => m !== month));
 }
 

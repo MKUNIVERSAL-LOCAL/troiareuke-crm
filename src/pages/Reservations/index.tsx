@@ -4,6 +4,8 @@ import { askConfirm, askConfirmWithChoice } from '../../lib/confirmDialog';
 // 취소·노쇼 사유 (244, GAP R-10 후속) — 규칙은 순수 cancelReasonRule, 저장은 설정 행(cancelReasons)
 import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, previousMonth } from '../../lib/cancelReasonRule';
 import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 사유가 정말 남았는지 (290, 리뷰 M-3)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 // 예약 변경 이력 (247) — 코어 Reservation 에 수정 시각·수정자 칸이 없어 이 기기 기록으로 남긴다
 import { logReservationEdit, logReservationStatus, logReservationCreate, logReservationDelete, reservationHistory } from '../../lib/reservationHistory';
 import { describeChange, describeEntryHead, HISTORY_CAVEAT, HISTORY_EMPTY } from '../../lib/reservationHistoryRule';
@@ -1708,7 +1710,11 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (!answer.ok) return;
     const okCancel = ReservationStore.updateStatus(r.id, 'cancelled');
     if (okCancel) logReservationStatus(r.id, r.status, 'cancelled', user?.name); // 저장 실패면 이력도 남기지 않는다 (250 리뷰 L-4)
-    if (answer.choice) saveReason(r.id, 'cancelled', answer.choice); // 사유 저장 실패는 취소 처리를 되돌리지 않는다 (244)
+    // 사유 저장 실패는 취소 처리를 되돌리지 않는다(244) — 다만 남지 않은 사유를 남았다고 두지 않는다(290, 리뷰 M-3)
+    if (answer.choice) {
+      const lost = describePrefLoss(saveReason(r.id, 'cancelled', answer.choice), '취소 사유', prefSaveMode());
+      if (lost) notify.error(lost);
+    }
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     // 빈 자리를 원한 대기 요청이 있으면 바로 안내 — 요청함을 열어 보지 않아도 알 수 있게 (185, GAP R-10)
     if (r.date >= todayISO()) void newRequests().then(list => { const msg = describeWaitlist(waitlistFor(list, r.date, r.startTime), formatDate(r.date)); if (msg) notify.info(msg); }).catch(() => undefined); // 지난 날짜 자리는 안내하지 않는다 (187 리뷰 L-4)
@@ -1743,7 +1749,10 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     if (!answer.ok) return;
     const okNoShow = ReservationStore.updateStatus(r.id, 'noshow');
     if (okNoShow) logReservationStatus(r.id, r.status, 'noshow', user?.name);
-    if (answer.choice) saveReason(r.id, 'noshow', answer.choice);
+    if (answer.choice) {
+      const lost = describePrefLoss(saveReason(r.id, 'noshow', answer.choice), '노쇼 사유', prefSaveMode());
+      if (lost) notify.error(lost);
+    }
     cleanupGcalEvent(r.id);
     notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
     onUpdate();

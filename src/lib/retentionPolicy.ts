@@ -14,6 +14,7 @@ import { ConsultationStore } from './consultationStore';
 import { clearPhotos } from './photoStore';
 import type { Customer } from '../types';
 import { getPreference, setPreference } from './shopPreferences';
+import type { PrefLanded } from './prefLandedRule';
 import { clearFreeTextReasonsOfCustomer } from './cancelReasons';
 import { clearHistoryOfCustomer } from './reservationHistory';
 import { clearCustomerHistory } from './customerHistory';
@@ -37,11 +38,14 @@ export function getRetentionPolicy(): RetentionPolicy {
   return { enabled: v?.enabled === true, years };
 }
 
-/** 정책 저장(1~10년). 범위 밖이면 false. */
-export function setRetentionPolicy(policy: RetentionPolicy): boolean {
-  if (!Number.isInteger(policy.years) || policy.years < MIN_RETENTION_YEARS || policy.years > MAX_RETENTION_YEARS) return false;
-  setPreference('retentionPolicy', { enabled: policy.enabled, years: policy.years });
-  return true;
+/**
+ * 정책 저장(1~10년). 범위 밖이면 `'invalid'`(아무것도 바꾸지 않았다).
+ * 290(285~287 리뷰 M-3): 전에는 `boolean` 이라 **저장이 남았는지는 버렸다** — 개인정보 파기 기준인데
+ * 저장 공간이 모자란 PC 에서도 "보존기간을 N년으로 저장했습니다" 라고 말했다.
+ */
+export function setRetentionPolicy(policy: RetentionPolicy): PrefLanded {
+  if (!Number.isInteger(policy.years) || policy.years < MIN_RETENTION_YEARS || policy.years > MAX_RETENTION_YEARS) return 'invalid';
+  return setPreference('retentionPolicy', { enabled: policy.enabled, years: policy.years });
 }
 
 /** 고객의 마지막 활동일(YYYY-MM-DD) — 마지막 방문일과 등록일 중 늦은 날 */
