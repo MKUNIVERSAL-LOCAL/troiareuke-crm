@@ -28,6 +28,14 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   await expect(card.getByTestId('metric-projected')).not.toHaveText('—'); // 이달 월말 예상(예측)
   await expect(card.getByTestId('metric-bep')).toHaveText('—'); // 판관비 없음 → 계산하지 않음 (149 L-8)
 
+  // 276(GAP Q-3): 한 번도 단언하지 않던 돈 칸 다섯 개 — "비어 있지 않다" 가 아니라 **무엇이 적혀야 하는지**를 본다.
+  // 전월·전년은 기준이 0 이므로 비율을 만들지 않아야 한다(0 에서 늘었다고 말하면 거짓 추세다 — 254 HIGH 와 같은 종류).
+  await expect(card.getByTestId('metric-mom')).toHaveText('—');
+  await expect(card.getByTestId('metric-yoy')).toHaveText('—');
+  await expect(card.getByTestId('metric-discount')).toHaveText('0원'); // 할인 없이 받은 50,000
+  await expect(card.getByTestId('metric-program')).toHaveText('0원');  // 회차권 판매 없음
+  await expect(card.getByTestId('metric-unused')).toHaveText('0원');   // 미사용 잔액 없음
+
   // 260(GAP P-6): 숫자를 눌러 **근거 목록**을 본다 — 합계가 카드 숫자와 같아야 한다(확인할 수 없는 숫자는 쓰이지 않는다)
   await card.getByTestId('metric-new-share-open').click();
   const detail = page.getByTestId('metric-detail');

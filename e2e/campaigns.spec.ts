@@ -50,6 +50,7 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await row.getByRole('button', { name: '대상 확인·발송' }).click();
   const run = page.getByRole('dialog', { name: '캠페인 실행 — 예약 전날 안내' });
   await expect(run.getByTestId('campaign-ready-count')).toHaveText('1');
+  await expect(run.getByTestId('campaign-candidates')).toContainText(acc.customer); // 276: 대상 상자
   const cand = run.getByTestId('campaign-candidate');
   await expect(cand).toHaveCount(1);
   await expect(cand).toContainText(acc.customer);
@@ -112,6 +113,8 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await card.getByTestId('campaign-row').filter({ hasText: '예약 당일 아침 안내' }).getByRole('button', { name: '대상 확인·발송' }).click();
   const todayRun = page.getByRole('dialog', { name: '캠페인 실행 — 예약 당일 아침 안내' });
   await expect(todayRun.getByTestId('campaign-ready-count')).toHaveText('0');
+  // 276: 대상이 0명이면 **빈 상자**가 아니라 없다고 말해야 한다(조용히 빈 목록은 "보낼 사람이 없다" 와 "불러오지 못했다" 를 구별해 주지 않는다)
+  await expect(todayRun.getByTestId('campaign-candidates')).toContainText('오늘 보낼 대상이 없습니다');
   await expect(todayRun.getByTestId('campaign-approve')).toBeDisabled();
 });
 

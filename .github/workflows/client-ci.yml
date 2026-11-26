@@ -51,6 +51,8 @@ jobs:
         run: node scripts/check-routes.mjs
       - name: 순수 규칙 커버리지(테스트가 안 부르는 공식 금지)
         run: node scripts/check-rule-coverage.mjs
+      - name: 화면 칸 커버리지(스펙이 안 보는 새 testid 금지)
+        run: node scripts/check-testid-coverage.mjs
       - name: E2E spec type check (e2e/tsconfig.json, strict + unused)
         run: npm run check:e2e-types
       - name: Distribution invariants (no-redownload policy)

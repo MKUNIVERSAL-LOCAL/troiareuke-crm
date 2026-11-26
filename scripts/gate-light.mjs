@@ -15,7 +15,7 @@
  *   node scripts/gate-light.mjs 274 --no-smoke # smoke 생략(코드를 안 건드린 문서 묶음)
  *   node scripts/gate-light.mjs --out <dir>    # 로그를 둘 폴더(기본: .gate/)
  *
- * 끝에 한 줄로 결과를 적는다: `T=0 T2=0 B=0 E=0 P=SKIP D=0 R=0 C=0 K=0 U=0 O=0 M=0 L=0`
+ * 끝에 한 줄로 결과를 적는다: `T=0 T2=0 B=0 E=0 P=SKIP D=0 R=0 C=0 V=0 K=0 U=0 O=0 M=0 L=0`
  * 0 이 아닌 칸이 하나라도 있으면 exit 1 — 그 칸의 이름으로 로그를 찾아 보면 된다.
  */
 import { spawnSync } from 'node:child_process';
@@ -85,6 +85,7 @@ process.stdout.write('P 전체 Playwright: SKIP (메모리 규칙)\n');
 flags.D = step('D', '배포 불변', 'node', ['scripts/check-distribution-invariants.mjs']);
 flags.R = step('R', '라우트', 'node', ['scripts/check-routes.mjs']);
 flags.C = step('C', '규칙 커버리지', 'node', ['scripts/check-rule-coverage.mjs']);
+flags.V = step('V', '화면 칸 커버리지', 'node', ['scripts/check-testid-coverage.mjs']); // 276
 flags.K = noSmoke ? 'SKIP' : step('K', '스모크', 'npx', ['playwright', 'test', 'e2e/smoke.spec.ts', '--project=chromium', '--workers=1', '--reporter=line']);
 if (noSmoke) process.stdout.write('K 스모크: SKIP (--no-smoke)\n');
 flags.U = step('U', '업데이터 헬퍼', 'npm', ['run', 'test:updater']);

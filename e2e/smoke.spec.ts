@@ -305,6 +305,7 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('재방문율 =');
   // 273: 재방문율·객단가 타일도 숫자를 말해야 한다(이달 방문이 있으니 '-' 가 아니다)
   await expect(kpiCard.getByTestId('kpi-revisit')).toHaveText(/^\d+%$/);
+  await expect(kpiCard.getByTestId('kpi-rebook')).toHaveText(/^\d+%$/); // 276: 재예약률 타일도 숫자를 말한다
   await expect(kpiCard.getByTestId('kpi-ticket')).toHaveText(/^[\d,]+원$/);
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);

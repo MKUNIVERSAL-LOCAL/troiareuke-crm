@@ -57,6 +57,41 @@ test('알레르기·메모 주의사항이 예약 창·예약 상세·시술 기
   const log = page.getByRole('dialog', { name: '시술 기록 추가' });
   await pickCustomer(page, acc.customer, log);
   await expect(log.getByTestId('customer-alert')).toContainText('레티놀 자극');
+
+  // ── 276(GAP Q-3): 주의 줄이 3줄을 넘으면 **숨겼다는 사실을 적어야** 한다 ──
+  // 아무 표시 없이 잘리면 '시술 불가' 같은 줄이 묻힌다(232 리뷰 H-1 이 고친 그 자리를 스펙이 아직 안 보고 있었다).
+  await page.keyboard.press('Escape');
+  await page.goto('/customers');
+  await page.getByText(acc.customer).filter({ visible: true }).first().click();
+  await desk.getByRole('button', { name: '수정', exact: true }).click();
+  await edit.getByLabel('메모').fill('임신 중\n켈로이드 체질\n아스피린 복용 중\n민감성 피부\n커피 좋아함');
+  await edit.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(edit).toHaveCount(0);
+  await dismissToasts(page);
+
+  await page.goto('/reservations');
+  await page.getByRole('button', { name: '예약 추가' }).filter({ visible: true }).first().click();
+  const add2 = page.getByRole('dialog', { name: '예약 추가' });
+  await pickCustomer(page, acc.customer, add2);
+  const many = add2.getByTestId('customer-alert');
+  await expect(many.getByRole('listitem')).toHaveCount(3);          // 알레르기 1 + 메모 주의 4 = 5줄 중 3줄만
+  const more = many.getByTestId('customer-alert-more');
+  await expect(more).toHaveText('+2개 더 보기');
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await expect(many).not.toContainText('커피 좋아함');               // 주의 줄이 아닌 메모는 접어도 펼쳐도 안 뜬다
+
+  await more.click();
+  await expect(many.getByRole('listitem')).toHaveCount(5);
+  await expect(more).toHaveText('접기');
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  for (const line of ['레티놀 자극', '임신 중', '켈로이드 체질', '아스피린 복용 중', '민감성 피부']) {
+    await expect(many).toContainText(line);                          // 숨어 있던 줄이 전부 나온다
+  }
+  await expect(many).not.toContainText('커피 좋아함');
+
+  await more.click();                                                // 다시 접힌다(가짜 토글이 아니다)
+  await expect(many.getByRole('listitem')).toHaveCount(3);
+  await expect(more).toHaveText('+2개 더 보기');
 });
 
 test('매장이 추가한 주의 키워드도 예약 창 경고에 올라간다 (240)', async ({ page }) => {
