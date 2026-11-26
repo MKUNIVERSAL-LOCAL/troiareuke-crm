@@ -135,6 +135,7 @@ flags.R = step('R', '라우트', 'node', ['scripts/check-routes.mjs']);
 flags.C = step('C', '규칙 커버리지', 'node', ['scripts/check-rule-coverage.mjs']);
 flags.V = step('V', '화면 칸 커버리지', 'node', ['scripts/check-testid-coverage.mjs']); // 276
 flags.W = step('W', '기록 검증', 'node', ['scripts/check-docs-claims.mjs']); // 283
+flags.G = step('G', 'GAP 표 검증', 'node', ['scripts/check-gap-claims.mjs']); // 303
 flags.A = step('A', '창 접근성 커버리지', 'node', ['scripts/check-modal-a11y.mjs']); // 289
 flags.K = noSmoke ? 'SKIP' : step('K', '스모크', 'npx', ['playwright', 'test', 'e2e/smoke.spec.ts', '--project=chromium', '--workers=1', '--reporter=line']);
 if (noSmoke) process.stdout.write('K 스모크: SKIP (--no-smoke)\n');
