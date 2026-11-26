@@ -16,6 +16,7 @@
     "release:all": "npm run test:server && node scripts/check-routes.mjs && npm run check:e2e-types && node scripts/check-distribution-invariants.mjs && node scripts/check-release-notes.mjs && node scripts/test-updater-helpers.mjs && node scripts/test-nas-outbox.mjs && npm run build:e2e && npm run test:e2e && npm run electron:build:release && npm run electron:portable:prepare && npm run mobile:prepare && node scripts/create-github-release.mjs && node scripts/publish-nas-channel.mjs && node scripts/deploy-nas-server.mjs",
     "verify:nas": "node scripts/verify-nas-deploy.mjs",
     "check:routes": "node scripts/check-routes.mjs",
+    "check:rules": "node scripts/check-rule-coverage.mjs",
     "check:e2e-types": "tsc -p e2e --noEmit",
     "electron:installer": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win nsis",
     "electron:build:dir": "cross-env BUILD_TARGET=electron npm run build && electron-builder --win --dir",

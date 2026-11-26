@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate } from '../src/lib/format';
 import { splitPercent } from '../src/lib/percent';
 import { renameTagInSegments } from '../src/lib/segmentFilterRule';
-import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry } from '../src/lib/rebookStatsRule';
+import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry, entryDay } from '../src/lib/rebookStatsRule';
 import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, previousMonth, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
 import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows } from '../src/lib/stockCountRule';
 import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
@@ -15,7 +15,7 @@ import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
 import { smsBytes, SMS_BYTE_LIMIT } from '../src/lib/smsBytes';
 import { sanitizeStorageSnapshot, backupTableShape } from '../src/lib/backupSanitize';
-import { computeRevisitDue, daysBetween, addDays } from '../src/lib/revisitRule';
+import { computeRevisitDue, daysBetween, addDays, toISO } from '../src/lib/revisitRule';
 import { nextBirthday } from '../src/lib/birthdayRule';
 import { summarizeDailyClose, formatDailyCloseMessage } from '../src/lib/dailyCloseSummary';
 import { tagRefund, refundedOn, memoWithoutRefundTag } from '../src/lib/refundDate';
@@ -34,9 +34,9 @@ import { monthlyKpis, noRebookIds } from '../src/lib/kpiRule';
 import { waitlistFor, describeWaitlist } from '../src/lib/waitlistRule';
 import { utilization, formatHours } from '../src/lib/utilizationRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
-import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
+import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes, toMinutes, fromMinutes } from '../src/lib/schedulingRule';
 import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
-import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule } from '../src/lib/staffScheduleRule';
+import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule, defaultShift, dayKeyOf, sameSchedule, DAY_KEYS } from '../src/lib/staffScheduleRule';
 import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
 import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
@@ -46,7 +46,7 @@ import { newCustomerRows, discountRows, unusedBalanceRows, DRILL_MAX_ROWS } from
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
-import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
+import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue, refundMemo } from '../src/lib/refundRule';
 import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
 import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
@@ -71,7 +71,7 @@ import { requestOtp, verifyOtp, isValidOtpCode, portalSummaryOf, EMPTY_OTP, OTP_
 import { duplicateCandidates, normalizeName, type DupInput } from '../src/lib/duplicateRule';
 import { decideOverlap } from '../src/lib/reservationPolicyRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
-import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
+import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags, isConsentDateTag } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
 import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
@@ -2718,4 +2718,87 @@ test('중복 결제 의심 — 등록 시각이 미래인 결제(시계 어긋�
   // 창을 크게 벗어난 미래(시계가 하루 틀린 PC)는 넣지 않는다 — 엉뚱한 경고를 만들지 않는다
   const farFuture = [{ id: 'f2', ...base, createdAt: '2026-11-27T05:00:00.000Z' }];
   expect(findDuplicateSuspects(base, farFuture, now)).toEqual([]);
+});
+
+// ════════════════════════════════════════════════════════════════
+// 268 (GAP Q-3): 테스트가 한 번도 부르지 않던 순수 함수 9개 — 다른 규칙이 이 값들을 믿고 계산한다
+// ════════════════════════════════════════════════════════════════
+
+test('시간 변환 — HH:mm ↔ 분, 자정·잘못된 값 (268, schedulingRule)', () => {
+  expect(toMinutes('10:30')).toBe(630);
+  expect(toMinutes('9:05')).toBe(545);          // 한 자리 시
+  expect(toMinutes('00:00')).toBe(0);
+  expect(toMinutes('24:00')).toBe(1440);        // 마감 자정은 24:00 으로 받는다(영업시간 계산이 이 값을 쓴다)
+  expect(toMinutes('25:00')).toBeNull();
+  expect(toMinutes('10:75')).toBeNull();
+  expect(toMinutes('열시')).toBeNull();
+  expect(toMinutes('')).toBeNull();
+  expect(toMinutes(undefined)).toBeNull();
+  expect(toMinutes(null)).toBeNull();
+  // 되돌리기 — 하루를 넘거나 음수여도 24시간 안으로 감는다(자정 넘김 예약의 시작 시각 표기)
+  expect(fromMinutes(630)).toBe('10:30');
+  expect(fromMinutes(0)).toBe('00:00');
+  expect(fromMinutes(1440)).toBe('00:00');
+  expect(fromMinutes(1500)).toBe('01:00');
+  expect(fromMinutes(-30)).toBe('23:30');
+  expect(fromMinutes(toMinutes('19:05') as number)).toBe('19:05'); // 왕복
+});
+
+test('근무표 — 기본 근무·요일 판정·같은 근무표 비교 (268, staffScheduleRule)', () => {
+  expect(defaultShift()).toEqual({ off: false, start: '10:00', end: '19:00' });
+  // 요일 키는 Date.getDay() 순서를 그대로 따라야 한다(월요일 시작 배열과 섞이면 하루가 밀린다)
+  expect(dayKeyOf(new Date(2026, 10, 23))).toBe('월'); // 2026-11-23 은 월요일
+  expect(dayKeyOf(new Date(2026, 10, 29))).toBe('일');
+  expect(dayKeyOf(new Date(2026, 10, 28))).toBe('토');
+  expect(DAY_KEYS).toHaveLength(7);
+
+  // sameSchedule — 바뀌지 않은 근무표를 설정 행에 다시 쓰지 않으려고 쓴다(191 리뷰 M-2).
+  // updatedAt 은 비교에서 빠져야 한다(그 값만 다르면 "바뀌었다" 가 되어 매번 설정 행을 덮는다)
+  const a = defaultSchedule('s1');
+  const b = { ...defaultSchedule('s1'), updatedAt: '2026-11-26T00:00:00.000Z' };
+  expect(sameSchedule(a, b)).toBe(true);
+  expect(sameSchedule(a, { ...a, bufferBeforeMin: 10 })).toBe(false);
+  expect(sameSchedule(a, { ...a, useShopHours: false })).toBe(false);
+  const changedDay = { ...a, weekly: { ...a.weekly, 월: { ...a.weekly['월'], end: '20:00' } } };
+  expect(sameSchedule(a, changedDay)).toBe(false);
+  const withBreak = { ...a, weekly: { ...a.weekly, 화: { ...a.weekly['화'], breakStart: '13:00', breakEnd: '14:00' } } };
+  expect(sameSchedule(a, withBreak)).toBe(false);
+  // 다른 직원 id 는 비교 대상이 아니다(같은 근무 내용이면 같다고 본다 — 호출 쪽이 같은 직원끼리만 비교한다)
+  expect(sameSchedule(a, { ...a, staffId: 's2' })).toBe(true);
+});
+
+test('광고 동의 태그 — 날짜 태그만 가려낸다 (268, consentRule)', () => {
+  expect(isConsentDateTag('광고동의:2026-11-26')).toBe(true);
+  expect(isConsentDateTag('광고동의:2026-1-5')).toBe(false);   // 자리 수가 다르면 날짜 태그가 아니다
+  expect(isConsentDateTag('광고동의')).toBe(false);
+  expect(isConsentDateTag('광고거부')).toBe(false);
+  expect(isConsentDateTag('VIP')).toBe(false);
+  expect(isConsentDateTag('')).toBe(false);
+  expect(isConsentDateTag(' 광고동의:2026-11-26')).toBe(false); // 앞뒤 공백이 붙은 값은 태그 칩으로 셈하지 않는다
+});
+
+test('재예약 기록 — 매장 기준 날짜를 쓰고, 없으면 ISO 앞 10자 (268, rebookStatsRule)', () => {
+  const base = { id: 'r1', customerId: 'c1', suggestedDate: '2026-12-01', shownAt: '2026-11-30T16:00:00.000Z' };
+  expect(entryDay({ ...base, day: '2026-12-01' })).toBe('2026-12-01'); // 매장 기준 날(UTC 로 자르면 11-30 이 된다)
+  expect(entryDay(base)).toBe('2026-11-30');                            // 옛 기록(day 없음)은 ISO 앞 10자
+  expect(entryDay({ ...base, day: '이상한값' })).toBe('2026-11-30');     // 모양이 깨진 day 는 믿지 않는다
+  expect(entryDay({ ...base, day: '' })).toBe('2026-11-30');
+});
+
+test('환불 메모 — 원 결제를 되찾을 수 있게 적는다 (268, refundRule)', () => {
+  const original = { id: 'pay-1', paymentDate: '2026-11-20' };
+  expect(refundMemo(original, '2026-11-26')).toBe('[환불 2026-11-26 ← 2026-11-20 pay-1]');
+  expect(refundMemo(original, '2026-11-26', '고객 요청')).toBe('[환불 2026-11-26 ← 2026-11-20 pay-1] 고객 요청');
+  expect(refundMemo(original, '2026-11-26', '고객 요청', '김원장')).toBe('[환불 2026-11-26 ← 2026-11-20 pay-1] 고객 요청 · 처리 김원장');
+  expect(refundMemo(original, '2026-11-26', '  ', '  ')).toBe('[환불 2026-11-26 ← 2026-11-20 pay-1]'); // 공백만이면 꼬리를 붙이지 않는다
+  expect(refundMemo(original, '2026-11-26', undefined, '김원장')).toContain('처리 김원장');
+});
+
+test('날짜 문자열 — 로컬 기준으로 자른다(UTC 로 밀리지 않게) (268, revisitRule)', () => {
+  expect(toISO(new Date(2026, 10, 26))).toBe('2026-11-26');
+  expect(toISO(new Date(2026, 0, 5))).toBe('2026-01-05');   // 한 자리 월·일은 0 을 채운다
+  expect(toISO(new Date(2026, 11, 31, 23, 59))).toBe('2026-12-31');
+  // 자정 직전·직후가 같은 날로 뭉치지 않는다
+  expect(toISO(new Date(2026, 10, 26, 0, 0))).toBe('2026-11-26');
+  expect(toISO(new Date(2026, 10, 25, 23, 59))).toBe('2026-11-25');
 });
