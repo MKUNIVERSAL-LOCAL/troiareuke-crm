@@ -10,8 +10,8 @@ import { describeChange, describeEntryHead, HISTORY_CAVEAT, HISTORY_EMPTY } from
 import MemoPresetChips from '../../components/MemoPresetChips'; // 자주 쓰는 메모 문구 (255)
 import { createSubmitLock } from '../../lib/submitLock';
 import { notify } from '../../lib/notify';
-import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
-import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, addMinutes } from 'date-fns';
+import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, CalendarDays, Search, Scissors } from 'lucide-react';
+import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, addMonths, subMonths, isSameDay, isSameMonth, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
@@ -177,7 +177,7 @@ function eventBlockStyle(ev: ScheduleEvent<unknown>, slotStartMin: number, rowH:
 }
 
 // ── Google Calendar 이벤트 매핑 (reservationId → eventId) ─────────────────
-type ViewMode = 'week' | 'day' | 'list';
+type ViewMode = 'month' | 'week' | 'day' | 'list'; // 월간은 261(GAP R-1) — 모바일에만 있던 한 달 흐름을 PC 에도
 
 interface GoogleEventLike {
   id: string;
@@ -242,8 +242,8 @@ export default function Reservations() {
     if (!googleConnected) { setGoogleEvents([]); return; }
     try {
       const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-      const pcStart = viewMode === 'day' ? new Date(currentDate) : weekStart;
-      const pcEnd = viewMode === 'day' ? addDays(currentDate, 1) : addDays(weekStart, 7);
+      const pcStart = viewMode === 'day' ? new Date(currentDate) : viewMode === 'month' ? startOfMonth(currentDate) : weekStart; // 월간은 그 달 전체 (261)
+      const pcEnd = viewMode === 'day' ? addDays(currentDate, 1) : viewMode === 'month' ? endOfMonth(currentDate) : addDays(weekStart, 7);
       const mDate = new Date(); mDate.setDate(1); mDate.setMonth(mDate.getMonth() + mobileMonthOffset);
       const mStart = mobileTab === 'today' ? new Date() : mobileTab === 'week' ? startOfWeek(new Date(), { weekStartsOn: 1 }) : startOfMonth(mDate);
       const mEnd = mobileTab === 'today' ? new Date() : mobileTab === 'week' ? endOfWeek(new Date(), { weekStartsOn: 1 }) : endOfMonth(mDate);
@@ -284,7 +284,9 @@ export default function Reservations() {
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const navigate = (dir: 'prev' | 'next') => {
-    if (viewMode === 'week') {
+    if (viewMode === 'month') {
+      setCurrentDate(dir === 'prev' ? subMonths(currentDate, 1) : addMonths(currentDate, 1)); // 261
+    } else if (viewMode === 'week') {
       setCurrentDate(dir === 'prev' ? subWeeks(currentDate, 1) : addWeeks(currentDate, 1));
     } else {
       setCurrentDate(dir === 'prev' ? subDays(currentDate, 1) : addDays(currentDate, 1));
@@ -378,6 +380,9 @@ export default function Reservations() {
   const weekReservations = useMemo(() => filteredReservations.filter(r => r.date >= weekRange[0] && r.date <= weekRange[1]), [filteredReservations, weekRange[0], weekRange[1]]);
   const dayKey = format(currentDate, 'yyyy-MM-dd');
   const dayReservations = useMemo(() => filteredReservations.filter(r => r.date === dayKey), [filteredReservations, dayKey]);
+  // 월간 보기 — 주/일과 같은 필터(직원·상태·검색)를 쓴다 (261, GAP R-1)
+  const monthKey = format(currentDate, 'yyyy-MM');
+  const monthReservations = useMemo(() => filteredReservations.filter(r => r.date.startsWith(monthKey)), [filteredReservations, monthKey]);
   const mobileRange: readonly [string, string] = (() => {
     if (mobileTab === 'today') return [todayStr, todayStr];
     if (mobileTab === 'week') return [format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'), format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')];
@@ -573,9 +578,11 @@ export default function Reservations() {
             <h3 className="text-base font-bold text-gray-900">
               {viewMode === 'list'
                 ? `전체 예약 ${filteredReservations.length}건 · 날짜순`
-                : viewMode === 'week'
-                  ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
-                  : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
+                : viewMode === 'month'
+                  ? `${format(currentDate, 'yyyy년 M월', { locale: ko })} · 예약 ${monthReservations.length}건`
+                  : viewMode === 'week'
+                    ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
+                    : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
               }
             </h3>
           </div>
@@ -594,9 +601,9 @@ export default function Reservations() {
               네이버 예약 (준비 중)
             </div>
             <div className="flex bg-gray-100 rounded-xl p-1">
-              {(['week', 'day', 'list'] as ViewMode[]).map(m => {
-                const labels = { week: '주간', day: '일간', list: '목록' };
-                const icons = { week: <LayoutGrid size={14} />, day: <Clock size={14} />, list: <List size={14} /> };
+              {(['month', 'week', 'day', 'list'] as ViewMode[]).map(m => {
+                const labels = { month: '월간', week: '주간', day: '일간', list: '목록' };
+                const icons = { month: <CalendarDays size={14} />, week: <LayoutGrid size={14} />, day: <Clock size={14} />, list: <List size={14} /> };
                 return (
                   <button
                     key={m}
@@ -689,6 +696,17 @@ export default function Reservations() {
         )}
 
         {/* Calendar Views */}
+        {viewMode === 'month' && (
+          <MonthView
+            month={currentDate}
+            reservations={monthReservations}
+            staffList={staffList}
+            googleEvents={googleEvents}
+            onSelect={setSelectedReservation}
+            onPickDay={d => { setCurrentDate(d); setViewMode('day'); }}
+            onAdd={d => { setNewDate(format(d, 'yyyy-MM-dd')); setShowAddModal(true); }}
+          />
+        )}
         {viewMode === 'week' && (
           <WeekView weekDays={weekDays} reservations={weekReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
@@ -731,6 +749,103 @@ export default function Reservations() {
           onDelete={handleDeleteReservation}
           onEdit={() => { setEditReservation(selectedReservation); setSelectedReservation(null); }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 월간 보기 (261, GAP R-1) — 모바일에는 '이번달' 탭이 있는데 PC 에는 한 달을 한눈에 보는 화면이 없었다.
+ * 주간·일간과 **같은 필터**(직원·상태·검색)를 쓰고, 칸이 좁아 하루 3건까지만 보여 준 뒤 나머지는
+ * "+N건" 으로 밝힌다(숨기지 않는다 — 누르면 그 날 일간 보기로 간다).
+ * 취소·노쇼는 취소선과 흐린 색으로 구분해, 바쁜 날이 실제로 바빴는지 착각하지 않게 한다.
+ */
+function MonthView({ month, reservations, staffList, googleEvents = [], onSelect, onPickDay, onAdd }: {
+  month: Date;
+  reservations: Reservation[];
+  staffList: Staff[];
+  googleEvents?: GoogleEventLike[];
+  onSelect: (r: Reservation) => void;
+  onPickDay: (d: Date) => void;
+  onAdd: (d: Date) => void;
+}) {
+  const MAX_CHIPS = 3;
+  const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+  const today = new Date();
+  const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
+  const gridEnd = endOfWeek(endOfMonth(month), { weekStartsOn: 1 });
+  const days: Date[] = [];
+  for (let d = gridStart; d <= gridEnd; d = addDays(d, 1)) days.push(d);
+
+  const byDay = new Map<string, Reservation[]>();
+  for (const r of reservations) {
+    const list = byDay.get(r.date) ?? [];
+    list.push(r);
+    byDay.set(r.date, list);
+  }
+  for (const list of byDay.values()) list.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.customerName.localeCompare(b.customerName));
+  const googleByDay = new Map<string, number>();
+  for (const ge of googleEvents) {
+    const key = (ge.date || '').slice(0, 10);
+    if (!key) continue;
+    googleByDay.set(key, (googleByDay.get(key) ?? 0) + 1);
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden" data-testid="month-view">
+      <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+        {dayNames.map(n => (
+          <div key={n} className={clsx('py-2 text-center text-xs font-semibold', n === '일' ? 'text-red-500' : n === '토' ? 'text-blue-500' : 'text-gray-500')}>{n}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {days.map(day => {
+          const key = format(day, 'yyyy-MM-dd');
+          const list = byDay.get(key) ?? [];
+          const gcount = googleByDay.get(key) ?? 0;
+          const inMonth = isSameMonth(day, month);
+          const isToday = isSameDay(day, today);
+          return (
+            <div key={key} className={clsx('min-h-[108px] border-r border-b border-gray-50 p-1.5 flex flex-col gap-1', !inMonth && 'bg-gray-50/60')} data-testid="month-cell" data-date={key}>
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => onPickDay(day)}
+                  className={clsx('min-w-[24px] px-1.5 py-0.5 rounded-lg text-xs font-bold hover:bg-gray-100',
+                    isToday ? 'bg-[#1a3a8f] text-white hover:bg-[#15306e]' : inMonth ? 'text-gray-700' : 'text-gray-400')}
+                  title={`${format(day, 'M월 d일')} 일간 보기`}>
+                  {format(day, 'd')}
+                </button>
+                {inMonth && (
+                  <button type="button" onClick={() => onAdd(day)} aria-label={`${format(day, 'M월 d일')} 예약 추가`}
+                    className="px-1.5 py-0.5 rounded-lg text-xs text-gray-300 hover:text-[#1a3a8f] hover:bg-blue-50">＋</button>
+                )}
+              </div>
+              {list.slice(0, MAX_CHIPS).map(r => {
+                const staff = staffList.find(s2 => s2.id === r.staffId);
+                const off = r.status === 'cancelled' || r.status === 'noshow';
+                return (
+                  <button key={r.id} type="button" onClick={() => onSelect(r)} data-testid="month-chip"
+                    title={`${r.startTime} ${r.customerName} · ${r.services[0]?.serviceName ?? ''} ${off ? '(취소·노쇼)' : ''}`}
+                    className={clsx('text-left px-1.5 py-1 rounded-md text-2xs font-medium truncate hover:opacity-80', off && 'line-through')}
+                    style={off ? { backgroundColor: '#F1F5F9', color: '#64748B' } : { backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6') }}>
+                    {r.startTime} {r.customerName}
+                  </button>
+                );
+              })}
+              {list.length > MAX_CHIPS && (
+                <button type="button" onClick={() => onPickDay(day)} data-testid="month-more"
+                  className="text-left px-1.5 text-2xs font-medium text-[#1a3a8f] hover:underline">
+                  +{list.length - MAX_CHIPS}건 더 보기
+                </button>
+              )}
+              {gcount > 0 && <span className="px-1.5 text-2xs text-gray-400">Google 일정 {gcount}건</span>}
+            </div>
+          );
+        })}
+      </div>
+      {reservations.length === 0 && (
+        <p className="py-6 text-center text-sm text-gray-500" data-testid="month-empty">
+          {format(month, 'yyyy년 M월', { locale: ko })}에는 (지금 필터로) 예약이 없습니다. 날짜의 ＋ 를 눌러 바로 넣을 수 있습니다.
+        </p>
       )}
     </div>
   );
@@ -1045,6 +1160,9 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                     return (
                       <button
                         key={r.id}
+                        type="button"
+                        data-testid="reservation-block"
+                        data-start={r.startTime}
                         onClick={() => onSelect(r)}
                         className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
                         style={{ backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6'), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}

@@ -85,6 +85,18 @@ export function defineA11yGate(title: string, accountPrefix: string, opts: { ove
       await scan(page, route, rows);
     }
 
+    // PC 월간 보기 — 라우트가 아니라 보기 전환이라 위 루프로는 닿지 않는다 (261, GAP R-1)
+    if (!opts.overflow) {
+      await page.goto('/reservations');
+      await page.waitForLoadState('networkidle');
+      const monthBtn = page.getByRole('button', { name: '월간' });
+      if (await monthBtn.count() > 0) {
+        await monthBtn.first().click();
+        await page.getByTestId('month-view').waitFor({ state: 'visible' });
+        await scan(page, '/reservations 월간', rows);
+      }
+    }
+
     assertNoBlocking(rows);
   });
 }
