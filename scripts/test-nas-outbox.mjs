@@ -29,12 +29,31 @@ class MockAuthApiError extends Error {
 globalThis.__NasTestAuthApiError = MockAuthApiError;
 
 const calls = [];
-// failWith: null=성공, 'network'=fetch TypeError 모사, 숫자=해당 status의 AuthApiError
+// failWith: null=성공, 'network'=fetch TypeError 모사, 숫자=해당 status의 AuthApiError,
+//           'lost'=**서버는 기록했는데 응답이 끊긴 경우**(302, 재전송 멱등성 ⑩~⑫)
 let failWith = null;
+// 302(GAP P-4): 서버 쪽 행을 흉내 내는 저장소 — PUT 은 (collection,id) 로 덮어쓰고(upsert) PATCH 는 칸을 합친다.
+// **이 모양이 실제 SQL 과 같다는 것**은 server/src/dataRouteIdempotency.test.js 가 배포 코드를 읽어 지킨다
+// (`ON CONFLICT (branch_id, collection, id) DO UPDATE`·`data || $1::jsonb`). 여기서는 클라이언트 쪽 절반,
+// "재전송이 **같은 id** 로 가서 행이 늘지 않는다" 를 본다. store=null 이면 ①~⑨ 의 옛 동작 그대로.
+let store = null;
+const storeKey = (collection, id) => `${collection}:${id}`;
+function applyToStore(path, method, body) {
+  const m = /^\/api\/data\/([^/]+)(?:\/([^/]+))?$/.exec(path);
+  if (!m) return;
+  const [, collection, id] = m;
+  const parsed = body ? JSON.parse(body) : {};
+  if (method === 'PUT') for (const row of parsed.rows || []) store.set(storeKey(collection, row.id), { ...row });
+  if (method === 'PATCH' && store.has(storeKey(collection, id))) {
+    store.set(storeKey(collection, id), { ...store.get(storeKey(collection, id)), ...parsed.updates });
+  }
+}
 globalThis.__nasTestApiRequest = async (path, init = {}) => {
   const method = init.method || 'GET';
   calls.push({ path, method, body: init.body });
   const mode = typeof failWith === 'function' ? failWith(path, method) : failWith;
+  if (store && (mode === null || mode === 'lost')) applyToStore(path, method, init.body);
+  if (mode === 'lost') throw new TypeError('Failed to fetch'); // 서버에는 남았고 클라이언트만 모른다
   if (mode === 'network') throw new TypeError('Failed to fetch');
   if (typeof mode === 'number') throw new MockAuthApiError(`HTTP ${mode}`, mode);
   return path.startsWith('/api/data/') && !init.method ? { rows: [{ id: 'remote' }] } : {};
@@ -184,4 +203,44 @@ await silent(async () => { nasData.nasUpsert('customers', { id: 'c10' }); await 
 await outbox.flushNasOutbox();
 assert.notEqual(localStorage.getItem('crm_last_sync_at'), '1', '실제 전송 성공은 동기화 시각을 갱신한다.');
 
-console.log('NAS outbox tests: 9/9 OK');
+// ⑩ 응답이 끊긴 PUT 의 재전송은 **같은 id** 로 간다 — 오프라인에서 받은 결제가 두 건이 되지 않는다 (302, GAP P-4)
+store = new Map();
+localStorage.removeItem(outboxKey);
+failWith = 'lost';
+calls.length = 0;
+await silent(async () => { nasData.nasUpsert('payments', { id: 'pay-1', amount: 50000 }); await settle(); });
+assert.equal(store.size, 1, '서버는 받아서 기록했다(응답만 끊겼다).');
+assert.equal(queueLength(), 1, '클라이언트는 성공을 못 봤으니 대기분으로 남긴다.');
+failWith = null;
+await outbox.flushNasOutbox();
+assert.equal(queueLength(), 0);
+const resentIds = calls.filter(c => c.method === 'PUT').map(c => JSON.parse(c.body).rows[0].id);
+assert.deepEqual(resentIds, ['pay-1', 'pay-1'], '재전송이 새 id 를 만들면 그것이 곧 중복 결제다.');
+assert.equal(store.size, 1, '재전송해도 결제는 한 건이어야 한다.');
+assert.deepEqual([...store.values()], [{ id: 'pay-1', amount: 50000 }]);
+
+// ⑪ PATCH 재전송도 결과가 같다 — 칸 합치기는 몇 번 보내도 같은 값이다
+failWith = 'lost';
+await silent(async () => { nasData.nasUpdate('payments', 'pay-1', { method: '카드' }); await settle(); });
+assert.deepEqual(store.get('payments:pay-1'), { id: 'pay-1', amount: 50000, method: '카드' });
+assert.equal(queueLength(), 1);
+failWith = null;
+await outbox.flushNasOutbox();
+assert.deepEqual(store.get('payments:pay-1'), { id: 'pay-1', amount: 50000, method: '카드' },
+  'PATCH 재전송은 같은 결과여야 한다(금액을 더하는 식이면 두 번 더해진다).');
+assert.equal(queueLength(), 0);
+
+// ⑫ **한계를 그대로 적어 둔다**: 멱등성은 "행이 늘지 않는다" 까지다. 응답이 끊긴 PUT 을 다시 보내는 사이
+//    다른 기기가 그 행을 바꿨다면 재전송이 그 변경을 **되돌린다**(last-writer-wins, GAP Q-1).
+//    고치려면 서버 쪽 버전 비교가 필요해 지금 구조에서는 할 수 없다 — 사실을 시험으로 고정해 둔다.
+failWith = 'lost';
+await silent(async () => { nasData.nasUpsert('payments', { id: 'pay-2', amount: 10000 }); await settle(); });
+store.set('payments:pay-2', { id: 'pay-2', amount: 10000, memo: '다른 기기가 적은 메모' });
+failWith = null;
+await outbox.flushNasOutbox();
+assert.deepEqual(store.get('payments:pay-2'), { id: 'pay-2', amount: 10000 },
+  '지금 동작: 재전송이 그 사이 다른 기기의 변경을 되돌린다(GAP Q-1).');
+assert.equal(queueLength(), 0);
+store = null;
+
+console.log('NAS outbox tests: 12/12 OK');
