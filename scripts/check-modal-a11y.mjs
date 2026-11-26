@@ -114,7 +114,8 @@ function openTag(text, at) {
 /**
  * 그 자리가 문자열 안인지 — `closest('[role="dialog"]')` 같은 선택자를 창으로 세지 않기 위해.
  * 298(293~296 리뷰 LOW-3): 줄 앞쪽의 **홀수 따옴표**(주석 안의 아포스트로피 같은 것)에 속아 진짜 창을 건너뛸 수 있었다.
- * 그래서 창을 세기 전에 **주석을 먼저 떼고**(`stripComments`) 이 검사를 쓴다 — 아포스트로피는 대개 주석 안에 있다.
+ * 그래서 창을 세기 전에 **주석을 먼저 떼고**(`blankComments` — 301 에서 `stripComments` 와 합쳤다. 305, 리뷰 LOW-6:
+ * 이 주석이 지워진 이름을 가리키고 있었다) 이 검사를 쓴다 — 아포스트로피는 대개 주석 안에 있다.
  */
 function insideString(text, at) {
   const lineStart = text.lastIndexOf('\n', at) + 1;

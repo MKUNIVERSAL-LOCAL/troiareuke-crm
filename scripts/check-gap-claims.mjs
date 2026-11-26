@@ -173,7 +173,11 @@ function selftest() {
   // 개선 방법 칸의 제안 경로는 잡지 않는다(거짓 경보 금지)
   ok('제안 경로 면제', !with_({}).some(p => /analytics\/rfm\.ts/.test(p)));
   // 완료 기준의 없는 명령·스펙
-  bite('없는 npm 명령', { gap: base.gap.replace('| 낮음 | 중 | 0.5 | — | ✅ test:outbox', '| 낮음 | 중 | 0.5 | — | npm run check:nope ✅ test:outbox') }, /npm run check:nope` 가 package.json 에 없다/);
+  // 덫을 **문서 문구가 아니라 줄 모양**에 건다 — 처음엔 P-4 행의 완료 기준 글을 그대로 적어 두었다가
+  // 305 에서 그 칸을 고치자 덫이 허공을 쳤다(가드의 덫이 낡으면 가드가 조용히 약해진다).
+  const withFakeCmd = base.gap.split('\n').map(l => (l.startsWith('| P-4 ')
+    ? l.replace(/\|\s*$/, '· 완료 기준은 npm run check:nope |') : l)).join('\n');
+  bite('없는 npm 명령', { gap: withFakeCmd }, /npm run check:nope` 가 package.json 에 없다/);
   bite('없는 스펙 파일', { gap: base.gap.replace('month-view 스펙', 'month-view-gone.spec.ts 스펙') }, /month-view-gone\.spec\.ts` 가 e2e 에 없다/);
   // 서버 테스트 0건 주장
   bite('서버 테스트 0건 주장', { gap: base.gap.replace('서버 자동 테스트는 node 내장 러너 **35건**', '서버 자동 테스트 0건') }, /사실이 아니다/);

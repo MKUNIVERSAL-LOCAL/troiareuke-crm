@@ -62,14 +62,9 @@ export function migrateLegacyPreference<K extends PrefKey>(
   }
 }
 
-/**
- * 지금 화면이 들고 있는 값이 **디스크에 남아 있는지** 돌려준다 (294, 288~292 리뷰 M-6).
- * 저장 직후 판정을 state 로 들고 있으면 **창을 다시 그릴 때 사라진다** — 그러면 거짓인 잠금 배지만 남는다.
- * 렌더마다 이 함수로 되읽으면 리마운트·재방문에도 사실이 유지된다.
- */
-export function preferenceLanded<K extends PrefKey>(key: K, wanted: ShopPreferences[K]): PrefLanded {
-  return prefLanded(readPersistedPreference(key), wanted);
-}
+// 294 의 `preferenceLanded(key, wanted)` 는 300 이 매출 카드 배지를 달 단위 판정(`monthCloseSavedFor`)으로
+// 옮기면서 호출자가 0이 됐고, 301 은 쓰이지 않는 인자만 떼고 함수를 남겼다 — **305(300~302 리뷰 M-4)에서 지웠다**
+// (CLAUDE.md 2절: 미사용 export 금지). 다시 필요하면 `prefLanded(persistedPreference(key), wanted)` 두 줄이면 된다.
 
 /**
  * 디스크에 남아 있는 그 칸의 값 — `null` = 행을 못 읽음, `undefined` = 칸이 없음 (300).
