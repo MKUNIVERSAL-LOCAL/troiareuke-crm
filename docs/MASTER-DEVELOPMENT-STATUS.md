@@ -22,7 +22,8 @@
 - 브랜치 **`feat/post-v1.0.63-2026-11-25` → PR #58**(묶음 218~285 + 재검증 기록). main 머지는 릴리스와 함께.
 - 서버(NAS): **219·225~230·234 의 server/ 변경이 미배포** — DSM sudo 1회 권한이 선행(`NAS-REDEPLOY-RUNBOOK.md`).
 - 품질 게이트(묶음마다, `npm run gate:light`): tsc 0 · build · build:e2e(두 빌드) · 스모크 · `check:rules`(순수 규칙 55모듈·234함수 전부 lib-units 166개가 호출) · `check:testids`(화면 칸 222칸 중 217칸, 남은 5칸은 사유 기록) · `check:docs`(기록 검증) · check:distribution/routes · test:updater · test:outbox 9 · mobile:prepare · 코어 잠금 검사. **전체 Playwright 는 메모리 부족 중단 이력 때문에 오너 지시 뒤에만**.
-- 테스트 exe: 지점·어드민 11-26 19:52/19:53 빌드(277~279 포함, asar 마커·CDP·폰트 검증 통과).
+- 테스트 exe: 지점·어드민 11-26 23:51/23:52 빌드(281~286 포함, asar 마커·CDP·폰트 + 기능 마커 6종 확인).
+- 릴리스 직전 검사: `release:checks` 의 값싼 10단계를 287 에서 리허설 — 전부 통과(전체 Playwright·빌드는 오너 복귀 뒤).
 
 ## 3. 완료 작업 (마스터 프롬프트 이후)
 - **묶음 155~285(131개)**. 전수 기록은 `COMMERCIALIZATION-ROADMAP-2026-11-17.md`(묶음 항목 + 재검증 287차까지), 오너용 요약은 `OWNER-BRIEFING-2026-11-30.md`.
