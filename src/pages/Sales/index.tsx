@@ -17,6 +17,7 @@ import { PaymentStore, CustomerStore, CustomerProgramStore, TreatmentLogStore, S
 import RevenueMetricsCard from '../../components/RevenueMetricsCard';
 import { monthMetrics } from '../../lib/revenueMetricsRule';
 import { newCustomerRows, discountRows, unusedBalanceRows } from '../../lib/revenueDrilldownRule'; // 지표 근거 보기 (260)
+import { confirmIfDuplicatePayment } from '../../lib/duplicatePayment'; // 중복 결제 의심 경고 (264, GAP P-4)
 import { monthCloseBlock, isMonthClosed, monthlyTarget } from '../../lib/monthClose';
 import { isAdminRole } from '../../lib/permissions';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
@@ -506,6 +507,11 @@ export default function Sales() {
     else if (form.status === 'refunded' && editingPayment && refundedOn(editingPayment)) payload.memo = tagRefund(payload.memo, refundedOn(editingPayment)!); // 폼에서 숨긴 기존 태그 재부착
     { const blocked = monthCloseBlock(form.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     { const blocked = monthCloseBlock(editingPayment?.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    // 중복 결제 의심 — 새 등록에만(수정은 이미 있는 줄을 고치는 것이다). 막지 않고 사실을 보여 주고 사람이 고른다 (264, GAP P-4)
+    if (!editingId && !(await confirmIfDuplicatePayment({
+      customerId: payload.customerId, customerName: payload.customerName,
+      amount: payload.amount, paymentDate: payload.paymentDate, status: payload.status,
+    }))) return;
     // 이중 제출 — 검증을 모두 통과한 뒤에만 잠근다. 앞에서 잠그면 조기 반환마다 풀어야 해서 하나라도 빠지면 버튼이 조용히 죽는다 (224, 221 리뷰 H-2)
     if (!saveLock.current.acquire()) return;
     if (editingId) {

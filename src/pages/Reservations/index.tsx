@@ -8,6 +8,7 @@ import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons'
 import { logReservationEdit, logReservationStatus, logReservationCreate, logReservationDelete, reservationHistory } from '../../lib/reservationHistory';
 import { describeChange, describeEntryHead, HISTORY_CAVEAT, HISTORY_EMPTY } from '../../lib/reservationHistoryRule';
 import MemoPresetChips from '../../components/MemoPresetChips'; // 자주 쓰는 메모 문구 (255)
+import { confirmIfDuplicatePayment } from '../../lib/duplicatePayment'; // 중복 결제 의심 경고 (264, GAP P-4)
 import { createSubmitLock } from '../../lib/submitLock';
 import { notify } from '../../lib/notify';
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, CalendarDays, Search, Scissors } from 'lucide-react';
@@ -1988,13 +1989,13 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
   };
 
   const saveLock = useRef(createSubmitLock());
-  const handleSave = () => {
+  const handleSave = async () => {
     { const blocked = monthCloseBlock(basePayment.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
-    // 이중 제출 — 합계·수단 검증을 지난 뒤에만 잠근다 (224, 221 리뷰 M-1)
-    if (!saveLock.current.acquire()) return;
+    // 저장할 줄을 먼저 만든다 — 264 전에는 검증보다 **먼저** 잠가서, 분할 합계·수단 검증에 걸리면
+    // 잠금이 풀리지 않아 [결제 등록] 버튼이 조용히 죽었다(모달을 다시 열어야 했다. 224 리뷰 H-2 와 같은 결함)
+    const toSave: { amount: number; paymentMethod: string; memo: string }[] = [];
     if (mode === 'single') {
-      PaymentStore.save({ ...basePayment, amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
-      rememberPaymentMethod(method);
+      toSave.push({ amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
     } else {
       const a = Math.max(0, Number(amountA.replace(/\D/g, '')) || 0);
       const b = Math.max(0, Number(amountB.replace(/\D/g, '')) || 0);
@@ -2007,9 +2008,18 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
         return;
       }
       const splitMemo = `복합결제 (${methodA} ${formatPrice(a)} + ${methodB} ${formatPrice(b)})`;
-      if (a > 0) PaymentStore.save({ ...basePayment, amount: a, paymentMethod: methodA, memo: splitMemo });
-      if (b > 0) PaymentStore.save({ ...basePayment, amount: b, paymentMethod: methodB, memo: splitMemo });
+      if (a > 0) toSave.push({ amount: a, paymentMethod: methodA, memo: splitMemo });
+      if (b > 0) toSave.push({ amount: b, paymentMethod: methodB, memo: splitMemo });
     }
+    // 중복 결제 의심 — 합계 기준으로 묻는다(복합결제도 받은 돈은 한 번이다) (264, GAP P-4)
+    if (!(await confirmIfDuplicatePayment({
+      customerId: basePayment.customerId, customerName: basePayment.customerName,
+      amount: r.totalPrice, paymentDate: basePayment.paymentDate, status: basePayment.status,
+    }))) return;
+    // 이중 제출 — 검증을 모두 지난 뒤에만 잠근다 (224, 221 리뷰 M-1)
+    if (!saveLock.current.acquire()) return;
+    for (const line of toSave) PaymentStore.save({ ...basePayment, ...line });
+    if (mode === 'single') rememberPaymentMethod(method);
     onDone();
   };
 
@@ -2073,7 +2083,7 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
           <button type="button" onClick={onDone} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
             결제 등록 없이 닫기
           </button>
-          <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium hover:bg-green-800">
+          <button type="button" onClick={() => void handleSave()} className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium hover:bg-green-800">
             결제 등록
           </button>
         </div>

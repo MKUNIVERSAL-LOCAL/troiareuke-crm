@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, isNearMidnightSeoul, visibleButton } from './helpers';
 import { salesScenario } from './scenarios';
 import { pickCustomer } from './helpers';
+import { dialog, registerPayment, expectSales } from './flows';
 
 /**
  * 돈 흐름 E2E (PC 폭) — 결제 → 지출(매입) → 손익계산서 → 환불이 숫자로 맞게 반영되는지.
@@ -12,6 +13,7 @@ import { pickCustomer } from './helpers';
 const acc = makeAccount('SL');
 const acc2 = makeAccount('SL2'); // 이중 제출 테스트는 매출이 섞이지 않게 별도 매장
 const acc3 = makeAccount('SL3'); // 체크아웃 재예약 유도 (231)
+const accDup = makeAccount('SL4'); // 중복 결제 경고 (264)
 
 test('결제 → 지출 → 손익계산서 → 환불이 숫자로 맞게 반영된다', async ({ page }) => {
   test.slow();
@@ -19,6 +21,44 @@ test('결제 → 지출 → 손익계산서 → 환불이 숫자로 맞게 반�
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
   await salesScenario(page, acc);
+});
+
+test('같은 고객·같은 금액을 다시 등록하면 중복인지 묻고, 취소하면 저장하지 않는다 (264, GAP P-4)', async ({ page }) => {
+  test.slow();
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 결제일과 보는 달이 달라진다');
+  page.on('dialog', d => d.accept());
+  await signupAndOnboard(page, accDup);
+  await createCustomer(page, accDup);
+  await registerPayment(page, accDup, 90000);
+  await expectSales(page, { total: '90,000원' });
+
+  // 같은 금액을 한 번 더 — 확인창이 사실(언제 들어온 결제인지)을 보여 주고, [취소하고 확인] 이면 저장되지 않는다
+  await visibleButton(page, '결제 등록').click();
+  const pay2 = dialog(page, '결제 등록');
+  await pickCustomer(page, accDup.customer, pay2);
+  await pay2.getByLabel('결제 금액').fill('90000');
+  await pay2.getByRole('button', { name: '결제 등록' }).click();
+  const warn = page.getByRole('dialog', { name: '같은 금액 결제가 이미 있습니다' });
+  await expect(warn).toBeVisible();
+  await expect(warn).toContainText('90,000원 결제가 이미 1건');
+  await expect(warn).toContainText('이 PC 에 저장된 결제만');
+  await warn.getByRole('button', { name: '취소하고 확인' }).click();
+  await expect(warn).toHaveCount(0);
+  await pay2.getByRole('button', { name: '닫기' }).click();
+  await expectSales(page, { total: '90,000원' }); // 저장되지 않았다
+
+  // 두 번째로 정말 받은 돈이면 [그대로 등록] — 막지 않는다
+  await visibleButton(page, '결제 등록').click();
+  const pay3 = dialog(page, '결제 등록');
+  await pickCustomer(page, accDup.customer, pay3);
+  await pay3.getByLabel('결제 금액').fill('90000');
+  await pay3.getByRole('button', { name: '결제 등록' }).click();
+  await page.getByRole('dialog', { name: '같은 금액 결제가 이미 있습니다' }).getByRole('button', { name: '그대로 등록' }).click();
+  await expectSales(page, { total: '180,000원' });
+
+  // 금액이 다르면 묻지 않는다(경고가 잦으면 아무도 읽지 않는다)
+  await registerPayment(page, accDup, 50000);
+  await expectSales(page, { total: '230,000원' });
 });
 
 test('결제 등록 버튼을 두 번 빠르게 눌러도 한 건만 저장된다 (221, GAP P-4)', async ({ page }) => {

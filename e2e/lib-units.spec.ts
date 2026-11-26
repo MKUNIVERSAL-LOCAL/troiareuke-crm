@@ -44,6 +44,7 @@ import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/p
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
 import { newCustomerRows, discountRows, unusedBalanceRows, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
+import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
 import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
 import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
@@ -2649,4 +2650,40 @@ test('발송 성과 근거 — 요약 숫자와 같은 창·같은 조건으로 
   const c3 = rows.find(r => r.customerId === 'c3')!;
   expect(c3.reservedOn).toBeNull();
   expect(c3.windowEnd > c3.sentOn).toBe(true);
+});
+
+// ── 264: 중복 결제 의심 판정 ──
+
+test('중복 결제 의심 — 같은 고객·같은 금액·같은 날짜의 최근 완료 결제만 집어낸다 (264, GAP P-4)', () => {
+  const now = '2026-11-26T05:00:00.000Z';
+  const base = { customerId: 'c1', amount: 90000, paymentDate: '2026-11-26', status: 'completed' as const };
+  const existing = [
+    { id: 'p1', ...base, createdAt: '2026-11-26T04:58:00.000Z', paymentMethod: '카드', typeLabel: '등 관리' },   // 2분 전 — 의심
+    { id: 'p2', ...base, createdAt: '2026-11-26T04:10:00.000Z', paymentMethod: '현금' },                        // 50분 전 — 창 밖
+    { id: 'p3', ...base, amount: 80000, createdAt: '2026-11-26T04:59:00.000Z' },                                // 금액 다름
+    { id: 'p4', ...base, customerId: 'c2', createdAt: '2026-11-26T04:59:00.000Z' },                             // 다른 고객
+    { id: 'p5', ...base, paymentDate: '2026-11-25', createdAt: '2026-11-26T04:59:00.000Z' },                    // 다른 업무 날짜
+    { id: 'p6', ...base, status: 'refunded' as const, createdAt: '2026-11-26T04:59:00.000Z' },                  // 환불된 건
+    { id: 'p7', ...base, createdAt: '이상한값' },                                                                // 등록 시각 모름 — "몇 분 전" 을 지어내지 않는다
+  ];
+  const hits = findDuplicateSuspects(base, existing, now);
+  expect(hits.map(h => h.id)).toEqual(['p1']);
+  expect(hits[0].minutesAgo).toBe(2);
+
+  // 환불·예정 건을 등록할 때는 묻지 않는다(중복 경고 대상이 아니다)
+  expect(findDuplicateSuspects({ ...base, status: 'refunded' }, existing, now)).toEqual([]);
+  expect(findDuplicateSuspects({ ...base, status: 'pending' }, existing, now)).toEqual([]);
+  // 고객을 연결하지 않은 결제는 같은 사람인지 알 수 없다 → 묻지 않는다
+  expect(findDuplicateSuspects({ ...base, customerId: undefined }, existing, now)).toEqual([]);
+  // 창을 넓히면 50분 전 건도 들어온다(기본 창은 30분)
+  expect(findDuplicateSuspects(base, existing, now, 60).map(h => h.id)).toEqual(['p1', 'p2']);
+  expect(DUP_WINDOW_MINUTES).toBe(30);
+
+  // 문구 — 언제·무엇으로 들어온 결제인지 적고, 이 PC 한계도 밝힌다
+  const text = describeDuplicateWarning(hits, { amount: 90000, customerName: '홍길동' }, n => `${n.toLocaleString('ko-KR')}원`);
+  expect(text).toContain('홍길동 고객의 90,000원 결제가 이미 1건');
+  expect(text).toContain('2분 전 등록');
+  expect(text).toContain('등 관리 · 카드');
+  expect(text).toContain('이 PC 에 저장된 결제만');
+  expect(describeDuplicateWarning([], { amount: 1000 }, String)).toBe(''); // 의심이 없으면 빈 문구(창을 띄우지 않는다)
 });
