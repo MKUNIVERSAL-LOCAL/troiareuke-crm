@@ -1,11 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, dismissToasts, expectNoHorizontalOverflow, visibleButton } from './helpers';
-import { registerPayment, addReservation, openReservationDetail } from './flows';
+import { registerPayment, addReservation, openReservationDetail, addProduct } from './flows';
+import { scan, assertNoBlocking, type Row } from './a11y-shared'; // 288: 그 상태에서 접근성까지 본다
 
 /**
- * 폰 폭에서 새 기능 점검 (241·244·254) — 228~252 으로 들어온 화면은 PC 스펙만 있었다.
+ * 폰 폭에서 새 기능 점검 (241·244·254·288) — 228~252 으로 들어온 화면은 PC 스펙만 있었다.
  * 매장은 태블릿·폰으로 쓰는 일이 많아(UI 품질 절대 기준) 영수증·수당·태그·등급·사진 백업이
  * 폰에서 눌릴 수 있고 가로로 넘치지 않아야 한다. 창 안쪽 가로 넘침까지 본다.
+ *
+ * 288 추가: 274~286 으로 들어온 **상태**까지 — 실사 창에서 세는 동안 제품이 지워진 줄([삭제됨] 배지·
+ * 잠긴 입력칸, 281)과 매출 카드의 돈 분모 줄(282). 285 리뷰 M-3 이 "그 두 상태는 접근성 쓸이 밖" 이라고
+ * 지적한 자리다 — a11y 쓸이는 창을 열고 바로 닫아 그 DOM 을 만들지 못한다.
  */
 
 const acc = makeAccount('NM');
@@ -145,4 +150,43 @@ test('폰 폭: 영수증·사진 백업·태그·등급·수당 화면이 눌리
   await page.goto('/reservations');
   await expect(page.getByRole('button', { name: '월간' }).filter({ visible: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '이번달' }).filter({ visible: true }).first()).toBeVisible();
+
+  // ── 282: 매출 카드의 돈 분모 줄이 폰에서도 보이고 넘치지 않는다 ──
+  await page.goto('/sales');
+  const metrics = page.getByTestId('revenue-metrics');
+  await expect(metrics).toBeVisible();
+  await expect(metrics.getByTestId('metric-achievement-sub')).toBeVisible();
+  await expect(metrics.getByTestId('metric-mom-sub')).toHaveText('지난달 0원');
+  await expect(metrics.getByTestId('metric-per-hour-sub')).toBeVisible();
+  await expectNoHorizontalOverflow(page, '매출 지표 카드 분모 줄(폰, 282)');
+
+  // ── 281: 실사 창에서 세는 동안 제품이 지워진 줄 — 폰에서도 [삭제됨] 과 잠긴 칸이 읽히고 넘치지 않는다 ──
+  await page.goto('/products');
+  await addProduct(page, { name: '폰실사앰플', price: 20000, stock: 7 });
+  await dismissToasts(page);
+  await page.getByTestId('stock-count-open').click();
+  const count = page.getByTestId('stock-count');
+  await expect(count).toBeVisible();
+  await count.getByLabel('폰실사앰플 실제 수량').fill('6');
+  await expectNoHorizontalOverflow(page, '재고 실사 창(폰)');
+
+  const other = await page.context().newPage();
+  await other.goto('/products');
+  await other.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_products$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    localStorage.setItem(key, JSON.stringify(list.filter((x: { name: string }) => x.name !== '폰실사앰플')));
+  });
+  await other.close();
+
+  await expect(count.getByTestId('stock-count-removed')).toBeVisible({ timeout: 10_000 });
+  await expect(count.getByTestId('stock-count-removed')).toContainText('반영되지 않음');
+  await expect(count.getByLabel('폰실사앰플 실제 수량')).toBeDisabled();
+  await expect(count.getByTestId('stock-count-row').filter({ hasText: '폰실사앰플' })).toContainText('삭제 전 7개');
+  await expectNoHorizontalOverflow(page, '재고 실사 창 — 삭제된 줄 포함(폰, 281)');
+
+  // 285 리뷰 M-3: a11y 쓸이는 실사 창을 열고 바로 닫아 이 상태를 만들지 못한다 — 여기서 그 상태로 한 번 본다
+  const rows: Row[] = [];
+  await scan(page, '실사 창(삭제된 줄 포함, 폰)', rows);
+  assertNoBlocking(rows);
 });
