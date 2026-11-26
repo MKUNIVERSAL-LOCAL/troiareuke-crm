@@ -27,6 +27,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GAP = 'docs/GLOBAL-CRM-GAP-ANALYSIS.md';
 const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
@@ -202,7 +203,7 @@ function selftest() {
   const live = with_({});
   ok('지금 표는 통과', live.length === 0 || (console.error(live.join('\n')), false));
 
-  console.log('[check-gap-claims] selftest OK — 덫 15개(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건) 통과');
+  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건) 통과`);
 }
 
 const problems = (() => {

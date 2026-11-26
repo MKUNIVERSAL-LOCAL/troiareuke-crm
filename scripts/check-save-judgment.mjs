@@ -25,6 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src');
 
@@ -157,7 +158,7 @@ if (process.argv.includes('--selftest')) {
   ok('지금 버리는 자리는 전부 이유가 있다', problems.length === 0 || (console.error(problems.join('\n')), false));
   ok('ALLOWED 가 비어 있지 않다', ALLOWED.length > 0);
   ok('호출 자리를 실제로 찾았다', discarded.length >= ALLOWED.length);
-  console.log(`[check-save-judgment] selftest OK — 덫 12개(블록 주석·문자열·여러 줄 대입·대입·반환·인자·객체 값·삼항·문장·if 뒤·try 블록·세미콜론 뒤) + 지금 상태 통과`);
+  console.log(`[check-save-judgment] selftest OK — 덫(블록 주석·문자열·여러 줄 대입·대입·반환·인자·객체 값·삼항·문장·if 뒤·try 블록·세미콜론 뒤) + 지금 상태 통과`);
   process.exit(0);
 }
 

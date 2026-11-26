@@ -44,6 +44,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
 /** 해시 규약이 시작된 묶음 — 그 앞은 기록 당시 규약이 없었다 */
@@ -91,8 +92,10 @@ function hashOf(line) {
  * (298 에서 `당시(11-24)`·`당시 기준` 까지 받아들이려고 12 → 24자로 넓혔다. 301, 리뷰 LOW-3: 주석이 12자로 남아 있었다).
  */
 function markedPast(text, at) {
-  // 298(리뷰 LOW-6): `당시(11-24) 54모듈`·`당시 기준 54모듈` 도 과거다 — 괄호·"기준" 까지 허용한다
-  return /당시[\s)\]]*$|당시\s*\([^)]*\)\s*$|당시 기준\s*$/.test(text.slice(Math.max(0, at - 24), at));
+  // 298(리뷰 LOW-6): `당시(11-24) 54모듈`·`당시 기준 54모듈` 도 과거다 — 괄호·"기준" 까지 허용한다.
+  // 312: `당시 — 213개`·`당시, 213개` 처럼 **줄표·쉼표·콜론**이 끼면 못 읽어 거짓 실패가 났다
+  // (한국어로 자연스러운 모양이다 — 문서를 가드에 맞춰 비틀게 만들지 않는다).
+  return /당시[\s)\]—–\-:,·]*$|당시\s*\([^)]*\)[\s—–\-:,·]*$|당시 기준[\s—–\-:,·]*$/.test(text.slice(Math.max(0, at - 24), at));
 }
 
 /** 문서가 주장하는 숫자들 */
@@ -103,7 +106,14 @@ function claimedNumbers(text) {
   // 전부 가드 밖이었다. 283 이 기계가 보던 표현을 지우고 못 보는 표현만 남겨 한 묶음 뒤 낡은 적도 있다.
   for (const m of text.matchAll(/(\d+)\s*모듈/g)) if (fresh(m)) out.rules.push({ modules: Number(m[1]), fns: null, raw: m[0] });
   for (const m of text.matchAll(/(\d+)\s*함수/g)) if (fresh(m)) out.rules.push({ modules: null, fns: Number(m[1]), raw: m[0] });
-  for (const m of text.matchAll(/(\d+)칸 중 (\d+)칸/g)) if (fresh(m)) out.testids.push({ total: Number(m[1]), covered: Number(m[2]), raw: m[0] });
+  // 312: `N칸 중 M칸` 만 보던 탓에 **"화면 칸 222개 중 217개"**(NEXT-ACTION) 가 검사 밖이었다 —
+  // 311 은 이 넓히기를 셀프테스트 라벨에만 적고 **실제로는 넣지 않았다**(라벨이 거짓이었다).
+  for (const m of text.matchAll(/(\d+)칸 중 (\d+)칸|화면 칸 (\d+)개 중 (\d+)개/g)) {
+    if (!fresh(m)) continue;
+    const total = Number(m[1] ?? m[3]);
+    const covered = Number(m[2] ?? m[4]);
+    out.testids.push({ total, covered, raw: m[0] });
+  }
   // 291(리뷰 M-4): 묶음 범위·누계·리뷰 건수 — 묶음마다 바뀌어 가장 빨리 낡는다
   for (const m of text.matchAll(/누계 155~(\d+) 묶음 (\d+)개|묶음 155~(\d+)\s*\((\d+)개\)/g)) {
     if (fresh(m)) out.cumulative.push({ end: Number(m[1] ?? m[3]), count: Number(m[2] ?? m[4]), raw: m[0] });
@@ -255,6 +265,18 @@ function selftest() {
   if (tbl.length !== 1 || !/칸이 4개다/.test(tbl[0])) { console.error('[selftest] 표 열 수 덫 실패: ' + JSON.stringify(tbl)); process.exit(1); }
   if (tableProblems('| # | 값 |\n|---|---|\n| 1 | data \\| jsonb |', 'x.md').length !== 0) { console.error('[selftest] 이스케이프 파이프 면제 덫 실패'); process.exit(1); }
   if (tableProblems('| 이건 표가 아니다 |\n그냥 글', 'x.md').length !== 0) { console.error('[selftest] 구분 줄 없는 표 면제 덫 실패'); process.exit(1); }
+  // 312: "화면 칸 N개 중 M개" 도 같은 주장으로 모은다(311 의 라벨이 이 덫 없이 그렇게 적혀 있었다)
+  const idsForm = claimedNumbers('화면 칸 222개 중 217개가 스펙에 닿는다.');
+  if (idsForm.testids.length !== 1 || idsForm.testids[0].total !== 222 || idsForm.testids[0].covered !== 217) {
+    console.error('[selftest] 화면 칸 개수형 덫 실패: ' + JSON.stringify(idsForm.testids)); process.exit(1);
+  }
+  const idsPast = claimedNumbers('당시 화면 칸 222개 중 217개였다.');
+  if (idsPast.testids.length !== 0) { console.error('[selftest] 개수형 "당시" 면제 덫 실패'); process.exit(1); }
+  // 312: 줄표·쉼표가 끼어도 과거 표시다
+  for (const dash of ['당시 — 화면 칸 222개 중 217개', '당시, 화면 칸 222개 중 217개', '당시(11-26) — 화면 칸 222개 중 217개']) {
+    if (claimedNumbers(dash).testids.length !== 0) { console.error('[selftest] 줄표 끼운 "당시" 면제 덫 실패: ' + dash); process.exit(1); }
+  }
+  if (claimedNumbers('화면 칸 222개 중 217개').testids.length !== 1) { console.error('[selftest] 표시 없는 개수형은 검사한다 덫 실패'); process.exit(1); }
   // 311(리뷰 L-1): 코드 펜스 안의 표는 보기용이라 검사하지 않는다
   if (tableProblems('```markdown\n| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |\n```', 'x.md').length !== 0) { console.error('[selftest] 코드 펜스 면제 덫 실패'); process.exit(1); }
   // 310: 중간 칸이 비면 잡는다(마지막 칸이 비는 것은 "아직 없음" 이라 잡지 않는다)
@@ -276,7 +298,7 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 36개(코드 펜스·화면 칸 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
