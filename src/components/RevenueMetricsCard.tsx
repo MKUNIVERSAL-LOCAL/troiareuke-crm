@@ -115,19 +115,19 @@ export default function RevenueMetricsCard({ m, closed, canLock, onChanged, dril
         )}
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-        <Item label="전월 대비" value={pctText(m.momPct)} sub={`지난달 ${formatPrice(m.prevMonth)}`} tone={tone(m.momPct)} tip="(이달 − 지난달) ÷ 지난달. 지난달 0 이면 —" testId="metric-mom" />
-        <Item label="전년 동월 대비" value={pctText(m.yoyPct)} sub={`작년 ${formatPrice(m.lastYear)}`} tone={tone(m.yoyPct)} tip="(이달 − 작년 같은 달) ÷ 작년 같은 달. 작년 0 이면 —" testId="metric-yoy" />
-        <Item label="목표 달성률" value={m.achievementPct === null ? '—' : `${m.achievementPct}%`} sub={m.target ? `목표 ${formatPrice(m.target)}` : '목표를 아래에 적으세요'} tone={m.achievementPct !== null && m.achievementPct >= 100 ? 'up' : undefined} tip="매출 ÷ 월 목표" testId="metric-achievement" />
-        <Item label="신규 고객 매출" value={m.newSharePct === null ? '—' : `${m.newSharePct}%`} sub={`신규 ${formatPrice(m.newCustomerRevenue)} · 기존 ${formatPrice(m.existingCustomerRevenue)}`} tip="이달 등록한 고객의 결제 비중" testId="metric-new-share" openTestId="metric-new-share-open"
+        <Item label="전월 대비" value={pctText(m.momPct)} sub={`지난달 ${formatPrice(m.prevMonth)}`} tone={tone(m.momPct)} tip="(이달 − 지난달) ÷ 지난달. 지난달 0 이면 —" testId="metric-mom" subTestId="metric-mom-sub" />
+        <Item label="전년 동월 대비" value={pctText(m.yoyPct)} sub={`작년 ${formatPrice(m.lastYear)}`} tone={tone(m.yoyPct)} tip="(이달 − 작년 같은 달) ÷ 작년 같은 달. 작년 0 이면 —" testId="metric-yoy" subTestId="metric-yoy-sub" />
+        <Item label="목표 달성률" value={m.achievementPct === null ? '—' : `${m.achievementPct}%`} sub={m.target ? `목표 ${formatPrice(m.target)}` : '목표를 아래에 적으세요'} tone={m.achievementPct !== null && m.achievementPct >= 100 ? 'up' : undefined} tip="매출 ÷ 월 목표" testId="metric-achievement" subTestId="metric-achievement-sub" />
+        <Item label="신규 고객 매출" value={m.newSharePct === null ? '—' : `${m.newSharePct}%`} sub={`신규 ${formatPrice(m.newCustomerRevenue)} · 기존 ${formatPrice(m.existingCustomerRevenue)}`} tip="이달 등록한 고객의 결제 비중" testId="metric-new-share" subTestId="metric-new-share-sub" openTestId="metric-new-share-open"
           onOpen={openDrill('newCustomer')} />
         <Item label="할인 합계" value={formatPrice(m.discount)} tip="완료 결제의 할인 금액 합" testId="metric-discount" openTestId="metric-discount-open"
           onOpen={openDrill('discount')} />
-        <Item label="회원권 판매" value={formatPrice(m.programSold)} sub={`실현 ${formatPrice(m.programRealized)} (이달 시술로 소진된 회차 × 회당 가격)`} tip="판매 = 회차권 결제(현금 유입), 실현 = 이달 차감 회차 × (결제액 ÷ 총 회차)" testId="metric-program" />
+        <Item label="회원권 판매" value={formatPrice(m.programSold)} sub={`실현 ${formatPrice(m.programRealized)} (이달 시술로 소진된 회차 × 회당 가격)`} tip="판매 = 회차권 결제(현금 유입), 실현 = 이달 차감 회차 × (결제액 ÷ 총 회차)" testId="metric-program" subTestId="metric-program-sub" />
         <Item label="미사용 회원권 잔액" value={formatPrice(m.unusedBalance)} sub="진행 중 회차권의 잔여 회차 × 회당 가격" tip="고객이 이미 낸 돈 중 아직 서비스하지 않은 몫(시점값)" tone={m.unusedBalance > 0 ? 'warn' : undefined} testId="metric-unused" openTestId="metric-unused-open"
           onOpen={openDrill('unused')} />
-        <Item label="손익분기 매출" value={m.breakEven === null || m.sga === 0 ? '—' : formatPrice(m.breakEven)} sub={m.sga === 0 ? '판관비(임대료·인건비 등) 지출이 없으면 계산하지 않습니다' : `원가 ${formatPrice(m.cogs)} · 판관비 ${formatPrice(m.sga)}`} tip="판관비 ÷ (1 − 매출원가율). 판관비 0 또는 원가가 매출 이상이면 —" testId="metric-bep" />
+        <Item label="손익분기 매출" value={m.breakEven === null || m.sga === 0 ? '—' : formatPrice(m.breakEven)} sub={m.sga === 0 ? '판관비(임대료·인건비 등) 지출이 없으면 계산하지 않습니다' : `원가 ${formatPrice(m.cogs)} · 판관비 ${formatPrice(m.sga)}`} tip="판관비 ÷ (1 − 매출원가율). 판관비 0 또는 원가가 매출 이상이면 —" testId="metric-bep" subTestId="metric-bep-sub" />
         <Item label="시간당 매출" value={m.perHour === null ? '—' : formatPrice(m.perHour)} testId="metric-per-hour" subTestId="metric-per-hour-sub" sub={m.openHours === null ? '영업시간 설정 필요' : `영업 ${m.openHours}시간`} tip="매출 ÷ 영업시간(설정 > 영업시간, 휴무·지정 휴일 제외, 이달은 오늘까지)" />
-        <Item label={m.isCurrentMonth ? '월말 예상(예측)' : '월 매출'} value={m.isCurrentMonth ? (m.projected === null ? '—' : formatPrice(m.projected)) : formatPrice(m.total)} sub={m.isCurrentMonth ? `${m.daysElapsed}/${m.daysInMonth}일 경과 · 일평균 × 일수` : undefined} tip="이달에만: 지금까지 매출 ÷ 지난 일수 × 그 달 일수 — 예측값" testId="metric-projected" />
+        <Item label={m.isCurrentMonth ? '월말 예상(예측)' : '월 매출'} value={m.isCurrentMonth ? (m.projected === null ? '—' : formatPrice(m.projected)) : formatPrice(m.total)} sub={m.isCurrentMonth ? `${m.daysElapsed}/${m.daysInMonth}일 경과 · 일평균 × 일수` : undefined} tip="이달에만: 지금까지 매출 ÷ 지난 일수 × 그 달 일수 — 예측값" testId="metric-projected" subTestId="metric-projected-sub" />
       </div>
       {canLock && (
       <div className="flex flex-wrap items-center gap-2">

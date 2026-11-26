@@ -21,12 +21,29 @@ test('지표 카드·월 목표·월 마감 잠금이 동작한다', async ({ pa
   const card = page.getByTestId('revenue-metrics');
   await expect(card).toBeVisible();
   await expect(card.getByTestId('metric-achievement')).toHaveText('—');
+  // 282(리뷰 L-9): 분모·내역 줄에 testid 가 없어 가드도 스펙도 안 보던 돈 칸 7개 — **그 칸이 말해야 하는 값**으로 고정한다.
+  // 값만 보면 "—" 가 목표를 안 적어서인지 계산이 깨져서인지 알 수 없다. 분모 줄이 그 이유를 적는다.
+  await expect(card.getByTestId('metric-achievement-sub')).toHaveText('목표를 아래에 적으세요');
+  await expect(card.getByTestId('metric-mom-sub')).toHaveText('지난달 0원');   // 전월 '—' 의 이유(기준이 0)
+  await expect(card.getByTestId('metric-yoy-sub')).toHaveText('작년 0원');     // 전년 '—' 의 이유
   await expect(card.getByTestId('metric-new-share')).toHaveText('100%'); // 이달 등록한 고객의 결제
+  await expect(card.getByTestId('metric-new-share-sub')).toHaveText('신규 50,000원 · 기존 0원'); // 100% 의 분자·분모
   await card.getByLabel(/매출 목표/).fill('100000');
   await card.getByRole('button', { name: '목표 저장' }).click();
   await expect(card.getByTestId('metric-achievement')).toHaveText('50%');
+  await expect(card.getByTestId('metric-achievement-sub')).toHaveText('목표 100,000원'); // 50% 의 분모
   await expect(card.getByTestId('metric-projected')).not.toHaveText('—'); // 이달 월말 예상(예측)
   await expect(card.getByTestId('metric-bep')).toHaveText('—'); // 판관비 없음 → 계산하지 않음 (149 L-8)
+  await expect(card.getByTestId('metric-bep-sub')).toHaveText('판관비(임대료·인건비 등) 지출이 없으면 계산하지 않습니다'); // '—' 의 이유
+  await expect(card.getByTestId('metric-program-sub')).toHaveText(/^실현 0원 \(이달 시술로 소진된 회차/); // 판매 0원의 내역
+
+  // 월말 예상은 "지금까지 매출 ÷ 지난 일수 × 그 달 일수" 다 — 분모 줄의 경과 일수를 읽어 그 나눗셈을 맞춰 본다
+  const projSub = (await card.getByTestId('metric-projected-sub').innerText()).trim();
+  const days = projSub.match(/^(\d+)\/(\d+)일 경과 · 일평균 × 일수$/);
+  expect(days, `월말 예상 분모 줄을 읽지 못했다: ${projSub}`).not.toBeNull();
+  const [, elapsed, inMonth] = days!;
+  expect(Number(elapsed)).toBeGreaterThan(0);
+  await expect(card.getByTestId('metric-projected')).toHaveText(`${Math.round((50000 / Number(elapsed)) * Number(inMonth)).toLocaleString('ko-KR')}원`);
 
   // 276(GAP Q-3): 한 번도 단언하지 않던 돈 칸 다섯 개 — "비어 있지 않다" 가 아니라 **무엇이 적혀야 하는지**를 본다.
   // 전월·전년은 기준이 0 이므로 비율을 만들지 않아야 한다(0 에서 늘었다고 말하면 거짓 추세다 — 254 HIGH 와 같은 종류).
