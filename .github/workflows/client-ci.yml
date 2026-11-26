@@ -57,6 +57,8 @@ jobs:
         run: npm run check:docs
       - name: GAP 표 검증(낡은 계획 금지 — 상태 기호·묶음 번호·위치 파일·완료 기준)
         run: npm run check:gap
+      - name: 설정 저장 판정(판정을 버리고 "저장했습니다" 금지)
+        run: npm run check:save
       - name: 창 접근성 커버리지(게이트가 안 여는 새 창 금지)
         run: npm run check:modal-a11y
       - name: E2E spec type check (e2e/tsconfig.json, strict + unused)

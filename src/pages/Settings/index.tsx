@@ -949,7 +949,13 @@ export default function Settings() {
                         </p>
                       </div>
                       <button
-                        onClick={() => { const next = !beaconOn; setBeaconConsultationEnabled(next); setBeaconOn(next); }}
+                        onClick={() => {
+                          // 304: 안 남았는데 "사용 중" 으로 두지 않는다 — 다시 열면 토글이 되돌아간다
+                          const next = !beaconOn;
+                          const lost = describePrefLoss(setBeaconConsultationEnabled(next), '비컨 측정 수치·AI 피부분석 표시 설정', prefSaveMode());
+                          setBeaconOn(next);
+                          if (lost) notify.error(lost);
+                        }}
                         role="switch"
                         aria-checked={beaconOn}
                         aria-label="상담 화면에 비컨 점수·AI 피부 분석 표시"

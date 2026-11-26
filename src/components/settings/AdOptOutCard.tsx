@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { notify } from '../../lib/notify';
 import { getOptOutNumber, setOptOutNumber } from '../../lib/marketingConsent';
+import { describePrefLoss, describePrefRemovalLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (304)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 import { isValidOptOutNumber, QUIET_START_HOUR, QUIET_END_HOUR } from '../../lib/adComplianceRule';
 
 export default function AdOptOutCard() {
@@ -11,8 +13,13 @@ export default function AdOptOutCard() {
   const save = () => {
     const v = draft.trim();
     if (v && !isValidOptOutNumber(v)) { notify.error('080 번호 형식이 아닙니다. 예: 080-123-4567'); return; }
-    setOptOutNumber(v);
+    const landed = setOptOutNumber(v);
     setSaved(v);
+    // 304: 빈 값은 **지우기**라 할 말이 다르다 — 안 남으면 다시 열 때 번호가 돌아와 광고가 다시 나갈 수 있다
+    const lost = v
+      ? describePrefLoss(landed, '무료수신거부 번호', prefSaveMode())
+      : describePrefRemovalLoss(landed, '무료수신거부 번호', prefSaveMode());
+    if (lost) { notify.error(lost); return; }
     notify.success(v ? `무료수신거부 번호를 ${v}로 저장했습니다. 광고 메시지 끝에 자동으로 붙습니다.` : '무료수신거부 번호를 지웠습니다. 광고 메시지는 보낼 수 없습니다.');
   };
   return (

@@ -44,6 +44,7 @@ import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/p
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
 import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, describeDrillFooter, describeDrillTruncation, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
 import { prefLanded, prefLandedMember, sameValue, describePrefLoss, describePrefRemovalLoss, prefLossNote } from '../src/lib/prefLandedRule';
+import { describeMergedMapLoss } from '../src/lib/mergeNoticeRule';
 import { performanceRows } from '../src/lib/campaignPerformanceRule';
 import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
@@ -3118,4 +3119,23 @@ test('설정 저장 판정 — 남음·사라짐·확인 불가를 가린다 (28
   expect(prefLossNote('lost', 'server-backed')).toBe('이 PC 에 저장 안 됨(서버는 확인 필요)');
   expect(prefLossNote('unknown', 'local-only')).toBe('이 PC 에서 확인 못 함');
   expect(prefLossNote('invalid', 'local-only')).toBe('바뀌지 않음(형식 오류)');
+});
+
+test('고객 병합 뒤 되짚는 표가 안 남았을 때 할 말 — 제품 판매가 있을 때만 (304)', async () => {
+  // 병합은 되돌릴 수 없다. 그래서 "다시 저장해주세요" 가 아니라 **무엇이 달라 보이는지**를 적는다(296 의 파기 대장과 같은 원칙).
+  expect(describeMergedMapLoss('landed', 3)).toBeNull();
+  // 제품 판매가 없으면 표가 없어도 화면이 달라지지 않는다 — 없는 피해를 알리면 그것도 거짓이다
+  expect(describeMergedMapLoss('lost', 0)).toBeNull();
+  expect(describeMergedMapLoss('unknown', 0)).toBeNull();
+  // 형식 오류는 저장 공간 탓이 아니고 이 자리에서는 생기지 않는다 — 조용히 넘긴다
+  expect(describeMergedMapLoss('invalid', 2)).toBeNull();
+  const lost = describeMergedMapLoss('lost', 2);
+  expect(lost).toContain('병합은 끝났지만');
+  expect(lost).toContain('저장되지 않았습니다');
+  expect(lost).toContain('제품 판매 2건');
+  expect(lost).toContain('병합을 다시 할 필요는 없습니다');
+  const unknown = describeMergedMapLoss('unknown', 5);
+  expect(unknown).toContain('남았는지 확인할 수 없었습니다');
+  expect(unknown).toContain('제품 판매 5건');
+  expect(unknown).not.toContain('저장 공간이 모자랍니다'); // 확인 불가를 실패로 단정하지 않는다
 });

@@ -5,6 +5,7 @@
 // deviceToggle이 있는 기능은 어드민 허용 + 기기별 토글이 모두 켜져야 사용된다.
 
 import { setCatalogOverride } from './ai/catalog';
+import type { PrefLanded } from './prefLandedRule'; // 설정 저장 판정 (304)
 import { FEATURE_MAP } from './featureRegistry';
 import { apiRequest, isAuthApiConfigured } from './authApi';
 import { getPreference, setPreference } from './shopPreferences';
@@ -72,8 +73,11 @@ export function isFeatureEnabled(id: string): boolean {
       const legacy = localStorage.getItem(def.deviceToggle.key);
       if (legacy !== null) {
         const on = legacy === '1';
-        setPreference('deviceFeatures', { ...(prefs || {}), [id]: on }); // 1회 이관
-        localStorage.removeItem(def.deviceToggle.key);
+        const migrated = setPreference('deviceFeatures', { ...(prefs || {}), [id]: on }); // 1회 이관
+        // 304: 290·293(285~292 리뷰 H-1·H-2)과 **같은 길이 여기 남아 있었다** — 새 자리에 남은 것을
+        // 확인하기 전에 예전 키를 지우면, 저장 공간이 모자란 PC 에서 이 토글이 **영구 소실**된다.
+        // 'landed' 일 때만 지운다(확인 불가면 이중 진실이 잠깐 남을 뿐이고, 되돌릴 수 없는 쪽은 삭제다).
+        if (migrated === 'landed') localStorage.removeItem(def.deviceToggle.key);
         return on;
       }
     } catch {
@@ -84,12 +88,17 @@ export function isFeatureEnabled(id: string): boolean {
   return true;
 }
 
-/** 지점 사용 토글 저장 (deviceToggle 정의된 기능만 의미 있음) — 서버 동기 설정에 기록 */
-export function setDeviceFeatureEnabled(id: string, on: boolean): void {
+/**
+ * 지점 사용 토글 저장 (deviceToggle 정의된 기능만 의미 있음) — 서버 동기 설정에 기록.
+ * 304: 저장 판정을 돌려준다. 안 남으면 다시 열 때 토글이 되돌아가는데 화면은 "사용 중" 이라고 적고 있었다.
+ * 토글이 없는 기능 id 는 invalid (아무것도 바꾸지 않았다는 뜻 — 저장 공간 탓이 아니다).
+ */
+export function setDeviceFeatureEnabled(id: string, on: boolean): PrefLanded {
   const def = FEATURE_MAP.get(id);
-  if (!def?.deviceToggle) return;
-  setPreference('deviceFeatures', { ...(getPreference('deviceFeatures') || {}), [id]: on });
+  if (!def?.deviceToggle) return 'invalid';
+  const landed = setPreference('deviceFeatures', { ...(getPreference('deviceFeatures') || {}), [id]: on });
   emit();
+  return landed;
 }
 
 /**
@@ -158,8 +167,8 @@ export function isBeaconConsultationEnabled(): boolean {
   return isFeatureEnabled('customers.beacon');
 }
 
-export function setBeaconConsultationEnabled(on: boolean): void {
-  setDeviceFeatureEnabled('customers.beacon', on);
+export function setBeaconConsultationEnabled(on: boolean): PrefLanded {
+  return setDeviceFeatureEnabled('customers.beacon', on);
 }
 
 // 플래그 변경 구독. 해제 함수를 반환.

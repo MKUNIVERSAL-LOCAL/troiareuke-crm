@@ -2,6 +2,7 @@
 // 예약·시술 기록·회차권·결제·상담은 고객 이름(예약은 전화번호도)을 복사해 들고 있다. 익명화(retentionPolicy)·병합(customerMerge)·고객 정보 수정·삭제가
 // 모두 이 전파를 쓴다 — 한 곳만 빠지면 개명한 고객이 다른 화면 검색에서 사라지거나 공유 캘린더에 실명이 남는다 (114~116 리뷰 #H4).
 import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
+import type { PrefLanded } from './prefLandedRule'; // 설정 저장 판정 (304)
 import { ConsultationStore } from './consultationStore';
 import { clearHistoryOfCustomer } from './reservationHistory';
 import { clearCustomerHistory } from './customerHistory';
@@ -55,15 +56,16 @@ export function upcomingReservationsOf(customerIds: string[]) {
 
 const MERGED_MAP_MAX = 500;
 
-/** 병합으로 사라진 고객 id 를 기록 — 옮길 수 없는 제품 판매 행(코어)을 읽을 때 되짚는다 (11차 #M10). 사슬은 기록 시점에 평탄화하고, 오래된 항목부터 500개까지만 */
-export function recordMergedCustomer(sourceId: string, targetId: string): void {
+/** 병합으로 사라진 고객 id 를 기록 — 옮길 수 없는 제품 판매 행(코어)을 읽을 때 되짚는다 (11차 #M10). 사슬은 기록 시점에 평탄화하고, 오래된 항목부터 500개까지만.
+ *  304: 저장 판정을 돌려준다 — 이 표가 안 남으면 그 고객의 제품 판매가 "삭제된 고객" 으로 보인다(`saleCustomerNameResolver`). */
+export function recordMergedCustomer(sourceId: string, targetId: string): PrefLanded {
   const map = mergedCustomerIds();
   const next: Record<string, string> = {};
   for (const [k, v] of Object.entries(map)) next[k] = v === sourceId ? targetId : v; // 이전에 source 로 합쳐진 것도 target 으로
   next[sourceId] = targetId;
   const keys = Object.keys(next);
   for (const k of keys.slice(0, Math.max(0, keys.length - MERGED_MAP_MAX))) delete next[k];
-  setPreference('mergedCustomerIds', next);
+  return setPreference('mergedCustomerIds', next);
 }
 
 function mergedCustomerIds(): Record<string, string> {

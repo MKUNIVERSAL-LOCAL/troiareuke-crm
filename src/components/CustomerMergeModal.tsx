@@ -11,6 +11,7 @@ import { matchesSearch, formatPrice } from '../lib/format';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
 import { recordPrivacyAction, maskNameForLog, PRIVACY_LOG_LOST, PRIVACY_LOG_UNKNOWN } from '../lib/privacyLog';
+import { describeMergedMapLoss } from '../lib/mergeNoticeRule'; // 되짚는 표가 안 남았을 때 (304)
 import { askConfirm } from '../lib/confirmDialog';
 import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
@@ -84,6 +85,9 @@ export default function CustomerMergeModal({ target, onClose, onMerged }: { targ
       // 296·297 — 병합은 되돌릴 수 없다. 기록만 없다는 사실을 적는다(톤도 error 로 고정, 리뷰 LOW-2)
       if (logLanded === 'lost') notify.error(PRIVACY_LOG_LOST);
       else if (logLanded === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN);
+      // 304: 옮길 수 없는 제품 판매를 되짚는 표가 안 남으면 그 판매 행이 "삭제된 고객" 으로 보인다(판매 0건이면 말하지 않는다)
+      const mapLost = describeMergedMapLoss(moved.mergedMapLanded, moved.productSales);
+      if (mapLost) notify.error(mapLost);
       notify(`'${source.name}' 고객을 병합했습니다. 기록 ${n}건을 옮겼습니다.`);
       onMerged();
     } catch (e) {

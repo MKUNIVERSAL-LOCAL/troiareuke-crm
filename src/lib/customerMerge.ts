@@ -15,6 +15,7 @@ import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStor
 import { ConsultationStore } from './consultationStore';
 import { isAnonymized } from './retentionPolicy';
 import { recordMergedCustomer } from './customerIdentity';
+import type { PrefLanded } from './prefLandedRule';
 import { consentFromTags, tagsWithConsent } from './consentRule';
 import { todayISO } from './format';
 import { duplicateCandidates, type DupCandidate } from './duplicateRule';
@@ -67,7 +68,8 @@ function later(a?: string, b?: string): string | undefined {
 const GRADE_RANK: Record<CustomerGrade, number> = { 신규: 0, 일반: 1, 골드: 2, VIP: 3 };
 
 /** source의 기록을 target으로 옮기고 source를 삭제한다. 되돌릴 수 없다. @returns 이동한 기록 수 */
-export function mergeCustomers(targetId: string, sourceId: string): MergePreview {
+/** 병합 실행. 돌려주는 값은 옮긴 건수(= previewMerge 와 같은 모양) + **되짚는 표가 남았는지**(304) */
+export function mergeCustomers(targetId: string, sourceId: string): MergePreview & { mergedMapLanded: PrefLanded } {
   if (targetId === sourceId) throw new Error('같은 고객입니다.');
   const target = CustomerStore.getById(targetId);
   const source = CustomerStore.getById(sourceId);
@@ -113,8 +115,10 @@ export function mergeCustomers(targetId: string, sourceId: string): MergePreview
   clearCustomerHistory(sourceId);
   clearHistoryOfCustomer(sourceId);
   CustomerStore.delete(sourceId);
-  recordMergedCustomer(sourceId, targetId); // 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 — 병합이 끝난 뒤에만 기록(중간 예외 시 유령 매핑 방지) (11차 #M10, 리뷰 #M9)
-  return preview;
+  // 제품 판매 행은 옮길 수 없어(코어) 읽을 때 되짚는다 — 병합이 끝난 뒤에만 기록(중간 예외 시 유령 매핑 방지) (11차 #M10, 리뷰 #M9)
+  // 304: 그 기록이 남았는지도 돌려준다 — 안 남으면 그 고객의 제품 판매가 "삭제된 고객" 으로 보인다
+  const mergedMapLanded = recordMergedCustomer(sourceId, targetId);
+  return { ...preview, mergedMapLanded };
 }
 
 /** 합집합 태그의 동의 예약어를 한 상태로 정리 — 동의+거부가 공존하면 거부 우선(consentFromTags), 동의일은 하나만 (165 리뷰 L-15) */

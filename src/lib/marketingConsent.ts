@@ -1,6 +1,7 @@
 // marketingConsent — 광고 수신 동의·거부 저장(고객 태그)과 무료수신거부 080 번호(지점 설정) (비코어, 155, GAP C-8·M-4)
 // 규칙(태그 ↔ 상태)은 순수 consentRule.ts, 광고 표기·시간대는 adComplianceRule.ts.
 import { CustomerStore } from './store';
+import type { PrefLanded } from './prefLandedRule'; // 설정 저장 판정 (304)
 import { todayISO } from './format';
 import { getPreference, setPreference } from './shopPreferences';
 import { consentFromTags, tagsWithConsent } from './consentRule';
@@ -33,6 +34,7 @@ export function getOptOutNumber(): string {
   const v = getPreference('adsOptOutNumber');
   return typeof v === 'string' ? v : '';
 }
-export function setOptOutNumber(n: string): void {
-  setPreference('adsOptOutNumber', n.trim());
+/** 304: 저장 판정을 돌려준다 — 이 번호가 없으면 광고 발송이 막히고, 지운 것이 안 남으면 다시 열 때 번호가 **돌아온다**(법정 표기다) */
+export function setOptOutNumber(n: string): PrefLanded {
+  return setPreference('adsOptOutNumber', n.trim());
 }

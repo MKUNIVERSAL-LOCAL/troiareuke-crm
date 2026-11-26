@@ -4,12 +4,18 @@ import { ShieldAlert } from 'lucide-react';
 import { notify } from '../../lib/notify';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { getReservationPolicy, setReservationPolicy } from '../../lib/reservationPolicy';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (304)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 
 export default function ReservationPolicyCard() {
   const [policy, setPolicy] = useState(() => getReservationPolicy());
   const toggle = (blockOverlap: boolean) => {
     const next = { ...policy, blockOverlap };
-    setReservationPolicy(next); setPolicy(next);
+    const landed = setReservationPolicy(next);
+    setPolicy(next);
+    // 304: 안 남았는데 "이제 저장할 수 없습니다" 라고 말하지 않는다 — 다시 열면 겹침이 다시 허용된다
+    const lost = describePrefLoss(landed, '겹치는 예약 금지 설정', prefSaveMode());
+    if (lost) { notify.error(lost); return; }
     notify.success(blockOverlap ? '같은 담당자의 겹치는 예약은 이제 저장할 수 없습니다(빈 시간 제안만).' : '겹치는 예약은 경고 뒤 저장할 수 있습니다.');
   };
   return (
