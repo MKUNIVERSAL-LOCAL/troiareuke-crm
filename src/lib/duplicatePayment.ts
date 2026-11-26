@@ -16,6 +16,7 @@ export async function confirmIfDuplicatePayment(candidate: DupCandidate & { cust
     PaymentStore.getAll().map(p => ({
       id: p.id, customerId: p.customerId, amount: p.amount, paymentDate: p.paymentDate,
       status: p.status, createdAt: p.createdAt, paymentMethod: p.paymentMethod, typeLabel: p.typeLabel,
+      discountAmount: p.discountAmount, // (279) 같은 실결제액끼리 구별할 수 있게 문구에 적는다
     })),
     new Date().toISOString(),
   );

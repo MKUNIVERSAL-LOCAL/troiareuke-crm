@@ -2965,3 +2965,76 @@ test('중복 결제 창 길이 — 30분이고, 29분 전은 잡고 31분 전은
   expect(findDuplicateSuspects(candidate, [mk(29)], now).map(x => x.minutesAgo)).toEqual([29]);
   expect(findDuplicateSuspects(candidate, [mk(31)], now)).toEqual([]);
 });
+
+// ── 279: 아무 시험도 가 보지 않은 갈래 두 묶음 ──
+// ① 이름·날짜가 비어 있는 자료에서 돈 목록이 **빈칸이나 undefined 를 적지 않는다**
+//    (규칙에 폴백 문자열이 있는데 `고객 정보 없음`·`이름 없음`·`날짜 미상`·`회차권` 은 어느 시험도 확인하지 않았다)
+// ② 중복 결제 경고의 남은 갈래 — 고객명 없음·4건 이상·유형/수단 없음, 그리고 GAP P-4 의 판정 기준
+
+test('돈 목록 — 이름·날짜가 비어도 빈칸을 적지 않는다 (279, GAP P-6 갈래)', () => {
+  // 할인 목록: 고객을 연결하지 않은 결제(매출 화면에서 고객 없이 등록할 수 있다)
+  const dc = discountRows('2026-11', [
+    { id: 'p1', paymentDate: '2026-11-03', status: 'completed' as const, amount: 50000, discountAmount: 5000 },
+  ]);
+  expect(dc.rows).toHaveLength(1);
+  expect(dc.rows[0].label).toBe('고객 정보 없음'); // 연결하지 않았거나 그 뒤 삭제된 고객 — 둘을 구분할 자료가 없다
+  expect(dc.rows[0].label).not.toBe('');
+  // 할인이 음수로 적힌 자료는 할인으로 세지 않는다(마이너스 할인은 정의가 없다)
+  expect(discountRows('2026-11', [
+    { id: 'p2', paymentDate: '2026-11-03', status: 'completed' as const, amount: 50000, discountAmount: -3000 },
+  ]).rows).toHaveLength(0);
+
+  // 신규 고객 목록: 이름·등록일이 빈 고객(엑셀 가져오기로 들어온 줄)
+  const nc = newCustomerRows('2026-11', [
+    { id: 'pay1', paymentDate: '2026-11-05', status: 'completed' as const, amount: 10000, customerId: 'x1' },
+  ], [{ id: 'x1', name: '', registeredAt: '2026-11-01T00:00:00.000Z' }]);
+  expect(nc.rows[0].label).toBe('이름 없음');
+  expect(nc.rows[0].detail).toContain('등록 2026-11-01');
+
+  // 미사용 잔액 목록: 상품 이름이 빈 회차권
+  const ub = unusedBalanceRows('2026-11-20', [
+    { id: 'g1', customerName: '', programName: '', pricePaid: 100000, totalSessions: 4, usedSessions: 1 },
+  ]);
+  expect(ub.rows[0].label).toBe('고객 정보 없음');
+  expect(ub.rows[0].detail).toContain('회차권 · 잔여 3회');   // 이름이 없으면 '회차권' 이라고만 적는다
+  expect(ub.rows[0].amount).toBe(75000);
+  // 쓴 회차가 음수로 적힌 자료도 잔여가 총 회차를 넘지 않는다(잔액이 부풀면 그대로 분쟁이다)
+  expect(unusedBalanceRows('2026-11-20', [
+    { id: 'g2', customerName: '최', programName: '5회권', pricePaid: 100000, totalSessions: 5, usedSessions: -3 },
+  ]).rows[0].amount).toBe(100000);
+});
+
+test('중복 결제 경고 — 고객명 없음·4건 이상·유형 없음, 그리고 유형·할인이 달라도 묻는다 (279, GAP P-4 마무리)', () => {
+  const now = '2026-11-26T05:00:00.000Z';
+  const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+  const base = { customerId: 'c1', amount: 50000, paymentDate: '2026-11-26', status: 'completed' as const };
+
+  // 고객 이름을 모르면 "같은 고객" 으로 — 빈칸이 들어가지 않는다
+  const one = findDuplicateSuspects(base, [{ id: 'q1', ...base, createdAt: '2026-11-26T04:58:00.000Z' }], now);
+  const noName = describeDuplicateWarning(one, { amount: 50000 }, won);
+  expect(noName).toContain('같은 고객의 50,000원 결제가 이미 1건');
+  expect(noName).not.toContain('undefined');
+  // 유형·수단을 모르는 기록은 괄호를 만들지 않는다(빈 괄호를 적지 않는다)
+  expect(noName).toContain('· 2분 전 등록 · 결제일 2026-11-26');
+  expect(noName).not.toContain('()');
+
+  // 4건이면 세 줄만 적고 나머지는 "그 밖에 1건" — 창이 끝없이 길어지지 않게
+  const four = ['q1', 'q2', 'q3', 'q4'].map((id, i) => ({ id, ...base, createdAt: new Date(Date.parse(now) - (i + 1) * 60_000).toISOString() }));
+  const many = findDuplicateSuspects(base, four, now);
+  expect(many).toHaveLength(4);
+  const manyText = describeDuplicateWarning(many, { amount: 50000, customerName: '김' }, won);
+  expect(manyText).toContain('이미 4건 있습니다');
+  expect(manyText.split('\n').filter(l => l.startsWith('· ') && l.includes('등록'))).toHaveLength(3);
+  expect(manyText).toContain('그 밖에 1건');
+
+  // GAP P-4 의 남은 결정: **실결제액이 같으면 유형·할인이 달라도 묻는다**(좁히면 진짜 이중 등록을 놓친다).
+  // 대신 유형·수단·할인을 적어 직원이 "다른 결제" 와 "두 번 받은 돈" 을 눈으로 가른다.
+  const mixed = findDuplicateSuspects(
+    { ...base, amount: 50000 },
+    [{ id: 'r1', ...base, createdAt: '2026-11-26T04:59:00.000Z', typeLabel: '등 관리', paymentMethod: '카드', discountAmount: 10000 }],
+    now,
+  );
+  expect(mixed).toHaveLength(1);
+  const mixedText = describeDuplicateWarning(mixed, { amount: 50000, customerName: '김' }, won);
+  expect(mixedText).toContain('등 관리 · 카드 · 할인 10,000원'); // 같은 5만이라도 할인이 다르면 다른 결제일 수 있다
+});

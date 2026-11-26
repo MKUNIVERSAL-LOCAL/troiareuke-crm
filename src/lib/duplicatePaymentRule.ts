@@ -25,6 +25,8 @@ export interface DupExisting extends DupCandidate {
   createdAt: string;            // ISO
   paymentMethod?: string;
   typeLabel?: string;
+  /** 그 결제에 붙은 할인 — 실결제액이 같아도 할인이 다르면 **다른 결제**일 수 있다 (279, GAP P-4) */
+  discountAmount?: number;
 }
 
 export interface DupSuspect {
@@ -35,10 +37,14 @@ export interface DupSuspect {
   paymentDate: string;          // 그 결제의 업무 날짜 — 늦은 완료 처리는 오늘이 아닐 수 있다 (266, 리뷰 M-3)
   paymentMethod?: string;
   typeLabel?: string;
+  discountAmount?: number;      // (279) 할인이 있으면 문구에 적어 같은 금액끼리 구별하게 한다
 }
 
 /**
  * 중복으로 의심되는 기존 결제 — 같은 고객·같은 금액이고 창 안에 **등록된**(createdAt) 완료 결제.
+ * 유형(시술·제품·회차권)과 할인도 같을 것을 요구하지 않는다 (279, GAP P-4 마무리) — 좁히면 "시술 5만 받고 바로
+ * 제품 5만 로 또 등록" 같은 **진짜 이중 등록**을 놓친다. 묻는 기준은 그대로 두고, 문구에 유형·수단·할인을 적어
+ * 직원이 "다른 결제" 와 "두 번 받은 돈" 을 눈으로 가르게 한다.
  * 업무 날짜(paymentDate)는 같을 것을 요구하지 않는다 — 예약 완료 결제는 예약일로, 매출 화면은 오늘로 적혀
  * 늦은 완료 처리 날 두 직원이 각자 등록하면 서로 걸리지 않았다(266, 리뷰 M-3). 대신 그 날짜를 문구에 적는다.
  * @param now 지금 시각(ISO) — 테스트가 고정할 수 있게 받는다
@@ -73,6 +79,7 @@ export function findDuplicateSuspects(
       paymentDate: p.paymentDate,
       paymentMethod: p.paymentMethod,
       typeLabel: p.typeLabel,
+      discountAmount: p.discountAmount,
     });
   }
   return out.sort((a, b) => a.minutesAgo - b.minutesAgo);
@@ -94,7 +101,10 @@ export function describeDuplicateWarning(
     const when = s.futureSkewMinutes
       ? `시각이 어긋난 기록(이 PC 보다 ${s.futureSkewMinutes}분 뒤)`
       : s.minutesAgo <= 0 ? '방금' : `${s.minutesAgo}분 전`;
-    const what = [s.typeLabel, s.paymentMethod].filter(Boolean).join(' · ');
+    // 279(GAP P-4): **실결제액이 같으면 유형·할인이 달라도 묻는다**(좁히면 진짜 이중 등록을 놓친다) —
+    // 대신 유형·수단·할인을 한 줄에 적어 직원이 "다른 결제" 와 "두 번 받은 돈" 을 눈으로 가를 수 있게 한다.
+    const what = [s.typeLabel, s.paymentMethod, s.discountAmount && s.discountAmount > 0 ? `할인 ${s.discountAmount.toLocaleString('ko-KR')}원` : '']
+      .filter(Boolean).join(' · ');
     // 결제일을 함께 적는다 — 늦은 완료 처리는 오늘이 아닌 날짜로 들어간다 (266, 리뷰 M-3)
     return `· ${when} 등록${what ? ` (${what})` : ''} · 결제일 ${s.paymentDate}`;
   });
