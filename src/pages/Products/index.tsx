@@ -381,7 +381,10 @@ export default function Products() {
                             <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit}</p>
                           </td>
                           <td className="px-4 py-4 text-center">
-                            {isLow ? (
+                            {/* 단종(판매 중지) 제품은 재고가 0 이어도 "정상" 도 "부족" 도 아니다 — 그대로 말한다 (리뷰 M-1) */}
+                            {p.isActive === false ? (
+                              <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">판매중지</span>
+                            ) : isLow ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
                                 <AlertTriangle size={10} /> 부족
                               </span>

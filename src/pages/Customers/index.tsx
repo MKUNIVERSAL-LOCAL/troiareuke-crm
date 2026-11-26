@@ -3756,10 +3756,11 @@ export default function Customers() {
               {/* 관리사 소견 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">관리사 소견</label>
-                <MemoPresetChips value={consultForm.managerNote} onChange={next => setConsultForm(fm => ({ ...fm, managerNote: next }))} />
                 <textarea aria-label="관리사 소견" value={consultForm.managerNote} onChange={e => setConsultForm(f => ({ ...f, managerNote: e.target.value }))}
                   rows={2} placeholder="고객 피부 상태 관찰 소견을 기록하세요"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
+                {/* 칩은 입력칸 아래 — 시술 기록·예약·빠른 메모와 같은 자리 (리뷰 L-2) */}
+                <MemoPresetChips value={consultForm.managerNote} onChange={next => setConsultForm(fm => ({ ...fm, managerNote: next }))} />
               </div>
 
               <p className="text-xs text-gray-400">

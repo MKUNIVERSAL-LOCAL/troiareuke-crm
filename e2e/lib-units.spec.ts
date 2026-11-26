@@ -8,7 +8,7 @@ import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCoun
 import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
 import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
 import { resultLabel, defaultSnoozeDays, addDays as addDaysFollowUp, isSnoozed, sanitizeFollowUps, pruneFollowUps, snoozedIdSet, describeFollowUp, describeHidden } from '../src/lib/followUpRule';
-import { normalizePreset, sanitizePresets, addPreset, removePreset, appendPreset, removePresetLine, presetInMemo, MAX_PRESET_LEN, MAX_PRESETS } from '../src/lib/memoPresetRule';
+import { normalizePreset, sanitizePresets, addPreset, removePreset, appendPreset, removePresetLine, presetInMemo, splitOneLine, oneLineHas, toggleOneLine, MAX_PRESET_LEN, MAX_PRESETS } from '../src/lib/memoPresetRule';
 import { diffCustomer, gradeChange, describeCustomerChange, describeCustomerEntryHead, sanitizeCustomerHistory, trimCustomerHistory, customerHistoryFor, maskPhone, maskEmail, MAX_PER_CUSTOMER } from '../src/lib/customerHistoryRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
@@ -2508,4 +2508,33 @@ test('영수증 인사말 — 정리하고, 환불·예정 내역서에는 붙�
   expect(pending.greeting).toBeNull();
   // 설정에 인사말이 없으면 null — 빈 줄을 만들지 않는다
   expect(buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 1000, paymentMethod: '현금', status: 'completed' }, shop: { name: '샵' } }).greeting).toBeNull();
+});
+
+// ── 258: 한 줄 칸(빠른 메모) 문구 토글 — 255~257 리뷰 H-2 회귀 ──
+
+test('한 줄 메모 문구 — 문구에 구분자가 들어 있어도 실제로 토글되고 중복되지 않는다 (258, 리뷰 H-2)', () => {
+  // 기본 예시 문구가 그 자체로 ' · ' 를 품고 있다 — 255 는 구분자로 쪼개 비교해 칩이 꺼진 채 계속 덧붙었다
+  const presets = ['자극 없음 · 홈케어 안내', '다음에 10분 추가'];
+  const one = toggleOneLine('', presets[0], presets);
+  expect(one).toBe('자극 없음 · 홈케어 안내');
+  expect(oneLineHas(one, presets[0], presets)).toBe(true);          // 255 에서는 false 였다(거짓 토글)
+  expect(splitOneLine(one, presets)).toEqual(['자극 없음 · 홈케어 안내']);
+  // 다시 누르면 빠진다 — 255 에서는 같은 문구가 두 번 들어갔다
+  expect(toggleOneLine(one, presets[0], presets)).toBe('');
+  // 두 문구를 넣으면 구분자로 잇고, 한쪽만 빼도 다른 쪽은 남는다
+  const two = toggleOneLine(one, presets[1], presets);
+  expect(two).toBe('자극 없음 · 홈케어 안내 · 다음에 10분 추가');
+  expect(splitOneLine(two, presets)).toEqual(presets);
+  expect(toggleOneLine(two, presets[1], presets)).toBe('자극 없음 · 홈케어 안내');
+  // 손으로 적은 글은 그대로 두고 뒤에 붙인다
+  const typed = toggleOneLine('컨디션 좋음', presets[1], presets);
+  expect(typed).toBe('컨디션 좋음 · 다음에 10분 추가');
+  expect(oneLineHas(typed, presets[1], presets)).toBe(true);
+  expect(oneLineHas(typed, presets[0], presets)).toBe(false);
+  // 긴 문구를 먼저 맞춰 본다 — 짧은 문구가 긴 문구의 앞머리와 같아도 섞이지 않는다
+  const both = ['자극 없음 · 홈케어 안내', '자극 없음'];
+  expect(splitOneLine('자극 없음 · 홈케어 안내', both)).toEqual(['자극 없음 · 홈케어 안내']);
+  expect(oneLineHas('자극 없음 · 홈케어 안내', '자극 없음', both)).toBe(false);
+  expect(toggleOneLine('자극 없음 · 홈케어 안내', '자극 없음', both)).toBe('자극 없음 · 홈케어 안내 · 자극 없음');
+  expect(toggleOneLine('자극 없음 · 홈케어 안내 · 자극 없음', '자극 없음', both)).toBe('자극 없음 · 홈케어 안내');
 });

@@ -4,7 +4,7 @@ import { markBackupSaved } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
 import { normalizeGreeting, MAX_GREETING } from '../../lib/receiptRule'; // 영수증 인사말 (256)
-import { getPreference, setPreference } from '../../lib/shopPreferences'; // 영수증 인쇄 정보 (235)
+import { getPreference, setPreference, readPersistedPreference } from '../../lib/shopPreferences'; // 영수증 인쇄 정보 (235)
 // 고객 주의사항 키워드 — 매장이 쓰는 말을 더한다 (240, GAP C-11)
 import { getCautionKeywords, saveCautionKeywords } from '../../lib/cautionKeywords';
 import { CAUTION_KEYWORDS, sanitizeCautionKeywords } from '../../lib/customerAlertRule';
@@ -444,15 +444,23 @@ export default function Settings() {
   const dropCautionWord = (word: string) => {
     setCautionWords(saveCautionKeywords(cautionWords.filter(w => w !== word)));
   };
-  const saveReceiptInfo = () => {
+  const saveReceiptInfo = async () => {
     const next = {
       businessNumber: receiptInfo.businessNumber?.trim() || undefined,
       ownerName: receiptInfo.ownerName?.trim() || undefined,
       greeting: normalizeGreeting(receiptInfo.greeting) ?? undefined, // 공백 축약·60자 (256)
     };
+    await syncBeforeSave(); // 설정은 행 전체 PUT — 다른 PC 가 바꾼 영업시간·휴일을 옛 캐시로 덮지 않게 (16차 #H1, 리뷰 M-4)
     setPreference('receiptInfo', next);
     setReceiptInfo(next);
-    notify('영수증 인쇄 정보를 저장했습니다.');
+    // 되읽어 확인 — 저장 공간이 꽉 찬 PC 에서 "저장했습니다" 가 거짓이 되지 않게 (254 리뷰 M-1, 리뷰 M-3)
+    const saved = readPersistedPreference('receiptInfo');
+    const ok = !!saved
+      && (saved.businessNumber ?? undefined) === next.businessNumber
+      && (saved.ownerName ?? undefined) === next.ownerName
+      && (saved.greeting ?? undefined) === next.greeting;
+    if (ok) notify.success('영수증 인쇄 정보를 저장했습니다.');
+    else notify('영수증 인쇄 정보를 저장하지 못했습니다. 저장 공간을 확인한 뒤 다시 시도해주세요.');
   };
   const handleShopSave = async () => {
     if (shopSaving) return;
@@ -783,7 +791,7 @@ export default function Settings() {
                   {/* 영수증 인쇄 정보 — 고객에게 주는 영수증에 찍힌다. 사업자등록번호는 가입 계정(코어)에 있어 여기서 따로 받는다 (235, GAP P-9) */}
                   <div className="pt-6 border-t border-gray-100" data-testid="settings-receipt-info">
                     <h4 className="text-sm font-bold text-gray-900 mb-1">영수증 인쇄 정보</h4>
-                    <p className="text-xs text-gray-400 mb-3">매출 &gt; 결제 내역의 [영수증]으로 저장하는 PDF 머리말에 찍힙니다. 비워 두면 그 줄을 빼고 인쇄하고, 영수증에 안내가 함께 나옵니다. 세금계산서·현금영수증은 이 영수증으로 대체되지 않습니다.</p>
+                    <p className="text-xs text-gray-400 mb-3">매출 &gt; 결제 내역의 [영수증]으로 저장하는 PDF 에 찍힙니다. 사업자등록번호·대표자명은 머리말에, 인사말은 합계 아래 한 줄로 들어갑니다. 비워 두면 그 줄을 빼고 인쇄하고, 영수증에 안내가 함께 나옵니다. 세금계산서·현금영수증은 이 영수증으로 대체되지 않습니다.</p>
                     <div className="space-y-4">
                       <FormRow label="사업자등록번호">
                         <input type="text" aria-label="사업자등록번호" value={receiptInfo.businessNumber ?? ''}
@@ -796,9 +804,13 @@ export default function Settings() {
                           className="form-input" placeholder="예: 홍길동" maxLength={30} />
                       </FormRow>
                       <FormRow label="인사말 (선택)">
-                        <input type="text" aria-label="영수증 인사말" value={receiptInfo.greeting ?? ''}
-                          onChange={e => setReceiptInfo(v => ({ ...v, greeting: e.target.value }))}
-                          className="form-input" placeholder="예: 오늘도 찾아주셔서 감사합니다" maxLength={MAX_GREETING} />
+                        <div>
+                          <input type="text" aria-label="영수증 인사말" value={receiptInfo.greeting ?? ''}
+                            onChange={e => setReceiptInfo(v => ({ ...v, greeting: e.target.value }))}
+                            className="form-input" placeholder="예: 오늘도 찾아주셔서 감사합니다" maxLength={MAX_GREETING} />
+                          {/* 왜 환불 영수증에는 안 나오는지 미리 말해 둔다 — 고장으로 오해하던 것 (리뷰 M-2) */}
+                          <p className="mt-1 text-xs text-gray-400">결제 영수증 합계 아래에 한 줄로 찍힙니다({MAX_GREETING}자). 환불 영수증·결제 예정 내역서에는 찍지 않습니다.</p>
+                        </div>
                       </FormRow>
                       <button type="button" onClick={saveReceiptInfo}
                         className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors">영수증 정보 저장</button>

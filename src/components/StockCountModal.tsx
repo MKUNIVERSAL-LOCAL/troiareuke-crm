@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import Modal from './ui/Modal';
 import { ProductStore } from '../lib/store';
 import { recordStockMovement, allStockEntries } from '../lib/stockLedger';
+import { persistedStockMap } from '../lib/persistedStock'; // 재고가 정말 저장됐는지 되읽어 확인 (리뷰 H-1)
 import { todayISO } from '../lib/format';
 import { notify } from '../lib/notify';
 import { askConfirm } from '../lib/confirmDialog';
@@ -76,8 +77,8 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
     let done = 0;
     let applied = 0;
     let skipped = 0;
-    let ledgerFailed = 0;        // 원장 기록이 예외로 끊긴 건수
-    const ledgerIds: string[] = []; // 남겼다고 되돌아온 행 — 끝에 한 번 되읽어 실제로 저장됐는지 본다 (250 리뷰 L-9)
+    // 맞춘 제품 한 줄씩 — 끝에 **재고와 원장 둘 다** 정말 저장됐는지 되읽어 확인한다 (250 리뷰 L-9, 255~257 리뷰 H-1)
+    const appliedRows: { id: string; counted: number; entryId: string | null; threw: boolean }[] = [];
     const step = () => {
       try {
         for (const r of toSave.slice(done, done + 25)) {
@@ -87,13 +88,16 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
           if (fresh.stock === r.counted) { skipped += 1; continue; }
           const updated = ProductStore.update(r.id, { stock: r.counted as number });
           if (!updated) { skipped += 1; continue; }
+          let entryId: string | null = null;
+          let threw = false;
           try {
             // 원장 저장만 실패해도 재고는 이미 맞췄으니 되돌리지 않고, 끝에 사실대로 알린다
             const entry = recordStockMovement({ product: fresh, kind: 'count', qty: (r.counted as number) - fresh.stock, date, note: countNote({ counted: r.counted as number, unit: r.unit }, date, memo), actor });
-            if (entry) ledgerIds.push(entry.id);
+            entryId = entry ? entry.id : null; // 샘플 제품은 원장을 남기지 않는다(실패가 아니다)
           } catch {
-            ledgerFailed += 1;
+            threw = true;
           }
+          appliedRows.push({ id: r.id, counted: r.counted as number, entryId, threw });
           applied += 1;
         }
       } catch (e) {
@@ -106,12 +110,23 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
       done += 25;
       if (done < toSave.length) { setTimeout(step, 0); return; }
       setSaving(false);
-      // 되읽어 확인 — safeSetItem 은 저장 공간 초과를 조용히 삼키므로(토스트만 뜬다) 예외만으로는 못 잡는다
-      if (ledgerIds.length > 0) {
-        const persisted = new Set(allStockEntries().map(e => e.id));
-        ledgerFailed += ledgerIds.filter(id => !persisted.has(id)).length;
+      // 되읽어 확인 — safeSetItem 은 저장 공간 초과를 조용히 삼키므로(토스트만 뜬다) 반환값·예외로는 못 잡는다
+      const persistedStock = persistedStockMap();
+      const savedEntries = appliedRows.some(a => a.entryId) ? new Set(allStockEntries().map(e => e.id)) : null;
+      let stockFailed = 0;
+      let ledgerFailed = 0;
+      for (const a of appliedRows) {
+        if (persistedStock && persistedStock.get(a.id) !== a.counted) { stockFailed += 1; continue; } // 재고부터 안 남았으면 원장 얘기는 하지 않는다
+        if (a.threw || (a.entryId && savedEntries && !savedEntries.has(a.entryId))) ledgerFailed += 1;
       }
-      notify.success(`제품 ${applied}종의 재고를 실사 수량으로 맞췄습니다.${skipped > 0 ? ` ${skipped}종은 그 사이 재고가 바뀌어 건너뛰었습니다(다시 세어주세요).` : ''}`);
+      const saved = applied - stockFailed;
+      if (saved > 0) {
+        notify.success(`제품 ${saved}종의 재고를 실사 수량으로 맞췄습니다.${skipped > 0 ? ` ${skipped}종은 그 사이 재고가 바뀌어 건너뛰었습니다(다시 세어주세요).` : ''}`);
+      } else if (skipped > 0) {
+        notify(`맞출 제품이 없었습니다. ${skipped}종은 그 사이 재고가 바뀌어 건너뛰었습니다(다시 세어주세요).`);
+      }
+      // 저장 공간이 꽉 찬 PC — "맞췄습니다" 가 거짓이 되지 않게 몇 종이 안 남았는지 말한다 (리뷰 H-1)
+      if (stockFailed > 0) notify(`${stockFailed}종은 이 PC 저장 공간이 모자라 재고가 저장되지 않았습니다(프로그램을 다시 열면 옛 수량이 보입니다). 저장 공간을 비운 뒤 다시 세어주세요.`);
       // 원장 기록만 실패하면 그 제품은 "원장 합 ≠ 재고" 가 된다 — 숨기지 않고 알린다 (250 리뷰 L-9)
       if (ledgerFailed > 0) notify(`${ledgerFailed}종은 재고는 맞췄지만 이력(원장)에 남기지 못했습니다. 제품 [이력]에서 "차이를 조정으로 기록" 으로 맞춰주세요.`);
       onDone();

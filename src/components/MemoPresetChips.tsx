@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { notify } from '../lib/notify';
 import { memoPresets, saveMemoPreset, deleteMemoPreset } from '../lib/memoPresets';
-import { appendPreset, removePresetLine, presetInMemo, MAX_PRESET_LEN } from '../lib/memoPresetRule';
+import { appendPreset, removePresetLine, presetInMemo, toggleOneLine, oneLineHas, MAX_PRESET_LEN } from '../lib/memoPresetRule';
+import { useDataRefreshed } from '../hooks/useDataRefreshed';
 
 /**
  * 자주 쓰는 메모 문구 칩 (251 → 255 공용화) — 시술 기록뿐 아니라 **상담 소견·예약 메모·빠른 메모**에서도 쓴다.
@@ -23,20 +24,17 @@ export default function MemoPresetChips({ value, onChange, manage = false, oneLi
   const [presets, setPresets] = useState<string[]>(() => memoPresets());
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  // 문구는 매장 설정이라 다른 창·다른 PC 에서 바뀐다 — 마운트 때 한 번만 읽으면 지워진 문구가 칩으로 남는다 (리뷰 L-3)
+  useDataRefreshed(() => setPresets(memoPresets()));
 
   function toggle(t: string) {
-    if (oneLine) {
-      // 한 줄 칸: 이미 들어 있으면 빼고, 없으면 공백으로 잇는다
-      const parts = value.split(/\s*·\s*/).map(p => p.trim()).filter(Boolean);
-      const next = parts.includes(t) ? parts.filter(p => p !== t) : [...parts, t];
-      onChange(next.join(' · '));
-      return;
-    }
+    // 한 줄 칸은 문구 단위로 읽어 넣고 뺀다 — 문구에 ' · ' 가 들어가도 중복되지 않게 (리뷰 H-2)
+    if (oneLine) { onChange(toggleOneLine(value, t, presets)); return; }
     onChange(presetInMemo(value, t) ? removePresetLine(value, t) : appendPreset(value, t));
   }
 
   function isOn(t: string): boolean {
-    return oneLine ? value.split(/\s*·\s*/).map(p => p.trim()).includes(t) : presetInMemo(value, t);
+    return oneLine ? oneLineHas(value, t, presets) : presetInMemo(value, t);
   }
 
   function handleAdd() {

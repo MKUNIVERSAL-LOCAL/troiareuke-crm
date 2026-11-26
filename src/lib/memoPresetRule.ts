@@ -81,3 +81,51 @@ export function presetInMemo(memo: string, preset: string): boolean {
   if (!clean) return false;
   return (memo ?? '').split('\n').map(l => l.trim()).includes(clean);
 }
+
+// ─────────────────────────────────────────────────────────────
+// 한 줄 칸(빠른 메모) — 줄바꿈을 쓸 수 없는 입력칸
+// 255 는 ' · ' 로 단순히 쪼개 비교했는데, **문구 자체에 ' · ' 가 들어갈 수 있다**
+// (기본 예시가 "자극 없음 · 홈케어 안내"). 그래서 그 문구를 넣고도 칩은 꺼진 채였고,
+// 다시 누르면 같은 문구가 두 번·세 번 쌓여 고객 메모에 그대로 저장됐다 (255~257 리뷰 H-2).
+// 해결: **긴 문구부터** 맞춰 보며 조각이 아니라 문구 단위로 읽는다.
+// ─────────────────────────────────────────────────────────────
+
+/** 한 줄 칸에서 문구를 잇는 구분자 */
+export const ONE_LINE_SEP = ' · ';
+
+/** 한 줄 글을 문구 단위로 쪼갠다 — 아는 문구는 통째로, 손으로 적은 조각은 그대로 둔다 */
+export function splitOneLine(value: string, presets: string[]): string[] {
+  const known = sanitizePresets(presets).sort((a, b) => b.length - a.length); // 긴 문구 우선
+  const out: string[] = [];
+  let rest = (value ?? '').trim();
+  while (rest) {
+    const hit = known.find(p => rest === p || rest.startsWith(p + ONE_LINE_SEP));
+    if (hit) {
+      out.push(hit);
+      rest = rest.slice(hit.length).replace(/^\s*·\s*/, '').trim();
+      continue;
+    }
+    const at = rest.indexOf(ONE_LINE_SEP);
+    if (at < 0) { out.push(rest); rest = ''; continue; }
+    const piece = rest.slice(0, at).trim();
+    if (piece) out.push(piece);
+    rest = rest.slice(at + ONE_LINE_SEP.length).trim();
+  }
+  return out;
+}
+
+/** 한 줄 글에 그 문구가 들어 있는가(칩을 눌린 상태로 보여 주려고) */
+export function oneLineHas(value: string, preset: string, presets: string[]): boolean {
+  const clean = normalizePreset(preset);
+  if (!clean) return false;
+  return splitOneLine(value, presets).includes(clean);
+}
+
+/** 한 줄 글에서 문구를 넣거나 뺀다(실제 토글) — 같은 문구가 두 번 들어가지 않는다 */
+export function toggleOneLine(value: string, preset: string, presets: string[]): string {
+  const clean = normalizePreset(preset);
+  if (!clean) return value ?? '';
+  const parts = splitOneLine(value, presets);
+  const next = parts.includes(clean) ? parts.filter(p => p !== clean) : [...parts, clean];
+  return next.join(ONE_LINE_SEP);
+}
