@@ -1,0 +1,161 @@
+#!/usr/bin/env node
+/**
+ * 기록 검증 가드 — 문서가 **확인할 수 없는 말**을 적지 못하게 한다 (283, CLAUDE.md §3·§5).
+ *
+ * 왜: 274~282 의 독립 리뷰가 찾아낸 결함 중 상당수는 코드가 아니라 **기록**이었다 —
+ * "고쳤다" 고 적었지만 단언은 여전히 통과할 수 없는 모양이었고(277 M-1), "네 곳 전부" 라고
+ * 적었지만 한 곳뿐이었고(279 M-2), "쓸이에 모두 들어 있다" 는 네 항목 중 셋이 사실과 달랐다(279 M-3).
+ * 숫자도 묶음을 거듭할수록 낡았다("54모듈·229함수" 가 실제 231 이었다 — 279 에서 손으로 발견).
+ * 사람이 매번 다시 세는 대신, **기계가 셀 수 있는 주장만 기계가 지킨다**.
+ *
+ * 검사 네 가지:
+ *  ① 묶음 기록의 커밋 해시 — 로드맵의 `- [x] NNN — …` 항목(243 번부터 해시를 적는 규약, **가장 최근 묶음 하나는 면제** — 해시는 커밋 뒤에 적는다)마다
+ *     `커밋 <7자 이상 hex>` 가 있고 그 커밋이 **이 저장소에 실재**해야 한다. 없으면 그 묶음의
+ *     주장을 아무도 되짚을 수 없다.
+ *  ② "지금 상태" 문서의 숫자 — 아래 CURRENT_DOCS 안의 `N모듈·M함수`·`N칸 중 M칸`·`lib-units N개`는
+ *     **지금 세어 나오는 값**과 같아야 한다. 날짜가 붙은 기록(로드맵 묶음 항목·REVIEW-*)은 그때의
+ *     사실이므로 검사하지 않는다 — 과거 기록을 고치는 것은 역사 조작이다.
+ *  ③ 문서가 가리키는 파일 — 문서 안의 `docs/X.md`·`scripts/Y.mjs` 는 실재해야 한다(깨진 포인터 금지).
+ *  ④ 리뷰 기록의 반영 표시 — `docs/REVIEW-*.md` 머리말(앞 3줄)에 "반영" 상태가 적혀 있어야 한다.
+ *     조용히 묻힌 리뷰가 없다는 뜻이다.
+ *
+ * 사용: node scripts/check-docs-claims.mjs [--selftest]
+ */
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
+/** 해시 규약이 시작된 묶음 — 그 앞은 기록 당시 규약이 없었다 */
+const HASH_FROM = 243;
+/** "지금 상태" 를 말하는 문서 — 숫자가 낡으면 읽는 사람이 틀린 상태를 믿는다 */
+const CURRENT_DOCS = [
+  'docs/GLOBAL-CRM-GAP-ANALYSIS.md',
+  'docs/NEXT-ACTION.md',
+  'docs/OWNER-APPROVAL-QUEUE.md',
+  'docs/OWNER-BRIEFING-2026-11-30.md',
+  'docs/MASTER-DEVELOPMENT-STATUS.md',
+];
+
+const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+/** 로드맵에서 묶음 번호 → 그 줄 */
+function batchLines(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^- \[x\] (\d+) — /.exec(line);
+    if (m) out.push({ no: Number(m[1]), line });
+  }
+  return out;
+}
+
+/** 그 줄이 적어 둔 커밋 해시(없으면 null) */
+function hashOf(line) {
+  const m = /커밋 ([0-9a-f]{7,40})/.exec(line);
+  return m ? m[1] : null;
+}
+
+/** 문서가 주장하는 숫자들 */
+function claimedNumbers(text) {
+  const out = { rules: [], testids: [], libUnits: [] };
+  for (const m of text.matchAll(/(\d+)모듈·(\d+)함수/g)) out.rules.push({ modules: Number(m[1]), fns: Number(m[2]), raw: m[0] });
+  for (const m of text.matchAll(/(\d+)칸 중 (\d+)칸/g)) out.testids.push({ total: Number(m[1]), covered: Number(m[2]), raw: m[0] });
+  for (const m of text.matchAll(/lib-units (\d+)개/g)) out.libUnits.push({ count: Number(m[1]), raw: m[0] });
+  return out;
+}
+
+/** 지금 세어 나오는 값 */
+function liveNumbers() {
+  const run = args => {
+    const r = spawnSync('node', args, { cwd: ROOT, encoding: 'utf8' });
+    return (r.stdout || '') + (r.stderr || '');
+  };
+  const rules = /순수 규칙 (\d+)개 모듈, export 함수 (\d+)개/.exec(run(['scripts/check-rule-coverage.mjs']));
+  const ids = /화면 칸 (\d+)개 중 스펙이 보는 것 (\d+)개/.exec(run(['scripts/check-testid-coverage.mjs']));
+  const units = read('e2e/lib-units.spec.ts').split(/\r?\n/).filter(l => l.startsWith('test(')).length;
+  if (!rules || !ids) throw new Error('가드 출력에서 숫자를 읽지 못했다 — 두 가드가 먼저 통과해야 한다');
+  return { modules: Number(rules[1]), fns: Number(rules[2]), idTotal: Number(ids[1]), idCovered: Number(ids[2]), libUnits: units };
+}
+
+function selftest() {
+  const c = claimedNumbers('가드는 54모듈·231함수 를 센다. 화면 칸 222칸 중 217칸. lib-units 165개.');
+  if (c.rules.length !== 1 || c.rules[0].fns !== 231) { console.error('[selftest] 모듈·함수 추출 실패'); process.exit(1); }
+  if (c.testids.length !== 1 || c.testids[0].covered !== 217) { console.error('[selftest] 칸 추출 실패'); process.exit(1); }
+  if (c.libUnits.length !== 1 || c.libUnits[0].count !== 165) { console.error('[selftest] lib-units 추출 실패'); process.exit(1); }
+  const b = batchLines('- [x] 243 — 무언가 (11-26 10:00): 커밋 abc1234. 끝\n- [ ] 999 — 아직\n- [x] 100 — 옛 묶음 해시 없음');
+  if (b.length !== 2 || b[0].no !== 243) { console.error(`[selftest] 묶음 줄 추출 실패: ${JSON.stringify(b.map(x => x.no))}`); process.exit(1); }
+  if (hashOf(b[0].line) !== 'abc1234' || hashOf(b[1].line) !== null) { console.error('[selftest] 해시 추출 실패'); process.exit(1); }
+  console.log('[check-docs-claims] selftest OK — 덫 4개(숫자 3종·묶음 해시) 통과');
+}
+
+if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
+
+const problems = [];
+
+// ① 묶음 기록의 커밋 해시가 실재하는가
+{
+  const lines = batchLines(read(ROADMAP));
+  // 해시는 묶음 커밋 **뒤에** 적는다(커밋하기 전에는 해시를 알 수 없다) — 그래서 **가장 최근 묶음 하나**는
+  // 아직 해시가 없을 수 있다. 그 하나만 면제하고, 그 앞 묶음은 전부 해시가 있어야 한다 (283).
+  const newest = Math.max(...lines.map(l => l.no));
+  for (const { no, line } of lines) {
+    if (no < HASH_FROM || no === newest) continue;
+    const h = hashOf(line);
+    if (!h) { problems.push(`${ROADMAP}: 묶음 ${no} 에 커밋 해시가 없다 — 그 묶음의 주장을 되짚을 수 없다`); continue; }
+    const r = spawnSync('git', ['cat-file', '-e', `${h}^{commit}`], { cwd: ROOT });
+    if (r.status !== 0) problems.push(`${ROADMAP}: 묶음 ${no} 의 커밋 ${h} 가 이 저장소에 없다`);
+  }
+}
+
+// ② "지금 상태" 문서의 숫자가 지금 값과 같은가
+{
+  const live = liveNumbers();
+  for (const rel of CURRENT_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) { problems.push(`${rel}: CURRENT_DOCS 목록에 있는데 파일이 없다`); continue; }
+    const c = claimedNumbers(read(rel));
+    for (const r of c.rules) {
+      if (r.modules !== live.modules || r.fns !== live.fns) problems.push(`${rel}: "${r.raw}" 가 낡았다 — 지금은 ${live.modules}모듈·${live.fns}함수`);
+    }
+    for (const t of c.testids) {
+      if (t.total !== live.idTotal || t.covered !== live.idCovered) problems.push(`${rel}: "${t.raw}" 가 낡았다 — 지금은 ${live.idTotal}칸 중 ${live.idCovered}칸`);
+    }
+    for (const u of c.libUnits) {
+      if (u.count !== live.libUnits) problems.push(`${rel}: "${u.raw}" 가 낡았다 — 지금은 lib-units ${live.libUnits}개`);
+    }
+  }
+}
+
+// ③ 문서가 가리키는 파일이 실재하는가
+{
+  const docs = fs.readdirSync(path.join(ROOT, 'docs')).filter(f => f.endsWith('.md'));
+  for (const f of docs) {
+    const text = read(`docs/${f}`);
+    const seen = new Set();
+    for (const m of text.matchAll(/(?:docs\/[A-Za-z0-9._-]+\.md|scripts\/[A-Za-z0-9._-]+\.(?:mjs|cjs))/g)) {
+      const rel = m[0];
+      // 뒤에 (신설)·(예정)·(계획) 이 붙은 것은 **앞으로 만들 파일**을 적은 계획이다 — 깨진 포인터가 아니다
+      if (/^`?\s*\((신설|예정|계획)\)/.test(text.slice(m.index + rel.length, m.index + rel.length + 20))) continue;
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      if (!fs.existsSync(path.join(ROOT, rel))) problems.push(`docs/${f}: 가리키는 파일이 없다 — ${rel}`);
+    }
+  }
+}
+
+// ④ 리뷰 기록마다 반영 상태가 적혀 있는가
+{
+  for (const f of fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-.*\.md$/.test(x))) {
+    const head = read(`docs/${f}`).split(/\r?\n/).slice(0, 3).join('\n');
+    if (!head.includes('반영')) problems.push(`docs/${f}: 머리말(앞 3줄)에 반영 상태가 없다 — 조용히 묻힌 리뷰인지 알 수 없다`);
+  }
+}
+
+if (problems.length > 0) {
+  console.error(`[check-docs-claims] 확인할 수 없는 기록 ${problems.length}건:`);
+  for (const p of problems) console.error(`  - ${p}`);
+  console.error('  → 기록을 사실로 고치세요(과거 날짜 기록은 그대로 두고, "지금 상태" 문서만 갱신합니다).');
+  process.exit(1);
+}
+console.log('[check-docs-claims] OK — 묶음 해시 실재·지금 상태 숫자·문서 포인터·리뷰 반영 표시 전부 확인');
