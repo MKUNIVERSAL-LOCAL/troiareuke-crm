@@ -66,6 +66,7 @@ test('재고 실사 — 세는 동안 다른 PC 가 재고를 바꾸면 그 사�
   const accTab = makeAccount('SC2');
   await signupAndOnboard(page, accTab);
   await addProduct(page, { name: '동시앰플', price: 20000, stock: 10 });
+  await addProduct(page, { name: '안센팩', price: 5000, stock: 30 }); // 빈칸으로 둘 제품 (271)
   await dismissToasts(page);
 
   // 실사 창을 열어 수량을 적는 중
@@ -83,10 +84,15 @@ test('재고 실사 — 세는 동안 다른 PC 가 재고를 바꾸면 그 사�
     const list = JSON.parse(localStorage.getItem(key) || '[]');
     const p = list.find((x: { name: string }) => x.name === '동시앰플');
     p.stock = 6; // 다른 PC 에서 4개 판매
+    const q = list.find((x: { name: string }) => x.name === '안센팩');
+    q.stock = 25; // 안 센 제품도 바뀌었다 (271)
     localStorage.setItem(key, JSON.stringify(list));
   });
+  // 271: **내가 센 제품**과 **안 센 제품**을 나눠 말한다 — 빈칸은 반영 대상이 아니므로 "다시 세어주세요" 가 아니다
   await expect(count.getByTestId('stock-count-changed')).toContainText('제품 1종의 재고가 다른 곳에서 바뀌었습니다', { timeout: 10_000 });
   await expect(count.getByTestId('stock-count-changed')).toContainText('다시 세어주세요');
+  await expect(count.getByTestId('stock-count-changed')).toContainText('아직 세지 않은 제품 1종');
+  await expect(count.getByTestId('stock-count-changed')).toContainText('반영에는 영향이 없습니다');
   await other.close();
 
   // 반영을 눌러도 그 제품은 건너뛴다 — 옛 숫자로 덮지 않는다(246 리뷰 M-5)

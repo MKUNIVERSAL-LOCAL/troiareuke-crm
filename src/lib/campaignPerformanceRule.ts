@@ -26,15 +26,36 @@ function addDaysISO(date: string, n: number): string {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }
 
-export function estimatePerformance(sends: SendRef[], reservations: ReservationRef[], payments: PaymentRef[], windowDays = PERFORMANCE_WINDOW_DAYS): CampaignPerformance {
-  // 고객별 첫 발송일 — 같은 고객에게 여러 번 갔으면 가장 이른 발송부터 창을 연다
+/** 고객별 첫 발송일 — 같은 고객에게 여러 번 갔으면 가장 이른 발송부터 창을 연다 */
+function firstSendByCustomer(sends: SendRef[]): Map<string, string> {
   const first = new Map<string, string>();
   for (const s of sends) { const d = dateOf(s.at); const cur = first.get(s.customerId); if (!cur || d < cur) first.set(s.customerId, d); }
+  return first;
+}
+/**
+ * 고객별 색인 — 수신 2,000명 × 결제 5,000건이면 고객마다 전수 훑기가 1천만 번이 된다(211 이 피하려 한 비용).
+ * 한 번만 묶어 두고 사람마다 자기 것만 본다 (271, 리뷰 LOW).
+ */
+function indexBy<T>(rows: T[], key: (r: T) => string | undefined): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const r of rows) {
+    const k = key(r);
+    if (!k) continue;
+    const list = out.get(k);
+    if (list) list.push(r); else out.set(k, [r]);
+  }
+  return out;
+}
+
+export function estimatePerformance(sends: SendRef[], reservations: ReservationRef[], payments: PaymentRef[], windowDays = PERFORMANCE_WINDOW_DAYS): CampaignPerformance {
+  const first = firstSendByCustomer(sends);
+  const resvBy = indexBy(reservations, r => r.customerId);
+  const paysBy = indexBy(payments, p => p.customerId);
   let reserved = 0, paid = 0, revenue = 0;
   for (const [cid, d] of first) {
     const end = addDaysISO(d, windowDays);
-    if (reservations.some(r => r.customerId === cid && r.status !== 'cancelled' && r.status !== 'noshow' && r.date >= d && r.date <= end)) reserved += 1;
-    const pays = payments.filter(p => p.customerId === cid && p.status === 'completed' && p.paymentDate >= d && p.paymentDate <= end);
+    if ((resvBy.get(cid) ?? []).some(r => r.status !== 'cancelled' && r.status !== 'noshow' && r.date >= d && r.date <= end)) reserved += 1;
+    const pays = (paysBy.get(cid) ?? []).filter(p => p.status === 'completed' && p.paymentDate >= d && p.paymentDate <= end);
     if (pays.length) { paid += 1; revenue += pays.reduce((a, p) => a + p.amount, 0); }
   }
   return { sent: first.size, reserved, paid, revenue, windowDays };
@@ -56,16 +77,17 @@ export interface PerformanceRow {
  * 어트리뷰션은 여전히 추정이다 — 창 안에 있었다는 사실만 말하고 인과라고 말하지 않는다.
  */
 export function performanceRows(sends: SendRef[], reservations: ReservationRef[], payments: PaymentRef[], windowDays = PERFORMANCE_WINDOW_DAYS): PerformanceRow[] {
-  const first = new Map<string, string>();
-  for (const s of sends) { const d = dateOf(s.at); const cur = first.get(s.customerId); if (!cur || d < cur) first.set(s.customerId, d); }
+  const first = firstSendByCustomer(sends);
+  const resvBy = indexBy(reservations, r => r.customerId);   // 요약과 같은 색인 방식 (271)
+  const paysBy = indexBy(payments, p => p.customerId);
   const rows: PerformanceRow[] = [];
   for (const [cid, d] of first) {
     const end = addDaysISO(d, windowDays);
-    const resv = reservations
-      .filter(r => r.customerId === cid && r.status !== 'cancelled' && r.status !== 'noshow' && r.date >= d && r.date <= end)
+    const resv = (resvBy.get(cid) ?? [])
+      .filter(r => r.status !== 'cancelled' && r.status !== 'noshow' && r.date >= d && r.date <= end)
       .map(r => r.date)
       .sort();
-    const pays = payments.filter(p => p.customerId === cid && p.status === 'completed' && p.paymentDate >= d && p.paymentDate <= end);
+    const pays = (paysBy.get(cid) ?? []).filter(p => p.status === 'completed' && p.paymentDate >= d && p.paymentDate <= end);
     rows.push({
       customerId: cid,
       sentOn: d,

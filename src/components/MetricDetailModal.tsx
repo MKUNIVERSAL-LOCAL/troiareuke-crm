@@ -25,7 +25,7 @@ export default function MetricDetailModal({ title, note, result, onClose }: {
         ) : (
           <>
             <div className="max-h-[50vh] overflow-y-auto -mx-1 px-1">
-              <ul className="divide-y divide-gray-50">
+              <ul className="divide-y divide-gray-50" aria-label={`${title} 목록`}>{/* 목록에 이름 — 낭독 때 어디인지 알 수 있게 (271, 리뷰 LOW) */}
                 {rows.map(r => (
                   <li key={r.key} className="py-2.5 flex items-start justify-between gap-3" data-testid="metric-detail-row">
                     <span className="min-w-0">

@@ -6,7 +6,7 @@ import { persistedStockMap } from '../lib/persistedStock'; // 재고가 정말 �
 import { todayISO } from '../lib/format';
 import { notify } from '../lib/notify';
 import { askConfirm } from '../lib/confirmDialog';
-import { buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows, type CountItem } from '../lib/stockCountRule';
+import { buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows, parseCountedQty, type CountItem } from '../lib/stockCountRule';
 import type { Product } from '../types';
 
 /**
@@ -33,14 +33,23 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
   // 전에는 60초마다 오는 데이터 갱신으로 기준이 따라 올라가, 세는 동안 다른 PC 에서 판매된 제품을
   // "건너뛴다" 던 가드가 항상 통과하고 판매분이 실사로 지워졌다.
   const [items] = useState<CountItem[]>(() => snapshot(products));
-  // 그 사이 재고가 바뀐 제품 수 — 숫자를 조용히 바꾸지 않고 "다시 세어 달라" 고 알린다
-  const changedSince = useMemo(() => {
-    const now = new Map(snapshot(products).map(p => [p.id, p.stock] as const));
-    return items.filter(it => now.has(it.id) && now.get(it.id) !== it.stock).length;
-  }, [products, items]);
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
+  // 그 사이 재고가 바뀐 제품 — **내가 센 제품**과 아직 안 센 제품을 나눠 센다 (271, 리뷰 LOW).
+  // 전에는 안 센 제품까지 한 숫자로 묶어 "그 제품은 건너뛰니 다시 세어주세요" 라고 했는데,
+  // 빈칸은 애초에 반영 대상이 아니라 그 말이 사실이 아니었다.
+  const changed = useMemo(() => {
+    const now = new Map(snapshot(products).map(p => [p.id, p.stock] as const));
+    let counted = 0;
+    let untouched = 0;
+    for (const it of items) {
+      if (!now.has(it.id) || now.get(it.id) === it.stock) continue;
+      if (parseCountedQty(inputs[it.id] ?? '') === null) untouched += 1; // 빈칸(안 센 제품)
+      else counted += 1;
+    }
+    return { counted, untouched };
+  }, [products, items, inputs]);
   const rows = buildCountRows(items, inputs);
   const summary = countSummary(rows);
   const toSave = rowsToSave(rows);
@@ -140,9 +149,10 @@ export default function StockCountModal({ products, actor, onClose, onDone }: {
         <p className="text-sm text-gray-700">
           제품을 직접 세어 실제 수량을 적어주세요. <b>빈칸은 세지 않은 제품</b>으로 두고 건드리지 않습니다.
         </p>
-        {changedSince > 0 && (
+        {(changed.counted > 0 || changed.untouched > 0) && (
           <p className="text-sm text-amber-800 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl" role="status" aria-live="polite" data-testid="stock-count-changed">
-            세는 동안 제품 {changedSince}종의 재고가 다른 곳에서 바뀌었습니다(판매·입고). 그 제품은 반영에서 건너뛰니 다시 세어주세요.
+            {changed.counted > 0 && <>세는 동안 제품 {changed.counted}종의 재고가 다른 곳에서 바뀌었습니다(판매·입고). 그 제품은 반영에서 건너뛰니 다시 세어주세요. </>}
+            {changed.untouched > 0 && <>아직 세지 않은 제품 {changed.untouched}종도 그 사이 재고가 바뀌었습니다(빈칸이라 반영에는 영향이 없습니다).</>}
           </p>
         )}
         {items.length === 0 ? (

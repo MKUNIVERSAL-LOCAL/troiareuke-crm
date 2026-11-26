@@ -47,6 +47,8 @@ export function historyPerformanceDrill(historyId: string, sentAt: string, known
   const pays = PaymentStore.getAll().filter(p => !!p.customerId && set.has(p.customerId));
   const nameOf = new Map(CustomerStore.getAll().map(c => [c.id, c.name]));
   const all = performanceRows(ids.map(id => ({ customerId: id, at: sentAt })), resv, pays);
+  // 금액을 숨기는 화면에서는 금액 순 정렬도 숨겨야 한다 — 맨 위가 최다 결제자라는 사실이 드러난다 (271, 리뷰 LOW)
+  if (opts.showMoney === false) all.sort((a, b) => a.customerId.localeCompare(b.customerId));
   const total = all.reduce((a, r) => a + r.amount, 0);     // 자른 줄도 합계에는 들어간다 (260 규약)
   const rows: DrillRow[] = all.slice(0, DRILL_MAX_ROWS).map(r => ({
     key: r.customerId,
@@ -85,6 +87,7 @@ export function campaignPerformanceDrill(sends: { customerId: string; at: string
   const pays = PaymentStore.getAll().filter(p => !!p.customerId && set.has(p.customerId));
   const nameOf = new Map(CustomerStore.getAll().map(c => [c.id, c.name]));
   const all = performanceRows(sends, resv, pays);
+  if (opts.showMoney === false) all.sort((a, b) => a.customerId.localeCompare(b.customerId)); // (271, 리뷰 LOW)
   const total = all.reduce((a, r) => a + r.amount, 0);
   const rows: DrillRow[] = all.slice(0, DRILL_MAX_ROWS).map(r => ({
     key: r.customerId,

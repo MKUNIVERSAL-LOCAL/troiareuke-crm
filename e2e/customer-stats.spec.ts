@@ -59,6 +59,7 @@ test('같은 날 예약 완료 + 시술 기록은 방문 1회, 환불은 누적 
   await expect(desk.getByTestId('rfm-segment')).toContainText('매장 내 5분위');                  // 상대 순위라는 사실
   const cycle = desk.getByTestId('visit-cycle');
   await expect(cycle).toContainText('매장 기준');                                               // 방문 3회 미만이면 매장 기본 주기
+  await expect(cycle).toHaveText(/\d+일/);                                                      // 271: 숫자가 비어 있지 않은지(문구만 보지 않는다)
   await expect(cycle).toContainText('방문 3회 미만이라 매장 기본 주기');
 
   // 환불 → 누적 결제액 0 (방문은 그대로 1)
