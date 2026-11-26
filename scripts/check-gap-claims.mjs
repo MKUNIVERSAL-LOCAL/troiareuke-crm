@@ -48,7 +48,7 @@ function cells(line) {
 }
 
 /** 표를 머리글 기준으로 묶는다 */
-export function tablesOf(text) {
+function tablesOf(text) {
   const tables = [];
   const lines = text.split(/\r?\n/);
   let current = null;
@@ -71,7 +71,7 @@ export function tablesOf(text) {
 const pathsIn = cell => [...cell.matchAll(/`([A-Za-z0-9_@./-]+\.(?:ts|tsx|mjs|cjs|js|md|json))`/g)].map(m => m[1]);
 const exists = p => DIRS.some(d => fs.existsSync(path.join(ROOT, d + p)));
 
-export function checkGap({ gap, roadmap, pkg, hasServerTests, specExists, scriptExists, fileExists }) {
+function checkGap({ gap, roadmap, pkg, hasServerTests, specExists, scriptExists, fileExists }) {
   const problems = [];
   const tables = tablesOf(gap);
   const codes = new Set();

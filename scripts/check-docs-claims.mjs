@@ -53,7 +53,11 @@ const CURRENT_DOCS = [
   'docs/GLOBAL-CRM-GAP-ANALYSIS.md',
   'docs/NEXT-ACTION.md',
   'docs/OWNER-APPROVAL-QUEUE.md',
-  'docs/OWNER-BRIEFING-2026-11-30.md',
+  // 307: 브리핑은 날짜가 파일명에 있다 — 이름이 바뀌면 조용히 검사 밖이 되므로 글롭으로 잡는다
+  // (301 이 검사 ⑥ 에서 같은 구멍을 메웠는데 이 목록은 그대로 박혀 있었다).
+  // **가장 최근 것만** 본다 — 지난 브리핑은 그때의 상태를 적은 역사다(그것까지 "지금 상태" 로 검사하면
+  // 과거 기록을 고치게 만든다. 298 이 뒤집기를 되돌린 것과 같은 이유다).
+  ...fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^OWNER-BRIEFING-.*\.md$/.test(f)).sort().slice(-1).map(f => `docs/${f}`),
   'docs/MASTER-DEVELOPMENT-STATUS.md',
 ];
 
@@ -241,7 +245,12 @@ function selftest() {
   // 291(리뷰 M-5): 브랜치 이름 뒤 마침표를 먹지 않는다
   const br = /feat\/[A-Za-z0-9_\/-]+(?:\.[A-Za-z0-9_\/-]+)*/.exec('브랜치 feat/post-v1.0.63-2026-11-25.');
   if (br[0] !== 'feat/post-v1.0.63-2026-11-25') { console.error(`[selftest] 브랜치 마침표 덫 실패: ${br[0]}`); process.exit(1); }
-  console.log('[check-docs-claims] selftest OK — 덫 24개(넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
+  // 307: 표 열 수 — 칸이 밀린 행을 잡고, 이스케이프한 파이프와 "표가 아닌 글" 은 잡지 않는다
+  const tbl = tableProblems('| # | 요청 | 상태 |\n|---|---|---|\n| 1 | 가 | 나 |\n| 2 | 가 | 나 | 다 |', 'x.md');
+  if (tbl.length !== 1 || !/칸이 4개다/.test(tbl[0])) { console.error('[selftest] 표 열 수 덫 실패: ' + JSON.stringify(tbl)); process.exit(1); }
+  if (tableProblems('| # | 값 |\n|---|---|\n| 1 | data \\| jsonb |', 'x.md').length !== 0) { console.error('[selftest] 이스케이프 파이프 면제 덫 실패'); process.exit(1); }
+  if (tableProblems('| 이건 표가 아니다 |\n그냥 글', 'x.md').length !== 0) { console.error('[selftest] 구분 줄 없는 표 면제 덫 실패'); process.exit(1); }
+  console.log('[check-docs-claims] selftest OK — 덫 27개(표 열 수·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -393,6 +402,43 @@ const problems = [];
     if (claimedNumbers(read(rel)).ranges.length === 0) {
       problems.push(`${rel}: 자기 범위를 **표시된 형태**로 적은 자리가 없다 — "완료 묶음: NNN~MMM" 처럼 적으세요(그러면 검사 ② 가 그 범위를 지킵니다)`);
     }
+  }
+}
+
+
+// ⑦ **표의 행 열 수가 머리글과 같다** (307)
+//
+// 왜: 2026-11-26 에 승인 요청 23~26 을 적을 때, 열이 10개인 행을 열이 4개인 "C. 외부 계약" 표 아래에
+//     붙였다. 마크다운은 **뒤쪽 칸을 조용히 버리므로** 오너가 읽는 화면에서 그 네 항목의
+//     추천·검증·**상태** 칸이 보이지 않았다(상태가 "대기" 인지조차 알 수 없었다).
+//     글은 다 적혀 있는데 화면에서 사라지는 종류라, 사람 눈으로는 몇 주를 지나칠 수 있다.
+// 한계: 열 수만 본다 — 칸 **내용**이 머리글과 맞는지는 보지 못한다(그건 리뷰가 본다).
+function tableProblems(text, rel) {
+  const out = [];
+  const lines = text.split(/\r?\n/);
+  const cellsOf = line => line.split(/(?<!\\)\|/).slice(1, -1).length;
+  let header = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line.startsWith('|')) { header = null; continue; }
+    const next = (lines[i + 1] || '').trim();
+    if (!header) {
+      // 머리글은 **구분 줄**(|---|---|)이 바로 뒤에 와야 표다 — 그냥 파이프가 있는 글은 표가 아니다
+      if (/^\|(\s*:?-{3,}:?\s*\|)+$/.test(next)) header = { cols: cellsOf(line), line: i + 1 };
+      continue;
+    }
+    if (/^\|(\s*:?-{3,}:?\s*\|)+$/.test(line)) continue; // 구분 줄
+    const cols = cellsOf(line);
+    if (cols !== header.cols) {
+      out.push(`${rel}:${i + 1} 표 행의 칸이 ${cols}개다(머리글 ${header.cols}개, ${header.line}줄) — 마크다운이 뒤쪽 칸을 버려 **화면에서 사라진다**`);
+    }
+  }
+  return out;
+}
+{
+  for (const rel of CURRENT_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    problems.push(...tableProblems(read(rel), rel));
   }
 }
 

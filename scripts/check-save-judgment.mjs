@@ -50,7 +50,7 @@ const files = [];
 })(SRC);
 
 /** 한 줄에서 `setPreference(` 앞의 글을 보고 "답을 쓰는가" 를 가린다 */
-export function usesResult(before) {
+function usesResult(before) {
   const t = before.trimEnd();
   if (t.endsWith('=') || t.endsWith('=>')) return true;        // const landed = … / () => …
   if (/\breturn$/.test(t)) return true;                         // return …
