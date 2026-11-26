@@ -51,11 +51,22 @@ test('인센티브 비율을 정하면 직원별 수당 열이 생기고, 잘못
   await expect(card.getByTestId('commission-total')).toContainText('시술 12.5% × 실결제액 + 제품 5% × 제품 판매액');
   await expect(card.getByText(/수당은 참고 계산입니다/)).toBeVisible(); // 한계를 함께 적는다
 
+  // ── 272: 직원별 예외 비율을 정하면 **그 사실을 한 줄로 적는다**(급여 근거라 숨기면 안 된다) ──
+  await expect(card.getByTestId('commission-exceptions')).toHaveCount(0); // 예외가 없으면 줄도 없다
+  await panel.getByLabel('김테스트 시술 비율').fill('20');
+  await panel.getByRole('button', { name: '비율 저장' }).click();
+  await dismissToasts(page);
+  await expect(card.getByTestId('commission-exceptions')).toContainText('직원별 예외');
+  await expect(card.getByTestId('commission-exceptions')).toContainText('김테스트');
+  await expect(card.getByTestId('commission-exceptions')).toContainText('20');
+
   // ── 새로고침해도 비율이 남는다(설정 행 저장) ──
   await page.reload();
   await expect(page.getByTestId('staff-performance').getByText('수당(참고)')).toBeVisible();
   await visibleButton(page, '인센티브 비율').click();
   await expect(page.getByTestId('commission-panel').getByLabel('매장 기본 시술 비율')).toHaveValue('12.5');
+  await expect(page.getByTestId('commission-panel').getByLabel('김테스트 시술 비율')).toHaveValue('20'); // 예외도 남는다
+  await expect(page.getByTestId('staff-performance').getByTestId('commission-exceptions')).toContainText('김테스트');
 });
 
 test('실결제가 있는 직원의 수당 금액과 보고 문구가 비율대로 나온다 (234, 리뷰 M-6)', async ({ page }) => {

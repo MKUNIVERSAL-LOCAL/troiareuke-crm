@@ -129,6 +129,9 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const payForm2 = page.locator('form').filter({ hasText: '구분 (매출/환불)' });
   await expect(payForm2.getByPlaceholder('0').first()).toHaveValue('50,000');
   await payForm2.getByRole('button', { name: '결제 등록' }).click();
+  // 264: 같은 고객·같은 금액(50,000)을 30분 안에 또 등록하므로 중복 경고가 뜬다 — 시술 기록에서 넘어온
+  // 의도한 등록이니 [그대로 등록] 을 고른다(막지 않고 묻는다는 것을 이 흐름이 보여 준다)
+  await page.getByRole('dialog', { name: '같은 금액 결제가 이미 있습니다' }).getByRole('button', { name: '그대로 등록' }).click();
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
 
   // ── 6. 데이터가 새로고침 후에도 남는다 (로컬 저장 회귀) ──
@@ -692,6 +695,13 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await anonConfirm.getByRole('button', { name: '1명 익명화' }).click();
   await expect(page.getByText('고객 1명을 익명화했습니다.').first()).toBeVisible();
   await expect(bar).toContainText('경과 0명');
+  // 272: 익명화는 되돌릴 수 없으므로 **누가 언제 몇 명** 했는지가 설정에 남아야 한다(개인정보 처리 기록)
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();
+  const privacyLog = page.getByTestId('retention-policy-card').getByTestId('privacy-action-log');
+  await expect(privacyLog).toBeVisible();
+  await expect(privacyLog).toContainText('익명화 1명');
+  await expect(privacyLog).toContainText('지점 설정에 보관');
   await page.goto('/customers');
   await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
   // 익명화 고객 상세에는 [예약 추가]·[메시지]가 없다 — 발송·예약 대상이 아니므로 (2026-11-18)
