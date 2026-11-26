@@ -126,4 +126,23 @@ test('폰 폭: 영수증·사진 백업·태그·등급·수당 화면이 눌리
   const histCard = page.getByTestId('customer-history').filter({ visible: true }).first();
   await expect(histCard).toBeVisible();
   await expectNoHorizontalOverflow(page, '고객 상세 정보 변경 이력(폰)');
+
+  // ── 259 문구 관리가 설정에도 있다: 폰에서 추가·삭제가 눌리고 넘치지 않는다 ──
+  await page.goto('/settings?tab=shop');
+  const presetBox = page.getByTestId('settings-memo-presets').filter({ visible: true }).first();
+  await expect(presetBox).toBeVisible();
+  const setEditor = presetBox.getByTestId('memo-preset-editor');
+  await setEditor.getByLabel('새 문구').fill('홈케어 안내');
+  await setEditor.getByRole('button', { name: '추가' }).click();
+  await dismissToasts(page);
+  const delBtn = setEditor.getByRole('button', { name: '홈케어 안내 문구 삭제' });
+  await expect(delBtn).toBeVisible();
+  const box = await delBtn.boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(36); // 손가락으로 누를 수 있는 높이
+  await expectNoHorizontalOverflow(page, '설정 자주 쓰는 메모 문구(폰)');
+
+  // ── 261 월간 보기는 PC 전용이다: 폰에서는 보기 전환 자체가 없다(없는 버튼을 찾게 만들지 않는다) ──
+  await page.goto('/reservations');
+  await expect(page.getByRole('button', { name: '월간' }).filter({ visible: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '이번달' }).filter({ visible: true }).first()).toBeVisible();
 });

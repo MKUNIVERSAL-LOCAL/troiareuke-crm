@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, expectNoHorizontalOverflow } from './helpers';
 import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
-import { addProgram } from './flows';
+import { addProgram, registerPayment } from './flows';
 
 /**
  * 모바일 폭 모달·상세 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉞) — PC 모달 게이트(a11y-modals.spec)와 같은 창을
@@ -142,6 +142,28 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     await vis('지출 등록').click();
     await expect(dialog('지출(매입) 등록')).toBeVisible();
   });
+  await dialog('지출(매입) 등록').getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(dialog('지출(매입) 등록')).toHaveCount(0);
+
+  // ── 중복 결제 경고 창(264)·지표 근거 보기 창(260) — 폰 폭에서 글이 넘치지 않는지 ──
+  await registerPayment(page, acc, 90000);
+  await step('m/sales 중복 결제 경고 (264)', async () => {
+    await vis('결제 등록').click();
+    const pay = dialog('결제 등록');
+    await pickCustomer(page, acc.customer, pay);
+    await pay.getByLabel('결제 금액').fill('90000');
+    await pay.getByRole('button', { name: '결제 등록' }).click();
+    await expect(dialog('같은 금액 결제가 이미 있습니다')).toBeVisible();
+  });
+  await dialog('같은 금액 결제가 이미 있습니다').getByRole('button', { name: '취소하고 확인' }).click();
+  await dialog('결제 등록').getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(dialog('결제 등록')).toHaveCount(0);
+  await step('m/sales 지표 근거 보기 (260)', async () => {
+    await page.getByTestId('metric-new-share-open').click();
+    await expect(page.getByTestId('metric-detail')).toBeVisible();
+  });
+  await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
+  await expect(page.getByTestId('metric-detail')).toHaveCount(0);
 
   // ── 태그 목록 관리 창 (237·239) — 고객 추가 창 위에 겹쳐 열린다 ──
   await page.goto('/customers');
