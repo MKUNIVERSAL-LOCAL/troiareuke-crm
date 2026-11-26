@@ -2641,7 +2641,7 @@ test('발송 성과 근거 — 요약 숫자와 같은 창·같은 조건으로 
   // 요약과 목록이 같은 조건 — 합계·인원이 어긋나지 않는다
   expect(rows.reduce((a, r) => a + r.amount, 0)).toBe(sum.revenue);
   expect(rows.filter(r => r.reservedOn).length).toBe(sum.reserved);
-  expect(rows.filter(r => r.amount > 0).length).toBe(sum.paid);
+  expect(rows.filter(r => r.paidOn !== null).length).toBe(sum.paid); // 0원 완료 결제(이벤트)도 "결제한 사람" 이다 (266, 리뷰 L-3)
   // 취소·창 밖만 있는 고객은 "없음" 으로 남는다(줄을 지우지 않는다 — 누가 안 움직였는지도 사실이다)
   const c2 = rows.find(r => r.customerId === 'c2')!;
   expect(c2.reservedOn).toBeNull();
@@ -2662,13 +2662,16 @@ test('중복 결제 의심 — 같은 고객·같은 금액·같은 날짜의 �
     { id: 'p2', ...base, createdAt: '2026-11-26T04:10:00.000Z', paymentMethod: '현금' },                        // 50분 전 — 창 밖
     { id: 'p3', ...base, amount: 80000, createdAt: '2026-11-26T04:59:00.000Z' },                                // 금액 다름
     { id: 'p4', ...base, customerId: 'c2', createdAt: '2026-11-26T04:59:00.000Z' },                             // 다른 고객
-    { id: 'p5', ...base, paymentDate: '2026-11-25', createdAt: '2026-11-26T04:59:00.000Z' },                    // 다른 업무 날짜
+    { id: 'p5', ...base, paymentDate: '2026-11-25', createdAt: '2026-11-26T04:59:00.000Z' },                    // 다른 업무 날짜 — 266 부터 이것도 의심(늦은 완료 처리)
     { id: 'p6', ...base, status: 'refunded' as const, createdAt: '2026-11-26T04:59:00.000Z' },                  // 환불된 건
     { id: 'p7', ...base, createdAt: '이상한값' },                                                                // 등록 시각 모름 — "몇 분 전" 을 지어내지 않는다
   ];
   const hits = findDuplicateSuspects(base, existing, now);
-  expect(hits.map(h => h.id)).toEqual(['p1']);
-  expect(hits[0].minutesAgo).toBe(2);
+  // 266(리뷰 M-3): 업무 날짜가 달라도 **등록 시각**이 창 안이면 의심한다 — 예약 완료 결제는 예약일로,
+  // 매출 화면은 오늘로 적혀, 늦은 완료 처리 날 두 직원이 각자 등록하면 서로 걸리지 않았다
+  expect(hits.map(h => h.id)).toEqual(['p5', 'p1']); // 1분 전(p5) → 2분 전(p1)
+  expect(hits[1].minutesAgo).toBe(2);
+  expect(hits[0].paymentDate).toBe('2026-11-25');    // 그 결제의 결제일을 함께 돌려준다(문구에 적는다)
 
   // 환불·예정 건을 등록할 때는 묻지 않는다(중복 경고 대상이 아니다)
   expect(findDuplicateSuspects({ ...base, status: 'refunded' }, existing, now)).toEqual([]);
@@ -2676,14 +2679,29 @@ test('중복 결제 의심 — 같은 고객·같은 금액·같은 날짜의 �
   // 고객을 연결하지 않은 결제는 같은 사람인지 알 수 없다 → 묻지 않는다
   expect(findDuplicateSuspects({ ...base, customerId: undefined }, existing, now)).toEqual([]);
   // 창을 넓히면 50분 전 건도 들어온다(기본 창은 30분)
-  expect(findDuplicateSuspects(base, existing, now, 60).map(h => h.id)).toEqual(['p1', 'p2']);
+  expect(findDuplicateSuspects(base, existing, now, 60).map(h => h.id)).toEqual(['p5', 'p1', 'p2']);
   expect(DUP_WINDOW_MINUTES).toBe(30);
 
   // 문구 — 언제·무엇으로 들어온 결제인지 적고, 이 PC 한계도 밝힌다
   const text = describeDuplicateWarning(hits, { amount: 90000, customerName: '홍길동' }, n => `${n.toLocaleString('ko-KR')}원`);
-  expect(text).toContain('홍길동 고객의 90,000원 결제가 이미 1건');
+  expect(text).toContain('홍길동 고객의 90,000원 결제가 이미 2건'); // 266: 다른 업무 날짜 건도 의심에 들어온다
   expect(text).toContain('2분 전 등록');
   expect(text).toContain('등 관리 · 카드');
+  expect(text).toContain('결제일 2026-11-26');
   expect(text).toContain('이 PC 에 저장된 결제만');
   expect(describeDuplicateWarning([], { amount: 1000 }, String)).toBe(''); // 의심이 없으면 빈 문구(창을 띄우지 않는다)
+});
+
+// ── 266: 0원 완료 결제가 섞여도 성과 인원이 어긋나지 않는다 (리뷰 L-3) ──
+
+test('발송 성과 근거 — 0원 완료 결제도 결제한 사람으로 센다 (266, 리뷰 L-3)', () => {
+  const sends = [{ customerId: 'z1', at: '2026-11-10T01:00:00.000Z' }];
+  const payments = [{ customerId: 'z1', paymentDate: '2026-11-12', amount: 0, status: 'completed' as const }]; // 0원 이벤트 결제
+  const sum = estimatePerformance(sends, [], payments);
+  const rows = performanceRows(sends, [], payments);
+  expect(sum.paid).toBe(1);
+  expect(sum.revenue).toBe(0);
+  expect(rows[0].paidOn).toBe('2026-11-12');
+  expect(rows[0].amount).toBe(0);
+  expect(rows.filter(r => r.paidOn !== null).length).toBe(sum.paid); // 금액으로 세면 0원 건이 빠진다
 });

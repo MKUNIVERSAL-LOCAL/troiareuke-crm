@@ -6,7 +6,7 @@
 import { ReservationStore, PaymentStore, CustomerStore } from './store';
 import { recipientsOf } from './messageRecipients';
 import { estimatePerformance, describePerformance, performanceRows, type CampaignPerformance } from './campaignPerformanceRule';
-import type { DrillResult, DrillRow } from './revenueDrilldownRule';
+import { DRILL_MAX_ROWS, type DrillResult, type DrillRow } from './revenueDrilldownRule';
 
 /**
  * 이력 1건의 성과 추정. 수신 고객 기록이 없으면(204·206 전 이력·다른 PC 발송) null — 값을 만들지 않는다.
@@ -38,7 +38,7 @@ export function describeHistoryPerformance(p: CampaignPerformance, h: { successC
  * 숫자(estimateHistoryPerformance)와 **같은 창·같은 조건**으로 고르므로 합계가 요약 줄의 금액과 같다.
  * 수신 고객 기록이 없으면 null — 값을 만들지 않는다.
  */
-export function historyPerformanceDrill(historyId: string, sentAt: string, known?: string[]): DrillResult | null {
+export function historyPerformanceDrill(historyId: string, sentAt: string, known?: string[], opts: { showMoney?: boolean } = {}): DrillResult | null {
   if (Number.isNaN(new Date(sentAt).getTime())) return null;
   const ids = known ?? recipientsOf(historyId);
   if (!ids || ids.length === 0) return null;
@@ -46,20 +46,30 @@ export function historyPerformanceDrill(historyId: string, sentAt: string, known
   const resv = ReservationStore.getAll().filter(r => set.has(r.customerId));
   const pays = PaymentStore.getAll().filter(p => !!p.customerId && set.has(p.customerId));
   const nameOf = new Map(CustomerStore.getAll().map(c => [c.id, c.name]));
-  const rows: DrillRow[] = performanceRows(ids.map(id => ({ customerId: id, at: sentAt })), resv, pays).map(r => ({
+  const all = performanceRows(ids.map(id => ({ customerId: id, at: sentAt })), resv, pays);
+  const total = all.reduce((a, r) => a + r.amount, 0);     // 자른 줄도 합계에는 들어간다 (260 규약)
+  const rows: DrillRow[] = all.slice(0, DRILL_MAX_ROWS).map(r => ({
     key: r.customerId,
     label: nameOf.get(r.customerId) || '삭제된 고객',
     detail: [
       `발송 ${r.sentOn} · 창 ${r.windowEnd} 까지`,
       r.reservedOn ? `예약 ${r.reservedOn}` : '예약 없음',
-      r.paidOn ? `결제 ${r.paidOn}` : '결제 없음',
+      opts.showMoney === false ? (r.amount > 0 ? '결제 있음' : '결제 없음') : (r.paidOn ? `결제 ${r.paidOn}` : '결제 없음'),
     ].join(' · '),
-    amount: r.amount,
+    // 금액을 볼 권한이 없는 화면에서는 0 으로 — 문자 화면은 직원도 쓴다 (266, 리뷰 M-4)
+    amount: opts.showMoney === false ? 0 : r.amount,
   }));
   return {
     rows,
-    total: rows.reduce((a, r) => a + r.amount, 0),
-    caveat: '창 안에 예약·결제가 있었다는 사실만 보여 줍니다 — 이 문자 때문이라는 뜻은 아닙니다(추정). 다른 PC 에서 보낸 건과 사이드맵 기록 이전 발송은 빠집니다.',
+    total: opts.showMoney === false ? 0 : total,
+    ...(all.length > DRILL_MAX_ROWS ? { truncatedFrom: all.length } : {}),
+    caveat: [
+      '이 발송의 **수신 고객 전원**입니다 — 예약·결제가 없던 분도 함께 보여 줍니다(누가 움직이지 않았는지도 사실이라서).',
+      '창 안에 예약·결제가 있었다는 사실만 보여 줍니다. 이 문자 때문이라는 뜻은 아닙니다(추정).',
+      '보낸 뒤 실패한 수신자도 이 목록에 있습니다(게이트웨이가 건수만 돌려줘 실패자를 가릴 수 없습니다).',
+      '다른 PC 에서 보낸 건과 사이드맵 기록 이전 발송은 빠집니다.',
+      opts.showMoney === false ? '금액은 매출 권한이 있는 계정에서만 보입니다.' : '',
+    ].filter(Boolean).join(' '),
     empty: '이 발송의 수신 고객 기록이 없습니다.',
   };
 }

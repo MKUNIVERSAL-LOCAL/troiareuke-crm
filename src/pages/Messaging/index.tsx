@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { canDo } from '../../lib/permissions'; // 성과 근거 금액 노출 기준 (266)
 import { askConfirm } from '../../lib/confirmDialog';
 import { maskPhone } from '../../lib/pii';
 import { normalizePhone } from '../../lib/inputRules';
@@ -667,6 +668,7 @@ function formatSentAt(value: string): string {
 }
 
 function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialStatus = 'all', onResend }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void; initialStatus?: 'all' | 'failed'; onResend: (h: MessageHistory) => void }) {
+  const { user: histUser } = useAuth(); // 성과 근거 목록의 금액 노출 기준 — 문자 화면은 직원도 쓴다 (266, 리뷰 M-4)
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
   const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
@@ -831,7 +833,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
                   {/* 숫자만 주면 "그 문자 덕" 인지 확인할 수 없다 — 세어진 고객을 그대로 보여 준다 (263, GAP M-6) */}
                   <button type="button" data-testid="history-perf-rows"
                     onClick={() => {
-                      const d = historyPerformanceDrill(h.id, h.sentAt, recipients.get(h.id));
+                      const d = historyPerformanceDrill(h.id, h.sentAt, recipients.get(h.id), { showMoney: canDo(histUser?.role, 'sales.view') });
                       if (!d) { notify('이 발송의 수신 고객 기록이 없어 근거를 보여 줄 수 없습니다.'); return; }
                       setPerfDrill({ title: `${h.templateName || '직접 작성'} 성과 근거`, result: d });
                     }}
@@ -848,7 +850,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
     {perfDrill && (
       <MetricDetailModal
         title={perfDrill.title}
-        note="발송 뒤 14일 안에 예약·결제가 있었던 고객입니다(금액은 그 기간 결제 합)."
+        note="이 발송의 수신 고객 전원입니다 — 예약·결제가 없던 분도 함께 보여 줍니다(금액은 창 안 결제 합)."
         result={perfDrill.result}
         onClose={() => setPerfDrill(null)}
       />

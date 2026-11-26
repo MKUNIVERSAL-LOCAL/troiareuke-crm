@@ -17,7 +17,8 @@ import StockAdjustModal from '../../components/StockAdjustModal';
 import StockLedgerModal from '../../components/StockLedgerModal';
 import StockCountModal from '../../components/StockCountModal'; // 전 제품 재고 실사 (245, GAP P-5 후속)
 import ReorderModal from '../../components/ReorderModal';
-import { DEFAULT_COVER_DAYS } from '../../lib/reorderRule'; // 며칠분 기본값 (262) // 발주 제안 (248, GAP P-5 계열)
+import { DEFAULT_COVER_DAYS } from '../../lib/reorderRule'; // 며칠분 기본값 (262)
+import { confirmIfDuplicatePayment } from '../../lib/duplicatePayment'; // 중복 결제 의심 경고 (266, 리뷰 M-1) // 발주 제안 (248, GAP P-5 계열)
 import { recordStockMovement, removeStockEntries } from '../../lib/stockLedger';
 import { monthCloseBlock } from '../../lib/monthClose';
 import Header from '../../components/layout/Header';
@@ -840,7 +841,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
 
   const selectedCustomer = customers.find(c => c.id === form.customerId);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!isISODate(form.saleDate)) { notify('판매일을 선택해주세요(YYYY-MM-DD).'); return; } // 빈 판매일은 월 매출·목록에서 사라지는 유령 판매 (120~122 리뷰 #M8)
     if (!form.unitPrice || !form.quantity) {
       notify('수량과 단가를 입력해주세요.');
@@ -860,6 +861,11 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       return;
     }
     { const blocked = monthCloseBlock(form.saleDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    // 중복 결제 의심 — 판매는 코어가 결제까지 함께 만든다 (266, 리뷰 M-1)
+    if (form.customerId && totalPrice > 0 && !(await confirmIfDuplicatePayment({
+      customerId: form.customerId, customerName: selectedCustomer?.name,
+      amount: totalPrice, paymentDate: form.saleDate, status: 'completed',
+    }))) return;
     if (!saleLock.current.acquire()) return; // 이중 제출 — 같은 판매가 두 건 기록되지 않게 (221, GAP P-4)
     setSaving(true);
     const sale = ProductSaleStore.save({
@@ -1000,7 +1006,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             취소
           </button>
           <button
-            onClick={handleSubmit}
+            onClick={() => void handleSubmit()}
             disabled={saving}
             className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#152d6e] shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
           >

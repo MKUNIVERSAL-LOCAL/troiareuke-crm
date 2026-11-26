@@ -30,12 +30,15 @@ export interface DupExisting extends DupCandidate {
 export interface DupSuspect {
   id: string;
   minutesAgo: number;           // 몇 분 전에 들어온 결제인지(음수 없음)
+  paymentDate: string;          // 그 결제의 업무 날짜 — 늦은 완료 처리는 오늘이 아닐 수 있다 (266, 리뷰 M-3)
   paymentMethod?: string;
   typeLabel?: string;
 }
 
 /**
- * 중복으로 의심되는 기존 결제 — 같은 고객·같은 금액·같은 업무 날짜이고, 창 안에 등록된 완료 결제.
+ * 중복으로 의심되는 기존 결제 — 같은 고객·같은 금액이고 창 안에 **등록된**(createdAt) 완료 결제.
+ * 업무 날짜(paymentDate)는 같을 것을 요구하지 않는다 — 예약 완료 결제는 예약일로, 매출 화면은 오늘로 적혀
+ * 늦은 완료 처리 날 두 직원이 각자 등록하면 서로 걸리지 않았다(266, 리뷰 M-3). 대신 그 날짜를 문구에 적는다.
  * @param now 지금 시각(ISO) — 테스트가 고정할 수 있게 받는다
  */
 export function findDuplicateSuspects(
@@ -54,12 +57,11 @@ export function findDuplicateSuspects(
     if (p.status !== 'completed') continue;
     if (p.customerId !== candidate.customerId) continue;
     if (p.amount !== candidate.amount) continue;
-    if (p.paymentDate !== candidate.paymentDate) continue;
     const t = new Date(p.createdAt).getTime();
     if (Number.isNaN(t)) continue;                        // 등록 시각을 모르면 "몇 분 전" 을 지어내지 않는다
     const minutes = Math.floor((nowMs - t) / 60_000);
     if (minutes < 0 || minutes > windowMinutes) continue;
-    out.push({ id: p.id, minutesAgo: minutes, paymentMethod: p.paymentMethod, typeLabel: p.typeLabel });
+    out.push({ id: p.id, minutesAgo: minutes, paymentDate: p.paymentDate, paymentMethod: p.paymentMethod, typeLabel: p.typeLabel });
   }
   return out.sort((a, b) => a.minutesAgo - b.minutesAgo);
 }
@@ -78,7 +80,8 @@ export function describeDuplicateWarning(
   const lines = suspects.slice(0, 3).map(s => {
     const when = s.minutesAgo <= 0 ? '방금' : `${s.minutesAgo}분 전`;
     const what = [s.typeLabel, s.paymentMethod].filter(Boolean).join(' · ');
-    return `· ${when} 등록${what ? ` (${what})` : ''}`;
+    // 결제일을 함께 적는다 — 늦은 완료 처리는 오늘이 아닌 날짜로 들어간다 (266, 리뷰 M-3)
+    return `· ${when} 등록${what ? ` (${what})` : ''} · 결제일 ${s.paymentDate}`;
   });
   const more = suspects.length > 3 ? `· 그 밖에 ${suspects.length - 3}건` : null;
   return [

@@ -37,6 +37,7 @@ import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
 import FollowUpCard from '../../components/FollowUpCard'; // 연락 기록·미루기 (249)
 import CustomerHistoryCard from '../../components/CustomerHistoryCard'; // 정보 변경 이력 (252)
+import { confirmIfDuplicatePayment } from '../../lib/duplicatePayment'; // 중복 결제 의심 경고 (266, 리뷰 M-1)
 import MemoPresetChips from '../../components/MemoPresetChips'; // 자주 쓰는 메모 문구 (255)
 import { logCustomerEdit, logCustomerGrade, logCustomerGradeBatch, logCustomerEditBatch } from '../../lib/customerHistory';
 import { snoozedCustomerIds } from '../../lib/followUp';
@@ -1697,7 +1698,7 @@ export default function Customers() {
   }
 
   // 프로그램 등록
-  function handleRegisterProgram(e: React.FormEvent) {
+  async function handleRegisterProgram(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
     const prog = programs.find(p => p.id === progForm.programId);
@@ -1718,6 +1719,11 @@ export default function Customers() {
       pricePaid = parsed;
     }
 
+    // 중복 결제 의심 — 회차권 등록은 코어가 결제까지 함께 만든다(가장 금액이 큰 경로) (266, 리뷰 M-1)
+    if (pricePaid > 0 && !(await confirmIfDuplicatePayment({
+      customerId: selected.id, customerName: selected.name,
+      amount: pricePaid, paymentDate: progForm.purchaseDate, status: 'completed',
+    }))) return;
     CustomerProgramStore.save({
       customerId: selected.id,
       customerName: selected.name,
@@ -3286,7 +3292,7 @@ export default function Customers() {
               </div>
               <button onClick={() => setShowProgramModal(false)} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
-            <form onSubmit={handleRegisterProgram} className="p-5 space-y-4">
+            <form onSubmit={e => void handleRegisterProgram(e)} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">프로그램 선택 *</label>
                 <select aria-label="프로그램 선택"

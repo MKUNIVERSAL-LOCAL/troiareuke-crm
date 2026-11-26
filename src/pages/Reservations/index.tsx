@@ -2011,14 +2011,40 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
       if (a > 0) toSave.push({ amount: a, paymentMethod: methodA, memo: splitMemo });
       if (b > 0) toSave.push({ amount: b, paymentMethod: methodB, memo: splitMemo });
     }
-    // 중복 결제 의심 — 합계 기준으로 묻는다(복합결제도 받은 돈은 한 번이다) (264, GAP P-4)
-    if (!(await confirmIfDuplicatePayment({
+    // ① 이 예약에 이미 결제가 있나 — 금액과 무관하게 정확히 잡는다. 복합(분할) 결제는 두 줄로 저장돼
+    //    합계 비교로는 절대 걸리지 않았다 (266, 리뷰 M-2)
+    const already = PaymentStore.getAll().filter(p => p.referenceId === r.id && p.status === 'completed');
+    if (already.length > 0) {
+      const sum = already.reduce((a, p) => a + p.amount, 0);
+      const ok = await askConfirm({
+        title: '이 예약에 결제가 이미 있습니다',
+        message: [
+          `${r.customerName} 고객의 이 예약에 등록된 결제가 ${already.length}건(합계 ${formatPrice(sum)}) 있습니다.`,
+          ...already.slice(0, 3).map(p => `· ${p.paymentDate} ${formatPrice(p.amount)} (${p.paymentMethod})`),
+          '',
+          '한 번 더 받은 돈이면 그대로 등록하세요. 아니면 취소하고 매출 > 결제 내역에서 확인해주세요.',
+        ].join('\n'),
+        confirmLabel: '그대로 등록',
+        cancelLabel: '취소하고 확인',
+        danger: true,
+      });
+      if (!ok) return;
+    } else if (!(await confirmIfDuplicatePayment({
+      // ② 다른 예약·단건으로 같은 금액이 방금 들어왔는지 (264, GAP P-4)
       customerId: basePayment.customerId, customerName: basePayment.customerName,
       amount: r.totalPrice, paymentDate: basePayment.paymentDate, status: basePayment.status,
     }))) return;
     // 이중 제출 — 검증을 모두 지난 뒤에만 잠근다 (224, 221 리뷰 M-1)
     if (!saveLock.current.acquire()) return;
-    for (const line of toSave) PaymentStore.save({ ...basePayment, ...line });
+    try {
+      for (const line of toSave) PaymentStore.save({ ...basePayment, ...line });
+    } catch (e) {
+      // 저장이 끊기면 잠금을 풀어 다시 시도할 수 있게 한다 — 안 풀면 버튼이 죽는다 (266, 리뷰 L-5)
+      saveLock.current.release();
+      console.error('[complete-payment] 결제 저장 실패:', e);
+      notify('결제를 저장하지 못했습니다. 저장 공간을 확인한 뒤 다시 시도해주세요.');
+      return;
+    }
     if (mode === 'single') rememberPaymentMethod(method);
     onDone();
   };

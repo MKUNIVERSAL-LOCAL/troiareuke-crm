@@ -165,6 +165,18 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
   await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
   await expect(page.getByTestId('metric-detail')).toHaveCount(0);
 
+  // ── 발송 성과 근거 창 (263) — 폰 폭에서 줄이 넘치지 않는지 (266, 리뷰 L-8) ──
+  await page.goto('/messaging');
+  const perfBtn = page.getByTestId('history-perf').first();
+  if (await perfBtn.count() > 0) {
+    await perfBtn.click();
+    await page.getByTestId('history-perf-rows').first().click();
+    await step('m/messaging 성과 근거 (263)', async () => {
+      await expect(page.getByTestId('metric-detail')).toBeVisible();
+    });
+    await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
+  }
+
   // ── 태그 목록 관리 창 (237·239) — 고객 추가 창 위에 겹쳐 열린다 ──
   await page.goto('/customers');
   await step('m/customers 태그 목록 관리', async () => {
