@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 스펙 관례 가드 (338·341) — `npm run check:e2e-conv`
+ * 스펙 관례 가드 (338·341·344) — `npm run check:e2e-conv`
  *
  * 왜: 338 이 전체 Playwright 를 **분할 실행**으로 바꾸면서 한 조각을 돌려 봤더니
  *     `month-view.spec.ts` 가 실패했다. 원인은 스펙이 "오늘" 을 `new Date().toISOString().slice(0, 10)`
@@ -13,9 +13,13 @@
  *     화면과 같은 로컬 날짜를 쓰려면 `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-…`
  *     꼴로 만든다(여러 스펙이 이미 그렇게 한다). `toLocaleDateString('sv-SE')` 도 로컬 날짜라 통과다.
  *
- * 보는 것 ② **무시되는 timeout**(341, 335~340 리뷰 M-3): `isVisible({ timeout })` 처럼
- *     **Playwright 가 무시하는** 옵션. 설치된 1.63 의 `types.d.ts` 가 이 옵션을 `@deprecated This option
- *     is ignored.` 로 못 박고 있다 — `isVisible()` 은 **기다리지 않고 즉시** 답한다.
+ * 보는 것 ② **무시되는 timeout**(341, 335~340 리뷰 M-3 / 344 에서 범위 정정): `isVisible({ timeout })`
+ *     처럼 **Playwright 가 무시하는** 옵션. 설치된 1.63 의 `types.d.ts` 에서 `@deprecated This option is
+ *     ignored.` 는 **일곱 곳뿐**이다 — Page·Frame·Locator 의 `isVisible`·`isHidden`(여섯)과
+ *     `ElementHandle.inputValue`(하나). `isVisible()` 은 기다리지 않고 즉시 답한다.
+ *     **341 은 `isChecked`·`isDisabled`·`isEditable`·`isEnabled` 까지 묶어 금지했는데 그 넷의 timeout 은
+ *     deprecated 가 아니고 실제로 쓰인다**("Defaults to 0 - no timeout") — 341~343 리뷰 M-3 가 잡았고
+ *     344 에서 뗐다. 거짓 근거로 정당한 코드를 막는 것은 못 잡는 것보다 나쁘다(330 의 원칙).
  *     339 가 모바일 스펙에서 인앱 확인 창을 누르려고 `isVisible({ timeout: 3_000 })` 를 썼고
  *     기록에 "경고가 늦게 떠도 3초는 기다린다" 고 적었는데 **그 기다림은 존재하지 않았다**.
  *     React 가 한 틱 늦게 그리면 조용히 건너뛰고, 뒤의 단언에서 간헐 실패가 된다.
@@ -26,7 +30,8 @@
  *     면제 키는 `규칙 + 파일 + 줄` 이다(341: 한 줄에 두 자리가 있어도 각각 센다).
  *
  * 한계: `toISOString()` 전체를 금지하지는 않는다(시각까지 쓰는 자리는 UTC 가 맞다). 규칙 ① 은
- *     **날짜 10자리만 잘라 쓰는** 모양만 본다. 규칙 ② 는 위에 적은 여섯 함수만 본다.
+ *     **날짜 10자리만 잘라 쓰는** 모양만 본다. 규칙 ② 는 `isVisible`·`isHidden`·`inputValue` 세 함수만 본다
+ *     (그 셋이 types.d.ts 가 "무시된다" 고 적은 전부다).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -57,10 +62,11 @@ const RULES = [
   },
   {
     key: 'ignored-timeout',
-    re: /\.(?:isVisible|isHidden|isEnabled|isDisabled|isChecked|isEditable)\s*\(\s*\{[^}]*timeout/g,
+    // 344: 진짜 무시되는 것만 — isVisible·isHidden(옵션만 받는 꼴), 선택자를 앞에 받는 꼴, inputValue
+    re: /\.(?:isVisible|isHidden)\s*\(\s*(?:['"`][^'"`]*['"`]\s*,\s*)?\{[^}]*timeout|\.inputValue\s*\(\s*\{[^}]*timeout/g,
     title: 'Playwright 가 무시하는 timeout',
     hint: [
-      '  → `isVisible()` 등은 기다리지 않고 즉시 답합니다(types.d.ts: "This option is ignored").',
+      '  → `isVisible()`·`isHidden()`·`inputValue()` 는 기다리지 않고 즉시 답합니다(types.d.ts: "This option is ignored").',
       '    기다려야 하면 `await expect(x).toBeVisible({ timeout })` 또는',
       "    `await x.waitFor({ state: 'visible', timeout }).catch(() => {})` 를 쓰세요.",
     ],
@@ -87,6 +93,9 @@ export function sitesOf(text, re) {
   };
   for (const m of text.matchAll(re)) {
     const line = lineOf(m.index);
+    // 344: 설명 주석을 코드로 세지 않는다(314·316 이 장식 UI 가드에서 겪은 거짓 경보와 같은 종류)
+    const head = text.slice(lineStarts[line - 1], m.index);
+    if (/^\s*(?:\/\/|\*|\/\*)/.test(head)) continue;
     const end = text.indexOf('\n', m.index);
     const raw = text.slice(lineStarts[line - 1], end === -1 ? text.length : end);
     out.push({ line, raw: raw.trim().slice(0, 100) });
@@ -128,14 +137,20 @@ function selftest() {
   // ② 무시되는 timeout
   ok('isVisible timeout 을 잡는다', timeouts('if (await x.isVisible({ timeout: 3_000 })) {}').length === 1);
   ok('공백이 없어도 잡는다(timeout)', timeouts('await x.isHidden({timeout:1000})').length === 1);
-  ok('isEnabled·isChecked 도 본다', timeouts('await a.isEnabled({ timeout: 1 });\nawait b.isChecked({ timeout: 1 });').length === 2);
+  // 344(리뷰 M-3): 이 넷의 timeout 은 **무시되지 않는다** — 금지하면 거짓 경보다
+  ok('isEnabled 는 통과', timeouts('await a.isEnabled({ timeout: 1 });').length === 0);
+  ok('isChecked·isDisabled·isEditable 도 통과', timeouts('await a.isChecked({ timeout: 1 });\nawait b.isDisabled({ timeout: 1 });\nawait c.isEditable({ timeout: 1 });').length === 0);
+  // 344: 진짜 무시되는 나머지 두 모양
+  ok('선택자를 앞에 받는 꼴도 잡는다', timeouts("await page.isVisible('#a', { timeout: 1 });").length === 1);
+  ok('inputValue 도 잡는다', timeouts('await h.inputValue({ timeout: 1 });').length === 1);
+  ok('주석 줄은 세지 않는다', timeouts('  // await x.isVisible({ timeout: 1 }) 는 기다리지 않는다').length === 0);
   ok('옵션 없는 isVisible 은 통과', timeouts('if (await x.isVisible()) {}').length === 0);
   ok('toBeVisible timeout 은 통과', timeouts('await expect(x).toBeVisible({ timeout: 3_000 });').length === 0);
   ok('waitFor timeout 은 통과', timeouts("await x.waitFor({ state: 'visible', timeout: 3_000 });").length === 0);
   ok('click timeout 은 통과', timeouts('await x.click({ timeout: 3_000 });').length === 0);
   ok('줄 번호를 센다(timeout)', timeouts('x\ny.isVisible({ timeout: 1 })')[0].line === 2);
 
-  console.log(`[check-e2e-conv] selftest OK — 덫 ${trapCount}종 통과(UTC 날짜 ①: 적중 3종·통과 4종·줄 번호·한 줄 두 자리 / 무시되는 timeout ②: 적중 4종·통과 3종·줄 번호)`);
+  console.log(`[check-e2e-conv] selftest OK — 덫 ${trapCount}종 통과(UTC 날짜 ①: 적중 3종·통과 4종·줄 번호·한 줄 두 자리 / 무시되는 timeout ②: 적중 4종·통과 6종·주석 면제·줄 번호)`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }

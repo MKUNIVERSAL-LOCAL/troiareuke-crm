@@ -423,6 +423,11 @@ function selftest() {
   if (exeA.length !== 1 || exeA[0].md !== '11-27' || exeA[0].branch !== '04:31' || exeA[0].admin !== '04:32') { console.error('[selftest] exe 시각 수집 덫 실패: ' + JSON.stringify(exeA)); process.exit(1); }
   const exeB = exeTimeClaims('- 테스트 exe(바탕화면 바로가기) = 11-26 **08:04**/08:05(지점·어드민)');
   if (exeB.length !== 1 || exeB[0].branch !== '08:04') { console.error('[selftest] exe 시각(굵게) 덫 실패: ' + JSON.stringify(exeB)); process.exit(1); }
+  // 344(리뷰 M-1): 날짜 없이 시각만 적은 꼴도 모은다
+  const exeD = exeTimeClaims('- 테스트 exe 19:56/19:57(184~224 포함)');
+  if (exeD.length !== 1 || exeD[0].md !== null || exeD[0].branch !== '19:56') { console.error('[selftest] 날짜 없는 exe 시각 덫 실패: ' + JSON.stringify(exeD)); process.exit(1); }
+  const exeE = exeTimeClaims('- 테스트 exe(바탕화면) 11-25 당시 19:56/19:57');
+  if (exeE.length !== 0) { console.error('[selftest] 뒤에 온 당시 면제 덫 실패: ' + JSON.stringify(exeE)); process.exit(1); }
   const exeC = exeTimeClaims('- 테스트 exe 는 다시 만들지 않았다(앱 변경 0건)');
   if (exeC.length !== 0) { console.error('[selftest] exe 시각 없는 줄 덫 실패'); process.exit(1); }
   // 341(335~340 리뷰 H-1): 리뷰 회수 주장 수집 — 전체와 "이 기간만", 그리고 "당시" 면제
@@ -474,7 +479,7 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 3종·느슨한 묶음 번호·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 5종·느슨한 묶음 번호·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -548,10 +553,13 @@ const problems = [];
         problems.push(`${rel}: "${v.raw}" 가 낡았다 — 리뷰 기록은 ${live.reviewFiles}건이다(리뷰 1회 = 기록 1건)`);
       }
       if (v.subset !== null) {
+        // 344(리뷰 L-1): 전에는 선언 범위 중 **아무거나** 맞으면 통과였다 — 155 범위가 하나 더 생기면
+        // "이 기간만 44회" 같은 거짓이 통과한다. "이 기간" 은 가장 최근 구간이므로 **가장 큰 시작 번호**로 센다.
         const starts = [...new Set(c.ranges.filter(g => g.start >= 155).map(g => g.start))].sort((a, b) => a - b);
-        const cands = starts.map(st => live.reviewsFromCount(st));
-        if (!cands.includes(v.subset)) {
-          problems.push(`${rel}: "${v.raw}" 의 "이 기간만" 이 맞지 않는다 — 이 문서가 선언한 범위(${starts.join('·')} 번부터)로 세면 ${cands.join('·')}건`);
+        const base = starts.length > 0 ? starts[starts.length - 1] : null;
+        const real = base === null ? null : live.reviewsFromCount(base);
+        if (real !== null && v.subset !== real) {
+          problems.push(`${rel}: "${v.raw}" 의 "이 기간만" 이 맞지 않는다 — 이 문서가 선언한 가장 최근 범위(${base} 번부터)로 세면 ${real}건`);
         }
       }
     }
@@ -738,8 +746,13 @@ problems.push(...releaseStepProblems());
 
 // ⑭ 브리핑 품질 장치 표 (341)
 {
-  const brief = 'docs/OWNER-BRIEFING-2026-11-30.md';
-  if (fs.existsSync(path.join(ROOT, brief))) {
+  // 344(리뷰 H-1): 파일 이름을 박아 두면 다음 브리핑이 생기는 순간 조용히 검사 밖이 된다 —
+  // 301·307 이 검사 ⑥·CURRENT_DOCS 에서 메운 바로 그 구멍을 341 이 다시 냈다. 글롭으로 가장 최근 것을 본다.
+  const briefs = fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^OWNER-BRIEFING-.*\.md$/.test(f)).sort();
+  if (briefs.length === 0) {
+    problems.push('docs/OWNER-BRIEFING-*.md 가 없다 — 품질 장치 표를 검사할 문서가 없다(검사 ⑭)');
+  } else {
+    const brief = `docs/${briefs[briefs.length - 1]}`;
     const miss = missingGuardRows(read(brief), read('scripts/gate-light.mjs'), JSON.parse(read('package.json')).scripts);
     for (const g of miss) problems.push(`${brief}: §5 품질 장치 표에 \`npm run ${g}\` 줄이 없다 — 게이트는 돌리는데 오너는 모른다`);
   }
@@ -749,11 +762,16 @@ problems.push(...releaseStepProblems());
 {
   const branch = asarStamp('release/win-unpacked/resources/app.asar');
   const admin = asarStamp('release-admin/win-unpacked/resources/app.asar');
+  if (!branch || !admin) {
+    // 344(리뷰 M-2): 조용히 건너뛰면 CI 에서는 **없는 검사**인데 문서는 "가드가 지킨다" 고 적는다
+    console.log('[check-docs-claims] ⑮ 건너뜀 — release/·release-admin 의 app.asar 가 없습니다(이 검사는 exe 를 빌드한 PC 에서만 돕니다)');
+  }
   if (branch && admin) {
     for (const rel of CURRENT_DOCS) {
       if (!fs.existsSync(path.join(ROOT, rel))) continue;
       for (const c of exeTimeClaims(read(rel))) {
-        if (c.md !== branch.md || c.branch !== branch.hm || c.admin !== admin.hm) {
+        const dateOff = c.md !== null && c.md !== branch.md;
+        if (dateOff || c.branch !== branch.hm || c.admin !== admin.hm) {
           problems.push(`${rel}: "…${c.raw}" 가 낡았다 — 지금 빌드는 ${branch.md} ${branch.hm}/${admin.hm}(asar 수정 시각). 과거 기록이면 "당시" 를 함께 적으세요`);
         }
       }
@@ -797,9 +815,12 @@ function missingGuardRows(briefText, gateSrc, scripts) {
 /** 글에서 "테스트 exe … MM-DD HH:MM/HH:MM" 주장을 모은다 (341) */
 function exeTimeClaims(text) {
   const out = [];
-  for (const m of text.matchAll(/테스트 exe[^\n]{0,80}?(\d{2})-(\d{2})\s*\*{0,2}(\d{2}):(\d{2})\*{0,2}\/\*{0,2}(\d{2}):(\d{2})/g)) {
-    if (markedPast(text, m.index, m[0].length)) continue;
-    out.push({ md: `${m[1]}-${m[2]}`, branch: `${m[3]}:${m[4]}`, admin: `${m[5]}:${m[6]}`, raw: m[0].slice(-24) });
+  // 344(리뷰 M-1): 날짜를 **필수**로 요구해 `테스트 exe 19:56/19:57` 꼴을 놓쳤다(세션 시작 문서에 낡은 자리 1건).
+  // 날짜는 있으면 보고, 없으면 시각만 본다. "당시" 가 끼어 날짜와 시각이 떨어진 꼴도 같은 길로 들어온다.
+  for (const m of text.matchAll(/테스트 exe[^\n]{0,90}?(?:(\d{2})-(\d{2})[^\n]{0,8}?)?\*{0,2}(\d{2}):(\d{2})\*{0,2}\s*\/\s*\*{0,2}(\d{2}):(\d{2})/g)) {
+    // 344: "11-25 당시 19:56/19:57" 처럼 **적중 글귀 안**에 "당시" 가 있는 꼴도 과거 표시다
+    if (markedPast(text, m.index) || m[0].includes('당시')) continue;
+    out.push({ md: m[1] ? `${m[1]}-${m[2]}` : null, branch: `${m[3]}:${m[4]}`, admin: `${m[5]}:${m[6]}`, raw: m[0].slice(-28) });
   }
   return out;
 }
