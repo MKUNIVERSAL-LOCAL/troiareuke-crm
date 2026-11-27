@@ -76,9 +76,18 @@ export async function installHealthyNas(page: Page): Promise<void> {
     { branchId: 'b-gn', branchName: '강남점', plan: 'pro', calls: 12, inputTokens: 4000, outputTokens: 800, usd: 0.12, creditsUsed: 340, creditsBalance: 660, lastCallAt: '2026-11-26T01:00:00.000Z' },
   ] }));
   await page.route(`${API}/api/admin/ai/credits/grant`, route => json(route, { balance: 1160 }));
-  await page.route(`${API}/api/admin/backups**`, route => json(route, { backups: [
-    { id: 'bk-1', branchId: 'b-gn', branchName: '강남점', at: '2026-11-26T02:00:00.000Z', bytes: 123456, kind: 'auto' },
+  // 323: 자료 탐색기(상세 보기 창)·백업 복원 창을 열 수 있게 — 실제 응답 모양(`AdminDataRow`·`AdminBackupEntry`)을 지킨다
+  await page.route(`${API}/api/admin/data/*/*?**`, route => json(route, { total: 1, rows: [
+    { id: 'cus-1', updatedAt: '2026-11-26T01:00:00.000Z', data: { name: '김흉내', phone: '010-0000-0000', grade: 'gold', visits: 3 } },
   ] }));
+  await page.route(`${API}/api/admin/messages/**`, route => json(route, { sendLog: [], scheduled: [] }));
+  await page.route(`${API}/api/admin/photos/**`, route => json(route, { entities: [] }));
+  await page.route(`${API}/api/admin/backups/**`, route => json(route, {
+    backupDirConfigured: true,
+    backups: [
+      { label: '2026-11-26', kind: 'daily', collections: ['customers', 'reservations'], hasPhotos: true, createdAt: '2026-11-26T02:00:00.000Z' },
+    ],
+  }));
   await page.route(`${UPDATE}/portable/latest.json**`, route => json(route, { version: '1.0.63', releaseDate: '2026-11-25' }));
 }
 
