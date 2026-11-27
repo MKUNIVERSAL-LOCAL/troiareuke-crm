@@ -131,7 +131,7 @@ export default function StaffPage() {
               <div
                 key={staff.id}
                 onClick={() => setSelected(staff)}
-                className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md cursor-pointer transition-all hover:-translate-y-0.5"
+                className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md focus-within:shadow-md cursor-pointer transition-all hover:-translate-y-0.5"
               >
                 <div className="text-center mb-5">
                   <div
@@ -140,7 +140,12 @@ export default function StaffPage() {
                   >
                     {staff.name[0]}
                   </div>
-                  <h3 className="text-base font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-1.5 align-middle text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">퇴사</span>}</h3>
+                  <h3 className="text-base font-bold text-gray-900">
+                    {/* 318: 카드가 마우스로만 열렸다. 카드 전체에 role=button 을 주면 보조기기가 아래 통계·연락처를 한 덩어리로 삼켜 잃는다 —
+                        진짜 단추는 이름 칸에 둔다(어드민 표가 2026-11-20 리뷰에서 고른 것과 같은 방식). */}
+                    <button type="button" onClick={e => { e.stopPropagation(); setSelected(staff); }} aria-label={`${staff.name} 직원 상세 보기`}
+                      className="hover:underline focus-visible:outline-none focus-visible:underline">{staff.name}</button>
+                    {!staff.isActive && <span className="ml-1.5 align-middle text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">퇴사</span>}</h3>
                   <p className="text-xs text-slate-600 mt-0.5">{staff.role}</p>
                 </div>
 

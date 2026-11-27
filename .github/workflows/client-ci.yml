@@ -65,6 +65,8 @@ jobs:
         run: npm run check:dead-export
       - name: 창 접근성 커버리지(게이트가 안 여는 새 창 금지)
         run: npm run check:modal-a11y
+      - name: 키보드 경로(마우스로만 쓸 수 있는 자리 금지)
+        run: npm run check:keyboard
       - name: E2E spec type check (e2e/tsconfig.json, strict + unused)
         run: npm run check:e2e-types
       - name: Distribution invariants (no-redownload policy)
