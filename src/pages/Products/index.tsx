@@ -442,7 +442,7 @@ export default function Products() {
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(p)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                                 aria-label="제품 삭제"
                               >
                                 <Trash2 size={14} />
@@ -541,7 +541,7 @@ export default function Products() {
                         {isCanceled(sale) ? <span className="text-xs px-2 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
                         <button
                           onClick={() => handleDeleteSale(sale)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                          className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg"
                           aria-label="판매 취소"
                           title="판매 취소 및 재고 복구"
                         >

@@ -476,7 +476,7 @@ export default function Branches() {
                         <button
                           onClick={() => openEdit(b)}
                           aria-label={`${b.name} 지점 정보 수정`}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
                         >
                           <Pencil size={13} />
                         </button>

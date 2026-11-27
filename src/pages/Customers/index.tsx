@@ -2116,7 +2116,7 @@ export default function Customers() {
                       )}
                       {canManage && (
                       <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); handleDeleteCustomer(); }} aria-label="고객 삭제"
-                        className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        className="w-full text-left px-4 py-3 text-sm text-red-700 hover:bg-red-50 flex items-center gap-2">
                         <Trash2 size={15} />고객 삭제
                       </button>
                       )}
@@ -2719,7 +2719,7 @@ export default function Customers() {
                           )}
                           {canManage && (
                           <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); handleDeleteCustomer(); }} aria-label="고객 삭제"
-                            className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
+                            className="w-full text-left px-3 py-2 text-xs text-red-700 hover:bg-red-50 flex items-center gap-2">
                             <Trash2 size={13} />고객 삭제
                           </button>
                           )}

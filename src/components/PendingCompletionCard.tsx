@@ -80,7 +80,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
             <button type="button" onClick={() => navigate(`/reservations?open=${r.id}`)} className="flex-1 min-w-0 text-left" title="예약 상세 열기">
               <p className="text-sm font-medium text-gray-800 truncate">
                 {r.customerName} <span className="text-xs text-gray-400">· {formatDate(r.date)} {r.startTime}</span>
-                {r.status === 'pending' && <span className="ml-1 text-2xs font-semibold text-gray-500 bg-gray-100 rounded px-1 py-0.5 align-middle">대기</span>}
+                {r.status === 'pending' && <span className="ml-1 text-2xs font-semibold text-gray-600 bg-gray-100 rounded px-1 py-0.5 align-middle">대기</span>}
               </p>
               <p className="text-xs text-gray-500 truncate">{r.services.map(s => s.serviceName).join(', ') || '시술 항목 미지정'}{r.staffName ? ` · ${r.staffName}` : ''}</p>
             </button>

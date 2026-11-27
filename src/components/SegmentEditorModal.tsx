@@ -68,7 +68,7 @@ export default function SegmentEditorModal({ segment, facts, tagOptions, onClose
         <fieldset><legend className="text-xs font-medium text-gray-600 mb-1">이탈 위험</legend><div className="flex flex-wrap gap-1.5">{CHURN.map(x => <button key={x.v} type="button" aria-pressed={!!c.churnLevels?.includes(x.v)} onClick={() => toggle('churnLevels', x.v)} className={chip(!!c.churnLevels?.includes(x.v))}>{x.label}</button>)}</div></fieldset>
         <p className="text-xs text-gray-700 bg-gray-50 rounded-xl px-3 py-2">{describeSegment(c)} · 지금 <b data-testid="segment-count">{count}</b>명 (조건은 모두 "그리고")</p>
         <div className="flex gap-2 pt-1">
-          {segment && <button type="button" onClick={() => void remove()} className="px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100">삭제</button>}
+          {segment && <button type="button" onClick={() => void remove()} className="px-4 py-2.5 text-sm font-medium text-red-700 bg-red-50 rounded-xl hover:bg-red-100">삭제</button>}
           <button type="button" onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
           <button type="button" onClick={submit} className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e]" data-testid="segment-save">{segment ? '저장' : '만들기'}</button>
         </div>

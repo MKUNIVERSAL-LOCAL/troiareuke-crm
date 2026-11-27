@@ -377,7 +377,7 @@ export default function Onboarding() {
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center">
               <div className="flex flex-col items-center gap-1">
-                <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
                 <p className={`text-xs font-medium whitespace-nowrap ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400 hidden sm:block'}`}>{s.label}</p>
@@ -631,7 +631,7 @@ export default function Onboarding() {
                           <p className="text-sm font-bold text-gray-400">{plan.price.toLocaleString()}원/월</p>
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
-                        <span className="inline-block mt-1.5 text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">결제 기능 준비 중</span>
+                        <span className="inline-block mt-1.5 text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full">결제 기능 준비 중</span>
                       </div>
                     </div>
                   </div>

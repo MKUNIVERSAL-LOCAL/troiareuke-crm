@@ -375,7 +375,7 @@ function AiChatInner() {
 
           <div className="flex-1" />
 
-          <button onClick={clearChat} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
+          <button onClick={clearChat} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all">
             <Trash2 size={14} /> 초기화
           </button>
 

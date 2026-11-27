@@ -65,7 +65,7 @@ export default function ResourcesCard() {
                 <input type="checkbox" checked={r.isActive} onChange={() => toggle(r.id)} className="rounded" aria-label={`${r.name} 사용 중`} />
                 사용 중
               </label>
-              <button type="button" onClick={() => void remove(r)} aria-label={`${r.name} 삭제`} className="p-1.5 rounded-lg text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
+              <button type="button" onClick={() => void remove(r)} aria-label={`${r.name} 삭제`} className="p-1.5 rounded-lg text-red-700 hover:bg-red-50"><Trash2 size={14} /></button>
             </li>
           ))}
         </ul>

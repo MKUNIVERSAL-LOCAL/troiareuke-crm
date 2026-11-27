@@ -612,7 +612,7 @@ export default function Reservations() {
               </div>
             )}
             {/* Naver sync badge — 실제 연동 전까지 '준비 중' 표기 (오해 방지) */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-400" title="네이버 예약 연동은 준비 중입니다">
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-500" title="네이버 예약 연동은 준비 중입니다">
               <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
               네이버 예약 (준비 중)
             </div>
@@ -931,7 +931,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
           const slotStartMin = timeToMin(time);
           return (
             <div key={time} className="grid grid-cols-8 border-b border-gray-50 h-14">
-              <div className="py-2 px-3 text-xs text-gray-400 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
+              <div className="py-2 px-3 text-xs text-gray-500 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
                 {time}
               </div>
               {weekDays.map((day, di) => {
@@ -1054,7 +1054,7 @@ function StaffColumnsDay({ date, dayReservations, dayGoogleEvents, staffList, gr
         const slotStartMin = timeToMin(time);
         return (
           <div key={time} className="grid border-b border-gray-50 h-[60px] min-w-max" style={gridStyle}>
-            <div className="py-3 px-4 text-xs text-gray-400 border-r border-gray-100 font-medium sticky left-0 bg-white">{time}</div>
+            <div className="py-3 px-4 text-xs text-gray-500 border-r border-gray-100 font-medium sticky left-0 bg-white">{time}</div>
             {columns.map(c => (
               <div key={c.staff.id} className="relative border-r border-gray-100 last:border-r-0">
                 {shadeIn(c.shade, slotStartMin)}
@@ -1665,7 +1665,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
           </label>
         )}
         {formError && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
             {formError}
           </div>
         )}

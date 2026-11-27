@@ -226,7 +226,7 @@ export default function Announcements() {
                     <button
                       onClick={() => openEdit(a)}
                       aria-label={`'${a.title}' 공지 수정`}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                      className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
                     >
                       <Pencil size={13} />
                     </button>
@@ -260,7 +260,7 @@ export default function Announcements() {
                       key={t.value}
                       onClick={() => setForm(f => ({ ...f, type: t.value }))}
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                        form.type === t.value ? t.color + ' border border-current' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                        form.type === t.value ? t.color + ' border border-current' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
                       }`}
                     >
                       {t.label}

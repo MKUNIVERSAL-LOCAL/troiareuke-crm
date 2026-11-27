@@ -223,7 +223,7 @@ export default function Subscriptions() {
             key={s}
             onClick={() => setFilterStatus(s)}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              filterStatus === s ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              filterStatus === s ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
             }`}
           >
             {s === 'all' ? '전체' : statusOptions.find(o => o.value === s)?.label || s}
@@ -279,7 +279,7 @@ export default function Subscriptions() {
                       <button
                         onClick={() => openEdit(s)}
                         aria-label={`${s.branch_name} 구독 수정`}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
                       >
                         <Pencil size={13} />
                       </button>

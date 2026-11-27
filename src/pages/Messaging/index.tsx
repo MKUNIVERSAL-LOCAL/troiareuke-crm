@@ -419,7 +419,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
                 </button>
                 <button
                   onClick={() => handleDelete(t.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                   title="삭제"
                 >
                   <Trash2 size={14} />
@@ -648,7 +648,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
               {item.status === 'pending' && (
                 <button
                   onClick={() => handleCancel(item.id)}
-                  className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
+                  className="px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
                 >
                   취소
                 </button>
@@ -1082,7 +1082,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             본사 서버에 문자·알림톡 발송사가 아직 연동되지 않았습니다.<br />
             연동되면 이 화면 그대로 실제 발송됩니다 — 지점에서 따로 설정할 것은 없습니다.
           </p>
-          <p className="text-xs text-gray-400 mt-3 bg-gray-50 rounded-lg px-3 py-2">{resultMessage}</p>
+          <p className="text-xs text-gray-600 mt-3 bg-gray-50 rounded-lg px-3 py-2">{resultMessage}</p>
           <p className="text-xs text-gray-400 mt-2">발송 이력에 '미연동' 사유로 기록되었습니다.</p>
           <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
         </div>
@@ -1090,7 +1090,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
           <AlertCircle size={48} className="text-red-600 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 실패</p>
-          <p className="text-xs mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
+          <p className="text-xs mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-700">{resultMessage}</p>
           <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
         </div>
       ) : (

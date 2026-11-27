@@ -901,7 +901,7 @@ export default function Sales() {
               </ul>
               <div className="hidden lg:block overflow-auto max-h-[65vh]">
                 <div className="min-w-[720px]">
-                  <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
+                  <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-500 font-medium px-4 py-3 border-b border-gray-100">
                     <span>날짜</span>
                     <span className="col-span-2">고객</span>
                     <span>구분</span>
@@ -932,7 +932,7 @@ export default function Sales() {
                         <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">
                           <Pencil size={13} />
                         </button>
-                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
+                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-700 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
                           <Trash2 size={13} />
                         </button>
                       </span>
@@ -1037,7 +1037,7 @@ export default function Sales() {
                 </ul>
                 <div className="hidden lg:block overflow-auto max-h-[65vh]">
                   <div className="min-w-[720px]">
-                    <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
+                    <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-500 font-medium px-4 py-3 border-b border-gray-100">
                       <span>날짜</span>
                       <span>분류</span>
                       <span className="col-span-2">내용 / 거래처</span>
@@ -1062,7 +1062,7 @@ export default function Sales() {
                           <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 수정">
                             <Pencil size={13} />
                           </button>
-                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
+                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-700 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
                             <Trash2 size={13} />
                           </button>
                         </span>

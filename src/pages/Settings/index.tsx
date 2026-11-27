@@ -891,7 +891,7 @@ export default function Settings() {
                     {(settings.holidays || []).length > 0 ? (
                       <ul className="flex flex-wrap gap-2">
                         {(settings.holidays || []).map(d => (
-                          <li key={d} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${d < todayISO() ? 'bg-gray-100 text-gray-500 border border-dashed border-gray-300' : 'bg-rose-50 text-rose-700'}`} title={d < todayISO() ? '지난 휴일' : undefined}>
+                          <li key={d} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${d < todayISO() ? 'bg-gray-100 text-gray-600 border border-dashed border-gray-300' : 'bg-rose-50 text-rose-700'}`} title={d < todayISO() ? '지난 휴일' : undefined}>
                             {d}
                             <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="p-1.5 -m-1 rounded text-rose-400 hover:text-rose-600"><X size={14} /></button>
                           </li>
@@ -1232,7 +1232,7 @@ export default function Settings() {
                               <button
                                 onClick={() => handleDeleteService(svc.id)}
                                 aria-label={`${svc.name} 삭제`}
-                                className="text-xs text-red-600 hover:text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
+                                className="text-xs text-red-700 hover:text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
                               >
                                 <Trash2 size={12} /> 삭제
                               </button>
@@ -1381,7 +1381,7 @@ export default function Settings() {
                   </div>
 
                   {planChangeError && (
-                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                       {planChangeError}
                     </div>
                   )}

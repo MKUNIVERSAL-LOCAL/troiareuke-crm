@@ -118,7 +118,7 @@ export default function CampaignsCard({ onSent }: { onSent: () => void }) {
                 {canManage && (
                   <>
                     <button type="button" onClick={() => setEditing(c)} className="p-1.5 text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100" aria-label={`${c.name} 수정`}><Pencil size={14} /></button>
-                    <button type="button" onClick={() => remove(c)} className="p-1.5 text-gray-500 hover:text-red-600 rounded-lg hover:bg-gray-100" aria-label={`${c.name} 삭제`}><Trash2 size={14} /></button>
+                    <button type="button" onClick={() => remove(c)} className="p-1.5 text-gray-500 hover:text-red-700 rounded-lg hover:bg-gray-100" aria-label={`${c.name} 삭제`}><Trash2 size={14} /></button>
                   </>
                 )}
               </div>
