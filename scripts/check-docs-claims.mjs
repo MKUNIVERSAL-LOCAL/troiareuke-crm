@@ -47,6 +47,12 @@
  *     **한 묶음 뒤에 재발**했다(350·351 이 머리말 수만 올려 42개가 어디에도 없었다). 한 줄로 덮는
  *     행("위 행에 없는 나머지 전부")이 있으면 그 행의 범위가 머리말과 같아야 하고, 없으면 열거가
  *     완전해야 한다. 표에 적힌 번호가 **로드맵에 없는 묶음**이거나 머리말 범위를 벗어나는 것도 막는다.
+ *  ⑱ **로드맵이 적은 시각 ↔ git 이 아는 커밋 시각**(354) — 묶음 줄 `(MM-DD HH:MM)` 과 재검증 줄의
+ *     시각은 그 묶음이 적어 둔 커밋의 시각과 맞아야 한다. 353 에서 전수로 재니 **27곳**이 어긋나 있었고
+ *     가장 심한 자리는 **3시간 39분**이었다(342 부터 벌어졌다 — 시계를 읽지 않고 더해 적었다).
+ *     규칙이 비대칭인 이유: 묶음 줄은 **커밋하기 직전에** 적으므로 커밋이 뒤여야 한다(검사·푸시가
+ *     사이에 든다 → 뒤로 20분까지). 거꾸로 **적은 시각이 커밋보다 뒤**면 아직 오지 않은 시각을
+ *     적은 것이라 반올림 몫 5분만 둔다. 해시가 없는 줄(243 번 이전)은 git 에 물을 것이 없어 건너뛴다.
  *  ④ 리뷰 기록의 반영 표시 — `docs/REVIEW-*.md` 머리말(앞 3줄)에 "반영" 상태가 적혀 있어야 한다.
  *     조용히 묻힌 리뷰가 없다는 뜻이다.
  *  ⑥ 자기 범위 표시가 사라지지 않는가 — `NEXT-ACTION`·`OWNER-BRIEFING`·`MASTER-DEVELOPMENT-STATUS` 는
@@ -72,6 +78,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
 /** 해시 규약이 시작된 묶음 — 그 앞은 기록 당시 규약이 없었다 */
 const HASH_FROM = 243;
+// ⑱ 시각 대조의 허용 몫 (354) — 검사 블록이 최상위에서 바로 도므로 선언이 위에 있어야 한다
+const TIME_BEFORE = 5;   // 적은 시각이 커밋보다 뒤여도 되는 몫(반올림·HH:Mx 창)
+const TIME_AFTER = 20;   // 커밋이 적은 시각보다 뒤일 수 있는 몫(검사·푸시가 사이에 든다)
 /** "지금 상태" 를 말하는 문서 — 숫자가 낡으면 읽는 사람이 틀린 상태를 믿는다 */
 /** 일부러 비운 칸 — 이유가 사실이어야 한다 */
 const EMPTY_CELL_ALLOWED = [
@@ -548,7 +557,30 @@ function selftest() {
     const noRange = section4Problems('## 4. 지점이 보는 변화 (기능군별)\n\n| 묶음 | 것 |\n|---|---|\n| 218 | 가 |\n', nos);
     if (noRange.length !== 1 || !/범위가 없다/.test(noRange[0])) { console.error('[selftest] §4 범위 없음 덫 실패: ' + JSON.stringify(noRange)); process.exit(1); }
   }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종·코어 잠금 표 6종·§4 범위 7종) 통과`);
+// ⑱ 덫 — 시각 ↔ 커밋 (354)
+  {
+    if (timeGap('11-28', '07:30', '11-28', '07:30') !== 0) { console.error('[selftest] 같은 시각 덫 실패'); process.exit(1); }
+    if (timeGap('11-28', '07:3x', '11-28', '07:37') !== 0) { console.error('[selftest] 분 자리 창 덫 실패'); process.exit(1); }
+    if (timeGap('11-28', '07:30', '11-28', '07:50') !== 20) { console.error('[selftest] 커밋이 뒤인 덫 실패'); process.exit(1); }
+    if (timeGap('11-28', '07:40', '11-28', '07:30') !== -10) { console.error('[selftest] 적은 시각이 미래인 덫 실패'); process.exit(1); }
+    if (timeGap('11-28', '07:4x', '11-28', '07:30') !== -10) { console.error('[selftest] 창 아래로 벗어난 덫 실패'); process.exit(1); }
+    if (timeGap('11-27', '23:50', '11-28', '00:05') !== 15) { console.error('[selftest] 날짜 넘는 덫 실패: ' + timeGap('11-27', '23:50', '11-28', '00:05')); process.exit(1); }
+    // 352 가 실제로 적고 있던 값 — 219분 미래였다
+    if (timeGap('11-28', '10:5x', '11-28', '07:11') !== -219) { console.error('[selftest] 352 실측 덫 실패: ' + timeGap('11-28', '10:5x', '11-28', '07:11')); process.exit(1); }
+    const road = [
+      '- [x] 352 — **가**(11-28 07:11): 검증. 커밋 c0aacdb. 누계 155~352 묶음 197개.',
+      '- [x] 240 — **나**(11-25 01:02): 해시 규약 앞이라 해시가 없다.',
+      '- 2026-11-28 07:30 354차 재검증(353, PR #58): 가드 통과',
+      '- 2026-11-28 07:11 353차 재검증(352, PR #58): 가드 통과',
+      '- [x] 353 — **다**(11-28 07:30): 커밋 d1df183.',
+    ].join('\n');
+    const rows = timeClaimRows(road);
+    if (rows.length !== 4) { console.error('[selftest] 시각 줄 수집 덫 실패: ' + JSON.stringify(rows)); process.exit(1); }
+    if (rows.filter(r => r.kind === '재검증').length !== 2) { console.error('[selftest] 재검증 줄 수집 덫 실패'); process.exit(1); }
+    if (rows.some(r => r.no === 240)) { console.error('[selftest] 해시 없는 줄 면제 덫 실패'); process.exit(1); }
+    if (rows.find(r => r.kind === '재검증' && r.no === 353).hash !== 'd1df183') { console.error('[selftest] 재검증 줄이 그 묶음 해시를 봐야 한다'); process.exit(1); }
+  }
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종·코어 잠금 표 6종·§4 범위 7종·시각 10종) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -878,6 +910,23 @@ problems.push(...releaseStepProblems());
   }
 }
 
+// ⑱ 로드맵의 시각 ↔ git 커밋 시각 (354)
+{
+  const commits = commitTimes();
+  if (commits === null) {
+    console.log('[check-docs-claims] ⑱ 건너뜀 — git log 를 읽을 수 없습니다');
+  } else {
+    for (const r of timeClaimRows(read(ROADMAP))) {
+      const c = commits.find(x => x.h.startsWith(r.hash));
+      if (!c) continue; // 해시 실재는 ① 이 본다
+      const d = timeGap(r.md, r.hm, c.md, c.hm);
+      if (d === null) continue;
+      if (d < -TIME_BEFORE) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 는 커밋(${c.md} ${c.hm})보다 ${-d}분 뒤다 — 아직 오지 않은 시각을 적었다(시계를 읽어 적으세요)`);
+      else if (d > TIME_AFTER) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 가 커밋(${c.md} ${c.hm})보다 ${d}분 앞이다 — 시각을 사실대로 적으세요`);
+    }
+  }
+}
+
 // 341(리뷰 M-5): 로드맵이 스스로 적은 **마지막 누계**도 실측과 맞아야 한다 — 전에는 이 값을 사실로 믿었다
 {
   const live2 = liveNumbers();
@@ -892,6 +941,71 @@ problems.push(...releaseStepProblems());
 // 왜: 브리핑 §5 는 오너가 "무엇이 기계로 막히나" 를 읽는 자리다. 335 가 세 줄을 더한 바로 다음
 //     묶음에서 `check:e2e-conv` 가 또 빠졌고, `check:routes`·`check:distribution` 은 처음부터 없었다.
 //     ⑬ 은 **수**만 보고 **빠진 줄**은 보지 못한다. 기준은 "게이트가 실제로 돌리는 것" 이다.
+// ⑱ **로드맵이 적은 시각은 git 이 아는 커밋 시각과 맞아야 한다** (354)
+//
+// 왜: 353 에서 전수로 재니 묶음·재검증 줄 **27곳**이 어긋나 있었고 가장 심한 자리는 **3시간 39분**
+//     이었다(352 는 10:5x 라고 적었지만 실제 커밋은 07:11). 342 부터 벌어진 것인데, 원인은
+//     **시계를 읽지 않고 앞 묶음 시각에 더해 적은 것**이다. 오너는 월요일에 이 시각으로 "한 묶음에
+//     얼마나 걸렸나" 를 읽는다 — 틀린 시각은 그 판단을 조용히 왜곡한다. git 이 정본인 비교라
+//     352 가 받아들인 경계선 안에 있다(코드·VCS 가 답을 아는 것만 가드로 만든다).
+/** 묶음 줄·재검증 줄에서 (시각, 묶음 번호, 해시)를 모은다 */
+function timeClaimRows(text) {
+  const hashOfBatch = new Map();
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const m = /^- \[x\] (\d{3,4}) — /.exec(line);
+    const h = hashOf(line);
+    if (m && h && Number(m[1]) < 2000) hashOfBatch.set(Number(m[1]), h);
+  }
+  const out = [];
+  for (const line of lines) {
+    const bm = /^- \[x\] (\d{3,4}) — /.exec(line);
+    const rm = /^- \d{4}-(\d{2})-(\d{2}) (\d{2}):(\d)([0-9x]) \d{3,4}차 재검증\((\d{3,4})[,)]/.exec(line);
+    let row = null;
+    if (bm && Number(bm[1]) < 2000) {
+      const t = /\((\d{2})-(\d{2}) (\d{2}):(\d)([0-9x])/.exec(line);
+      if (t) row = { no: Number(bm[1]), md: t[1] + '-' + t[2], hm: t[3] + ':' + t[4] + t[5], kind: '묶음' };
+    } else if (rm) {
+      row = { no: Number(rm[6]), md: rm[1] + '-' + rm[2], hm: rm[3] + ':' + rm[4] + rm[5], kind: '재검증' };
+    }
+    if (row === null) continue;
+    const hash = hashOfBatch.get(row.no);
+    if (!hash) continue; // 243 번 이전 줄은 해시가 없다 — git 에 물을 것이 없다
+    out.push({ ...row, hash });
+  }
+  return out;
+}
+/** 적은 시각과 커밋 시각의 분 차이 — 0 이면 맞다. 음수는 적은 시각이 그만큼 미래 */
+function timeGap(md, hm, cmd, chm) {
+  if (md !== cmd) {
+    // 날짜가 다르면 날짜까지 포함해 센다(달을 31일로 단순화 — 묶음은 같은 달 안에서 이어진다)
+    const day = x => Number(x.slice(0, 2)) * 31 + Number(x.slice(3));
+    const diff = (day(cmd) - day(md)) * 1440;
+    return diff + timeGapSameDay(hm, chm);
+  }
+  return timeGapSameDay(hm, chm);
+}
+function timeGapSameDay(hm, chm) {
+  const toMin = x => Number(x.slice(0, 2)) * 60 + Number(x.slice(3));
+  const low = toMin(hm.endsWith('x') ? hm.replace('x', '0') : hm);
+  const high = toMin(hm.endsWith('x') ? hm.replace('x', '9') : hm);
+  const t = toMin(chm);
+  if (t < low) return t - low;
+  if (t > high) return t - high;
+  return 0;
+}
+/** 이 브랜치의 커밋 시각 표 — git 을 한 번만 부른다 */
+function commitTimes() {
+  const r = spawnSync('git', ['log', '--format=%H %ad', '--date=format-local:%m-%d %H:%M'], { cwd: ROOT, encoding: 'utf8' });
+  if (r.status !== 0) return null;
+  const out = [];
+  for (const line of (r.stdout || '').split('\n')) {
+    const m = /^([0-9a-f]{40}) (\d{2}-\d{2}) (\d{2}:\d{2})$/.exec(line.trim());
+    if (m) out.push({ h: m[1], md: m[2], hm: m[3] });
+  }
+  return out.length === 0 ? null : out;
+}
+
 /** 가장 최근 오너 브리핑 — 없으면 null (344 리뷰 H-1: 파일 이름을 박으면 다음 브리핑이 검사 밖이 된다) */
 function newestBriefing() {
   const briefs = fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^OWNER-BRIEFING-.*\.md$/.test(f)).sort();
@@ -1210,4 +1324,4 @@ if (problems.length > 0) {
   console.error('  → 기록을 사실로 고치세요(과거 날짜 기록은 그대로 두고, "지금 상태" 문서만 갱신합니다).');
   process.exit(1);
 }
-console.log('[check-docs-claims] OK — 묶음 해시 실재·지금 상태 숫자·문서 포인터·리뷰 반영 표시·버전/브랜치·자기 범위 표시·코어 잠금 표·§4 묶음 집합 전부 확인');
+console.log('[check-docs-claims] OK — 묶음 해시 실재·지금 상태 숫자·문서 포인터·리뷰 반영 표시·버전/브랜치·자기 범위 표시·코어 잠금 표·§4 묶음 집합·기록 시각 전부 확인');
