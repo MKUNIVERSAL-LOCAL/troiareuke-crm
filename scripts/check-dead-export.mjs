@@ -7,11 +7,18 @@
  *     쓰던 자리를 옮기고, 301 은 "죽은 코드를 치웠다" 면서 인자만 떼고 함수는 남겼다.
  *     `check:rules` 는 **순수 규칙 함수가 lib-units 에서 호출되는지**만 보므로 이 종류를 보지 못한다.
  *
- * 하는 일: `src/lib` 의 **값 export**(`export function`·`export const`)를 모아, 저장소의 다른 코드
- *     파일(`src`·`e2e`·`scripts`·`server`·`electron`)에서 그 이름이 한 번도 나오지 않으면 적는다.
+ * 하는 일: `src` **전체**의 **값 export**(`export function`·`export const`)를 모아, 다른 코드
+ *     파일(`src`·`e2e`·`server`·`electron`)에서 그 이름이 한 번도 나오지 않으면 적는다.
  *   - 타입·인터페이스는 보지 않는다(타입은 자기 파일 안에서만 쓰여도 공개 계약일 수 있다).
  *   - 문서(.md)의 언급은 **코드 참조가 아니다** — 315 에서 그걸 참조로 세어 다섯 개를 놓쳤다.
+ *   - **316(312~315 리뷰 M-2·M-3)**: ① 사정거리가 `src/lib` 뿐이라 그 밖의 미사용 export 세 개를
+ *     못 봤다(`GradeBadge`·`HOMECARE_SETS`·`SHOP_SETTINGS_CHANGED_EVENT`) → `src` 전체로 넓혔다.
+ *     ② `scripts/**` 를 사용 코퍼스에 넣은 탓에 **가드 목록에 이름이 적혀 있다는 이유로** 쓰인다고
+ *     분류된 것이 있었다(`setDeviceFeatureEnabled`) — `scripts` 는 `.mjs` 라 `.ts` 를 import 할 수
+ *     없으므로 거기 나오는 이름은 전부 글이다 → 코퍼스에서 뺐다. 전수는 45가 아니라 **46**이었다.
  *   - 코어 잠금 파일의 것은 ALLOWED 에 둔다(고치려면 오너 승인 + CORE_EDIT=1 이 필요하다).
+ *   - 보지 않는 형태(사정거리 밖): `export class`·`export let/var`·`export default`·
+ *     `export { x } from './y'` 배럴 재수출·한 줄 다중 선언. 지금 그 형태 중 미사용은 0이다(316 확인).
  *
  * 한계(정직하게): 이름이 **문자열로만** 쓰이는 경우(동적 접근)는 "쓰임" 으로 세어 놓칠 수 있다.
  *     반대로 같은 이름의 다른 심볼이 다른 파일에 있으면 "쓰인다" 고 볼 수 있다 — 둘 다 **놓치는 쪽**이라
@@ -48,7 +55,8 @@ function walk(dir) {
   });
 }
 
-const codeFiles = ['src', 'e2e', 'scripts', 'server', 'electron'].flatMap(d => walk(path.join(ROOT, d)));
+// 316(리뷰 M-3): `scripts` 는 사용 코퍼스에서 뺀다 — 가드·헬퍼의 **글**이 "쓰임" 으로 세어졌다
+const codeFiles = ['src', 'e2e', 'server', 'electron'].flatMap(d => walk(path.join(ROOT, d)));
 const texts = new Map(codeFiles.map(f => [f, fs.readFileSync(f, 'utf8')]));
 const EXPORT_RE = /^export\s+(?:async\s+)?(?:function|const)\s+([A-Za-z_$][\w$]*)/gm;
 
@@ -56,15 +64,13 @@ function deadExports() {
   const out = [];
   for (const [full, text] of texts) {
     const rel = path.relative(ROOT, full).replace(/\\/g, '/');
-    if (!rel.startsWith('src/lib/')) continue;
+    if (!rel.startsWith('src/')) continue;
     for (const m of text.matchAll(EXPORT_RE)) {
       const name = m[1];
       const re = new RegExp(`\\b${name}\\b`);
       let used = false;
       for (const [other, t] of texts) {
-        if (other === full) continue;
-        // **이 가드 자신**은 세지 않는다 — ALLOWED 에 적어 둔 이름이 "쓰인다" 로 읽혀 전부 낡은 것처럼 보였다(315)
-        if (other === fileURLToPath(import.meta.url)) continue;
+        if (other === full) continue; // 코퍼스에 scripts 가 없으니 이 가드 자신은 애초에 들어오지 않는다(316)
         if (re.test(t)) { used = true; break; }
       }
       if (!used) out.push({ file: rel, name, line: text.slice(0, m.index).split('\n').length });
@@ -104,4 +110,4 @@ if (unexpected.length > 0 || stale.length > 0) {
   }
   process.exit(1);
 }
-console.log(`[check-dead-export] OK — src/lib 의 값 export 중 쓰이지 않는 것은 사유를 적어 둔 ${ALLOWED.length}개(전부 코어 잠금)뿐`);
+console.log(`[check-dead-export] OK — src 의 값 export 중 쓰이지 않는 것은 사유를 적어 둔 ${ALLOWED.length}개(전부 코어 잠금)뿐`);

@@ -107,7 +107,9 @@ for (const full of files) {
   const lines = text.split(/\r?\n/);
   const rawLines = raw.split(/\r?\n/);
   lines.forEach((line, i) => {
-    if (/export function (setPreference|setReservationPolicy|setOptOutNumber|setDeviceFeatureEnabled|setBeaconConsultationEnabled)/.test(rawLines[i])) return;
+    // 316(312~315 리뷰 M-3 의 뒤따름): `export` 가 붙지 않은 선언도 **선언**이다 — 315 가 그 키워드를
+    // 떼자 선언 줄 자체가 "판정을 버리는 호출" 로 신고됐다.
+    if (/^\s*(?:export )?(?:async )?function (setPreference|setReservationPolicy|setOptOutNumber|setDeviceFeatureEnabled|setBeaconConsultationEnabled)\b/.test(rawLines[i])) return;
     for (const call of JUDGING_CALLS) {
       let at = line.indexOf(call);
       while (at >= 0) {

@@ -82,9 +82,11 @@ export function clearHistoryOfCustomer(customerId: string): number {
   }
 }
 
-/** 예약 한 건의 이력을 지운다 — 예약을 삭제할 때 호출(삭제 기록만 남기거나 전부 정리) */
-// 315: `clearHistoryOfReservation` 을 지웠다 — 250 이 개인정보 정리를 **고객 단위**
-// (`clearHistoryOfCustomer`)로 바꾸면서 호출자가 0이 됐다(CLAUDE.md 2절).
+// 315: `clearHistoryOfReservation` 을 지웠다(CLAUDE.md 2절). **316(리뷰 M-5) 정정**: 그 함수는
+// 250 에서 "예약 단건 정리용" 으로 **같이 추가됐고 처음부터 호출자가 없었다**(315 는 "250 이 고객 단위로
+// 바꾸며 0이 됐다" 고 적었는데 이력과 다르다). 지운 함수의 JSDoc("예약을 삭제할 때 호출")도 남아 있었는데,
+// 지금 설계는 정반대다 — `logReservationDelete` 가 **일부러 삭제 흔적을 남긴다**(250 리뷰 H-3,
+// "그 예약 받은 적 없다" 분쟁 대비). 그 거짓 설명을 지웠다.
 
 /** 그 예약의 이력(최근 것이 위로) */
 export function reservationHistory(reservationId: string): HistoryEntry[] {

@@ -40,7 +40,7 @@ function read(): Stored {
   }
 }
 
-// 315: `getRebookLog` 를 지웠다 — 243 이 지표를 만들 때 두었다가 집계를 `rebookStats` 로 옮기며
+// 315: `getRebookLog` 를 지웠다 — 243 이 지표를 만들 때 두었다가 집계를 `rebookStatsRule.ts` 로 옮기며
 // 호출자가 0이 됐다(CLAUDE.md 2절: 미사용 export 금지). 필요하면 `read().entries` 한 줄이면 된다.
 
 function save(entries: RebookLogEntry[], droppedMonths: string[]): void {

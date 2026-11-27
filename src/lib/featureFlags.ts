@@ -93,7 +93,7 @@ export function isFeatureEnabled(id: string): boolean {
  * 304: 저장 판정을 돌려준다. 안 남으면 다시 열 때 토글이 되돌아가는데 화면은 "사용 중" 이라고 적고 있었다.
  * 토글이 없는 기능 id 는 invalid (아무것도 바꾸지 않았다는 뜻 — 저장 공간 탓이 아니다).
  */
-export function setDeviceFeatureEnabled(id: string, on: boolean): PrefLanded {
+function setDeviceFeatureEnabled(id: string, on: boolean): PrefLanded {
   const def = FEATURE_MAP.get(id);
   if (!def?.deviceToggle) return 'invalid';
   const landed = setPreference('deviceFeatures', { ...(getPreference('deviceFeatures') || {}), [id]: on });

@@ -4,8 +4,11 @@
  *
  * 왜: CLAUDE.md 2절이 금지하는 것 중 하나가 **"동작하는 척" 하는 요소**다 — onClick 없는 단추,
  *     저장되지 않는 입력칸, 상태와 무관한 배지. 지점 직원은 눌러 보고 "아무 일도 안 일어났다" 를
- *     고장으로 읽거나, 더 나쁘게는 **눌렀으니 됐다고 믿는다**(117~119 리뷰 #H4 가 실제로 그 길이었다 —
- *     직원 계정에 보이는 줄의 단추가 권한 밖이라 막다른 길이었다).
+ *     고장으로 읽거나, 더 나쁘게는 **눌렀으니 됐다고 믿는다**.
+ *     **316(312~315 리뷰 M-1) 정정**: 314 는 이 자리에 "117~119 리뷰 #H4 가 실제로 그 길이었다" 고
+ *     적었는데 **이 가드가 잡을 수 있는 종류가 아니다** — #H4 의 단추들은 onClick 이 **있었고**
+ *     이동한 경로가 권한 밖이라 막다른 길이었다. 그 종류는 역할 게이트와 스펙이 본다.
+ *     이 가드의 동기는 CLAUDE.md 2절 자체로 충분하다.
  *     284~312 는 "화면이 사실이 아닌 말을 하는 것" 을 저장 판정·기록·배너 쪽에서 기계에 맡겼다.
  *     이 가드는 같은 원칙을 **입력 요소**에 적용한다.
  *
@@ -34,26 +37,30 @@ const INPUT_OK = /onChange|onInput|readOnly|disabled|ref=|defaultValue|type="fil
 
 /** 주석을 같은 길이의 공백으로 (줄 번호가 흔들리지 않게). 따옴표는 줄을 넘지 않는다(JSX 아포스트로피 대비) */
 function blankComments(text) {
-  const out = text.split('');
-  let mode = 'code';
-  for (let i = 0; i < text.length; i += 1) {
-    const c = text[i];
-    const n = text[i + 1];
-    if (mode === 'code') {
-      if (c === '/' && n === '/') { mode = 'line'; out[i] = ' '; out[i + 1] = ' '; i += 1; continue; }
-      if (c === '/' && n === '*') { mode = 'block'; out[i] = ' '; out[i + 1] = ' '; i += 1; continue; }
-      if (c === "'" || c === '"' || c === '`') mode = c;
+  // 316(312~315 리뷰 M-4): 전에는 따옴표만 보아 **정규식 안의 따옴표**(`/['"]/g`)나 JSX 아포스트로피에
+  // 속았고, 그 뒤 같은 줄의 `// <button>…` 주석이 지워지지 않아 **주석 속 단추를 실물로 신고**했다
+  // (거짓 경보 — 가드를 끄게 만드는 종류다). **줄 주석을 먼저, 줄 단위로** 지운다:
+  // 문자열 안의 `//` 는 대개 URL 이고, 장식 판정은 여는 태그의 속성만 보므로 지워도 판정이 바뀌지 않는다.
+  // 그 다음 블록 주석을 상태로 지운다(문자열·템플릿은 그대로 둔다 — 속성 값을 봐야 한다).
+  const noLine = text.split('\n').map(line => {
+    const at = line.indexOf('//');
+    if (at < 0) return line;
+    // `http://`·`https://` 처럼 바로 앞이 `:` 인 것은 주석이 아니다
+    if (at > 0 && line[at - 1] === ':') return line;
+    return line.slice(0, at) + ' '.repeat(line.length - at);
+  }).join('\n');
+
+  const out = noLine.split('');
+  let inBlock = false;
+  for (let i = 0; i < noLine.length; i += 1) {
+    const c = noLine[i];
+    const n = noLine[i + 1];
+    if (!inBlock) {
+      if (c === '/' && n === '*') { inBlock = true; out[i] = ' '; out[i + 1] = ' '; i += 1; }
       continue;
     }
-    if (mode === 'line') { if (c === '\n') mode = 'code'; else out[i] = ' '; continue; }
-    if (mode === 'block') {
-      if (c === '*' && n === '/') { out[i] = ' '; out[i + 1] = ' '; i += 1; mode = 'code'; continue; }
-      if (c !== '\n') out[i] = ' ';
-      continue;
-    }
-    if (c === '\\') { i += 1; continue; }
-    if (c === mode) { mode = 'code'; continue; }
-    if (c === '\n' && mode !== '`') mode = 'code';
+    if (c === '*' && n === '/') { out[i] = ' '; out[i + 1] = ' '; i += 1; inBlock = false; continue; }
+    if (c !== '\n') out[i] = ' ';
   }
   return out.join('');
 }
@@ -118,8 +125,12 @@ function selftest() {
   ok('읽기 전용·파일 입력은 통과', run('<input value={v} readOnly />\n<input type="file" />').length === 0);
   ok('주석 속 입력칸은 코드가 아니다', run('/* 네이티브 <input type="date"> 를 보조한다 */\n<input value={v} onChange={x} />').length === 0);
   ok('다른 이름 태그는 세지 않는다', run('<inputish value={v} />\n<buttonGroup />').length === 0);
+  // 316(리뷰 M-4): 정규식 안의 따옴표 뒤에 오는 **같은 줄 주석**도 주석이다(전에는 거짓 경보였다)
+  ok('정규식 뒤 같은 줄 주석', run("const re = /['\"]/g; // <button>장식</button>\n<button onClick={x}>저장</button>").length === 0);
+  ok('JSX 아포스트로피 뒤 주석', run("<p>Let's go</p> // <button>장식</button>\n<button onClick={x}>저장</button>").length === 0);
+  ok('URL 의 // 는 주석이 아니다', run('<button onClick={x} data-url="https://a/b">저장</button>').length === 0);
 
-  console.log('[check-decorative] selftest OK — 덫(동작 없는 단추·onClick·화살표 함수·submit·spread·주석 속 단추·입력칸 onChange 2종·읽기 전용·주석 속 입력칸·다른 이름) 통과');
+  console.log('[check-decorative] selftest OK — 덫(동작 없는 단추·onClick·화살표 함수·submit·spread·주석 속 단추·입력칸 onChange 2종·읽기 전용·주석 속 입력칸·다른 이름·정규식 뒤 주석·아포스트로피 뒤 주석·URL) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
