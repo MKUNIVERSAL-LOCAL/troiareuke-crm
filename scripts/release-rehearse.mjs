@@ -8,7 +8,7 @@
  *     302~312 가 검사를 다섯 개 더했고 그중 하나라도 빠지면 리허설이 통과해도 릴리스가 멈춘다.
  *
  * 하는 일: `package.json` 의 `release:checks` 를 **그 자리에서 읽어** 단계를 만들고, 비싼 단계만 빼고 돌린다.
- *   - 빼는 것: `npm run test:e2e`(전체 Playwright) 하나뿐이다.
+ *   - 빼는 것: `npm run test:e2e:shards`(전체 Playwright, 338 부터 분할 실행) 하나뿐이다.
  *   - **빼는 목록이 그 하나와 다르면 멈춘다** — 새 비싼 단계가 조용히 건너뛰어지는 것을 막는다.
  *   그래서 이 스크립트는 `release:checks` 가 바뀌면 자동으로 함께 바뀐다(목록을 두 곳에 적지 않는다).
  *
@@ -38,7 +38,7 @@ if (odd.length > 0) {
   console.error('  → 체인에 따옴표 안 && 가 들어갔을 수 있습니다. 그 단계를 npm 스크립트로 빼고 다시 돌리세요.');
   process.exit(1);
 }
-const EXPENSIVE = ['npm run test:e2e'];
+const EXPENSIVE = ['npm run test:e2e:shards'];
 const skipped = steps.filter(s => EXPENSIVE.includes(s));
 const todo = steps.filter(s => !EXPENSIVE.includes(s));
 

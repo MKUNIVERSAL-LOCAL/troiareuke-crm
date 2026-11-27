@@ -30,7 +30,11 @@ test('월간 보기 — 하루 3건까지 칩, 나머지는 +N건, 날짜·칩·
   await expect(page.getByRole('heading', { level: 3 })).toContainText('예약 4건');
 
   // 오늘 칸: 3건까지만 칩으로, 나머지는 숨기지 않고 "+1건 더 보기"
-  const todayKey = new Date().toISOString().slice(0, 10);
+  // 338: 전에는 `toISOString()`(UTC)로 오늘을 만들었다 — 화면은 **로컬 날짜**로 칸을 그리므로
+  // 한국 시간 00:00~09:00 에는 하루 전 칸을 찾아 칩 0건이 나왔다(분할 실행에서 01:2x 에 실패를 봤다).
+  // 자정 경계 건너뛰기(`isNearMidnightSeoul`)는 23:45~00:05 만 덮으므로 이 구간을 막지 못했다.
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const cell = month.locator(`[data-testid="month-cell"][data-date="${todayKey}"]`);
   await expect(cell.getByTestId('month-chip')).toHaveCount(3);
   await expect(cell.getByTestId('month-chip').first()).toContainText('10:00');

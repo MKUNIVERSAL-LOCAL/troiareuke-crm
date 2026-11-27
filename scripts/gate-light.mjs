@@ -142,6 +142,7 @@ flags.X = step('X', '미사용 export', 'node', ['scripts/check-dead-export.mjs'
 flags.A = step('A', '창 접근성 커버리지', 'node', ['scripts/check-modal-a11y.mjs']); // 289
 flags.N = step('N', '키보드 경로', 'node', ['scripts/check-keyboard-path.mjs']); // 318
 flags.I = step('I', '보이지 않는 글자', 'node', ['scripts/check-invisible-chars.mjs']); // 332
+flags.S = step('S', '스펙 관례', 'node', ['scripts/check-e2e-conventions.mjs']); // 338
 // F 는 **빌드된 CSS 의 순서**를 보므로 B(앱 빌드) 뒤여야 한다 (333)
 flags.F = step('F', '초점 표시', 'node', ['scripts/check-focus-visible.mjs']); // 333
 flags.Q = step('Q', '글자 대비', 'node', ['scripts/check-contrast-classes.mjs']); // 326
