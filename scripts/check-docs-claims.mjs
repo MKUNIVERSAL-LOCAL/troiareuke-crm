@@ -25,6 +25,9 @@
  *     M-4 가 찾은 낡은 줄("출장 기간(11-25 저녁~) 218~285")이 **날짜 때문에 면제**된다 — 낡은 것을
  *     숨기는 쪽이 아니라, 과거라고 밝힌 자리만 면제한다.
  *  ③ 문서가 가리키는 파일 — 문서 안의 `docs/X.md`·`scripts/Y.mjs` 는 실재해야 한다(깨진 포인터 금지).
+ *  ⑬ **부분 집합 리뷰 수**(335) — "기록 N개(`docs/REVIEW-*.md` 중 NNN 번 이상을 다루는 것)" 는 파일 이름의
+ *     첫 묶음 번호로 **세어** 맞춘다. ② 는 전체 건수만 봐서, 오너가 가장 먼저 읽는 브리핑 §1 에서
+ *     이 수가 낡은 것을 못 봤다(335 가 손으로 찾았다 — 그래서 가드가 덮게 했다).
  *  ④ 리뷰 기록의 반영 표시 — `docs/REVIEW-*.md` 머리말(앞 3줄)에 "반영" 상태가 적혀 있어야 한다.
  *     조용히 묻힌 리뷰가 없다는 뜻이다.
  *  ⑥ 자기 범위 표시가 사라지지 않는가 — `NEXT-ACTION`·`OWNER-BRIEFING`·`MASTER-DEVELOPMENT-STATUS` 는
@@ -156,7 +159,7 @@ function outboxClaims(text, rel) {
 
 /** 문서가 주장하는 숫자들 */
 function claimedNumbers(text) {
-  const out = { rules: [], testids: [], libUnits: [], ranges: [], cumulative: [], reviews: [] };
+  const out = { rules: [], testids: [], libUnits: [], ranges: [], cumulative: [], reviews: [], reviewsFrom: [] };
   const fresh = m => !markedPast(text, m.index, m[0].length);
   // 285(리뷰 M-2): 문구를 좁게 보던 탓에 `lib-units.spec.ts 160건`·`lib-units(165개)`·맨 `231함수` 가
   // 전부 가드 밖이었다. 283 이 기계가 보던 표현을 지우고 못 보는 표현만 남겨 한 묶음 뒤 낡은 적도 있다.
@@ -218,6 +221,11 @@ function claimedNumbers(text) {
     }
   }
   for (const m of text.matchAll(/REVIEW-\*\.md[^\d]{0,4}(\d+)\s*건/g)) if (fresh(m)) out.reviews.push({ count: Number(m[1]), raw: m[0] });
+  // 335: **부분 집합 주장** — "기록 28개(`docs/REVIEW-*.md` 중 218 번 이상을 다루는 것)".
+  // 전체 건수와 다른 수라서 기존 검사가 보지 못했고, 오너가 가장 먼저 읽는 문서에서 낡아 있었다.
+  for (const m of text.matchAll(/기록\s*(\d+)\s*개\*{0,2}\(`?docs\/REVIEW-\*\.md`?\s*중\s*(\d+)\s*번\s*이상/g)) {
+    if (fresh(m)) out.reviewsFrom.push({ count: Number(m[1]), from: Number(m[2]), raw: m[0] });
+  }
   // lib-units 뒤에 공백·괄호·`.spec.ts` 가 끼어도 센다(개·건 둘 다)
   for (const m of text.matchAll(/lib-units(?:\.spec\.ts)?[^\d]{0,4}(\d+)\s*(?:개|건)/g)) out.libUnits.push({ count: Number(m[1]), raw: m[0] });
   return out;
@@ -243,6 +251,9 @@ function liveNumbers() {
   const UNIFORM_FROM = 165;
   const countInRange = (start, end) => batchNos.filter(n => n >= start && n <= end).length;
   const reviewFiles = fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-.*\.md$/.test(x)).length;
+  // 335: 부분 집합 실측 — 파일 이름의 **첫 묶음 번호**가 N 이상인 것을 센다
+  const reviewNames = fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-\d+-\d+-\d{4}-\d{2}-\d{2}\.md$/.test(x));
+  const reviewsFromCount = from => reviewNames.filter(x => Number(x.replace('REVIEW-', '').split('-')[0]) >= from).length;
   if (!rules || !ids) {
     // 이 가드는 다른 두 가드의 출력을 세므로, 그쪽이 실패하면 여기서 숫자를 읽을 수 없다.
     // 남의 실패를 떠안고 스택 트레이스로 끝내지 않고 **무엇을 먼저 고쳐야 하는지** 적는다 (285, 리뷰 LOW)
@@ -254,7 +265,7 @@ function liveNumbers() {
   }
   return {
     modules: Number(rules[1]), fns: Number(rules[2]), idTotal: Number(ids[1]), idCovered: Number(ids[2]), libUnits: units,
-    newestBatch, cumCount: lastCum ? Number(lastCum[2]) : null, reviewFiles, countInRange, UNIFORM_FROM,
+    newestBatch, cumCount: lastCum ? Number(lastCum[2]) : null, reviewFiles, reviewsFromCount, countInRange, UNIFORM_FROM,
   };
 }
 
@@ -310,6 +321,18 @@ function selftest() {
   if (mixed.rules.length !== 1 || mixed.rules[0].modules !== 99) { console.error(`[selftest] 당시 범위 덫 실패: ${JSON.stringify(mixed.rules)}`); process.exit(1); }
   if (n291.cumulative.length !== 1 || n291.cumulative[0].count !== 136) { console.error(`[selftest] 누계 추출 실패: ${JSON.stringify(n291.cumulative)}`); process.exit(1); }
   if (n291.reviews.length !== 1 || n291.reviews[0].count !== 31) { console.error(`[selftest] 리뷰 건수 추출 실패: ${JSON.stringify(n291.reviews)}`); process.exit(1); }
+  // 335(검사 ⑬): 부분 집합 주장("기록 N개(REVIEW-*.md 중 NNN 번 이상을 다루는 것)")을 뽑아내는가.
+  // 오너가 가장 먼저 읽는 브리핑 §1 에서 이 수가 낡아 있었는데 전체 건수만 보던 ② 는 못 봤다.
+  {
+    const sub = claimedNumbers('이 기간 분만 **기록 28개**(`docs/REVIEW-*.md` 중 218 번 이상을 다루는 것)이고');
+    if (sub.reviewsFrom.length !== 1 || sub.reviewsFrom[0].count !== 28 || sub.reviewsFrom[0].from !== 218) {
+      console.error(`[selftest] 부분 집합 리뷰 수 추출 실패: ${JSON.stringify(sub.reviewsFrom)}`); process.exit(1);
+    }
+    const none = claimedNumbers('리뷰 기록은 `docs/REVIEW-*.md` 42건이고');
+    if (none.reviewsFrom.length !== 0) { console.error('[selftest] 전체 건수를 부분 집합으로 오인'); process.exit(1); }
+    const past = claimedNumbers('11-25 당시 기록 24개(`docs/REVIEW-*.md` 중 218 번 이상을 다루는 것)');
+    if (past.reviewsFrom.length !== 0) { console.error('[selftest] "당시" 가 붙은 과거 수를 세었다'); process.exit(1); }
+  }
   const past = claimedNumbers('11-24 당시 54모듈 이었다. 당시 묶음 155~285(131개) 였다.');
   if (past.rules.length !== 0 || past.cumulative.length !== 0) { console.error(`[selftest] "당시" 면제 실패: ${JSON.stringify(past)}`); process.exit(1); }
   const dated = claimedNumbers('11-25 저녁~ 묶음 218~285 를 했다');  // 날짜만 있으면 면제되지 않는다(M-4 가 찾은 자리)
@@ -389,7 +412,7 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수) 통과`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·부분 집합 리뷰 수 3종) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -455,6 +478,11 @@ const problems = [];
     }
     for (const v of c.reviews) {
       if (v.count !== live.reviewFiles) problems.push(`${rel}: "${v.raw}" 가 낡았다 — docs/REVIEW-*.md 는 ${live.reviewFiles}건`);
+    }
+    // 335(검사 ⑬): 부분 집합 주장도 센다
+    for (const v of c.reviewsFrom) {
+      const real = live.reviewsFromCount(v.from);
+      if (v.count !== real) problems.push(`${rel}: "${v.raw}…" 가 낡았다 — ${v.from} 번 이상을 다루는 리뷰 기록은 ${real}개`);
     }
   }
 }
