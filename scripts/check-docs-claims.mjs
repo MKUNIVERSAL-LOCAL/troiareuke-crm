@@ -518,55 +518,81 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-// ⑯ 덫 — 코어 잠금 표 (353). 정본이 집합이므로 양방향 모두 본다.
+// ── 새 검사(⑯⑰⑱)의 덫 — **수는 세어서 찍는다**(356, 352~354 리뷰 M-2).
+  //    353·354 는 손으로 "12종"·"10종" 이라고 적었고 둘 다 틀렸다(실제 13·11).
+  //    이 저장소의 다른 가드 넷은 이미 trapCount 를 쓴다(check-contrast-classes.mjs:803 의 교훈).
+  let newTraps = 0;
+  const trap = (name, cond) => { newTraps += 1; if (!cond) { console.error('[selftest] ' + name + ' 덫 실패'); process.exit(1); } };
+
+  // ⑯ 코어 잠금 표 — 정본이 집합이므로 양방향 모두 본다 (353)
   {
     const lockDoc = rows => '# x\n\n## 보호 대상 (코어)\n\n| 파일 | 역할 |\n|---|---|\n' + rows + '\n\n## 다음 절\n';
     const real = ['a/b.ts', 'c/d.cjs', 'c/e.cjs', 'sb/'];
     const full = '| `a/b.ts` | 가 |\n| `c/d.cjs`, `c/e.cjs` | 나 |\n| `sb/**` | 다 |';
-    if (lockDocProblems(lockDoc(full), real).length !== 0) { console.error('[selftest] 잠금 표 거짓 경보: ' + JSON.stringify(lockDocProblems(lockDoc(full), real))); process.exit(1); }
+    trap('잠금 표 거짓 경보', lockDocProblems(lockDoc(full), real).length === 0);
     const dropped = lockDocProblems(lockDoc('| `a/b.ts` | 가 |\n| `sb/**` | 다 |'), real);
-    if (dropped.length !== 2 || !/c\/d\.cjs/.test(dropped[0])) { console.error('[selftest] 빠진 잠금 파일 덫 실패: ' + JSON.stringify(dropped)); process.exit(1); }
+    trap('빠진 잠금 파일', dropped.length === 2 && /c\/d\.cjs/.test(dropped[0]));
     const extra = lockDocProblems(lockDoc(full + '\n| `x/y.ts` | 라 |'), real);
-    if (extra.length !== 1 || !/정본\(scripts\/core-lock\.mjs\)에 없다/.test(extra[0])) { console.error('[selftest] 잠기지 않은 파일 덫 실패: ' + JSON.stringify(extra)); process.exit(1); }
-    // 한 칸에 두 경로를 적는 줄(`electron/main.cjs`, `electron/preload.cjs`)을 한 개로 세면 안 된다
-    if (lockDocPaths(lockDoc(full)).size !== 4) { console.error('[selftest] 한 칸 두 경로 덫 실패'); process.exit(1); }
-    // 디렉터리는 표가 `sb/**`, 정본이 `sb/` 로 적는다 — 꼬리 별표만 떼고 같다고 본다
-    if (lockDocProblems(lockDoc('| `a/b.ts` | 가 |\n| `c/d.cjs`, `c/e.cjs` | 나 |\n| `sb/` | 다 |'), real).length !== 0) { console.error('[selftest] 디렉터리 표기 덫 실패'); process.exit(1); }
+    trap('잠기지 않은 파일', extra.length === 1 && /정본\(scripts\/core-lock\.mjs\)에 없다/.test(extra[0]));
+    // 한 칸에 두 경로를 적는 줄(electron/main.cjs, electron/preload.cjs)을 한 개로 세면 안 된다
+    trap('한 칸 두 경로', lockDocPaths(lockDoc(full)).size === 4);
+    // 디렉터리는 표가 sb/**, 정본이 sb/ 로 적는다 — 꼬리 별표만 떼고 같다고 본다
+    trap('디렉터리 표기', lockDocProblems(lockDoc('| `a/b.ts` | 가 |\n| `c/d.cjs`, `c/e.cjs` | 나 |\n| `sb/` | 다 |'), real).length === 0);
     const noSec = lockDocProblems('# x\n\n## 딴 절\n', real);
-    if (noSec.length !== 1 || !/절이 없다/.test(noSec[0])) { console.error('[selftest] 절 없음 덫 실패: ' + JSON.stringify(noSec)); process.exit(1); }
+    trap('절 없음', noSec.length === 1 && /절이 없다/.test(noSec[0]));
+    // 356(리뷰 L-3): 렌더되지 않는 자리의 행을 "있다" 고 세면, 문서에서 사라진 줄이 가드를 통과한다
+    const hiddenHtml = lockDocProblems(lockDoc('| `a/b.ts` | 가 |\n<!--\n| `c/d.cjs`, `c/e.cjs` | 나 |\n-->\n| `sb/**` | 다 |'), real);
+    trap('HTML 주석 안의 행은 없는 것', hiddenHtml.length === 2 && /c\/d\.cjs/.test(hiddenHtml[0]));
+    const fence = '```\n| `c/d.cjs`, `c/e.cjs` | 나 |\n```';
+    const hiddenFence = lockDocProblems(lockDoc('| `a/b.ts` | 가 |\n' + fence + '\n| `sb/**` | 다 |'), real);
+    trap('코드 펜스 안의 행은 없는 것', hiddenFence.length === 2);
   }
-  // ⑰ 덫 — 브리핑 §4 범위 (353, 349~351 리뷰 M-1)
+
+  // ⑰ 브리핑 §4 범위 (353, 349~351 리뷰 M-1)
   {
     const nos = [218, 219, 220, 221, 222];
     const sec4 = (head, rows) => '## 4. 지점이 보는 변화 (' + head + ', 기능군별)\n\n| 묶음 | 지점이 보는 것 |\n|---|---|\n' + rows + '\n\n## 5. 다음\n';
     const cover = '| **위 행에 없는 나머지 전부**(218~222 중 — 품질) | 품질 작업 |';
-    const ok = sec4('218~222', '| 218·219 | 가 |\n| 220~222 | 나 |\n' + cover);
-    if (section4Problems(ok, nos).length !== 0) { console.error('[selftest] §4 거짓 경보: ' + JSON.stringify(section4Problems(ok, nos))); process.exit(1); }
+    const good = sec4('218~222', '| 218·219 | 가 |\n| 220~222 | 나 |\n' + cover);
+    trap('§4 거짓 경보', section4Problems(good, nos).length === 0);
     // 머리말만 올리는 것이 349 가 고치고 350·351 이 되풀이한 모양이다
     const bumped = section4Problems(sec4('218~223', '| 218·219 | 가 |\n' + cover), [...nos, 223]);
-    if (bumped.length !== 1 || !/나머지 전부/.test(bumped[0])) { console.error('[selftest] 머리말만 올린 덫 실패: ' + JSON.stringify(bumped)); process.exit(1); }
+    trap('머리말만 올림', bumped.length === 1 && /나머지 전부/.test(bumped[0]));
     // 덮개 줄이 없으면 열거가 완전해야 한다 — 범위 표기(218~220)는 펼쳐서 센다
     const holes = section4Problems(sec4('218~222', '| 218~220 | 가 |'), nos);
-    if (holes.length !== 1 || !/덮지 않는 묶음이 2개/.test(holes[0])) { console.error('[selftest] 빠진 묶음 덫 실패: ' + JSON.stringify(holes)); process.exit(1); }
+    trap('빠진 묶음', holes.length === 1 && /덮지 않는 묶음이 2개/.test(holes[0]));
     const outside = section4Problems(sec4('218~222', '| 999 | 가 |\n' + cover), nos);
-    if (outside.length !== 1 || !/머리말 범위\(218~222\) 밖/.test(outside[0])) { console.error('[selftest] 범위 밖 묶음 덫 실패: ' + JSON.stringify(outside)); process.exit(1); }
+    trap('범위 밖 묶음', outside.length === 1 && /머리말 범위\(218~222\) 밖/.test(outside[0]));
     const ghost = section4Problems(sec4('218~222', '| 221 | 가 |\n' + cover), [218, 219, 220, 222]);
-    if (ghost.length !== 1 || !/로드맵에 없다/.test(ghost[0])) { console.error('[selftest] 없는 묶음 덫 실패: ' + JSON.stringify(ghost)); process.exit(1); }
+    trap('없는 묶음', ghost.length === 1 && /로드맵에 없다/.test(ghost[0]));
     const noSec = section4Problems('## 3. 딴 절\n\n글\n', nos);
-    if (noSec.length !== 1 || !/"## 4\." 절이 없다/.test(noSec[0])) { console.error('[selftest] §4 절 없음 덫 실패: ' + JSON.stringify(noSec)); process.exit(1); }
+    trap('§4 절 없음', noSec.length === 1 && /"## 4\." 절이 없다/.test(noSec[0]));
     const noRange = section4Problems('## 4. 지점이 보는 변화 (기능군별)\n\n| 묶음 | 것 |\n|---|---|\n| 218 | 가 |\n', nos);
-    if (noRange.length !== 1 || !/범위가 없다/.test(noRange[0])) { console.error('[selftest] §4 범위 없음 덫 실패: ' + JSON.stringify(noRange)); process.exit(1); }
+    trap('§4 범위 없음', noRange.length === 1 && /범위가 없다/.test(noRange[0]));
+    // 356(리뷰 L-2): 앞쪽에 끼운 거짓 덮개가 조용히 묻히던 자리
+    const twoCovers = section4Problems(sec4('218~222', '| **나머지 전부**(218~219 중) | 가 |\n' + cover), nos);
+    trap('덮개가 둘', twoCovers.some(p => /"나머지 전부" 행이 2개/.test(p)));
+    // 356(리뷰 L-4): 네 자리 묶음의 앞 세 자리를 번호로 읽으면 거짓 경보가 난다
+    const four = section4Problems(sec4('218~222', '| 1000·1001 | 가 |\n' + cover), nos);
+    trap('네 자리 묶음을 자르지 않는다', four.length === 2 && four.every(p => /묶음 100[01] /.test(p)));
+    const year = section4Problems(sec4('218~222', '| 2026 년 작업 | 가 |\n' + cover), nos);
+    trap('연도를 묶음으로 세지 않는다', year.length === 0);
   }
-// ⑱ 덫 — 시각 ↔ 커밋 (354)
+
+  // ⑱ 시각 ↔ 커밋 (354)
   {
-    if (timeGap('11-28', '07:30', '11-28', '07:30') !== 0) { console.error('[selftest] 같은 시각 덫 실패'); process.exit(1); }
-    if (timeGap('11-28', '07:3x', '11-28', '07:37') !== 0) { console.error('[selftest] 분 자리 창 덫 실패'); process.exit(1); }
-    if (timeGap('11-28', '07:30', '11-28', '07:50') !== 20) { console.error('[selftest] 커밋이 뒤인 덫 실패'); process.exit(1); }
-    if (timeGap('11-28', '07:40', '11-28', '07:30') !== -10) { console.error('[selftest] 적은 시각이 미래인 덫 실패'); process.exit(1); }
-    if (timeGap('11-28', '07:4x', '11-28', '07:30') !== -10) { console.error('[selftest] 창 아래로 벗어난 덫 실패'); process.exit(1); }
-    if (timeGap('11-27', '23:50', '11-28', '00:05') !== 15) { console.error('[selftest] 날짜 넘는 덫 실패: ' + timeGap('11-27', '23:50', '11-28', '00:05')); process.exit(1); }
+    trap('같은 시각', timeGap('11-28', '07:30', '11-28', '07:30') === 0);
+    trap('분 자리 창', timeGap('11-28', '07:3x', '11-28', '07:37') === 0);
+    trap('커밋이 뒤', timeGap('11-28', '07:30', '11-28', '07:50') === 20);
+    trap('적은 시각이 미래', timeGap('11-28', '07:40', '11-28', '07:30') === -10);
+    trap('창 아래로 벗어남', timeGap('11-28', '07:4x', '11-28', '07:30') === -10);
+    trap('날짜 넘김', timeGap('11-27', '23:50', '11-28', '00:05') === 15);
     // 352 가 실제로 적고 있던 값 — 219분 미래였다
-    if (timeGap('11-28', '10:5x', '11-28', '07:11') !== -219) { console.error('[selftest] 352 실측 덫 실패: ' + timeGap('11-28', '10:5x', '11-28', '07:11')); process.exit(1); }
+    trap('352 실측', timeGap('11-28', '10:5x', '11-28', '07:11') === -219);
+    // 356(리뷰 H-3): 달을 31일로 단순화하면 11-30 → 12-01 이 이틀이 된다(1455분). 달력으로 센다.
+    trap('달 경계(11-30 → 12-01)', timeGap('11-30', '23:50', '12-01', '00:05', 2026) === 15);
+    trap('해 넘김(12-31 → 01-01)', timeGap('12-31', '23:50', '01-01', '00:05', 2027) === 15);
+    trap('2월 끝(02-28 → 03-01)', timeGap('02-28', '23:50', '03-01', '00:05', 2026) === 15);
     const road = [
       '- [x] 352 — **가**(11-28 07:11): 검증. 커밋 c0aacdb. 누계 155~352 묶음 197개.',
       '- [x] 240 — **나**(11-25 01:02): 해시 규약 앞이라 해시가 없다.',
@@ -575,12 +601,29 @@ function selftest() {
       '- [x] 353 — **다**(11-28 07:30): 커밋 d1df183.',
     ].join('\n');
     const rows = timeClaimRows(road);
-    if (rows.length !== 4) { console.error('[selftest] 시각 줄 수집 덫 실패: ' + JSON.stringify(rows)); process.exit(1); }
-    if (rows.filter(r => r.kind === '재검증').length !== 2) { console.error('[selftest] 재검증 줄 수집 덫 실패'); process.exit(1); }
-    if (rows.some(r => r.no === 240)) { console.error('[selftest] 해시 없는 줄 면제 덫 실패'); process.exit(1); }
-    if (rows.find(r => r.kind === '재검증' && r.no === 353).hash !== 'd1df183') { console.error('[selftest] 재검증 줄이 그 묶음 해시를 봐야 한다'); process.exit(1); }
+    trap('시각 줄 수집', rows.length === 4);
+    trap('재검증 줄 수집', rows.filter(r => r.kind === '재검증').length === 2);
+    trap('해시 없는 줄 면제', !rows.some(r => r.no === 240));
+    trap('재검증 줄이 그 묶음 해시를 본다', rows.find(r => r.kind === '재검증' && r.no === 353).hash === 'd1df183');
+    // 356(리뷰 H-2): 전에는 커밋 시각을 **돌리는 PC 의 지역시각**으로 읽어 UTC 러너에서 194건 거짓 경보가 났다.
+    // 처음 쓴 덫은 같은 명령을 TZ 만 바꿔 두 번 불러 비교했는데, spawnSync 로 넘긴 TZ 를 이 환경의
+    // git 이 따르지 않아 **두 값이 늘 같았다** — 덫이 돌지도 않는데 통과하는 모양이었다(변이 시험이 잡았다).
+    // 이제 **커밋 자신의 오프셋**(%aI)에서 뽑은 값과 맞춘다 — 그게 이 검사의 정의다.
+    {
+      const r = spawnSync('git', ['log', '-1', '--format=%H %aI'], { cwd: ROOT, encoding: 'utf8' });
+      const m = r.status === 0 ? /^([0-9a-f]{40}) (\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec((r.stdout || '').trim()) : null;
+      const ct = m ? commitTimes() : null;
+      const row = ct ? ct.find(x => x.h === m[1]) : null;
+      if (m === null || ct === null) console.log('[check-docs-claims] ⑱ 오프셋 덫 건너뜀 — git 을 읽을 수 없습니다');
+      else trap('커밋 시각은 커밋 자신의 오프셋으로 읽는다', !!row && row.y === Number(m[2]) && row.md === m[3] + '-' + m[4] && row.hm === m[5] + ':' + m[6]);
+    }
+    // 356: ⑮ 의 asar 시각도 같은 결함이었다 — 서울 기준으로 못 박았는지 고정된 순간으로 확인한다
+    {
+      const kst = seoulStamp(new Date(Date.UTC(2026, 10, 27, 16, 6)));
+      trap('asar 시각은 서울 기준', kst.md === '11-28' && kst.hm === '01:06');
+    }
   }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종·코어 잠금 표 6종·§4 범위 7종·시각 10종) 통과`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과 + 새 검사 덫 ${newTraps}종(코어 잠금 표·§4 범위·기록 시각 — **이 수는 세어서 찍는다**, 352~354 리뷰 M-2)`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -919,8 +962,8 @@ problems.push(...releaseStepProblems());
     for (const r of timeClaimRows(read(ROADMAP))) {
       const c = commits.find(x => x.h.startsWith(r.hash));
       if (!c) continue; // 해시 실재는 ① 이 본다
-      const d = timeGap(r.md, r.hm, c.md, c.hm);
-      if (d === null) continue;
+      // 356(리뷰 L-1): `if (d === null) continue` 가 있었는데 timeGap 은 null 을 돌려주지 않는다 — 죽은 가지였다.
+      const d = timeGap(r.md, r.hm, c.md, c.hm, c.y);
       if (d < -TIME_BEFORE) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 는 커밋(${c.md} ${c.hm})보다 ${-d}분 뒤다 — 아직 오지 않은 시각을 적었다(시계를 읽어 적으세요)`);
       else if (d > TIME_AFTER) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 가 커밋(${c.md} ${c.hm})보다 ${d}분 앞이다 — 시각을 사실대로 적으세요`);
     }
@@ -976,14 +1019,21 @@ function timeClaimRows(text) {
   return out;
 }
 /** 적은 시각과 커밋 시각의 분 차이 — 0 이면 맞다. 음수는 적은 시각이 그만큼 미래 */
-function timeGap(md, hm, cmd, chm) {
-  if (md !== cmd) {
-    // 날짜가 다르면 날짜까지 포함해 센다(달을 31일로 단순화 — 묶음은 같은 달 안에서 이어진다)
-    const day = x => Number(x.slice(0, 2)) * 31 + Number(x.slice(3));
-    const diff = (day(cmd) - day(md)) * 1440;
-    return diff + timeGapSameDay(hm, chm);
+function timeGap(md, hm, cmd, chm, cYear = 2026) {
+  if (md === cmd) return timeGapSameDay(hm, chm);
+  // 356(352~354 리뷰 H-3): 전에는 `월*31 + 일` 로 셌다. 11월은 30일이므로 **11-30 → 12-01 이
+  // 이틀**로 계산돼 1455분 어긋남을 신고했고(릴리스 경로가 이틀 뒤 막힐 자리였다), 12-31 → 01-01 은
+  // -535665 분이 나왔다. 달력으로 센다. 기록은 MM-DD 만 적으므로 **연도는 커밋 연도 전후에서
+  // 가장 가까운 해**를 고른다 — 그래야 해를 넘기는 자리(12-31 ↔ 01-01)가 맞는다.
+  const dayIndex = (x, y) => Math.floor(Date.UTC(y, Number(x.slice(0, 2)) - 1, Number(x.slice(3))) / 86400000);
+  const ci = dayIndex(cmd, cYear);
+  const within = timeGapSameDay(hm, chm);
+  let best = null;
+  for (const y of [cYear - 1, cYear, cYear + 1]) {
+    const g = (ci - dayIndex(md, y)) * 1440 + within;
+    if (best === null || Math.abs(g) < Math.abs(best)) best = g;
   }
-  return timeGapSameDay(hm, chm);
+  return best;
 }
 function timeGapSameDay(hm, chm) {
   const toMin = x => Number(x.slice(0, 2)) * 60 + Number(x.slice(3));
@@ -996,12 +1046,15 @@ function timeGapSameDay(hm, chm) {
 }
 /** 이 브랜치의 커밋 시각 표 — git 을 한 번만 부른다 */
 function commitTimes() {
-  const r = spawnSync('git', ['log', '--format=%H %ad', '--date=format-local:%m-%d %H:%M'], { cwd: ROOT, encoding: 'utf8' });
+  // 356(352~354 리뷰 H-2): 전에는 `format-local` 이라 **돌리는 PC 의 시간대**로 읽었다 —
+  // 기록의 시각은 KST 고정이므로 UTC 러너(client-ci 가 ubuntu-latest 다)에서 **194건 거짓 경보**가 났다.
+  // `format` 은 커밋 자신이 들고 있는 오프셋(+0900)으로 찍으므로 어디서 돌려도 같은 값이 나온다.
+  const r = spawnSync('git', ['log', '--format=%H %ad', '--date=format:%Y-%m-%d %H:%M'], { cwd: ROOT, encoding: 'utf8' });
   if (r.status !== 0) return null;
   const out = [];
   for (const line of (r.stdout || '').split('\n')) {
-    const m = /^([0-9a-f]{40}) (\d{2}-\d{2}) (\d{2}:\d{2})$/.exec(line.trim());
-    if (m) out.push({ h: m[1], md: m[2], hm: m[3] });
+    const m = /^([0-9a-f]{40}) (\d{4})-(\d{2}-\d{2}) (\d{2}:\d{2})$/.exec(line.trim());
+    if (m) out.push({ h: m[1], y: Number(m[2]), md: m[3], hm: m[4] });
   }
   return out.length === 0 ? null : out;
 }
@@ -1010,6 +1063,21 @@ function commitTimes() {
 function newestBriefing() {
   const briefs = fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^OWNER-BRIEFING-.*\.md$/.test(f)).sort();
   return briefs.length === 0 ? null : `docs/${briefs[briefs.length - 1]}`;
+}
+
+/**
+ * 356(352~354 리뷰 L-3): 렌더되지 않는 곳의 표 행을 "있다" 고 세면 안 된다 —
+ * `<!-- -->` 로 감싼 줄이나 코드 펜스 안의 예시를 세면, 문서에서 사라진 행이 가드를 통과한다.
+ * 줄 수를 지키려 공백으로 바꾼다(소스 가드의 `scripts/lib/blank-comments.mjs` 와 같은 원칙).
+ */
+function hiddenBlanked(md) {
+  const out = [];
+  let inFence = false;
+  for (const line of md.split('\n')) {
+    if (/^\s*```/.test(line)) { inFence = !inFence; out.push(''); continue; }
+    out.push(inFence ? '' : line);
+  }
+  return out.join('\n').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
 }
 
 /** 표 첫 칸만 돌려준다 — 구분 줄·머리 줄은 건너뛴다 */
@@ -1028,7 +1096,7 @@ function firstCells(body) {
 
 /** ⑯ 코어 잠금 문서 표의 경로 집합 — 절이 없으면 null (353) */
 function lockDocPaths(text) {
-  const sec = text.split(/^## 보호 대상/m)[1];
+  const sec = hiddenBlanked(text).split(/^## 보호 대상/m)[1];
   if (sec === undefined) return null;
   const out = new Set();
   for (const first of firstCells(sec.split(/^## /m)[0])) {
@@ -1054,29 +1122,44 @@ function lockDocProblems(text, real) {
 
 /** ⑰ 브리핑 §4 — 머리말 범위·열거된 묶음·한 줄로 덮는 행 (353) */
 function section4Scope(briefText) {
-  const sec = briefText.split(/^## 4\./m)[1];
+  const sec = hiddenBlanked(briefText).split(/^## 4\./m)[1];
   if (sec === undefined) return null;
   const head = sec.split('\n')[0];
-  const hm = head.match(/\((\d{3})~(\d{3})/);
+  // 356(리뷰 L-4): 세 자리만 보면 네 자리 묶음(1000~)의 앞 세 자리를 번호로 읽어 **거짓 경보**가 난다
+  // (`| 1000·1001 |` → "묶음 100 이 범위 밖"). 같은 파일의 allBatchNos 는 347 리뷰 L-1 로 이미 고쳤다.
+  const hm = head.match(/\((\d{3,4})~(\d{3,4})/);
   const listed = new Set();
-  let catchAll = null;
+  const catchAlls = [];
   for (const first of firstCells(sec.split(/^## /m)[0])) {
     if (/나머지 전부/.test(first)) {
-      const r = first.match(/(\d{3})~(\d{3})/);
-      catchAll = r ? { start: Number(r[1]), end: Number(r[2]) } : { start: null, end: null };
+      // 356(리뷰 L-2): 전에는 마지막 것만 남겨 **앞쪽의 거짓 덮개가 조용히 묻혔다**
+      const r = first.match(/(\d{3,4})~(\d{3,4})/);
+      catchAlls.push(r ? { start: Number(r[1]), end: Number(r[2]) } : { start: null, end: null });
       continue;
     }
     let rest = first;
-    for (const m of first.matchAll(/(\d{3})~(\d{3})/g)) {
-      for (let i = Number(m[1]); i <= Number(m[2]); i++) listed.add(i);
+    for (const m of first.matchAll(/(\d{3,4})~(\d{3,4})/g)) {
+      const a = Number(m[1]), b = Number(m[2]);
+      if (a < 2000 && b < 2000) for (let i = a; i <= b; i++) listed.add(i);
     }
-    rest = rest.replace(/(\d{3})~(\d{3})/g, ' ');
-    for (const m of rest.matchAll(/\d{3}/g)) listed.add(Number(m[0]));
+    rest = rest.replace(/(\d{3,4})~(\d{3,4})/g, ' ');
+    for (const m of rest.matchAll(/\d{3,4}/g)) {
+      const n = Number(m[0]);
+      if (n < 2000) listed.add(n); // 2000 이상은 묶음이 아니라 연도다(allBatchNos 와 같은 경계)
+    }
   }
-  return { head: hm ? { start: Number(hm[1]), end: Number(hm[2]) } : null, listed, catchAll };
+  return { head: hm ? { start: Number(hm[1]), end: Number(hm[2]) } : null, listed, catchAll: catchAlls[0] ?? null, catchAlls };
 }
 
-/** ⑰ 어긋남 — batchNos 는 로드맵의 실제 묶음 번호 (353) */
+/**
+ * ⑰ 어긋남 — batchNos 는 로드맵의 실제 묶음 번호 (353)
+ *
+ * **보지 않는 것**(356, 352~354 리뷰 M-5): 덮개 행이 있는 동안 이 검사는 완전성을 재지 않는다 —
+ * 하는 일은 (가) 덮개 범위 == 머리말 범위, (나) **명시로 적힌** 번호가 범위 안이고 로드맵에 있는가,
+ * 둘뿐이다. 그래서 "§4 가 덮지 않는 묶음 0" 은 참이지만 **동어반복**이다. 349 가 331·332·334 를
+ * "내부" 로 잘못 분류한 종류(≈100개가 한 줄 아래로 들어가는 것)는 **사람만 잡는다** — 분류의
+ * 참거짓은 기계가 셀 수 있는 집합이 아니기 때문이다(352 가 받아들인 경계선).
+ */
 function section4Problems(briefText, batchNos) {
   const sc = section4Scope(briefText);
   if (sc === null) return ['"## 4." 절이 없다 — 지점이 보는 변화 표를 찾을 수 없다(검사 ⑰)'];
@@ -1087,6 +1170,9 @@ function section4Problems(briefText, batchNos) {
   for (const n of [...sc.listed].sort((a, b) => a - b)) {
     if (n < start || n > end) out.push(`§4 표에 묶음 ${n} 이 적혀 있는데 머리말 범위(${start}~${end}) 밖이다`);
     else if (!real.has(n)) out.push(`§4 표의 묶음 ${n} 은 로드맵에 없다 — 없는 묶음의 변화를 적었다`);
+  }
+  if (sc.catchAlls.length > 1) {
+    out.push(`§4 에 "나머지 전부" 행이 ${sc.catchAlls.length}개다 — 어느 것이 덮는지 알 수 없다(하나만 두세요)`);
   }
   if (sc.catchAll !== null) {
     if (sc.catchAll.start !== start || sc.catchAll.end !== end) {
@@ -1142,13 +1228,22 @@ function exeTimeClaims(text) {
   }
   return out;
 }
+/** 어떤 시각을 **서울 기준** MM-DD/HH:MM 으로 (356) */
+function seoulStamp(date) {
+  // 356(352~354 리뷰 H-2 와 같은 결함): 전에는 `getHours()` 로 **돌리는 PC 의 지역시각**을 읽었다.
+  // 기록의 시각은 KST 고정이라 UTC 러너·다른 시간대 PC 에서 9시간 어긋난 거짓 경보가 났다
+  // (TZ=UTC 로 재현: exe 시각 주장 2건이 "낡았다" 로 신고됐다). 시간대를 못 박는다.
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date);
+  const g = t => parts.find(x => x.type === t).value;
+  return { md: `${g('month')}-${g('day')}`, hm: `${g('hour')}:${g('minute')}` };
+}
 /** 실제 asar 수정 시각 — 없으면 null */
 function asarStamp(rel) {
   const full = path.join(ROOT, rel);
   if (!fs.existsSync(full)) return null;
-  const d = fs.statSync(full).mtime;
-  const two = n => String(n).padStart(2, '0');
-  return { md: `${two(d.getMonth() + 1)}-${two(d.getDate())}`, hm: `${two(d.getHours())}:${two(d.getMinutes())}` };
+  return seoulStamp(fs.statSync(full).mtime);
 }
 
 // ⑨ **"서버 테스트 N개" 는 러너가 세는 수와 같아야 한다** (309)

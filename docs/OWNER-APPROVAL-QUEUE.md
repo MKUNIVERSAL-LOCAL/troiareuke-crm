@@ -105,6 +105,7 @@
 | 13 | 지점 AI API 키 보관 위치(현재 PC localStorage `ai_key_*`) — **설계 제출(152, `AI-SECURITY-POLICY.md` 3절)**: A Electron safeStorage(권장, 코어 A-17) / B 서버 암호화 보관(NAS 매장 선택, B-2+동의) / C 모바일 보안 저장소(의존성). 결정 전에도 키 꼴 탐지·스크럽으로 새는 길은 막음 | 대기(설계 제출 2026-11-24) |
 | 14 | 직원 계정 권한 범위(가정 적용 중) | 대기 |
 | D-15 | 서비스명 표기: 앱 내 "트로이아르케 CRM" → "DERMASOLUTION" 전환 시점·범위(설치 파일명·appId 는 배포 불변 원칙상 불변) | 대기 |
+| D-16 | `CLAUDE.md` §1 의 코어 잠금 괄호 목록 보완 — 정본(`scripts/core-lock.mjs`)에는 15개인데 §1 괄호에는 `scripts/prepare-portable-update.mjs`·`src/lib/updateChannel.ts` 가 없다(§6 에서만 따로 말한다). §1 이 "목록의 단일 소스: `scripts/core-lock.mjs`" 를 먼저 적으므로 거짓은 아니지만 목록이 짧다. **CLAUDE.md 는 모든 세션의 지시 문서라 자율로 고치지 않는다** — 승인하면 356 의 새 검사 ⑯ 사정거리에 이 파일도 넣는다(352~354 리뷰 L-5) | 대기 |
 
 ## 설계서
 - 고객 포털·온라인 예약(C-10·R-6 — B-2 공개 라우트·컬렉션 3개, C-2 SOLAPI OTP·확정 문자, 지점 slug 발급, 정적 호스팅): `CUSTOMER-PORTAL-DESIGN-2026-11-24.md`(묶음 169). 승인 전에는 순수 규칙(OTP 정책·노출 항목)만 코드에.
