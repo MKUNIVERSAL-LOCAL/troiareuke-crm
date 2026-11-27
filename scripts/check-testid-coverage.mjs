@@ -40,10 +40,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * "상태를 만들기 어렵다" 와 "승인·서버가 없으면 띄울 수 없다" 는 다른 이유다. 섞어 적지 않는다.
  */
 const ALLOWED = {
-  'admin-ai-service': '어드민 AI 서비스 화면 — 어드민 계정 + 서버 설정이 필요(승인 대기)',
-  'branch-pin-reset': '어드민 지점 PIN 초기화 — 본사 권한 + 서버 호출(승인 대기)',
-  'mobile-update-banner': '모바일 앱 업데이트 띠 — 앱(Capacitor) 런타임에서만 뜬다',
-  'nas-rejected-banner': 'NAS 거부 띠 — 서버가 실제로 거부해야 뜬다(흉내 서버로는 그 상태를 못 만든다)',
+  // 320 실측: 이 띠는 `IS_MOBILE_APP`(= `Capacitor.isNativePlatform()`)가 **모듈 로드 시점에** 정해진다.
+  // `addInitScript` 로 `window.Capacitor` 를 네이티브처럼 주입해 봤지만 번들의 `@capacitor/core` 가
+  // 자기 웹 구현으로 그 전역을 **덮어써서** 판정이 false 로 남았다(탐색 스펙으로 확인한 뒤 지웠다).
+  // 그래서 브라우저를 Pixel 폭으로 바꾼 mobile 프로젝트로는 이 띠를 띄울 수 없다 — 앱 런타임이 필요하다.
+  'mobile-update-banner': '모바일 앱 업데이트 띠 — 앱(Capacitor) 런타임에서만 뜬다(전역 주입은 번들이 덮어써서 안 된다, 320 실측)',
 };
 
 function listFiles(dir, exts = ['.ts', '.tsx'], out = []) {
