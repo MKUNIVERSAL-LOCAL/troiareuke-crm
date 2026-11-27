@@ -18,6 +18,8 @@
  *      아직 없는 **제안**이다(`analytics/rfm.ts` 처럼). 그 둘을 섞으면 가드가 거짓 경보를 낸다.
  *   ⑤ 완료 기준 칸 — `npm run X` 는 package.json 에 있고, `*.spec.ts` 는 e2e 에 있다
  *   ⑥ "서버 자동 테스트 0건" 류 — 테스트 파일이 있는데 0건이라고 적지 않는다
+ *   ⑦ **✅ 행의 완료 기준은 확인 가능한 것을 가리킨다**(343) — 스펙 파일 이름·`lib-units`·npm 명령 중
+ *      하나가 있어야 한다. "스펙"·"E2E" 라고만 적힌 칸은 ✅ 가 맞는지 되짚을 길이 없다(처음 돌렸을 때 15행).
  *      (정확한 개수는 러너가 세는 수(반복 생성 테스트 포함)와 달라 **0 과 0 아님**만 본다)
  *   ⑦ 우선순위 요약(8절)의 항목 코드 — 표에 실재한다(행을 지우거나 이름을 바꾼 뒤 요약만 남으면 유령 계획이다)
  *
@@ -74,6 +76,20 @@ function tablesOf(text) {
 const pathsIn = cell => [...cell.matchAll(/`([A-Za-z0-9_@./-]+\.(?:ts|tsx|mjs|cjs|js|md|json))`/g)].map(m => m[1]);
 const exists = p => DIRS.some(d => fs.existsSync(path.join(ROOT, d + p)));
 
+/**
+ * 이 완료 기준이 **사람이 돌려 볼 수 있는 것**을 가리키는가 (343)
+ * — e2e 스펙 파일 이름(실재해야 한다) · lib-units · npm 명령 중 하나.
+ */
+function verifiable(done, specExists) {
+  if (/lib-units|test:outbox|test:server|npm run [a-z:-]+/.test(done)) return true;
+  for (const m of done.matchAll(/([a-z0-9-]+)\.spec(?:\.ts)?/g)) if (specExists(`${m[1]}.spec.ts`)) return true;
+  // 343: `cancel-reason(사유 칩…)` 처럼 괄호가 바로 붙은 이름도 **그 파일이 실재할 때만** 인정한다
+  for (const m of done.matchAll(/([a-z0-9-]{3,})\s*\(/g)) if (specExists(`${m[1]}.spec.ts`)) return true;
+  // `sales 스펙`·`month-view 스펙` 처럼 확장자 없이 적은 자리도 파일이 실재하면 인정한다
+  for (const m of done.matchAll(/([a-z0-9-]{3,})\s*(?:스펙|spec)/gi)) if (specExists(`${m[1]}.spec.ts`)) return true;
+  return false;
+}
+
 function checkGap({ gap, roadmap, pkg, hasServerTests, specExists, scriptExists, fileExists }) {
   const problems = [];
   const tables = tablesOf(gap);
@@ -90,6 +106,14 @@ function checkGap({ gap, roadmap, pkg, hasServerTests, specExists, scriptExists,
         continue;
       }
       if (iCode >= 0 && /^[A-Z]-\d+$/.test(row[iCode])) codes.add(row[iCode]);
+
+      // ⑦ ✅ 행의 완료 기준은 확인 가능한 것을 가리켜야 한다 (343)
+      if (iStatus >= 0 && iDone >= 0 && row[iStatus].startsWith('✅')) {
+        const done = row[iDone];
+        if (done && done !== '—' && !verifiable(done, specExists)) {
+          problems.push(`${GAP}:${line} ${row[iCode] || ''} 의 완료 기준이 "${done.slice(0, 24)}" 뿐이다 — ✅ 를 되짚을 수 없다. 스펙 파일 이름·lib-units·npm 명령 중 하나를 적으세요`);
+        }
+      }
 
       if (iStatus >= 0) {
         const status = row[iStatus];
@@ -198,6 +222,17 @@ function selftest() {
   bite('서버 테스트 0건 주장', { gap: sub(base.gap, /서버 자동 테스트는 node 내장 러너 \*\*\d+건\*\*/, '서버 자동 테스트 0건') }, /사실이 아니다/);
   ok('표의 항목 이름 속 0건 은 잡지 않는다', !with_({}).some(p => /0건/.test(p)));
   ok('서버 테스트가 정말 없으면 0건은 사실', !checkGap({ ...base, gap: sub(base.gap, /서버 자동 테스트는 node 내장 러너 \*\*\d+건\*\*/, '서버 자동 테스트 0건'), hasServerTests: false }).some(p => /사실이 아니다/.test(p)));
+  // 343: 완료 기준이 확인 가능한지
+  ok('스펙 이름이 있으면 인정', verifiable('month-view 스펙', n => n === 'month-view.spec.ts'));
+  ok('확장자까지 적어도 인정', verifiable('`receipt.spec.ts`(PDF 저장)', n => n === 'receipt.spec.ts'));
+  ok('lib-units 는 인정', verifiable('lib-units 공식 고정', () => false));
+  ok('npm 명령은 인정', verifiable('npm run test:outbox 1건', () => false));
+  ok('"스펙" 만 적으면 거절', !verifiable('스펙', () => false));
+  ok('"E2E" 만 적으면 거절', !verifiable('PC·모바일 E2E', () => false));
+  ok('확장자 없는 spec 도 인정', verifiable('(photo-backup.spec)', n => n === 'photo-backup.spec.ts'));
+  ok('괄호가 붙은 이름도 인정', verifiable('cancel-reason(사유 칩·복구)', n => n === 'cancel-reason.spec.ts'));
+  ok('괄호가 붙었어도 파일이 없으면 거절', !verifiable('무언가(설명)', () => false));
+  ok('없는 스펙 이름은 거절', !verifiable('nope 스펙', () => false));
   // 요약의 유령 코드
   bite('요약의 유령 항목', { gap: sub(base.gap, '5. C-8/M-4 수신 동의', '5. C-99/M-4 수신 동의') }, /요약\(8절\)이 C-99/);
   // 311(리뷰 L-1·L-2): 펜스 안 예시 표와 단위가 붙은 숫자는 잡지 않는다
@@ -210,7 +245,7 @@ function selftest() {
   const live = with_({});
   ok('지금 표는 통과', live.length === 0 || (console.error(live.join('\n')), false));
 
-  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건) 통과`);
+  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건·확인 가능한 완료 기준 10종) 통과`);
 }
 
 const problems = (() => {
