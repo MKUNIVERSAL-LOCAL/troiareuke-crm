@@ -1,6 +1,9 @@
 // src/lib/ai/catalog.ts — 모델 카탈로그 (순수, 150, GAP A-1)
 // 기본값은 코드에, 본사가 내려주는 갱신(어드민 기능 플래그 payload)이 있으면 덮어쓴다(원격 갱신 가능). 가격은 **참고값**(USD / 100만 토큰, pricingAsOf 기준) —
 // 실제 청구는 제공사 콘솔이 정본이며 화면에는 "추정"으로만 표시한다(마스터 프롬프트 13절).
+/** 아는 제공사 — 화면·순수 규칙이 **같은 목록**을 본다(두 벌로 두면 하나만 늘어난다, 324) */
+export const AI_PROVIDERS = ['claude', 'openai', 'gemini'] as const;
+
 import type { AiProvider } from './types';
 
 export interface AiModel {

@@ -13,11 +13,13 @@
 //     지난달 기록이 없으면 비교를 만들지 않는다 — `null` 이다. 0 과 "없음" 을 섞으면 "지난달보다
 //     100% 줄었다" 같은 거짓이 나온다(253·254 에서 취소 사유 추세로 실제로 겪은 종류다).
 // ═══════════════════════════════════════════════════════════════
+import { AI_PROVIDERS } from './catalog';
 import { previousMonth } from '../format';
 import type { AiProvider } from './types';
 
-/** 아는 제공사 — 기록은 손댈 수 있으므로 모르는 키는 세지 않는다 (321, 리뷰 M-7) */
-const KNOWN_PROVIDERS: AiProvider[] = ['claude', 'openai', 'gemini'];
+/** 아는 제공사 — 기록은 손댈 수 있으므로 모르는 키는 세지 않는다 (321, 리뷰 M-7).
+ *  324(리뷰 L-6): 목록을 두 벌로 두지 않는다 — 카탈로그의 `AI_PROVIDERS` 한 곳에서 가져온다. */
+const KNOWN_PROVIDERS: readonly AiProvider[] = AI_PROVIDERS;
 
 /** `usage.ts` 가 날짜별로 쌓는 한 줄 — 이 모듈은 저장소를 모르고 모양만 안다 */
 export interface AiUsageDayInput {
@@ -53,8 +55,13 @@ function round4(n: number): number {
  */
 export function summarizeAiUsage(days: AiUsageDayInput[], month: string, dailyLimit = 7): AiUsageSummary {
   const ofMonth = days.filter(d => typeof d?.date === 'string' && d.date.startsWith(`${month}-`));
-  // 321(리뷰 L-4): 기록이 문자열이면(`usd: '0.5'`) 합이 NaN 이 되어 화면에 "약 $NaN" 이 나갔다
-  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
+  // 321(리뷰 L-4): 기록이 문자열이면(`usd: '0.5'`) 합이 NaN 이 되어 화면에 "약 $NaN" 이 나갔다.
+  // 324(321~323 리뷰 L-5): `byProvider` 만 음수를 막아 **합계는 음수를 그대로 더했다** — 같은 논리면 총계도 막아야 한다
+  // (호출 수·토큰·비용에 음수는 없다. 음수가 들어온 기록은 손댄 것이고, 그것을 합에 반영하면 화면이 거짓을 말한다).
+  const num = (v: unknown): number => {
+    const n = typeof v === 'number' && Number.isFinite(v) ? v : Number(v);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
   const total = ofMonth.reduce((s, d) => ({
     calls: s.calls + num(d.calls),
     input: s.input + num(d.input),

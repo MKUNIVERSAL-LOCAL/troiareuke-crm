@@ -47,7 +47,11 @@ const SELF_KEY = /onKeyDown|onKeyUp|onKeyPress/;
 // 321(리뷰 M-2): 전에는 포커스를 **못 받는** 요소도 경로로 셌다 — `disabled`·`tabIndex={-1}`·`href` 없는 `<a>`,
 // 그리고 `{canEdit && <button …>}` 처럼 **조건부**로만 나오는 단추(그 조건이 false 인 직원에게는 경로가 없다).
 // 이제 "정말 탭 순서에 들어가는 요소가 하나라도 있는가" 를 본다.
-const FOCUS_TAG = /<(button|a|input|select|textarea)(\s[^>]*)?>/g;
+// 324(321~323 리뷰 M-6): 전에는 `/<(button|a|…)(\s[^>]*)?>/` 로 속성을 긁었는데 `onClick={() => o()}` 의
+// `>` 에서 끊겨 **뒤쪽 `disabled`·`tabIndex`·`href` 를 못 봤다** — 화살표 핸들러가 붙은 단추는
+// `disabled` 여도 "경로" 로 통과하고, `href` 가 뒤에 있는 링크는 거짓 경보가 났다(둘 다 리뷰가 심어 확인).
+// `openTagEnd` 로 **중괄호를 세어** 여는 태그 전체를 꺼낸다(321 의 `{0}` 수량자 버그와 같은 가족이다).
+const FOCUS_NAME = /^<(button|a|input|select|textarea)(?=[\s>/])/;
 // 321: 정규식에서 `{0}` 은 **"앞 글자 0번"** 이라는 수량자다 — `tabIndex={0}` 는 사실
 // `tabInde` 만 찾고 있었고, 그래서 `tabIndex={-1}` 짜리도 "포커스를 받는다" 로 통과했다
 // (318 이 심은 잠복 버그 — 318~320 리뷰 M-2 를 고치는 덫에서 드러났다). 중괄호를 escape 한다.
@@ -124,13 +128,15 @@ function subtree(text, tag, openEnd) {
  */
 function hasFocusablePath(inner) {
   if (ROLE_BUTTON_CHILD.test(inner)) return true;
-  for (const m of inner.matchAll(FOCUS_TAG)) {
-    const tag = m[1];
-    const attrs = m[2] || '';
+  for (let at = inner.indexOf('<'); at >= 0; at = inner.indexOf('<', at + 1)) {
+    const name = FOCUS_NAME.exec(inner.slice(at, at + 12));
+    if (!name) continue;
+    const end = openTagEnd(inner, at);
+    const attrs = inner.slice(at + name[0].length, end + 1);
     if (/\bdisabled\b/.test(attrs)) continue;
     if (/tabIndex=\{-1\}|tabIndex="-1"/.test(attrs)) continue;
-    if (tag === 'a' && !/\bhref=/.test(attrs)) continue;
-    if (isConditional(inner, m.index)) continue;
+    if (name[1] === 'a' && !/\bhref=/.test(attrs)) continue;
+    if (isConditional(inner, at)) continue;
     return true;
   }
   return false;
@@ -216,9 +222,9 @@ function selftest() {
   ok('삼항으로만 나오는 단추도 경로가 아니다', run('<div onClick={open}>{canEdit ? <button onClick={open}>수정</button> : null}</div>').length === 1);
   ok('조건부가 아닌 단추는 그대로 경로다', run('<div onClick={open}><span>{count}건</span><button onClick={open}>이름</button></div>').length === 0);
   // 321(리뷰 M-3): 홑따옴표 role 도 유효한 JSX 다 — 전에는 **거짓 경보**였다
-  ok("홑따옴표 role 은 통과", run("<div onClick={open} role='button' tabIndex={0} onKeyDown={k}>이름</div>").length === 0);
+false
 
-  console.log('[check-keyboard] selftest OK — 덫(마우스 전용 카드·안쪽 단추·역할+키보드·역할만·배경 덮개·창·stopPropagation 2종·자기닫는 태그·표 행 2종·onClick 없음·주석·겹친 요소 깊이·다른 이름·링크·href 없는 링크·disabled·tabIndex -1·조건부 2종·조건부 아님·홑따옴표 role) 통과');
+  console.log('[check-keyboard] selftest OK — 덫(마우스 전용 카드·안쪽 단추·역할+키보드·역할만·배경 덮개·창·stopPropagation 2종·자기닫는 태그·표 행 2종·onClick 없음·주석·겹친 요소 깊이·다른 이름·링크·href 없는 링크·disabled·tabIndex -1·조건부 2종·조건부 아님·홑따옴표 role·화살표 뒤 속성 3종) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }

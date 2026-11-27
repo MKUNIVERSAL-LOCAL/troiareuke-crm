@@ -485,7 +485,8 @@ export default function AdminUsers() {
                     onClick={handleApprove}
                     disabled={reviewBusy}
                     // 322: emerald-600(#059669) 에 흰 글자는 3.76:1 로 기준(4.5:1) 미달이었다 — 한 단 진하게
-                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-50"
+                    // 324(321~323 리뷰 L-1): 호버에서 emerald-600 으로 돌아가면 다시 3.77:1 이다 — axe 는 호버를 하지 않아 못 본다
+                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white disabled:opacity-50"
                   >
                     <CheckCircle2 size={14} />
                     {reviewBusy ? '처리 중…' : '승인 (로그인 허용)'}

@@ -87,7 +87,10 @@ test('흉내 서버에서 어드민 창을 열어도 serious·critical 접근성
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   assertNoBlocking(rows);
-  // 흉내 내지 않은 경로가 남으면 그 화면은 조용히 404 를 먹고 비어 있었던 것이다 — 쓸이의 전제가 깨진다
+  // 흉내 내지 않은 경로가 남으면 그 화면은 조용히 404 를 먹고 비어 있었던 것이다 — 쓸이의 전제가 깨진다.
+  // 324(리뷰 L-9): 두 경로만 제외하는 이유를 적는다 — `/api/data/*` 는 **지점 자료 동기화**(어드민 화면과 무관,
+  // 로그인 직후 '/' 가 잠깐 지점 홈을 거치며 호출된다)이고, `/api/ai/status` 는 중계 상태 조회로 404 면
+  // '사용 불가' 로 조용히 처리되는 설계다. 둘 다 어드민 창을 그리는 데 쓰이지 않는다.
   expect([...new Set(unmocked)].filter(path => !path.startsWith('/api/data/') && path !== '/api/ai/status'), '흉내 내지 않은 서버 경로').toEqual([]);
 });
 

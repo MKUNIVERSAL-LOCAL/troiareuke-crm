@@ -7,14 +7,14 @@ import { askConfirm } from '../../lib/confirmDialog';
 import { canDo, ADMIN_REQUIRED_MESSAGE } from '../../lib/permissions';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAiKey, setAiKey, maskAiKey, looksLikeKey, getAiModel, setAiModel } from '../../lib/ai/keys';
-import { modelsOf, findModel, PROVIDER_LABEL, PRICING_AS_OF } from '../../lib/ai/catalog';
+import { modelsOf, findModel, PROVIDER_LABEL, PRICING_AS_OF, AI_PROVIDERS } from '../../lib/ai/catalog';
 import { ADAPTERS } from '../../lib/ai/adapters';
 import { usageLog, currentUsageMonth, USAGE_KEEP_DAYS, estimateCostUsd } from '../../lib/ai/usage';
 import { summarizeAiUsage, describeAiUsageDelta } from '../../lib/ai/usageSummaryRule';
 import { getCachedAiProxyStatus, refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
 import type { AiProvider } from '../../lib/ai/types';
 
-const PROVIDERS: AiProvider[] = ['claude', 'openai', 'gemini'];
+const PROVIDERS: readonly AiProvider[] = AI_PROVIDERS; // 324(리뷰 L-6): 목록은 카탈로그 한 곳에서
 const IS_ELECTRON = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
 
 interface Guide { title: string; steps: string[]; links: { label: string; href: string }[]; note?: string }
@@ -187,8 +187,9 @@ export default function AiServiceCard() {
         {usageDelta && <p className="text-xs text-gray-600 mt-0.5" data-testid="ai-usage-delta">{usageDelta}</p>}
         {usage.byProvider.length > 0 && (
           <p className="text-xs text-gray-600 mt-1.5" data-testid="ai-usage-providers">
-            {/* 321(리뷰 M-7): 규칙이 아는 제공사만 돌려주지만 화면도 라벨이 없으면 키를 그대로 쓴다(카드가 죽지 않게) */}
-            제공사별: {usage.byProvider.map(b => `${(PROVIDER_LABEL[b.provider] ?? b.provider).split(' ')[0]} ${b.calls}건`).join(' · ')}
+            {/* 324(321~323 리뷰 L-6): 규칙(`summarizeAiUsage`)이 `AI_PROVIDERS` 만 돌려주므로 라벨은 **항상 있다** —
+                321 이 넣은 `?? b.provider` 는 도달하지 않는 분기였다(CLAUDE.md 2절). 그 보장은 lib-units 가 고정한다. */}
+            제공사별: {usage.byProvider.map(b => `${PROVIDER_LABEL[b.provider].split(' ')[0]} ${b.calls}건`).join(' · ')}
           </p>
         )}
         {usage.daily.length > 0 && (

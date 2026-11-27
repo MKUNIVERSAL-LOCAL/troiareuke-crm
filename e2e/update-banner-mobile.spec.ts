@@ -37,6 +37,9 @@ test('모바일 앱에서 새 버전 안내 띠가 뜨고, 닫으면 다시 안 
   const banner = page.getByTestId('mobile-update-banner');
   await expect(banner).toContainText('새 버전 9.9.9', { timeout: 20_000 });
   await expect(banner).toContainText('스토어에서 업데이트하면');
+  // 324(321~323 리뷰 L-7): 머리말은 "현재 버전 문구" 를 본다고 적었는데 보지 않았다 — 폴백이 `0.0.0` 같은
+  // **틀린 비어 있지 않은** 값으로 돌아가도 통과했다. 이 앱의 실제 버전 모양(`현재 1.x.y`)을 본다.
+  await expect(banner).toContainText(/현재 1\.\d+\.\d+/);
   await expect(banner.getByRole('button', { name: '닫기' })).toBeVisible();
 
   // 닫으면 같은 버전은 하루 동안 다시 뜨지 않는다

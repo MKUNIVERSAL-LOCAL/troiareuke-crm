@@ -289,10 +289,11 @@ export default function Announcements() {
               </div>
               <div className="flex items-center gap-3">
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" aria-label="공지 게시" className="sr-only peer" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} />
+                  {/* 324(리뷰 L-4): 상태는 **스위치가 직접** 알린다 — 옆 글자("즉시 게시"/"숨김")는 보기용이라 중복 낭독을 막는다 */}
+                  <input type="checkbox" role="switch" aria-checked={form.is_active} aria-label="공지 게시" className="sr-only peer" checked={form.is_active} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} />
                   <div className="w-9 h-5 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
-                <span className="text-xs text-slate-400">{form.is_active ? (editTarget ? '게시' : '즉시 게시') : '숨김'}</span>
+                <span aria-hidden="true" className="text-xs text-slate-400">{form.is_active ? (editTarget ? '게시' : '즉시 게시') : '숨김'}</span>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">

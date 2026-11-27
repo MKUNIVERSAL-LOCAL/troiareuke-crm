@@ -71,6 +71,13 @@ function pruned(map: Record<string, StoredReason>): Record<string, StoredReason>
 }
 
 /**
+ * 안 지워졌을 때 화면이 하는 말 — **익명화·삭제 세 자리가 같은 문구를 쓴다** (324, 321~323 리뷰 H-1).
+ * 문구를 세 벌로 흩어 두면 하나만 고쳐져 화면마다 다른 말을 한다.
+ */
+export const CANCEL_REASON_SCRUB_LOST = '취소·노쇼에 직접 적은 사유를 이 PC 에서 지우지 못했습니다(저장 공간 부족) — 저장 공간을 확보한 뒤 다시 실행해주세요.';
+export const CANCEL_REASON_SCRUB_UNKNOWN = '취소·노쇼에 직접 적은 사유가 지워졌는지 확인할 수 없었습니다 — 다시 실행해 확인해주세요.';
+
+/**
  * 고객 익명화·삭제 때 **직접 입력한 사유만** 지운다 (246 리뷰 M-4).
  * 직접 입력 30자에는 "○○ 임신으로 중단" 같은 개인 사정이 적힐 수 있는데, 익명화가 이 기록을 몰랐다.
  * 등록된 보기(고객 일정 변경 등)는 개인정보가 아니라 통계라 남긴다.
@@ -80,6 +87,10 @@ function pruned(map: Record<string, StoredReason>): Record<string, StoredReason>
  * `pruned()` 는 날짜와 예약 존재로만 걷고 자유 입력·익명화 여부는 보지 않는다(= "다음 저장에서 다시 걷힌다" 는
  * `check:save` 면제 사유도 사실이 아니었다). 이제 **판정을 함께 돌려주고** 부르는 쪽이 사용자에게 알린다.
  * 지울 것이 없었으면 `'landed'` 다 — 아무것도 잃지 않았으므로 없는 실패를 알리지 않는다.
+ *
+ * **324(321~323 리뷰 H-1)**: 이 주석이 "익명화·**삭제**" 라고 적는 동안 **호출자는 익명화 하나뿐**이었다 —
+ * 고객을 삭제하면 개인 사정이 적힌 사유가 설정 행에 남았다(리뷰가 e2e 로 재현했다). 이제
+ * `scrubCustomerBeforeDelete`(삭제 직전 정리)도 부른다 — 주석이 사실이 됐다.
  */
 export function clearFreeTextReasonsOfCustomer(customerId: string): { removed: number; landed: PrefLanded } {
   try {
@@ -94,7 +105,9 @@ export function clearFreeTextReasonsOfCustomer(customerId: string): { removed: n
     if (removed === 0) return { removed: 0, landed: 'landed' };
     return { removed, landed: setPreference('reservationCancelReasons', next) };
   } catch {
-    // 읽기 자체가 안 되면(프라이빗 모드 등) 지웠는지 **단정할 수 없다** — 'lost' 로 과장하지 않는다
+    // 읽기 자체가 안 되면(프라이빗 모드 등) 지웠는지 **단정할 수 없다** — 'lost' 로 과장하지 않는다.
+    // 324(321~323 리뷰 L-11): 지금 이 자리는 **도달하지 않는다**(`safeSetItem`·되읽기가 모두 예외를 삼킨다).
+    // 그래도 남겨 둔다 — 아래 계층이 던지게 바뀌면 그때 "확인할 수 없었다" 가 맞는 답이다(과장보다 안전하다).
     return { removed: 0, landed: 'unknown' };
   }
 }

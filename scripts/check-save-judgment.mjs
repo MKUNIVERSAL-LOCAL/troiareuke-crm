@@ -171,4 +171,5 @@ if (problems.length > 0) {
   console.error('\n저장 공간이 모자란 PC 에서는 화면에만 남고 다시 열면 사라집니다 — 그때 "저장했습니다" 는 거짓입니다.');
   process.exit(1);
 }
-console.log(`[check-save-judgment] OK — setPreference 호출 중 판정을 버리는 자리 ${discarded.length}개는 전부 이유가 적혀 있다`);
+// 324(321~323 리뷰 L-10): 전에는 "자리 N개" 만 찍어 ALLOWED 항목 수(사유 수)와 어긋나 보였다 — 둘 다 말한다
+console.log(`[check-save-judgment] OK — setPreference 호출 중 판정을 버리는 자리 ${discarded.length}개(적어 둔 사유 ${ALLOWED.length}개)는 전부 이유가 적혀 있다`);

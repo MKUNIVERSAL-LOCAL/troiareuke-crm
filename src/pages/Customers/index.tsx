@@ -73,6 +73,7 @@ import SegmentEditorModal from '../../components/SegmentEditorModal';
 import { CHURN_LABEL, CHURN_HIGH_RATIO } from '../../lib/churnRule';
 import { getCustomerValue } from '../../lib/customerValue';
 import { recordPrivacyAction, PRIVACY_LOG_LOST, PRIVACY_LOG_UNKNOWN } from '../../lib/privacyLog';
+import { CANCEL_REASON_SCRUB_LOST, CANCEL_REASON_SCRUB_UNKNOWN } from '../../lib/cancelReasons';
 import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
@@ -1370,8 +1371,8 @@ export default function Customers() {
     const logLanded = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' });
     notify(`고객 ${n}명을 익명화했습니다.`);
     // 321(318~320 리뷰 H-1): 취소·노쇼에 직접 적은 사유는 개인 사정이 적힐 수 있는 기록이다 — 안 지워졌으면 말한다
-    if (reasonsLanded === 'lost') notify.error('취소·노쇼에 직접 적은 사유를 이 PC 에서 지우지 못했습니다(저장 공간 부족) — 저장 공간을 확보한 뒤 익명화를 다시 실행해주세요.');
-    else if (reasonsLanded === 'unknown') notify.error('취소·노쇼에 직접 적은 사유가 지워졌는지 확인할 수 없었습니다 — 익명화를 다시 실행해 확인해주세요.');
+    if (reasonsLanded === 'lost') notify.error(CANCEL_REASON_SCRUB_LOST);
+    else if (reasonsLanded === 'unknown') notify.error(CANCEL_REASON_SCRUB_UNKNOWN);
     if (logLanded === 'lost') notify.error(PRIVACY_LOG_LOST);
     else if (logLanded === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN); // 297(리뷰 LOW-1)
     setSelected(null);
@@ -1695,8 +1696,8 @@ export default function Customers() {
     const logLandedOne = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
     notify('고객을 익명화했습니다.');
     // 321(318~320 리뷰 H-1): 개별 익명화도 같은 사실을 말한다
-    if (reasonsLandedOne === 'lost') notify.error('취소·노쇼에 직접 적은 사유를 이 PC 에서 지우지 못했습니다(저장 공간 부족) — 저장 공간을 확보한 뒤 익명화를 다시 실행해주세요.');
-    else if (reasonsLandedOne === 'unknown') notify.error('취소·노쇼에 직접 적은 사유가 지워졌는지 확인할 수 없었습니다 — 익명화를 다시 실행해 확인해주세요.');
+    if (reasonsLandedOne === 'lost') notify.error(CANCEL_REASON_SCRUB_LOST);
+    else if (reasonsLandedOne === 'unknown') notify.error(CANCEL_REASON_SCRUB_UNKNOWN);
     if (logLandedOne === 'lost') notify.error(PRIVACY_LOG_LOST); // 296
     else if (logLandedOne === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN); // 297(리뷰 LOW-1)
     const updated = CustomerStore.getById(selected.id);
@@ -1723,9 +1724,12 @@ export default function Customers() {
       return;
     }
     if (!(await askConfirm({ title: '고객 삭제', message: `'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`, confirmLabel: '삭제', danger: true, returnFocusTo: menuAnchor() }))) return;
-    const scrubbed = scrubCustomerBeforeDelete(selected.id); // 얼굴 사진이 접근 불가 상태로 영구 잔류하고 상담 기록이 실명으로 엑셀에 나가던 것 (11차 #H3·H6)
+    const { renamed: scrubbed, reasonsLanded: deletedReasonsLanded } = scrubCustomerBeforeDelete(selected.id); // 얼굴 사진이 접근 불가 상태로 영구 잔류하고 상담 기록이 실명으로 엑셀에 나가던 것 (11차 #H3·H6)
     CustomerStore.delete(selected.id);
     notify(scrubbed > 0 ? `고객을 삭제했습니다 — 기록 ${scrubbed}건의 이름·연락처를 정리하고 시술·상담 사진을 삭제했습니다.` : '고객을 삭제했습니다.');
+    // 324(321~323 리뷰 H-1): 익명화와 같은 말을 삭제에서도 한다 — 개인 사정이 적힐 수 있는 기록이다
+    if (deletedReasonsLanded === 'lost') notify.error(CANCEL_REASON_SCRUB_LOST);
+    else if (deletedReasonsLanded === 'unknown') notify.error(CANCEL_REASON_SCRUB_UNKNOWN);
     setSelected(null);
     loadAll();
   }

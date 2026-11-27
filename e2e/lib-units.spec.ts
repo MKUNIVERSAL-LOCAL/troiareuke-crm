@@ -837,6 +837,9 @@ test('AI 어댑터 계층 — 카탈로그·원격 갱신 검증·토큰/비용 
     .toEqual([{ provider: 'claude', calls: 1 }]);
   // 음수 건수도 줄을 만들지 않는다(전에는 `!n` 이 음수를 통과시켜 "claude -5건" 이 나갔다)
   expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.1, byProvider: { claude: -5 } }], '2026-11').byProvider).toEqual([]);
+  // 324(321~323 리뷰 L-5): 합계도 음수를 받지 않는다 — byProvider 만 막아 총계는 음수를 그대로 더하고 있었다
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: -3, input: -10, output: 5, usd: -1.5, byProvider: { claude: 1 } }], '2026-11'))
+    .toMatchObject({ calls: 0, input: 0, output: 5, usd: 0 });
   // 문자열 금액도 합을 NaN 으로 만들지 않는다(화면에 "약 $NaN" 이 나갔다)
   expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: '0.5' as never, byProvider: { claude: 1 } }], '2026-11').usd).toBe(0.5);
   // 보여 주는 합과 차이가 **서로 맞는다**(반올림 전 합에서 빼면 usd - prev ≠ delta 가 됐다)
