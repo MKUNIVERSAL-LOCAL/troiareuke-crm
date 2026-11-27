@@ -1839,7 +1839,7 @@ export default function Customers() {
             <div className="px-5 py-3 flex gap-2">
               <input value={tagDraft} onChange={e => setTagDraft(e.target.value)} aria-label="새 태그" placeholder="예: 민감성"
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addToMaster(); } }}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm" />
               <button type="button" onClick={addToMaster} className="px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl">추가</button>
             </div>
             <ul className="flex-1 overflow-y-auto px-5 pb-3 flex flex-wrap gap-1.5 content-start">
@@ -1858,7 +1858,7 @@ export default function Customers() {
                 <div className="flex gap-2">
                   <input value={renameTo} onChange={e => setRenameTo(e.target.value)} aria-label="바꿀 태그 이름"
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void applyRename(); } }}
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+                    className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm" />
                   <button type="button" onClick={() => void applyRename()} disabled={renaming}
                     className="px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl disabled:opacity-60">{renaming ? '바꾸는 중...' : '바꾸기'}</button>
                   <button type="button" onClick={() => setRenameFrom(null)} disabled={renaming}

@@ -1,5 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// 358(352~354 리뷰 H-1 로 드러난 CI 실패): 아래 `timezoneId` 는 **브라우저**만 서울로 못 박는다.
+// `tomorrow` 같은 날짜를 만드는 것은 **테스트 프로세스**이고, 그쪽은 러너의 지역시각을 쓴다 —
+// 깃허브 러너는 UTC 라서 한국 시간 00~09시에는 node 가 "어제" 를, 화면이 "오늘" 을 가리켜
+// 하루가 어긋났다(캠페인 실행 창이 대상 0명으로 열리지 않고, 직원별 열의 예약 블록이 0개였다).
+// 338 이 고친 "UTC 날짜로 오늘을 만든 것" 과 같은 종류다. 두 쪽을 같은 시간대로 묶는다.
+process.env.TZ = 'Asia/Seoul';
+
 /**
  * E2E 스모크 — 로컬 모드 빌드(dist-e2e)를 vite preview로 띄우고 핵심 사용 흐름을 브라우저로 통과시킨다.
  * 실행: npm run build:e2e && npm run test:e2e   (CI: client-ci.yml의 e2e 잡)
