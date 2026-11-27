@@ -1,6 +1,17 @@
 // 공통 포맷 유틸 (비코어) — 페이지 전반의 중복 포맷 함수를 한 곳으로.
 // 코어(store/supabase 등) 아님. 자유롭게 추가·수정 가능.
 
+/**
+ * 지난달(YYYY-MM) — 못 읽으면 그대로 돌려준다(없는 달을 만들지 않는다).
+ * 319: 같은 규칙이 `cancelReasonRule` 과 새 `ai/usageSummaryRule` 두 곳에 생길 자리였다.
+ * 판정·계산을 두 벌로 두지 않는다(286 이 되읽기 판정 네 벌을 한 곳으로 모은 뜻과 같다).
+ */
+export function previousMonth(yearMonth: string): string {
+  const [y, m] = yearMonth.split('-').map(Number);
+  if (!y || !m) return yearMonth;
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
 /** 숫자를 한국 원화 표기로. 예: 12000 → "12,000원" */
 export function formatPrice(n: number): string {
   return n.toLocaleString('ko-KR') + '원';

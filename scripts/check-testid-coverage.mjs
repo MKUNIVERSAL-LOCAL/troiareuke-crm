@@ -40,7 +40,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * "상태를 만들기 어렵다" 와 "승인·서버가 없으면 띄울 수 없다" 는 다른 이유다. 섞어 적지 않는다.
  */
 const ALLOWED = {
-  'ai-usage': '설정 > AI 사용량 카드 — 서버 ai_usage 응답이 있어야 숫자가 뜬다(B-2 승인 뒤)',
   'admin-ai-service': '어드민 AI 서비스 화면 — 어드민 계정 + 서버 설정이 필요(승인 대기)',
   'branch-pin-reset': '어드민 지점 PIN 초기화 — 본사 권한 + 서버 호출(승인 대기)',
   'mobile-update-banner': '모바일 앱 업데이트 띠 — 앱(Capacitor) 런타임에서만 뜬다',

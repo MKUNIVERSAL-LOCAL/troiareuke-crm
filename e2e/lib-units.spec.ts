@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate } from '../src/lib/format';
+import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate, previousMonth } from '../src/lib/format';
 import { splitPercent } from '../src/lib/percent';
 import { renameTagInSegments } from '../src/lib/segmentFilterRule';
 import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry, entryDay } from '../src/lib/rebookStatsRule';
-import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, previousMonth, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
+import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
 import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows, describeStockDrift, describeStockSkips } from '../src/lib/stockCountRule';
 import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
 import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
@@ -51,6 +51,7 @@ import { foldOldest } from '../src/lib/stockLedgerRule';
 import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue, refundMemo } from '../src/lib/refundRule';
 import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
+import { summarizeAiUsage, describeAiUsageDelta } from '../src/lib/ai/usageSummaryRule';
 import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
 import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
 import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, sanitizeCautionKeywords, CAUTION_KEYWORDS, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
@@ -794,6 +795,42 @@ test('AI 어댑터 계층 — 카탈로그·원격 갱신 검증·토큰/비용 
   expect(estimateUsage('가나다', 'abcd')).toEqual({ input: 2, output: 1, estimated: true });
   expect(estimateCostUsd('openai', 'gpt-4o-mini', { input: 1_000_000, output: 1_000_000, estimated: false })).toBe(0.75);
   expect(estimateCostUsd('gemini', 'gemini-1.5-flash', { input: 0, output: 0, estimated: true })).toBe(0);
+  // 사용량 요약(319, GAP A-4) — 150 부터 쌓아 온 날짜별 기록을 읽을 수 있는 모양으로
+  const uDays = [
+    { date: '2026-11-03', calls: 2, input: 100, output: 20, usd: 0.0012, byProvider: { claude: 2 } },
+    { date: '2026-11-25', calls: 1, input: 50, output: 10, usd: 0.0004, byProvider: { openai: 1 } },
+    { date: '2026-11-25', calls: 3, input: 10, output: 5, usd: 0.0001, byProvider: { claude: 1, gemini: 2 } },
+    { date: '2026-10-30', calls: 5, input: 500, output: 50, usd: 0.0100, byProvider: { claude: 5 } },
+  ];
+  const uSum = summarizeAiUsage(uDays, '2026-11');
+  expect(uSum.calls).toBe(6);                              // 11월 세 줄만
+  expect(uSum.input).toBe(160);
+  expect(uSum.usd).toBe(0.0017);
+  expect(uSum.recordedDays).toBe(3);
+  expect(uSum.byProvider).toEqual([{ provider: 'claude', calls: 3 }, { provider: 'gemini', calls: 2 }, { provider: 'openai', calls: 1 }]); // 많은 순
+  expect(uSum.daily.map(d => d.date)).toEqual(['2026-11-25', '2026-11-25', '2026-11-03']); // 최신부터
+  expect(uSum.prevMonthUsd).toBe(0.01);
+  expect(uSum.deltaUsd).toBe(-0.0083);
+  expect(describeAiUsageDelta(uSum)).toContain('적습니다');
+  // 지난달 기록이 없으면 비교를 **만들지 않는다** — 0 과 "없음" 을 섞으면 거짓 추세가 된다(253·254 에서 겪은 종류)
+  const uAlone = summarizeAiUsage([uDays[1]], '2026-11');
+  expect(uAlone.prevMonthUsd).toBeNull();
+  expect(uAlone.deltaUsd).toBeNull();
+  expect(describeAiUsageDelta(uAlone)).toBeNull();
+  // 기록이 아예 없는 달도 거짓말하지 않는다(전부 0, 줄 0개)
+  const uEmpty = summarizeAiUsage([], '2026-11');
+  expect(uEmpty).toMatchObject({ calls: 0, usd: 0, recordedDays: 0, prevMonthUsd: null, deltaUsd: null });
+  expect(uEmpty.byProvider).toEqual([]);
+  expect(uEmpty.daily).toEqual([]);
+  // 0건으로 적힌 제공사는 줄을 만들지 않는다 — 쓰지 않은 제공사를 "썼다" 로 보이게 하지 않는다
+  expect(summarizeAiUsage([{ date: '2026-11-01', calls: 0, input: 0, output: 0, usd: 0, byProvider: { openai: 0 } }], '2026-11').byProvider).toEqual([]);
+  // 같은 금액이면 "같습니다" — 줄었다고 말하지 않는다
+  expect(describeAiUsageDelta(summarizeAiUsage([
+    { date: '2026-11-01', calls: 1, input: 1, output: 1, usd: 0.5, byProvider: { claude: 1 } },
+    { date: '2026-10-01', calls: 1, input: 1, output: 1, usd: 0.5, byProvider: { claude: 1 } },
+  ], '2026-11'))).toContain('지난달과 같습니다');
+  // 줄 수 상한(화면 사정)과 달 경계 계산
+  expect(summarizeAiUsage(uDays, '2026-11', 1).daily).toHaveLength(1); // 줄 수 상한(화면 사정)
   // 선택·폴백: Claude 우선, 키 있는 것만
   expect(selectProvider({ claude: '', openai: 'k', gemini: 'k' })).toBe('openai');
   expect(selectProvider({ claude: 'k', openai: 'k', gemini: '' })).toBe('claude');

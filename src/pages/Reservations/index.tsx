@@ -2,7 +2,8 @@
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { askConfirm, askConfirmWithChoice } from '../../lib/confirmDialog';
 // 취소·노쇼 사유 (244, GAP R-10 후속) — 규칙은 순수 cancelReasonRule, 저장은 설정 행(cancelReasons)
-import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, previousMonth } from '../../lib/cancelReasonRule';
+import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend } from '../../lib/cancelReasonRule';
+import { previousMonth } from '../../lib/format';
 import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons';
 import { describePrefLoss } from '../../lib/prefLandedRule'; // 사유가 정말 남았는지 (290, 리뷰 M-3)
 import { prefSaveMode } from '../../lib/prefSaveMode';

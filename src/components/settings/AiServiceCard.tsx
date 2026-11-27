@@ -9,7 +9,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getAiKey, setAiKey, maskAiKey, looksLikeKey, getAiModel, setAiModel } from '../../lib/ai/keys';
 import { modelsOf, findModel, PROVIDER_LABEL, PRICING_AS_OF } from '../../lib/ai/catalog';
 import { ADAPTERS } from '../../lib/ai/adapters';
-import { usageThisMonth, estimateCostUsd } from '../../lib/ai/usage';
+import { usageLog, currentUsageMonth, USAGE_KEEP_DAYS, estimateCostUsd } from '../../lib/ai/usage';
+import { summarizeAiUsage, describeAiUsageDelta } from '../../lib/ai/usageSummaryRule';
 import { getCachedAiProxyStatus, refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
 import type { AiProvider } from '../../lib/ai/types';
 
@@ -146,7 +147,8 @@ export default function AiServiceCard() {
   }, []);
   const keys = { claude: getAiKey('claude'), openai: getAiKey('openai'), gemini: getAiKey('gemini') };
   const hasOwnKey = !!(keys.claude || keys.openai || keys.gemini);
-  const usage = usageThisMonth();
+  const usage = summarizeAiUsage(usageLog(), currentUsageMonth());
+  const usageDelta = describeAiUsageDelta(usage);
   void tick;
 
   const modes = [
@@ -180,6 +182,27 @@ export default function AiServiceCard() {
       <div className="rounded-xl bg-slate-50 border border-gray-100 p-3 text-sm" data-testid="ai-usage">
         <p className="font-semibold text-gray-900">이달 사용량 (이 기기, 추정)</p>
         <p className="text-xs text-gray-600 mt-0.5">호출 {usage.calls}건 · 입력 {usage.input.toLocaleString()} 토큰 · 출력 {usage.output.toLocaleString()} 토큰 · 약 ${usage.usd.toFixed(2)} (참고값, 단가 {PRICING_AS_OF} 기준 — 정확한 청구는 제공사 콘솔)</p>
+        {/* 319: 150 부터 날짜별·제공사별로 쌓아 온 기록을 **처음으로** 보여 준다 — 그전에는 위 한 줄뿐이어서
+            어느 날·어느 제공사에서 그 비용이 났는지 알 수 없었다. 기록이 없으면 아래를 아예 만들지 않는다(빈 표 금지). */}
+        {usageDelta && <p className="text-xs text-gray-600 mt-0.5" data-testid="ai-usage-delta">{usageDelta}</p>}
+        {usage.byProvider.length > 0 && (
+          <p className="text-xs text-gray-600 mt-1.5" data-testid="ai-usage-providers">
+            제공사별: {usage.byProvider.map(b => `${PROVIDER_LABEL[b.provider].split(' ')[0]} ${b.calls}건`).join(' · ')}
+          </p>
+        )}
+        {usage.daily.length > 0 && (
+          <div className="mt-1.5" data-testid="ai-usage-daily">
+            <p className="text-2xs text-gray-500">최근 {usage.daily.length}일 (이달 기록이 있는 날 {usage.recordedDays}일, 이 기기 보관 {USAGE_KEEP_DAYS}일분)</p>
+            <ul className="mt-1 space-y-0.5">
+              {usage.daily.map(d => (
+                <li key={d.date} className="flex items-center justify-between text-xs text-gray-600">
+                  <span>{d.date.slice(5).replace('-', '월 ')}일</span>
+                  <span>{d.calls}건 · 약 ${d.usd.toFixed(4)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <p className="text-2xs text-gray-400 mt-1">예: 질문 1건(자료 3,000 토큰 + 답 500 토큰)은 {PROVIDERS.map(p => `${PROVIDER_LABEL[p].split(' ')[0]} 약 $${estimateCostUsd(p, findModel(p, getAiModel(p)).id, { input: 3000, output: 500, estimated: true }).toFixed(4)}`).join(' · ')}</p>
       </div>
 

@@ -177,10 +177,5 @@ export function describeReasonTrend(t: ReasonTrend): string | null {
   return `지난달 대비 ${parts.join(' · ')}${basis}`;
 }
 
-/** 지난달(YYYY-MM) */
-export function previousMonth(yearMonth: string): string {
-  const [y, m] = yearMonth.split('-').map(Number);
-  if (!y || !m) return yearMonth;
-  const d = new Date(y, m - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+// 319: `previousMonth` 는 `lib/format.ts` 한 곳으로 옮겼다 — AI 사용량 요약(GAP A-4)에도 같은 규칙이
+// 필요해져 두 벌이 될 자리였다. 부르는 쪽(예약 화면·스펙)은 `lib/format` 에서 가져온다.
