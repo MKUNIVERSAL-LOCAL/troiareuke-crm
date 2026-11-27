@@ -98,7 +98,7 @@ export function describeEntryHead(e: HistoryEntry, formatTime: (iso: string) => 
   return `${formatTime(e.at)}${who} · ${what}`;
 }
 
-export const MAX_HISTORY_ENTRIES = 1000;   // 기기 전체
+const MAX_HISTORY_ENTRIES = 1000;   // 기기 전체
 export const MAX_PER_RESERVATION = 20;     // 한 예약당
 
 function isEntry(e: unknown): e is HistoryEntry {

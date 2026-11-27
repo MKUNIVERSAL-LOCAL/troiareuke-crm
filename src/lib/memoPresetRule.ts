@@ -91,7 +91,7 @@ export function presetInMemo(memo: string, preset: string): boolean {
 // ─────────────────────────────────────────────────────────────
 
 /** 한 줄 칸에서 문구를 잇는 구분자 */
-export const ONE_LINE_SEP = ' · ';
+const ONE_LINE_SEP = ' · ';
 
 /** 한 줄 글을 문구 단위로 쪼갠다 — 아는 문구는 통째로, 손으로 적은 조각은 그대로 둔다 */
 export function splitOneLine(value: string, presets: string[]): string[] {

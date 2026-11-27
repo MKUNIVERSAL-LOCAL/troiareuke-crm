@@ -42,7 +42,7 @@ export const SENSITIVE_SCREENS = [
 export type ScreenKey = typeof SENSITIVE_SCREENS[number]['key'];
 
 /** 경로 → 민감 화면 키 (하위 경로 포함) */
-export function screenKeyForPath(pathname: string): ScreenKey | null {
+function screenKeyForPath(pathname: string): ScreenKey | null {
   for (const s of SENSITIVE_SCREENS) if (pathname === s.path || pathname.startsWith(s.path + '/')) return s.key;
   return null;
 }

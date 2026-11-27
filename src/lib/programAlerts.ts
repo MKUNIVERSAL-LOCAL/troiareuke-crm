@@ -9,7 +9,7 @@ import { CustomerStore, CustomerProgramStore, SettingsStore, ProgramStore, Treat
 import type { Customer, CustomerProgram } from '../types';
 import { buildUsedSessionsIndex, derivedUsedSessions } from './programSessionsRule';
 
-export const EXPIRY_WINDOW_DAYS = 14;
+const EXPIRY_WINDOW_DAYS = 14;
 
 export type ProgramAlertReason = 'exhausted' | 'low' | 'expired' | 'expiring';
 

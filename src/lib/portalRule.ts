@@ -1,9 +1,9 @@
 // portalRule — 고객 포털 인증(OTP) 정책과 노출 항목 규칙 (순수, 169, docs/CUSTOMER-PORTAL-DESIGN-2026-11-24.md 2·7절)
 // 서버(승인 B-2 뒤)와 테스트가 같은 값·전이를 쓰기 위한 참조 구현. 저장소·네트워크 의존 없음.
-export const OTP_LENGTH = 6;
+const OTP_LENGTH = 6;
 export const OTP_TTL_MS = 5 * 60_000;         // 5분 유효
 export const OTP_RESEND_GAP_MS = 60_000;      // 재요청 60초
-export const OTP_MAX_FAILS = 5;               // 연속 실패 5회 → 잠금
+const OTP_MAX_FAILS = 5;               // 연속 실패 5회 → 잠금
 export const OTP_LOCK_MS = 15 * 60_000;       // 15분 잠금
 export const PORTAL_SESSION_MS = 24 * 3_600_000;
 

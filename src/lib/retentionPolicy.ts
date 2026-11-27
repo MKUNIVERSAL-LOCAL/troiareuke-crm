@@ -29,7 +29,7 @@ export interface RetentionPolicy {
 export const DEFAULT_RETENTION_YEARS = 3;
 export const MIN_RETENTION_YEARS = 1;
 export const MAX_RETENTION_YEARS = 10;
-export const ANONYMIZED_NAME = '탈퇴고객';
+const ANONYMIZED_NAME = '탈퇴고객';
 
 export function getRetentionPolicy(): RetentionPolicy {
   const v = getPreference('retentionPolicy');
@@ -49,7 +49,7 @@ export function setRetentionPolicy(policy: RetentionPolicy): PrefLanded {
 }
 
 /** 고객의 마지막 활동일(YYYY-MM-DD) — 마지막 방문일과 등록일 중 늦은 날 */
-export function lastActivityDate(c: Customer): string {
+function lastActivityDate(c: Customer): string {
   const registered = localISODate(c.registeredAt); // UTC ISO → 로컬 날짜 — 방문일(로컬)과 같은 기준으로 비교 (12차 #M3)
   const visit = (c.lastVisitDate || '').slice(0, 10);
   return visit > registered ? visit : registered;

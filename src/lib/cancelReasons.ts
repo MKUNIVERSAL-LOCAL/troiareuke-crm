@@ -13,7 +13,7 @@ const MAX_REASONS = 500; // 삭제된 예약의 고아 기록까지 무한정 �
 
 export interface StoredReason { kind: CancelKind; reason: string; at: string }
 
-export function reasonMap(): Record<string, StoredReason> {
+function reasonMap(): Record<string, StoredReason> {
   const v = getPreference('reservationCancelReasons');
   if (!v || typeof v !== 'object') return {};
   const out: Record<string, StoredReason> = {};

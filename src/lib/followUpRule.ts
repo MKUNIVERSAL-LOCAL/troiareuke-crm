@@ -79,7 +79,7 @@ export function sanitizeFollowUps(value: unknown): Record<string, FollowUpRecord
   return out;
 }
 
-export const MAX_FOLLOW_UPS = 500;
+const MAX_FOLLOW_UPS = 500;
 
 /**
  * 오래된 기록 정리 — keepFrom 이전 연락은 버리고, 그래도 많으면 최근 것만 남긴다.

@@ -18,7 +18,7 @@ export function maskEmail(v: string | undefined | null): string {
 }
 
 /** 'YYYY-MM-DD' → 'YYYY-**-**' (연도만 — 연령대 응대는 가능하게) */
-export function maskBirthDate(v: string | undefined | null): string {
+function maskBirthDate(v: string | undefined | null): string {
   const s = (v || '').trim();
   return s.length >= 4 ? `${s.slice(0, 4)}-**-**` : (s ? '****' : '');
 }

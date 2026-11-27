@@ -4,7 +4,7 @@ import { findModel } from './catalog';
 import { recordUsage } from './usage';
 import type { AiProvider, ChatMessage, ChatResult } from './types';
 
-export const PROVIDER_ORDER: AiProvider[] = ['claude', 'openai', 'gemini'];
+const PROVIDER_ORDER: AiProvider[] = ['claude', 'openai', 'gemini'];
 
 /** 키가 있는 제공사 중 우선순위 첫 번째(Claude 우선). 하나도 없으면 null */
 export function selectProvider(keys: Record<AiProvider, string>, order: AiProvider[] = PROVIDER_ORDER): AiProvider | null {

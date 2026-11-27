@@ -183,7 +183,7 @@ async function migrateFromLocalStorage(database: IDBDatabase): Promise<void> {
   }
 }
 /** 캐시 준비(IDB 열기 + 이관) — 쓰기·동기화는 이 뒤에 수행해 이관본이 새 값을 덮어쓰지 않게 한다 */
-export const photoCacheReady: Promise<void> = backend === 'idb'
+const photoCacheReady: Promise<void> = backend === 'idb'
   ? openDb()
       .then(async database => { db = database; await migrateFromLocalStorage(database); })
       .catch(e => { console.warn('[photoStore] IndexedDB 사용 불가 — localStorage 폴백:', e); backend = 'ls'; db = null; })
@@ -400,7 +400,7 @@ export function rejectedPhotoCount(): number { return REJECTED_PUSH.size; }
  * 서버가 거부한 사진을 이 기기에만 두기로 함 — 전송 대기(dirty)·거부 표식을 지워 배너가 영구히 빨갛지 않게. 기록의 사진을 줄여 다시 저장하면 그때 다시 올라간다 (UX 점검 2026-11-19).
  * 이 사진은 서버에 없으므로 이 기기에서 로그아웃(캐시 비우기)하면 함께 사라진다 — 확인창·로그아웃 경로가 그 사실을 알린다 (리뷰 2026-11-19).
  */
-export function keepLocalPhotoCount(): number { return getKeepLocalKeys().length; }
+function keepLocalPhotoCount(): number { return getKeepLocalKeys().length; }
 /** 이 기기에만 보관한 사진이 있을 때 로그아웃 확인창에 넣는 문장(없으면 null) — 사이드바·앱 잠금은 confirmLogoutDespiteKeepLocal로, 모바일 더보기는 기존 확인창에 이 문장을 합쳐 쓴다 (리뷰 2026-11-19) */
 export function keepLocalLogoutWarning(): string | null {
   const n = keepLocalPhotoCount();

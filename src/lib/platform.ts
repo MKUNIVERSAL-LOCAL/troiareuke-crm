@@ -9,7 +9,7 @@ const capacitorNative = (() => {
   try { return Capacitor.isNativePlatform(); } catch { return false; }
 })();
 
-export const IS_CAPACITOR: boolean = capacitorNative;
+const IS_CAPACITOR: boolean = capacitorNative;
 export const IS_ELECTRON: boolean = Boolean(electronApi?.isElectron) || (typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron'));
 
 export const PLATFORM: RuntimePlatform = IS_ELECTRON

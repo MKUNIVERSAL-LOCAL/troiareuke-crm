@@ -114,7 +114,7 @@ export function describeCustomerEntryHead(e: CustomerHistoryEntry, formatTime: (
 }
 
 // 일괄 적용(등급 제안·태그 이름 변경)이 한 번에 수백 건을 쓰므로, 한 번의 조작으로 상한이 소진되지 않게 넉넉히 (254 리뷰 H-3)
-export const MAX_CUSTOMER_HISTORY = 3000;
+const MAX_CUSTOMER_HISTORY = 3000;
 export const MAX_PER_CUSTOMER = 20;
 
 function isEntry(e: unknown): e is CustomerHistoryEntry {

@@ -5,7 +5,7 @@
 import { getPreference, setPreference, migrateLegacyPreference } from './shopPreferences';
 import type { PrefLanded } from './prefLandedRule';
 
-export const BASE_PAYMENT_METHODS = ['카드', '현금', '계좌이체', '카카오페이'] as const;
+const BASE_PAYMENT_METHODS = ['카드', '현금', '계좌이체', '카카오페이'] as const;
 
 const LEGACY_STORAGE_KEY = 'crm_custom_payment_methods';
 

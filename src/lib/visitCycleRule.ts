@@ -6,9 +6,9 @@
  *  - 방문 3회 이상(간격 2개 이상)일 때만 개인 주기, 아니면 매장 기본 주기(basis 'shop')
  *  - 7~365일로 묶는다(설정 화면의 범위와 같다 — 주 1회 회차권은 7, 그보다 짧은 간격은 7로)
  */
-export const MIN_INTERVALS_FOR_PERSONAL = 2; // 방문 3회
-export const PERSONAL_CYCLE_MIN_DAYS = 7;
-export const PERSONAL_CYCLE_MAX_DAYS = 365;
+const MIN_INTERVALS_FOR_PERSONAL = 2; // 방문 3회
+const PERSONAL_CYCLE_MIN_DAYS = 7;
+const PERSONAL_CYCLE_MAX_DAYS = 365;
 
 export interface VisitCycle {
   days: number;

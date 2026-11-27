@@ -13,7 +13,7 @@ export type CancelKind = 'cancelled' | 'noshow';
 /** by: 사유의 책임이 누구 쪽인지 — 매장 쪽(shop) 건수는 운영으로 줄일 수 있는 몫이다 */
 export interface ReasonOption { id: string; label: string; by: 'customer' | 'shop' | 'unknown' }
 
-export const CANCEL_REASONS: ReasonOption[] = [
+const CANCEL_REASONS: ReasonOption[] = [
   { id: 'customer-schedule', label: '고객 일정 변경', by: 'customer' },
   { id: 'customer-condition', label: '고객 몸 상태·개인 사정', by: 'customer' },
   { id: 'shop-schedule', label: '매장 사정(직원·설비)', by: 'shop' },
@@ -22,7 +22,7 @@ export const CANCEL_REASONS: ReasonOption[] = [
   { id: 'unreachable', label: '연락이 닿지 않음', by: 'unknown' },
 ];
 
-export const NOSHOW_REASONS: ReasonOption[] = [
+const NOSHOW_REASONS: ReasonOption[] = [
   { id: 'no-contact', label: '연락 없이 오지 않음', by: 'customer' },
   { id: 'late-notice', label: '시간 지나 뒤늦게 연락', by: 'customer' },
   { id: 'wrong-date', label: '고객 날짜·시간 착오', by: 'customer' },

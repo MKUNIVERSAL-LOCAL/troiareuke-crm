@@ -83,11 +83,8 @@ export function clearHistoryOfCustomer(customerId: string): number {
 }
 
 /** 예약 한 건의 이력을 지운다 — 예약을 삭제할 때 호출(삭제 기록만 남기거나 전부 정리) */
-export function clearHistoryOfReservation(reservationId: string): void {
-  try {
-    safeSetItem(KEY(), JSON.stringify(read().filter(e => e.reservationId !== reservationId)));
-  } catch { /* 무시 */ }
-}
+// 315: `clearHistoryOfReservation` 을 지웠다 — 250 이 개인정보 정리를 **고객 단위**
+// (`clearHistoryOfCustomer`)로 바꾸면서 호출자가 0이 됐다(CLAUDE.md 2절).
 
 /** 그 예약의 이력(최근 것이 위로) */
 export function reservationHistory(reservationId: string): HistoryEntry[] {

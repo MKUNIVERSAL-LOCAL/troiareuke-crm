@@ -7,7 +7,7 @@
  */
 export type ChurnLevel = 'high' | 'medium' | 'low';
 export const CHURN_HIGH_RATIO = 2.0;
-export const CHURN_MEDIUM_RATIO = 1.3;
+const CHURN_MEDIUM_RATIO = 1.3;
 
 export interface ChurnInput { daysSinceLastVisit: number | null; cycleDays: number; hasUpcomingReservation: boolean }
 export interface ChurnRisk { level: ChurnLevel; ratio: number }

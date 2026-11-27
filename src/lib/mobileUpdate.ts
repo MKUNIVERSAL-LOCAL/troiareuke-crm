@@ -15,7 +15,7 @@ export interface MobileManifest {
   ios?: { storeUrl?: string; testflightUrl?: string };
 }
 
-export const MOBILE_MANIFEST_URLS = [
+const MOBILE_MANIFEST_URLS = [
   'https://crm-update.mkcorp.familyds.com/mobile/latest.json',
   'https://github.com/MKUNIVERSAL-LOCAL/troiareuke-crm/releases/latest/download/mobile-latest.json',
 ] as const;
@@ -49,7 +49,7 @@ async function fetchManifest(): Promise<MobileManifest | null> {
   return null;
 }
 
-export function pickStoreUrl(manifest: MobileManifest): string {
+function pickStoreUrl(manifest: MobileManifest): string {
   if (PLATFORM === 'ios') return manifest.ios?.storeUrl || manifest.ios?.testflightUrl || '';
   return manifest.android?.storeUrl || manifest.android?.apkUrl || '';
 }
