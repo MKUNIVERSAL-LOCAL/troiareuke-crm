@@ -59,6 +59,8 @@ jobs:
         run: npm run check:gap
       - name: 설정 저장 판정(판정을 버리고 "저장했습니다" 금지)
         run: npm run check:save
+      - name: 장식 UI 금지(동작 없는 단추·입력칸)
+        run: npm run check:decorative
       - name: 창 접근성 커버리지(게이트가 안 여는 새 창 금지)
         run: npm run check:modal-a11y
       - name: E2E spec type check (e2e/tsconfig.json, strict + unused)

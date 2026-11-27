@@ -137,6 +137,7 @@ flags.V = step('V', '화면 칸 커버리지', 'node', ['scripts/check-testid-co
 flags.W = step('W', '기록 검증', 'node', ['scripts/check-docs-claims.mjs']); // 283
 flags.G = step('G', 'GAP 표 검증', 'node', ['scripts/check-gap-claims.mjs']); // 303
 flags.J = step('J', '저장 판정', 'node', ['scripts/check-save-judgment.mjs']); // 304
+flags.Y = step('Y', '장식 UI', 'node', ['scripts/check-decorative.mjs']); // 314
 flags.A = step('A', '창 접근성 커버리지', 'node', ['scripts/check-modal-a11y.mjs']); // 289
 flags.K = noSmoke ? 'SKIP' : step('K', '스모크', 'npx', ['playwright', 'test', 'e2e/smoke.spec.ts', '--project=chromium', '--workers=1', '--reporter=line']);
 if (noSmoke) process.stdout.write('K 스모크: SKIP (--no-smoke)\n');
