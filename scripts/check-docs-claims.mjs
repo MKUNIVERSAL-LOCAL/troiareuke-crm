@@ -37,6 +37,16 @@
  *     (경로를 글롭으로 적으면 별표와 슬래시가 이 주석을 닫아 버린다 — 341 에서 겪었다). 세 묶음 연속
  *     낡아 있었다(11-26 08:04·11-27 04:31 이라고 적혀 있었고 실제는 11-28 01:06/01:07).
  *     asar 가 없는 환경에서는 건너뛴다.
+ *  ⑯ **코어 잠금 문서의 표 ↔ 정본**(353, 349~351 리뷰가 승인한 경계선) — `docs/CORE-LOCK.md` 의 보호 대상
+ *     표에 적힌 경로 집합이 `scripts/core-lock.mjs` 의 `CORE_FILES`+`CORE_DIRS` 와 **같아야** 한다.
+ *     350 이 이 표에서 배포 관련 **세 파일이 빠진 것**을 손으로 찾았다 — 표만 본 세션은 "잠금이 아니다"
+ *     라고 믿고 코어를 고치려 든다(훅이 막지만 문서가 거짓을 말한 것이다). 반대 방향도 본다:
+ *     잠기지 않은 파일을 잠금으로 적으면 아무도 그 파일을 고치지 않는다(352 가 겪은 M-3 의 이웃).
+ *  ⑰ **브리핑 §4 가 선언한 범위 ↔ 그 표가 덮는 묶음 집합**(353, 349~351 리뷰 M-1) — 머리말이
+ *     `(218~352, …)` 라고 적으면 표는 그 범위를 **빠짐없이** 덮어야 한다. 349 가 이 결함을 고쳤는데
+ *     **한 묶음 뒤에 재발**했다(350·351 이 머리말 수만 올려 42개가 어디에도 없었다). 한 줄로 덮는
+ *     행("위 행에 없는 나머지 전부")이 있으면 그 행의 범위가 머리말과 같아야 하고, 없으면 열거가
+ *     완전해야 한다. 표에 적힌 번호가 **로드맵에 없는 묶음**이거나 머리말 범위를 벗어나는 것도 막는다.
  *  ④ 리뷰 기록의 반영 표시 — `docs/REVIEW-*.md` 머리말(앞 3줄)에 "반영" 상태가 적혀 있어야 한다.
  *     조용히 묻힌 리뷰가 없다는 뜻이다.
  *  ⑥ 자기 범위 표시가 사라지지 않는가 — `NEXT-ACTION`·`OWNER-BRIEFING`·`MASTER-DEVELOPMENT-STATUS` 는
@@ -55,6 +65,8 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// ⑯ 은 **코드를 정본으로** 본다 — 문서를 문서와 맞추면 둘이 같이 낡는다(350 이 그 상태였다).
+import { CORE_FILES, CORE_DIRS } from './core-lock.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
@@ -497,7 +509,46 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과`);
+// ⑯ 덫 — 코어 잠금 표 (353). 정본이 집합이므로 양방향 모두 본다.
+  {
+    const lockDoc = rows => '# x\n\n## 보호 대상 (코어)\n\n| 파일 | 역할 |\n|---|---|\n' + rows + '\n\n## 다음 절\n';
+    const real = ['a/b.ts', 'c/d.cjs', 'c/e.cjs', 'sb/'];
+    const full = '| `a/b.ts` | 가 |\n| `c/d.cjs`, `c/e.cjs` | 나 |\n| `sb/**` | 다 |';
+    if (lockDocProblems(lockDoc(full), real).length !== 0) { console.error('[selftest] 잠금 표 거짓 경보: ' + JSON.stringify(lockDocProblems(lockDoc(full), real))); process.exit(1); }
+    const dropped = lockDocProblems(lockDoc('| `a/b.ts` | 가 |\n| `sb/**` | 다 |'), real);
+    if (dropped.length !== 2 || !/c\/d\.cjs/.test(dropped[0])) { console.error('[selftest] 빠진 잠금 파일 덫 실패: ' + JSON.stringify(dropped)); process.exit(1); }
+    const extra = lockDocProblems(lockDoc(full + '\n| `x/y.ts` | 라 |'), real);
+    if (extra.length !== 1 || !/정본\(scripts\/core-lock\.mjs\)에 없다/.test(extra[0])) { console.error('[selftest] 잠기지 않은 파일 덫 실패: ' + JSON.stringify(extra)); process.exit(1); }
+    // 한 칸에 두 경로를 적는 줄(`electron/main.cjs`, `electron/preload.cjs`)을 한 개로 세면 안 된다
+    if (lockDocPaths(lockDoc(full)).size !== 4) { console.error('[selftest] 한 칸 두 경로 덫 실패'); process.exit(1); }
+    // 디렉터리는 표가 `sb/**`, 정본이 `sb/` 로 적는다 — 꼬리 별표만 떼고 같다고 본다
+    if (lockDocProblems(lockDoc('| `a/b.ts` | 가 |\n| `c/d.cjs`, `c/e.cjs` | 나 |\n| `sb/` | 다 |'), real).length !== 0) { console.error('[selftest] 디렉터리 표기 덫 실패'); process.exit(1); }
+    const noSec = lockDocProblems('# x\n\n## 딴 절\n', real);
+    if (noSec.length !== 1 || !/절이 없다/.test(noSec[0])) { console.error('[selftest] 절 없음 덫 실패: ' + JSON.stringify(noSec)); process.exit(1); }
+  }
+  // ⑰ 덫 — 브리핑 §4 범위 (353, 349~351 리뷰 M-1)
+  {
+    const nos = [218, 219, 220, 221, 222];
+    const sec4 = (head, rows) => '## 4. 지점이 보는 변화 (' + head + ', 기능군별)\n\n| 묶음 | 지점이 보는 것 |\n|---|---|\n' + rows + '\n\n## 5. 다음\n';
+    const cover = '| **위 행에 없는 나머지 전부**(218~222 중 — 품질) | 품질 작업 |';
+    const ok = sec4('218~222', '| 218·219 | 가 |\n| 220~222 | 나 |\n' + cover);
+    if (section4Problems(ok, nos).length !== 0) { console.error('[selftest] §4 거짓 경보: ' + JSON.stringify(section4Problems(ok, nos))); process.exit(1); }
+    // 머리말만 올리는 것이 349 가 고치고 350·351 이 되풀이한 모양이다
+    const bumped = section4Problems(sec4('218~223', '| 218·219 | 가 |\n' + cover), [...nos, 223]);
+    if (bumped.length !== 1 || !/나머지 전부/.test(bumped[0])) { console.error('[selftest] 머리말만 올린 덫 실패: ' + JSON.stringify(bumped)); process.exit(1); }
+    // 덮개 줄이 없으면 열거가 완전해야 한다 — 범위 표기(218~220)는 펼쳐서 센다
+    const holes = section4Problems(sec4('218~222', '| 218~220 | 가 |'), nos);
+    if (holes.length !== 1 || !/덮지 않는 묶음이 2개/.test(holes[0])) { console.error('[selftest] 빠진 묶음 덫 실패: ' + JSON.stringify(holes)); process.exit(1); }
+    const outside = section4Problems(sec4('218~222', '| 999 | 가 |\n' + cover), nos);
+    if (outside.length !== 1 || !/머리말 범위\(218~222\) 밖/.test(outside[0])) { console.error('[selftest] 범위 밖 묶음 덫 실패: ' + JSON.stringify(outside)); process.exit(1); }
+    const ghost = section4Problems(sec4('218~222', '| 221 | 가 |\n' + cover), [218, 219, 220, 222]);
+    if (ghost.length !== 1 || !/로드맵에 없다/.test(ghost[0])) { console.error('[selftest] 없는 묶음 덫 실패: ' + JSON.stringify(ghost)); process.exit(1); }
+    const noSec = section4Problems('## 3. 딴 절\n\n글\n', nos);
+    if (noSec.length !== 1 || !/"## 4\." 절이 없다/.test(noSec[0])) { console.error('[selftest] §4 절 없음 덫 실패: ' + JSON.stringify(noSec)); process.exit(1); }
+    const noRange = section4Problems('## 4. 지점이 보는 변화 (기능군별)\n\n| 묶음 | 것 |\n|---|---|\n| 218 | 가 |\n', nos);
+    if (noRange.length !== 1 || !/범위가 없다/.test(noRange[0])) { console.error('[selftest] §4 범위 없음 덫 실패: ' + JSON.stringify(noRange)); process.exit(1); }
+  }
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종·코어 잠금 표 6종·§4 범위 7종) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -774,11 +825,10 @@ problems.push(...releaseStepProblems());
 {
   // 344(리뷰 H-1): 파일 이름을 박아 두면 다음 브리핑이 생기는 순간 조용히 검사 밖이 된다 —
   // 301·307 이 검사 ⑥·CURRENT_DOCS 에서 메운 바로 그 구멍을 341 이 다시 냈다. 글롭으로 가장 최근 것을 본다.
-  const briefs = fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^OWNER-BRIEFING-.*\.md$/.test(f)).sort();
-  if (briefs.length === 0) {
+  const brief = newestBriefing();
+  if (brief === null) {
     problems.push('docs/OWNER-BRIEFING-*.md 가 없다 — 품질 장치 표를 검사할 문서가 없다(검사 ⑭)');
   } else {
-    const brief = `docs/${briefs[briefs.length - 1]}`;
     const miss = missingGuardRows(read(brief), read('scripts/gate-light.mjs'), JSON.parse(read('package.json')).scripts);
     for (const g of miss) {
       if (g === '!없는 절') { problems.push(`${brief}: "## 5." 절이 없다 — 품질 장치 표를 찾을 수 없다(검사 ⑭)`); continue; }
@@ -808,6 +858,26 @@ problems.push(...releaseStepProblems());
   }
 }
 
+// ⑯ 코어 잠금 문서의 표 ↔ scripts/core-lock.mjs (353)
+{
+  const doc = 'docs/CORE-LOCK.md';
+  if (!fs.existsSync(path.join(ROOT, doc))) {
+    problems.push(`${doc}: 코어 잠금 문서가 없다 — CLAUDE.md §1 이 상세로 가리키는 문서다(검사 ⑯)`);
+  } else {
+    for (const p of lockDocProblems(read(doc), [...CORE_FILES, ...CORE_DIRS])) problems.push(`${doc}: ${p}`);
+  }
+}
+
+// ⑰ 브리핑 §4 가 선언한 범위 ↔ 표가 덮는 묶음 집합 (353)
+{
+  const brief = newestBriefing();
+  if (brief === null) {
+    problems.push('docs/OWNER-BRIEFING-*.md 가 없다 — §4 의 묶음 집합을 검사할 문서가 없다(검사 ⑰)');
+  } else {
+    for (const p of section4Problems(read(brief), allBatchNos(read(ROADMAP)))) problems.push(`${brief}: ${p}`);
+  }
+}
+
 // 341(리뷰 M-5): 로드맵이 스스로 적은 **마지막 누계**도 실측과 맞아야 한다 — 전에는 이 값을 사실로 믿었다
 {
   const live2 = liveNumbers();
@@ -822,6 +892,102 @@ problems.push(...releaseStepProblems());
 // 왜: 브리핑 §5 는 오너가 "무엇이 기계로 막히나" 를 읽는 자리다. 335 가 세 줄을 더한 바로 다음
 //     묶음에서 `check:e2e-conv` 가 또 빠졌고, `check:routes`·`check:distribution` 은 처음부터 없었다.
 //     ⑬ 은 **수**만 보고 **빠진 줄**은 보지 못한다. 기준은 "게이트가 실제로 돌리는 것" 이다.
+/** 가장 최근 오너 브리핑 — 없으면 null (344 리뷰 H-1: 파일 이름을 박으면 다음 브리핑이 검사 밖이 된다) */
+function newestBriefing() {
+  const briefs = fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^OWNER-BRIEFING-.*\.md$/.test(f)).sort();
+  return briefs.length === 0 ? null : `docs/${briefs[briefs.length - 1]}`;
+}
+
+/** 표 첫 칸만 돌려준다 — 구분 줄·머리 줄은 건너뛴다 */
+function firstCells(body) {
+  const out = [];
+  for (const line of body.split('\n')) {
+    if (!/^\|/.test(line)) continue;
+    const cells = line.split('|');
+    if (cells.length < 3) continue;
+    const first = cells[1];
+    if (/^\s*:?-+:?\s*$/.test(first)) continue;
+    out.push(first);
+  }
+  return out;
+}
+
+/** ⑯ 코어 잠금 문서 표의 경로 집합 — 절이 없으면 null (353) */
+function lockDocPaths(text) {
+  const sec = text.split(/^## 보호 대상/m)[1];
+  if (sec === undefined) return null;
+  const out = new Set();
+  for (const first of firstCells(sec.split(/^## /m)[0])) {
+    // 표는 디렉터리를 `supabase/**` 로 적고 정본은 `supabase/` 로 적는다 — 꼬리 별표만 떼고 비교한다.
+    for (const m of first.matchAll(/`([^`]+)`/g)) out.add(m[1].replace(/\*+$/, ''));
+  }
+  return out;
+}
+
+/** ⑯ 양방향 어긋남 (353) */
+function lockDocProblems(text, real) {
+  const listed = lockDocPaths(text);
+  if (listed === null) return ['"## 보호 대상" 절이 없다 — 잠금 목록을 찾을 수 없다(검사 ⑯)'];
+  const out = [];
+  for (const p of real) {
+    if (!listed.has(p)) out.push(`잠금 파일 \`${p}\` 가 표에 없다 — 이 문서만 본 세션은 "잠금이 아니다" 라고 믿는다(정본: scripts/core-lock.mjs)`);
+  }
+  for (const p of listed) {
+    if (!real.includes(p)) out.push(`표의 \`${p}\` 는 정본(scripts/core-lock.mjs)에 없다 — 잠기지 않은 파일을 잠금으로 적었다`);
+  }
+  return out;
+}
+
+/** ⑰ 브리핑 §4 — 머리말 범위·열거된 묶음·한 줄로 덮는 행 (353) */
+function section4Scope(briefText) {
+  const sec = briefText.split(/^## 4\./m)[1];
+  if (sec === undefined) return null;
+  const head = sec.split('\n')[0];
+  const hm = head.match(/\((\d{3})~(\d{3})/);
+  const listed = new Set();
+  let catchAll = null;
+  for (const first of firstCells(sec.split(/^## /m)[0])) {
+    if (/나머지 전부/.test(first)) {
+      const r = first.match(/(\d{3})~(\d{3})/);
+      catchAll = r ? { start: Number(r[1]), end: Number(r[2]) } : { start: null, end: null };
+      continue;
+    }
+    let rest = first;
+    for (const m of first.matchAll(/(\d{3})~(\d{3})/g)) {
+      for (let i = Number(m[1]); i <= Number(m[2]); i++) listed.add(i);
+    }
+    rest = rest.replace(/(\d{3})~(\d{3})/g, ' ');
+    for (const m of rest.matchAll(/\d{3}/g)) listed.add(Number(m[0]));
+  }
+  return { head: hm ? { start: Number(hm[1]), end: Number(hm[2]) } : null, listed, catchAll };
+}
+
+/** ⑰ 어긋남 — batchNos 는 로드맵의 실제 묶음 번호 (353) */
+function section4Problems(briefText, batchNos) {
+  const sc = section4Scope(briefText);
+  if (sc === null) return ['"## 4." 절이 없다 — 지점이 보는 변화 표를 찾을 수 없다(검사 ⑰)'];
+  if (sc.head === null) return ['§4 머리말에 "(NNN~MMM" 범위가 없다 — 범위를 적지 않으면 표의 완전함을 셀 수 없다(검사 ⑰)'];
+  const out = [];
+  const { start, end } = sc.head;
+  const real = new Set(batchNos);
+  for (const n of [...sc.listed].sort((a, b) => a - b)) {
+    if (n < start || n > end) out.push(`§4 표에 묶음 ${n} 이 적혀 있는데 머리말 범위(${start}~${end}) 밖이다`);
+    else if (!real.has(n)) out.push(`§4 표의 묶음 ${n} 은 로드맵에 없다 — 없는 묶음의 변화를 적었다`);
+  }
+  if (sc.catchAll !== null) {
+    if (sc.catchAll.start !== start || sc.catchAll.end !== end) {
+      const r = sc.catchAll.start === null ? '범위 없음' : `${sc.catchAll.start}~${sc.catchAll.end}`;
+      out.push(`§4 의 "나머지 전부" 행이 적은 범위(${r})가 머리말(${start}~${end})과 다르다 — 머리말만 올리면 그 행이 덮는 범위가 조용히 뒤처진다`);
+    }
+  } else {
+    const miss = [...real].filter(n => n >= start && n <= end && !sc.listed.has(n)).sort((a, b) => a - b);
+    if (miss.length > 0) {
+      out.push(`§4 머리말은 ${start}~${end} 인데 표가 덮지 않는 묶음이 ${miss.length}개다(${miss.slice(0, 8).join('·')}${miss.length > 8 ? '…' : ''}) — 한 줄로 덮는 행("위 행에 없는 나머지 전부")을 두거나 열거를 채우세요`);
+    }
+  }
+  return out;
+}
+
 /** gate-light 가 돌리는 가드의 npm 이름 — 스크립트 파일 이름으로 package.json 을 거슬러 찾는다 */
 function gateGuardNames(gateSrc, scripts) {
   const files = [...new Set([...gateSrc.matchAll(/(check-[a-z0-9-]+)\.mjs/g)].map(m => m[1]))];
@@ -1044,4 +1210,4 @@ if (problems.length > 0) {
   console.error('  → 기록을 사실로 고치세요(과거 날짜 기록은 그대로 두고, "지금 상태" 문서만 갱신합니다).');
   process.exit(1);
 }
-console.log('[check-docs-claims] OK — 묶음 해시 실재·지금 상태 숫자·문서 포인터·리뷰 반영 표시·버전/브랜치·자기 범위 표시 전부 확인');
+console.log('[check-docs-claims] OK — 묶음 해시 실재·지금 상태 숫자·문서 포인터·리뷰 반영 표시·버전/브랜치·자기 범위 표시·코어 잠금 표·§4 묶음 집합 전부 확인');
