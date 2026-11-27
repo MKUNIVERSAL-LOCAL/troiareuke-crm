@@ -21,8 +21,10 @@
 | `electron/main.cjs`, `electron/preload.cjs` | Electron 코어(백업·IPC·autoUpdater) |
 | `electron/portable-updater.cjs` | 포터블 exe 무인 업데이트(내려받기 → 종료 시 적용) — 재다운로드 금지 원칙의 핵심 |
 | `scripts/prepare-portable-update.mjs` | 포터블·폴더형 업데이트 꾸러미 생성(하위호환 브리지) |
-| `src/lib/updateChannel.ts` | 업데이트 채널 판정(버전 비교·필수 업데이트) |
+| `src/lib/updateChannel.ts` | 설치 안내 주소(`INSTALL_SITE_URL`·`INSTALL_GUIDE_MESSAGE` — 6절 "신규 설치는 배포 사이트로만" 의 유일한 출처)·채널 매니페스트 주소·버전 비교(`compareVersions`·`isOutdated`·`isStale`) |
 | `supabase/**` | RLS·마이그레이션 SQL 전체 |
+
+> **여기 없는 것**: 모바일 **필수 업데이트**(최소 지원 버전) 판정은 `src/lib/mobileUpdate.ts`·`src/components/ui/MobileUpdateBanner.tsx` 에 있고 **잠금이 아니다**. 352 에서 이 표가 그 기능을 `updateChannel.ts` 의 것으로 잘못 적어 두었던 것을 고쳤다(349~351 리뷰 M-3).
 
 ## 2중 차단 구조
 
