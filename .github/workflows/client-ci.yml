@@ -39,7 +39,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # 357(352~354 리뷰 H-1): 기록 검증 가드(check:docs)는 묶음 줄이 적어 둔 **커밋 해시가 실재하는지**
+      # git 에 묻는다. 기본 checkout 은 깊이 1이라 그 해시를 하나도 찾지 못해 "확인할 수 없는 기록 111건"
+      # 으로 멈췄고, 이 게이트는 **100회 연속 빨갰다**. 같은 이유로 시각 검사(⑱)는 커밋 하나만 얻어
+      # 194줄 전부를 조용히 건너뛰었다 — 신고 0건이라 꺼진 것조차 보이지 않았다.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 묶음 해시를 git 에 물어야 한다(얕은 클론이면 ①·⑱ 이 거짓으로 실패·무음이 된다)
       - uses: actions/setup-node@v4
         with:
           node-version: 22 # @axe-core/playwright 4.14 engines >=22.12
