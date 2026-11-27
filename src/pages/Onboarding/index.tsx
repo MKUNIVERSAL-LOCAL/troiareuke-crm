@@ -361,11 +361,11 @@ export default function Onboarding() {
             </div>
             <div className="text-left">
               <p className="text-sm font-bold tracking-wider text-[#1a3a8f] leading-tight">DERMASOLUTION</p>
-              <p className="text-xs text-gray-400">에스테틱 전용 CRM</p>
+              <p className="text-xs text-gray-600">에스테틱 전용 CRM</p>
             </div>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-gray-900">안녕하세요, {user?.name}님!</h1>
-          <p className="text-sm text-gray-400 mt-1">매장 정보를 설정하고 CRM을 시작해보세요</p>
+          <p className="text-sm text-gray-600 mt-1">매장 정보를 설정하고 CRM을 시작해보세요</p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
             <Sparkles size={12} className="text-[#1a3a8f]" />
             <span className="text-xs font-semibold text-[#1a3a8f]">에스테틱 전용 CRM 솔루션</span>
@@ -611,7 +611,7 @@ export default function Onboarding() {
                         <h3 className="text-sm font-bold text-gray-900">14일 무료 체험</h3>
                         <p className="text-sm font-bold text-[#1a3a8f]">무료</p>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">모든 기능 체험 가능 · 신용카드 불필요</p>
+                      <p className="text-xs text-gray-600 mt-0.5">모든 기능 체험 가능 · 신용카드 불필요</p>
                     </div>
                   </div>
                 </div>

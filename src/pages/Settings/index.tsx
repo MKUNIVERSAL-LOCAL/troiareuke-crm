@@ -789,7 +789,7 @@ export default function Settings() {
                         {cautionWords.map(w => (
                           <li key={w} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-amber-50 text-amber-800 border border-amber-200">
                             {w}
-                            <button type="button" onClick={() => dropCautionWord(w)} aria-label={`${w} 키워드 지우기`} className="text-amber-400 hover:text-red-600">✕</button>
+                            <button type="button" onClick={() => dropCautionWord(w)} aria-label={`${w} 키워드 지우기`} className="text-amber-700 hover:text-red-700">✕</button>
                           </li>
                         ))}
                       </ul>
@@ -1266,7 +1266,7 @@ export default function Settings() {
                           <h3 className="text-base font-bold text-gray-900">
                             {PLANS.find(p => p.id === (currentSubscription?.plan || user?.plan))?.name || '무료 체험'}
                           </h3>
-                          <p className="text-xs text-gray-500 mt-0.5">
+                          <p className="text-xs text-gray-600 mt-0.5">
                             {currentSubscription?.plan === 'trial'
                               ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? formatLocalDate(String(currentSubscription.expiresAt)) : '알 수 없음'})`
                               : currentSubscription?.amount

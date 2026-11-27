@@ -1847,8 +1847,8 @@ export default function Customers() {
               {tagMaster.map(t => (
                 <li key={t} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-blue-50 text-[#1a3a8f] border border-blue-200">
                   #{t}
-                  <button type="button" onClick={() => startRename(t)} aria-label={`${t} 태그 이름 바꾸기`} className="text-blue-400 hover:text-[#1a3a8f]" title="이름 바꾸기(고객 태그도 함께 바뀝니다)">✎</button>
-                  <button type="button" onClick={() => dropFromMaster(t)} aria-label={`${t} 태그 목록에서 지우기`} className="text-blue-400 hover:text-red-600">✕</button>
+                  <button type="button" onClick={() => startRename(t)} aria-label={`${t} 태그 이름 바꾸기`} className="text-blue-700 hover:text-[#1a3a8f]" title="이름 바꾸기(고객 태그도 함께 바뀝니다)">✎</button>
+                  <button type="button" onClick={() => dropFromMaster(t)} aria-label={`${t} 태그 목록에서 지우기`} className="text-blue-700 hover:text-red-700">✕</button>
                 </li>
               ))}
             </ul>
@@ -3556,7 +3556,7 @@ export default function Customers() {
                 <div className="flex items-center gap-1.5 mb-2">
                   <Sparkles size={14} className="text-primary-600" />
                   <label className="text-xs font-semibold text-primary-800">AI 피부 분석 (사진)</label>
-                  <span className="text-2xs text-gray-400">· 관리 참고용 (의학적 진단 아님)</span>
+                  <span className="text-2xs text-gray-600">· 관리 참고용 (의학적 진단 아님)</span>
                 </div>
                 <input ref={consultPhotoRef} type="file" accept="image/*" onChange={handleConsultPhoto} className="hidden" />
                 <div className="flex gap-3">

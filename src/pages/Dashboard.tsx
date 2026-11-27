@@ -605,7 +605,7 @@ export default function Dashboard() {
                       <span className="text-xs font-medium text-[#1a3a8f] w-10 flex-shrink-0">{r.startTime}</span>
                       <div className="flex-1 bg-blue-50 rounded-lg px-3 py-1.5">
                         <p className="text-xs font-semibold text-gray-800">{r.customerName}</p>
-                        <p className="text-xs text-gray-400">{r.staffName}</p>
+                        <p className="text-xs text-gray-600">{r.staffName}</p>
                       </div>
                     </div>
                   ))

@@ -272,7 +272,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                 )}
               </div>
               {smsResult && <p className={`text-xs ${smsResult.startsWith('문자 발송 실패') ? 'text-rose-700' : 'text-primary-600'}`}>{smsResult}</p>}
-              <p className="text-xs text-blue-400">
+              <p className="text-xs text-blue-700">
                 카톡·문자로 링크를 보내면 고객이 휴대폰에서 바로 결제할 수 있습니다. 결제 완료 시 매출에 자동 기록됩니다.
               </p>
             </div>

@@ -796,7 +796,7 @@ export default function AdminUsers() {
                       {u.is_onboarded ? (
                         <span className="text-xs text-emerald-400">완료</span>
                       ) : (
-                        <span className="text-xs text-amber-700">미완료</span>
+                        <span className="text-xs text-amber-400">미완료</span>
                       )}
                     </td>
                     {isAuthApiConfigured && (
