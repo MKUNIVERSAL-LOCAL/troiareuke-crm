@@ -831,6 +831,22 @@ test('AI 어댑터 계층 — 카탈로그·원격 갱신 검증·토큰/비용 
   ], '2026-11'))).toContain('지난달과 같습니다');
   // 줄 수 상한(화면 사정)과 달 경계 계산
   expect(summarizeAiUsage(uDays, '2026-11', 1).daily).toHaveLength(1); // 줄 수 상한(화면 사정)
+  // 321(318~320 리뷰 M-7·L-3·L-4·L-5): 기록은 `JSON.parse` 만 거쳐 오므로 모양을 믿을 수 없다
+  // 모르는 제공사 키는 세지 않는다 — 세면 화면이 라벨 표를 찾다가 **예외로 카드를 못 그린다**
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.1, byProvider: { claude: 1, grok: 4 } as never }], '2026-11').byProvider)
+    .toEqual([{ provider: 'claude', calls: 1 }]);
+  // 음수 건수도 줄을 만들지 않는다(전에는 `!n` 이 음수를 통과시켜 "claude -5건" 이 나갔다)
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.1, byProvider: { claude: -5 } }], '2026-11').byProvider).toEqual([]);
+  // 문자열 금액도 합을 NaN 으로 만들지 않는다(화면에 "약 $NaN" 이 나갔다)
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: '0.5' as never, byProvider: { claude: 1 } }], '2026-11').usd).toBe(0.5);
+  // 보여 주는 합과 차이가 **서로 맞는다**(반올림 전 합에서 빼면 usd - prev ≠ delta 가 됐다)
+  const uRound = summarizeAiUsage([
+    { date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.000051, byProvider: { claude: 1 } },
+    { date: '2026-10-02', calls: 1, input: 1, output: 1, usd: 0.000049, byProvider: { claude: 1 } },
+  ], '2026-11');
+  expect(uRound.usd - (uRound.prevMonthUsd ?? 0)).toBeCloseTo(uRound.deltaUsd ?? 0, 10);
+  // 줄 수 상한이 음수여도 **맨 최신 줄을 빼고** 돌려주지 않는다(slice(0,-1) 함정)
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.1, byProvider: { claude: 1 } }], '2026-11', -1).daily).toEqual([]);
   // 선택·폴백: Claude 우선, 키 있는 것만
   expect(selectProvider({ claude: '', openai: 'k', gemini: 'k' })).toBe('openai');
   expect(selectProvider({ claude: 'k', openai: 'k', gemini: '' })).toBe('claude');

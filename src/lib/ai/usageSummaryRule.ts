@@ -16,6 +16,9 @@
 import { previousMonth } from '../format';
 import type { AiProvider } from './types';
 
+/** 아는 제공사 — 기록은 손댈 수 있으므로 모르는 키는 세지 않는다 (321, 리뷰 M-7) */
+const KNOWN_PROVIDERS: AiProvider[] = ['claude', 'openai', 'gemini'];
+
 /** `usage.ts` 가 날짜별로 쌓는 한 줄 — 이 모듈은 저장소를 모르고 모양만 안다 */
 export interface AiUsageDayInput {
   date: string;            // YYYY-MM-DD (기기 현지 날짜)
@@ -50,24 +53,30 @@ function round4(n: number): number {
  */
 export function summarizeAiUsage(days: AiUsageDayInput[], month: string, dailyLimit = 7): AiUsageSummary {
   const ofMonth = days.filter(d => typeof d?.date === 'string' && d.date.startsWith(`${month}-`));
+  // 321(리뷰 L-4): 기록이 문자열이면(`usd: '0.5'`) 합이 NaN 이 되어 화면에 "약 $NaN" 이 나갔다
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0);
   const total = ofMonth.reduce((s, d) => ({
-    calls: s.calls + (d.calls || 0),
-    input: s.input + (d.input || 0),
-    output: s.output + (d.output || 0),
-    usd: s.usd + (d.usd || 0),
+    calls: s.calls + num(d.calls),
+    input: s.input + num(d.input),
+    output: s.output + num(d.output),
+    usd: s.usd + num(d.usd),
   }), { calls: 0, input: 0, output: 0, usd: 0 });
 
   const counts = new Map<AiProvider, number>();
   for (const d of ofMonth) {
     for (const [p, n] of Object.entries(d.byProvider || {})) {
-      if (!n) continue; // 0건은 줄을 만들지 않는다 — 쓰지 않은 제공사를 "썼다" 로 보이게 하지 않는다
+      // 321(318~320 리뷰 M-7): `!n` 은 **음수를 통과**시켰다(손댄 기록·옛 형식에서 `-5건` 이 줄로 나갔다).
+      // 그리고 모르는 제공사 키(`grok` 등)가 들어오면 화면이 라벨 표를 찾다가 **예외로 카드를 못 그린다** —
+      // 기록은 `JSON.parse` 만 거쳐 오므로 모양을 믿을 수 없다. 아는 제공사·양수만 센다.
+      if (!(typeof n === 'number' && n > 0)) continue;
+      if (!KNOWN_PROVIDERS.includes(p as AiProvider)) continue;
       counts.set(p as AiProvider, (counts.get(p as AiProvider) || 0) + n);
     }
   }
 
   const prev = previousMonth(month);
   const prevDays = days.filter(d => typeof d?.date === 'string' && d.date.startsWith(`${prev}-`));
-  const prevMonthUsd = prevDays.length === 0 ? null : round4(prevDays.reduce((s, d) => s + (d.usd || 0), 0));
+  const prevMonthUsd = prevDays.length === 0 ? null : round4(prevDays.reduce((s, d) => s + num(d.usd), 0));
 
   return {
     month,
@@ -80,10 +89,12 @@ export function summarizeAiUsage(days: AiUsageDayInput[], month: string, dailyLi
       .map(([provider, calls]) => ({ provider, calls })),
     daily: [...ofMonth]
       .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, dailyLimit)
-      .map(d => ({ date: d.date, calls: d.calls || 0, usd: round4(d.usd || 0) })),
+      .slice(0, Math.max(0, dailyLimit)) // 321(리뷰 L-5): 음수면 slice 가 **맨 최신 줄을 빼고** 돌려줬다
+      .map(d => ({ date: d.date, calls: num(d.calls), usd: round4(num(d.usd)) })),
     prevMonthUsd,
-    deltaUsd: prevMonthUsd === null ? null : round4(total.usd - prevMonthUsd),
+    // 321(리뷰 L-3): 차이를 **반올림 전 합**에서 내면 `usd - prevMonthUsd ≠ deltaUsd` 가 되고,
+    // 0.00005 같은 차이가 "$0.0000 보다 $0.0001 많습니다" 로 **두 배 과장**돼 나갔다. 표시값끼리 뺀다.
+    deltaUsd: prevMonthUsd === null ? null : round4(round4(total.usd) - prevMonthUsd),
     recordedDays: ofMonth.length,
   };
 }

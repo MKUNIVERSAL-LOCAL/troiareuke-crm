@@ -30,8 +30,10 @@ const SRC = path.join(ROOT, 'src');
 
 /** 판정을 버려도 되는 자리 — 이유가 사실이어야 하고, 자리가 사라지면 이 목록도 지워야 한다 */
 const ALLOWED = [
-  { file: 'src/lib/cancelReasons.ts', key: 'reservationCancelReasons',
-    why: '정리 경로 — 취소·노쇼가 아니게 된 예약의 사유를 걷는다. 집계는 예약 상태로 먼저 걸러 세므로 고아 사유가 숫자를 틀리게 하지 않고, 다음 저장에서 다시 걷힌다 (301 리뷰 LOW-9)' },
+  // 321(318~320 리뷰 H-1): 여기에 있던 `cancelReasons.ts` 면제를 지웠다 — 사유가 **다른 함수를 설명하고 있었다**.
+  // 그 자리는 고아 정리가 아니라 **고객 익명화 때 직접 입력 사유를 지우는 길**이었고(개인 사정이 적힐 수 있다),
+  // "다음 저장에서 다시 걷힌다" 도 거짓이었다(`pruned()` 는 날짜·예약 존재만 본다). 지금은 판정을 돌려주고
+  // 화면이 실패를 알린다 — 면제가 필요 없어졌다.
   { file: 'src/lib/followUp.ts', key: 'followUps',
     why: '바로 아래에서 **되읽어 확인**하고 boolean 으로 돌려준다 — 판정을 버리는 것이 아니라 더 센 확인을 쓴다 (250 리뷰 M-3)' },
   { file: 'src/lib/fullBackup.ts', key: 'lastBackupAt',

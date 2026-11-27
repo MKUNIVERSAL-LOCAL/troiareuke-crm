@@ -187,12 +187,14 @@ export default function AiServiceCard() {
         {usageDelta && <p className="text-xs text-gray-600 mt-0.5" data-testid="ai-usage-delta">{usageDelta}</p>}
         {usage.byProvider.length > 0 && (
           <p className="text-xs text-gray-600 mt-1.5" data-testid="ai-usage-providers">
-            제공사별: {usage.byProvider.map(b => `${PROVIDER_LABEL[b.provider].split(' ')[0]} ${b.calls}건`).join(' · ')}
+            {/* 321(리뷰 M-7): 규칙이 아는 제공사만 돌려주지만 화면도 라벨이 없으면 키를 그대로 쓴다(카드가 죽지 않게) */}
+            제공사별: {usage.byProvider.map(b => `${(PROVIDER_LABEL[b.provider] ?? b.provider).split(' ')[0]} ${b.calls}건`).join(' · ')}
           </p>
         )}
         {usage.daily.length > 0 && (
           <div className="mt-1.5" data-testid="ai-usage-daily">
-            <p className="text-2xs text-gray-500">최근 {usage.daily.length}일 (이달 기록이 있는 날 {usage.recordedDays}일, 이 기기 보관 {USAGE_KEEP_DAYS}일분)</p>
+            {/* 321(리뷰 L-7): "최근 N일" 은 **기록이 있는** 날이다 — 한 달에 흩어져 있을 수 있다 */}
+            <p className="text-2xs text-gray-500">기록이 있는 최근 {usage.daily.length}일 (이달 기록이 있는 날 {usage.recordedDays}일, 이 기기 보관 {USAGE_KEEP_DAYS}일분)</p>
             <ul className="mt-1 space-y-0.5">
               {usage.daily.map(d => (
                 <li key={d.date} className="flex items-center justify-between text-xs text-gray-600">

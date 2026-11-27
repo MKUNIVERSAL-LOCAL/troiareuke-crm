@@ -1365,10 +1365,13 @@ export default function Customers() {
     if (targets.length === 0) return;
     const residueBulk = describeAnonymizeResidue(countAnonymizeResidue(targets.map(c => c.id))); // 발송 이력 본문·제품 판매 이름은 코어 수정 수단이 없어 남는다 — 사실대로 (216)
     if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.${residueBulk ? `\n${residueBulk}` : ''}`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
-    const n = anonymizeCustomers(targets.map(c => c.id));
+    const { count: n, reasonsLanded } = anonymizeCustomers(targets.map(c => c.id));
     // 파기 대장(설정 > 알림 설정)에 남긴다 — 누가·몇 명을 (P4). 296: 기록이 안 남았으면 그 사실도 말한다
     const logLanded = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' });
     notify(`고객 ${n}명을 익명화했습니다.`);
+    // 321(318~320 리뷰 H-1): 취소·노쇼에 직접 적은 사유는 개인 사정이 적힐 수 있는 기록이다 — 안 지워졌으면 말한다
+    if (reasonsLanded === 'lost') notify.error('취소·노쇼에 직접 적은 사유를 이 PC 에서 지우지 못했습니다(저장 공간 부족) — 저장 공간을 확보한 뒤 익명화를 다시 실행해주세요.');
+    else if (reasonsLanded === 'unknown') notify.error('취소·노쇼에 직접 적은 사유가 지워졌는지 확인할 수 없었습니다 — 익명화를 다시 실행해 확인해주세요.');
     if (logLanded === 'lost') notify.error(PRIVACY_LOG_LOST);
     else if (logLanded === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN); // 297(리뷰 LOW-1)
     setSelected(null);
@@ -1687,10 +1690,13 @@ export default function Customers() {
     if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
     const residueOne = describeAnonymizeResidue(countAnonymizeResidue([selected.id])); // (216)
     if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.${residueOne ? `\n${residueOne}` : ''}`, confirmLabel: '익명화', danger: true, returnFocusTo: menuAnchor() }))) return;
-    const n = anonymizeCustomers([selected.id]);
+    const { count: n, reasonsLanded: reasonsLandedOne } = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
     const logLandedOne = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
     notify('고객을 익명화했습니다.');
+    // 321(318~320 리뷰 H-1): 개별 익명화도 같은 사실을 말한다
+    if (reasonsLandedOne === 'lost') notify.error('취소·노쇼에 직접 적은 사유를 이 PC 에서 지우지 못했습니다(저장 공간 부족) — 저장 공간을 확보한 뒤 익명화를 다시 실행해주세요.');
+    else if (reasonsLandedOne === 'unknown') notify.error('취소·노쇼에 직접 적은 사유가 지워졌는지 확인할 수 없었습니다 — 익명화를 다시 실행해 확인해주세요.');
     if (logLandedOne === 'lost') notify.error(PRIVACY_LOG_LOST); // 296
     else if (logLandedOne === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN); // 297(리뷰 LOW-1)
     const updated = CustomerStore.getById(selected.id);

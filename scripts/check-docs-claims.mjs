@@ -97,6 +97,41 @@ function markedPast(text, at) {
   return /당시[\s)\]—–\-:,·]*$|당시\s*\([^)]*\)[\s—–\-:,·]*$|당시 기준[\s—–\-:,·]*$/.test(text.slice(Math.max(0, at - 24), at));
 }
 
+/** 면제·남은 수 주장(321) — 어느 가드의 수인지까지 고른다. 인용문·'당시'·기준 문구의 과거 표시는 주장이 아니다 */
+const EXEMPT_GUARDS = [
+  { key: 'testids', words: /화면\s*칸|check:testids/g, script: 'scripts/check-testid-coverage.mjs', label: 'npm run check:testids' },
+  { key: 'modal', words: /창\s*자리|check:modal-a11y/g, script: 'scripts/check-modal-a11y.mjs', label: 'npm run check:modal-a11y' },
+];
+function exemptionClaims(text, rel) {
+  const out = [];
+  for (const m of text.matchAll(/(?:남은|면제(?:는)?)\s*(\d+)\s*(?:칸|자리|개)/g)) {
+    if (markedPast(text, m.index)) continue;
+    const lineStart = text.lastIndexOf('\n', m.index) + 1;
+    if ((text.slice(lineStart, m.index).match(/"/g) || []).length % 2 === 1) continue;
+    const before = text.slice(Math.max(0, m.index - 220), m.index);
+    const base = [...before.matchAll(/(\d+)칸 중 (\d+)칸|(?:화면\s*)?칸 (\d+)개 중 (\d+)개|(\d+)개 중 (\d+)자리/g)].pop();
+    if (base && markedPast(text, m.index - before.length + base.index)) continue;
+    const guard = EXEMPT_GUARDS
+      .map(g => { const hits = [...before.matchAll(g.words)]; return hits.length ? { g, at: hits[hits.length - 1].index } : null; })
+      .filter(Boolean)
+      .sort((x, y) => y.at - x.at)
+      .map(x => x.g)[0];
+    if (!guard) continue;
+    out.push({ rel, raw: m[0], n: Number(m[1]), guard });
+  }
+  return out;
+}
+
+/** outbox 테스트 수 주장(321) */
+function outboxClaims(text, rel) {
+  const out = [];
+  for (const m of text.matchAll(/outbox[^\n]{0,40}?(\d+)\/(\d+)/g)) {
+    if (markedPast(text, m.index)) continue;
+    out.push({ rel, raw: m[0].slice(0, 40), n: Number(m[2]) });
+  }
+  return out;
+}
+
 /** 문서가 주장하는 숫자들 */
 function claimedNumbers(text) {
   const out = { rules: [], testids: [], libUnits: [], ranges: [], cumulative: [], reviews: [] };
@@ -299,10 +334,25 @@ function selftest() {
   // 309: 서버 테스트 수 주장 — 인용문·"당시" 는 주장이 아니고, 맨 주장은 모은다
   const stc = serverTestClaims('서버 테스트 45개가 돈다.\n첫 실행에서 "서버 자동 테스트 0건" 을 잡았다.\n당시 서버 테스트 25개였다.', 'x.md');
   if (stc.length !== 1 || stc[0].n !== 45) { console.error('[selftest] 서버 테스트 주장 수집 덫 실패: ' + JSON.stringify(stc)); process.exit(1); }
+  // 321(318~320 리뷰 H-2): 파생 수(면제·남은) 주장 수집 — 가드 고르기·인용문·기준 문구의 과거 표시
+  const ex1 = exemptionClaims('화면 칸 227개 중 227개, 면제 0개다.', 'x.md');
+  if (ex1.length !== 1 || ex1[0].n !== 0 || ex1[0].guard.key !== 'testids') { console.error('[selftest] 면제 수 수집 덫 실패: ' + JSON.stringify(ex1.map(c => [c.n, c.guard.key]))); process.exit(1); }
+  const ex2 = exemptionClaims('창 자리 56개 중 42자리 덮임, 남은 14개는 사유를 적음', 'x.md');
+  if (ex2.length !== 1 || ex2[0].guard.key !== 'modal') { console.error('[selftest] 창 자리 가드 고르기 덫 실패'); process.exit(1); }
+  // 윗줄의 "화면 칸" 이 아랫줄 "창 자리" 주장을 가로채지 않는다(표의 이웃 줄에서 실제로 그랬다)
+  const ex3 = exemptionClaims('| check:testids | 화면 칸 227개 중 227개 |\n| check:modal-a11y | 창 자리 56개 중 42자리, 남은 14개 |', 'x.md');
+  if (ex3.length !== 1 || ex3[0].guard.key !== 'modal') { console.error('[selftest] 가장 가까운 가드 덫 실패: ' + JSON.stringify(ex3.map(c => c.guard.key))); process.exit(1); }
+  // 인용문·기준 문구가 과거로 표시된 자리는 주장이 아니다
+  if (exemptionClaims('화면 칸 기록의 "남은 5칸" 을 고쳤다', 'x.md').length !== 0) { console.error('[selftest] 인용문 면제 덫 실패'); process.exit(1); }
+  if (exemptionClaims('276~277 당시 — 화면 칸 213개 중 204개가 닿고, 남은 9개는 사유를 적어 둔다', 'x.md').length !== 0) { console.error('[selftest] 당시 물려받기 덫 실패'); process.exit(1); }
+  if (exemptionClaims('승인 대기 남은 3개', 'x.md').length !== 0) { console.error('[selftest] 다른 주제 면제 덫 실패'); process.exit(1); }
+  // 321(리뷰 M-6): outbox 수 주장
+  const ob = outboxClaims('npm run test:outbox  # 12/12\n당시 outbox 9/9 였다', 'x.md');
+  if (ob.length !== 1 || ob[0].n !== 12) { console.error('[selftest] outbox 주장 수집 덫 실패: ' + JSON.stringify(ob)); process.exit(1); }
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음) 통과`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -609,6 +659,64 @@ function serverTestClaims(text, rel) {
       for (const c of claims) {
         if (c.buttons !== Number(b) || c.inputs !== Number(i)) {
           problems.push(`${c.rel}: "${c.raw}" 가 낡았다 — 지금은 단추 ${b}개·입력칸 ${i}개(npm run check:decorative)`);
+        }
+      }
+    }
+  }
+}
+
+// ⑪ **"면제 N개"·"남은 N칸/자리" 는 그 가드가 세는 수와 같아야 한다** (321, 318~320 리뷰 H-2)
+//
+// 왜: ② 는 `N칸 중 M칸` **두 수만** 봤다. 그래서 거기서 파생되는 "남은 K칸" 은 검사 밖이었고,
+//     319·320 이 네 칸을 덮은 뒤에도 오너가 읽는 문서 셋이 **"남은 5칸은 승인·서버 선행"** 이라고
+//     적고 있었다 — 승인 결정 문서가 이미 끝난 일을 기다리라고 말한 셈이다. 같은 가드 구멍으로
+//     지난 두 리뷰의 HIGH 와 같은 종류가 또 통과했다. 파생 수도 함께 센다.
+//     주의 둘: ① 같은 말이 **다른 가드**에도 쓰인다(화면 칸 / 창 자리) — 앞 글을 보고 가드를 고른다.
+//     ② 파생 수는 **기준 문구("N칸 중 M칸")의 '당시' 표시를 물려받는다** — 그 기준이 과거로 표시돼
+//     있으면 파생 수도 과거다(아니면 276~277 당시 기록이 거짓 실패가 된다).
+{
+  const claims = [];
+  for (const rel of CURRENT_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    claims.push(...exemptionClaims(read(rel), rel));
+  }
+  const counted = new Map();
+  for (const c of claims) {
+    if (!counted.has(c.guard.key)) {
+      const r = spawnSync(process.execPath, [c.guard.script], { cwd: ROOT, encoding: 'utf8' });
+      const out = `${r.stdout || ''}${r.stderr || ''}`;
+      const m = out.match(/사유를 적어 둔 (\d+)개/);
+      counted.set(c.guard.key, m ? Number(m[1]) : null);
+    }
+    const now = counted.get(c.guard.key);
+    if (now === null) {
+      problems.push(`${c.guard.label} 출력에서 면제 수를 찾지 못했다 — 그 명령을 먼저 보세요`);
+    } else if (c.n !== now) {
+      problems.push(`${c.rel}: "${c.raw}" 가 낡았다 — 지금 면제는 ${now}개(${c.guard.label})`);
+    }
+  }
+}
+
+// ⑫ **"outbox N/N" 은 그 테스트가 세는 수와 같아야 한다** (321, 318~320 리뷰 M-6)
+//
+// 왜: 재개 절차 문서가 `npm run test:outbox  # 9/9` 라고 적고 있었는데 실측은 **12/12** 였다.
+//     다음 세션이 처음 읽는 문서라 "뭔가 바뀌었나" 로 오해할 자리고, 어떤 가드도 이 수를 보지 않았다.
+{
+  const claims = [];
+  for (const rel of CURRENT_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    claims.push(...outboxClaims(read(rel), rel));
+  }
+  if (claims.length > 0) {
+    const r = spawnSync(process.execPath, ['scripts/test-nas-outbox.mjs'], { cwd: ROOT, encoding: 'utf8' });
+    const out = `${r.stdout || ''}${r.stderr || ''}`;
+    const m = out.match(/(\d+)\/(\d+)/);
+    if (!m) {
+      problems.push('NAS 아웃박스 테스트 출력에서 개수를 찾지 못했다 — npm run test:outbox 를 먼저 보세요');
+    } else {
+      for (const c of claims) {
+        if (c.n !== Number(m[2])) {
+          problems.push(`${c.rel}: "${c.raw}" 가 낡았다 — 지금은 ${m[1]}/${m[2]}(npm run test:outbox)`);
         }
       }
     }

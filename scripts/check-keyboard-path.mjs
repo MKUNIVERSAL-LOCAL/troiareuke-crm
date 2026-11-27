@@ -8,20 +8,24 @@
  *     이 가드가 그 말을 사실로 만든다.
  *     실제로 318 에서 훑었을 때 **지점 직원이 쓰는 직원 카드**가 마우스로만 열렸다(Tab 으로 닿지 않았다).
  *
- * 하는 일: src 의 .tsx 에서 `onClick` 이 붙은 `div`·`span`·`li`·`tr`·`td` 여는 태그를 모아
+ * 하는 일: src 의 .tsx 에서 `onClick` 이 붙은 `div`·`span`·`li`·`tr`·`td`·`th`·`p`·`label`·`section`·`article`·`img` 여는 태그를 모아
  *     **키보드로 닿을 길이 하나라도 있는지** 본다. 다음 중 하나면 통과:
  *   ① 자기 자리가 제대로 된 단추다 — `role="button"` + `tabIndex` + `onKeyDown` (셋 다)
  *   ② 안쪽에 포커스를 받는 요소가 있다 — `<button>`·`<a>`·`<input>`·`<select>`·`<textarea>`·`role="button"`·`tabIndex={0}`
  *   ③ 배경 덮개다 — className 에 `inset-0` (배경을 눌러 닫는 자리. 키보드는 Esc 가 맡는다 — `useOverlayClose`)
  *   ④ 창 자체다 — `role="dialog"`·`aria-modal` (`check:modal-a11y` 가 본다)
+ *       **321(리뷰 M-4) 정직하게**: 이 조건은 **실물에서 한 번도 발동하지 않는다** — 창틀(`AdminDialog` 등)은
+ *       ⑤(`stopPropagation`)가 먼저 받는다. 지금 18자리 분류는 ③ 10 · ⑤ 5 · ② 3 · ① 0 · ④ 0 이다.
+ *       그래도 남겨 둔다: 창을 `onClick` 으로 직접 닫는 모양이 생기면 그때 쓰인다(죽은 설정이 아니라 좁은 조건이다).
  *   ⑤ 핸들러가 `e.stopPropagation()` 뿐이다 — 누르는 자리가 아니라 **부모의 닫기를 막는** 자리다
  *   주석은 먼저 지운다(305·306·311·316 에서 네 번 만난 거짓 경보의 원천).
  *
  * 한계(정직하게): ②는 **포커스를 받는 요소가 안에 있는지**만 본다 — 그 단추가 바깥 `onClick` 과
  *   **같은 동작**인지는 보지 않는다. 어드민 표 두 곳·직원 카드처럼 "진짜 단추를 첫 칸에 둔다" 가
  *   이 저장소의 방식이라(2026-11-20 리뷰가 고른 모양) 통과 조건으로 삼았고, 같은 동작인지는 사람·리뷰가 본다.
- *   318 측정: 훑은 18자리 중 ③④⑤가 15, ②가 2(어드민 표), 진짜 구멍이 1(직원 카드).
- *   그래서 ③④⑤를 **모양으로** 면제한다 — 면제하지 않으면 17/18 이 거짓 경보가 되고,
+ *   318 측정(321 정정): 훑은 18자리 중 ③이 10·⑤가 5·②가 3(어드민 표 둘 + 직원 카드), ①④는 0.
+ *   ③⑤만 끄면 **7자리**가 잡히고 그중 6이 거짓 경보다(처음에는 "18 중 17" 이라고 적었는데 그 18 은 ②까지
+ *   함께 끈 수였다 — 318~320 리뷰 L-1). 그래서 ③④⑤를 **모양으로** 면제한다 — 면제하지 않으면 6/7 이 거짓 경보가 되고,
  *   거짓 경보를 내는 가드는 사람이 가드를 끄게 만들어 못 잡는 것보다 나쁘다(303 에서 정한 기준).
  */
 import fs from 'node:fs';
@@ -30,17 +34,27 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src');
-const TAGS = ['div', 'span', 'li', 'tr', 'td'];
+// 321(318~320 리뷰 L-8): 다섯 태그만 보던 것을 넓혔다 — 브리핑이 "마우스로만 쓸 수 있는 자리" 라고
+// 말하는데 가드가 그보다 좁으면 그 말이 사실보다 넓다. 넓힌 뒤에도 위반 0 이다(리뷰도 전수로 확인했다).
+const TAGS = ['div', 'span', 'li', 'tr', 'td', 'th', 'p', 'label', 'section', 'article', 'img'];
 
 /** 키보드 경로가 없어도 되는 자리 — 이유가 사실이어야 하고, 자리가 사라지면 이 줄도 지워야 한다 */
 const ALLOWED = [];
 
-const SELF_ROLE = /role="button"|role={'button'}/;
+// 321(318~320 리뷰 M-3): 홑따옴표 `role='button'` 도 유효한 JSX 인데 못 봐서 **거짓 경보**가 났다
+const SELF_ROLE = /role=["']button["']|role=\{'button'\}/;
 const SELF_KEY = /onKeyDown|onKeyUp|onKeyPress/;
-const FOCUSABLE = /<(?:button|a|input|select|textarea)[\s>/]|role="button"|role={'button'}|tabIndex={0}/;
+// 321(리뷰 M-2): 전에는 포커스를 **못 받는** 요소도 경로로 셌다 — `disabled`·`tabIndex={-1}`·`href` 없는 `<a>`,
+// 그리고 `{canEdit && <button …>}` 처럼 **조건부**로만 나오는 단추(그 조건이 false 인 직원에게는 경로가 없다).
+// 이제 "정말 탭 순서에 들어가는 요소가 하나라도 있는가" 를 본다.
+const FOCUS_TAG = /<(button|a|input|select|textarea)(\s[^>]*)?>/g;
+// 321: 정규식에서 `{0}` 은 **"앞 글자 0번"** 이라는 수량자다 — `tabIndex={0}` 는 사실
+// `tabInde` 만 찾고 있었고, 그래서 `tabIndex={-1}` 짜리도 "포커스를 받는다" 로 통과했다
+// (318 이 심은 잠복 버그 — 318~320 리뷰 M-2 를 고치는 덫에서 드러났다). 중괄호를 escape 한다.
+const ROLE_BUTTON_CHILD = /role=["']button["']|role=\{'button'\}|tabIndex=\{0\}/;
 const BACKDROP = /inset-0/;
-const DIALOG = /role="dialog"|role={'dialog'}|aria-modal/;
-const ONLY_STOP = /onClick={\s*e\s*=>\s*e\.stopPropagation\(\)\s*}|onClick={\s*e\s*=>\s*{\s*e\.stopPropagation\(\);?\s*}\s*}/;
+const DIALOG = /role="dialog"|role=\{'dialog'\}|aria-modal/;
+const ONLY_STOP = /onClick=\{\s*e\s*=>\s*e\.stopPropagation\(\)\s*\}|onClick=\{\s*e\s*=>\s*\{\s*e\.stopPropagation\(\);?\s*\}\s*\}/;
 
 /** 주석을 같은 길이의 공백으로 (줄 번호가 흔들리지 않게) — check-decorative 와 같은 방식(316·317) */
 function blankComments(text) {
@@ -102,6 +116,40 @@ function subtree(text, tag, openEnd) {
   return text.slice(start, Math.max(start, i - close.length));
 }
 
+/**
+ * 안쪽에 **탭 순서에 들어가는** 요소가 있는가 (321, 리뷰 M-2).
+ * 제외: `disabled`·`tabIndex={-1}`·`href` 없는 `<a>`·조건부 렌더(`{… && <button>}`·`{… ? <button> : …}`).
+ * 조건부 판정은 그 태그 앞의 **닫히지 않은 `{`** 안에 `&&`·`?` 가 있는지로 본다 — 좁게 잡아
+ * 거짓 경보를 만들지 않는 쪽으로 기울였다(303 기준).
+ */
+function hasFocusablePath(inner) {
+  if (ROLE_BUTTON_CHILD.test(inner)) return true;
+  for (const m of inner.matchAll(FOCUS_TAG)) {
+    const tag = m[1];
+    const attrs = m[2] || '';
+    if (/\bdisabled\b/.test(attrs)) continue;
+    if (/tabIndex=\{-1\}|tabIndex="-1"/.test(attrs)) continue;
+    if (tag === 'a' && !/\bhref=/.test(attrs)) continue;
+    if (isConditional(inner, m.index)) continue;
+    return true;
+  }
+  return false;
+}
+
+/** 그 자리가 조건부 표현 안인가 — 앞쪽에서 닫히지 않은 `{` 를 찾아 그 안에 `&&`·`?` 가 있는지 본다 */
+function isConditional(text, at) {
+  let depth = 0;
+  for (let i = at - 1; i >= 0; i -= 1) {
+    const c = text[i];
+    if (c === '}') depth += 1;
+    else if (c === '{') {
+      if (depth === 0) return /&&|\?/.test(text.slice(i, at));
+      depth -= 1;
+    }
+  }
+  return false;
+}
+
 function problems(files) {
   const found = [];
   for (const { file, text } of files) {
@@ -124,7 +172,7 @@ function problems(files) {
         if (BACKDROP.test(src)) continue;                                               // ③
         if (DIALOG.test(src)) continue;                                                 // ④
         if (SELF_ROLE.test(src) && SELF_KEY.test(src) && /tabIndex=/.test(src)) continue; // ①
-        if (!selfClosing && FOCUSABLE.test(inner)) continue;                            // ②
+        if (!selfClosing && hasFocusablePath(inner)) continue;                          // ②
         found.push({ file, line, src: src.replace(/\s+/g, ' ').slice(0, 80) });
       }
     }
@@ -160,8 +208,17 @@ function selftest() {
   ok('겹친 요소를 깊이로 센다', run('<div onClick={open} className="card"><div><p>이름</p></div></div>\n<div><button onClick={x}>밖</button></div>').length === 1);
   ok('다른 이름 태그는 세지 않는다', run('<divider onClick={open}>x</divider>').length === 0);
   ok('링크도 키보드 경로다', run('<li onClick={open}><a href="/x">이름</a></li>').length === 0);
+  // 321(318~320 리뷰 M-2): 포커스를 **못 받는** 요소는 경로가 아니다 — 전에는 네 가지가 거짓 통과였다
+  ok('href 없는 링크는 경로가 아니다', run('<div onClick={open}><a onClick={open}>이름</a></div>').length === 1);
+  ok('disabled 단추는 경로가 아니다', run('<div onClick={open}><button disabled>이름</button></div>').length === 1);
+  ok('tabIndex -1 은 경로가 아니다', run('<div onClick={open}><button tabIndex={-1}>이름</button></div>').length === 1);
+  ok('조건부로만 나오는 단추는 경로가 아니다', run('<div onClick={open}>{canEdit && <button onClick={open}>수정</button>}</div>').length === 1);
+  ok('삼항으로만 나오는 단추도 경로가 아니다', run('<div onClick={open}>{canEdit ? <button onClick={open}>수정</button> : null}</div>').length === 1);
+  ok('조건부가 아닌 단추는 그대로 경로다', run('<div onClick={open}><span>{count}건</span><button onClick={open}>이름</button></div>').length === 0);
+  // 321(리뷰 M-3): 홑따옴표 role 도 유효한 JSX 다 — 전에는 **거짓 경보**였다
+  ok("홑따옴표 role 은 통과", run("<div onClick={open} role='button' tabIndex={0} onKeyDown={k}>이름</div>").length === 0);
 
-  console.log('[check-keyboard] selftest OK — 덫(마우스 전용 카드·안쪽 단추·역할+키보드·역할만·배경 덮개·창·stopPropagation 2종·자기닫는 태그·표 행 2종·onClick 없음·주석·겹친 요소 깊이·다른 이름·링크) 통과');
+  console.log('[check-keyboard] selftest OK — 덫(마우스 전용 카드·안쪽 단추·역할+키보드·역할만·배경 덮개·창·stopPropagation 2종·자기닫는 태그·표 행 2종·onClick 없음·주석·겹친 요소 깊이·다른 이름·링크·href 없는 링크·disabled·tabIndex -1·조건부 2종·조건부 아님·홑따옴표 role) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }

@@ -74,8 +74,14 @@ function pruned(map: Record<string, StoredReason>): Record<string, StoredReason>
  * 고객 익명화·삭제 때 **직접 입력한 사유만** 지운다 (246 리뷰 M-4).
  * 직접 입력 30자에는 "○○ 임신으로 중단" 같은 개인 사정이 적힐 수 있는데, 익명화가 이 기록을 몰랐다.
  * 등록된 보기(고객 일정 변경 등)는 개인정보가 아니라 통계라 남긴다.
+ *
+ * **321(318~320 리뷰 H-1)**: 전에는 지운 건수만 돌려주고 **저장 판정을 버렸다**. 저장 공간이 꽉 찬 PC 에서
+ * 쓰기가 실패하면 개인 사정이 적힌 사유가 그대로 남는데 화면은 "익명화했습니다" 만 말했다. 되걷는 길도 없다 —
+ * `pruned()` 는 날짜와 예약 존재로만 걷고 자유 입력·익명화 여부는 보지 않는다(= "다음 저장에서 다시 걷힌다" 는
+ * `check:save` 면제 사유도 사실이 아니었다). 이제 **판정을 함께 돌려주고** 부르는 쪽이 사용자에게 알린다.
+ * 지울 것이 없었으면 `'landed'` 다 — 아무것도 잃지 않았으므로 없는 실패를 알리지 않는다.
  */
-export function clearFreeTextReasonsOfCustomer(customerId: string): number {
+export function clearFreeTextReasonsOfCustomer(customerId: string): { removed: number; landed: PrefLanded } {
   try {
     const map = reasonMap();
     const mine = new Set(ReservationStore.getAll().filter(r => r.customerId === customerId).map(r => r.id));
@@ -85,10 +91,11 @@ export function clearFreeTextReasonsOfCustomer(customerId: string): number {
       if (mine.has(id) && !isPresetReason(rec.reason)) { removed += 1; continue; }
       next[id] = rec;
     }
-    if (removed > 0) setPreference('reservationCancelReasons', next);
-    return removed;
+    if (removed === 0) return { removed: 0, landed: 'landed' };
+    return { removed, landed: setPreference('reservationCancelReasons', next) };
   } catch {
-    return 0;
+    // 읽기 자체가 안 되면(프라이빗 모드 등) 지웠는지 **단정할 수 없다** — 'lost' 로 과장하지 않는다
+    return { removed: 0, landed: 'unknown' };
   }
 }
 

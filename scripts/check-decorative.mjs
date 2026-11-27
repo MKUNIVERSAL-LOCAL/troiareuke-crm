@@ -33,7 +33,9 @@ const SRC = path.join(ROOT, 'src');
 /** 동작이 없어도 되는 자리 — 이유가 사실이어야 하고, 자리가 사라지면 이 목록도 지워야 한다 */
 const ALLOWED = [];
 
-const BUTTON_OK = /onClick|onPointerDown|onMouseDown|onKeyDown|type="submit"|type={'submit'}|disabled|\{\.\.\./;
+// 321: 중괄호는 escape 한다 — `{0}` 같은 모양이면 **수량자**로 읽혀 엉뚱한 것을 찾는다
+// (키보드 경로 가드에서 실제로 그 버그가 있었다). `{'submit'}` 는 지금도 리터럴로 읽히지만 같은 함정의 이웃이다.
+const BUTTON_OK = /onClick|onPointerDown|onMouseDown|onKeyDown|type="submit"|type=\{'submit'\}|disabled|\{\.\.\./;
 const INPUT_OK = /onChange|onInput|readOnly|disabled|ref=|defaultValue|type="file"|type="hidden"|\{\.\.\./;
 
 /** 주석을 같은 길이의 공백으로 (줄 번호가 흔들리지 않게). 따옴표는 줄을 넘지 않는다(JSX 아포스트로피 대비) */

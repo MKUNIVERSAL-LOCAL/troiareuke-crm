@@ -72,10 +72,13 @@ export function getExpiredCustomers(today = new Date()): Customer[] {
  * 익명화(파기) — 고객 레코드의 개인 식별 정보를 지우고 통계(방문·결제 합계)만 남긴다.
  * 예약·시술·프로그램·결제·상담 기록에 복사돼 있던 이름(예약은 전화번호도)과 얼굴 사진(시술·상담 사진)도 함께 지운다 —
  * 기록 자체는 고객 id로 연결된 채 남아 매출 통계가 깨지지 않는다. (제품 판매 기록의 저장 이름은 수정 API가 없어 남지만 화면·엑셀은 customerIdentity.saleCustomerName 으로 현재 이름을 읽어 노출되지 않는다 — 11차 #H4)
- * @returns 처리한 고객 수
+ * @returns 처리한 고객 수와, **직접 입력 취소 사유 삭제가 디스크에 남았는지**(321, 318~320 리뷰 H-1 —
+ * 개인 사정이 적힐 수 있는 기록이라 실패를 삼키지 않는다. 여러 명 중 가장 나쁜 판정을 돌려준다)
  */
-export function anonymizeCustomers(ids: string[]): number {
+export function anonymizeCustomers(ids: string[]): { count: number; reasonsLanded: PrefLanded } {
   let n = 0;
+  let reasonsLanded: PrefLanded = 'landed';
+  const rank: Record<PrefLanded, number> = { landed: 0, unknown: 1, invalid: 2, lost: 3 };
   const done: string[] = [];
   for (const id of ids) {
     const c = CustomerStore.getById(id);
@@ -100,7 +103,9 @@ export function anonymizeCustomers(ids: string[]): number {
     });
     // 연결 기록에 복사된 이름·전화 + 공유 Google 캘린더 앞 일정 — 고객 정보 수정·삭제와 같은 전파(customerIdentity). 수동 복제본일 때 캘린더만 빠져 실명이 남았다 (리뷰 #H4)
     propagateCustomerIdentity(id, { name: ANONYMIZED_NAME, phone: '' }, { resyncCalendar: false });
-    clearFreeTextReasonsOfCustomer(id); // 취소·노쇼에 직접 적은 사유(개인 사정이 적힐 수 있다)도 지운다 (246 리뷰 M-4)
+    // 취소·노쇼에 직접 적은 사유(개인 사정이 적힐 수 있다)도 지운다 (246 리뷰 M-4). 판정은 버리지 않는다 (321)
+    const reasons = clearFreeTextReasonsOfCustomer(id);
+    if (rank[reasons.landed] > rank[reasonsLanded]) reasonsLanded = reasons.landed;
     clearHistoryOfCustomer(id);         // 예약 변경 이력에 남은 실명도 지운다 (250 리뷰 H-4)
     clearCustomerHistory(id);           // 고객 정보 변경 이력(이름·태그)도 지운다 (252)
     TreatmentLogStore.getByCustomer(id).forEach(t => clearPhotos(`treatment:${t.id}`));
@@ -108,5 +113,5 @@ export function anonymizeCustomers(ids: string[]): number {
     n += 1;
   }
   if (n > 0) void resyncGcalEvents(upcomingReservationsOf(done)); // 건너뛴 id 는 제외 (120~122 리뷰 #L6) // 캘린더 재동기·실패 경고는 일괄 1회 (117~119 리뷰 #M1)
-  return n;
+  return { count: n, reasonsLanded };
 }

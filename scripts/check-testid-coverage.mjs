@@ -40,11 +40,12 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * "상태를 만들기 어렵다" 와 "승인·서버가 없으면 띄울 수 없다" 는 다른 이유다. 섞어 적지 않는다.
  */
 const ALLOWED = {
-  // 320 실측: 이 띠는 `IS_MOBILE_APP`(= `Capacitor.isNativePlatform()`)가 **모듈 로드 시점에** 정해진다.
-  // `addInitScript` 로 `window.Capacitor` 를 네이티브처럼 주입해 봤지만 번들의 `@capacitor/core` 가
-  // 자기 웹 구현으로 그 전역을 **덮어써서** 판정이 false 로 남았다(탐색 스펙으로 확인한 뒤 지웠다).
-  // 그래서 브라우저를 Pixel 폭으로 바꾼 mobile 프로젝트로는 이 띠를 띄울 수 없다 — 앱 런타임이 필요하다.
-  'mobile-update-banner': '모바일 앱 업데이트 띠 — 앱(Capacitor) 런타임에서만 뜬다(전역 주입은 번들이 덮어써서 안 된다, 320 실측)',
+  // 321(318~320 리뷰 H-3): 320 이 "앱 런타임이 필요하다" 며 남긴 마지막 면제를 **덮어서 지웠다**.
+  // 320 의 실측은 결론만 맞고 **기제가 틀렸다** — `window.Capacitor` 덮어쓰기는 막히지만
+  // `@capacitor/core` 가 공식으로 보는 `window.CapacitorCustomPlatform` 을 심으면 판정이 뒤집힌다(리뷰가 찾았다).
+  // 뒤집어도 띠가 안 뜬 진짜 이유는 따로 있었다: `getMobileAppVersion()` 의 폴백이 **정의되지 않은 이름**
+  // (`VITE_APP_VERSION`)을 읽어 늘 빈 문자열이었고, 그러면 `checkMobileUpdate` 가 항상 'none' 이다.
+  // 빌드 상수(`__APP_VERSION__`)로 고치니 브라우저에서도 뜬다 → `e2e/update-banner-mobile.spec.ts` 가 지킨다.
 };
 
 function listFiles(dir, exts = ['.ts', '.tsx'], out = []) {

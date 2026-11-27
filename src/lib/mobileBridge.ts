@@ -144,6 +144,10 @@ export async function getMobileAppVersion(): Promise<string> {
     const info = await App.getInfo();
     return info.version;
   } catch {
-    return String(import.meta.env.VITE_APP_VERSION || '');
+    // 321(318~320 리뷰 H-3 에서 드러난 자리): 전에는 `import.meta.env.VITE_APP_VERSION` 을 읽었는데
+    // 그 이름은 **이 저장소 어디에도 정의돼 있지 않다**(vite.config·.env·package.json 전수 확인) —
+    // 플러그인을 못 쓰는 환경에서 늘 빈 문자열이었고, 그래서 `checkMobileUpdate` 가 항상 'none' 이었다.
+    // 빌드 시점 상수(`__APP_VERSION__`, vite.config define)를 쓰면 폴백이 실제로 동작한다.
+    return __APP_VERSION__;
   }
 }
