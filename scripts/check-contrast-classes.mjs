@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 글자 대비 가드 (326·327, 328 팔레트·사정거리, 329 부모·자식 물려받기, 330 **투명도·표 배경**) — `npm run check:contrast`
+ * 글자 대비 가드 (326~330, 331 **가드의 두 구멍**, 332 **삼항 가지**) — `npm run check:contrast`
  *
  * 왜: 325 가 **성공 토스트의 대비 3.77:1**(경고 토스트는 2.15:1)을 찾았는데, 그것이 잡힌 것은 **운이었다** —
  *     캠페인 창을 열 때 토스트가 떠 있었다. 접근성 쓸이(axe)는 **그 순간 화면에 있는 것만** 본다.
@@ -49,9 +49,12 @@
  *  - **투명도 유틸**(`opacity-70`)도 글자 알파로 본다(331). 글자색은 **자식이 투명도를 바꾸고 글자를
  *    담았을 때만** 조상에서 물려받는다 — 넓게 켜자 장식 상자(로그인 화면의 흐린 원)와 진행 바까지
  *    신고했다(거짓 경보 둘). 그 밖에는 조상 자신의 짝으로 이미 본다.
- *  - **조상 배경이 삼항이면 "모른다" 고 본다**(331). 그래서 `${required ? 'bg-red-600' : 'bg-...'}`
- *    꼴의 띠 안쪽은 못 본다 — 앱의 필수 업데이트 띠 본문(4.13:1)이 그 자리였고 **손으로 고쳤다**.
- *    삼항의 가지들을 표 후보처럼 전부 재는 것이 다음 단계다(지금은 가정하지 않는 쪽을 택했다).
+ *  - **삼항으로 갈리는 조상 배경은 가지마다 잰다**(332). `${required ? 'bg-red-600 …' : 'bg-… …'}`
+ *    꼴의 띠 안쪽을 331 까지는 "모른다" 로 넘겨 앱의 **필수 업데이트 띠** 본문(4.13:1)을 손으로
+ *    고쳤는데, 삼항은 값이 유한하므로 표 후보와 같은 방식으로 전부 잰다. 그 자리를 되돌리면
+ *    가드가 `가지의 bg-red-600 / text-white + opacity-90 / 4.13:1` 로 잡는다(확인했다).
+ *    **모든 가지가 배경을 깔 때만** 후보로 본다 — 한 가지가 안 깔면 그 상태의 바닥은 바깥에서
+ *    오므로 세지 않는다. 글자색은 **가지들이 한 색으로 일치할 때만** 물려받는다.
  *  - 인라인 `style`·CSS 변수·이미지 위의 글자는 보지 않는다.
  *  - `gray-400` 과 `gray-500` 은 이 프로젝트에서 **같은 색**이다(`tailwind.config.js:11`, 의도된 것) —
  *    둘 사이를 바꾸는 "수정" 은 화면을 바꾸지 않는다(327 이 그걸 다섯 번 했다).
@@ -169,6 +172,54 @@ function blend(front, back, alpha) {
 }
 
 /**
+ * 삼항 가지의 글자색이 **모두 같은 색**이면 그 색 (332).
+ * 가지마다 다르면 모른다(배경과 달리 글자색은 가지별로 짝지을 상대가 정해지지 않는다).
+ */
+function ternaryTextColor(raw) {
+  if (raw === null || !/\?/.test(raw) || !/:/.test(raw)) return null;
+  const nested = branches(raw).slice(1);
+  if (nested.length < 2) return null;
+  let picked = null;
+  for (const chunk of nested) {
+    const fg = chunk.split(/\s+/).map(colorToken).find(c => c && c.kind === 'text' && c.state === 'base');
+    if (!fg) return null;
+    const name = tokenName(fg);
+    if (picked && tokenName(picked) !== name) return null;
+    picked = fg;
+  }
+  return picked;
+}
+/**
+ * 삼항으로 갈리는 배경의 **후보 전부** (332).
+ *
+ * 왜: 331 머리말이 마지막 한계로 적어 둔 자리다 — 앱의 **필수 업데이트 띠**가
+ * `${required ? 'bg-red-600 text-white' : 'bg-[#1a3a8f] text-white'}` 꼴이어서 "모른다" 로 멈췄고,
+ * 그 안쪽 본문(4.13:1)을 가드가 못 봤다(331 에서 손으로 고쳤다). 삼항은 **값이 유한**하다 —
+ * 표 후보와 똑같이 가지마다 재면 된다.
+ *
+ * 안전 규칙: **모든 가지가 배경을 깔 때만** 후보로 본다. 한 가지가 배경을 안 깔면 그 상태의 바닥은
+ * 바깥(다른 파일일 수도 있다)에서 오므로 모르는 것이고, 그때는 아무것도 세지 않는다.
+ * `cond && '…'` 처럼 가지가 하나뿐인 모양도 "안 깔리는 상태" 가 있으니 세지 않는다.
+ */
+function ternaryBgCandidates(raw) {
+  if (raw === null || !/\?/.test(raw) || !/:/.test(raw)) return null;
+  const nested = branches(raw).slice(1); // [0] 은 조건 없이 늘 붙는 부분
+  if (nested.length < 2) return null;
+  const out = [];
+  for (const chunk of nested) {
+    const bgs = baseBgs(chunk.split(/\s+/).filter(Boolean));
+    if (!bgs.length) return null;          // 배경을 안 깔는 가지가 있으면 모른다
+    for (const c of bgs) {
+      if (c.alpha < 1) return null;        // 반투명 가지는 뒤를 또 알아야 한다
+      const hex = tokenHex(c);
+      if (!hex) return null;
+      out.push({ color: hex, name: '가지의 ' + tokenName(c) });
+    }
+  }
+  return out.length ? out : null;
+}
+
+/**
  * `${style.bg}` 처럼 **같은 파일의 표에서 꺼내 쓰는 배경**의 후보들 (330).
  *
  * 왜: 본사 공지 띠가 바로 이 모양이다 — 배경을 `typeStyles[ann.type].bg` 에서 꺼낸다. 330 이 투명도를
@@ -226,7 +277,7 @@ function resolveBackground(node, stack, text) {
   // 드러났는데, 그 배경을 모르는 채 조상(`bg-gray-50`)과 짝지으면 1.05:1 같은 **없는 조합**이 된다.
   // 표에서 꺼내 쓰는 색이면 후보 전부를, 조건부면 모른다고 본다.
   if (!own.length) {
-    const ownTable = tableBgCandidates(text, node.raw);
+    const ownTable = tableBgCandidates(text, node.raw) || ternaryBgCandidates(node.raw);
     if (ownTable) {
       const out = [];
       for (const base of ownTable) { const one = stackOn(base); if (!one) return null; out.push(one); }
@@ -254,13 +305,14 @@ function resolveBackground(node, stack, text) {
     }
     for (const c of bgs) layers.push(c);
     if (!bgs.length) {
-      const candidates = tableBgCandidates(text, anc.raw);
+      // 332: 표에서 꺼내 쓰는 배경 → 삼항으로 갈리는 배경 → 그래도 모르면 멈춘다
+      const candidates = tableBgCandidates(text, anc.raw) || ternaryBgCandidates(anc.raw);
       if (candidates) {
         const out = [];
         for (const base of candidates) { const one = stackOn(base); if (!one) return null; out.push(one); }
         return out;
       }
-      if (hasConditionalBg(anc.raw)) return null; // ① 조건부 배경이면 멈춘다
+      if (hasConditionalBg(anc.raw)) return null; // ① 조건부인데 후보를 못 세면 모른다
     }
   }
   return null;
@@ -456,7 +508,11 @@ function iconOnly(body, name) {
   const stripped = inner.replace(/<[^>]*>/g, ' ');
   if (stripped.includes('{')) return false; // 태그 밖의 보간은 글자일 수 있다
   if (/\S/.test(stripped)) return false;      // 태그 밖에 글자(문자·기호)가 있으면 글자로 본다
-  return /<(?:[A-Z]|svg)/.test(inner);      // 컴포넌트 태그와 인라인 svg 만 그림으로 본다
+    // 332: 이 줄의 `svg` 뒤에 **보이지 않는 백스페이스 문자**(0x08)가 박혀 있었다 — 331 에서
+  // `node -e` 를 셸로 지나게 한 탓이다(`\\b` → 실제 제어문자). 그래서 인라인 svg 아이콘이
+  // 계속 글자로 분류됐고, 331 은 그 결과를 "설명되지 않는 값" 으로 기록했다. 원인은 가드가
+  // 아니라 **내 수정 방식**이었다. 정규식이 든 수정은 파일로 써서 실행한다.
+  return /<(?:[A-Z]|svg[\s/>])/.test(inner); // 컴포넌트 태그와 인라인 svg 만 그림으로 본다      // 컴포넌트 태그와 인라인 svg 만 그림으로 본다
 }
 
 /**
@@ -540,7 +596,10 @@ function inheritedProblems(file, text) {
         const anc = stack[k];
         const ancFg = anc.tokens.map(colorToken).find(c => c && c.kind === 'text' && c.state === 'base');
         if (ancFg) { fgTok = ancFg; break; }
-        if (hasConditionalText(anc.raw)) break; // 조건부 글자색이면 모른다
+        // 332: 가지들이 **한 색으로 일치**하면 조건과 무관하게 그 색이다
+        const agreed = ternaryTextColor(anc.raw);
+        if (agreed) { fgTok = agreed; break; }
+        if (hasConditionalText(anc.raw)) break; // 가지마다 다르면 모른다
       }
     }
     const off = node.tokens.some(t => t === 'cursor-not-allowed' || t.startsWith('disabled:'));
@@ -664,8 +723,10 @@ function selftest() {
   ok('부모 배경에 진한 글자면 통과', run('<div className="bg-blue-600 p-3"><p className="text-xs text-blue-50">안내</p></div>').length === 0);
   ok('조상 배경을 두 단 건너도 찾는다', run('<div className="bg-blue-600"><div className="p-3"><p className="text-xs text-blue-100">안내</p></div></div>').length === 1);
   ok('닫는 태그 뒤 형제는 물려받지 않는다', run('<div><div className="bg-blue-600" /><p className="text-xs text-blue-100">안내</p></div>').length === 0);
-  // ① 조건부 배경은 물려주지 않는다 — 무엇이 깔릴지 모르는 것을 흰색으로 가정하면 거짓 경보가 된다
-  ok('조건부 배경이면 멈춘다', run('<div className={on ? "bg-blue-600" : "bg-white"}><p className="text-xs text-blue-100">안내</p></div>').length === 0);
+  // ① 조건부 배경은 **가지를 알 때만** 잰다. 332 전에는 이 모양을 통째로 "모른다" 로 넘겼는데,
+  // 삼항은 값이 유한하므로 가지마다 재는 것이 맞다 — `bg-white` 가지에서 `text-blue-100` 은 진짜로 안 보인다.
+  ok('삼항이면 가지마다 잰다(두 가지 다 미달이면 둘 다 신고)', run('<div className={on ? "bg-blue-600" : "bg-white"}><p className="text-xs text-blue-100">안내</p></div>').length === 2);
+  ok('두 가지 다 진하면 통과한다', run('<div className={on ? "bg-blue-600" : "bg-blue-800"}><p className="text-xs text-blue-50">안내</p></div>').length === 0);
   // ② 자기 배경이 있으면 같은 className 안에서 이미 본다(중복 신고 금지)
   ok('자기 배경은 중복 신고하지 않는다', run('<div className="bg-blue-600"><p className="bg-amber-500 text-white text-xs">경고</p></div>').length === 1);
   // ③ 조상에 배경이 없으면 아무것도 세지 않는다 — 배경은 대개 **다른 파일의 부모**가 깐다(329 정정)
@@ -701,6 +762,14 @@ function selftest() {
   ok('글자를 담지 않은 반투명 상자는 보지 않는다', run('<div className="bg-amber-700 text-white"><div className="opacity-10"><span className="w-4 h-4 bg-white" /></div></div>').length === 0);
   ok('투명도를 바꾸지 않으면 물려받지 않는다(중복 신고 금지)', run('<div className="bg-amber-700 text-white"><p className="text-xs">안내</p></div>').length === 0);
   ok('조건부 글자색 조상이면 멈춘다', run('<div className={on ? "bg-amber-700 text-white" : "bg-white text-gray-900"}><p className="text-xs opacity-70">안내</p></div>').length === 0);
+  // 332: 인라인 `svg` 도 그림이다 — 이 허용이 **보이지 않는 제어문자**(0x08) 때문에 두 번 죽었다.
+  ok('인라인 svg 아이콘을 그림으로 본다', run('<div className="bg-amber-700"><button onClick={go} className="text-white/70"><svg width="14" height="14"><line x1="1" y1="1" x2="9" y2="9" /></svg></button></div>').length === 0);
+  ok('인라인 svg 라도 3:1 미만은 잡는다', run('<div className="bg-amber-700"><button onClick={go} className="text-white/40"><svg width="14" height="14"><line x1="1" y1="1" x2="9" y2="9" /></svg></button></div>').length === 1);
+  // 332: 삼항으로 갈리는 조상 배경 — 가지마다 잰다(331 머리말의 마지막 한계)
+  ok('삼항 가지 배경을 둘 다 본다', run('<div className={`w-full ${on ? "bg-red-600 text-white" : "bg-blue-800 text-white"}`}><p className="text-xs opacity-90">안내</p></div>').length === 1);
+  ok('두 가지 다 진하면 통과', run('<div className={`w-full ${on ? "bg-red-800 text-white" : "bg-blue-800 text-white"}`}><p className="text-xs opacity-90">안내</p></div>').length === 0);
+  ok('배경 없는 가지가 있으면 세지 않는다', run('<div className={`w-full ${on ? "bg-red-600 text-white" : "text-gray-900"}`}><p className="text-xs opacity-90">안내</p></div>').length === 0);
+  ok('가지가 하나뿐이면(논리곱) 세지 않는다', run('<div className={`w-full ${on && "bg-red-600"} text-white`}><p className="text-xs opacity-90">안내</p></div>').length === 0);
   console.log(`[check-contrast] selftest OK — 덫 ${trapCount}종 통과(팔레트·가지 쪼개기·상태별 짝짓기·큰 글자·꺼진 조작부·className 모양·그라디언트·물려받기·아이콘·투명도·표 배경). **이 수는 세어서 찍는다** — 손으로 적지 말 것(리뷰 H-3)`);
 }
 

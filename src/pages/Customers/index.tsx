@@ -1,7 +1,7 @@
 import { isImeKey } from '../../lib/ime';
 import { describePrefLoss, describePrefRemovalLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296·300)
 import { prefSaveMode } from '../../lib/prefSaveMode';
-﻿import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { monthCloseBlock } from '../../lib/monthClose';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';

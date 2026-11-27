@@ -141,6 +141,7 @@ flags.Y = step('Y', '장식 UI', 'node', ['scripts/check-decorative.mjs']); // 3
 flags.X = step('X', '미사용 export', 'node', ['scripts/check-dead-export.mjs']); // 315
 flags.A = step('A', '창 접근성 커버리지', 'node', ['scripts/check-modal-a11y.mjs']); // 289
 flags.N = step('N', '키보드 경로', 'node', ['scripts/check-keyboard-path.mjs']); // 318
+flags.I = step('I', '보이지 않는 글자', 'node', ['scripts/check-invisible-chars.mjs']); // 332
 flags.Q = step('Q', '글자 대비', 'node', ['scripts/check-contrast-classes.mjs']); // 326
 flags.K = noSmoke ? 'SKIP' : step('K', '스모크', 'npx', ['playwright', 'test', 'e2e/smoke.spec.ts', '--project=chromium', '--workers=1', '--reporter=line']);
 if (noSmoke) process.stdout.write('K 스모크: SKIP (--no-smoke)\n');

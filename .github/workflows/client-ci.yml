@@ -69,6 +69,9 @@ jobs:
         run: npm run check:keyboard
       - name: 글자 대비(흰 글자가 얹힌 배경색 기준 미달 금지)
         run: npm run check:contrast
+
+      - name: 보이지 않는 글자 검사 (제어문자·폭 없는 글자)
+        run: npm run check:invisible
       - name: E2E spec type check (e2e/tsconfig.json, strict + unused)
         run: npm run check:e2e-types
       - name: Distribution invariants (no-redownload policy)

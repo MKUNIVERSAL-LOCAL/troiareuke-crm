@@ -893,7 +893,7 @@ export default function Settings() {
                         {(settings.holidays || []).map(d => (
                           <li key={d} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${d < todayISO() ? 'bg-gray-100 text-gray-600 border border-dashed border-gray-300' : 'bg-rose-50 text-rose-700'}`} title={d < todayISO() ? '지난 휴일' : undefined}>
                             {d}
-                            <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="p-1.5 -m-1 rounded text-rose-400 hover:text-rose-600"><X size={14} /></button>
+                            <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="p-1.5 -m-1 rounded text-rose-700 hover:text-rose-900"><X size={14} /></button>
                           </li>
                         ))}
                       </ul>
