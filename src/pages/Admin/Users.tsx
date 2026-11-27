@@ -412,7 +412,8 @@ export default function AdminUsers() {
                 <h2 className="text-base font-bold text-white">지점 신청 검토</h2>
                 <p className="text-xs text-slate-400 mt-1">사업자등록증의 <span className="text-slate-200">업태·종목</span>이 피부미용업/에스테틱인지 확인하고 승인/거부하세요.</p>
               </div>
-              <button onClick={() => setReviewTarget(null)} disabled={reviewBusy} className="text-slate-400 hover:text-white disabled:opacity-50">
+              {/* 322: 아이콘만 있어 화면 읽기가 이름 없는 "버튼" 으로 읽었다(axe critical button-name) */}
+              <button type="button" onClick={() => setReviewTarget(null)} disabled={reviewBusy} aria-label="닫기" className="text-slate-400 hover:text-white disabled:opacity-50">
                 <XCircle size={20} />
               </button>
             </div>
@@ -483,7 +484,8 @@ export default function AdminUsers() {
                   <button
                     onClick={handleApprove}
                     disabled={reviewBusy}
-                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                    // 322: emerald-600(#059669) 에 흰 글자는 3.76:1 로 기준(4.5:1) 미달이었다 — 한 단 진하게
+                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-50"
                   >
                     <CheckCircle2 size={14} />
                     {reviewBusy ? '처리 중…' : '승인 (로그인 허용)'}
