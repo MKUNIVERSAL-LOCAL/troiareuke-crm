@@ -12,6 +12,8 @@
  *   4) 배너에 **절(■)이 둘 이상** 보인다 — 한 주제가 2000자를 삼키면 나머지는 직원에게 닿지 않는다 (299)
  *   5) 한 절에 항목(`•`·`·`·`-` 로 시작하는 줄)이 **12개를 넘지 않는다** — 묶음을 거듭하며 아무 절에나 붙이다 보면 "■ 영수증" 아래에
  *      예약·재고·발송 이야기가 25개 쌓인다(299 에서 실제로 그랬다). 직원이 제목으로 찾을 수 없게 된다.
+ *   6) 같은 **굵은 낱말**이 **두 절에 나오지 않는다**(336) — `**공지 띠**` 가 두 절에 적혀 지점이
+ *      같은 것을 두 번 읽고 있었다(한쪽은 배경, 한쪽은 본문이라 어느 쪽이 사실인지도 흐렸다).
  * 실패하면 비 0 으로 끝난다. 자체 점검: node scripts/check-release-notes.mjs --selftest
  */
 import { readFile } from 'node:fs/promises';
@@ -98,6 +100,32 @@ export function checkReleaseNotes(text, pkgVersion) {
     problems.push(`"■ ${name}" 절에 항목이 ${n}개입니다(최대 ${MAX_PER_SECTION}) — 주제별로 나누세요. 직원은 제목으로 찾습니다`);
   }
 
+  // ⑥ 같은 **굵은 낱말**이 두 절에 나오지 않는가 (336)
+  //
+  // 왜: 336 이 노트를 한 편으로 읽었더니 `**공지 띠**` 가 "잘 안 보이던 글자·아이콘" 과 "안내 띠"
+  // 양쪽에 적혀 있었다 — 지점은 같은 것을 두 번 읽고, 두 줄이 서로 다른 말을 하면(한쪽은 배경,
+  // 한쪽은 본문) 어느 쪽이 사실인지 알 수 없다. 굵게 적는 낱말은 글쓴이가 고른 **핵심 낱말**이라
+  // 신호가 분명하고 거짓 경보가 적다. 지난 버전 절은 그때의 기록이니 보지 않는다(맨 위 절들만).
+  {
+    const current = body.slice(0, topEnd);
+    const seen = new Map();
+    let secName = null;
+    for (const line of current.split(String.fromCharCode(10))) {
+      const h = /^■ (.+)$/.exec(line);
+      if (h) { secName = h[1].trim(); continue; }
+      if (!secName) continue;
+      for (const b of line.matchAll(/\*\*([^*]{2,20})\*\*/g)) {
+        const key = b[1].trim();
+        if (!seen.has(key)) seen.set(key, new Set());
+        seen.get(key).add(secName);
+      }
+    }
+    for (const [term, where] of seen) {
+      if (where.size > 1) {
+        problems.push(`굵게 적은 "${term}" 이 ${where.size}개 절에 나옵니다(${[...where].map(x => `■ ${x}`).join(" · ")}) — 지점은 같은 것을 두 번 읽습니다. 한 줄로 합치세요`);
+      }
+    }
+  }
   return problems;
 }
 
@@ -123,6 +151,10 @@ if (process.argv.includes('--selftest')) {
     // 299: 한 절에 13개를 넣으면 알린다
     ['한 절에 13개', 'v1.0.63 업데이트 내용\n\n■ 몰아넣은 절\n' + '• 항목\n'.repeat(13), '1.0.62', 1],
     ['한 절에 12개는 통과', 'v1.0.63 업데이트 내용\n\n■ 괜찮은 절\n' + '• 항목\n'.repeat(12), '1.0.62', 0],
+    // 336(규칙 ⑥): 같은 굵은 낱말이 두 절에 — 336 이 손으로 찾은 중복(공지 띠)이 이 모양이었다
+    ['굵은 낱말이 두 절에 나오면 잡는다', 'v1.0.63 업데이트 내용\n\n■ 가\n• **공지 띠** 배경을 진하게\n\n■ 나\n• **공지 띠** 본문을 진하게\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 1],
+    ['한 절 안에서 두 번은 통과', 'v1.0.63 업데이트 내용\n\n■ 가\n• **공지 띠** 배경을 진하게\n• **공지 띠** 본문도 진하게\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
+    ['지난 버전 절의 같은 낱말은 보지 않는다', 'v1.0.63 업데이트 내용\n\n■ 가\n• **공지 띠** 배경을 진하게\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n\n■ 나\n• **공지 띠** 를 만들었습니다\n', '1.0.62', 0],
   ];
   let bad = 0;
   for (const [name, text, version, expected] of cases) {
@@ -145,4 +177,4 @@ if (problems.length > 0) {
   console.error(`배너는 앞 ${BANNER_CHARS}자만 보여줍니다 — 새 릴리스 항목을 맨 위 섹션에 두세요.`);
   process.exit(1);
 }
-console.log('[check-release-notes] OK — 첫 줄 버전·맨 위 섹션 항목·배너 구분선·배너 절 수·절 크기 확인');
+console.log('[check-release-notes] OK — 첫 줄 버전·맨 위 섹션 항목·배너 구분선·배너 절 수·절 크기·굵은 낱말 중복 확인');
