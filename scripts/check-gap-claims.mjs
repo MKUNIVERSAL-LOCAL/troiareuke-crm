@@ -166,17 +166,25 @@ function liveInputs() {
 function selftest() {
   const base = liveInputs();
   const ok = (name, cond) => { if (!cond) { console.error(`[selftest] ${name} 덫 실패`); process.exit(1); } };
+  // 340: 덫이 살아 있는 문서 글귀에 묶여 있으면, 그 글귀를 고친 날 치환이 헛돌고 덫은 조용히 약해진다
+  //      (305 에서 같은 사고를 겪고 적어 두었는데 글귀로 치환하는 덫이 그대로 남아 있었다).
+  //      sub() 는 **바꾼 것이 없으면 그 자리에서 멈춘다** — 면제 덫이 헛돌아 통과하는 길을 막는다.
+  const sub = (text, find, rep) => {
+    const out = text.replace(find, rep);
+    if (out === text) { console.error(`[selftest] 덫이 헛돌았다 — 문서에서 ${find} 를 찾지 못했다(덫을 지금 문서에 맞게 고치세요)`); process.exit(1); }
+    return out;
+  };
   const with_ = over => checkGap({ ...base, ...over });
   const bite = (name, over, re) => ok(name, with_(over).some(p => re.test(p)));
 
   // 표 구조
-  bite('칸 하나가 밀린 행', { gap: base.gap.replace('| P-5 | 재고 입출고 원장·실사·발주 제안 |', '| P-5 | 재고 입출고 원장·실사·발주 제안 | 군더더기 |') }, /칸이 밀리면/);
+  bite('칸 하나가 밀린 행', { gap: sub(base.gap, '| P-5 | 재고 입출고 원장·실사·발주 제안 |', '| P-5 | 재고 입출고 원장·실사·발주 제안 | 군더더기 |') }, /칸이 밀리면/);
   // 상태 기호
-  bite('상태 기호 없음', { gap: base.gap.replace('| P-6 | 매출 지표 | ✅ 147·260 |', '| P-6 | 매출 지표 | 완료 147·260 |') }, /기호.*중 하나로 시작/);
+  bite('상태 기호 없음', { gap: sub(base.gap, '| P-6 | 매출 지표 | ✅ 147·260 |', '| P-6 | 매출 지표 | 완료 147·260 |') }, /기호.*중 하나로 시작/);
   // 없는 묶음 번호
-  bite('없는 묶음 번호', { gap: base.gap.replace('✅ 221·264·279·302', '✅ 221·264·279·999') }, /묶음 999 를 근거로 적었는데/);
+  bite('없는 묶음 번호', { gap: sub(base.gap, '✅ 221·264·279·302', '✅ 221·264·279·999') }, /묶음 999 를 근거로 적었는데/);
   // 위치 칸의 없는 파일
-  bite('위치 칸의 없는 파일', { gap: base.gap.replace('`refundRule.ts`', '`refundRuleGone.ts`') }, /위치 칸의 `refundRuleGone\.ts` 가 없다/);
+  bite('위치 칸의 없는 파일', { gap: sub(base.gap, '`refundRule.ts`', '`refundRuleGone.ts`') }, /위치 칸의 `refundRuleGone\.ts` 가 없다/);
   // 개선 방법 칸의 제안 경로는 잡지 않는다(거짓 경보 금지)
   ok('제안 경로 면제', !with_({}).some(p => /analytics\/rfm\.ts/.test(p)));
   // 완료 기준의 없는 명령·스펙
@@ -185,16 +193,16 @@ function selftest() {
   const withFakeCmd = base.gap.split('\n').map(l => (l.startsWith('| P-4 ')
     ? l.replace(/\|\s*$/, '· 완료 기준은 npm run check:nope |') : l)).join('\n');
   bite('없는 npm 명령', { gap: withFakeCmd }, /npm run check:nope` 가 package.json 에 없다/);
-  bite('없는 스펙 파일', { gap: base.gap.replace('month-view 스펙', 'month-view-gone.spec.ts 스펙') }, /month-view-gone\.spec\.ts` 가 e2e 에 없다/);
+  bite('없는 스펙 파일', { gap: sub(base.gap, 'month-view 스펙', 'month-view-gone.spec.ts 스펙') }, /month-view-gone\.spec\.ts` 가 e2e 에 없다/);
   // 서버 테스트 0건 주장
-  bite('서버 테스트 0건 주장', { gap: base.gap.replace('서버 자동 테스트는 node 내장 러너 **35건**', '서버 자동 테스트 0건') }, /사실이 아니다/);
+  bite('서버 테스트 0건 주장', { gap: sub(base.gap, /서버 자동 테스트는 node 내장 러너 \*\*\d+건\*\*/, '서버 자동 테스트 0건') }, /사실이 아니다/);
   ok('표의 항목 이름 속 0건 은 잡지 않는다', !with_({}).some(p => /0건/.test(p)));
-  ok('서버 테스트가 정말 없으면 0건은 사실', !checkGap({ ...base, gap: base.gap.replace('서버 자동 테스트는 node 내장 러너 **35건**', '서버 자동 테스트 0건'), hasServerTests: false }).some(p => /사실이 아니다/.test(p)));
+  ok('서버 테스트가 정말 없으면 0건은 사실', !checkGap({ ...base, gap: sub(base.gap, /서버 자동 테스트는 node 내장 러너 \*\*\d+건\*\*/, '서버 자동 테스트 0건'), hasServerTests: false }).some(p => /사실이 아니다/.test(p)));
   // 요약의 유령 코드
-  bite('요약의 유령 항목', { gap: base.gap.replace('5. C-8/M-4 수신 동의', '5. C-99/M-4 수신 동의') }, /요약\(8절\)이 C-99/);
+  bite('요약의 유령 항목', { gap: sub(base.gap, '5. C-8/M-4 수신 동의', '5. C-99/M-4 수신 동의') }, /요약\(8절\)이 C-99/);
   // 311(리뷰 L-1·L-2): 펜스 안 예시 표와 단위가 붙은 숫자는 잡지 않는다
   ok('코드 펜스 면제', !with_({ gap: base.gap + '\n\n```markdown\n| # | 항목 | 상태 |\n|---|---|---|\n| X-1 | 예시 | 대기 |\n```\n' }).some(p => /상태 칸이|칸이 밀리면/.test(p)));
-  ok('단위 붙은 숫자 면제', !with_({ gap: base.gap.replace('✅ 221·264·279·302·305', '✅ 221·264·279·302·305 (표는 500행까지)') }).some(p => /묶음 500/.test(p)));
+  ok('단위 붙은 숫자 면제', !with_({ gap: sub(base.gap, '✅ 221·264·279·302·305', '✅ 221·264·279·302·305 (표는 500행까지)') }).some(p => /묶음 500/.test(p)));
   // 처음 짰을 때 낸 거짓 경보 두 가지가 다시 생기지 않게
   ok('이스케이프한 파이프는 칸을 나누지 않는다', !with_({}).some(p => /칸이 밀리면/.test(p)));
   ok('승인 번호는 유령 항목이 아니다', !with_({}).some(p => /A-15|B-2/.test(p)));

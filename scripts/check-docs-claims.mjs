@@ -379,6 +379,9 @@ function selftest() {
   // 309: 서버 테스트 수 주장 — 인용문·"당시" 는 주장이 아니고, 맨 주장은 모은다
   const stc = serverTestClaims('서버 테스트 45개가 돈다.\n첫 실행에서 "서버 자동 테스트 0건" 을 잡았다.\n당시 서버 테스트 25개였다.', 'x.md');
   if (stc.length !== 1 || stc[0].n !== 45) { console.error('[selftest] 서버 테스트 주장 수집 덫 실패: ' + JSON.stringify(stc)); process.exit(1); }
+  // 340: '테스트' 라는 말 없이 "러너 **35건**" 으로 적힌 자리(GAP 0절 실사고) — 숫자 아닌 말은 세지 않는다
+  const stc3 = serverTestClaims('서버 자동 테스트는 node 내장 러너 **35건**(225~230).\n러너 두 벌을 쓴다.', 'x.md');
+  if (stc3.length !== 1 || stc3[0].n !== 35) { console.error('[selftest] 러너만 적힌 수 덫 실패: ' + JSON.stringify(stc3)); process.exit(1); }
   // 321(318~320 리뷰 H-2): 파생 수(면제·남은) 주장 수집 — 가드 고르기·인용문·기준 문구의 과거 표시
   const ex1 = exemptionClaims('화면 칸 227개 중 227개, 면제 0개다.', 'x.md');
   if (ex1.length !== 1 || ex1[0].n !== 0 || ex1[0].guard.key !== 'testids') { console.error('[selftest] 면제 수 수집 덫 실패: ' + JSON.stringify(ex1.map(c => [c.n, c.guard.key]))); process.exit(1); }
@@ -412,7 +415,7 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·부분 집합 리뷰 수 3종) 통과`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·부분 집합 리뷰 수 3종) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -667,9 +670,11 @@ problems.push(...releaseStepProblems());
 //     주장이 없는 저장소에서는 돌리지 않는다(검사가 느려질 이유가 없다).
 function serverTestClaims(text, rel) {
   const out = [];
+  // 340: 324 가 넓힌 뒤에도 "node 내장 러너 **35건**"(테스트라는 말이 없는 모양)이 남아 GAP 0절이
+  //      실측 47 과 어긋난 채 **같은 문서의 Q-3 칸과 모순**이었다. 이제 '러너' 뒤에 바로 수가 와도 센다.
   // 324(321~323 리뷰 M-2): 붙어 있는 "서버 테스트 N개" 만 보던 탓에 "node 내장 러너 테스트 **45개**"·
   // "서버 테스트 도입(당시 25개, **지금은 45개**)" 두 줄이 실측 47 과 어긋난 채 남아 있었다.
-  for (const m of text.matchAll(/서버(?: 자동)? 테스트 (\d+)(?:개|건)|러너 테스트 \*{0,2}(\d+)\*{0,2}(?:개|건)|지금은 \*{0,2}(\d+)\*{0,2}개\)/g)) {
+  for (const m of text.matchAll(/서버(?: 자동)? 테스트 (\d+)(?:개|건)|러너(?: 테스트)? \*{0,2}(\d+)\*{0,2}\s*(?:개|건)|지금은 \*{0,2}(\d+)\*{0,2}개\)/g)) {
     if (markedPast(text, m.index)) continue;
     // 309: **인용문은 주장이 아니다** — "첫 실행에서 \"서버 자동 테스트 0건\" 을 잡았다" 처럼
     // 가드가 찾아낸 옛 문구를 그대로 적은 자리를 처음엔 낡은 주장으로 읽었다(거짓 경보 2건).

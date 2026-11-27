@@ -8,7 +8,7 @@
 ## 0. 구조 전제(모든 항목에 공통)
 - 데이터 계층 코어(`store.ts`)는 잠금 → 신규 기능은 비코어 파생 모듈(`programSessions`·`customerStats` 방식)과 서버 API 로 구현. 코어 필드 추가가 필요한 것은 승인 대기열 A.
 - 서버는 `crm_records(branch_id, collection, id, data JSONB)` 단일 테이블 + 전 컬렉션 전체 로드. 수천 건 규모까지는 동작(scale E2E: 고객 2,000·시술 6,000·예약 3,000·결제 4,000). 서버 페이징·집계·제약은 없음 → PHASE 1~2 에서 서버 측 보강(승인 B-2).
-- 단위 테스트 프레임워크 없음(순수 모듈은 Playwright `lib-units` 167건), 서버 자동 테스트는 node 내장 러너 **35건**(225~230·302, `npm run test:server` — 이 줄의 "0건" 이 302 까지 남아 있던 것을 303 의 `npm run check:gap` 이 잡았다) → 품질 항목 참조.
+- 단위 테스트 프레임워크 없음(순수 모듈은 Playwright `lib-units` 167건), 서버 자동 테스트는 node 내장 러너 **47건**(225~230·302·305, `npm run test:server` — 이 줄의 "0건" 이 302 까지 남아 있던 것을 303 의 `npm run check:gap` 이 잡았고, 그 뒤 **35 에 멈춰 있던 것**을 340 이 `npm run check:docs` ⑨ 를 넓혀 잡았다. Q-3 칸은 47 로 맞게 적혀 있었으니 **같은 문서 안의 모순**이었다) → 품질 항목 참조.
 
 ## 1. 고객관리 (P1 고객 360)
 
