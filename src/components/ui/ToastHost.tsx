@@ -21,10 +21,14 @@ export default function ToastHost() {
   if (items.length === 0) return null;
 
   const style: Record<NotifyEvent['tone'], { box: string; icon: JSX.Element }> = {
+    // 325: 흰 글자 대비 실측 — slate-900 17.85 · emerald-600 **3.77** · red-600 4.83 · amber-500 **2.15**(기준 4.5:1).
+    // 성공·경고 토스트는 지점 직원이 **하루에 수십 번** 보는 자리인데 기준 미달이었다. 기존 게이트는 스캔 전에
+    // 토스트를 치워서(dismissToasts) 한 번도 재지 않았다 — 325 의 캠페인 창 쓸이에서 토스트가 떠 있는 채로 잡혔다.
+    // emerald-700 5.48 · amber-700 5.02 로 올린다(색 계열은 그대로 — 초록=성공, 주황=경고).
     info: { box: 'bg-slate-900 text-white border-slate-700', icon: <Info size={16} className="text-blue-300" /> },
-    success: { box: 'bg-emerald-600 text-white border-emerald-500', icon: <CheckCircle size={16} /> },
+    success: { box: 'bg-emerald-700 text-white border-emerald-600', icon: <CheckCircle size={16} /> },
     error: { box: 'bg-red-600 text-white border-red-500', icon: <AlertCircle size={16} /> },
-    warning: { box: 'bg-amber-500 text-white border-amber-400', icon: <AlertTriangle size={16} /> },
+    warning: { box: 'bg-amber-700 text-white border-amber-600', icon: <AlertTriangle size={16} /> },
   };
 
   return (

@@ -48,6 +48,8 @@ const GATES = [
   'e2e/a11y-admin.spec.ts',
   // 322: 흉내 서버 빌드로 어드민 창을 여는 쓸이 — 321 까지 면제 사유였던 "서버 행이 없다" 를 없앴다
   'e2e/a11y-admin-nas.spec.ts',
+  // 325: 지점 쪽도 같은 길 — 흉내 서버 빌드로 결제 요청 창을 열어 axe 를 돌린다
+  'e2e/a11y-branch-nas.spec.ts',
 ];
 
 /**
@@ -84,9 +86,7 @@ const MARKER = {
 // 거기서도 막는 위반 하나(백업·복원 탭 단추 3.18:1)가 더 나왔다. 어드민 창은 이제 **전부** 열어 본다.
 // 남은 셋은 서버 계약·앱 런타임·발송 흉내가 선행이다(아래 사유 참고).
 const ALLOWED = {
-  '결제 요청': 'NAS 서버 모드 전용 창(PG 계약 전, GAP P-8·결정 #4) — 로컬 모드 게이트로는 띄울 수 없다',
   '카메라 촬영': '앱(Capacitor) 카메라 오버레이 — 가짜 카메라로 여는 길은 mobile·screenshots 스펙에 있다(before-after 가 아니다, 293 리뷰 M-2). 그 상태에서 axe 를 돌리면 비디오 트랙이 떠 대비 측정이 흔들린다',
-  'src/components/campaigns/CampaignRunModal.tsx': '캠페인을 실제로 실행해야 열린다 — 발송 흉내까지 필요해 다음 창 묶음으로 미룬다',
 };
 
 function listFiles(dir, out = []) {

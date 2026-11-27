@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, dismissToasts, solidPng } from './helpers';
 import { assertNoBlocking, makeStep, type Row } from './a11y-shared';
-import { addProgram, addProduct, registerPayment } from './flows';
+import { addProgram, addProduct, registerPayment, addReservation } from './flows';
 
 /**
  * 창 접근성 게이트 2편 (289) — 어느 접근성 게이트도 **한 번도 열지 않던 창**들을 axe 로 본다.
@@ -181,5 +181,48 @@ test('로그인 전 비밀번호 재설정 창에 serious·critical 접근성 �
     await page.getByRole('button', { name: '비밀번호 찾기' }).click();
     await expect(page.getByRole('dialog', { name: '비밀번호 재설정 안내' })).toBeVisible();
   });
+  assertNoBlocking(rows);
+});
+
+test('캠페인 실행 창에 serious·critical 접근성 위반이 없다 (325)', async ({ page }) => {
+  // 325: 이 창의 면제 사유는 "캠페인을 실제로 실행해야 열린다 — **발송 흉내까지 필요해** 다음 창
+  // 묶음으로 미룬다" 였다. **발송 흉내는 필요 없었다** — 창을 여는 데 필요한 것은 캠페인 하나와
+  // 내일 예약 한 건뿐이고(승인 단추를 누르지 않으면 아무것도 보내지 않는다), 그 길은 `campaigns.spec.ts`
+  // 가 이미 쓰고 있었다. 사유가 사실보다 넓었다(320·321·324 에서 세 번 만난 종류).
+  // 앞 테스트에 붙이지 않은 이유는 이 파일 머리말과 같다 — 앞 테스트는 끝에서 앱을 잠근다.
+  test.slow();
+  test.skip(new Date().getHours() === 23 && new Date().getMinutes() >= 55, '자정을 넘기면 "내일 예약" 기준이 바뀐다');
+  page.setDefaultTimeout(15_000);
+  page.on('dialog', d => d.accept());
+  const rows: Row[] = [];
+  const step = makeStep(page, rows);
+  const cAcc = makeAccount('AC');
+  await signupAndOnboard(page, cAcc);
+  await createCustomer(page, cAcc);
+
+  const t = new Date();
+  t.setDate(t.getDate() + 1);
+  const tomorrow = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  await page.goto('/reservations');
+  await addReservation(page, cAcc, '14:00', { date: tomorrow });
+  await dismissToasts(page);
+
+  await page.goto('/messaging');
+  const card = page.getByTestId('campaigns-card');
+  await card.getByRole('button', { name: '캠페인 추가' }).click();
+  const edit = page.getByRole('dialog', { name: '캠페인 추가' });
+  await edit.getByLabel('캠페인 이름').fill('예약 전날 안내');
+  await edit.getByLabel('언제(트리거)').selectOption('reservation_tomorrow');
+  await edit.getByLabel('메시지 내용').fill('{고객명}님, 내일 {예약일시} 예약을 기다리고 있어요. — {매장명}');
+  await edit.getByRole('button', { name: '추가', exact: true }).click();
+  await expect(edit).toHaveCount(0);
+
+  await step('/messaging 캠페인 실행', async () => {
+    await card.getByTestId('campaign-row').filter({ hasText: '예약 전날 안내' }).getByRole('button', { name: '대상 확인·발송' }).click();
+    // 창 이름으로 집는다 — 창 커버리지 가드가 이 자리를 센다(이름에 캠페인 이름이 섞인다)
+    await expect(page.getByRole('dialog', { name: /캠페인 실행/ })).toBeVisible();
+    await expect(page.getByTestId('campaign-candidate')).toHaveCount(1); // 대상이 비면 빈 창을 검사하는 셈이다
+  });
+
   assertNoBlocking(rows);
 });

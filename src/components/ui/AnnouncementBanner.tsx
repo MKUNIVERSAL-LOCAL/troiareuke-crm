@@ -14,9 +14,11 @@ interface Announcement {
 }
 
 const typeStyles: Record<string, { bg: string; icon: React.ElementType; iconColor: string }> = {
+  // 325: 흰 글자 대비 실측 — blue-600 5.17 · emerald-600 **3.77** · amber-500 **2.15** · purple-600 5.38(기준 4.5:1).
+  // 본사 공지 띠는 **서버에 공지가 있어야** 뜨므로 로컬 모드 게이트가 한 번도 재지 않았다(어드민 창과 같은 사각지대).
   info:    { bg: 'bg-blue-600',   icon: Megaphone,      iconColor: 'text-blue-200' },
-  update:  { bg: 'bg-emerald-600', icon: RefreshCw,     iconColor: 'text-emerald-200' },
-  warning: { bg: 'bg-amber-500',  icon: AlertTriangle,  iconColor: 'text-amber-200' },
+  update:  { bg: 'bg-emerald-700', icon: RefreshCw,     iconColor: 'text-emerald-200' },
+  warning: { bg: 'bg-amber-700',  icon: AlertTriangle,  iconColor: 'text-amber-200' },
   event:   { bg: 'bg-purple-600', icon: Gift,           iconColor: 'text-purple-200' },
 };
 
