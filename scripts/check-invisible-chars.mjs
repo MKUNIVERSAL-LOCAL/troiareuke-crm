@@ -16,18 +16,23 @@
  *     중간에 있는 BOM 은 사고다(실제로 `Customers/index.tsx` 4줄 머리에 하나 박혀 있었다).
  *
  * 한계: UTF-8 로 읽는 글 파일만 본다(확장자로 고른다). 바이너리·이미지는 보지 않는다.
- *     **보지 않는 자리**(334, 리뷰 L-4): `electron/`·루트 설정(`vite.config.ts`·`tailwind.config.js`·
- *     `package.json`)·`.github/` 워크플로, 그리고 이름이 `archive` 인 모든 디렉터리(의도는 `docs/archive`).
- *     코어 잠금 파일이 많은 쪽을 일부러 뺀 것이지만, 빼 둔 사실을 적어 두지 않으면 "전역" 이라는 말이
- *     사실보다 넓어진다.
+ *     이름이 `archive` 인 디렉터리는 보지 않는다(폐기 문서 보관 — `docs/archive`).
+ *     **337 에서 넓혔다**: `electron/`·`.github/`·루트 설정(`vite.config.ts`·`tailwind.config.js`·
+ *     `package.json`·`playwright.config.ts`·`electron-builder.admin.cjs`·`capacitor.config.ts`)·
+ *     `server/test`·`supabase`(`.sql` 포함)까지 본다.
+ *     334 까지는 "코어 잠금 파일이 많아서" 뺐는데, **잠금은 수정 금지이고 읽기는 막지 않는다** —
+ *     거기 박힌 제어문자는 빌드 전체를 흔들므로 **아는 것이 먼저**다. 잠금 파일에서 나오면 고치지
+ *     않고 `OWNER-APPROVAL-QUEUE.md` 에 적는다.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ROOTS = ['src', 'scripts', 'e2e', 'server/src', 'docs'];
-const EXT = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.md', '.css', '.html', '.yml']);
+const ROOTS = ['src', 'scripts', 'e2e', 'server/src', 'server/test', 'supabase', 'docs', 'electron', '.github'];
+// 337: 루트에 흩어진 설정 파일도 본다 — 여기 박힌 제어문자는 빌드 전체를 흔든다
+const ROOT_FILES = ['vite.config.ts', 'tailwind.config.js', 'package.json', 'playwright.config.ts', 'electron-builder.admin.cjs', 'capacitor.config.ts'];
+const EXT = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.md', '.css', '.html', '.yml', '.sql']);
 
 /** 탭(09)·줄바꿈(0A)·복귀(0D)만 허용 */
 const ALLOWED = new Set([9, 10, 13]);
@@ -94,7 +99,10 @@ function selftest() {
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
 
-const files = ROOTS.flatMap(r => listFiles(path.join(ROOT, r)));
+const files = [
+  ...ROOTS.flatMap(r => listFiles(path.join(ROOT, r))),
+  ...ROOT_FILES.map(f => path.join(ROOT, f)).filter(f => fs.existsSync(f)),
+];
 const problems = [];
 for (const full of files) {
   const rel = path.relative(ROOT, full).replace(/\\/g, '/');
