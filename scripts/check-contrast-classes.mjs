@@ -172,41 +172,46 @@ function blend(front, back, alpha) {
 }
 
 /**
- * 삼항 가지의 글자색이 **모두 같은 색**이면 그 색 (332).
- * 가지마다 다르면 모른다(배경과 달리 글자색은 가지별로 짝지을 상대가 정해지지 않는다).
+ * `cond ? 'A' : 'B'` 의 두 가지를 **실제로 파싱**한다 (334, 331~333 리뷰 M-4).
+ *
+ * 332 는 `branches(raw).slice(1)` 로 **raw 안의 모든 인용 리터럴**을 "가지" 로 봤다. 그래서
+ * `clsx('bg-gray-50', on ? 'bg-blue-800' : 'bg-blue-900')` 의 **무조건 리터럴**까지 가지로 세어
+ * 렌더되지 않는 조합(`가지의 bg-gray-50`)을 신고했고, 라벨도 사실과 달랐다(잠복 거짓 경보 —
+ * 리뷰가 사본에서 재현했다). 삼항은 구문으로 읽어야 한다.
+ *
+ * 보수 규칙: **가지가 둘인 단순 삼항**(양쪽이 인용 리터럴)만 읽는다. 삼항이 둘 이상이거나
+ * 중첩이거나, **삼항 밖의 리터럴에 배경이 있으면** 무엇이 깔릴지 모르므로 `null`(모른다)이다.
  */
-function ternaryTextColor(raw) {
-  if (raw === null || !/\?/.test(raw) || !/:/.test(raw)) return null;
-  const nested = branches(raw).slice(1);
-  if (nested.length < 2) return null;
-  let picked = null;
-  for (const chunk of nested) {
-    const fg = chunk.split(/\s+/).map(colorToken).find(c => c && c.kind === 'text' && c.state === 'base');
-    if (!fg) return null;
-    const name = tokenName(fg);
-    if (picked && tokenName(picked) !== name) return null;
-    picked = fg;
-  }
-  return picked;
+function ternaryParts(raw) {
+  if (raw === null) return null;
+  const re = /\?\s*(['"`])((?:(?!\1)[\s\S])*)\1\s*:\s*(['"`])((?:(?!\3)[\s\S])*)\3/g;
+  const first = re.exec(raw);
+  if (!first) return null;
+  if (re.exec(raw)) return null; // 삼항이 둘 이상이면 모른다
+  const rest = raw.slice(0, first.index) + ' ' + raw.slice(first.index + first[0].length);
+  return { parts: [first[2], first[4]], rest };
 }
+
+/** 삼항 밖의 리터럴·고정 토큰에 배경이 있으면 모른다 */
+function bgOutsideTernary(rest) {
+  return branches(rest).some(chunk => baseBgs(chunk.split(/\s+/).filter(Boolean)).length > 0);
+}
+
 /**
- * 삼항으로 갈리는 배경의 **후보 전부** (332).
+ * 삼항으로 갈리는 배경의 **후보 전부** (332, 334 에서 구문 파싱으로 고쳤다).
  *
  * 왜: 331 머리말이 마지막 한계로 적어 둔 자리다 — 앱의 **필수 업데이트 띠**가
- * `${required ? 'bg-red-600 text-white' : 'bg-[#1a3a8f] text-white'}` 꼴이어서 "모른다" 로 멈췄고,
- * 그 안쪽 본문(4.13:1)을 가드가 못 봤다(331 에서 손으로 고쳤다). 삼항은 **값이 유한**하다 —
- * 표 후보와 똑같이 가지마다 재면 된다.
+ * `${required ? 'bg-red-600 text-white' : 'bg-… text-white'}` 꼴이어서 "모른다" 로 멈췄고,
+ * 그 안쪽 본문(4.13:1)을 가드가 못 봤다(331 에서 손으로 고쳤다). 삼항은 **값이 유한**하다.
  *
- * 안전 규칙: **모든 가지가 배경을 깔 때만** 후보로 본다. 한 가지가 배경을 안 깔면 그 상태의 바닥은
- * 바깥(다른 파일일 수도 있다)에서 오므로 모르는 것이고, 그때는 아무것도 세지 않는다.
- * `cond && '…'` 처럼 가지가 하나뿐인 모양도 "안 깔리는 상태" 가 있으니 세지 않는다.
+ * 안전 규칙: **두 가지 모두 배경을 깔 때만** 후보로 본다. 한 가지가 안 깔면 그 상태의 바닥은
+ * 바깥(다른 파일일 수도 있다)에서 오므로 세지 않는다. `cond && '…'` 는 가지가 하나뿐이라 밖이다.
  */
 function ternaryBgCandidates(raw) {
-  if (raw === null || !/\?/.test(raw) || !/:/.test(raw)) return null;
-  const nested = branches(raw).slice(1); // [0] 은 조건 없이 늘 붙는 부분
-  if (nested.length < 2) return null;
+  const t = ternaryParts(raw);
+  if (!t || bgOutsideTernary(t.rest)) return null;
   const out = [];
-  for (const chunk of nested) {
+  for (const chunk of t.parts) {
     const bgs = baseBgs(chunk.split(/\s+/).filter(Boolean));
     if (!bgs.length) return null;          // 배경을 안 깔는 가지가 있으면 모른다
     for (const c of bgs) {
@@ -217,6 +222,24 @@ function ternaryBgCandidates(raw) {
     }
   }
   return out.length ? out : null;
+}
+
+/**
+ * 삼항 가지의 글자색이 **모두 같은 색**이면 그 색 (332, 334 에서 구문 파싱으로 고쳤다).
+ * 가지마다 다르면 모른다(배경과 달리 글자색은 가지별로 짝지을 상대가 정해지지 않는다).
+ */
+function ternaryTextColor(raw) {
+  const t = ternaryParts(raw);
+  if (!t) return null;
+  let picked = null;
+  for (const chunk of t.parts) {
+    const fg = chunk.split(/\s+/).map(colorToken).find(c => c && c.kind === 'text' && c.state === 'base');
+    if (!fg) return null;
+    const name = tokenName(fg);
+    if (picked && tokenName(picked) !== name) return null;
+    picked = fg;
+  }
+  return picked;
 }
 
 /**
@@ -512,7 +535,7 @@ function iconOnly(body, name) {
   // `node -e` 를 셸로 지나게 한 탓이다(`\\b` → 실제 제어문자). 그래서 인라인 svg 아이콘이
   // 계속 글자로 분류됐고, 331 은 그 결과를 "설명되지 않는 값" 으로 기록했다. 원인은 가드가
   // 아니라 **내 수정 방식**이었다. 정규식이 든 수정은 파일로 써서 실행한다.
-  return /<(?:[A-Z]|svg[\s/>])/.test(inner); // 컴포넌트 태그와 인라인 svg 만 그림으로 본다      // 컴포넌트 태그와 인라인 svg 만 그림으로 본다
+  return /<(?:[A-Z]|svg[\s/>])/.test(inner); // 컴포넌트 태그와 인라인 svg 만 그림으로 본다
 }
 
 /**
@@ -568,8 +591,9 @@ function inheritedProblems(file, text) {
     const end = openTagEnd(src, i);
     if (end < 0) {
       // 331(리뷰 H-2): 전에는 여기서 조용히 `break` 해 **그 파일의 나머지를 포기**했다(사람은 알 길이
-      // 없었다). 여는 태그가 닫히지 않는 것은 스캐너가 못 보는 모양이라는 뜻이니, 사실대로 말한다.
-      console.error(`[check-contrast] ${file}:${src.slice(0, i).split('\n').length} 여는 태그가 닫히지 않아 이 파일의 나머지를 보지 못했다 — 스캐너를 고쳐야 한다`);
+      // 없었다). 334(리뷰 M-6): 한 줄 적고 **종료 코드 0** 으로 "0자리" 를 찍던 것도 가짜 성공이다 —
+      // 문제로 세어 게이트가 멈추게 한다(`blank-comments` 가 짝이 안 맞으면 던지는 것과 같은 원칙).
+      out.push({ file, line: src.slice(0, i).split('\n').length, token: '스캐너', fg: '여는 태그가 닫히지 않아 이 파일의 나머지를 보지 못했다', ratio: '-', need: '-', scanner: true });
       break;
     }
     const tag = src.slice(i, end + 1);
@@ -770,6 +794,12 @@ function selftest() {
   ok('두 가지 다 진하면 통과', run('<div className={`w-full ${on ? "bg-red-800 text-white" : "bg-blue-800 text-white"}`}><p className="text-xs opacity-90">안내</p></div>').length === 0);
   ok('배경 없는 가지가 있으면 세지 않는다', run('<div className={`w-full ${on ? "bg-red-600 text-white" : "text-gray-900"}`}><p className="text-xs opacity-90">안내</p></div>').length === 0);
   ok('가지가 하나뿐이면(논리곱) 세지 않는다', run('<div className={`w-full ${on && "bg-red-600"} text-white`}><p className="text-xs opacity-90">안내</p></div>').length === 0);
+  // 334(리뷰 M-4): 332 는 raw 안의 **모든 인용 리터럴**을 가지로 봐서 삼항 밖의 무조건 리터럴까지
+  // 후보에 넣었다 — 렌더되지 않는 조합을 신고하고 라벨도 "가지의" 라고 사실과 달리 적었다(잠복 거짓 경보).
+  ok('삼항 밖 리터럴에 배경이 있으면 세지 않는다', run('<div className={clsx("bg-gray-50", on ? "bg-blue-800" : "bg-blue-900")}><p className="text-xs text-white opacity-90">x</p></div>').length === 0);
+  ok('논리곱 배경이 섞여 있으면 세지 않는다', run('<div className={`${on && "bg-red-600"} ${a ? "bg-amber-700" : "bg-blue-800"} text-white`}><p className="text-xs opacity-90">x</p></div>').length === 0);
+  ok('삼항이 둘이면 세지 않는다', run('<div className={`${a ? "bg-amber-700" : "bg-blue-800"} ${b ? "p-2" : "p-3"}`}><p className="text-xs text-white opacity-90">x</p></div>').length === 0);
+  ok('단순 삼항은 그대로 잰다(가지 자신 + 투명도 자식 둘)', run('<div className={`w-full ${on ? "bg-amber-500 text-white" : "bg-blue-800 text-white"}`}><p className="text-xs opacity-90">x</p></div>').length === 2);
   console.log(`[check-contrast] selftest OK — 덫 ${trapCount}종 통과(팔레트·가지 쪼개기·상태별 짝짓기·큰 글자·꺼진 조작부·className 모양·그라디언트·물려받기·아이콘·투명도·표 배경). **이 수는 세어서 찍는다** — 손으로 적지 말 것(리뷰 H-3)`);
 }
 
@@ -787,7 +817,10 @@ const stale = ALLOWED.filter(a => !found.some(p => p.file === a.file && p.line =
 if (unexpected.length > 0 || stale.length > 0) {
   if (unexpected.length > 0) {
     console.error(`[check-contrast] 글자 대비가 기준에 못 미치는 자리 ${unexpected.length}개:`);
-    for (const p of unexpected) console.error(`  - ${key(p)}  ${p.fg} 대비 ${p.ratio}:1 (기준 ${p.need}:1)`);
+    for (const p of unexpected) {
+      if (p.scanner) { console.error(`  - ${p.file}:${p.line}  ${p.fg} — 스캐너를 고쳐야 합니다`); continue; }
+      console.error(`  - ${key(p)}  ${p.fg} 대비 ${p.ratio}:1 (기준 ${p.need}:1)`);
+    }
     console.error('  → 배경을 한 단 진한 색으로 올리세요(색 계열은 그대로 — 초록=성공, 주황=경고의 뜻이 바뀌면 안 됩니다).');
   }
   if (stale.length > 0) {

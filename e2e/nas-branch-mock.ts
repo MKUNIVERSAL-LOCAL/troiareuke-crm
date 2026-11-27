@@ -1,6 +1,5 @@
 import type { Page, Route } from '@playwright/test';
 
-
 /**
  * 지점 앱 — **정상 동작하는** NAS 응답 흉내 (325).
  *

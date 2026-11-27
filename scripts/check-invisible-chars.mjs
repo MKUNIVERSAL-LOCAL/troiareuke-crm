@@ -16,6 +16,10 @@
  *     중간에 있는 BOM 은 사고다(실제로 `Customers/index.tsx` 4줄 머리에 하나 박혀 있었다).
  *
  * 한계: UTF-8 로 읽는 글 파일만 본다(확장자로 고른다). 바이너리·이미지는 보지 않는다.
+ *     **보지 않는 자리**(334, 리뷰 L-4): `electron/`·루트 설정(`vite.config.ts`·`tailwind.config.js`·
+ *     `package.json`)·`.github/` 워크플로, 그리고 이름이 `archive` 인 모든 디렉터리(의도는 `docs/archive`).
+ *     코어 잠금 파일이 많은 쪽을 일부러 뺀 것이지만, 빼 둔 사실을 적어 두지 않으면 "전역" 이라는 말이
+ *     사실보다 넓어진다.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,8 +34,8 @@ const ALLOWED = new Set([9, 10, 13]);
 const BOM = 0xfeff;
 const ZERO_WIDTH = new Set([0x00ad, 0x200b, 0x200c, 0x200d, BOM]);
 
-/** 이 글에서 보이지 않는 글자를 찾는다 — [{line, col, code}] */
-export function invisibleChars(text) {
+/** 이 글에서 보이지 않는 글자를 찾는다 — [{line, col, code}]. 334: 파일 밖 호출자가 없어 export 를 뗐다 */
+function invisibleChars(text) {
   const out = [];
   let line = 1;
   let col = 1;

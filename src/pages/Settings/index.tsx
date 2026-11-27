@@ -1108,7 +1108,7 @@ export default function Settings() {
                         {googleConnected ? (
                           <p className="text-xs text-blue-600 mt-0.5">연결됨 - 예약이 캘린더에 표시됩니다</p>
                         ) : (
-                          <p className="text-xs text-gray-400 mt-0.5">연결되지 않음</p>
+                          <p className="text-xs text-gray-600 mt-0.5">연결되지 않음</p>
                         )}
                       </div>
                       {googleConnected ? (
