@@ -80,14 +80,14 @@ export default function AnnouncementBanner() {
         title={expanded ? '접기' : '전체 보기'}
       >
         <span className="font-bold mr-2">{ann.title}</span>
-        <span className="text-white/80">{ann.content}</span>
+        <span className="text-white">{ann.content}</span>
       </button>
       {visible.length > 1 && (
         <button
           type="button"
           onClick={() => { setCurrent(c => (c + 1) % visible.length); setExpanded(false); }}
           aria-label={`다음 공지 (${current % visible.length + 1}/${visible.length})`}
-          className="text-xs text-white/70 hover:text-white shrink-0 px-2"
+          className="text-xs text-white shrink-0 px-2"
         >
           {current % visible.length + 1}/{visible.length}
         </button>
@@ -96,7 +96,7 @@ export default function AnnouncementBanner() {
         type="button"
         onClick={() => dismiss(ann.id)}
         aria-label="이 공지 닫기"
-        className="text-white/70 hover:text-white shrink-0 p-1"
+        className="text-white/80 hover:text-white shrink-0 p-1"
       >
         <X size={14} />
       </button>

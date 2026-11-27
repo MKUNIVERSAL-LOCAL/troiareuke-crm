@@ -308,10 +308,10 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                       <span className="font-bold text-gray-900 whitespace-nowrap">{formatPrice(r.amount)}</span>
                       {(r.status === 'pending' || r.status === 'vbank_wait') && (
                         <>
-                          <button onClick={() => copyLink(r.url, r.id)} className="p-1 text-gray-300 hover:text-[#1a3a8f]" aria-label="링크 복사">
+                          <button onClick={() => copyLink(r.url, r.id)} className="p-1 text-gray-400 hover:text-[#1a3a8f]" aria-label="링크 복사">
                             {copiedId === r.id ? <CheckCircle size={13} className="text-emerald-700" /> : <Copy size={13} />}
                           </button>
-                          <button onClick={() => handleCancel(r)} className="p-1 text-gray-300 hover:text-red-600" aria-label="요청 취소">
+                          <button onClick={() => handleCancel(r)} className="p-1 text-gray-400 hover:text-red-700" aria-label="요청 취소">
                             <Ban size={13} />
                           </button>
                         </>

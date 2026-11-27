@@ -980,7 +980,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                           target="_blank"
                           rel="noopener noreferrer"
                           className={clsx(
-                            'absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
+                            'absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-600 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
                             !ge.htmlLink && 'pointer-events-none', // 링크 없으면 클릭 무반응 앵커 방지
                           )}
                           style={eventBlockStyle(ev, slotStartMin, ROW_H)}

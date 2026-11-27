@@ -926,13 +926,13 @@ export default function Sales() {
                       <span className="text-gray-500 text-xs">{p.paymentMethod}</span>
                       <span className="flex items-center justify-end gap-1.5">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
-                        <button onClick={() => handleReceipt(p)} disabled={receiptBusy === p.id} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded disabled:opacity-40 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label={p.status === 'pending' ? '결제 예정 내역서 저장' : '영수증 저장'}>
+                        <button onClick={() => handleReceipt(p)} disabled={receiptBusy === p.id} className="p-1 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded disabled:opacity-40 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label={p.status === 'pending' ? '결제 예정 내역서 저장' : '영수증 저장'}>
                           <ReceiptText size={13} />
                         </button>
-                        <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">
+                        <button onClick={() => openEdit(p)} className="p-1 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">
                           <Pencil size={13} />
                         </button>
-                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-700 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
+                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
                           <Trash2 size={13} />
                         </button>
                       </span>
@@ -1059,10 +1059,10 @@ export default function Sales() {
                         <span className="text-gray-500 text-xs">{x.paymentMethod}</span>
                         <span className="flex items-center justify-end gap-1.5">
                           <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
-                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 수정">
+                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 수정">
                             <Pencil size={13} />
                           </button>
-                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-700 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
+                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
                             <Trash2 size={13} />
                           </button>
                         </span>

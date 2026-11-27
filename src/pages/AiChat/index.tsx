@@ -495,7 +495,7 @@ function AiChatInner() {
                       </span>
                     )}
                     {msg.role === 'assistant' && msg.id !== '0' && (
-                      <button onClick={() => copyMessage(msg.id, msg.content)} className="text-gray-300 hover:text-gray-500 transition-colors">
+                      <button onClick={() => copyMessage(msg.id, msg.content)} className="text-gray-400 hover:text-gray-600 transition-colors">
                         {copiedId === msg.id ? <Check size={11} className="text-green-700" /> : <Copy size={11} />}
                       </button>
                     )}

@@ -1232,7 +1232,7 @@ export default function Settings() {
                               <button
                                 onClick={() => handleDeleteService(svc.id)}
                                 aria-label={`${svc.name} 삭제`}
-                                className="text-xs text-red-700 hover:text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
+                                className="text-xs text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
                               >
                                 <Trash2 size={12} /> 삭제
                               </button>

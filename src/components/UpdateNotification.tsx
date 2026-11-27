@@ -89,7 +89,7 @@ export default function UpdateNotification() {
             <Download className="w-5 h-5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-semibold">새 업데이트 v{version}</p>
-              <p className="text-xs text-blue-100">자동으로 내려받아 프로그램을 닫을 때 적용됩니다.</p>
+              <p className="text-xs text-blue-50">자동으로 내려받아 프로그램을 닫을 때 적용됩니다.</p>
             </div>
             <button
               onClick={handleDownload}
@@ -111,13 +111,13 @@ export default function UpdateNotification() {
               <div className="mt-1.5 bg-blue-400/40 rounded-full h-2 overflow-hidden">
                 <div className="bg-white h-full rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
               </div>
-              <p className="text-xs text-blue-100 mt-1">{percent}% 완료</p>
+              <p className="text-xs text-blue-50 mt-1">{percent}% 완료</p>
             </div>
           </div>
         )}
 
         {state === 'ready' && (
-          <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white rounded-xl shadow-2xl px-5 py-4 flex items-center gap-3">
+          <div className="bg-emerald-700 text-white rounded-xl shadow-2xl px-5 py-4 flex items-center gap-3">
             <CheckCircle className="w-6 h-6 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-bold">v{version} 업데이트 준비 완료</p>

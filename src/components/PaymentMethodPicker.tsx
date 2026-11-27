@@ -67,7 +67,7 @@ export default function PaymentMethodPicker({ value, onChange, manageable = true
                   if (lostRemove) notify.error(lostRemove);
                   if (selectable && value === m) onChange('카드');
                 }}
-                className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${selectable && value === m ? 'text-white/70 hover:text-white' : 'text-gray-300 hover:text-red-600'}`}
+                className={`absolute right-1.5 top-1/2 -translate-y-1/2 ${selectable && value === m ? 'text-white/70 hover:text-white' : 'text-gray-400 hover:text-red-700'}`}
               >
                 <X size={12} />
               </button>

@@ -30,7 +30,13 @@ test('흉내 서버에서 지점 결제 요청 창에 접근성 위반이 없다
 
   await step('/sales 결제 요청', async () => {
     await payBtn.click({ timeout: 20_000 });
-    await expect(page.getByRole('dialog', { name: '결제 요청' })).toBeVisible({ timeout: 10_000 });
+    const dialog = page.getByRole('dialog', { name: '결제 요청' });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    // 328: **PG 가 켜진 상태**인지 단언한다. 꺼진 상태에서도 창은 열리지만 입력 폼 대신 "준비 중" 안내문이
+    // 나온다 — 그러면 이 쓸이는 **더 단순한 화면**을 검사하고도 통과한다(리뷰 M-6). 전제를 눈으로 고정한다.
+    await expect(dialog.getByRole('button', { name: '결제 링크 만들기' })).toBeVisible();
+    await expect(dialog.getByLabel('금액')).toBeVisible();
+    await expect(dialog.getByText('온라인 결제 준비 중입니다')).toHaveCount(0);
   });
 
   assertNoBlocking(rows);

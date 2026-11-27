@@ -2274,7 +2274,7 @@ export default function Customers() {
                           <p className="text-xs font-semibold text-gray-800">{formatDate(c.consultDate)}{c.staffName ? <span className="font-normal text-gray-400"> · {c.staffName}</span> : null}</p>
                           <span className="flex items-center gap-1.5">
                             {c.skinTypeResult && <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
-                            <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-2.5 -m-2 text-gray-300 active:text-red-600"><X size={16} /></button>
+                            <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-2.5 -m-2 text-gray-400 active:text-red-700"><X size={16} /></button>
                           </span>
                         </div>
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
@@ -2837,7 +2837,7 @@ export default function Customers() {
                           </div>
                           <button
                             onClick={() => handleConsultDelete(c)}
-                            className="text-gray-300 hover:text-red-600"
+                            className="text-gray-400 hover:text-red-700"
                             aria-label={`${formatDate(c.consultDate)} 상담 삭제`}
                           >
                             <X size={14} />
