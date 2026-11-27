@@ -190,8 +190,8 @@ function selftest() {
   // 완료 기준의 없는 명령·스펙
   // 덫을 **문서 문구가 아니라 줄 모양**에 건다 — 처음엔 P-4 행의 완료 기준 글을 그대로 적어 두었다가
   // 305 에서 그 칸을 고치자 덫이 허공을 쳤다(가드의 덫이 낡으면 가드가 조용히 약해진다).
-  const withFakeCmd = base.gap.split('\n').map(l => (l.startsWith('| P-4 ')
-    ? l.replace(/\|\s*$/, '· 완료 기준은 npm run check:nope |') : l)).join('\n');
+  // 341(리뷰 L-1): 이 덫도 sub() 로 가져온다 — P-4 행이 없어지면 **조용히** 헛돌지 않고 멈춘다
+  const withFakeCmd = sub(base.gap, /^\| P-4 .*\|\s*$/m, m => m.replace(/\|\s*$/, '· 완료 기준은 npm run check:nope |'));
   bite('없는 npm 명령', { gap: withFakeCmd }, /npm run check:nope` 가 package.json 에 없다/);
   bite('없는 스펙 파일', { gap: sub(base.gap, 'month-view 스펙', 'month-view-gone.spec.ts 스펙') }, /month-view-gone\.spec\.ts` 가 e2e 에 없다/);
   // 서버 테스트 0건 주장

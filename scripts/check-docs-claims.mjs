@@ -28,6 +28,15 @@
  *  ⑬ **부분 집합 리뷰 수**(335) — "기록 N개(`docs/REVIEW-*.md` 중 NNN 번 이상을 다루는 것)" 는 파일 이름의
  *     첫 묶음 번호로 **세어** 맞춘다. ② 는 전체 건수만 봐서, 오너가 가장 먼저 읽는 브리핑 §1 에서
  *     이 수가 낡은 것을 못 봤다(335 가 손으로 찾았다 — 그래서 가드가 덮게 했다).
+ *  ⑭ **오너 브리핑의 품질 장치 표**(341, 335~340 리뷰 M-2) — `scripts/gate-light.mjs` 가 돌리는 `check:*` 가
+ *     브리핑 §5 표에 **빠지지 않았는가**. 그 절은 오너가 "무엇이 기계로 막히나" 를 읽는 자리인데,
+ *     335 가 세 줄을 더한 바로 뒤 묶음에서 `check:e2e-conv` 가 또 빠졌다(`check:routes`·`check:distribution` 은
+ *     처음부터 없었다). ⑬ 은 **수**만 보고 **빠진 줄**은 보지 못한다.
+ *  ⑮ **테스트 exe 빌드 시각**(341, 335~340 리뷰 M-6) — "테스트 exe … MM-DD HH:MM/HH:MM" 는
+ *     `release`·`release-admin` 의 `win-unpacked/resources/app.asar` 수정 시각과 같아야 한다
+ *     (경로를 글롭으로 적으면 별표와 슬래시가 이 주석을 닫아 버린다 — 341 에서 겪었다). 세 묶음 연속
+ *     낡아 있었다(11-26 08:04·11-27 04:31 이라고 적혀 있었고 실제는 11-28 01:06/01:07).
+ *     asar 가 없는 환경에서는 건너뛴다.
  *  ④ 리뷰 기록의 반영 표시 — `docs/REVIEW-*.md` 머리말(앞 3줄)에 "반영" 상태가 적혀 있어야 한다.
  *     조용히 묻힌 리뷰가 없다는 뜻이다.
  *  ⑥ 자기 범위 표시가 사라지지 않는가 — `NEXT-ACTION`·`OWNER-BRIEFING`·`MASTER-DEVELOPMENT-STATUS` 는
@@ -72,6 +81,19 @@ const CURRENT_DOCS = [
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 /** 로드맵에서 묶음 번호 → 그 줄 */
+/**
+ * 로드맵이 적은 **모든 묶음 번호** — 155~164 는 `- [x] 155 PHASE 4 1/5 — …` 꼴이라
+ * `batchLines()`(`- [x] NNN — `)로는 세어지지 않는다. 341: 누계를 실측하려고 느슨한 모양으로 센다.
+ */
+function allBatchNos(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^- \[x\] (\d{3})\b/.exec(line);
+    if (m) out.push(Number(m[1]));
+  }
+  return [...new Set(out)];
+}
+
 function batchLines(text) {
   const out = [];
   for (const line of text.split(/\r?\n/)) {
@@ -159,7 +181,7 @@ function outboxClaims(text, rel) {
 
 /** 문서가 주장하는 숫자들 */
 function claimedNumbers(text) {
-  const out = { rules: [], testids: [], libUnits: [], ranges: [], cumulative: [], reviews: [], reviewsFrom: [] };
+  const out = { rules: [], testids: [], libUnits: [], ranges: [], cumulative: [], reviews: [], reviewsFrom: [], reviewRuns: [] };
   const fresh = m => !markedPast(text, m.index, m[0].length);
   // 285(리뷰 M-2): 문구를 좁게 보던 탓에 `lib-units.spec.ts 160건`·`lib-units(165개)`·맨 `231함수` 가
   // 전부 가드 밖이었다. 283 이 기계가 보던 표현을 지우고 못 보는 표현만 남겨 한 묶음 뒤 낡은 적도 있다.
@@ -226,6 +248,13 @@ function claimedNumbers(text) {
   for (const m of text.matchAll(/기록\s*(\d+)\s*개\*{0,2}\(`?docs\/REVIEW-\*\.md`?\s*중\s*(\d+)\s*번\s*이상/g)) {
     if (fresh(m)) out.reviewsFrom.push({ count: Number(m[1]), from: Number(m[2]), raw: m[0] });
   }
+  // 341(335~340 리뷰 H-1): "독립 리뷰 **40회**(이 기간만 25회)" 가 실측 42/28 과 어긋난 채
+  // 세션 시작 문서에 있었다. ⑬ 은 "기록 N개(REVIEW-*.md 중 …)" 꼴만 봐서 이 말투를 지나쳤다.
+  // 리뷰 1회 = 기록 1건이므로 전체는 파일 수와 같아야 하고, "이 기간만" 은 그 문서가 선언한
+  // 범위 시작 번호로 센 값 **중 하나**와 같아야 한다(문서가 155~·218~ 둘을 선언하므로).
+  for (const m of text.matchAll(/독립 리뷰 \*{0,2}(\d+)회\*{0,2}(?:\s*\(이 기간만 \*{0,2}(\d+)회)?/g)) {
+    if (fresh(m)) out.reviewRuns.push({ total: Number(m[1]), subset: m[2] ? Number(m[2]) : null, raw: m[0] });
+  }
   // lib-units 뒤에 공백·괄호·`.spec.ts` 가 끼어도 센다(개·건 둘 다)
   for (const m of text.matchAll(/lib-units(?:\.spec\.ts)?[^\d]{0,4}(\d+)\s*(?:개|건)/g)) out.libUnits.push({ count: Number(m[1]), raw: m[0] });
   return out;
@@ -242,14 +271,20 @@ function liveNumbers() {
   const units = read('e2e/lib-units.spec.ts').split(/\r?\n/).filter(l => l.startsWith('test(')).length;
   const roadmap = read(ROADMAP);
   const newestBatch = Math.max(...batchLines(roadmap).map(l => l.no));
-  // 누계는 **로드맵이 스스로 적은 마지막 값**을 쓴다 — 묶음 155~164 는 기록 형식이 달라(`- [x] NNN — ` 아님)
-  // 전수 집계를 할 수 없다. 기계가 지키는 것은 "다른 문서가 로드맵과 다른 숫자를 말하지 않는 것" 이다.
+  // 341(335~340 리뷰 M-5): 전에는 누계를 **로드맵이 스스로 적은 값**으로 믿었다("155~164 는 형식이 달라
+  // 전수 집계를 할 수 없다"). 느슨한 모양(`- [x] NNN`)으로 세면 그 열 줄도 세어지므로 **실측**한다.
+  // 그 가정 때문에 "묶음 186개" 가 통과했는데 실제는 185개였다 — 묶음 **161 이 없다**(162 줄이 순서를 바꿨다).
+  // 340-155+1 같은 산수를 그대로 적으면 또 어긋나므로, 틀렸을 때 **빠진 번호**를 함께 말한다.
   const cums = [...roadmap.matchAll(/누계 155~(\d+) 묶음 (\d+)개/g)];
   const lastCum = cums.length > 0 ? cums[cums.length - 1] : null;
+  const allNos = allBatchNos(roadmap);
+  const cumReal = allNos.filter(n => n >= 155 && n <= newestBatch).length;
+  const missingNos = [];
+  for (let n = 155; n <= newestBatch; n += 1) if (!allNos.includes(n)) missingNos.push(n);
   // 범위 안의 묶음 수는 셀 수 있다 — `- [x] NNN — ` 형식이 쓰이기 시작한 165 번부터 (294, 리뷰 M-4)
-  const batchNos = batchLines(roadmap).map(l => l.no);
   const UNIFORM_FROM = 165;
-  const countInRange = (start, end) => batchNos.filter(n => n >= start && n <= end).length;
+  // 341: 155~164 까지 세는 느슨한 모양을 쓴다 — 전에는 165 번부터만 세어 "155~340(186개)" 를 못 봤다
+  const countInRange = (start, end) => allBatchNos(roadmap).filter(n => n >= start && n <= end).length;
   const reviewFiles = fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-.*\.md$/.test(x)).length;
   // 335: 부분 집합 실측 — 파일 이름의 **첫 묶음 번호**가 N 이상인 것을 센다
   const reviewNames = fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-\d+-\d+-\d{4}-\d{2}-\d{2}\.md$/.test(x));
@@ -265,7 +300,8 @@ function liveNumbers() {
   }
   return {
     modules: Number(rules[1]), fns: Number(rules[2]), idTotal: Number(ids[1]), idCovered: Number(ids[2]), libUnits: units,
-    newestBatch, cumCount: lastCum ? Number(lastCum[2]) : null, reviewFiles, reviewsFromCount, countInRange, UNIFORM_FROM,
+    newestBatch, cumCount: cumReal, cumClaimed: lastCum ? Number(lastCum[2]) : null, missingNos,
+    reviewFiles, reviewsFromCount, countInRange, UNIFORM_FROM,
   };
 }
 
@@ -382,6 +418,29 @@ function selftest() {
   // 340: '테스트' 라는 말 없이 "러너 **35건**" 으로 적힌 자리(GAP 0절 실사고) — 숫자 아닌 말은 세지 않는다
   const stc3 = serverTestClaims('서버 자동 테스트는 node 내장 러너 **35건**(225~230).\n러너 두 벌을 쓴다.', 'x.md');
   if (stc3.length !== 1 || stc3[0].n !== 35) { console.error('[selftest] 러너만 적힌 수 덫 실패: ' + JSON.stringify(stc3)); process.exit(1); }
+  // 341(리뷰 M-6): exe 빌드 시각 주장 수집 — "당시" 는 면제
+  const exeA = exeTimeClaims('- 테스트 exe: 지점·어드민 11-27 04:31/04:32 빌드\n- 11-24 당시 테스트 exe 11-24 01:02/01:03');
+  if (exeA.length !== 1 || exeA[0].md !== '11-27' || exeA[0].branch !== '04:31' || exeA[0].admin !== '04:32') { console.error('[selftest] exe 시각 수집 덫 실패: ' + JSON.stringify(exeA)); process.exit(1); }
+  const exeB = exeTimeClaims('- 테스트 exe(바탕화면 바로가기) = 11-26 **08:04**/08:05(지점·어드민)');
+  if (exeB.length !== 1 || exeB[0].branch !== '08:04') { console.error('[selftest] exe 시각(굵게) 덫 실패: ' + JSON.stringify(exeB)); process.exit(1); }
+  const exeC = exeTimeClaims('- 테스트 exe 는 다시 만들지 않았다(앱 변경 0건)');
+  if (exeC.length !== 0) { console.error('[selftest] exe 시각 없는 줄 덫 실패'); process.exit(1); }
+  // 341(335~340 리뷰 H-1): 리뷰 회수 주장 수집 — 전체와 "이 기간만", 그리고 "당시" 면제
+  const rr = claimedNumbers('독립 리뷰 **40회**(이 기간만 25회) 했다.\n11-24 당시 독립 리뷰 30회.');
+  if (rr.reviewRuns.length !== 1 || rr.reviewRuns[0].total !== 40 || rr.reviewRuns[0].subset !== 25) { console.error('[selftest] 리뷰 회수 수집 덫 실패: ' + JSON.stringify(rr.reviewRuns)); process.exit(1); }
+  const rr2 = claimedNumbers('독립 리뷰 42회 돌렸다.');
+  if (rr2.reviewRuns.length !== 1 || rr2.reviewRuns[0].subset !== null) { console.error('[selftest] 리뷰 회수(부분 없음) 덫 실패'); process.exit(1); }
+  // 341(리뷰 M-5): 느슨한 모양으로 155~164 까지 센다 — 빠진 번호도 드러나야 한다
+  const nos = allBatchNos('- [x] 155 PHASE 4 1/5 — 가\n- [x] 162 PHASE 5 — 나\n- [x] 165 — 다\n- 아닌 줄 170\n- [x] 2026 — 날짜');
+  if (nos.join(',') !== '155,162,165') { console.error('[selftest] 느슨한 묶음 번호 덫 실패: ' + nos.join(',')); process.exit(1); }
+  // 341(리뷰 M-2): 브리핑 §5 에 빠진 가드를 찾는다
+  const gateFake = "run('check-aaa.mjs');\nrun('check-bbb.mjs');";
+  const scriptsFake = { 'check:aaa': 'node scripts/check-aaa.mjs', 'check:bbb': 'node scripts/check-bbb.mjs' };
+  const briefFake = '## 4. 앞 절\n| x |\n## 5. 품질 장치\n| `npm run check:aaa` | 설명 |\n## 6. 다음 절\n| `npm run check:bbb` | 다른 절이라 세지 않는다 |';
+  const missFake = missingGuardRows(briefFake, gateFake, scriptsFake);
+  if (missFake.join(',') !== 'check:bbb') { console.error('[selftest] 빠진 가드 줄 덫 실패: ' + JSON.stringify(missFake)); process.exit(1); }
+  const okFake = missingGuardRows(briefFake.replace('## 6. 다음 절', '| `npm run check:bbb` | 같은 절 |\n## 6. 다음 절'), gateFake, scriptsFake);
+  if (okFake.length !== 0) { console.error('[selftest] 가드 줄 면제 덫 실패: ' + JSON.stringify(okFake)); process.exit(1); }
   // 321(318~320 리뷰 H-2): 파생 수(면제·남은) 주장 수집 — 가드 고르기·인용문·기준 문구의 과거 표시
   const ex1 = exemptionClaims('화면 칸 227개 중 227개, 면제 0개다.', 'x.md');
   if (ex1.length !== 1 || ex1[0].n !== 0 || ex1[0].guard.key !== 'testids') { console.error('[selftest] 면제 수 수집 덫 실패: ' + JSON.stringify(ex1.map(c => [c.n, c.guard.key]))); process.exit(1); }
@@ -415,7 +474,7 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·부분 집합 리뷰 수 3종) 통과`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 3종·느슨한 묶음 번호·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -469,18 +528,32 @@ const problems = [];
     for (const g of c.ranges) {
       if (g.start >= 155 && g.end !== live.newestBatch) problems.push(`${rel}: "${g.raw}" 가 낡았다 — 마지막 묶음은 ${live.newestBatch} (과거 범위면 "당시" 를 함께 적으세요)`);
       // 294(리뷰 M-4): 범위와 묶음 수를 같은 줄에 적었으면 **그 범위의 실제 묶음 수**와 같아야 한다
-      if (g.count !== null && g.start >= live.UNIFORM_FROM) {
+      if (g.count !== null) {
         const real = live.countInRange(g.start, g.end);
         if (g.count !== real) problems.push(`${rel}: "${g.raw} … ${g.countRaw}" 가 맞지 않는다 — 로드맵에 ${g.start}~${g.end} 묶음은 ${real}개`);
       }
     }
     for (const u of c.cumulative) {
       if (u.end !== live.newestBatch || (live.cumCount !== null && u.count !== live.cumCount)) {
-        problems.push(`${rel}: "${u.raw}" 가 로드맵과 다르다 — 로드맵은 155~${live.newestBatch} 묶음 ${live.cumCount}개`);
+        const miss = live.missingNos.length > 0 ? ` (빠진 번호: ${live.missingNos.join('·')} — 산수로 적지 마세요)` : '';
+        problems.push(`${rel}: "${u.raw}" 가 실측과 다르다 — 로드맵의 묶음 줄을 세면 155~${live.newestBatch} 는 ${live.cumCount}개${miss}`);
       }
     }
     for (const v of c.reviews) {
       if (v.count !== live.reviewFiles) problems.push(`${rel}: "${v.raw}" 가 낡았다 — docs/REVIEW-*.md 는 ${live.reviewFiles}건`);
+    }
+    // 341(리뷰 H-1): "독립 리뷰 N회(이 기간만 M회)" — 리뷰 1회 = 기록 1건
+    for (const v of c.reviewRuns) {
+      if (v.total !== live.reviewFiles) {
+        problems.push(`${rel}: "${v.raw}" 가 낡았다 — 리뷰 기록은 ${live.reviewFiles}건이다(리뷰 1회 = 기록 1건)`);
+      }
+      if (v.subset !== null) {
+        const starts = [...new Set(c.ranges.filter(g => g.start >= 155).map(g => g.start))].sort((a, b) => a - b);
+        const cands = starts.map(st => live.reviewsFromCount(st));
+        if (!cands.includes(v.subset)) {
+          problems.push(`${rel}: "${v.raw}" 의 "이 기간만" 이 맞지 않는다 — 이 문서가 선언한 범위(${starts.join('·')} 번부터)로 세면 ${cands.join('·')}건`);
+        }
+      }
     }
     // 335(검사 ⑬): 부분 집합 주장도 센다
     for (const v of c.reviewsFrom) {
@@ -662,6 +735,82 @@ function releaseStepProblems(injected) {
   return out;
 }
 problems.push(...releaseStepProblems());
+
+// ⑭ 브리핑 품질 장치 표 (341)
+{
+  const brief = 'docs/OWNER-BRIEFING-2026-11-30.md';
+  if (fs.existsSync(path.join(ROOT, brief))) {
+    const miss = missingGuardRows(read(brief), read('scripts/gate-light.mjs'), JSON.parse(read('package.json')).scripts);
+    for (const g of miss) problems.push(`${brief}: §5 품질 장치 표에 \`npm run ${g}\` 줄이 없다 — 게이트는 돌리는데 오너는 모른다`);
+  }
+}
+
+// ⑮ 테스트 exe 빌드 시각 (341)
+{
+  const branch = asarStamp('release/win-unpacked/resources/app.asar');
+  const admin = asarStamp('release-admin/win-unpacked/resources/app.asar');
+  if (branch && admin) {
+    for (const rel of CURRENT_DOCS) {
+      if (!fs.existsSync(path.join(ROOT, rel))) continue;
+      for (const c of exeTimeClaims(read(rel))) {
+        if (c.md !== branch.md || c.branch !== branch.hm || c.admin !== admin.hm) {
+          problems.push(`${rel}: "…${c.raw}" 가 낡았다 — 지금 빌드는 ${branch.md} ${branch.hm}/${admin.hm}(asar 수정 시각). 과거 기록이면 "당시" 를 함께 적으세요`);
+        }
+      }
+    }
+  }
+}
+
+// 341(리뷰 M-5): 로드맵이 스스로 적은 **마지막 누계**도 실측과 맞아야 한다 — 전에는 이 값을 사실로 믿었다
+{
+  const live2 = liveNumbers();
+  if (live2.cumClaimed !== null && live2.cumClaimed !== live2.cumCount) {
+    const miss = live2.missingNos.length > 0 ? ` (빠진 번호: ${live2.missingNos.join('·')})` : '';
+    problems.push(`${ROADMAP}: 마지막 "누계 155~${live2.newestBatch} 묶음 ${live2.cumClaimed}개" 가 실측과 다르다 — 묶음 줄을 세면 ${live2.cumCount}개${miss}`);
+  }
+}
+
+// ⑭ **오너 브리핑의 품질 장치 표에 게이트의 가드가 빠지지 않았는가** (341, 335~340 리뷰 M-2)
+//
+// 왜: 브리핑 §5 는 오너가 "무엇이 기계로 막히나" 를 읽는 자리다. 335 가 세 줄을 더한 바로 다음
+//     묶음에서 `check:e2e-conv` 가 또 빠졌고, `check:routes`·`check:distribution` 은 처음부터 없었다.
+//     ⑬ 은 **수**만 보고 **빠진 줄**은 보지 못한다. 기준은 "게이트가 실제로 돌리는 것" 이다.
+/** gate-light 가 돌리는 가드의 npm 이름 — 스크립트 파일 이름으로 package.json 을 거슬러 찾는다 */
+function gateGuardNames(gateSrc, scripts) {
+  const files = [...new Set([...gateSrc.matchAll(/(check-[a-z0-9-]+)\.mjs/g)].map(m => m[1]))];
+  const out = [];
+  for (const f of files) {
+    const name = Object.keys(scripts).find(k => k.startsWith('check:') && scripts[k].includes(`${f}.mjs`));
+    if (name) out.push(name);
+  }
+  return out.sort();
+}
+/** 브리핑 §5 에 빠진 가드 이름 */
+function missingGuardRows(briefText, gateSrc, scripts) {
+  const sec = briefText.split(/^## 5\./m)[1];
+  if (sec === undefined) return ['브리핑에 "## 5." 절이 없다 — 품질 장치 표를 찾을 수 없다'];
+  const body = sec.split(/^## /m)[0];
+  const listed = new Set([...body.matchAll(/npm run (check:[a-z0-9-]+)/g)].map(m => m[1]));
+  return gateGuardNames(gateSrc, scripts).filter(g => !listed.has(g));
+}
+
+/** 글에서 "테스트 exe … MM-DD HH:MM/HH:MM" 주장을 모은다 (341) */
+function exeTimeClaims(text) {
+  const out = [];
+  for (const m of text.matchAll(/테스트 exe[^\n]{0,80}?(\d{2})-(\d{2})\s*\*{0,2}(\d{2}):(\d{2})\*{0,2}\/\*{0,2}(\d{2}):(\d{2})/g)) {
+    if (markedPast(text, m.index, m[0].length)) continue;
+    out.push({ md: `${m[1]}-${m[2]}`, branch: `${m[3]}:${m[4]}`, admin: `${m[5]}:${m[6]}`, raw: m[0].slice(-24) });
+  }
+  return out;
+}
+/** 실제 asar 수정 시각 — 없으면 null */
+function asarStamp(rel) {
+  const full = path.join(ROOT, rel);
+  if (!fs.existsSync(full)) return null;
+  const d = fs.statSync(full).mtime;
+  const two = n => String(n).padStart(2, '0');
+  return { md: `${two(d.getMonth() + 1)}-${two(d.getDate())}`, hm: `${two(d.getHours())}:${two(d.getMinutes())}` };
+}
 
 // ⑨ **"서버 테스트 N개" 는 러너가 세는 수와 같아야 한다** (309)
 //
