@@ -265,7 +265,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   <button
                     onClick={() => sendLinkSms(createdUrl)}
                     disabled={busy}
-                    className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium flex items-center gap-1 disabled:opacity-50"
+                    className="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center gap-1 disabled:opacity-50"
                   >
                     <MessageSquare size={12} />문자
                   </button>

@@ -1323,7 +1323,7 @@ export default function Customers() {
       <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible gap-1.5 py-1 -my-1 -mx-1 px-1" role="group" aria-label="태그 필터" data-testid="tag-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
         {tags.map(({ tag, count }) => (
           <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-            className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
+            className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-700 text-white border-amber-700' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
             #{tag} <span className="font-normal">{count}</span>
           </button>
         ))}
@@ -1979,7 +1979,7 @@ export default function Customers() {
               <button
                 type="button"
                 onClick={() => setRetentionOnly(!retentionOnly)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-700 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
                 title={`마지막 방문 후 ${retentionPolicy.years}년이 지난 고객`}
               >
                 보존기간 경과 {expiredIds.size}
@@ -1993,7 +1993,7 @@ export default function Customers() {
                 type="button"
                 onClick={handleAnonymizeExpired}
                 disabled={filtered.length === 0}
-                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
               >
                 {filtered.length}명 익명화
               </button>
@@ -2518,7 +2518,7 @@ export default function Customers() {
               <button
                 type="button"
                 onClick={() => setRetentionOnly(!retentionOnly)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-700 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
                 title={`마지막 방문 후 ${retentionPolicy.years}년이 지난 고객`}
               >
                 보존기간 경과 {expiredIds.size}
@@ -2532,7 +2532,7 @@ export default function Customers() {
                 type="button"
                 onClick={handleAnonymizeExpired}
                 disabled={filtered.length === 0}
-                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
               >
                 {filtered.length}명 익명화
               </button>

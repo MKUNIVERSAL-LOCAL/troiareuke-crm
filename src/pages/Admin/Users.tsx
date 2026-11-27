@@ -382,7 +382,7 @@ export default function AdminUsers() {
                 />
                 <button
                   onClick={copyTempPassword}
-                  className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-colors ${copied ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                  className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-colors ${copied ? 'bg-emerald-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
                 >
                   {copied ? '복사됨 ✓' : '복사'}
                 </button>
@@ -570,7 +570,7 @@ export default function AdminUsers() {
                 <button
                   onClick={() => savePeriod(false)}
                   disabled={periodBusy}
-                  className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
                 >
                   {periodBusy ? '저장 중…' : '저장'}
                 </button>
@@ -587,7 +587,7 @@ export default function AdminUsers() {
         {isAuthApiConfigured && (
           <button
             onClick={() => setInviteOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
           >
             <UserPlus size={16} />
             관리자 초대
@@ -663,7 +663,7 @@ export default function AdminUsers() {
               <button
                 onClick={handleInvite}
                 disabled={inviteBusy}
-                className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50"
+                className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
               >
                 {inviteBusy ? '발급 중…' : '초대 (임시 비밀번호 발급)'}
               </button>
@@ -739,7 +739,7 @@ export default function AdminUsers() {
                 <button
                   onClick={() => openReview(u.id)}
                   disabled={reviewLoading !== null}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
                 >
                   {reviewLoading === u.id ? '로딩…' : '검토'}
                 </button>
@@ -858,7 +858,7 @@ export default function AdminUsers() {
                             <button
                               onClick={() => openPeriodModal(u)}
                               disabled={actionBusy === u.id}
-                              className="px-2.5 py-1 text-xs font-medium rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+                              className="px-2.5 py-1 text-xs font-medium rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-700/10 transition-colors disabled:opacity-50"
                             >
                               사용기간
                             </button>

@@ -148,7 +148,7 @@ export default function CustomerMergeModal({ target, onClose, onMerged }: { targ
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
             <button type="button" onClick={handleMerge} disabled={!source || busy || pendingRequests > 0 || serverCheckFailed || serverChecking}
-              className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5">
+              className="flex-1 py-2.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5">
               <GitMerge size={14} />병합 실행
             </button>
           </div>

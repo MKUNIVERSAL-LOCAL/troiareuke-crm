@@ -427,7 +427,7 @@ export default function Reservations() {
             className={clsx('inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl border transition-colors', requestCount > 0 ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50')}
             title="전화·카톡·네이버로 받은 예약 요청을 적어 두고 확인 뒤 예약으로 등록"
           >
-            예약 요청함{requestCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold">{requestCount}</span>}
+            예약 요청함{requestCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-700 text-white text-xs font-bold">{requestCount}</span>}
           </button>
         )}
       />

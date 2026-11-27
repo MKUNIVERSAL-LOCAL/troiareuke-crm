@@ -929,7 +929,7 @@ function TreatmentDetailModal({
               <button
                 type="button"
                 onClick={() => { onClose(); navigate(`/reservations?new=1&customer=${encodeURIComponent(t.customerId)}&date=${encodeURIComponent(t.nextAppointment!)}`); }}
-                className="flex-shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 whitespace-nowrap"
+                className="flex-shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-green-700 text-white hover:bg-green-800 whitespace-nowrap"
               >
                 이 날짜로 예약
               </button>

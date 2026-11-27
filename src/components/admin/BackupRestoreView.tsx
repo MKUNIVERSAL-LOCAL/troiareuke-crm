@@ -184,7 +184,7 @@ export default function BackupRestoreView({ branch, backups, backupDirConfigured
               <button
                 onClick={runRestore}
                 disabled={busy || confirmText.trim() !== '복원' || (selected.size === 0 && !includePhotos)}
-                className="px-4 py-2 text-sm font-bold rounded-xl bg-amber-600 text-white hover:bg-amber-500 disabled:opacity-40"
+                className="px-4 py-2 text-sm font-bold rounded-xl bg-amber-700 text-white hover:bg-amber-800 disabled:opacity-40"
               >
                 {busy ? '복원 중...' : '복원 실행'}
               </button>

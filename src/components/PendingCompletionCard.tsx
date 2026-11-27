@@ -65,7 +65,7 @@ export default function PendingCompletionCard({ compact = false, refreshKey = 0,
         </div>
         {confirmedIds.length > 0 && (
           <button type="button" onClick={settleAll}
-            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-600 text-white hover:bg-amber-700">
+            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-700 text-white hover:bg-amber-800">
             <Check size={12} />확정 {confirmedIds.length}건 완료 처리
           </button>
         )}

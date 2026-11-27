@@ -185,7 +185,7 @@ export default function UpdateBanner() {
   // ── 오류 ──
   if (state === 'error') {
     return (
-      <div className="w-full bg-amber-500 text-white px-4 py-2.5 flex items-center justify-between gap-4 shadow-sm">
+      <div className="w-full bg-amber-700 text-white px-4 py-2.5 flex items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-2 text-sm">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />

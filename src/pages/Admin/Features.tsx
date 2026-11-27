@@ -149,7 +149,7 @@ export default function AdminFeatures() {
           <button
             onClick={handleSave}
             disabled={!NAS_MODE || !dirty || saving || !!loadError}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Save size={16} />
             {saving ? '저장 중...' : '저장'}

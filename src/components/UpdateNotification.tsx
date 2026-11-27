@@ -97,7 +97,7 @@ export default function UpdateNotification() {
             >
               업데이트
             </button>
-            <button onClick={() => setDismissed(true)} className="p-1 hover:bg-blue-500 rounded-lg" aria-label="닫기">
+            <button onClick={() => setDismissed(true)} className="p-1 hover:bg-blue-700 rounded-lg" aria-label="닫기">
               <X className="w-4 h-4" />
             </button>
           </div>

@@ -980,7 +980,7 @@ export default function Settings() {
                 <SettingCard title="네이버 예약 연동">
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-500">
                         N
                       </div>
                       <div className="flex-1">
@@ -1024,7 +1024,7 @@ export default function Settings() {
                 <SettingCard title="카카오 연동">
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-500">
                         K
                       </div>
                       <div className="flex-1">
@@ -1039,7 +1039,7 @@ export default function Settings() {
                     </div>
 
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-500">
                         K
                       </div>
                       <div className="flex-1">
@@ -1121,7 +1121,7 @@ export default function Settings() {
                       ) : GOOGLE_OAUTH_READY ? (
                         <button
                           onClick={() => startGoogleOAuth()}
-                          className="px-4 py-2 text-sm font-medium rounded-xl bg-blue-500 text-white hover:bg-blue-600"
+                          className="px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 text-white hover:bg-blue-700"
                         >
                           Google 캘린더 연결
                         </button>
