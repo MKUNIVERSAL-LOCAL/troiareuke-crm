@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 글자 대비 가드 (326·327, 328 팔레트·사정거리 전면 수정, 329 **부모·자식 물려받기**) — `npm run check:contrast`
+ * 글자 대비 가드 (326·327, 328 팔레트·사정거리, 329 부모·자식 물려받기, 330 **투명도·표 배경**) — `npm run check:contrast`
  *
  * 왜: 325 가 **성공 토스트의 대비 3.77:1**(경고 토스트는 2.15:1)을 찾았는데, 그것이 잡힌 것은 **운이었다** —
  *     캠페인 창을 열 때 토스트가 떠 있었다. 접근성 쓸이(axe)는 **그 순간 화면에 있는 것만** 본다.
@@ -41,7 +41,12 @@
  *    배경은 모른다 — 이 저장소에서는 그게 더 흔하다(어드민의 어두운 테마가 그렇다). 그래서 329 는
  *    "조상에 배경이 없으면 흰 바닥" 이라는 가정을 **버렸다**: 그 가정으로 돌렸더니 거짓 경보 202건이
  *    나왔고 그 중 `text-white` 를 1.00:1 로 신고하는 것까지 있었다. 지금은 **선언된 배경만** 본다.
- *  - 투명도 표기(`text-white/70`·`bg-amber-500/80`)·인라인 `style`·CSS 변수·이미지 위의 글자는 보지 않는다.
+ *  - **투명도 표기는 섞어서 본다**(330): `text-white/70` 은 배경 위에, `bg-amber-500/10` 은 조상의 불투명
+ *    배경 위에 섞는다. 뒤에 무엇이 있는지 알 수 없으면(불투명한 조상을 못 만나면) **세지 않는다**.
+ *  - **같은 파일의 표에서 꺼내 쓰는 배경도 본다**(330): 본사 공지 띠가 `typeStyles[type].bg` 꼴인데,
+ *    330 전에는 그 변수 하나 때문에 장님이었다 — 328 이 손으로 찾아 고친 자리다. 이제 표의 **후보 전부**를
+ *    보고(공지 종류 넷) 하나라도 미달이면 신고한다. 후보 중 하나라도 색을 모르면 세지 않는다.
+ *  - 인라인 `style`·CSS 변수·이미지 위의 글자는 보지 않는다.
  *  - `gray-400` 과 `gray-500` 은 이 프로젝트에서 **같은 색**이다(`tailwind.config.js:11`, 의도된 것) —
  *    둘 사이를 바꾸는 "수정" 은 화면을 바꾸지 않는다(327 이 그걸 다섯 번 했다).
  *  - 그래서 "**0자리**" 는 "**이 가드가 보는 범위에서** 0" 이라는 뜻이다. axe 쓸이가 나머지를 메우지만
@@ -144,17 +149,114 @@ function branches(raw) {
 }
 
 
+/**
+ * 투명도 표기를 섞는다 (330).
+ * `bg-amber-500/10` 은 **그 뒤에 무엇이 있는지 알아야** 색이 정해진다 — 329 가 조상 사슬을 만들어 두었으니
+ * 이제 섞을 수 있다. `text-white/70` 도 같은 식으로 배경 위에 섞는다. 브라우저도 sRGB 에서 이렇게 섞는다.
+ */
+function blend(front, back, alpha) {
+  const f = parseInt(front.slice(1), 16);
+  const b = parseInt(back.slice(1), 16);
+  const ch = shift => Math.round((((f >> shift) & 255) * alpha) + (((b >> shift) & 255) * (1 - alpha)));
+  return '#' + [16, 8, 0].map(shift => ch(shift).toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * `${style.bg}` 처럼 **같은 파일의 표에서 꺼내 쓰는 배경**의 후보들 (330).
+ *
+ * 왜: 본사 공지 띠가 바로 이 모양이다 — 배경을 `typeStyles[ann.type].bg` 에서 꺼낸다. 330 이 투명도를
+ * 읽게 된 뒤에도 그 띠의 본문(`text-white/80` = amber-700 공지에서 **3.81:1**)을 못 봤다. 328 이 손으로
+ * 찾아 고친 자리인데 가드는 여전히 장님이었다 — 변수 하나 때문이다.
+ *
+ * 어떻게: 같은 파일에서 `<그 속성>: '<클래스들>'` 꼴의 표 값을 모아 **후보 배경 전부**를 본다.
+ * 공지 종류가 넷이면 넷 다 봐야 한다 — 하나라도 기준에 못 미치면 그 종류의 공지에서 실제로 흐리다.
+ * 후보 중 하나라도 색을 알 수 없으면 **아무것도 세지 않는다**(모르는 것을 가정하지 않는다).
+ */
+function tableBgCandidates(text, raw) {
+  const m = /\$\{[A-Za-z_$][\w$]*(?:\[[^\]]*\])?\.([A-Za-z_$][\w$]*)\}/.exec(raw || '');
+  if (!m) return null;
+  const prop = m[1];
+  const found = [];
+  for (const hit of text.matchAll(new RegExp(prop + "\\s*:\\s*'([^']*)'", 'g'))) {
+    const bgs = baseBgs(hit[1].split(/\s+/).filter(Boolean));
+    if (!bgs.length) continue;
+    for (const c of bgs) {
+      if (c.alpha < 1) return null; // 표 안의 반투명 배경은 뒤를 또 알아야 한다 — 세지 않는다
+      const hex = tokenHex(c);
+      if (!hex) return null;
+      found.push({ color: hex, name: '표의 ' + tokenName(c) });
+    }
+  }
+  return found.length ? found : null;
+}
+
+/**
+ * 이 요소 뒤의 **실제 배경색**을 구한다 (330).
+ * 반투명 층은 모아 두고 **불투명한 층을 만나면** 그 위에 차례로 섞는다. 불투명한 층을 끝까지 만나지
+ * 못하면 `null`(모른다) — 다른 파일의 부모가 깐 배경일 수 있으니 가정하지 않는다(329 의 교훈).
+ */
+function resolveBackground(node, stack, text) {
+  const layers = []; // 안쪽 → 바깥쪽
+  const own = baseBgs(node.tokens);
+  for (const c of own) { if (c.alpha < 1) layers.push(c); else return null; } // 불투명 자기 배경은 같은 가지에서 본다
+  /** 모아 둔 반투명 층을 바닥색 위에 차례로 섞는다 */
+  const stackOn = base => {
+    let color = base.color;
+    let name = base.name;
+    for (let i = layers.length - 1; i >= 0; i -= 1) {
+      const hx = tokenHex(layers[i]);
+      if (!hx) return null;
+      color = blend(hx, color, layers[i].alpha);
+      name = tokenName(layers[i]) + ' on ' + name;
+    }
+    return { color, name };
+  };
+  for (let k = stack.length - 1; k >= 0; k -= 1) {
+    const anc = stack[k];
+    if (anc.tokens.some(t => t === 'cursor-not-allowed' || t.startsWith('disabled:'))) return null;
+    const bgs = baseBgs(anc.tokens);
+    const opaque = bgs.find(c => c.alpha === 1);
+    if (opaque) {
+      const hex = tokenHex(opaque);
+      if (!hex) return null;
+      const one = stackOn({ color: hex, name: anc.name + ' 의 ' + tokenName(opaque) });
+      return one ? [one] : null;
+    }
+    for (const c of bgs) layers.push(c);
+    if (!bgs.length) {
+      const candidates = tableBgCandidates(text, anc.raw);
+      if (candidates) {
+        const out = [];
+        for (const base of candidates) { const one = stackOn(base); if (!one) return null; out.push(one); }
+        return out;
+      }
+      if (hasConditionalBg(anc.raw)) return null; // ① 조건부 배경이면 멈춘다
+    }
+  }
+  return null;
+}
+
+/** 이 요소의 기본 상태 배경색 토큰들(그라디언트 끝 포함) */
+function baseBgs(tokens) {
+  return tokens.map(colorToken).filter(c => c && c.kind === 'bg' && c.state === 'base');
+}
+
 /** 토큰에서 상태·종류·색을 꺼낸다 — 팔레트·이름 색(white/black)·임의 값(`[#rrggbb]`)·그라디언트 끝 */
 function colorToken(token) {
-  const m = /^(?:(hover|focus|focus-visible|active):)?(bg|text|from|to)-(?:([a-z]+)-(\d{2,3})|(white|black)|\[(#[0-9a-fA-F]{6})\])$/.exec(token);
+  // 330: 끝의 `/NN` 은 투명도다(`text-white/70`·`bg-amber-500/10`). 330 전에는 이 모양이 토큰 정규식에
+  // 걸리지 않아 **아예 안 보였고**, 328 은 그 종류의 진짜 위반 둘(공지 띠 3.81·3.27)을 손으로 찾았다.
+  const m = /^(?:(hover|focus|focus-visible|active):)?(bg|text|from|to)-(?:([a-z]+)-(\d{2,3})|(white|black)|\[(#[0-9a-fA-F]{6})\])(?:\/(\d{1,3}))?$/.exec(token);
   if (!m) return null;
   const named = m[5] === 'white' ? '#ffffff' : (m[5] === 'black' ? '#000000' : null);
+  const pct = m[7] === undefined ? 100 : Number(m[7]);
+  if (pct > 100) return null;
   return {
     state: m[1] || 'base',
     kind: m[2] === 'from' || m[2] === 'to' ? 'bg' : m[2],
     edge: m[2] === 'from' || m[2] === 'to' ? m[2] : null,
     family: m[3], shade: m[4], named: m[5] || null,
     literal: m[6] ? m[6].toLowerCase() : named,
+    alpha: pct / 100,
   };
 }
 function tokenHex(c) { return c.literal ? c.literal : paletteHex(c.family, c.shade); }
@@ -162,7 +264,8 @@ function tokenName(c) {
   const prefix = c.state === 'base' ? '' : `${c.state}:`;
   const kind = c.edge || c.kind;
   const body = c.named ? c.named : (c.family ? `${c.family}-${c.shade}` : `[${c.literal}]`);
-  return `${prefix}${kind}-${body}`;
+  const alpha = c.alpha === 1 ? '' : `/${Math.round(c.alpha * 100)}`;
+  return `${prefix}${kind}-${body}${alpha}`;
 }
 
 const STATES = ['base', 'hover', 'focus', 'focus-visible', 'active'];
@@ -200,9 +303,12 @@ function statePairs(tokens) {
     const fg = tokenHex(fgTok);
     if (!fg) continue;
     for (const bgTok of slot.bgs) {
+      // 330: 반투명 배경은 **뒤에 무엇이 있는지** 알아야 색이 정해진다 — 같은 가지만 보는 이 길에서는
+      // 알 수 없으니 건너뛴다(물려받기 길이 조상 사슬로 섞는다). 반투명 글자는 배경 위에 섞는다.
+      if (bgTok.alpha < 1) continue;
       const bg = tokenHex(bgTok);
       if (!bg) continue;
-      out.push({ fg, fgName: tokenName(fgTok), bg, bgName: tokenName(bgTok) });
+      out.push({ fg: fgTok.alpha < 1 ? blend(fg, bg, fgTok.alpha) : fg, fgName: tokenName(fgTok), bg, bgName: tokenName(bgTok) });
     }
   }
   return out;
@@ -296,8 +402,10 @@ const VOID_TAGS = new Set(['img', 'input', 'br', 'hr', 'source', 'track', 'use',
 function iconOnly(body, name) {
   const close = body.indexOf('</' + name + '>');
   const inner = close < 0 ? body : body.slice(0, close);
-  if (inner.includes('{')) return false; // 보간은 글자일 수 있다
+  // 330 정정: **태그를 먼저 지운다** — 아이콘 태그의 속성 중괄호(`size={13}`)를 "글자일 수 있는
+  // 보간" 으로 오판해 아이콘 단추를 글자로 봤다(어드민 지점 삭제 단추가 그 자리였다).
   const stripped = inner.replace(/<[^>]*>/g, ' ');
+  if (stripped.includes('{')) return false; // 태그 밖의 보간은 글자일 수 있다
   return !/[A-Za-z0-9가-힣]/.test(stripped);
 }
 
@@ -361,42 +469,30 @@ function inheritedProblems(file, text) {
     const node = { name, raw, tokens: fixedTokens(raw), interactive, bodyStart: end + 1 };
 
     const colors = node.tokens.map(colorToken).filter(Boolean);
-    const ownBg = colors.some(c => c.kind === 'bg' && c.state === 'base');
     const fgTok = colors.find(c => c.kind === 'text' && c.state === 'base');
     const off = node.tokens.some(t => t === 'cursor-not-allowed' || t.startsWith('disabled:'));
 
-    if (fgTok && !ownBg && !off) {
+    if (fgTok && !off) {
       // 329 정정: 처음에는 "조상에 배경이 없으면 흰 바닥" 으로 봤는데 **그 가정이 틀렸다** —
       // 배경은 대개 **다른 파일의 부모**가 깐다(어드민은 어두운 테마라 text-white 를 1.00:1 로 신고했다).
       // 거짓 경보 202건 중 거의 전부가 그 종류였다. 같은 파일에 **실제로 선언된** 배경만 짝짓는다.
-      let bg = null;
-      let bgName = '';
-      let unknown = true;
-      for (let k = stack.length - 1; k >= 0; k -= 1) {
-        const anc = stack[k];
-        if (anc.tokens.some(t => t === 'cursor-not-allowed' || t.startsWith('disabled:'))) { unknown = true; break; }
-        const ancBg = anc.tokens.map(colorToken).find(c => c && c.kind === 'bg' && c.state === 'base');
-        if (ancBg) {
-          const hex = tokenHex(ancBg);
-          if (hex) { bg = hex; bgName = anc.name + ' 의 ' + tokenName(ancBg); unknown = false; }
-          break;
-        }
-        if (hasConditionalBg(anc.raw)) { unknown = true; break; } // ①
-      }
-      const fg = tokenHex(fgTok);
-      if (!unknown && bg && fg) {
-        const body = selfClosing ? '' : src.slice(end + 1, Math.min(src.length, end + 400));
-        const isIcon = selfClosing || iconOnly(body, name);
-        const need = isLargeText(node.tokens) || isIcon ? MIN_LARGE : MIN_NORMAL;
-        const ratio = contrast(fg, bg);
-        // ④ 장식 아이콘은 기준 밖 — 아이콘만 든 조작부의 아이콘만 센다
-        const counted = !isIcon || iconLabelsControl(src, node, stack);
-        if (counted && ratio < need) {
-          out.push({
-            file, line: src.slice(0, i).split('\n').length, token: bgName,
-            fg: tokenName(fgTok), ratio: ratio.toFixed(2), need: need.toFixed(1),
-          });
-        }
+      // 330: 불투명한 자기 배경이면 `null`(같은 가지에서 본다), 반투명이면 조상 위에 섞어 돌려준다.
+      const resolved = resolveBackground(node, stack, src) || [];
+      const fgRaw = tokenHex(fgTok);
+      const body = selfClosing ? '' : src.slice(end + 1, Math.min(src.length, end + 400));
+      const isIcon = selfClosing || iconOnly(body, name);
+      const need = isLargeText(node.tokens) || isIcon ? MIN_LARGE : MIN_NORMAL;
+      // ④ 장식 아이콘은 기준 밖 — 아이콘만 든 조작부의 아이콘만 센다
+      const counted = !isIcon || iconLabelsControl(src, node, stack);
+      for (const base of resolved) {
+        if (!fgRaw || !counted) break;
+        const fg = fgTok.alpha < 1 ? blend(fgRaw, base.color, fgTok.alpha) : fgRaw;
+        const ratio = contrast(fg, base.color);
+        if (ratio >= need) continue;
+        out.push({
+          file, line: src.slice(0, i).split('\n').length, token: base.name,
+          fg: tokenName(fgTok), ratio: ratio.toFixed(2), need: need.toFixed(1),
+        });
       }
     }
     if (!selfClosing) stack.push(node);
@@ -500,7 +596,24 @@ function selftest() {
   // 꺼진 조작부는 물려받기에서도 면제
   ok('꺼진 조작부는 물려받기에서도 면제', run('<div className="bg-blue-600"><p className="text-xs text-blue-100 cursor-not-allowed">안내</p></div>').length === 0);
 
-  console.log('[check-contrast] selftest OK — 덫(프로젝트 팔레트 3종·흐린/진한 배경·호버 2종·가지 쪼개기 2종·상태별 짝짓기 4종·큰 글자 3종·꺼진 조작부 4종·className 모양 5종·그라디언트 2종·글자색 없음·팔레트 밖·검은 글자·물려받기 6종·아이콘 4종) 통과');
+  // 330: 투명도 표기 — 뒤에 무엇이 있는지 알 때만 섞어서 본다
+  ok('반투명 흰 글자를 섞어서 본다', run('<div className="bg-amber-700"><span className="text-xs text-white/70">1/3</span></div>').length === 1);
+  ok('불투명 흰 글자는 통과', run('<div className="bg-amber-700"><span className="text-xs text-white/100">1/3</span></div>').length === 0);
+  ok('반투명 배경을 조상 위에 섞는다(통과 쪽)', run('<div className="bg-white"><div className="bg-amber-500/10"><p className="text-xs text-amber-700">주의</p></div></div>').length === 0);
+  ok('반투명 배경을 조상 위에 섞는다(실패 쪽)', run('<div className="bg-white"><div className="bg-amber-500/10"><p className="text-xs text-amber-400">주의</p></div></div>').length === 1);
+  ok('조상에 불투명 배경이 없으면 섞지 않는다', run('<div className="bg-amber-500/10"><p className="text-xs text-amber-400">주의</p></div>').length === 0);
+  ok('같은 가지의 반투명 배경은 건너뛴다', run('<div className="bg-amber-500/10 text-amber-400 text-xs">주의</div>').length === 0);
+  ok('잘못된 투명도 값은 토큰으로 보지 않는다', run('<div className="bg-amber-500 text-white/150 text-xs">경고</div>').length === 0);
+  // 330 정정: 아이콘 태그의 속성 중괄호(size={13})에 속아 아이콘 단추를 글자로 봤다
+  ok('아이콘 태그의 속성 중괄호에 속지 않는다', run('<div className="bg-slate-900"><button onClick={go} className="text-red-400/70"><Trash2 size={13} /></button></div>').length === 0);
+  ok('그래도 3:1 미만 아이콘은 잡는다', run('<div className="bg-slate-900"><button onClick={go} className="text-slate-700"><Trash2 size={13} /></button></div>').length === 1);
+
+  // 330(2): 같은 파일의 표에서 꺼내 쓰는 배경 — 본사 공지 띠가 이 모양이라 328 까지 장님이었다
+  ok('표에서 꺼내 쓰는 배경을 찾는다', run("const S = { bg: 'bg-amber-700' };\n<div className={`w-full ${s.bg} text-white`}><span className=\"text-xs text-white/70\">1/3</span></div>").length === 1);
+  ok('후보가 둘이면 둘 다 본다', run("const S = { a: { bg: 'bg-amber-700' }, b: { bg: 'bg-slate-900' } };\n<div className={`w-full ${s.bg} text-white`}><span className=\"text-xs text-white/70\">1/3</span></div>").length === 1);
+  ok('표를 못 찾으면 세지 않는다', run('<div className={`w-full ${s.bg} text-white`}><span className="text-xs text-white/70">1/3</span></div>').length === 0);
+
+  console.log('[check-contrast] selftest OK — 덫(프로젝트 팔레트 3종·흐린/진한 배경·호버 2종·가지 쪼개기 2종·상태별 짝짓기 4종·큰 글자 3종·꺼진 조작부 4종·className 모양 5종·그라디언트 2종·글자색 없음·팔레트 밖·검은 글자·물려받기 6종·아이콘 5종·투명도 7종·표 배경 3종) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -525,4 +638,4 @@ if (unexpected.length > 0 || stale.length > 0) {
   }
   process.exit(1);
 }
-console.log(`[check-contrast] OK — **이 가드가 보는 범위**(같은 className 가지 + 같은 파일 안 부모 배경)에서 기준 미달 0자리(사유를 적어 둔 자리 ${ALLOWED.length}개). **다른 파일의 부모가 깐 배경**과 투명도 표기는 보지 않는다 — 머리말의 한계를 보세요`);
+console.log(`[check-contrast] OK — **이 가드가 보는 범위**(같은 className 가지 + 같은 파일 안 부모·표 배경, 투명도 섞음)에서 기준 미달 0자리(사유를 적어 둔 자리 ${ALLOWED.length}개). **다른 파일의 부모가 깐 배경**·인라인 style 은 보지 않는다 — 머리말의 한계를 보세요`);
