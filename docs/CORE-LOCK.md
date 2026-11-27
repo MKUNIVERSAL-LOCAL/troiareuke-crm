@@ -5,7 +5,7 @@
 
 ## 보호 대상 (코어)
 
-`scripts/core-lock.mjs` 의 `CORE_FILES` / `CORE_DIRS` 가 **단일 소스**다. 현재 목록:
+`scripts/core-lock.mjs` 의 `CORE_FILES` / `CORE_DIRS` 가 **단일 소스**다. 현재 목록(350 에서 정본과 대조 — 그때까지 **배포 관련 세 파일이 이 표에만 빠져** 있었다. CLAUDE.md 6절은 적고 있었지만 상세로 가리키는 이 문서에 없어서, 이 문서만 본 세션은 "잠금이 아니다" 라고 믿을 수 있었다):
 
 | 파일 | 역할 |
 |---|---|
@@ -19,6 +19,9 @@
 | `src/App.tsx` | 라우팅 + 권한 가드 |
 | `src/main.tsx` | 부트스트랩 + OAuth 콜백 |
 | `electron/main.cjs`, `electron/preload.cjs` | Electron 코어(백업·IPC·autoUpdater) |
+| `electron/portable-updater.cjs` | 포터블 exe 무인 업데이트(내려받기 → 종료 시 적용) — 재다운로드 금지 원칙의 핵심 |
+| `scripts/prepare-portable-update.mjs` | 포터블·폴더형 업데이트 꾸러미 생성(하위호환 브리지) |
+| `src/lib/updateChannel.ts` | 업데이트 채널 판정(버전 비교·필수 업데이트) |
 | `supabase/**` | RLS·마이그레이션 SQL 전체 |
 
 ## 2중 차단 구조
