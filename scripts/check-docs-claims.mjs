@@ -88,8 +88,12 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 function allBatchNos(text) {
   const out = [];
   for (const line of text.split(/\r?\n/)) {
-    const m = /^- \[x\] (\d{3})\b/.exec(line);
-    if (m) out.push(Number(m[1]));
+    // 347(리뷰 L-1): 세 자리만 보면 네 자리 묶음(1000~)을 못 세고, 그 번호들이 "빠진 번호" 로 신고된다.
+    // 같은 파일이 298 에서 범위 정규식으로 이미 겪은 종류다.
+    const m = /^- \[x\] (\d{3,4})\b/.exec(line);
+    // 347: 네 자리를 열면 `- [x] 2026 …` 같은 **연도**가 묶음으로 세어진다(덫이 그 자리를 지킨다).
+    // 묶음 번호는 100~1999 로 본다 — 2000 이상은 연도다.
+    if (m && Number(m[1]) < 2000) out.push(Number(m[1]));
   }
   return [...new Set(out)];
 }
@@ -119,7 +123,8 @@ function markedPast(text, at) {
   // 298(리뷰 LOW-6): `당시(11-24) 54모듈`·`당시 기준 54모듈` 도 과거다 — 괄호·"기준" 까지 허용한다.
   // 312: `당시 — 213개`·`당시, 213개` 처럼 **줄표·쉼표·콜론**이 끼면 못 읽어 거짓 실패가 났다
   // (한국어로 자연스러운 모양이다 — 문서를 가드에 맞춰 비틀게 만들지 않는다).
-  return /당시[\s)\]—–\-:,·]*$|당시\s*\([^)]*\)[\s—–\-:,·]*$|당시 기준[\s—–\-:,·]*$/.test(text.slice(Math.max(0, at - 24), at));
+  // 347: **굵게 표시**가 끼어도 과거다("**11-25 당시** 테스트 exe …") — 312 가 줄표·쉼표에 넓힌 것과 같은 이유.
+  return /당시[\s)\]—–\-:,·*]*$|당시\s*\([^)]*\)[\s—–\-:,·*]*$|당시 기준[\s—–\-:,·*]*$/.test(text.slice(Math.max(0, at - 24), at));
 }
 
 /**
@@ -426,8 +431,18 @@ function selftest() {
   // 344(리뷰 M-1): 날짜 없이 시각만 적은 꼴도 모은다
   const exeD = exeTimeClaims('- 테스트 exe 19:56/19:57(184~224 포함)');
   if (exeD.length !== 1 || exeD[0].md !== null || exeD[0].branch !== '19:56') { console.error('[selftest] 날짜 없는 exe 시각 덫 실패: ' + JSON.stringify(exeD)); process.exit(1); }
+  // 347(리뷰 H-1): "당시" 가 **시각 쪽**에 있는 꼴은 면제가 아니다 — 그 면제는 구분력이 없어 뗐다.
+  // 과거 기록은 "11-25 당시 테스트 exe …" 처럼 **앞에서** 밝힌다(그 꼴은 markedPast 가 면제한다).
   const exeE = exeTimeClaims('- 테스트 exe(바탕화면) 11-25 당시 19:56/19:57');
-  if (exeE.length !== 0) { console.error('[selftest] 뒤에 온 당시 면제 덫 실패: ' + JSON.stringify(exeE)); process.exit(1); }
+  if (exeE.length !== 1) { console.error('[selftest] 시각 쪽 당시는 면제 아님 덫 실패: ' + JSON.stringify(exeE)); process.exit(1); }
+  const exeF = exeTimeClaims('- 11-25 당시 테스트 exe 19:56/19:57');
+  if (exeF.length !== 0) { console.error('[selftest] 앞에서 밝힌 과거 면제 덫 실패: ' + JSON.stringify(exeF)); process.exit(1); }
+  // 347(리뷰 L-6): 쉼표를 넘어 무관한 시각 쌍을 집지 않는다
+  const exeG = exeTimeClaims('- 테스트 exe 빌드 10분, 게이트 13:00/14:00 에 돌렸다');
+  if (exeG.length !== 0) { console.error('[selftest] 쉼표 건너 시각쌍 덫 실패: ' + JSON.stringify(exeG)); process.exit(1); }
+  // 347(리뷰 L-6): 인용은 주장이 아니다
+  const exeH = exeTimeClaims('- 그때 가드가 "테스트 exe 19:56/19:57" 를 잡았다');
+  if (exeH.length !== 0) { console.error('[selftest] exe 인용 면제 덫 실패: ' + JSON.stringify(exeH)); process.exit(1); }
   const exeC = exeTimeClaims('- 테스트 exe 는 다시 만들지 않았다(앱 변경 0건)');
   if (exeC.length !== 0) { console.error('[selftest] exe 시각 없는 줄 덫 실패'); process.exit(1); }
   // 341(335~340 리뷰 H-1): 리뷰 회수 주장 수집 — 전체와 "이 기간만", 그리고 "당시" 면제
@@ -438,6 +453,9 @@ function selftest() {
   // 341(리뷰 M-5): 느슨한 모양으로 155~164 까지 센다 — 빠진 번호도 드러나야 한다
   const nos = allBatchNos('- [x] 155 PHASE 4 1/5 — 가\n- [x] 162 PHASE 5 — 나\n- [x] 165 — 다\n- 아닌 줄 170\n- [x] 2026 — 날짜');
   if (nos.join(',') !== '155,162,165') { console.error('[selftest] 느슨한 묶음 번호 덫 실패: ' + nos.join(',')); process.exit(1); }
+  // 347(리뷰 L-1): 네 자리 묶음은 세고, 연도(2000 이상)는 세지 않는다
+  const nos4 = allBatchNos('- [x] 999 — 가\n- [x] 1002 — 나\n- [x] 2026 — 날짜');
+  if (nos4.join(',') !== '999,1002') { console.error('[selftest] 네 자리 묶음 덫 실패: ' + nos4.join(',')); process.exit(1); }
   // 341(리뷰 M-2): 브리핑 §5 에 빠진 가드를 찾는다
   const gateFake = "run('check-aaa.mjs');\nrun('check-bbb.mjs');";
   const scriptsFake = { 'check:aaa': 'node scripts/check-aaa.mjs', 'check:bbb': 'node scripts/check-bbb.mjs' };
@@ -479,7 +497,7 @@ function selftest() {
   // 308: 칸이 **모자란** 행도 잡는다 — 상태 칸이 비어 "대기인지 완료인지" 가 사라진다
   const shortRow = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |', 'x.md');
   if (shortRow.length !== 1 || !/칸이 2개다/.test(shortRow[0])) { console.error('[selftest] 모자란 칸 덫 실패: ' + JSON.stringify(shortRow)); process.exit(1); }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 5종·느슨한 묶음 번호·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -553,13 +571,21 @@ const problems = [];
         problems.push(`${rel}: "${v.raw}" 가 낡았다 — 리뷰 기록은 ${live.reviewFiles}건이다(리뷰 1회 = 기록 1건)`);
       }
       if (v.subset !== null) {
-        // 344(리뷰 L-1): 전에는 선언 범위 중 **아무거나** 맞으면 통과였다 — 155 범위가 하나 더 생기면
-        // "이 기간만 44회" 같은 거짓이 통과한다. "이 기간" 은 가장 최근 구간이므로 **가장 큰 시작 번호**로 센다.
-        const starts = [...new Set(c.ranges.filter(g => g.start >= 155).map(g => g.start))].sort((a, b) => a - b);
+        // 347(리뷰 M-1): 344 는 "가장 큰 시작 번호" 로 바꿨는데 그것도 틀린 기준이었다 —
+        // 그 문서에 `341~346` 같은 줄이 하나 들어오면 정당한 줄이 **거짓 경보**를 만들고(리뷰 B),
+        // 범위를 누계 꼴로만 적은 문서에서는 `real === null` 로 **조용히 넘어갔다**(리뷰 C).
+        // "이 기간" 은 그 문서가 **자기 보고 범위로 선언한 것**이다 — 완료 묶음·출장 기간 같은 표시가 붙은 범위.
+        const scoped = c.ranges.filter(g => g.start >= 155 && /완료 묶음|출장 기간|묶음 범위|지점이 보는 변화/.test(g.raw));
+        const pool = scoped.length > 0 ? scoped : c.ranges.filter(g => g.start >= 155);
+        const starts = [...new Set(pool.map(g => g.start))].sort((a, b) => a - b);
         const base = starts.length > 0 ? starts[starts.length - 1] : null;
-        const real = base === null ? null : live.reviewsFromCount(base);
-        if (real !== null && v.subset !== real) {
-          problems.push(`${rel}: "${v.raw}" 의 "이 기간만" 이 맞지 않는다 — 이 문서가 선언한 가장 최근 범위(${base} 번부터)로 세면 ${real}건`);
+        if (base === null) {
+          problems.push(`${rel}: "${v.raw}" 가 "이 기간만" 을 적었는데 이 문서는 **자기 보고 범위를 선언하지 않았다** — "완료 묶음 NNN~MMM" 같은 줄이 있어야 셀 수 있다`);
+        } else {
+          const real = live.reviewsFromCount(base);
+          if (v.subset !== real) {
+            problems.push(`${rel}: "${v.raw}" 의 "이 기간만" 이 맞지 않는다 — 이 문서가 선언한 보고 범위(${base} 번부터)로 세면 ${real}건`);
+          }
         }
       }
     }
@@ -754,7 +780,10 @@ problems.push(...releaseStepProblems());
   } else {
     const brief = `docs/${briefs[briefs.length - 1]}`;
     const miss = missingGuardRows(read(brief), read('scripts/gate-light.mjs'), JSON.parse(read('package.json')).scripts);
-    for (const g of miss) problems.push(`${brief}: §5 품질 장치 표에 \`npm run ${g}\` 줄이 없다 — 게이트는 돌리는데 오너는 모른다`);
+    for (const g of miss) {
+      if (g === '!없는 절') { problems.push(`${brief}: "## 5." 절이 없다 — 품질 장치 표를 찾을 수 없다(검사 ⑭)`); continue; }
+      problems.push(`${brief}: §5 품질 장치 표에 \`npm run ${g}\` 줄이 없다 — 게이트는 돌리는데 오너는 모른다`);
+    }
   }
 }
 
@@ -772,7 +801,7 @@ problems.push(...releaseStepProblems());
       for (const c of exeTimeClaims(read(rel))) {
         const dateOff = c.md !== null && c.md !== branch.md;
         if (dateOff || c.branch !== branch.hm || c.admin !== admin.hm) {
-          problems.push(`${rel}: "…${c.raw}" 가 낡았다 — 지금 빌드는 ${branch.md} ${branch.hm}/${admin.hm}(asar 수정 시각). 과거 기록이면 "당시" 를 함께 적으세요`);
+          problems.push(`${rel}: "…${c.raw}" 가 낡았다 — 지금 빌드는 ${branch.md} ${branch.hm}/${admin.hm}(asar 수정 시각). 과거 기록이면 "테스트 exe" **앞**에 "당시" 를 적으세요(예: 11-25 당시 테스트 exe …)`);
         }
       }
     }
@@ -806,7 +835,9 @@ function gateGuardNames(gateSrc, scripts) {
 /** 브리핑 §5 에 빠진 가드 이름 */
 function missingGuardRows(briefText, gateSrc, scripts) {
   const sec = briefText.split(/^## 5\./m)[1];
-  if (sec === undefined) return ['브리핑에 "## 5." 절이 없다 — 품질 장치 표를 찾을 수 없다'];
+  // 347(리뷰 L-5): 전에는 이 문장을 **가드 이름 자리**에 끼워 넣어 "npm run 브리핑에 …" 로 깨졌다.
+  // 호출부가 구분할 수 있게 표시를 붙여 돌려준다.
+  if (sec === undefined) return ['!없는 절'];
   const body = sec.split(/^## /m)[0];
   const listed = new Set([...body.matchAll(/npm run (check:[a-z0-9-]+)/g)].map(m => m[1]));
   return gateGuardNames(gateSrc, scripts).filter(g => !listed.has(g));
@@ -817,9 +848,16 @@ function exeTimeClaims(text) {
   const out = [];
   // 344(리뷰 M-1): 날짜를 **필수**로 요구해 `테스트 exe 19:56/19:57` 꼴을 놓쳤다(세션 시작 문서에 낡은 자리 1건).
   // 날짜는 있으면 보고, 없으면 시각만 본다. "당시" 가 끼어 날짜와 시각이 떨어진 꼴도 같은 길로 들어온다.
-  for (const m of text.matchAll(/테스트 exe[^\n]{0,90}?(?:(\d{2})-(\d{2})[^\n]{0,8}?)?\*{0,2}(\d{2}):(\d{2})\*{0,2}\s*\/\s*\*{0,2}(\d{2}):(\d{2})/g)) {
-    // 344: "11-25 당시 19:56/19:57" 처럼 **적중 글귀 안**에 "당시" 가 있는 꼴도 과거 표시다
-    if (markedPast(text, m.index) || m[0].includes('당시')) continue;
+  for (const m of text.matchAll(/테스트 exe[^\n,]{0,60}?(?:(\d{2})-(\d{2})[^\n]{0,8}?)?\*{0,2}(\d{2}):(\d{2})\*{0,2}\s*\/\s*\*{0,2}(\d{2}):(\d{2})/g)) {
+    // 347(리뷰 H-1): 344 가 "적중 글귀 안의 당시" 를, 이어서 내가 "시각 앞 24자의 당시" 를 면제로 넣었는데
+    // 둘 다 구분력이 없었다 — 복제 실험에서 "11-25 당시 것이 아니라 지금 01:06/01:07" 같은 줄이 통과했다.
+    // 과거 표시는 294 가 검증한 `markedPast` 하나만 쓴다: **"테스트 exe" 앞**에 "당시" 가 있을 때만 과거다.
+    // 문서가 과거임을 먼저 밝히게 하는 쪽이 가드가 지킬 수 있는 모양이다.
+    if (markedPast(text, m.index)) continue;
+    // 347(리뷰 L-6): 다른 수집기에는 다 있는 인용 면제가 ⑮ 에만 없었다 — 가드가 찾아낸 옛 문구를
+    // 그대로 적은 자리를 낡은 주장으로 읽지 않는다(309 가 서버 테스트 수에서 겪은 것과 같다).
+    const lineStart = text.lastIndexOf('\n', m.index) + 1;
+    if ((text.slice(lineStart, m.index).match(/"/g) || []).length % 2 === 1) continue;
     out.push({ md: m[1] ? `${m[1]}-${m[2]}` : null, branch: `${m[3]}:${m[4]}`, admin: `${m[5]}:${m[6]}`, raw: m[0].slice(-28) });
   }
   return out;

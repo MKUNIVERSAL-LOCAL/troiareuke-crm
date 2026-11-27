@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 스펙 관례 가드 (338·341·344) — `npm run check:e2e-conv`
+ * 스펙 관례 가드 (338·341·344·347) — `npm run check:e2e-conv`
  *
  * 왜: 338 이 전체 Playwright 를 **분할 실행**으로 바꾸면서 한 조각을 돌려 봤더니
  *     `month-view.spec.ts` 가 실패했다. 원인은 스펙이 "오늘" 을 `new Date().toISOString().slice(0, 10)`
@@ -17,6 +17,10 @@
  *     처럼 **Playwright 가 무시하는** 옵션. 설치된 1.63 의 `types.d.ts` 에서 `@deprecated This option is
  *     ignored.` 는 **일곱 곳뿐**이다 — Page·Frame·Locator 의 `isVisible`·`isHidden`(여섯)과
  *     `ElementHandle.inputValue`(하나). `isVisible()` 은 기다리지 않고 즉시 답한다.
+ *     **344 는 `inputValue` 까지 규칙에 넣었고 344~346 리뷰 M-4 가 그것도 거짓 근거임을 잡았다** —
+ *     deprecated 인 것은 `ElementHandle.inputValue` 하나뿐이고 Page·Frame·**Locator** 의 것은 정상으로 쓰인다.
+ *     정규식은 수신자를 구분하지 못하므로(스펙에서 흔한 것은 `locator(x).inputValue({ timeout })` 다)
+ *     347 에서 뗐다. **수신자를 믿을 수 없으면 규칙에 넣지 않는다.**
  *     **341 은 `isChecked`·`isDisabled`·`isEditable`·`isEnabled` 까지 묶어 금지했는데 그 넷의 timeout 은
  *     deprecated 가 아니고 실제로 쓰인다**("Defaults to 0 - no timeout") — 341~343 리뷰 M-3 가 잡았고
  *     344 에서 뗐다. 거짓 근거로 정당한 코드를 막는 것은 못 잡는 것보다 나쁘다(330 의 원칙).
@@ -30,8 +34,8 @@
  *     면제 키는 `규칙 + 파일 + 줄` 이다(341: 한 줄에 두 자리가 있어도 각각 센다).
  *
  * 한계: `toISOString()` 전체를 금지하지는 않는다(시각까지 쓰는 자리는 UTC 가 맞다). 규칙 ① 은
- *     **날짜 10자리만 잘라 쓰는** 모양만 본다. 규칙 ② 는 `isVisible`·`isHidden`·`inputValue` 세 함수만 본다
- *     (그 셋이 types.d.ts 가 "무시된다" 고 적은 전부다).
+ *     **날짜 10자리만 잘라 쓰는** 모양만 본다. 규칙 ② 는 `isVisible`·`isHidden` **두 함수만** 본다 —
+ *     `inputValue` 는 수신자에 따라 무시되기도 하고 쓰이기도 해서 모양만으로는 가릴 수 없다(347).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -62,11 +66,11 @@ const RULES = [
   },
   {
     key: 'ignored-timeout',
-    // 344: 진짜 무시되는 것만 — isVisible·isHidden(옵션만 받는 꼴), 선택자를 앞에 받는 꼴, inputValue
-    re: /\.(?:isVisible|isHidden)\s*\(\s*(?:['"`][^'"`]*['"`]\s*,\s*)?\{[^}]*timeout|\.inputValue\s*\(\s*\{[^}]*timeout/g,
+    // 344·347: 진짜 무시되는 것만 — isVisible·isHidden 의 옵션만 받는 꼴과 선택자를 앞에 받는 꼴
+    re: /\.(?:isVisible|isHidden)\s*\(\s*(?:['"`][^'"`]*['"`]\s*,\s*)?\{[^}]*timeout/g,
     title: 'Playwright 가 무시하는 timeout',
     hint: [
-      '  → `isVisible()`·`isHidden()`·`inputValue()` 는 기다리지 않고 즉시 답합니다(types.d.ts: "This option is ignored").',
+      '  → `isVisible()`·`isHidden()` 은 기다리지 않고 즉시 답합니다(types.d.ts: "This option is ignored").',
       '    기다려야 하면 `await expect(x).toBeVisible({ timeout })` 또는',
       "    `await x.waitFor({ state: 'visible', timeout }).catch(() => {})` 를 쓰세요.",
     ],
@@ -140,9 +144,10 @@ function selftest() {
   // 344(리뷰 M-3): 이 넷의 timeout 은 **무시되지 않는다** — 금지하면 거짓 경보다
   ok('isEnabled 는 통과', timeouts('await a.isEnabled({ timeout: 1 });').length === 0);
   ok('isChecked·isDisabled·isEditable 도 통과', timeouts('await a.isChecked({ timeout: 1 });\nawait b.isDisabled({ timeout: 1 });\nawait c.isEditable({ timeout: 1 });').length === 0);
-  // 344: 진짜 무시되는 나머지 두 모양
+  // 344: 선택자를 앞에 받는 꼴도 무시된다
   ok('선택자를 앞에 받는 꼴도 잡는다', timeouts("await page.isVisible('#a', { timeout: 1 });").length === 1);
-  ok('inputValue 도 잡는다', timeouts('await h.inputValue({ timeout: 1 });').length === 1);
+  // 347(리뷰 M-4): Locator·Page·Frame 의 inputValue 는 timeout 을 정상으로 쓴다 — 금지하면 거짓 경보
+  ok('inputValue 는 통과', timeouts('await page.locator(x).inputValue({ timeout: 1 });').length === 0);
   ok('주석 줄은 세지 않는다', timeouts('  // await x.isVisible({ timeout: 1 }) 는 기다리지 않는다').length === 0);
   ok('옵션 없는 isVisible 은 통과', timeouts('if (await x.isVisible()) {}').length === 0);
   ok('toBeVisible timeout 은 통과', timeouts('await expect(x).toBeVisible({ timeout: 3_000 });').length === 0);
@@ -150,7 +155,7 @@ function selftest() {
   ok('click timeout 은 통과', timeouts('await x.click({ timeout: 3_000 });').length === 0);
   ok('줄 번호를 센다(timeout)', timeouts('x\ny.isVisible({ timeout: 1 })')[0].line === 2);
 
-  console.log(`[check-e2e-conv] selftest OK — 덫 ${trapCount}종 통과(UTC 날짜 ①: 적중 3종·통과 4종·줄 번호·한 줄 두 자리 / 무시되는 timeout ②: 적중 4종·통과 6종·주석 면제·줄 번호)`);
+  console.log(`[check-e2e-conv] selftest OK — 덫 ${trapCount}종 통과(UTC 날짜 ①: 적중 3종·통과 4종·줄 번호·한 줄 두 자리 / 무시되는 timeout ②: 적중 3종·통과 7종·주석 면제·줄 번호)`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }

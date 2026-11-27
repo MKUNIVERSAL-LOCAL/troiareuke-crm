@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 보이지 않는 글자 가드 (332·337·342·345) — `npm run check:invisible`
+ * 보이지 않는 글자 가드 (332·337·342·345·347) — `npm run check:invisible`
  *
  * 왜: 331 이 "설명되지 않는 가드 동작" 이라고 기록한 자리의 정체가 **보이지 않는 제어문자**였다.
  *     정규식 수정을 셸의 `node -e` 로 지나게 했더니 백슬래시가 문자열 이스케이프로 해석돼
@@ -62,7 +62,11 @@ const ALLOWED = new Set([9, 10, 13]);
 const BOM = 0xfeff;
 const ZWJ = 0x200d;
 // 345: 폭 없는 글자·구문을 깨뜨리는 구분자·쌍방향 표시를 모두 본다(리뷰 L-2)
-const ZERO_WIDTH = new Set([0x00ad, 0x061c, 0x180e, 0x200b, 0x200c, ZWJ, 0x200e, 0x200f, 0x2028, 0x2029, 0x2060, 0xfffc, BOM]);
+// 347(344~346 리뷰 L-2): **한글 채움 문자**가 빠져 있었다 — U+3164(HANGUL FILLER)·U+115F(초성 채움)·
+// U+1160(중성 채움)·U+FFA0(반각 채움)은 폭 없이 보이지 않고 **한국어 환경에서 가장 섞여 들기 쉬운**
+// 글자인데 머리말이 "폭 없는 글자" 를 통틀어 말하면서 집합에는 없었다(전수 스캔 0건이지만 넓혀 둔다).
+// U+034F(결합용 그래핌 결합자)도 같은 종류다.
+const ZERO_WIDTH = new Set([0x00ad, 0x034f, 0x061c, 0x115f, 0x1160, 0x180e, 0x200b, 0x200c, ZWJ, 0x200e, 0x200f, 0x2028, 0x2029, 0x2060, 0x3164, 0xffa0, 0xfffc, BOM]);
 /** 태그 문자 — 눈에 보이지 않는데 글자 사이에 숨길 수 있다 */
 const isTagChar = code => code >= 0xe0000 && code <= 0xe007f;
 
@@ -90,7 +94,9 @@ const PICTO = /\p{Extended_Pictographic}/u;
 function emojiish(ch) {
   if (ch === undefined) return false;
   const code = ch.codePointAt(0);
-  // 345: 변형 선택자(U+FE0F·U+FE0E)는 그 자체가 보이지 않는 글자다 — 이 가드의 소스에 리터럴로 두지 않는다
+  // 345: 변형 선택자(U+FE0F·U+FE0E)는 눈에 보이지 않는 글자다 — 이 가드의 소스에 리터럴로 두지 않는다.
+  // 347(리뷰 L-2): 다만 **집합에는 넣지 않는다** — 이 저장소에 42건이 있고 전부 이모지의 정당한 꾸밈이다
+  // (그림문자 바로 뒤에 붙는 꾸밈이다). 넣으면 그 42건이 전부 거짓 경보가 되므로, 넣지 않는 이유를 적어 둔다.
   if (code === 0xfe0f || code === 0xfe0e) return true;
   if (/[\u{1F3FB}-\u{1F3FF}]/u.test(ch)) return true;
   return PICTO.test(ch);
@@ -166,6 +172,12 @@ function selftest() {
   ok('몽골 모음 구분자(U+180E)를 잡는다', invisibleChars('a' + ch(0x180e)).length === 1);
   ok('대체 문자(U+FFFC)를 잡는다', invisibleChars('a' + ch(0xfffc)).length === 1);
   ok('태그 문자를 잡는다', invisibleChars('a' + String.fromCodePoint(0xe0041) + 'b').length === 1);
+  // 347(리뷰 L-2): 한글 채움 문자 — 한국어 환경에서 가장 섞여 들기 쉬운 보이지 않는 글자
+  ok('한글 채움 문자(U+3164)를 잡는다', invisibleChars('text-' + ch(0x3164) + 'white').length === 1);
+  ok('초성·중성 채움(U+115F·U+1160)을 잡는다', invisibleChars(ch(0x115f) + 'a' + ch(0x1160)).length === 2);
+  ok('반각 채움(U+FFA0)을 잡는다', invisibleChars('a' + ch(0xffa0)).length === 1);
+  ok('그래핌 결합자(U+034F)를 잡는다', invisibleChars('a' + ch(0x034f)).length === 1);
+  ok('이모지 변형 선택자는 집합 밖(정당한 꾸밈)', invisibleChars('a' + ch(0xfe0f)).length === 0);
   ok('보통 글자는 그대로 통과', invisibleChars('가나다 abc 123 · — ✕').length === 0);
   // 342: 범위 — 전에 밖이었던 파일들이 목록에 들어오고, 산출물은 빠진다
   const files = collectFiles();
@@ -178,7 +190,7 @@ function selftest() {
   ok('루트 산출물 폴더는 범위 밖', !files.some(f => /^(build|dist|release)\//.test(f)));
   ok('server/src 는 범위 안', files.includes('server/src/server.js'));
 
-  console.log(`[check-invisible] selftest OK — 덫 ${trapCount}종 통과(제어문자 4종·폭 없는 글자 2종·BOM 2종·줄칸·여러 개·이모지 ZWJ 3종·넓힌 글자 9종·범위 10종)`);
+  console.log(`[check-invisible] selftest OK — 덫 ${trapCount}종 통과(제어문자 4종·폭 없는 글자 2종·BOM 2종·줄칸·여러 개·이모지 ZWJ 3종·넓힌 글자 9종·한글 채움 4종·변형 선택자 면제·범위 10종)`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -195,8 +207,20 @@ const problems = allHits.filter(h => !allowed(h));
 // 345: 면제가 낡으면(그 자리가 없어지면) 조용히 남지 않게 말한다 — 340 이 덫에서 겪은 것과 같은 원칙
 const staleAllow = ALLOWED_SITES.filter(a => !allHits.some(h => h.file === a.file && h.line === a.line && h.code === a.code));
 if (staleAllow.length > 0) {
-  console.error(`[check-invisible] 사유를 적어 둔 자리 ${staleAllow.length}개가 더는 없습니다 — 그 줄을 지우세요:`);
-  for (const a of staleAllow) console.error(`  - ${a.file}:${a.line} U+${a.code.toString(16).toUpperCase()}`);
+  // 347(344~346 리뷰 M-5): 전에는 "그 줄을 지우세요" 라고만 말하고 **먼저 멈췄다**. 그런데 가장 흔한 원인은
+  // 그 파일에 줄이 끼어 **면제의 줄 번호가 밀린 것**이다(server.js 는 2100줄이 넘고 서버 작업마다 바뀐다).
+  // 그때 올바른 조치는 "지우기" 가 아니라 "줄 번호 갱신" 이다 — 같은 (파일·글자) 가 다른 줄에서 보이면 그렇게 말한다.
+  // 그리고 남은 위반도 함께 출력한다(둘 중 하나만 보여 주면 사람이 반대로 고친다).
+  console.error(`[check-invisible] 사유를 적어 둔 자리 ${staleAllow.length}개가 그 줄에 없습니다:`);
+  for (const a of staleAllow) {
+    const moved = allHits.filter(h => h.file === a.file && h.code === a.code && !ALLOWED_SITES.some(x => x.file === h.file && x.line === h.line && x.code === h.code));
+    const where = moved.length > 0 ? ` → 같은 글자가 ${moved.map(h => h.line).join('·')}줄에 있습니다. **줄 번호를 갱신하세요**(면제를 지우면 그 자리가 위반으로 신고됩니다)` : ' → 그 자리가 없어졌으면 이 면제 줄을 지우세요';
+    console.error(`  - ${a.file}:${a.line} U+${a.code.toString(16).toUpperCase()}${where}`);
+  }
+  if (problems.length > 0) {
+    console.error(`[check-invisible] 함께 신고된 위반 ${problems.length}개:`);
+    for (const q of problems.slice(0, 10)) console.error(`  - ${q.file}:${q.line}:${q.col}  U+${q.code.toString(16).toUpperCase().padStart(4, '0')}`);
+  }
   process.exit(1);
 }
 

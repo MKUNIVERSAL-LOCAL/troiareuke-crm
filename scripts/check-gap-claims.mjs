@@ -18,12 +18,11 @@
  *      아직 없는 **제안**이다(`analytics/rfm.ts` 처럼). 그 둘을 섞으면 가드가 거짓 경보를 낸다.
  *   ⑤ 완료 기준 칸 — `npm run X` 는 package.json 에 있고, `*.spec.ts` 는 e2e 에 있다
  *   ⑥ "서버 자동 테스트 0건" 류 — 테스트 파일이 있는데 0건이라고 적지 않는다
-
- *      (정확한 개수는 러너가 세는 수(반복 생성 테스트 포함)와 달라 **0 과 0 아님**만 본다)
+ *      (정확한 개수는 러너가 세는 수를 쓴다 — 이 검사는 **0 과 0 아님**만 본다)
+ *   ⑦ 우선순위 요약(8절)의 항목 코드 — 표에 실재한다(행을 지우거나 이름을 바꾼 뒤 요약만 남으면 유령 계획이다)
  *   ⑧ **✅ 행의 완료 기준은 확인 가능한 것을 가리킨다**(343, 344 에서 '—' 면제 제거) — 스펙 파일 이름·
  *      `lib-units`·npm 명령 중 하나가 있어야 한다. "스펙"·"E2E" 라고만 적힌 칸이나 **비운 칸**은 ✅ 가
  *      맞는지 되짚을 길이 없다(처음 돌렸을 때 15행, 비운 칸 3행은 344 에서 드러났다).
- *   ⑦ 우선순위 요약(8절)의 항목 코드 — 표에 실재한다(행을 지우거나 이름을 바꾼 뒤 요약만 남으면 유령 계획이다)
  *
  * `--selftest` 는 아래 덫으로 검사가 정말 무는지 본다(게이트에서 본검사와 함께 돈다).
  */
@@ -110,6 +109,11 @@ function checkGap({ gap, roadmap, pkg, hasServerTests, specExists, scriptExists,
       if (iCode >= 0 && /^[A-Z]-\d+$/.test(row[iCode])) codes.add(row[iCode]);
 
       // ⑧ ✅ 행의 완료 기준은 확인 가능한 것을 가리켜야 한다 (343, 344 에서 '—' 면제 제거)
+      // 347(344~346 리뷰 L-4): **완료 기준 열이 아예 없는 표**의 ✅ 행은 조용히 빠져 있었다 —
+      // 344 가 "빈 칸 면제" 라는 조용한 구멍을 막은 묶음이었으니 이 구멍도 같이 막는다.
+      if (iStatus >= 0 && iDone < 0 && row[iStatus].startsWith('✅')) {
+        problems.push(`${GAP}:${line} ${row[iCode] || ''} 가 ✅ 인데 이 표에는 "완료 기준" 열이 없다 — 되짚을 길이 없다. 열을 더하거나 그 행을 완료 기준이 있는 표로 옮기세요`);
+      }
       if (iStatus >= 0 && iDone >= 0 && row[iStatus].startsWith('✅')) {
         const done = row[iDone];
         // 344(리뷰 M-4): 전에는 '—' 를 면제했는데, 그것이 **가장 되짚을 수 없는 모양**이다.
@@ -235,6 +239,8 @@ function selftest() {
   ok('"스펙" 만 적으면 거절', !verifiable('스펙', () => false));
   ok('비운 칸도 거절', !verifiable('—', () => false));
   ok('빈 문자열도 거절', !verifiable('', () => false));
+  // 347(리뷰 L-4): 완료 기준 열이 없는 표의 ✅ 행
+  bite('기준 열 없는 표의 ✅', { gap: base.gap + '\n\n| # | 항목 | 상태 |\n|---|---|---|\n| Z-1 | 예시 | ✅ 343 |\n' }, /"완료 기준" 열이 없다/);
   ok('"E2E" 만 적으면 거절', !verifiable('PC·모바일 E2E', () => false));
   ok('확장자 없는 spec 도 인정', verifiable('(photo-backup.spec)', n => n === 'photo-backup.spec.ts'));
   ok('괄호가 붙은 이름도 인정', verifiable('cancel-reason(사유 칩·복구)', n => n === 'cancel-reason.spec.ts'));
@@ -252,7 +258,7 @@ function selftest() {
   const live = with_({});
   ok('지금 표는 통과', live.length === 0 || (console.error(live.join('\n')), false));
 
-  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건·확인 가능한 완료 기준 12종) 통과`);
+  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건·확인 가능한 완료 기준 13종) 통과`);
 }
 
 const problems = (() => {
