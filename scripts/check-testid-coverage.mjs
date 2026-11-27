@@ -155,7 +155,7 @@ function selftest() {
   // 부분 문자열이 참조로 세어지지 않는다 — 'plain-open' 은 'plain' 과 다른 칸이다
   const used2 = referencedNames([{ file: 's.ts', text: `getByTestId('plain-open')` }]);
   if (!findUncovered(new Map([['plain', 'x']]), used2).includes('plain')) { console.error('[selftest] 부분 문자열 덫 실패'); process.exit(1); }
-  console.log('[check-testid-coverage] selftest OK — 덫 9개(변수·삼항·프로퍼티·보간·부분 문자열·낡은 목록·여러 줄·프로퍼티 전달·이름 경계) 통과');
+  console.log('[check-testid-coverage] selftest OK — 덫(변수·삼항·프로퍼티·보간·부분 문자열·낡은 목록·여러 줄·프로퍼티 전달·이름 경계) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }

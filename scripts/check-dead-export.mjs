@@ -41,14 +41,14 @@ const ALLOWED = [
   { file: 'src/lib/updateChannel.ts', name: 'isStale', why: '코어 잠금(배포 헬퍼) — 업데이트 채널 쪽에서 쓰려고 둔 것' },
 ];
 
-const SKIP = /node_modules|[\\/](dist|dist-e2e-nas|release|release-admin|android|ios|\.git)[\\/]/;
+// 317(리뷰 L-7): `SKIP` 정규식이 있었지만 `walk` 가 `src·e2e·server·electron` 에서만 출발해
+// **한 번도 발동하지 않았다**(죽은 코드를 잡는 가드 안의 죽은 설정이었다) — 지웠다.
 const CODE = /\.(ts|tsx|mjs|cjs|js)$/;
 
 function walk(dir) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).flatMap(name => {
     const full = path.join(dir, name);
-    if (SKIP.test(full + path.sep)) return [];
     try {
       return fs.statSync(full).isDirectory() ? walk(full) : (CODE.test(name) ? [full] : []);
     } catch { return []; }

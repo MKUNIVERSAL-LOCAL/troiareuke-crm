@@ -73,12 +73,18 @@ function openTags(text, tag) {
     // `<buttonish` 같은 다른 이름은 건너뛴다
     const after = text[at + tag.length + 1];
     if (after && /[A-Za-z0-9_]/.test(after)) { at = text.indexOf(`<${tag}`, at + 1); continue; }
+    // 317(312~315 리뷰 L-8): 속성 **문자열 안의 중괄호**(`<button title="}">`)에 중괄호 깊이가 음수로
+    // 내려가 여는 태그가 다음 요소까지 삼켜졌다 — 그러면 그 안의 다른 핸들러를 보고 **장식 단추를
+    // 통과시킨다**. 문자열 안은 세지 않는다.
     let depth = 0;
+    let quote = '';
     let end = text.length - 1;
     for (let i = at; i < text.length; i += 1) {
       const c = text[i];
+      if (quote) { if (c === quote) quote = ''; continue; }
+      if (c === '"' || c === "'" || c === '`') { quote = c; continue; }
       if (c === '{') depth += 1;
-      else if (c === '}') depth -= 1;
+      else if (c === '}') depth = Math.max(0, depth - 1);
       else if (c === '>' && depth === 0) { end = i; break; }
     }
     out.push({ line: text.slice(0, at).split('\n').length, src: text.slice(at, end + 1) });
@@ -95,9 +101,12 @@ function decorativeProblems(files) {
       if (BUTTON_OK.test(t.src)) continue;
       problems.push({ kind: '단추', file, line: t.line, src: t.src.replace(/\s+/g, ' ').slice(0, 80) });
     }
-    for (const t of openTags(code, 'input')) {
-      if (INPUT_OK.test(t.src)) continue;
-      problems.push({ kind: '입력칸', file, line: t.line, src: t.src.replace(/\s+/g, ' ').slice(0, 80) });
+    // 317(리뷰 L-8): `select`·`textarea` 도 "써도 저장되지 않는" 자리가 될 수 있는데 가드 밖이었다
+    for (const tag of ['input', 'select', 'textarea']) {
+      for (const t of openTags(code, tag)) {
+        if (INPUT_OK.test(t.src)) continue;
+        problems.push({ kind: tag === 'input' ? '입력칸' : tag, file, line: t.line, src: t.src.replace(/\s+/g, ' ').slice(0, 80) });
+      }
     }
   }
   return problems;
@@ -129,8 +138,12 @@ function selftest() {
   ok('정규식 뒤 같은 줄 주석', run("const re = /['\"]/g; // <button>장식</button>\n<button onClick={x}>저장</button>").length === 0);
   ok('JSX 아포스트로피 뒤 주석', run("<p>Let's go</p> // <button>장식</button>\n<button onClick={x}>저장</button>").length === 0);
   ok('URL 의 // 는 주석이 아니다', run('<button onClick={x} data-url="https://a/b">저장</button>').length === 0);
+  // 317(리뷰 L-8): 속성 문자열 안의 중괄호에 속아 다음 요소까지 삼키면 **장식 단추를 통과**시킨다
+  ok('속성 문자열 안의 중괄호', run('<button title="}">장식</button>\n<button onClick={x}>저장</button>').length === 1);
+  ok('select·textarea 도 본다', run('<select value={v} />\n<textarea value={v} />').length === 2);
+  ok('select·textarea 에 onChange 가 있으면 통과', run('<select value={v} onChange={x} />\n<textarea value={v} onChange={x} />').length === 0);
 
-  console.log('[check-decorative] selftest OK — 덫(동작 없는 단추·onClick·화살표 함수·submit·spread·주석 속 단추·입력칸 onChange 2종·읽기 전용·주석 속 입력칸·다른 이름·정규식 뒤 주석·아포스트로피 뒤 주석·URL) 통과');
+  console.log('[check-decorative] selftest OK — 덫(동작 없는 단추·onClick·화살표 함수·submit·spread·주석 속 단추·입력칸 onChange 2종·읽기 전용·주석 속 입력칸·다른 이름·정규식 뒤 주석·아포스트로피 뒤 주석·URL·속성 속 중괄호·select/textarea 2종) 통과');
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -159,6 +172,8 @@ const counts = files.reduce((acc, f) => {
   const code = blankComments(f.text);
   acc.b += openTags(code, 'button').length;
   acc.i += openTags(code, 'input').length;
+  acc.s += openTags(code, 'select').length;
+  acc.t += openTags(code, 'textarea').length;
   return acc;
-}, { b: 0, i: 0 });
-console.log(`[check-decorative] OK — 단추 ${counts.b}개·입력칸 ${counts.i}개 전부 동작이 붙어 있다(사유를 적어 둔 자리 ${ALLOWED.length}개)`);
+}, { b: 0, i: 0, s: 0, t: 0 });
+console.log(`[check-decorative] OK — 단추 ${counts.b}개·입력칸 ${counts.i}개·선택 ${counts.s}개·여러줄 ${counts.t}개 전부 동작이 붙어 있다(사유를 적어 둔 자리 ${ALLOWED.length}개)`);

@@ -44,7 +44,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
 /** 해시 규약이 시작된 묶음 — 그 앞은 기록 당시 규약이 없었다 */
@@ -108,7 +107,8 @@ function claimedNumbers(text) {
   for (const m of text.matchAll(/(\d+)\s*함수/g)) if (fresh(m)) out.rules.push({ modules: null, fns: Number(m[1]), raw: m[0] });
   // 312: `N칸 중 M칸` 만 보던 탓에 **"화면 칸 222개 중 217개"**(NEXT-ACTION) 가 검사 밖이었다 —
   // 311 은 이 넓히기를 셀프테스트 라벨에만 적고 **실제로는 넣지 않았다**(라벨이 거짓이었다).
-  for (const m of text.matchAll(/(\d+)칸 중 (\d+)칸|화면 칸 (\d+)개 중 (\d+)개/g)) {
+  // 317(312~315 리뷰 L-6): `칸 224개 중 219개`(앞의 "화면" 없음)·`화면칸`(붙여쓰기)도 같은 주장이다
+  for (const m of text.matchAll(/(\d+)칸 중 (\d+)칸|(?:화면\s*)?칸 (\d+)개 중 (\d+)개/g)) {
     if (!fresh(m)) continue;
     const total = Number(m[1] ?? m[3]);
     const covered = Number(m[2] ?? m[4]);
@@ -283,6 +283,10 @@ function selftest() {
   const midEmpty = tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 |  | 미반영 |', 'x.md');
   if (midEmpty.length !== 1 || !/2번 칸이 비어 있다/.test(midEmpty[0])) { console.error('[selftest] 중간 빈 칸 덫 실패: ' + JSON.stringify(midEmpty)); process.exit(1); }
   if (tableProblems('| # | 내용 | 상태 |\n|---|---|---|\n| 1 | 가 |  |', 'x.md').length !== 0) { console.error('[selftest] 마지막 빈 칸 면제 덫 실패'); process.exit(1); }
+  // 317(리뷰 L-6): 앞의 "화면" 이 없거나 붙여쓴 꼴도 모은다
+  for (const form of ['칸 224개 중 219개', '화면칸 224개 중 219개']) {
+    if (claimedNumbers(form).testids.length !== 1) { console.error('[selftest] 개수형 변형 덫 실패: ' + form); process.exit(1); }
+  }
   // 309: 릴리스 단계 대조 — 지금 안내는 통과해야 하고, 빠진 단계·순서 어긋남은 잡아야 한다
   if (releaseStepProblems().length !== 0) { console.error('[selftest] 릴리스 단계 대조 실패: ' + releaseStepProblems().join(' / ')); process.exit(1); }
   const runnerSrc = "{ id: 'preflight' }, { id: 'checks' }, { id: 'build' }, { id: 'verify' }";
@@ -574,6 +578,38 @@ function serverTestClaims(text, rel) {
       const live = Number(m[1]);
       for (const c of claims) {
         if (c.n !== live) problems.push(`${c.rel}: "${c.raw}" 가 낡았다 — 지금은 ${live}개(npm run test:server)`);
+      }
+    }
+  }
+}
+
+// ⑩ **"단추 N개·입력칸 M개" 는 장식 UI 가드가 세는 수와 같아야 한다** (317, 312~315 리뷰 L-9)
+//
+// 왜: 314 가 적은 `단추 721개·입력칸 239개` 는 **주석 안의 태그를 세고 있었다**(316 에서 717·238 로,
+//     317 에서 태그 탐색을 고쳐 717·235 로 바뀌었다). 어떤 가드도 이 수를 보지 않아 두 묶음을 지나 틀린
+//     채였다 — 이제 가드를 돌려 센 수와 맞춘다(주장이 없으면 돌리지 않는다).
+{
+  const claims = [];
+  for (const rel of CURRENT_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    const text = read(rel);
+    for (const m of text.matchAll(/단추 (\d+)개·입력칸 (\d+)개/g)) {
+      if (markedPast(text, m.index)) continue;
+      claims.push({ rel, raw: m[0], buttons: Number(m[1]), inputs: Number(m[2]) });
+    }
+  }
+  if (claims.length > 0) {
+    const r = spawnSync(process.execPath, ['scripts/check-decorative.mjs'], { cwd: ROOT, encoding: 'utf8' });
+    const out = `${r.stdout || ''}${r.stderr || ''}`;
+    const m = out.match(/단추 (\d+)개·입력칸 (\d+)개/);
+    if (!m) {
+      problems.push('장식 UI 가드의 출력에서 단추·입력칸 수를 찾지 못했다 — npm run check:decorative 를 먼저 보세요');
+    } else {
+      const [, b, i] = m;
+      for (const c of claims) {
+        if (c.buttons !== Number(b) || c.inputs !== Number(i)) {
+          problems.push(`${c.rel}: "${c.raw}" 가 낡았다 — 지금은 단추 ${b}개·입력칸 ${i}개(npm run check:decorative)`);
+        }
       }
     }
   }

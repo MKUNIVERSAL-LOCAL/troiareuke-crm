@@ -29,6 +29,15 @@ if (!chain) {
 }
 
 const steps = chain.split('&&').map(s => s.trim()).filter(Boolean);
+// 317(312~315 리뷰 L-1): `&&` 로 쪼개는 방식은 **문자열 안의 `&&`**(예: `node -e "a && b"`)를 모른다.
+// 지금 체인에는 그런 단계가 없지만, 생기면 조용히 토막나는 대신 **여기서 멈춘다**.
+const odd = steps.filter(s => !/^(npm run [a-z0-9:_-]+|node [\w./-]+\.(mjs|cjs|js)( .*)?)$/.test(s));
+if (odd.length > 0) {
+  console.error('[release-rehearse] release:checks 를 단계로 쪼갤 수 없다 — 명령 모양이 아닌 조각:');
+  for (const o of odd) console.error(`  - ${o}`);
+  console.error('  → 체인에 따옴표 안 && 가 들어갔을 수 있습니다. 그 단계를 npm 스크립트로 빼고 다시 돌리세요.');
+  process.exit(1);
+}
 const EXPENSIVE = ['npm run test:e2e'];
 const skipped = steps.filter(s => EXPENSIVE.includes(s));
 const todo = steps.filter(s => !EXPENSIVE.includes(s));
@@ -56,7 +65,12 @@ for (const [i, step] of todo.entries()) {
   } else {
     failed += 1;
     process.stdout.write(`FAIL ${label} (${secs}초)\n`);
-    process.stdout.write(`${out.split(/\r?\n/).slice(-12).join('\n')}\n`);
+    // 317(리뷰 L-2): 꼬리 12줄로는 **무엇이** 실패했는지(테스트 이름·요약)가 잘렸다 —
+    // 오류로 보이는 줄을 따로 먼저 찍고, 꼬리도 40줄로 늘린다.
+    const lines = out.split(/\r?\n/);
+    const hits = lines.filter(l => /not ok|AssertionError|error TS|✖|FAIL|실패|✘|Error:/.test(l)).slice(0, 12);
+    if (hits.length > 0) process.stdout.write(`${hits.join('\n')}\n  ---- 아래는 출력 꼬리 ----\n`);
+    process.stdout.write(`${lines.slice(-40).join('\n')}\n`);
   }
 }
 
