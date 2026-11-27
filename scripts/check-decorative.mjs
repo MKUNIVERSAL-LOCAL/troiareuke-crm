@@ -26,6 +26,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { blankComments } from './lib/blank-comments.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src');
@@ -38,36 +39,9 @@ const ALLOWED = [];
 const BUTTON_OK = /onClick|onPointerDown|onMouseDown|onKeyDown|type="submit"|type=\{'submit'\}|disabled|\{\.\.\./;
 const INPUT_OK = /onChange|onInput|readOnly|disabled|ref=|defaultValue|type="file"|type="hidden"|\{\.\.\./;
 
-/** 주석을 같은 길이의 공백으로 (줄 번호가 흔들리지 않게). 따옴표는 줄을 넘지 않는다(JSX 아포스트로피 대비) */
-function blankComments(text) {
-  // 316(312~315 리뷰 M-4): 전에는 따옴표만 보아 **정규식 안의 따옴표**(`/['"]/g`)나 JSX 아포스트로피에
-  // 속았고, 그 뒤 같은 줄의 `// <button>…` 주석이 지워지지 않아 **주석 속 단추를 실물로 신고**했다
-  // (거짓 경보 — 가드를 끄게 만드는 종류다). **줄 주석을 먼저, 줄 단위로** 지운다:
-  // 문자열 안의 `//` 는 대개 URL 이고, 장식 판정은 여는 태그의 속성만 보므로 지워도 판정이 바뀌지 않는다.
-  // 그 다음 블록 주석을 상태로 지운다(문자열·템플릿은 그대로 둔다 — 속성 값을 봐야 한다).
-  const noLine = text.split('\n').map(line => {
-    const at = line.indexOf('//');
-    if (at < 0) return line;
-    // `http://`·`https://` 처럼 바로 앞이 `:` 인 것은 주석이 아니다
-    if (at > 0 && line[at - 1] === ':') return line;
-    return line.slice(0, at) + ' '.repeat(line.length - at);
-  }).join('\n');
-
-  const out = noLine.split('');
-  let inBlock = false;
-  for (let i = 0; i < noLine.length; i += 1) {
-    const c = noLine[i];
-    const n = noLine[i + 1];
-    if (!inBlock) {
-      if (c === '/' && n === '*') { inBlock = true; out[i] = ' '; out[i + 1] = ' '; i += 1; }
-      continue;
-    }
-    if (c === '*' && n === '/') { out[i] = ' '; out[i + 1] = ' '; i += 1; inBlock = false; continue; }
-    if (c !== '\n') out[i] = ' ';
-  }
-  return out.join('');
-}
-
+// 331(328~330 리뷰 H-2): 이 파일에 있던 `blankComments` 사본은 **문자열 상태를 보지 않아**
+// `accept="image/*"` 의 `/*` 를 주석 시작으로 보고 파일 뒷부분을 통째로 지웠다. 검증된 구현을
+// `./lib/blank-comments.mjs` 로 모았다 — 사본을 다시 만들지 말 것.
 /** 여는 태그 하나를 꺼낸다 — 중괄호 안의 `>`(화살표 함수)는 끝이 아니다 */
 function openTags(text, tag) {
   const out = [];

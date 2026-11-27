@@ -32,8 +32,11 @@ test('흉내 서버에서 지점 결제 요청 창에 접근성 위반이 없다
     await payBtn.click({ timeout: 20_000 });
     const dialog = page.getByRole('dialog', { name: '결제 요청' });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-    // 328: **PG 가 켜진 상태**인지 단언한다. 꺼진 상태에서도 창은 열리지만 입력 폼 대신 "준비 중" 안내문이
-    // 나온다 — 그러면 이 쓸이는 **더 단순한 화면**을 검사하고도 통과한다(리뷰 M-6). 전제를 눈으로 고정한다.
+    // 328·**331 정정**: **PG 가 켜진 상태**인지 단언한다. 331 에서 실측해 보니 PG 가 꺼지면 매출 화면의
+    // 단추 이름이 `결제 요청 (준비 중)` 으로 바뀌어 이 쓸이는 **창을 열지 못해 `open-failed` 로 실패**한다
+    // (328 이전 스펙도 그랬다 — "조용한 통과" 는 애초에 없었다). 이 단언이 막는 것은 **이름은 그대로인데
+    // 폼만 안내문으로 바뀌는** 회귀다. 그 경우는 지금 재현할 수 없으므로 "이 단언이 무는 것을 봤다" 고
+    // 적지 않는다 — 전제를 눈에 보이게 적어 두는 값이 있어서 남긴다.
     await expect(dialog.getByRole('button', { name: '결제 링크 만들기' })).toBeVisible();
     await expect(dialog.getByLabel('금액')).toBeVisible();
     await expect(dialog.getByText('온라인 결제 준비 중입니다')).toHaveCount(0);

@@ -154,8 +154,8 @@ export default function OfflineBanner() {
         </span>
         <span className="ml-auto flex items-center gap-1">
           {rejected.length > 0 && <button type="button" onClick={retry} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>}
-          {rejected.length > 0 && canDo(user?.role, 'outbox.download') && <button type="button" onClick={download} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>내려받기</button>} {/* 고객 레코드 원문 파일 — 관리자만 (13차 #M13) */}
-          <button type="button" onClick={async () => { if (await askConfirm({ title: '거부된 저장분 지우기', message: '거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.', confirmLabel: '지우기', cancelLabel: '닫기', danger: true })) { clearRejectedNasOutbox(); setRejected([]); setLostRejected(0); } }} className={`${linkBtn} text-rose-500 hover:text-rose-700`}>지우기</button>
+          {rejected.length > 0 && canDo(user?.role, 'outbox.download') && <button type="button" onClick={download} className={`${linkBtn} text-rose-700 hover:text-rose-900`}>내려받기</button>} {/* 고객 레코드 원문 파일 — 관리자만 (13차 #M13) */}
+          <button type="button" onClick={async () => { if (await askConfirm({ title: '거부된 저장분 지우기', message: '거부된 저장분 기록을 지울까요? 서버에는 반영되지 않은 상태로 남습니다.', confirmLabel: '지우기', cancelLabel: '닫기', danger: true })) { clearRejectedNasOutbox(); setRejected([]); setLostRejected(0); } }} className={`${linkBtn} text-rose-700 hover:text-rose-900`}>지우기</button>
         </span>
       </div>
     );
@@ -180,7 +180,7 @@ export default function OfflineBanner() {
       <div role="alert" className={`${base} bg-rose-50 border-rose-200 text-rose-700`}>
         <AlertTriangle size={14} className="flex-shrink-0" />
         <span>이 기기 저장 공간이 부족해 대기열 없이 바로 보냈는데 전송에 실패했습니다 — 방금 저장한 내용이 서버에 없을 수 있습니다. 설정 &gt; 백업·보안으로 백업한 뒤 다시 저장해주세요.</span>
-        <button type="button" onClick={() => setQuotaFallback('none')} className={`${linkBtn} ml-auto text-rose-500 hover:text-rose-700`}>닫기</button>
+        <button type="button" onClick={() => setQuotaFallback('none')} className={`${linkBtn} ml-auto text-rose-700 hover:text-rose-900`}>닫기</button>
       </div>
     );
   }
@@ -217,7 +217,7 @@ export default function OfflineBanner() {
         <span className="ml-auto flex items-center gap-1">
           <button type="button" onClick={() => { void retryDirtyPhotos(true); }} className={`${linkBtn} text-rose-700 hover:text-rose-900 font-medium`}>다시 시도</button>
           {/* 같은 413이 반복되면 [다시 시도]만으로는 영원히 빨간 띠 — 이 기기에만 두는 선택을 준다 (UX 점검 2026-11-19) */}
-          <button type="button" onClick={() => { if (window.confirm(`거부된 사진 ${photoRejected}건을 이 기기에만 보관할까요?\n서버에는 올라가지 않아 다른 기기에서는 보이지 않고, 이 기기에서 로그아웃하면 함께 사라집니다. 나중에 그 기록의 사진을 줄여 다시 저장하면 올라갑니다.`)) { const n = keepRejectedPhotosLocal(); notify.info(`사진 ${n}건을 이 기기에만 보관합니다.`); } }} className={`${linkBtn} text-rose-600 hover:text-rose-800`}>이 기기에만 보관</button>
+          <button type="button" onClick={() => { if (window.confirm(`거부된 사진 ${photoRejected}건을 이 기기에만 보관할까요?\n서버에는 올라가지 않아 다른 기기에서는 보이지 않고, 이 기기에서 로그아웃하면 함께 사라집니다. 나중에 그 기록의 사진을 줄여 다시 저장하면 올라갑니다.`)) { const n = keepRejectedPhotosLocal(); notify.info(`사진 ${n}건을 이 기기에만 보관합니다.`); } }} className={`${linkBtn} text-rose-700 hover:text-rose-900`}>이 기기에만 보관</button>
         </span>
       </div>
     );

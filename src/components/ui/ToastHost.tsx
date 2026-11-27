@@ -43,7 +43,7 @@ export default function ToastHost() {
           <span className="flex-1">{item.message}</span>
           <button
             onClick={() => setItems(prev => prev.filter(i => i.id !== item.id))}
-            className="shrink-0 opacity-70 hover:opacity-100"
+            className="shrink-0 opacity-80 hover:opacity-100"
             aria-label="닫기"
           >
             <X size={14} />

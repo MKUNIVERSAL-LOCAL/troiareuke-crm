@@ -900,9 +900,9 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             <p className="text-sm font-bold text-gray-900 truncate">{product.name}</p>
             <div className="flex items-center gap-2 mt-0.5">
               {product.brand && <span className="text-xs text-gray-600">{product.brand}</span>}
-              <span className="text-xs text-gray-400">·</span>
+              <span className="text-xs text-gray-600">·</span>
               <span className="text-xs font-medium text-[#1a3a8f]">정가 {formatPrice(product.price)}</span>
-              <span className="text-xs text-gray-400">·</span>
+              <span className="text-xs text-gray-600">·</span>
               <span className={clsx('text-xs font-medium', isLowStock(product) ? 'text-red-700' : 'text-gray-600')}>
                 재고 {product.stock}{product.unit}
               </span>

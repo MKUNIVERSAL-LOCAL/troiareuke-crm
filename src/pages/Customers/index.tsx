@@ -3564,7 +3564,7 @@ export default function Customers() {
                     <img src={aiPhoto} alt="분석 사진" className="w-20 h-20 rounded-xl object-cover border border-indigo-100 flex-shrink-0" />
                   ) : (
                     <button type="button" onClick={() => consultPhotoRef.current?.click()}
-                      className="w-20 h-20 rounded-xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center gap-1 text-indigo-400 hover:border-indigo-400 transition-colors flex-shrink-0">
+                      className="w-20 h-20 rounded-xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center gap-1 text-indigo-600 hover:border-indigo-400 transition-colors flex-shrink-0">
                       <Camera size={18} />
                       <span className="text-2xs">사진</span>
                     </button>
@@ -3581,7 +3581,7 @@ export default function Customers() {
                       </div>
                     )}
                     {!aiPhoto && (
-                      <p className="text-xs text-gray-500 leading-relaxed">
+                      <p className="text-xs text-gray-600 leading-relaxed">
                         고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다. 사진은 상담 기록에 함께 저장됩니다.
                         {!skinAiAvailable && ' (본사 AI 미설정 — 설정 > 연동 설정 > AI 피부분석에서 OpenAI/Gemini 키 입력 필요)'}
                       </p>

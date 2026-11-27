@@ -1287,7 +1287,7 @@ function ListView({ reservations, onSelect, googleEvents = [], filterKey }: { re
               <p className="text-xs font-medium text-gray-500">{ge.date.slice(5).replace('-', '/')}</p>
               <p className="text-sm font-bold text-blue-600 mt-0.5">{ge.startTime}</p>
             </div>
-            <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
               <Calendar size={16} className="text-white" />
             </div>
             <div className="flex-1 min-w-0">

@@ -1,14 +1,5 @@
 import type { Page, Route } from '@playwright/test';
 
-/**
- * 서버가 돌려주는 결제 요청 행 — `src/lib/paymentLinks.ts` 의 `PaymentRequestRow` 중 흉내가 채우는 부분만.
- * 그 타입을 직접 가져오면 `authApi`(import.meta.env)까지 e2e 프로그램에 끌려와 `tsc -p e2e` 가 깨진다 —
- * e2e 는 **순수 모듈만** 가져온다(커밋 3a33fb3 실사고). 모양이 갈라지면 아래 단언이 먼저 깨진다.
- */
-type MockPaymentRequest = {
-  orderName?: string; amount?: number; method?: 'card' | 'vbank' | 'both';
-  customerId?: string; customerName?: string; memo?: string;
-};
 
 /**
  * 지점 앱 — **정상 동작하는** NAS 응답 흉내 (325).
@@ -52,21 +43,14 @@ export async function installHealthyBranchNas(page: Page): Promise<void> {
   await page.route(`${API}/api/ai/status**`, route => json(route, { enabled: false, providers: [], monthlyLimit: 0, usedThisMonth: 0, remaining: 0 }));
   // PG 가 **켜진** 상태 — 결제 요청 창이 안내문이 아니라 입력 폼으로 열린다(쓸이가 보려는 상태)
   await page.route(`${API}/api/payments/pg-config`, route => json(route, { enabled: true, methods: ['card', 'vbank'] }));
-  // 328: 만든 요청을 **되돌려 준다** — 서버는 보낸 `orderName`·`amount`·`method` 를 그대로 담아 주는데
-  // 흉내가 그걸 빼먹으면 목록 행이 "undefined원" 으로 그려진다(리뷰 M-6, `PaymentRequestRow` 참고).
-  await page.route(`${API}/api/payments/requests`, route => {
-    if (route.request().method() !== 'POST') return json(route, { enabled: true, requests: [] });
-    const sent = JSON.parse(route.request().postData() || '{}') as MockPaymentRequest;
-    return json(route, {
-      request: {
-        id: 'pr-1', status: 'pending', paidAt: null,
-        expiresAt: '2030-01-01T00:00:00.000Z', createdAt: '2026-11-27T00:00:00.000Z',
-        url: `${API}/pay/pr-1`,
-        orderName: sent.orderName ?? '테스트 결제', amount: sent.amount ?? 0, method: sent.method ?? 'card',
-        customerId: sent.customerId, customerName: sent.customerName, memo: sent.memo,
-      },
-    });
-  });
+  // 331(328~330 리뷰 M-5): 328 이 여기에 "보낸 값을 되돌려 준다" 는 코드를 넣고 그 이유로 "흉내가
+  // 빼먹으면 목록 행이 undefined원 으로 그려진다" 고 적었는데, **이 흉내에서는 일어날 수 없다** —
+  // 이 흉내를 쓰는 유일한 스펙(`a11y-branch-nas`)은 창을 열어 쓸이만 돌리고 POST 를 보내지 않으며,
+  // GET 은 늘 빈 목록을 돌려준다. 읽히지 않는 필드와 타입이었다(CLAUDE.md 2절). 지웠다.
+  // 보낸 값을 되돌려 주는 흉내가 정말 필요한 쪽은 `branch-nas.spec.ts` 이고, 거기엔 이미 있다.
+  await page.route(`${API}/api/payments/requests`, route => (route.request().method() === 'POST'
+    ? json(route, { request: { id: 'pr-1', status: 'pending', paidAt: null, expiresAt: '2030-01-01T00:00:00.000Z', createdAt: '2026-11-27T00:00:00.000Z', url: `${API}/pay/pr-1` } })
+    : json(route, { enabled: true, requests: [] })));
   await page.route(`${UPDATE}/portable/latest.json**`, route => json(route, { version: '1.0.63', releaseDate: '2026-11-25' }));
 }
 

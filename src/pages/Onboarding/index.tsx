@@ -573,9 +573,9 @@ export default function Onboarding() {
             <StepWrapper title="외부 서비스 연동" subtitle="나중에 설정 > 연동 설정에서도 할 수 있습니다">
               <div className="space-y-3">
                 {[
-                  { name: '네이버 예약', desc: '스마트플레이스 예약을 자동으로 받아옵니다', color: 'bg-green-500' },
-                  { name: '카카오 채널', desc: '카카오톡으로 예약 확인·마케팅 메시지를 보냅니다', color: 'bg-yellow-400' },
-                  { name: '엔포+ SMS', desc: 'SMS·LMS 문자 발송에 필요합니다', color: 'bg-blue-500' },
+                  { name: '네이버 예약', desc: '스마트플레이스 예약을 자동으로 받아옵니다', color: 'bg-green-700' },
+                  { name: '카카오 채널', desc: '카카오톡으로 예약 확인·마케팅 메시지를 보냅니다', color: 'bg-yellow-700' },
+                  { name: '엔포+ SMS', desc: 'SMS·LMS 문자 발송에 필요합니다', color: 'bg-blue-600' },
                 ].map(item => (
                   <div key={item.name} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
                     <div className={`w-10 h-10 rounded-xl ${item.color} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>

@@ -46,6 +46,12 @@
  *  - **같은 파일의 표에서 꺼내 쓰는 배경도 본다**(330): 본사 공지 띠가 `typeStyles[type].bg` 꼴인데,
  *    330 전에는 그 변수 하나 때문에 장님이었다 — 328 이 손으로 찾아 고친 자리다. 이제 표의 **후보 전부**를
  *    보고(공지 종류 넷) 하나라도 미달이면 신고한다. 후보 중 하나라도 색을 모르면 세지 않는다.
+ *  - **투명도 유틸**(`opacity-70`)도 글자 알파로 본다(331). 글자색은 **자식이 투명도를 바꾸고 글자를
+ *    담았을 때만** 조상에서 물려받는다 — 넓게 켜자 장식 상자(로그인 화면의 흐린 원)와 진행 바까지
+ *    신고했다(거짓 경보 둘). 그 밖에는 조상 자신의 짝으로 이미 본다.
+ *  - **조상 배경이 삼항이면 "모른다" 고 본다**(331). 그래서 `${required ? 'bg-red-600' : 'bg-...'}`
+ *    꼴의 띠 안쪽은 못 본다 — 앱의 필수 업데이트 띠 본문(4.13:1)이 그 자리였고 **손으로 고쳤다**.
+ *    삼항의 가지들을 표 후보처럼 전부 재는 것이 다음 단계다(지금은 가정하지 않는 쪽을 택했다).
  *  - 인라인 `style`·CSS 변수·이미지 위의 글자는 보지 않는다.
  *  - `gray-400` 과 `gray-500` 은 이 프로젝트에서 **같은 색**이다(`tailwind.config.js:11`, 의도된 것) —
  *    둘 사이를 바꾸는 "수정" 은 화면을 바꾸지 않는다(327 이 그걸 다섯 번 했다).
@@ -57,6 +63,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import resolveConfig from 'tailwindcss/resolveConfig.js';
 import tailwindConfig from '../tailwind.config.js';
+import { blankComments } from './lib/blank-comments.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src');
@@ -173,9 +180,13 @@ function blend(front, back, alpha) {
  * 후보 중 하나라도 색을 알 수 없으면 **아무것도 세지 않는다**(모르는 것을 가정하지 않는다).
  */
 function tableBgCandidates(text, raw) {
-  const m = /\$\{[A-Za-z_$][\w$]*(?:\[[^\]]*\])?\.([A-Za-z_$][\w$]*)\}/.exec(raw || '');
+  const m = /\$\{([A-Za-z_$][\w$]*)(?:\[[^\]]*\])?\.([A-Za-z_$][\w$]*)\}/.exec(raw || '');
   if (!m) return null;
-  const prop = m[1];
+  const prop = m[2];
+  // 331(리뷰 M-4): 전에는 **속성 이름만으로 파일 전체**를 긁어, 한 파일에 `bg:` 표가 둘이면 렌더되지
+  // 않는 조합을 신고했다(리뷰가 재현했다). 같은 속성을 쓰는 선언이 둘 이상이면 **모른다**고 본다.
+  const declCount = [...text.matchAll(new RegExp('(?:const|let|var)\\s+[A-Za-z_$][\\w$]*[^=]*=\\s*\\{[\\s\\S]{0,4000}?' + prop + "\\s*:\\s*'", 'g'))].length;
+  if (declCount > 1) return null;
   const found = [];
   for (const hit of text.matchAll(new RegExp(prop + "\\s*:\\s*'([^']*)'", 'g'))) {
     const bgs = baseBgs(hit[1].split(/\s+/).filter(Boolean));
@@ -211,16 +222,35 @@ function resolveBackground(node, stack, text) {
     }
     return { color, name };
   };
+  // 331(리뷰 H-1): **자기 자신의 보간 배경**을 먼저 본다. 인용을 벗기자 `${item.color}` 같은 타일이
+  // 드러났는데, 그 배경을 모르는 채 조상(`bg-gray-50`)과 짝지으면 1.05:1 같은 **없는 조합**이 된다.
+  // 표에서 꺼내 쓰는 색이면 후보 전부를, 조건부면 모른다고 본다.
+  if (!own.length) {
+    const ownTable = tableBgCandidates(text, node.raw);
+    if (ownTable) {
+      const out = [];
+      for (const base of ownTable) { const one = stackOn(base); if (!one) return null; out.push(one); }
+      return out;
+    }
+    if (hasConditionalBg(node.raw)) return null;
+  }
   for (let k = stack.length - 1; k >= 0; k -= 1) {
     const anc = stack[k];
     if (anc.tokens.some(t => t === 'cursor-not-allowed' || t.startsWith('disabled:'))) return null;
     const bgs = baseBgs(anc.tokens);
-    const opaque = bgs.find(c => c.alpha === 1);
-    if (opaque) {
-      const hex = tokenHex(opaque);
-      if (!hex) return null;
-      const one = stackOn({ color: hex, name: anc.name + ' 의 ' + tokenName(opaque) });
-      return one ? [one] : null;
+    // 331(리뷰 M-2): 전에는 `find` 로 **첫 불투명 배경 하나**만 골라 그라디언트 부모의 `to-` 끝을
+    // 버렸다 — 어느 끝이 나쁜지에 따라 잡히거나 놓치는, 운에 맡긴 구조였다. 끝을 전부 본다.
+    const opaques = bgs.filter(c => c.alpha === 1);
+    if (opaques.length) {
+      const out = [];
+      for (const o of opaques) {
+        const hex = tokenHex(o);
+        if (!hex) return null;
+        const one = stackOn({ color: hex, name: anc.name + ' 의 ' + tokenName(o) });
+        if (!one) return null;
+        out.push(one);
+      }
+      return out;
     }
     for (const c of bgs) layers.push(c);
     if (!bgs.length) {
@@ -245,15 +275,17 @@ function baseBgs(tokens) {
 function colorToken(token) {
   // 330: 끝의 `/NN` 은 투명도다(`text-white/70`·`bg-amber-500/10`). 330 전에는 이 모양이 토큰 정규식에
   // 걸리지 않아 **아예 안 보였고**, 328 은 그 종류의 진짜 위반 둘(공지 띠 3.81·3.27)을 손으로 찾았다.
-  const m = /^(?:(hover|focus|focus-visible|active):)?(bg|text|from|to)-(?:([a-z]+)-(\d{2,3})|(white|black)|\[(#[0-9a-fA-F]{6})\])(?:\/(\d{1,3}))?$/.exec(token);
+  const m = /^(?:(hover|focus|focus-visible|active):)?(bg|text|from|via|to)-(?:([a-z]+)-(\d{2,3})|(white|black)|\[(#[0-9a-fA-F]{6})\])(?:\/(\d{1,3}))?$/.exec(token);
   if (!m) return null;
   const named = m[5] === 'white' ? '#ffffff' : (m[5] === 'black' ? '#000000' : null);
   const pct = m[7] === undefined ? 100 : Number(m[7]);
-  if (pct > 100) return null;
+  // 331(리뷰 L-4): 알파 0 은 **보이지 않는 글자**다 — 섞으면 글자색이 배경색과 같아져 1.00:1 이 되는데
+  // WCAG 1.4.3 은 보이지 않는 글자를 기준에서 뺀다. 100 을 넘는 값은 토큰이 아니다.
+  if (pct > 100 || pct === 0) return null;
   return {
     state: m[1] || 'base',
-    kind: m[2] === 'from' || m[2] === 'to' ? 'bg' : m[2],
-    edge: m[2] === 'from' || m[2] === 'to' ? m[2] : null,
+    kind: m[2] === 'from' || m[2] === 'via' || m[2] === 'to' ? 'bg' : m[2],
+    edge: m[2] === 'from' || m[2] === 'via' || m[2] === 'to' ? m[2] : null,
     family: m[3], shade: m[4], named: m[5] || null,
     literal: m[6] ? m[6].toLowerCase() : named,
     alpha: pct / 100,
@@ -314,29 +346,9 @@ function statePairs(tokens) {
   return out;
 }
 
-/** 줄·블록 주석을 공백으로 지운다 — 주석 속 마크업을 실물로 세지 않는다(check-decorative 와 같은 방식) */
-function blankComments(text) {
-  const noLine = text.split('\n').map(line => {
-    const at = line.indexOf('//');
-    if (at < 0) return line;
-    if (at > 0 && line[at - 1] === ':') return line; // http:// 는 주석이 아니다
-    return line.slice(0, at) + ' '.repeat(line.length - at);
-  }).join('\n');
-  const out = noLine.split('');
-  let inBlock = false;
-  for (let i = 0; i < noLine.length; i += 1) {
-    const c = noLine[i];
-    const n = noLine[i + 1];
-    if (!inBlock) {
-      if (c === '/' && n === '*') { inBlock = true; out[i] = ' '; out[i + 1] = ' '; i += 1; }
-      continue;
-    }
-    if (c === '*' && n === '/') { out[i] = ' '; out[i + 1] = ' '; i += 1; inBlock = false; continue; }
-    if (c !== '\n') out[i] = ' ';
-  }
-  return out.join('');
-}
-
+// 331(328~330 리뷰 H-2): 이 파일에 있던 `blankComments` 사본은 **문자열 상태를 보지 않아**
+// `accept="image/*"` 의 `/*` 를 주석 시작으로 보고 파일 뒷부분을 통째로 지웠다. 검증된 구현을
+// `./lib/blank-comments.mjs` 로 모았다 — 사본을 다시 만들지 말 것.
 /** 여는 태그의 끝 — 중괄호 안의 화살표(=>)와 문자열 안의 꺾쇠는 끝이 아니다 */
 function openTagEnd(text, from) {
   let depth = 0;
@@ -381,7 +393,13 @@ function tagClassName(tag) {
  */
 function fixedTokens(raw) {
   if (raw === null) return [];
-  const plain = raw.replace(/\$\{[\s\S]*?\}/g, ' ').replace(new RegExp(QUOTED.source, 'g'), ' ');
+  // 331(리뷰 H-1): **바깥 인용을 한 겹 벗긴다.** 템플릿 리터럴 className(`{\`… \${x} …\`}`)은 raw 전체가
+  // 백틱 안이어서 QUOTED 로 지우면 **내용이 통째로 사라졌다** — 그 요소는 글자색도 배경색도 없는 것으로
+  // 보였고, 그래서 물려받기 길은 평범한 문자열 className 만 읽는 장님이었다. 그 뒤에 진짜 미달이
+  // 숨어 있었다(오프라인 띠 네 자리·온보딩 타일 글자).
+  const unwrapped = /^\s*([`'"])([\s\S]*)\1\s*$/.exec(raw);
+  const inner = unwrapped ? unwrapped[2] : raw;
+  const plain = inner.replace(/\$\{[\s\S]*?\}/g, ' ').replace(new RegExp(QUOTED.source, 'g'), ' ');
   return plain.split(/\s+/).filter(Boolean);
 }
 
@@ -398,15 +416,47 @@ function hasConditionalBg(raw) {
 
 const VOID_TAGS = new Set(['img', 'input', 'br', 'hr', 'source', 'track', 'use', 'path', 'circle', 'rect', 'line']);
 
+/** 이 요소가 **자기 글자**를 담고 있는가 — 태그를 지운 뒤 글자나 보간이 남으면 글자다 */
+function hasText(src, from, name) {
+  const body = src.slice(from, Math.min(src.length, from + 400));
+  const close = body.indexOf('</' + name + '>');
+  const inner = close < 0 ? body : body.slice(0, close);
+  const stripped = inner.replace(/<[^>]*>/g, ' ');
+  return /\S/.test(stripped);
+}
+/** `opacity-NN` 유틸(0~1) — 없으면 1. 가장 작은 값을 쓴다(여러 개면 가장 투명한 쪽) */
+function opacityUtil(tokens) {
+  let a = 1;
+  for (const t of tokens) {
+    const m = /^opacity-(\d{1,3})$/.exec(t);
+    if (m && Number(m[1]) <= 100) a = Math.min(a, Number(m[1]) / 100);
+  }
+  return a;
+}
+
+/** 조건부로 글자색이 바뀔 수 있는 자리인가 — 그렇다면 물려받기를 멈춘다 */
+function hasConditionalText(raw) {
+  if (raw === null) return false;
+  const fixed = new Set(fixedTokens(raw));
+  return branches(raw).some(chunk => chunk.split(/\s+/).some(t => {
+    if (fixed.has(t)) return false;
+    const c = colorToken(t);
+    return Boolean(c && c.kind === 'text');
+  }));
+}
 /** 아이콘만 들었는가 — 첫 닫는 태그까지 글자도 보간도 없으면 그림으로 본다 */
 function iconOnly(body, name) {
+  // 331(리뷰 L-5): 전에는 "영문·숫자·한글이 없으면 그림" 으로 봤다. 그래서 `·` 구분자와 `✕`·`✎`
+  // 같은 **글자**가 그림으로 분류돼 4.5 대신 3:1 로 재졌다(제품 카드의 점이 바로 옆 글자만 고쳐진
+  // 채 남은 이유다). 그림은 **컴포넌트 태그**(`<X />`·`<Trash2 />` — 대문자로 시작)뿐이다.
   const close = body.indexOf('</' + name + '>');
   const inner = close < 0 ? body : body.slice(0, close);
   // 330 정정: **태그를 먼저 지운다** — 아이콘 태그의 속성 중괄호(`size={13}`)를 "글자일 수 있는
   // 보간" 으로 오판해 아이콘 단추를 글자로 봤다(어드민 지점 삭제 단추가 그 자리였다).
   const stripped = inner.replace(/<[^>]*>/g, ' ');
   if (stripped.includes('{')) return false; // 태그 밖의 보간은 글자일 수 있다
-  return !/[A-Za-z0-9가-힣]/.test(stripped);
+  if (/\S/.test(stripped)) return false;      // 태그 밖에 글자(문자·기호)가 있으면 글자로 본다
+  return /<(?:[A-Z]|svg)/.test(inner);      // 컴포넌트 태그와 인라인 svg 만 그림으로 본다
 }
 
 /**
@@ -460,16 +510,39 @@ function inheritedProblems(file, text) {
     const m = /^<([A-Za-z][A-Za-z0-9_.]*)/.exec(src.slice(i, i + 60));
     if (!m) continue;
     const end = openTagEnd(src, i);
-    if (end < 0) break;
+    if (end < 0) {
+      // 331(리뷰 H-2): 전에는 여기서 조용히 `break` 해 **그 파일의 나머지를 포기**했다(사람은 알 길이
+      // 없었다). 여는 태그가 닫히지 않는 것은 스캐너가 못 보는 모양이라는 뜻이니, 사실대로 말한다.
+      console.error(`[check-contrast] ${file}:${src.slice(0, i).split('\n').length} 여는 태그가 닫히지 않아 이 파일의 나머지를 보지 못했다 — 스캐너를 고쳐야 한다`);
+      break;
+    }
     const tag = src.slice(i, end + 1);
     const name = m[1];
     const raw = tagClassName(tag);
     const selfClosing = /\/\s*>$/.test(tag) || VOID_TAGS.has(name);
-    const interactive = /onClick=|onKeyDown=|onPointerDown=|href=/.test(tag) || name === 'button' || name === 'a' || name === 'Link';
+    // 331(리뷰 L-6): `role="button"`·`<label>`·`onMouseDown`·커스텀 `<Button>` 안의 아이콘 전용
+    // 조작부가 "장식" 으로 빠지고 있었다(지금 src 에는 그 모양이 없지만 잠복이다).
+    const interactive = /onClick=|onKeyDown=|onPointerDown=|onMouseDown=|href=|role=["']button["']|role=\{'button'\}/.test(tag)
+      || name === 'button' || name === 'a' || name === 'Link' || name === 'label' || name === 'Button';
     const node = { name, raw, tokens: fixedTokens(raw), interactive, bodyStart: end + 1 };
 
     const colors = node.tokens.map(colorToken).filter(Boolean);
-    const fgTok = colors.find(c => c.kind === 'text' && c.state === 'base');
+    // 331(리뷰 M-1): 글자색도 **조상에서 물려받는다**(배경과 대칭). 전에는 자기 className 에 글자색이
+    // 없으면 요소를 통째로 건너뛰어, 부모가 `text-white` 를 깔고 자식이 `opacity-90` 만 쓰는 모양을
+    // 보지 못했다 — 앱의 **필수 업데이트 띠** 본문이 그 자리였다(4.13:1).
+    let fgTok = colors.find(c => c.kind === 'text' && c.state === 'base');
+    const ownUtil = opacityUtil(node.tokens);
+    if (!fgTok && ownUtil < 1 && !selfClosing && hasText(src, end + 1, name)) {
+      // **좁힌 이유**: 글자색을 조건 없이 물려받게 하자 글자를 담지 않은 요소까지 신고했다 —
+      // 로그인 화면의 흐린 장식 원(`opacity-10`)과 업데이트 띠의 진행 바가 그랬다(거짓 경보 둘).
+      // 물려받기가 뜻을 갖는 자리는 자식이 **투명도를 바꾸면서 글자를 담은** 경우다.
+      for (let k = stack.length - 1; k >= 0; k -= 1) {
+        const anc = stack[k];
+        const ancFg = anc.tokens.map(colorToken).find(c => c && c.kind === 'text' && c.state === 'base');
+        if (ancFg) { fgTok = ancFg; break; }
+        if (hasConditionalText(anc.raw)) break; // 조건부 글자색이면 모른다
+      }
+    }
     const off = node.tokens.some(t => t === 'cursor-not-allowed' || t.startsWith('disabled:'));
 
     if (fgTok && !off) {
@@ -479,6 +552,9 @@ function inheritedProblems(file, text) {
       // 330: 불투명한 자기 배경이면 `null`(같은 가지에서 본다), 반투명이면 조상 위에 섞어 돌려준다.
       const resolved = resolveBackground(node, stack, src) || [];
       const fgRaw = tokenHex(fgTok);
+      // 331(리뷰 M-1): `opacity-NN` 유틸은 요소 전체를 반투명하게 만든다 — 글자 알파에 곱한다.
+      const util = opacityUtil(node.tokens);
+      const fgAlpha = fgTok.alpha * util;
       const body = selfClosing ? '' : src.slice(end + 1, Math.min(src.length, end + 400));
       const isIcon = selfClosing || iconOnly(body, name);
       const need = isLargeText(node.tokens) || isIcon ? MIN_LARGE : MIN_NORMAL;
@@ -486,12 +562,13 @@ function inheritedProblems(file, text) {
       const counted = !isIcon || iconLabelsControl(src, node, stack);
       for (const base of resolved) {
         if (!fgRaw || !counted) break;
-        const fg = fgTok.alpha < 1 ? blend(fgRaw, base.color, fgTok.alpha) : fgRaw;
+        const fg = fgAlpha < 1 ? blend(fgRaw, base.color, fgAlpha) : fgRaw;
         const ratio = contrast(fg, base.color);
         if (ratio >= need) continue;
         out.push({
           file, line: src.slice(0, i).split('\n').length, token: base.name,
-          fg: tokenName(fgTok), ratio: ratio.toFixed(2), need: need.toFixed(1),
+          fg: tokenName(fgTok) + (util < 1 ? ` + opacity-${Math.round(util * 100)}` : ''),
+          ratio: ratio.toFixed(2), need: need.toFixed(1),
         });
       }
     }
@@ -501,10 +578,12 @@ function inheritedProblems(file, text) {
   return out;
 }
 
-export function contrastProblems(files) {
+function contrastProblems(files) {
   const problems = [];
   for (const { file, text } of files) {
-    for (const { line, raw } of classNameChunks(text)) {
+    // 331(리뷰 M-3): 전에는 같은-가지 길이 **원문**을 읽어 주석 처리된 JSX 를 실물로 셌다
+    // (`{/* <div className="bg-amber-500 text-white">x</div> */}` 를 2.15:1 로 신고 — 거짓 경보 통로).
+    for (const { line, raw } of classNameChunks(blankComments(text))) {
       for (const chunk of branches(raw)) {
         const tokens = chunk.split(/\s+/).filter(Boolean);
         // ④ 꺼진 조작부는 기준에서 빠진다
@@ -536,7 +615,10 @@ function listFiles(dir) {
 }
 
 function selftest() {
-  const ok = (name, cond) => { if (!cond) { console.error(`[selftest] ${name} 덫 실패`); process.exit(1); } };
+  // 331(리뷰 H-3): 덫 수를 **세어서** 찍는다. 손으로 센 총수는 두 묶음 연속 틀렸고(44/57 주장,
+  // 실제 41/53), 그 수가 커밋 제목·로드맵·재검증 기록까지 실렸다. 사람이 세지 않으면 틀리지 않는다.
+  let trapCount = 0;
+  const ok = (name, cond) => { trapCount += 1; if (!cond) { console.error(`[selftest] ${name} 덫 실패`); process.exit(1); } };
   const run = text => contrastProblems([{ file: 'x.tsx', text }]);
 
   // 팔레트 — 328(리뷰 H-1): 이 프로젝트의 `gray-400` 은 `#6b7280` 이라 흰 배경에서 **통과**한다
@@ -613,7 +695,13 @@ function selftest() {
   ok('후보가 둘이면 둘 다 본다', run("const S = { a: { bg: 'bg-amber-700' }, b: { bg: 'bg-slate-900' } };\n<div className={`w-full ${s.bg} text-white`}><span className=\"text-xs text-white/70\">1/3</span></div>").length === 1);
   ok('표를 못 찾으면 세지 않는다', run('<div className={`w-full ${s.bg} text-white`}><span className="text-xs text-white/70">1/3</span></div>').length === 0);
 
-  console.log('[check-contrast] selftest OK — 덫(프로젝트 팔레트 3종·흐린/진한 배경·호버 2종·가지 쪼개기 2종·상태별 짝짓기 4종·큰 글자 3종·꺼진 조작부 4종·className 모양 5종·그라디언트 2종·글자색 없음·팔레트 밖·검은 글자·물려받기 6종·아이콘 5종·투명도 7종·표 배경 3종) 통과');
+  // 331(리뷰 M-1): `opacity-NN` 유틸과 **글자색 물려받기**(좁힌 규칙)
+  ok('opacity 유틸을 글자 알파로 본다', run('<div className="bg-amber-700 text-white"><p className="text-xs opacity-70">안내</p></div>').length === 1);
+  ok('opacity 가 높으면 통과', run('<div className="bg-amber-700 text-white"><p className="text-xs opacity-100">안내</p></div>').length === 0);
+  ok('글자를 담지 않은 반투명 상자는 보지 않는다', run('<div className="bg-amber-700 text-white"><div className="opacity-10"><span className="w-4 h-4 bg-white" /></div></div>').length === 0);
+  ok('투명도를 바꾸지 않으면 물려받지 않는다(중복 신고 금지)', run('<div className="bg-amber-700 text-white"><p className="text-xs">안내</p></div>').length === 0);
+  ok('조건부 글자색 조상이면 멈춘다', run('<div className={on ? "bg-amber-700 text-white" : "bg-white text-gray-900"}><p className="text-xs opacity-70">안내</p></div>').length === 0);
+  console.log(`[check-contrast] selftest OK — 덫 ${trapCount}종 통과(팔레트·가지 쪼개기·상태별 짝짓기·큰 글자·꺼진 조작부·className 모양·그라디언트·물려받기·아이콘·투명도·표 배경). **이 수는 세어서 찍는다** — 손으로 적지 말 것(리뷰 H-3)`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
