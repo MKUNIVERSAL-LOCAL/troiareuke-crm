@@ -144,6 +144,9 @@ flags.N = step('N', '키보드 경로', 'node', ['scripts/check-keyboard-path.mj
 flags.I = step('I', '보이지 않는 글자', 'node', ['scripts/check-invisible-chars.mjs']); // 332
 flags.Z = step('Z', '입력칸 가로 넘침', 'node', ['scripts/check-flex-inputs.mjs']); // 362
 flags.S = step('S', '스펙 관례', 'node', ['scripts/check-e2e-conventions.mjs']); // 338
+// 375(372~374 리뷰 L-7): 노트 가드는 머지(client-ci)·릴리스에만 있었다 — 묶음마다 노트를 고치는데
+//      경량 게이트에서는 빠져 있었다. 374 가 더한 **화면 이름 실재** 검사도 여기서 함께 돈다.
+flags.H = step('H', '릴리스 노트', 'node', ['scripts/check-release-notes.mjs']); // 375
 // F 는 **빌드된 CSS 의 순서**를 보므로 B(앱 빌드) 뒤여야 한다 (333)
 flags.F = step('F', '초점 표시', 'node', ['scripts/check-focus-visible.mjs']); // 333
 flags.Q = step('Q', '글자 대비', 'node', ['scripts/check-contrast-classes.mjs']); // 326

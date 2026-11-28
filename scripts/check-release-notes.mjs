@@ -15,6 +15,11 @@
  *   6) 같은 **굵은 낱말**이 **두 절에 나오지 않는다**(336) — `**공지 띠**` 가 두 절에 적혀 지점이
  *      같은 것을 두 번 읽고 있었다(한쪽은 배경, 한쪽은 본문이라 어느 쪽이 사실인지도 흐렸다).
  * 실패하면 비 0 으로 끝난다. 자체 점검: node scripts/check-release-notes.mjs --selftest
+ *
+ * 검사: ① 첫 줄 버전 ② 맨 위 절에 항목 ③ 지난 버전 구분선 ④ 배너 절 수·절 크기
+ *       ⑤ 굵은 낱말 중복(맨 위 절만) ⑥ 절 머리말 앞 빈 줄 ⑦ 한 절의 항목 수
+ *       ⑧ **노트가 적은 화면 이름이 앱에 있는가**(374 신설, 375 에서 다시 씀 — 아래 머리말 참고)
+ *       375(리뷰 L-4): 374 는 새 검사에 ⑦ 번호를 붙였는데 342 의 ⑦ 이 이미 있었다.
  */
 import { readFile } from 'node:fs/promises';
 import fs from 'node:fs';
@@ -27,37 +32,78 @@ const HEAD_RE = /^v(\d+\.\d+\.\d+) 업데이트 내용\s*$/;
 const VERSION_HEAD_RE = /^v(\d+\.\d+\.\d+) 업데이트 내용\s*$/gm;
 
 /** 순수 검사 — 노트 본문과 package.json 버전을 받아 문제 목록을 돌려준다(빈 배열이면 통과) */
-/** 노트가 대괄호로 적은 화면 이름들 (374) */
-function noteLabels(text) {
-  return [...new Set([...text.matchAll(/\[([^\]\n]{2,24})\]/g)].map(m => m[1].trim()))];
-}
-
 /**
- * ⑦ 노트가 약속한 화면 이름이 **앱에 없는** 것들 (374)
+ * ⑧ **노트가 약속한 화면 이름이 앱에 있는가** (374 신설, 375 에서 다시 씀)
  *
  * 왜: 노트는 지점이 읽는 유일한 글이다. `[재고 실사]` 처럼 적은 단추가 앱에 없으면 지점은
  *     없는 것을 찾아 헤맨다. 이 비교는 **글 ↔ 코드 문자열**이라 판단이 끼지 않는다.
  *
- * 모양 다루기: 노트는 수를 `N` 으로 적고(`[+N개 더 보기]`·`[N종 실사 반영]`) 코드는 그 자리에
- *     값을 끼운다(`+${n}개 더 보기`). 그래서 `N` 으로 쪼갠 **조각마다** 찾는다.
- *     아이콘이 섞인 이름(`[🔒 마감됨]`)은 코드에서 아이콘 컴포넌트로 들어가므로 그림 글자를 뺀다.
- *     띄어쓰기는 양쪽 모두 지워서 비교한다(줄바꿈·들여쓰기로 갈라지는 자리가 있다).
- *     조각이 하나도 남지 않는 이름(`[N건]` 처럼 수·기호만)은 **판단할 수 없어 건너뛴다**(세어 찍는다).
+ * 375(372~374 리뷰 M-2·M-3·M-4·M-6): 374 의 첫 판은 **양쪽으로 틀렸다**.
+ *   - 대괄호를 **전부** 화면 이름으로 읽어 `[Ctrl+S]`·`[2026-11-28]` 같은 평범한 글을 신고했다.
+ *     `check:notes` 는 **머지 관문**에 있으므로 노트 한 줄로 머지가 막힌다 — 거짓을 말하는
+ *     가드는 사람이 끄게 되므로 못 잡는 것보다 나쁠 수 있다(303 의 기준).
+ *   - 반대로 `N` 으로 쪼갠 **2자 조각**을 src **전체 덩어리**에서 찾아, 없는 이름
+ *     (`[마감 N 완료]`)도 "확인" 으로 셌다. 조각이 서로 다른 파일에 흩어져 있어도 통과했다.
+ *   - **지난 업데이트 절**까지 보아 과거 기록을 고치라고 요구했다(⑥ 은 맨 위 절만 본다).
+ *   - 주장이 0개면 조용히 통과했다(바닥 없음).
+ *
+ * 지금 규칙:
+ *   ① **맨 위 절만** 본다(지난 절은 그때의 기록이다).
+ *   ② 화면 이름으로 보지 않는 모양을 **세어서 찍는다** — 단축키(`Ctrl+S`)·날짜·`:` 가 든 글·
+ *      수와 기호만 남는 이름. 신고하지 않고 "건너뜀" 으로 알린다.
+ *   ③ 조각은 **3자 이상**이어야 하고, 한 이름의 조각은 **같은 파일 안**에 모두 있어야 한다.
+ *   ④ 볼 이름이 0개면 신고한다(노트는 늘 화면 이름을 적는다).
  */
+/** 공백을 하나로 모은다 — 지우지 않는다(지우면 `없는기능` 이 `없는 기능` 에 우연히 맞는다, 375) */
+const soft = t => t.replace(/\s+/g, ' ').trim();
 const LABEL_EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu;
-function missingNoteLabels(text, haystack) {
-  const flat = haystack.replace(/\s+/g, '');
+/** 화면 이름이 아닌 대괄호 글 — 단축키·날짜·설명문 */
+function notAScreenName(label) {
+  if (/^[A-Za-z]+\s*\+/.test(label)) return '단축키';
+  if (/^\d{4}-\d{2}-\d{2}/.test(label)) return '날짜';
+  if (label.includes(':')) return '설명문';
+  return null;
+}
+/** 노트 맨 위 절의 대괄호 글들 */
+function noteLabels(text) {
+  return [...new Set([...text.matchAll(/\[([^\]\n]{2,24})\]/g)].map(m => m[1].trim()))];
+}
+/**
+ * 이름을 찾을 **조각**으로 바꾼다 (375).
+ *   · `N` 이 없으면 이름 전체 하나 — 쪼개지 않으니 짧아도 모호하지 않다(`[이력]`·`[닫기]`).
+ *   · `N` 이 있으면 그 자리로 쪼갠 2자 이상 조각들. 다만 **가장 긴 조각이 4자 미만**이면
+ *     우연히 맞을 수 있어 판단하지 않는다(`[마감 N 완료]` → 조각 둘 다 두 글자).
+ * 처음 판은 **3자 바닥을 모든 이름에** 걸어 멀쩡한 두 글자 이름까지 건너뛰었다.
+ */
+function labelParts(label) {
+  const clean = label.replace(LABEL_EMOJI, ' ');
+  if (!clean.includes('N')) {
+    const whole = soft(clean);
+    return whole.replace(/\s/g, '').length >= 2 ? [whole] : [];
+  }
+  const parts = clean.split('N').map(soft).filter(p => p.replace(/\s/g, '').length >= 2);
+  if (parts.length === 0) return [];
+  if (Math.max(...parts.map(p => p.replace(/\s/g, '').length)) < 4) return [];
+  return parts;
+}
+/**
+ * 앱에서 찾지 못한 화면 이름들. `files` 는 `{ path, text }` 목록 — **파일마다** 모든 조각이
+ * 있는지 보므로, 조각이 서로 다른 파일에 흩어져 우연히 맞는 일이 없다.
+ */
+function missingNoteLabels(text, files) {
+  const flats = files.map(f => soft(f.text));
   const missing = [];
-  let skipped = 0;
+  const skipped = [];
   for (const label of noteLabels(text)) {
-    const parts = label.replace(LABEL_EMOJI, ' ').split('N').map(p => p.replace(/\s+/g, '')).filter(p => p.length >= 2);
-    if (parts.length === 0) { skipped += 1; continue; }
-    if (parts.every(p => flat.includes(p))) continue;
+    const why = notAScreenName(label);
+    if (why !== null) { skipped.push(`${label}(${why})`); continue; }
+    const parts = labelParts(label);
+    if (parts.length === 0) { skipped.push(`${label}(수·기호)`); continue; }
+    if (flats.some(flat => parts.every(p => flat.includes(p)))) continue;
     missing.push(label);
   }
   return { missing, skipped, total: noteLabels(text).length };
 }
-
 function checkReleaseNotes(text, pkgVersion) {
   const problems = [];
   const body = text.replace(/\r\n/g, '\n');
@@ -175,10 +221,13 @@ function checkReleaseNotes(text, pkgVersion) {
 }
 
 if (process.argv.includes('--selftest')) {
-  // 374: ⑦ 의 덫 — 평범한 이름·N 자리·아이콘·띄어쓰기·수만 적은 이름
+  // 374→375: ⑧ 의 덫. 375 에서 **거짓 경보 쪽**(단축키·날짜·설명문)과 **검증력 쪽**(3자 조각·
+  //          같은 파일)을 더했다 — 374 의 덫은 둘 다 보지 못했다(리뷰 M-2·M-3).
   {
-    const hay = 'const a = <button>재고 실사</button>; const b = `+${n}개 더 보기`; const c = `${k}종 실사 반영`; <Lock /> 마감됨';
-    const t = (label) => missingNoteLabels(`v1.0.0 업데이트 내용\n\n■ 가\n• [${label}] 를 누르세요\n`, hay);
+    const files = [{ path: 'a.tsx', text: 'const a = <button>재고 실사</button>; const b = `+${n}개 더 보기`;' },
+                   { path: 'b.tsx', text: 'const c = `${k}종 실사 반영`; <Lock /> 마감됨; 저장 완료' },
+                   { path: 'c.tsx', text: '월 마감 배지' }];
+    const t = (label) => missingNoteLabels(`v1.0.0 업데이트 내용\n\n■ 가\n• [${label}] 를 누르세요\n`, files);
     const bad = [];
     if (t('재고 실사').missing.length !== 0) bad.push('있는 이름을 못 찾았다');
     if (t('없는 단추 이름').missing.length !== 1) bad.push('없는 이름을 잡지 못했다');
@@ -186,12 +235,28 @@ if (process.argv.includes('--selftest')) {
     if (t('N종 실사 반영').missing.length !== 0) bad.push('앞이 N 인 이름을 다루지 못했다');
     if (t('🔒 마감됨').missing.length !== 0) bad.push('아이콘이 섞인 이름을 다루지 못했다');
     if (t('재고  실사').missing.length !== 0) bad.push('띄어쓰기 차이를 다루지 못했다');
-    if (t('N건').skipped !== 1) bad.push('수만 적은 이름을 건너뛰지 않았다');
-    if (t('N건').missing.length !== 0) bad.push('건너뛴 이름을 신고했다');
-    if (bad.length > 0) { console.error('[selftest] ⑦ 덫 실패: ' + bad.join(' / ')); process.exit(1); }
-    console.log(`[check-release-notes] selftest ⑦ 덫 8종 통과(있는 이름·없는 이름·N 자리 2종·아이콘·띄어쓰기·수만 2종)`);
-  }
-  const pad = n => '\n'.repeat(n);
+    // 375(리뷰 M-2): 평범한 대괄호 글은 **신고하지 않고 건너뛴다**(머지 관문을 막지 않는다)
+    if (t('Ctrl+S').missing.length !== 0 || !t('Ctrl+S').skipped.join().includes('단축키')) bad.push('단축키를 신고했다');
+    if (t('2026-11-28').missing.length !== 0 || !t('2026-11-28').skipped.join().includes('날짜')) bad.push('날짜를 신고했다');
+    if (t('주의: 꼭 읽어 주세요').missing.length !== 0 || !t('주의: 꼭 읽어 주세요').skipped.join().includes('설명문')) bad.push('설명문을 신고했다');
+    if (t('N건').skipped.join().indexOf('수·기호') < 0) bad.push('수만 적은 이름을 건너뛰지 않았다');
+    // 375(리뷰 M-3): 조각은 3자 이상이고 **같은 파일**에 모두 있어야 한다
+    // 375: 조각이 다 짧은 N 이름은 **판단하지 않고 건너뛴다**(우연히 맞을 수 있다)
+    if (t('마감 N 완료').skipped.join().indexOf('수·기호') < 0) bad.push('짧은 조각 이름을 건너뛰지 않았다');
+    if (t('확인 N').skipped.join().indexOf('수·기호') < 0) bad.push('두 글자 조각 이름을 건너뛰지 않았다');
+    if (t('월 마감 배지').missing.length !== 0) bad.push('한 파일에 다 있는 이름을 못 찾았다');
+    // 375: 두 글자 이름은 쪼개지 않으므로 그대로 본다
+    if (t('마감됨').missing.length !== 0) bad.push('세 글자 이름을 못 찾았다');
+    if (t('없음').missing.length !== 1) bad.push('두 글자인데 없는 이름을 잡지 못했다');
+    // 375(리뷰 M-3): 조각이 **다른 파일**에 흩어지면 통과시키지 않는다
+    if (missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [재고 실사 N 마감됨] 를 누르세요\n', files).missing.length !== 1) bad.push('흩어진 조각을 통과시켰다');
+    // 375: 공백을 **지우면** 붙은 글자가 우연히 맞는다 — 하나로 모으기만 한다
+    const sp = [{ path: 'd.tsx', text: 'const t = "없는 기능을 숨긴다"; const u = `재고\n      실사`;' }];
+    if (missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [없는기능 N 열기]\n', sp).missing.length !== 1) bad.push('붙은 글자가 우연히 맞았다');
+    if (missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [재고 실사]\n', sp).missing.length !== 0) bad.push('줄바꿈으로 갈라진 이름을 못 찾았다');
+    if (bad.length > 0) { console.error('[selftest] ⑧ 덫 실패: ' + bad.join(' / ')); process.exit(1); }
+    console.log('[check-release-notes] selftest ⑧ 덫 17종 통과(있는 이름·없는 이름·N 자리 2종·아이콘·띄어쓰기·단축키·날짜·설명문·수만·짧은 조각 2종·한 파일·두 글자 2종·흩어진 조각·붙은 글자·갈라진 이름)');
+  }  const pad = n => '\n'.repeat(n);
   const cases = [
     ['정상(새 섹션이 배너를 채움 + 구분선)', 'v1.0.63 업데이트 내용\n\n■ 문자\n• 새 항목\n' + pad(2100) + '— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
     ['정상(짧은 새 섹션 + 구분선)', 'v1.0.63 업데이트 내용\n\n• 새 항목\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
@@ -236,7 +301,7 @@ const text = await readFile(path.join(root, 'docs', 'RELEASE-NOTES-CURRENT.md'),
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const problems = checkReleaseNotes(text, pkg.version);
 
-// ⑦ 노트가 약속한 화면 이름이 앱에 있는가 (374)
+// ⑧ 노트가 약속한 화면 이름이 앱에 있는가 (374, 375 에서 다시 씀)
 {
   const srcDir = path.join(root, 'src');
   const files = [];
@@ -244,14 +309,22 @@ const problems = checkReleaseNotes(text, pkg.version);
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name);
       if (fs.statSync(full).isDirectory()) walk(full);
-      else if (/\.(ts|tsx)$/.test(name)) files.push(full);
+      else if (/\.(ts|tsx)$/.test(name)) files.push({ path: full, text: fs.readFileSync(full, 'utf8') });
     }
   };
   walk(srcDir);
-  const hay = files.map(f => fs.readFileSync(f, 'utf8')).join('\n');
-  const res = missingNoteLabels(text, hay);
-  console.log(`[check-release-notes] ⑦ 노트가 적은 화면 이름 ${res.total}개 · 앱에서 확인 ${res.total - res.missing.length - res.skipped}개 · 수/기호만이라 건너뜀 ${res.skipped}개`);
-  for (const m of res.missing) problems.push(`노트가 적은 "[${m}]" 를 src 에서 찾지 못했다 — 지점이 없는 것을 찾으러 간다(없는 기능이면 노트에서 지우고, 이름이 바뀌었으면 노트를 고치세요)`);
+  // 375(리뷰 M-4): **맨 위 절만** 본다 — 지난 업데이트 절은 그때의 기록이다(⑥ 과 같은 기준)
+  const cut = text.indexOf(PAST_MARK);
+  const current = cut === -1 ? text : text.slice(0, cut);
+  const res = missingNoteLabels(current, files);
+  const skippedShown = res.skipped.length > 0 ? ` (건너뜀: ${res.skipped.join(' · ')})` : '';
+  console.log(`[check-release-notes] ⑧ 맨 위 절의 대괄호 글 ${res.total}개 · 화면 이름으로 확인 ${res.total - res.missing.length - res.skipped.length}개 · 건너뜀 ${res.skipped.length}개${skippedShown}`);
+  // 375(리뷰 M-6): 볼 이름이 0개면 검사가 꺼진 것이다
+  if (res.total - res.skipped.length === 0) problems.push('노트 맨 위 절에 화면 이름이 하나도 없다 — ⑧ 이 아무것도 대조하지 않는다(375). 노트는 늘 단추·메뉴 이름을 적는다');
+  // 375(리뷰 M-5): 배선 — 쌓은 신고 수가 찾지 못한 이름 수와 같아야 한다
+  let pushed = 0;
+  for (const m of res.missing) { problems.push(`노트가 적은 "[${m}]" 를 src 에서 찾지 못했다 — 지점이 없는 것을 찾으러 간다(없는 기능이면 노트에서 지우고, 이름이 바뀌었으면 노트를 고치세요)`); pushed += 1; }
+  if (pushed !== res.missing.length) problems.push(`⑧ 이 찾지 못한 이름 ${res.missing.length}개 중 ${pushed}개만 신고했다 — 배선이 끊겼다(375)`);
 }
 if (problems.length > 0) {
   console.error('[check-release-notes] 릴리스 노트 문제:');
@@ -259,4 +332,4 @@ if (problems.length > 0) {
   console.error(`배너는 앞 ${BANNER_CHARS}자만 보여줍니다 — 새 릴리스 항목을 맨 위 섹션에 두세요.`);
   process.exit(1);
 }
-console.log('[check-release-notes] OK — 첫 줄 버전·맨 위 섹션 항목·배너 구분선·배너 절 수·절 크기·굵은 낱말 중복·절 머리말 빈 줄 확인');
+console.log('[check-release-notes] OK — 첫 줄 버전·맨 위 섹션 항목·배너 구분선·배너 절 수·절 크기·굵은 낱말 중복·절 머리말 빈 줄·화면 이름 실재 확인');
