@@ -223,7 +223,46 @@ function selftest() {
   ok('상태 변형이라도 대체가 있으면 통과', run('<button className="focus:outline-none focus:ring-2">x</button>').length === 0);
   ok('입력칸의 상태 변형은 box-shadow 규칙이 지킨다', run('<input className="focus:outline-none" /><select className="focus:outline-none" /><textarea className="focus:outline-none" />').length === 0);
   ok('평범한 outline-none 은 전역 링이 순서로 덮는다', run('<button className="outline-none">x</button>').length === 0);
-  console.log(`[check-focus] selftest OK — 덫 ${trapCount}종 통과(전역 규칙 2종·사라짐 2종·순서 3종·덮임 4종·대체 3종·창 루트 2종·상태 변형 6종·그 외 4종)`);
+  // 364: 빌드 CSS 가 소스보다 낡았으면 신고한다 — 낡은 CSS 에 녹색을 주면 없어진 구조를 통과시킨다
+  ok('소스가 더 새로우면 신고', staleMessage(2000, 1000, 'src/x.tsx') !== null);
+  ok('낡음 분 수를 적는다', /2분 낡았습니다/.test(staleMessage(1000 + 120000, 1000, 'src/x.tsx')));
+  ok('빌드가 더 새로우면 통과', staleMessage(1000, 2000, 'src/x.tsx') === null);
+  ok('같은 시각이면 통과', staleMessage(1000, 1000, 'src/x.tsx') === null);
+  ok('빌드 CSS 가 없으면 ② 에 맡긴다', staleMessage(2000, 0, 'src/x.tsx') === null);
+  console.log(`[check-focus] selftest OK — 덫 ${trapCount}종 통과(전역 규칙 2종·사라짐 2종·순서 3종·덮임 4종·대체 3종·창 루트 2종·상태 변형 6종·낡은 빌드 5종·그 외 4종)`);
+}
+
+/**
+ * 364: 빌드 CSS 가 **소스보다 낡았는가** — 낡았으면 ② 는 지난 빌드를 보고 녹색을 준다.
+ * 360~362 리뷰가 "빌드 없이 이 단계만 돌리면 낡은 CSS 를 본다" 고 적어 둔 자리이고, 실제로 그
+ * 상태였다(dist 09:33 vs 소스 10:18 — 363 의 수정이 빌드에 들어가지 않았다). 게이트는 B(빌드) 뒤에
+ * F 를 두어 막지만 **개별 실행**에서는 막히지 않는다. 시각 비교라 사람의 판단이 들어가지 않는다.
+ */
+export function staleMessage(srcMs, cssMs, srcName) {
+  if (cssMs === 0) return null; // 빌드 CSS 가 없는 경우는 ② 가 따로 신고한다
+  if (srcMs <= cssMs) return null;
+  const min = Math.round((srcMs - cssMs) / 60000);
+  return 'dist/assets 의 빌드 CSS 가 소스보다 ' + min + '분 낡았습니다(가장 새 소스: ' + srcName + ') — '
+    + '`npm run build` 를 먼저 돌리세요. 낡은 CSS 로는 **이미 없어진 구조에 녹색을 줍니다**(360~362 리뷰).';
+}
+
+/** 가장 새 파일의 시각과 경로 (364) */
+export function newestFile(dir, exts) {
+  let t = 0;
+  let f = '';
+  const walk = d => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (exts.some(x => e.name.endsWith(x))) {
+        const m = fs.statSync(p).mtimeMs;
+        if (m > t) { t = m; f = p; }
+      }
+    }
+  };
+  if (!fs.existsSync(dir)) return { t: 0, f: '' };
+  walk(dir);
+  return { t, f };
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -249,6 +288,25 @@ if (built.length === 0) {
       fail.push(`dist/assets/${f}: 전역 초점 링이 .outline-none 보다 **앞**에 옵니다(${order.ring} < ${order.util}) — 같은 특정도라 나중 것이 이기므로 키보드 초점 표시가 사라집니다`);
     }
   }
+}
+
+// ②-2 빌드 CSS 가 소스보다 낡았는가 (364)
+{
+  let newestSrc = newestFile(SRC, ['.ts', '.tsx', '.css']);
+  // 364: 빌드 CSS 를 바꾸는 입력은 src 만이 아니다 — 팔레트 설정(328 의 교훈)과 틀 문서도 본다
+  for (const extra of ['tailwind.config.js', 'index.html']) {
+    const p = path.join(ROOT, extra);
+    if (!fs.existsSync(p)) continue;
+    const m = fs.statSync(p).mtimeMs;
+    if (m > newestSrc.t) newestSrc = { t: m, f: p };
+  }
+  let newestCssMs = 0;
+  for (const f of built) {
+    const m = fs.statSync(path.join(assets, f)).mtimeMs;
+    if (m > newestCssMs) newestCssMs = m;
+  }
+  const msg = staleMessage(newestSrc.t, newestCssMs, path.relative(ROOT, newestSrc.f).replace(/\\/g, '/'));
+  if (msg !== null) fail.push(msg);
 }
 
 // ③ 전역이 못 덮는 자리
