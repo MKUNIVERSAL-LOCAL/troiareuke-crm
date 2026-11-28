@@ -22,8 +22,8 @@
 - 브랜치 **`feat/post-v1.0.63-2026-11-25` → PR #58**(묶음 218~369 + 재검증 기록). main 머지는 릴리스와 함께.
 - 서버(NAS): **219·225~230·234 의 server/ 변경이 미배포** — DSM sudo 1회 권한이 선행(`NAS-REDEPLOY-RUNBOOK.md`).
 - 품질 게이트(묶음마다, `npm run gate:light`): tsc 0 · build · build:e2e(두 빌드) · 스모크 · `check:rules`(순수 규칙 57모듈·239함수 전부 lib-units 167개가 호출) · `check:testids`(화면 칸 227칸 중 227칸 — 사유를 적어 둔 면제 0개, 321) · `check:docs`(기록 검증 — 묶음 범위·누계·리뷰 건수까지, 291) · `check:modal-a11y`(창 자리 56개 중 55자리가 접근성 게이트에 닿음, 289·293 — 게이트 `A` 칸) · check:distribution/routes · test:updater · test:outbox 12 · mobile:prepare · 코어 잠금 검사. **전체 Playwright 는 메모리 부족 중단 이력 때문에 오너 지시 뒤에만**.
-- 테스트 exe: 지점·어드민 **11-28 11:02/11:03** 빌드(364 — 358·360·363 포함, asar 마커·CDP·잔존 0 확인). 338~357 은 앱 소스 변경 0건이라 다시 만들지 않았다. 이 시각은 `check:docs` ⑮ 가 asar 수정 시각과 대조한다(**이 PC 에서만** — CI 에는 `release*` 폴더가 없다).
-- 릴리스 직전 검사: `npm run release:rehearse`(`release:checks` 에서 전체 Playwright 만 빼고 전부 — 313 이 목록을 그 자리에서 읽게 만들었다. 365 에서 실측 1.9분, 전부 통과) — 전부 통과(전체 Playwright·빌드는 오너 복귀 뒤).
+- 테스트 exe: 지점·어드민 **11-28 13:44/13:45** 빌드(364 — 358·360·363 포함, asar 마커·CDP·잔존 0 확인). 338~357 은 앱 소스 변경 0건이라 다시 만들지 않았다. 이 시각은 `check:docs` ⑮ 가 asar 수정 시각과 대조한다(**이 PC 에서만** — CI 에는 `release*` 폴더가 없다).
+- 릴리스 직전 검사: `npm run release:rehearse`(`release:checks` 에서 전체 Playwright 만 빼고 전부 — 313 이 목록을 그 자리에서 읽게 만들었다. 365 에서 실측 1.9분) — 전부 통과(전체 Playwright·빌드는 오너 복귀 뒤).
 
 ## 3. 완료 작업 (마스터 프롬프트 이후)
 - **묶음 155~369(214개 — 묶음 161 은 없다. 162 줄이 순서를 바꿨다고 적고 있다)**. 전수 기록은 `COMMERCIALIZATION-ROADMAP-2026-11-17.md`(묶음 항목 + 재검증 370차까지), 오너용 요약은 `OWNER-BRIEFING-2026-11-30.md`.

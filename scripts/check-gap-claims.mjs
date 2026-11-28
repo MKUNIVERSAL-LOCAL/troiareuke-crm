@@ -202,7 +202,12 @@ function selftest() {
   //      그보다 훨씬 많았다(366 의 H-3 과 같은 모양: 기록이 적은 수와 가드가 도는 수가 다르다).
   //      ⑳(check:docs)이 이 수를 읽어 기록과 대조하므로, 찍는 모양은 `덫 N종` 이어야 한다.
   let traps = 0;
+  // 370(366~368 리뷰 M-1): 368 은 라벨의 "13종" 을 **손으로 적은 총계**라고 보고 지웠는데,
+  //      그 13 은 `확인 가능한 완료 기준` **범주의 수**였고 343→344→347 에서 10→12→13 으로
+  //      함께 올려 온 값이다(사실 오인이었다 — `git log -L` 로 확인). 범주 수도 **세어서** 찍는다.
+  let verifiableTraps = 0;
   const ok = (name, cond) => { traps += 1; if (!cond) { console.error(`[selftest] ${name} 덫 실패`); process.exit(1); } };
+  const okV = (name, cond) => { verifiableTraps += 1; ok(name, cond); };
   // 340: 덫이 살아 있는 문서 글귀에 묶여 있으면, 그 글귀를 고친 날 치환이 헛돌고 덫은 조용히 약해진다
   //      (305 에서 같은 사고를 겪고 적어 두었는데 글귀로 치환하는 덫이 그대로 남아 있었다).
   //      sub() 는 **바꾼 것이 없으면 그 자리에서 멈춘다** — 면제 덫이 헛돌아 통과하는 길을 막는다.
@@ -236,20 +241,20 @@ function selftest() {
   ok('표의 항목 이름 속 0건 은 잡지 않는다', !with_({}).some(p => /0건/.test(p)));
   ok('서버 테스트가 정말 없으면 0건은 사실', !checkGap({ ...base, gap: sub(base.gap, /서버 자동 테스트는 node 내장 러너 \*\*\d+건\*\*/, '서버 자동 테스트 0건'), hasServerTests: false }).some(p => /사실이 아니다/.test(p)));
   // 343: 완료 기준이 확인 가능한지
-  ok('스펙 이름이 있으면 인정', verifiable('month-view 스펙', n => n === 'month-view.spec.ts'));
-  ok('확장자까지 적어도 인정', verifiable('`receipt.spec.ts`(PDF 저장)', n => n === 'receipt.spec.ts'));
-  ok('lib-units 는 인정', verifiable('lib-units 공식 고정', () => false));
-  ok('npm 명령은 인정', verifiable('npm run test:outbox 1건', () => false));
-  ok('"스펙" 만 적으면 거절', !verifiable('스펙', () => false));
-  ok('비운 칸도 거절', !verifiable('—', () => false));
-  ok('빈 문자열도 거절', !verifiable('', () => false));
+  okV('스펙 이름이 있으면 인정', verifiable('month-view 스펙', n => n === 'month-view.spec.ts'));
+  okV('확장자까지 적어도 인정', verifiable('`receipt.spec.ts`(PDF 저장)', n => n === 'receipt.spec.ts'));
+  okV('lib-units 는 인정', verifiable('lib-units 공식 고정', () => false));
+  okV('npm 명령은 인정', verifiable('npm run test:outbox 1건', () => false));
+  okV('"스펙" 만 적으면 거절', !verifiable('스펙', () => false));
+  okV('비운 칸도 거절', !verifiable('—', () => false));
+  okV('빈 문자열도 거절', !verifiable('', () => false));
   // 347(리뷰 L-4): 완료 기준 열이 없는 표의 ✅ 행
   bite('기준 열 없는 표의 ✅', { gap: base.gap + '\n\n| # | 항목 | 상태 |\n|---|---|---|\n| Z-1 | 예시 | ✅ 343 |\n' }, /"완료 기준" 열이 없다/);
-  ok('"E2E" 만 적으면 거절', !verifiable('PC·모바일 E2E', () => false));
-  ok('확장자 없는 spec 도 인정', verifiable('(photo-backup.spec)', n => n === 'photo-backup.spec.ts'));
-  ok('괄호가 붙은 이름도 인정', verifiable('cancel-reason(사유 칩·복구)', n => n === 'cancel-reason.spec.ts'));
-  ok('괄호가 붙었어도 파일이 없으면 거절', !verifiable('무언가(설명)', () => false));
-  ok('없는 스펙 이름은 거절', !verifiable('nope 스펙', () => false));
+  okV('"E2E" 만 적으면 거절', !verifiable('PC·모바일 E2E', () => false));
+  okV('확장자 없는 spec 도 인정', verifiable('(photo-backup.spec)', n => n === 'photo-backup.spec.ts'));
+  okV('괄호가 붙은 이름도 인정', verifiable('cancel-reason(사유 칩·복구)', n => n === 'cancel-reason.spec.ts'));
+  okV('괄호가 붙었어도 파일이 없으면 거절', !verifiable('무언가(설명)', () => false));
+  okV('없는 스펙 이름은 거절', !verifiable('nope 스펙', () => false));
   // 요약의 유령 코드
   bite('요약의 유령 항목', { gap: sub(base.gap, '5. C-8/M-4 수신 동의', '5. C-99/M-4 수신 동의') }, /요약\(8절\)이 C-99/);
   // 311(리뷰 L-1·L-2): 펜스 안 예시 표와 단위가 붙은 숫자는 잡지 않는다
@@ -262,7 +267,7 @@ function selftest() {
   const live = with_({});
   ok('지금 표는 통과', live.length === 0 || (console.error(live.join('\n')), false));
 
-  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건·확인 가능한 완료 기준) 통과 — 덫 ${traps}종(**이 수는 세어서 찍는다** — 손으로 적지 말 것, 366 리뷰 H-3)`);
+  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건·확인 가능한 완료 기준 ${verifiableTraps}종) 통과 — 덫 ${traps}종(**이 수는 세어서 찍는다** — 손으로 적지 말 것, 366 리뷰 H-3)`);
 }
 
 const problems = (() => {

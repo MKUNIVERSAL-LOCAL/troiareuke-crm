@@ -821,6 +821,35 @@ function selftest() {
       const tc = newestTrapClaims(roadTrap);
       trap('인용한 덫 수는 보지 않는다', !tc.claims.includes(31));
       trap('인용 밖의 덫 수는 본다', tc.claims.includes(57) && tc.claims.includes(43));
+      // 370(366~368 리뷰 M-4): ⑳ 은 합집합과 비교해 **허용값이 7개**였다 — 기록은 이미 가드 이름을
+      //      짝지어 적으니 그 짝을 읽어 **그 가드의 수와만** 겨룬다. 짝이 없으면 합집합으로 떨어진다.
+      const pairLine = '- [x] 370 — **가**(11-28 14:00): 덫 85종(`check:docs`)·덫 29종(`check:gap`)·덫 7종. 커밋 abc1234.';
+      const pairs = pairTrapClaims(pairLine);
+      trap('덫 수에 붙은 가드 이름을 읽는다', pairs.length === 3 && pairs[0].npm === 'check:docs' && pairs[1].npm === 'check:gap' && pairs[2].npm === null);
+      trap('굵게 적은 덫 수도 짝짓는다', pairTrapClaims('덫 **85종**(`check:docs`)')[0].npm === 'check:docs');
+      trap('인용한 덫 수는 짝짓지 않는다', pairTrapClaims('리뷰가 "덫 31종(`check:docs`)" 이라고 적었다').length === 0);
+      // package.json 이 npm 이름 → 스크립트의 정본이다(표를 두면 낡는다)
+      const pkgFix = JSON.stringify({ scripts: { 'check:docs': 'node scripts/check-docs-claims.mjs --selftest && node scripts/check-docs-claims.mjs', 'check:gap': 'node scripts/check-gap-claims.mjs' } });
+      trap('npm 이름을 스크립트로 바꾼다', guardScriptOf(pkgFix, 'check:docs') === 'check-docs-claims' && guardScriptOf(pkgFix, 'check:gap') === 'check-gap-claims');
+      trap('없는 npm 이름은 null', guardScriptOf(pkgFix, 'check:nope') === null);
+      // 다른 가드의 수를 적으면 **짝이 있을 때** 잡힌다(리뷰가 심어 통과시킨 바로 그 자리)
+      const printedFix = { seen: new Set([85, 43, 29]), byGuard: new Map([['check-docs-claims', new Set([85, 7])], ['check-gap-claims', new Set([29])]]), dead: [] };
+      const scriptOf = npm => guardScriptOf(pkgFix, npm);
+      trap('짝이 맞으면 조용하다', trapClaimProblems([{ n: 85, npm: 'check:docs' }], printedFix, scriptOf).problems.length === 0);
+      trap('다른 가드의 수를 적으면 잡는다', trapClaimProblems([{ n: 43, npm: 'check:docs' }], printedFix, scriptOf).problems.length === 1);
+      trap('짝이 없으면 합집합과 겨룬다', trapClaimProblems([{ n: 43, npm: null }], printedFix, scriptOf).problems.length === 0);
+      trap('짝 없는 주장 수를 센다', trapClaimProblems([{ n: 43, npm: null }], printedFix, scriptOf).unpaired === 1);
+      trap('아무도 안 찍는 수는 짝이 없어도 잡는다', trapClaimProblems([{ n: 99, npm: null }], printedFix, scriptOf).problems.length === 1);
+      // 370(리뷰 L-3): **새로 적는 재검증 차수는 직전+1** 이어야 한다(번호는 369 인데 줄은 360개였다)
+      trap('재검증 차수가 직전+1 이면 조용하다', recheckSequenceProblems([370, 369, 368]).length === 0);
+      trap('차수를 건너뛰면 잡는다', recheckSequenceProblems([372, 369, 368])[0].includes('370차'));
+      trap('같은 차수를 또 적으면 잡는다', recheckSequenceProblems([370, 370, 369])[0].includes('두 번'));
+      trap('줄이 하나뿐이면 보지 않는다', recheckSequenceProblems([370]).length === 0);
+      // 370: 이 문서는 **오름 블록**(옛 3차~247차)과 **내림 블록**(지금)을 함께 가진다 —
+      //      첫 판은 "문서 순서의 첫 줄" 을 가장 새 것으로 보아 134차를 가장 새 차수로 찍었다.
+      trap('오름 블록 뒤의 내림 블록 맨 위를 본다', recheckSequenceProblems([100, 101, 370, 369, 368]).length === 0);
+      trap('오름 블록만 있으면 보지 않는다', recheckSequenceProblems([100, 101, 102]).length === 0);
+      trap('내림 블록 맨 위가 어긋나면 잡는다', recheckSequenceProblems([100, 101, 375, 369, 368]).length === 1);
     }
     // 356: ⑮ 의 asar 시각도 같은 결함이었다 — 서울 기준으로 못 박았는지 고정된 순간으로 확인한다
     {
@@ -1241,16 +1270,21 @@ problems.push(...releaseStepProblems());
 
 // ⑳ 가장 새 묶음 줄의 "덫 N종" 이 가드가 찍는 수인가 (366)
 {
-  const { no, claims } = newestTrapClaims(read(ROADMAP));
-  if (claims.length > 0) {
+  const { no, line } = newestTrapClaims(read(ROADMAP));
+  const pairs = line ? pairTrapClaims(line) : [];
+  if (pairs.length > 0) {
     const printed = trapCountsPrinted();
-    console.log(`[check-docs-claims] ⑳ 가드가 찍는 덫 수 ${[...printed].sort((a, b) => a - b).join('·')} / 묶음 ${no} 줄의 주장 ${claims.join('·')}`);
-    for (const c of claims) {
-      if (!printed.has(c)) {
-        problems.push(`${ROADMAP}: 묶음 ${no} 줄이 "덫 ${c}종" 이라고 적었는데 **어느 가드도 그 수를 찍지 않는다** — 가드의 \`--selftest\` 출력을 그대로 옮기세요(지금 찍히는 수: ${[...printed].sort((a, b) => a - b).join('·')})`);
-      }
-    }
+    const pkg = read('package.json');
+    const res = trapClaimProblems(pairs, printed, npm => guardScriptOf(pkg, npm));
+    console.log(`[check-docs-claims] ⑳ 묶음 ${no} 줄의 덫 수 주장 ${pairs.length}개(가드 이름 짝 ${pairs.length - res.unpaired}개) / 가드가 찍는 수 ${[...printed.seen].sort((a, b) => a - b).join('·')}`);
+    for (const p of res.problems) problems.push(`${ROADMAP}: ${p}`);
+    // 370(리뷰 M-4): 가드가 **죽으면** 그 수가 조용히 집합에서 빠진다 — 죽은 가드를 신고한다
+    for (const g of printed.dead) problems.push(`scripts/${g}.mjs --selftest 가 실패했다 — ⑳ 이 그 가드의 덫 수를 알 수 없다(먼저 그 가드를 보세요)`);
   }
+  // 370(리뷰 L-3): 새로 적는 재검증 차수가 직전+1 인가
+  const rn = recheckNumbers(read(ROADMAP));
+  console.log(`[check-docs-claims] ⑳-2 재검증 줄 ${rn.length}개 · 가장 새 차수 ${rn.length > 0 ? Math.max(...rn) : "(없음)"}(오름 블록 + 내림 블록)`);
+  for (const p of recheckSequenceProblems(rn)) problems.push(`${ROADMAP}: ${p}`);
 }
 
 // ⑲ 자기를 가리키는 문장이 자기 커밋을 말하는가 (363)
@@ -1410,20 +1444,106 @@ function selfTimeClaims(text) {
  * 범위: **가장 새 묶음 줄 하나**만 본다 — 지난 줄의 수는 그때의 사실이다(역사 조작 금지, 350).
  * 한계: 다른 가드의 수와 **우연히 같은** 틀린 수는 통과한다.
  */
+/**
+ * 370(366~368 리뷰 M-4): 가드 **이름별로** 모은다. 전에는 합집합 하나였고 허용값이 7개여서
+ * `덫 43종(check:docs)` 처럼 **다른 가드의 수**를 적어도 통과했다(리뷰가 심어 확인).
+ * 그리고 `--selftest` 의 **종료 코드를 보지 않아** 가드가 죽으면 그 수가 조용히 집합에서 빠졌다
+ * (리뷰의 사본에서 실제로 69 가 사라졌다) — 이제 죽은 가드를 신고한다.
+ */
 function trapCountsPrinted() {
   const guards = [
     'check-docs-claims', 'check-focus-visible', 'check-flex-inputs',
     'check-contrast-classes', 'check-invisible-chars', 'check-e2e-conventions',
     'check-release-notes', 'check-gap-claims',
   ];
+  const byGuard = new Map();
+  const dead = [];
   const seen = new Set();
   for (const g of guards) {
-    const r = spawnSync('node', [path.join('scripts', g + '.mjs'), '--selftest'], { cwd: ROOT, encoding: 'utf8' });
+    const r = spawnSync(process.execPath, [path.join('scripts', g + '.mjs'), '--selftest'], { cwd: ROOT, encoding: 'utf8' });
     const out = (r.stdout || '') + (r.stderr || '');
-    for (const m of out.matchAll(/덫 (\d+)종/g)) seen.add(Number(m[1]));
+    const mine = new Set();
+    for (const m of out.matchAll(/덫 \*{0,2}(\d+)종/g)) { mine.add(Number(m[1])); seen.add(Number(m[1])); }
+    byGuard.set(g, mine);
+    if (r.status !== 0) dead.push(g);
   }
-  return seen;
+  return { seen, byGuard, dead };
 }
+
+/** `check:docs` 같은 npm 이름 → 스크립트 파일. package.json 이 정본이다(표를 두지 않는다) */
+function guardScriptOf(pkgText, npmName) {
+  let scripts = {};
+  try { scripts = JSON.parse(pkgText).scripts || {}; } catch { return null; }
+  const cmd = scripts[npmName];
+  if (!cmd) return null;
+  const m = /scripts\/([a-z0-9-]+)\.mjs/.exec(cmd);
+  return m ? m[1] : null;
+}
+
+/**
+ * 덫 수 주장을 **그 줄에 적힌 가드 이름과 짝지어** 돌려준다 (370).
+ * `덫 85종(\`check:docs\`)` → { n: 85, npm: 'check:docs' }. 짝이 없으면 npm: null.
+ */
+function pairTrapClaims(line) {
+  const out = [];
+  for (const m of line.matchAll(/덫 \*{0,2}(\d+)종/g)) {
+    const before = line.slice(0, m.index);
+    const ascii = (before.match(/"/g) || []).length;
+    const open = (before.match(/[“‘]/g) || []).length;
+    const close = (before.match(/[”’]/g) || []).length;
+    if (ascii % 2 === 1 || open > close) continue;
+    const after = line.slice(m.index + m[0].length, m.index + m[0].length + 30);
+    // 370: 굵게 닫는 `**` 가 `종` 과 가드 이름 **사이**에 온다(`덫 **85종**(check:docs)`) —
+    //      이 두 글자를 건너뛰지 않으면 짝짓기가 조용히 실패한다(덫을 쓰면서 그 자리를 봤다).
+    const g = /^\*{0,2}\s*\(`?(check:[a-z0-9-]+)`?\)/.exec(after);
+    out.push({ n: Number(m[1]), npm: g ? g[1] : null });
+  }
+  return out;
+}
+
+/** 짝지은 주장을 그 가드의 수와만 겨룬다. 짝이 없으면 합집합과 겨루고 그 사실을 함께 돌려준다 */
+function trapClaimProblems(pairs, printed, scriptOf) {
+  const out = [];
+  let unpaired = 0;
+  for (const c of pairs) {
+    const script = c.npm ? scriptOf(c.npm) : null;
+    const mine = script ? printed.byGuard.get(script) : null;
+    if (mine) {
+      if (!mine.has(c.n)) out.push(`묶음 줄이 "덫 ${c.n}종(${c.npm})" 이라고 적었는데 그 가드가 찍는 수는 ${[...mine].join("·") || "(없음)"} 다 — 가드의 \`--selftest\` 출력을 그대로 옮기세요`);
+      continue;
+    }
+    unpaired += 1;
+    if (!printed.seen.has(c.n)) out.push(`묶음 줄이 "덫 ${c.n}종" 이라고 적었는데 **어느 가드도 그 수를 찍지 않는다** — 가드의 \`--selftest\` 출력을 그대로 옮기세요(지금 찍히는 수: ${[...printed.seen].sort((a, b) => a - b).join("·")})`);
+  }
+  return { problems: out, unpaired };
+}
+/**
+ * 370(366~368 리뷰 L-3): **새로 적는 재검증 차수가 직전+1 인가.** 번호는 370 까지 올라갔는데
+ * 엄격 형식 줄은 360개이고 246·298·299·301·302·311·312·325 가 없고 326 이 두 번 있다 —
+ * 어느 가드도 이 번호를 보지 않았다. 과거 줄은 고치지 않는 규칙이므로 **맨 위 두 줄만** 본다.
+ */
+function recheckSequenceProblems(numbers) {
+  if (numbers.length < 2) return [];
+  const max = Math.max(...numbers);
+  const at = numbers.indexOf(max);
+  if (numbers.lastIndexOf(max) !== at) return [`재검증 차수 ${max} 가 두 번 적혀 있다 — 새 줄의 차수는 직전+1 이어야 한다(370)`];
+  const below = numbers[at + 1];
+  // 오름 블록만 있는 글(가장 새 차수가 마지막 줄)은 보지 않는다 — 이 문서의 옛 블록이 그렇다
+  if (below === undefined) return [];
+  if (below !== max - 1) return [`가장 새 재검증 줄이 ${max}차인데 그 아래 줄은 ${below}차다 — 새 줄은 직전+1(${below + 1}차)로 **내림 블록 맨 위**에 와야 한다(370)`];
+  return [];
+}
+
+/** 재검증 줄의 차수를 **적힌 순서대로**(새 것이 위) 모은다 */
+function recheckNumbers(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^- \d{4}-\d{2}-\d{2} \d{2}:\d{2} (\d{3,4})차 재검증\(/.exec(line);
+    if (m) out.push(Number(m[1]));
+  }
+  return out;
+}
+
 /** 가장 새 묶음 줄이 적은 "덫 N종" 들 */
 function newestTrapClaims(text) {
   const lines = batchLines(text);
@@ -1441,7 +1561,7 @@ function newestTrapClaims(text) {
     if (ascii % 2 === 1 || open > close) continue;
     claims.push(Number(m[1]));
   }
-  return { no: newest.no, claims };
+  return { no: newest.no, claims, line: newest.line };
 }
 
 /** 이 브랜치의 커밋 시각 표 — git 을 한 번만 부른다 */

@@ -46,6 +46,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { blankComments } from './lib/blank-comments.mjs';
 
+// 370(366~368 리뷰 L-4): 364·366 이 이 넷을 `export` 했는데 **아무 모듈도 import 하지 않는다**
+//      (셀프테스트가 같은 파일 안에서 쓴다) — 미사용 export 는 §2 가 금지한 데드코드다.
+//      `check:dead-export` 는 `src` 만 훑어 `scripts/**` 는 사정거리 밖이라 기계가 막지 못했다.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'src');
 
@@ -284,7 +287,7 @@ function selftest() {
  * 상태였다(dist 09:33 vs 소스 10:18 — 363 의 수정이 빌드에 들어가지 않았다). 게이트는 B(빌드) 뒤에
  * F 를 두어 막지만 **개별 실행**에서는 막히지 않는다. 시각 비교라 사람의 판단이 들어가지 않는다.
  */
-export function staleMessage(srcMs, cssMs, srcName) {
+function staleMessage(srcMs, cssMs, srcName) {
   if (cssMs === 0) return null; // 빌드 CSS 가 없는 경우는 ② 가 따로 신고한다
   if (srcMs <= cssMs) return null;
   // 366(리뷰 L-1): `Math.round` 는 30초 미만을 **"0분 낡았습니다"** 로 적어 실패 문장이 자기를 부정했다.
@@ -304,7 +307,7 @@ export function staleMessage(srcMs, cssMs, srcName) {
  * 왜: 호출부의 확장자 목록에서 `.tsx` 를 빼는 변이는 셀프테스트가 볼 수 없었다(함수 안이 아니다).
  * 그래서 **본검사가 스스로 입력을 검사**한다. 코드가 정본인 집합 비교라 판단이 들어가지 않는다.
  */
-export function extensionsUnder(dir) {
+function extensionsUnder(dir) {
   const out = new Set();
   const walk = d => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -328,7 +331,7 @@ export function extensionsUnder(dir) {
  * @param srcLike  {t, f} 꼴 목록 — src 트리와 추가 입력들
  * @param cssTimes 빌드 CSS 들의 수정 시각(ms)
  */
-export function staleCheck(srcLike, cssTimes) {
+function staleCheck(srcLike, cssTimes) {
   let newest = { t: 0, f: '' };
   for (const x of srcLike) if (x.t > newest.t) newest = x;
   // 366(리뷰 L-5): ② 는 **모든** CSS 를 읽으므로, 비교는 **가장 낡은** 것과 해야 보수적이다
@@ -343,7 +346,7 @@ export function staleCheck(srcLike, cssTimes) {
  * 한계(366, 리뷰 L-4): **파일 삭제는 보이지 않는다** — 소스를 지우고 빌드하지 않으면 남은 파일이
  * 모두 빌드보다 오래되어 통과한다. mtime 으로 알 수 있는 것의 한계다.
  */
-export function newestFile(dir, exts) {
+function newestFile(dir, exts) {
   let t = 0;
   let f = '';
   const walk = d => {
