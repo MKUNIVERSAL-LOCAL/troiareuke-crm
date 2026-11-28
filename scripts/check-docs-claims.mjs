@@ -841,6 +841,11 @@ function selftest() {
       trap('짝 없는 주장 수를 센다', trapClaimProblems([{ n: 43, npm: null }], printedFix, scriptOf).unpaired === 1);
       trap('아무도 안 찍는 수는 짝이 없어도 잡는다', trapClaimProblems([{ n: 99, npm: null }], printedFix, scriptOf).problems.length === 1);
       // 370(리뷰 L-3): **새로 적는 재검증 차수는 직전+1** 이어야 한다(번호는 369 인데 줄은 360개였다)
+      // 371(366~368 리뷰 H-1 의 남은 몫): 계열 바닥 — 주장 0개는 통과가 아니다
+      trap('주장이 있는 계열은 조용하다', familyFloorProblems({ 모듈: 2, 화면칸: 5 }).length === 0);
+      trap('주장 0개 계열을 신고한다', familyFloorProblems({ 모듈: 0, 화면칸: 5 }).length === 1);
+      trap('어느 계열인지 말한다', familyFloorProblems({ libUnits: 0 })[0].includes('libUnits'));
+      trap('여러 계열이 비면 각각 신고한다', familyFloorProblems({ 모듈: 0, 함수: 0 }).length === 2);
       trap('재검증 차수가 직전+1 이면 조용하다', recheckSequenceProblems([370, 369, 368]).length === 0);
       trap('차수를 건너뛰면 잡는다', recheckSequenceProblems([372, 369, 368])[0].includes('370차'));
       trap('같은 차수를 또 적으면 잡는다', recheckSequenceProblems([370, 370, 369])[0].includes('두 번'));
@@ -945,6 +950,36 @@ const problems = [];
   }
 }
 
+/**
+ * ㉑ **수 계열마다 바닥**(371, 366~368 리뷰 H-1 의 남은 몫)
+ *
+ * 왜: 369 가 창 자리에 바닥을 두면서 "다른 수의 바닥 검사는 371" 이라고 적었다. 그 계열들은
+ *     아직 **표기만 바꾸면 주장 0개가 되고 조용히 통과**한다(리뷰가 `모듈 99개·함수 98개` 처럼
+ *     어순을 바꿔 빠져나가는 것을 전수로 보였다). 모양을 열거하는 쪽은 끝이 없으므로,
+ *     "한 계열의 주장이 **하나도 없으면** 그 계열은 아무것도 대조하지 않는다" 를 신고한다.
+ *
+ * 설계 판단(371 에서 두 안을 측정해 고름):
+ *   - **문서별 바닥**(그 가드를 적은 문서는 그 수를 적어야 한다)은 **면제가 필요해 버렸다** —
+ *     여덟 계열 중 다섯에서 "가드를 언급하지만 수는 적지 않는" 정당한 문서가 있다(게이트 목록 등).
+ *   - **낱말 가까이의 "수+단위" 가 전부 파서에 인정돼야 한다**는 안은 지금 문서에서 **거짓 경보 8건**을
+ *     낸다(과거 서술·다른 주제의 수). 거짓을 말하는 가드는 사람이 끄게 되므로 쓰지 않는다(303).
+ *   - 남은 것이 **계열별 전체 바닥**이다. 지금 문서에서 거짓 경보 0이고, 파서가 깨지거나 표기가
+ *     전부 바뀌면 그 자리에서 울린다. 한계: 한 문서만 표기를 바꾸고 다른 문서가 수를 그대로 적고
+ *     있으면 그 한 자리는 여전히 검사 밖이다(그 한계를 숨기지 않고 적는다).
+ */
+function familyFloorProblems(counts) {
+  const out = [];
+  for (const [name, n] of Object.entries(counts)) {
+    if (n === 0) out.push(`"${name}" 계열의 주장이 어느 문서에도 없다 — 표기를 바꿔 이 검사를 끈 것일 수 있다(371). 적어도 한 문서가 지금 수를 적어야 한다`);
+  }
+  return out;
+}
+
+/** ㉑ 집계 그릇 — 각 블록이 자기 계열 수를 여기에 더한다 */
+const familyCounts = {
+  모듈: 0, 함수: 0, 화면칸: 0, libUnits: 0, 리뷰기록: 0, 리뷰회수: 0, 누계: 0, 묶음범위: 0, 서버테스트: 0, outbox: 0,
+};
+
 // ② "지금 상태" 문서의 숫자가 지금 값과 같은가
 {
   const live = liveNumbers();
@@ -952,9 +987,16 @@ const problems = [];
     if (!fs.existsSync(path.join(ROOT, rel))) { problems.push(`${rel}: CURRENT_DOCS 목록에 있는데 파일이 없다`); continue; }
     const c = claimedNumbers(read(rel));
     for (const r of c.rules) {
+      if (r.modules !== null) familyCounts.모듈 += 1;
+      if (r.fns !== null) familyCounts.함수 += 1;
       if (r.modules !== null && r.modules !== live.modules) problems.push(`${rel}: "${r.raw}" 가 낡았다 — 지금은 ${live.modules}모듈`);
       if (r.fns !== null && r.fns !== live.fns) problems.push(`${rel}: "${r.raw}" 가 낡았다 — 지금은 ${live.fns}함수`);
     }
+    familyCounts.화면칸 += c.testids.length;
+    familyCounts.libUnits += c.libUnits.length;
+    familyCounts.리뷰기록 += c.reviews.length;
+    familyCounts.리뷰회수 += c.reviewRuns.length;
+    familyCounts.묶음범위 += c.ranges.length;
     for (const t of c.testids) {
       if (t.total !== live.idTotal || t.covered !== live.idCovered) problems.push(`${rel}: "${t.raw}" 가 낡았다 — 지금은 ${live.idTotal}칸 중 ${live.idCovered}칸`);
     }
@@ -1841,6 +1883,7 @@ function serverTestClaims(text, rel) {
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
     claims.push(...serverTestClaims(read(rel), rel));
+    familyCounts.서버테스트 = claims.length;
   }
   if (claims.length > 0) {
     const r = spawnSync(process.execPath, ['scripts/run-server-tests.mjs'], { cwd: ROOT, encoding: 'utf8' });
@@ -1974,6 +2017,7 @@ function serverTestClaims(text, rel) {
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
     claims.push(...outboxClaims(read(rel), rel));
+    familyCounts.outbox = claims.length;
   }
   if (claims.length > 0) {
     const r = spawnSync(process.execPath, ['scripts/test-nas-outbox.mjs'], { cwd: ROOT, encoding: 'utf8' });
@@ -1999,6 +2043,15 @@ function serverTestClaims(text, rel) {
   }
 }
 
+// ㉑ 수 계열마다 바닥 — 주장이 0개인 계열은 아무것도 대조하지 않는다 (371)
+{
+  // 371: `누계 155~N 묶음 M개` 는 **로드맵 묶음 줄**에 적힌다(liveNumbers 가 거기서 읽어 대조한다).
+  //      ② 의 문서들에서 세면 0 이 되어 첫 실행부터 거짓 경보였다 — 만든 자리에서 바로 보였다.
+  familyCounts.누계 = (read(ROADMAP).match(/누계 155~\d+ 묶음 \d+개/g) || []).length;
+  const shown = Object.entries(familyCounts).map(([k, v]) => `${k} ${v}`).join(' · ');
+  if (!process.argv.includes('--selftest')) console.log(`[check-docs-claims] ㉑ 계열별 주장 수 — ${shown}`);
+  problems.push(...familyFloorProblems(familyCounts));
+}
 if (problems.length > 0) {
   console.error(`[check-docs-claims] 확인할 수 없는 기록 ${problems.length}건:`);
   for (const p of problems) console.error(`  - ${p}`);

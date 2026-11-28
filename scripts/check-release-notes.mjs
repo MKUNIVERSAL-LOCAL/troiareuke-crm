@@ -20,13 +20,13 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const BANNER_CHARS = 2000;
-export const PAST_MARK = '지난 업데이트';
+const BANNER_CHARS = 2000;
+const PAST_MARK = '지난 업데이트';
 const HEAD_RE = /^v(\d+\.\d+\.\d+) 업데이트 내용\s*$/;
 const VERSION_HEAD_RE = /^v(\d+\.\d+\.\d+) 업데이트 내용\s*$/gm;
 
 /** 순수 검사 — 노트 본문과 package.json 버전을 받아 문제 목록을 돌려준다(빈 배열이면 통과) */
-export function checkReleaseNotes(text, pkgVersion) {
+function checkReleaseNotes(text, pkgVersion) {
   const problems = [];
   const body = text.replace(/\r\n/g, '\n');
   const lines = body.split('\n');

@@ -82,7 +82,7 @@ const RULES = [
  * 341(리뷰 L-5): 줄 단위로 `test()` 를 한 번만 보던 탓에 **한 줄에 두 자리**가 있으면 하나로 셌다.
  * 이제 모든 적중을 센다(면제 키가 파일+줄이라, 한 줄에 두 자리면 사유 하나로 둘이 면제됐다).
  */
-export function sitesOf(text, re) {
+function sitesOf(text, re) {
   const out = [];
   const lineStarts = [0];
   for (let i = 0; i < text.length; i += 1) if (text[i] === '\n') lineStarts.push(i + 1);
@@ -108,7 +108,7 @@ export function sitesOf(text, re) {
 }
 
 /** 규칙 ① 만 보는 옛 이름 — 덫과 호출자가 함께 쓴다 */
-export function utcDateSites(text) {
+function utcDateSites(text) {
   return sitesOf(text, RULES[0].re);
 }
 

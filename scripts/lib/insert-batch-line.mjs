@@ -17,6 +17,9 @@
  */
 
 /** 묶음 줄을 넣는다 — `after` 묶음 번호의 줄 **아래**에(묶음 줄은 오름차순이다) */
+// 371: 이 두 함수는 저장소 안의 다른 모듈이 import 하지 않는다 — **묶음 기록을 쓰는 세션 스크립트**가
+//      쓰는 공개 API 다(손 패치가 앞 줄의 꼬리를 끌어간 363 실사고 뒤 이 방식으로 바꿨다).
+//      "밖에서 안 쓰이니 데드코드" 로 보고 지우지 말 것. `selftest()` 는 check-docs-claims 가 부른다.
 export function insertBatchLine(text, { after, line }) {
   const crlf = text.includes('\r\n');
   const lines = (crlf ? text.replace(/\r\n/g, '\n') : text).split('\n');

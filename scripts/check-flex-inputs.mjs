@@ -92,7 +92,7 @@ function minWidths(open) {
     .filter(c => SHRINKABLE.test(c));
 }
 /** `flex-1` 인데 최소 너비가 없거나, 서로 겨루는 최소 너비가 둘 이상인 자리 */
-export function violations(text) {
+function violations(text) {
   const out = [];
   for (const t of openTags(blankComments(text))) {
     if (!/\bflex-1\b/.test(t.open)) continue;
