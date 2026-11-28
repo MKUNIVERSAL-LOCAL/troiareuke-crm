@@ -73,6 +73,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // ⑯ 은 **코드를 정본으로** 본다 — 문서를 문서와 맞추면 둘이 같이 낡는다(350 이 그 상태였다).
 import { CORE_FILES, CORE_DIRS } from './core-lock.mjs';
+// 363: 묶음 줄 삽입기의 덫도 여기서 함께 돈다 — 그 lib 이 지키는 것이 바로 이 로드맵이다.
+import { selftest as insertSelftest } from './lib/insert-batch-line.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
@@ -525,6 +527,8 @@ function selftest() {
 // ── 새 검사(⑯⑰⑱)의 덫 — **수는 세어서 찍는다**(356, 352~354 리뷰 M-2).
   //    353·354 는 손으로 "12종"·"10종" 이라고 적었고 둘 다 틀렸다(실제 13·11).
   //    이 저장소의 다른 가드 넷은 이미 trapCount 를 쓴다(check-contrast-classes.mjs:803 의 교훈).
+  // 363: 묶음 줄 삽입기(로드맵에 줄을 넣는 도구)의 덫 — 던지면 여기서 멈춘다
+  const insertTraps = insertSelftest();
   let newTraps = 0;
   let skippedTraps = 0; // 361(리뷰 L-2): git 이 없으면 오프셋 덫이 돌지 않는다 — 수가 환경에 따라 달라지는 것을 **드러낸다**
   const trap = (name, cond) => { newTraps += 1; if (!cond) { console.error('[selftest] ' + name + ' 덫 실패'); process.exit(1); } };
@@ -651,13 +655,45 @@ function selftest() {
       trap('번호 목록은 그대로 읽는다', section4Problems(sec('| **218·219** | 가 |'), nos4).length === 0);
       trap('번호 목록의 범위 밖은 잡는다', section4Problems(sec('| 999 | 가 |'), nos4).some(p => /범위\(218~222\) 밖/.test(p)));
     }
+// 363(리뷰 L-4): 02-29 를 "없는 날짜" 로 거짓 신고하던 자리 — 후보 연도를 ±2 로 넓혔다
+    trap('02-29 는 없는 날짜가 아니다', timeGap('02-29', '23:50', '03-01', '00:05', 2026) !== null);
+    trap('11-31 은 여전히 없는 날짜', timeGap('11-31', '23:50', '12-01', '00:05', 2026) === null);
+    // 363(리뷰 L-3): 주석 안에 백틱이 홀수면 닫힌 주석도 안 지워졌다(설명과 동작이 달랐다)
+    {
+      const doc = rows => '# x\n\n## 보호 대상 (코어)\n\n| 파일 | 역할 |\n|---|---|\n' + rows + '\n\n## 끝\n';
+      // 닫는 줄 **자신에** 홀수 백틱이 있을 때만 드러난다 — 줄이 바뀌면 codeLen 이 0 으로 돌아가므로.
+      const hidden = doc('| `a/b.ts` | 가 |\n<!--\n| `x/y.ts` | 예시 |\n` 여기서 닫는다 -->');
+      trap('주석 안의 표 행은 없는 것(닫는 줄에 홀수 백틱이어도)', lockDocProblems(hidden, ['a/b.ts']).length === 0);
+      const oneLine = doc('| `a/b.ts` | 가 |\n<!-- 숨김 `코드 열고 끝 -->\n| `x/y.ts` | 예시 |');
+      trap('한 줄 주석의 홀수 백틱이 뒤를 삼키지 않는다', lockDocProblems(oneLine, ['a/b.ts', 'x/y.ts']).length === 0);
+    }
+    // 363(리뷰 L-5): 붙임표 범위도 묶음 목록이다 — 전에는 그 칸을 통째로 건너뛰어 번호가 검사 밖이었다
+    {
+      const nos5 = [218, 219, 220, 221, 222];
+      const sec = rows => '## 4. 지점이 보는 변화 (218~222, 기능군별)\n\n| 묶음 | 것 |\n|---|---|\n' + rows + '\n| **위 행에 없는 나머지 전부**(218~222 중) | 품질 |\n\n## 5. 끝\n';
+      trap('붙임표 범위를 펼친다', section4Problems(sec('| 218-222 | 가 |'), nos5).length === 0);
+      trap('붙임표 범위의 범위 밖도 잡는다', section4Problems(sec('| 900-902 | 가 |'), nos5).some(p => /범위\(218~222\) 밖/.test(p)));
+      // 표 머리 칸("묶음")도 모양이 아니므로 함께 센다 — 특별 취급을 두지 않는다
+      trap('모양이 아닌 칸은 센 수에 남는다', section4Scope(sec('| 1455분 | 가 |')).skippedCells.join(',') === '묶음,1455분');
+    }
+    // 363(리뷰 H-1): 자기를 가리키는 문장이 자기 커밋을 말하는가
+    {
+      const road = [
+        '- [x] 360 — **가**(11-28 09:37): 검증. 커밋 0294575. **[자기 정정]** 이 줄의 시각을 처음에 09:42 로 적었다 — 커밋은 09:37 이다.',
+        '- [x] 362 — **나**(11-28 09:53): 검증. 커밋 5780390. **[자기 정정]** 이 줄의 시각을 처음에 09:42 로 적었다 — 커밋은 09:37 이다.',
+        '- [x] 354 — **다**(11-28 07:39): 342 는 04:4x 로 적었지만 실제 커밋은 04:13. 커밋 57f25e5.',
+      ].join('\n');
+      const claims = selfTimeClaims(road);
+      trap('자기 시각 주장 둘만 모은다', claims.length === 2);
+      trap('다른 묶음 커밋을 인용한 줄은 보지 않는다', !claims.some(c => c.no === 354));
+    }
     // 356: ⑮ 의 asar 시각도 같은 결함이었다 — 서울 기준으로 못 박았는지 고정된 순간으로 확인한다
     {
       const kst = seoulStamp(new Date(Date.UTC(2026, 10, 27, 16, 6)));
       trap('asar 시각은 서울 기준', kst.md === '11-28' && kst.hm === '01:06');
     }
   }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과 + 새 검사 덫 ${newTraps}종${skippedTraps > 0 ? ' (+ 건너뜀 ' + skippedTraps + '종 — git 을 읽을 수 없는 환경)' : ''}(코어 잠금 표·§4 범위·기록 시각 — **이 수는 세어서 찍는다**, 352~354 리뷰 M-2)`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과 + 새 검사 덫 ${newTraps}종 + 삽입기 덫 ${insertTraps}종${skippedTraps > 0 ? ' (+ 건너뜀 ' + skippedTraps + '종 — git 을 읽을 수 없는 환경)' : ''}(코어 잠금 표·§4 범위·기록 시각 — **이 수는 세어서 찍는다**, 352~354 리뷰 M-2)`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -984,6 +1020,11 @@ problems.push(...releaseStepProblems());
     problems.push('docs/OWNER-BRIEFING-*.md 가 없다 — §4 의 묶음 집합을 검사할 문서가 없다(검사 ⑰)');
   } else {
     for (const p of section4Problems(read(brief), allBatchNos(read(ROADMAP)))) problems.push(`${brief}: ${p}`);
+    // 363(리뷰 L-5): 모양이 아니어서 **번호로 읽지 않은 칸**을 찍는다 — 조용히 빠지는 것을 막는다
+    const sc = section4Scope(read(brief));
+    if (sc !== null && sc.skippedCells.length > 0) {
+      console.log(`[check-docs-claims] ⑰ 번호로 읽지 않은 §4 첫 칸 ${sc.skippedCells.length}개: ${sc.skippedCells.join(' · ')}`);
+    }
   }
 }
 
@@ -1002,6 +1043,20 @@ problems.push(...releaseStepProblems());
       if (d === null) { problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 날짜 ${r.md} 는 **없는 날짜**다(커밋은 ${c.md} ${c.hm})`); continue; }
       if (d < -TIME_BEFORE) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 는 커밋(${c.md} ${c.hm})보다 ${-d}분 뒤다 — 아직 오지 않은 시각을 적었다(시계를 읽어 적으세요)`);
       else if (d > TIME_AFTER) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 가 커밋(${c.md} ${c.hm})보다 ${d}분 앞이다 — 시각을 사실대로 적으세요`);
+    }
+  }
+}
+
+// ⑲ 자기를 가리키는 문장이 자기 커밋을 말하는가 (363)
+{
+  const commits = commitTimes();
+  if (commits !== null) {
+    for (const r of selfTimeClaims(read(ROADMAP))) {
+      const c = commits.find(x => x.h.startsWith(r.hash));
+      if (!c) continue; // 해시 실재는 ① 이 본다
+      if (c.hm !== r.hm) {
+        problems.push(`${ROADMAP}: 묶음 ${r.no} 줄이 "이 줄의 … 커밋은 ${r.hm}" 이라고 적었는데 그 줄의 커밋(${r.hash})은 ${c.hm} 이다 — 다른 줄의 문장이 끌려왔는지 보세요(360~362 리뷰 H-1)`);
+      }
     }
   }
 }
@@ -1074,8 +1129,11 @@ function timeGap(md, hm, cmd, chm, cYear = 2026) {
   const ci = dayIndex(cmd, cYear);
   if (ci === null) return null;
   const within = timeGapSameDay(hm, chm);
+  // 363(리뷰 L-4): ±1 만 보면 **02-29 가 "없는 날짜" 로 거짓 신고**된다(2025·2026·2027 에 윤년이 없다).
+  // ±2 로 넓히면 윤년이 반드시 들어오고, 엉뚱한 해를 골라 어긋남을 숨길 위험은 없다 —
+  // 한 해만 틀려도 차이가 50만 분이라 허용 몫(-2~+20)에 들 수 없다.
   let best = null;
-  for (const y of [cYear - 1, cYear, cYear + 1]) {
+  for (const y of [cYear - 2, cYear - 1, cYear, cYear + 1, cYear + 2]) {
     const si = dayIndex(md, y);
     if (si === null) continue;
     const g = (ci - si) * 1440 + within;
@@ -1092,6 +1150,32 @@ function timeGapSameDay(hm, chm) {
   if (t > high) return t - high;
   return 0;
 }
+/**
+ * ⑲ **자기를 가리키는 문장이 자기 커밋을 말하는가** (363, 360~362 리뷰 H-1)
+ *
+ * 왜: 361·362 를 넣을 때 내 패치가 **앞 줄의 꼬리를 그 줄로 끌어갔다** — 360 의
+ * "**[자기 정정]** 이 줄의 시각을 처음에 09:42 로 적었다 — 커밋은 09:37" 이 362 줄 끝으로 옮겨져,
+ * 362 줄이 **자기에 대해 거짓**을 말했다(362 의 커밋은 09:54). ⑱ 은 한 줄의 **첫** 시각만 보므로
+ * 이 모양을 구조적으로 못 본다.
+ *
+ * 좁은 검사임을 밝혀 둔다: **"이 줄의"** 라고 스스로를 가리킨 문장에서 `커밋은 HH:MM` 을 적었을 때만
+ * 본다. 다른 묶음의 커밋 시각을 인용하는 문장(354 가 342 의 04:13 을 적은 것처럼)은 "이 줄의" 가
+ * 없으므로 걸리지 않는다 — 그 구분이 기계가 셀 수 있는 유일한 경계다.
+ */
+function selfTimeClaims(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!/이 줄의/.test(line)) continue;
+    const m = /커밋은 (\d{2}):(\d{2})/.exec(line);
+    if (!m) continue;
+    const b = /^- \[x\] (\d{3,4}) — /.exec(line);
+    const h = hashOf(line);
+    if (!b || !h || Number(b[1]) >= 2000) continue;
+    out.push({ no: Number(b[1]), hm: m[1] + ':' + m[2], hash: h });
+  }
+  return out;
+}
+
 /** 이 브랜치의 커밋 시각 표 — git 을 한 번만 부른다 */
 function commitTimes() {
   // 356(352~354 리뷰 H-2): 전에는 `format-local` 이라 **돌리는 PC 의 시간대**로 읽었다 —
@@ -1145,7 +1229,10 @@ function blankHtmlComments(text) {
   while (i < text.length) {
     const c = text[i];
     if (c === '\n') { codeLen = 0; i += 1; continue; } // 인라인 코드는 줄을 넘지 않는다
-    if (c === '`') {
+    // 363(360~362 리뷰 L-3): **주석 안에서는** 인라인 코드를 따라가지 않는다 — 주석 안에 백틱이
+    // 홀수로 있으면 `codeLen` 이 열린 채 남아 뒤의 진짜 `-->` 를 못 알아봤다(머리말은 "닫히지 않은
+    // 주석만 그대로 둔다" 고 적었는데 **닫힌 주석도** 안 지워졌다 — 설명과 동작이 달랐다).
+    if (c === '`' && start < 0) {
       let n = 0;
       while (text[i + n] === '`') n += 1;
       if (codeLen === 0) codeLen = n;
@@ -1215,6 +1302,7 @@ function section4Scope(briefText) {
   const hm = head.match(/\((\d{3,4})~(\d{3,4})/);
   const listed = new Set();
   const catchAlls = [];
+  const skippedCells = [];
   for (const first of firstCells(sec.split(/^## /m)[0])) {
     if (/나머지 전부/.test(first)) {
       // 356(리뷰 L-2): 전에는 마지막 것만 남겨 **앞쪽의 거짓 덮개가 조용히 묻혔다**
@@ -1226,19 +1314,21 @@ function section4Scope(briefText) {
     // 같은 글에서 거짓 경보를 냈다. §4 의 첫 칸은 **묶음 번호 목록**(숫자와 ·~, 그리고 굵게 표시)이
     // 아니면 묶음을 적는 칸이 아니므로, 그 모양일 때만 센다. 모양이 아니면 그 칸은 건너뛴다(사람이 읽는다).
     const bare = first.replace(/\*\*/g, '').trim();
-    if (!/^[\d·~,\s]+$/.test(bare)) continue;
+    // 363(리뷰 L-5): 붙임표 범위(`218-222`)도 묶음 목록이다 — 전에는 그 칸을 통째로 건너뛰어
+    // 그 번호들이 **검사 밖**이 됐다(조용한 거짓 통과). 건너뛴 칸 수는 호출부가 찍는다.
+    if (!/^[\d·~,\-\s]+$/.test(bare)) { skippedCells.push(bare.slice(0, 20)); continue; }
     let rest = bare;
-    for (const m of bare.matchAll(/(\d{3,4})~(\d{3,4})/g)) {
+    for (const m of bare.matchAll(/(\d{3,4})[~\-](\d{3,4})/g)) {
       const a = Number(m[1]), b = Number(m[2]);
       if (a < 2000 && b < 2000) for (let i = a; i <= b; i++) listed.add(i);
     }
-    rest = rest.replace(/(\d{3,4})~(\d{3,4})/g, ' ');
+    rest = rest.replace(/(\d{3,4})[~\-](\d{3,4})/g, ' ');
     for (const m of rest.matchAll(/\d{3,4}/g)) {
       const n = Number(m[0]);
       if (n < 2000) listed.add(n); // 2000 이상은 묶음이 아니라 연도다(allBatchNos 와 같은 경계)
     }
   }
-  return { head: hm ? { start: Number(hm[1]), end: Number(hm[2]) } : null, listed, catchAll: catchAlls[0] ?? null, catchAlls };
+  return { head: hm ? { start: Number(hm[1]), end: Number(hm[2]) } : null, listed, catchAll: catchAlls[0] ?? null, catchAlls, skippedCells };
 }
 
 /**
