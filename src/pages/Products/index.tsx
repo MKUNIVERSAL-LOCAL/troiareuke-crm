@@ -931,7 +931,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
                 min="1"
                 value={form.quantity}
                 onChange={e => set('quantity', e.target.value)}
-                className="flex-1 py-2.5 text-sm text-center focus:outline-none"
+                className="flex-1 min-w-0 py-2.5 text-sm text-center focus:outline-none"
               />
               <button
                 onClick={() => set('quantity', String(qty + 1))}

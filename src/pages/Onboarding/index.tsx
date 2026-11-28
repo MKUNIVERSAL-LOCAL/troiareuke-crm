@@ -431,7 +431,7 @@ export default function Onboarding() {
                 {staffList.map((s, i) => (
                   <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
                     <input value={s.name} onChange={e => updateStaff(i, 'name', e.target.value)}
-                      className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+                      className="flex-1 min-w-0 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                       placeholder={`직원 ${i + 1} 이름`} />
                     <select value={s.role} onChange={e => updateStaff(i, 'role', e.target.value)}
                       className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300">
@@ -461,7 +461,7 @@ export default function Onboarding() {
                     {customServices.map((s, i) => (
                       <div key={i} className="flex gap-2 items-center">
                         <input value={s.name} onChange={e => updateCustomService(i, 'name', e.target.value)}
-                          className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+                          className="flex-1 min-w-0 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                           placeholder="시술명" />
                         <input value={s.duration} onChange={e => updateCustomService(i, 'duration', e.target.value)}
                           className="w-20 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 text-center"

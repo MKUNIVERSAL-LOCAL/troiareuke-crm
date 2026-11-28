@@ -528,7 +528,7 @@ function AiChatInner() {
                 placeholder={hasAnyKey ? '질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)' : '먼저 API 키를 설정해주세요 →'}
                 disabled={isLoading || !hasAnyKey}
                 rows={1}
-                className="flex-1 px-4 py-3 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:bg-gray-50 disabled:text-gray-400"
+                className="flex-1 min-w-0 px-4 py-3 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:bg-gray-50 disabled:text-gray-400"
                 style={{ maxHeight: '120px' }}
               />
               <button onClick={() => sendMessage()} disabled={isLoading || !input.trim() || !hasAnyKey}

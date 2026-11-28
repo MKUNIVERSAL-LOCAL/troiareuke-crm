@@ -41,7 +41,7 @@ export default function MemoPresetManager({ presets, onChange, beforeSave }: {
       <div className="flex gap-2">
         <input type="text" value={draft} onChange={e => setDraft(e.target.value)} maxLength={MAX_PRESET_LEN}
           aria-label="새 문구" placeholder="예: 자극 없음 · 홈케어 안내"
-          className="flex-1 min-h-[44px] px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300" />
+          className="flex-1 min-w-0 min-h-[44px] px-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300" />
         <button type="button" onClick={() => void handleAdd()} className="px-4 min-h-[44px] rounded-xl bg-[#1a3a8f] text-white text-sm font-semibold hover:bg-[#15306e]">추가</button>
       </div>
       <p className="text-xs text-gray-400">문구는 매장 설정에 저장되어 모든 PC 가 함께 씁니다(시술 기록·상담·예약·고객 메모에서 같은 문구를 씁니다). 다른 PC 와 같은 시각(1분 안)에 설정을 바꾸면 드물게 한쪽이 덮일 수 있습니다.</p>

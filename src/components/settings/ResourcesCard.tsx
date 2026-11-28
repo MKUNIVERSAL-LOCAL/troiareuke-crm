@@ -78,7 +78,7 @@ export default function ResourcesCard() {
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
-          className="flex-1 min-w-[10rem] px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
+          className="flex-1 min-w-0 min-w-[10rem] px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300"
         />
         <select aria-label="자원 종류" value={kind} onChange={e => setKind(e.target.value as Resource['kind'])} className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300">
           {KINDS.map(k => <option key={k} value={k}>{RESOURCE_KIND_LABEL[k]}</option>)}

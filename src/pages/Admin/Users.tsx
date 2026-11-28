@@ -378,7 +378,7 @@ export default function AdminUsers() {
                   readOnly
                   value={tempPwResult.password}
                   onFocus={e => e.currentTarget.select()}
-                  className="flex-1 px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-base font-mono text-emerald-300 tracking-wider outline-none"
+                  className="flex-1 min-w-0 px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-base font-mono text-emerald-300 tracking-wider outline-none"
                 />
                 <button
                   onClick={copyTempPassword}

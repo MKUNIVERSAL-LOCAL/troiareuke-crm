@@ -230,7 +230,7 @@ export default function AdminLogin() {
                     <div className="flex gap-2">
                       <input
                         type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)}
-                        className="flex-1 px-3 py-2 text-xs bg-slate-900/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40"
+                        className="flex-1 min-w-0 px-3 py-2 text-xs bg-slate-900/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40"
                         placeholder="관리자 이메일"
                       />
                       <button

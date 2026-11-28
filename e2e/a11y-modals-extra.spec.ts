@@ -137,6 +137,9 @@ test('게이트 밖에 있던 창들에 serious·critical 접근성 위반이 �
   await dialog('시술 기록 추가').getByLabel('시술일').fill('2026-11-10');
   await dialog('시술 기록 추가').getByRole('checkbox', { name: '테스트관리' }).check();
   await dialog('시술 기록 추가').getByRole('button', { name: '저장', exact: true }).click();
+  // 360(355~359 리뷰 M-3): 293 리뷰 LOW-11 이 위 자리에 세운 "열렸는지" 확인이 **이 자리에는 없었다** —
+  // 하필 CI 가 간헐로 실패한 자리가 여기다(359). 창이 열리지 않으면 닫기 루프가 그냥 빠져 조용히 통과한다.
+  await expect(dialog('결제 등록')).toBeVisible();
   await closeDialog('결제 등록'); // 저장 뒤 결제 창(231)
   await dismissToasts(page);
   await page.goto('/customers');

@@ -781,7 +781,7 @@ export default function Settings() {
                     <div className="flex gap-2">
                       <input value={cautionDraft} onChange={e => setCautionDraft(e.target.value)} aria-label="새 주의 키워드"
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCautionWord(); } }}
-                        placeholder="예: 레이저 금지, 필러 이력" className="form-input flex-1" maxLength={40} />
+                        placeholder="예: 레이저 금지, 필러 이력" className="form-input flex-1 min-w-0" maxLength={40} />
                       <button type="button" onClick={addCautionWord} className="px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl whitespace-nowrap">추가</button>
                     </div>
                     {cautionWords.length > 0 && (

@@ -252,7 +252,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   readOnly
                   value={createdUrl}
                   onFocus={e => e.currentTarget.select()}
-                  className="flex-1 px-2.5 py-2 bg-white border border-blue-200 rounded-lg text-xs text-gray-600 outline-none"
+                  className="flex-1 min-w-0 px-2.5 py-2 bg-white border border-blue-200 rounded-lg text-xs text-gray-600 outline-none"
                 />
                 <button
                   onClick={() => copyLink(createdUrl, 'new')}
