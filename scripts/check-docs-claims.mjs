@@ -989,6 +989,16 @@ function selftest() {
       trap('if: failure() 같은 평범한 조건은 살려 둔다', enabledWorkflowText(wfOn + '\n        if: failure()').includes('check:a'));
       trap('여러 줄 run 블록을 자르지 않는다', enabledWorkflowText(['jobs:', '  build:', '    steps:', '      - name: 가', '        run: |', '          npm run check:a', '      - run: npm run check:b'].join('\n')).includes('check:a'));
       trap('옆 단계를 함께 지우지 않는다', enabledWorkflowText(['jobs:', '  build:', '    steps:', '      - name: 가', '        run: npm run check:a', '        if: false', '      - run: npm run check:b'].join('\n')).includes('check:b'));
+      // 387(381~383 리뷰 M-5): 반영 칸이 **끝난 묶음**을 "앞으로 닫을 묶음" 으로 가리키면 잡는다.
+      trap('미반영이 끝난 묶음을 가리키면 잡는다', reflectBatchProblems('r.md', '| L-1 | 가 | 미반영 — **383** |', 383).length === 1);
+      trap('미반영이 앞으로 올 묶음을 가리키면 조용하다', reflectBatchProblems('r.md', '| L-1 | 가 | 미반영 — **384** |', 383).length === 0);
+      trap('머리말의 "미반영 N가지는 383·384 에서" 도 잡는다', reflectBatchProblems('r.md', '**미반영 10가지는 383·384 에서**', 383).length === 1);
+      trap('반영된 칸은 보지 않는다', reflectBatchProblems('r.md', '| L-1 | 가 | **382** — 고쳤다 |', 383).length === 0);
+      trap('번호가 없는 칸은 보지 않는다', reflectBatchProblems('r.md', '| L-1 | 가 | 미반영 |', 383).length === 0);
+      trap('두 자리 수는 번호로 읽지 않는다', reflectBatchProblems('r.md', '| L-1 | 가 | 미반영 — **25**자리 |', 383).length === 0);
+      trap('미반영보다 앞에 있는 수는 보지 않는다', reflectBatchProblems('r.md', '| L-1 | 378 이 만든 자리 | 미반영 — **390** |', 383).length === 0);
+      trap('미반영분 같은 다른 낱말은 보지 않는다', reflectBatchProblems('r.md', '**미반영분 마무리(259, 발주 제안)**', 383).length === 0);
+      trap('괄호 안 산문의 수는 대상이 아니다', reflectBatchProblems('r.md', '| M-5 | 가 | 미반영 — **390**(그 줄은 384 에서 다시 썼다) |', 383).length === 0);
       // 386(381~383 리뷰 M-4): 게이트도 **실제 호출 줄만** 본다 — 돌지 않게 만든 대입은 밖이다.
       const gateSrc = ["flags.T = step('T', '앱 타입', 'npx', ['tsc']);", "if (false) flags.W = step('W', '기록', 'node', ['scripts/check-docs-claims.mjs']);", "  flags.G = step('G', '갭', 'node', ['scripts/check-gap-claims.mjs']);", "// flags.H = step('H', '노트', 'node', ['scripts/check-release-notes.mjs']);"].join('\n');
       trap('맨 왼쪽 열의 대입은 도는 것이다', gateStepText(gateSrc).includes('tsc'));
@@ -1883,6 +1893,43 @@ function trapFloorProblems(no, line, pairs) {
  *     않는다(들여쓰기가 더 깊은 줄은 그 단계의 몸이다).
  */
 /**
+ * ㉔ **리뷰 기록의 반영 칸이 가리키는 묶음**(387, 381~383 리뷰 M-5)
+ *
+ * 왜: ④ 는 칸이 **비어 있지 않은지**만 본다. 그래서 383 이 세션 시작 문서에 "남은 10가지는
+ * **383·384** 에서 닫는다" 를 남겼는데 383 은 그중 **0건**을 닫았다 — **끝난 묶음을 "앞으로
+ * 닫을 묶음" 으로** 가리키는 거짓 미완 표시다. 378 의 H-1("반영했다고 적었는데 안 했다")과
+ * 378~380 리뷰 M-4(반영 칸 ↔ 실제 커밋)의 **같은 자리 세 번째 재발**이고 하필 세션 시작 문서였다.
+ *
+ * 규칙(기계가 셀 수 있는 것만): **미반영** 뒤 40자 안에 묶음 번호가 있으면 그 번호는 **아직
+ * 오지 않은 묶음**이어야 한다(가장 새 묶음보다 커야 한다). 끝난 묶음을 가리키면 그 항목은
+ * 영원히 열린 채 남는다 — 383 이 남긴 자리가 정확히 그 모양이었다.
+ *
+ * 첫 판은 **"반영" 이라는 낱말**에 기대 반영된 칸의 번호 실재까지 보려 했는데, 실제 표의 반영
+ * 칸은 그 낱말을 쓰지 않는다(`| **382** — 고쳤다 |`) — 아무것도 보지 않는 가지였고 **내 덫이
+ * 그 자리에서 실패했다**(지그부터 재라는 교훈을 또 받았다). 반영된 칸의 번호 실재는 ①·⑱ 이
+ * 묶음 줄에서 이미 보므로 여기서는 **미반영만** 본다. 칸의 말이 맞는지는 사람이 본다(352).
+ */
+function reflectBatchProblems(rel, text, newest) {
+  const out = [];
+  // 387: 기준선에서 재니 **거짓 경보 둘**이 났다 — `미반영분 마무리(259, …)` 의 "미반영분" 과,
+  //      괄호 안 산문의 수(`미반영 — **387**(그 줄은 384 에서 다시 써서…)`). 그래서 좁힌다:
+  //      ⓐ `미반영` 은 **단독 낱말**(뒤에 한글이 붙으면 다른 말이다) ⓑ 번호는 **굵게 적힌 것**
+  //      이거나 `383·384 에서` 꼴만 본다(둘 다 "어느 묶음에서 닫는다" 를 적는 자리다).
+  const BOLD = /미반영(?![가-힣])[^(\n]{0,24}?\*\*(\d{3,4})\*\*/g;
+  const PLAIN = /미반영(?![가-힣])[^(\n]{0,24}?(\d{3,4})(?:\s*·\s*(\d{3,4}))*\s*에서/g;
+  for (const line of text.split('\n')) {
+    const nums = [];
+    for (const re of [BOLD, PLAIN]) {
+      for (const m of line.matchAll(re)) for (const g of m.slice(1)) if (g) nums.push(Number(g));
+    }
+    for (const n of new Set(nums)) {
+      if (n < 100 || n >= 2000) continue;
+      if (n <= newest) out.push(`${rel}: "미반영 … ${n}" 이 **이미 끝난 묶음**을 가리킨다(가장 새 묶음 ${newest}) — 그 묶음에서 닫았으면 반영으로 적고, 아직이면 앞으로 올 번호를 적으세요(387)`);
+    }
+  }
+  return out;
+}
+/**
  * 묶음 게이트에서 **실제로 도는 단계의 줄만** (386, 381~383 리뷰 M-4)
  *
  * 382 는 워크플로를 "실행되는 단계" 로 고치면서 게이트 쪽은 `blankComments` 로 **주석만**
@@ -2626,6 +2673,77 @@ function serverTestClaims(text, rel) {
   const STATUS = 'docs/MASTER-DEVELOPMENT-STATUS.md';
   if (fs.existsSync(path.join(ROOT, STATUS)) && !/\(package\.json\)/.test(read(STATUS))) {
     problems.push(`${STATUS}: 코드 버전을 "vX.Y.Z(package.json)" 형태로 적은 자리가 없다 — 그러면 버전 검사가 아무것도 보지 않는다`);
+  }
+}
+
+// ㉔ 리뷰 기록·지금 상태 문서의 반영 칸이 가리키는 묶음 (387, 381~383 리뷰 M-5)
+{
+  const road387 = read(ROADMAP);
+  const newest387 = Math.max(...allBatchNos(road387));
+  const docs387 = [...CURRENT_DOCS, ...fs.readdirSync(path.join(ROOT, 'docs')).filter(f => /^REVIEW-.*\.md$/.test(f)).sort().slice(-3).map(f => `docs/${f}`)];
+  let seen387 = 0;
+  for (const rel of docs387) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    const found = reflectBatchProblems(rel, hiddenBlanked(read(rel)), newest387);
+    seen387 += 1;
+    for (const p of found) problems.push(p);
+  }
+  console.log(`[check-docs-claims] ㉔ 반영 칸의 묶음 번호 — 문서 ${seen387}개(가장 새 묶음 ${newest387})`);
+  if (seen387 === 0) problems.push(`㉔ 가 반영 칸을 읽을 문서를 하나도 찾지 못했다 — 배선이 끊겼다(387)`);
+}
+
+// ㉕ `재검증 N차` 주장 ↔ 로드맵의 실제 차수 (387, 381~383 리뷰 M-6)
+//
+// 왜: 383 이 **같은 문장의 누계**는 보게 고쳤는데 **옆 숫자**(`재검증 384차까지`)는 그대로였다 —
+//     `999차` 로 바꿔도 조용했다. 가드는 그 수를 이미 **찍고 있다**(⑳-2) — 대조만 안 했다.
+{
+  const rn387 = recheckNumbers(read(ROADMAP));
+  const live387 = rn387.length > 0 ? Math.max(...rn387) : null;
+  let claims387 = 0;
+  for (const rel of CURRENT_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    const text = hiddenBlanked(read(rel));
+    for (const m of text.matchAll(/재검증(?: 기록)? \*{0,2}(?:\d{3,4}~)?(\d{3,4})차\*{0,2}(?:까지)?/g)) {
+      if (markedPast(text, m.index, m[0].length)) continue;
+      claims387 += 1;
+      if (live387 !== null && Number(m[1]) !== live387) problems.push(`${rel}: 적힌 "${m[0]}" 가 낡았다 — 로드맵의 가장 새 재검증 차수는 ${live387}차다(387)`);
+    }
+  }
+  console.log(`[check-docs-claims] ㉕ 재검증 차수 주장 ${claims387}개 대조(지금 ${live387 === null ? '(없음)' : live387 + '차'})`);
+  if (live387 === null) problems.push(`${ROADMAP}: 재검증 줄을 한 개도 읽지 못했다 — ㉕ 가 대조할 기준이 없다(387)`);
+  if (claims387 === 0) problems.push(`지금 상태 문서에 재검증 차수를 적은 자리가 없다 — ㉕ 가 아무것도 대조하지 않는다(387)`);
+}
+
+// ㉖ E2E 스펙 수 주장 ↔ `playwright test --list` (387, 381~383 리뷰 L-7)
+//
+// 왜: 오너 보고서의 `257 통과·2 건너뜀` 은 **아무도 보지 않는 수**였다(리뷰가 변이로 확인).
+//     실측 비용은 3초다 — `--list` 는 브라우저도 서버도 띄우지 않고 스펙만 모은다.
+//     합(통과+건너뜀)이 전체 수와 같아야 한다 — 자정 근처의 `238 통과·21 건너뜀` 도 같은 합이다.
+{
+  const pairs387 = [];
+  for (const rel of CURRENT_DOCS) {
+    if (!fs.existsSync(path.join(ROOT, rel))) continue;
+    const text = hiddenBlanked(read(rel));
+    // 387: `건너뜀` 을 **요구**한다 — 없이 보면 "수정 없이 통과)·리뷰 반영(242" 같은 평범한 글에서
+    //      짝이 생겨 거짓 경보가 났다(기준선에서 재며 알았다).
+    for (const m of text.matchAll(/(\d{2,4})\s*통과\s*[·,]\s*(?:(?:조건부\s*)?건너뜀\s*(\d{1,4})|(\d{1,4})\s*건너뜀)/g)) {
+      if (markedPast(text, m.index, m[0].length)) continue;
+      pairs387.push({ rel, raw: m[0], sum: Number(m[1]) + Number(m[2] ?? m[3]) });
+    }
+  }
+  if (pairs387.length > 0) {
+    const listed = spawnSync('npx', ['playwright', 'test', '--list'], { cwd: ROOT, encoding: 'utf8', shell: process.platform === 'win32' });
+    const total = (String(listed.stdout || '').match(/Total: (\d+) tests/) || [])[1];
+    if (!total) {
+      console.log('[check-docs-claims] ㉖ 건너뜀 — `playwright test --list` 를 읽을 수 없습니다(스펙 수 주장 ' + pairs387.length + '개를 대조하지 않았습니다)');
+    } else {
+      console.log(`[check-docs-claims] ㉖ E2E 스펙 수 주장 ${pairs387.length}개 대조(실측 ${total}개)`);
+      for (const p of pairs387) {
+        if (p.sum !== Number(total)) problems.push(`${p.rel}: 적힌 "${p.raw.trim()}" 의 합이 ${p.sum} 인데 실측 스펙 수는 ${total}개다 — \`npx playwright test --list\` 로 세어 적으세요(387)`);
+      }
+    }
+  } else {
+    problems.push(`지금 상태 문서에 E2E 통과·건너뜀 수를 적은 자리가 없다 — ㉖ 가 아무것도 대조하지 않는다(387)`);
   }
 }
 
