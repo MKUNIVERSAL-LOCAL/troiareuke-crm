@@ -41,6 +41,7 @@
  *     않는다 — ② 는 이 한 쌍만 본다). 인라인 `style` 도 보지 않는다.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { blankComments } from './lib/blank-comments.mjs';
@@ -229,6 +230,51 @@ function selftest() {
   ok('빌드가 더 새로우면 통과', staleMessage(1000, 2000, 'src/x.tsx') === null);
   ok('같은 시각이면 통과', staleMessage(1000, 1000, 'src/x.tsx') === null);
   ok('빌드 CSS 가 없으면 ② 에 맡긴다', staleMessage(2000, 0, 'src/x.tsx') === null);
+  // 366(363~365 리뷰 H-1): 여기까지는 **순수 비교기**만 찔렀다 — 리뷰가 ②-2 를 통째로 지워도
+  // 셀프테스트가 "통과" 를 찍는 것을 변이 6종으로 보였다. 아래는 **파일을 찾는 쪽과 배선**을 찌른다.
+  ok('1분 미만은 분 수를 적지 않는다', /1분 미만/.test(staleMessage(1000 + 29000, 1000, 'src/x.tsx')));
+  {
+    // 임시 폴더에 하위 폴더·대상 외 확장자를 섞어 두고 newestFile 이 **가장 새 대상 파일**을 고르는지 본다
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'focus-trap-'));
+    fs.mkdirSync(path.join(tmp, 'deep'));
+    const write = (rel, ms) => {
+      const p = path.join(tmp, rel);
+      fs.writeFileSync(p, 'x');
+      fs.utimesSync(p, new Date(ms), new Date(ms));
+      return p;
+    };
+    write('a.ts', 1_000_000);
+    const deep = write(path.join('deep', 'b.tsx'), 3_000_000); // 하위 폴더가 가장 새 것
+    write('c.md', 9_000_000); // 대상 외 확장자 — 골라서는 안 된다
+    const got = newestFile(tmp, ['.ts', '.tsx', '.css']);
+    ok('하위 폴더까지 내려간다', got.f === deep);
+    ok('가장 새 대상 파일의 시각을 돌려준다', got.t === 3_000_000);
+    ok('대상 외 확장자는 보지 않는다', got.t !== 9_000_000);
+    const empty = newestFile(path.join(tmp, '없는폴더'), ['.ts']);
+    ok('없는 폴더면 0', empty.t === 0);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  {
+    // 366: src 에 있는 확장자를 세는 함수 — 훑는 목록이 이것을 덮는지 본검사가 비교한다
+    const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'focus-ext-'));
+    fs.mkdirSync(path.join(tmp2, 'sub'));
+    fs.writeFileSync(path.join(tmp2, 'a.ts'), 'x');
+    fs.writeFileSync(path.join(tmp2, 'sub', 'b.tsx'), 'x');
+    fs.writeFileSync(path.join(tmp2, 'sub', 'c.json'), 'x');
+    const exts = extensionsUnder(tmp2);
+    ok('확장자를 하위 폴더까지 모은다', exts.has('.ts') && exts.has('.tsx') && exts.has('.json'));
+    ok('확장자 집합 크기', exts.size === 3);
+    ok('없는 폴더면 빈 집합', extensionsUnder(path.join(tmp2, '없음')).size === 0);
+    fs.rmSync(tmp2, { recursive: true, force: true });
+  }
+  {
+    // 배선: 여러 입력 중 가장 새 것을 고르고, **가장 낡은** CSS 와 비교한다
+    const srcLike = [{ t: 1000, f: 'src/a.tsx' }, { t: 5000, f: 'tailwind.config.js' }];
+    ok('추가 입력이 더 새면 그 이름을 적는다', /tailwind\.config\.js/.test(staleCheck(srcLike, [2000])));
+    ok('가장 낡은 CSS 와 비교한다', staleCheck([{ t: 3000, f: 'src/a.tsx' }], [2000, 9000]) !== null);
+    ok('CSS 가 전부 더 새면 통과', staleCheck([{ t: 1000, f: 'src/a.tsx' }], [2000, 9000]) === null);
+    ok('CSS 가 없으면 ② 에 맡긴다', staleCheck([{ t: 9000, f: 'src/a.tsx' }], []) === null);
+  }
   console.log(`[check-focus] selftest OK — 덫 ${trapCount}종 통과(전역 규칙 2종·사라짐 2종·순서 3종·덮임 4종·대체 3종·창 루트 2종·상태 변형 6종·낡은 빌드 5종·그 외 4종)`);
 }
 
@@ -241,12 +287,62 @@ function selftest() {
 export function staleMessage(srcMs, cssMs, srcName) {
   if (cssMs === 0) return null; // 빌드 CSS 가 없는 경우는 ② 가 따로 신고한다
   if (srcMs <= cssMs) return null;
-  const min = Math.round((srcMs - cssMs) / 60000);
+  // 366(리뷰 L-1): `Math.round` 는 30초 미만을 **"0분 낡았습니다"** 로 적어 실패 문장이 자기를 부정했다.
+  // 1분 미만은 "1분 미만" 으로 적는다.
+  const diff = srcMs - cssMs;
+  if (diff < 60000) {
+    return 'dist/assets 의 빌드 CSS 가 소스보다 낡았습니다(1분 미만, 가장 새 소스: ' + srcName + ') — '
+      + '`npm run build` 를 먼저 돌리세요. 낡은 CSS 로는 **이미 없어진 구조에 녹색을 줍니다**(360~362 리뷰).';
+  }
+  const min = Math.round(diff / 60000);
   return 'dist/assets 의 빌드 CSS 가 소스보다 ' + min + '분 낡았습니다(가장 새 소스: ' + srcName + ') — '
     + '`npm run build` 를 먼저 돌리세요. 낡은 CSS 로는 **이미 없어진 구조에 녹색을 줍니다**(360~362 리뷰).';
 }
 
-/** 가장 새 파일의 시각과 경로 (364) */
+/**
+ * 366: src 아래 **실제로 있는 확장자 집합** — 훑는 목록이 이것을 다 덮어야 한다.
+ * 왜: 호출부의 확장자 목록에서 `.tsx` 를 빼는 변이는 셀프테스트가 볼 수 없었다(함수 안이 아니다).
+ * 그래서 **본검사가 스스로 입력을 검사**한다. 코드가 정본인 집합 비교라 판단이 들어가지 않는다.
+ */
+export function extensionsUnder(dir) {
+  const out = new Set();
+  const walk = d => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else {
+        const i = e.name.lastIndexOf('.');
+        if (i > 0) out.add(e.name.slice(i));
+      }
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return out;
+}
+
+/**
+ * 366(363~365 리뷰 H-1): ②-2 의 **배선**을 순수 함수로 떼어낸다 — 전에는 비교기에만 덫이 있어
+ * 블록을 통째로 지워도 셀프테스트가 "통과" 를 찍었다(리뷰가 변이 6종으로 보였다. 다섯 번째다).
+ * 이제 "어느 파일이 가장 새 것인지" 와 "어느 CSS 와 비교하는지" 까지 덫이 찌른다.
+ *
+ * @param srcLike  {t, f} 꼴 목록 — src 트리와 추가 입력들
+ * @param cssTimes 빌드 CSS 들의 수정 시각(ms)
+ */
+export function staleCheck(srcLike, cssTimes) {
+  let newest = { t: 0, f: '' };
+  for (const x of srcLike) if (x.t > newest.t) newest = x;
+  // 366(리뷰 L-5): ② 는 **모든** CSS 를 읽으므로, 비교는 **가장 낡은** 것과 해야 보수적이다
+  // (낡은 CSS 가 하나라도 남아 있으면 ② 가 그것을 읽는다. 지금은 `emptyOutDir` 때문에 하나뿐이다).
+  const oldest = cssTimes.length === 0 ? 0 : Math.min(...cssTimes);
+  return staleMessage(newest.t, oldest, newest.f);
+}
+
+/**
+ * 가장 새 파일의 시각과 경로 (364)
+ *
+ * 한계(366, 리뷰 L-4): **파일 삭제는 보이지 않는다** — 소스를 지우고 빌드하지 않으면 남은 파일이
+ * 모두 빌드보다 오래되어 통과한다. mtime 으로 알 수 있는 것의 한계다.
+ */
 export function newestFile(dir, exts) {
   let t = 0;
   let f = '';
@@ -285,27 +381,35 @@ if (built.length === 0) {
   for (const f of built) {
     const order = orderInBuiltCss(fs.readFileSync(path.join(assets, f), 'utf8'));
     if (!order.ok) {
-      fail.push(`dist/assets/${f}: 전역 초점 링이 .outline-none 보다 **앞**에 옵니다(${order.ring} < ${order.util}) — 같은 특정도라 나중 것이 이기므로 키보드 초점 표시가 사라집니다`);
+      fail.push(`dist/assets/${f}: 전역 초점 링이 .outline-none 보다 **앞**에 옵니다(${order.ring} < ${order.plain}) — 같은 특정도라 나중 것이 이기므로 키보드 초점 표시가 사라집니다`);
     }
   }
 }
 
 // ②-2 빌드 CSS 가 소스보다 낡았는가 (364)
 {
-  let newestSrc = newestFile(SRC, ['.ts', '.tsx', '.css']);
-  // 364: 빌드 CSS 를 바꾸는 입력은 src 만이 아니다 — 팔레트 설정(328 의 교훈)과 틀 문서도 본다
-  for (const extra of ['tailwind.config.js', 'index.html']) {
+  // 364: 빌드 CSS 를 바꾸는 입력은 src 만이 아니다 — 팔레트 설정(328 의 교훈)과 틀 문서도 본다.
+  // 366(리뷰 M-2): `postcss.config.js`(타일윈드를 켜는 파일)·`vite.config.ts`(출력 설정)도 같은 이유로 넣는다.
+  // 366: 훑는 확장자는 **한 곳에만** 적는다 — 두 곳에 적었더니 한쪽만 바꾸는 변이를 못 잡았다
+  const SCANNED = ['.ts', '.tsx', '.css'];
+  const srcLike = [newestFile(SRC, SCANNED)];
+  for (const extra of ['tailwind.config.js', 'index.html', 'postcss.config.js', 'vite.config.ts']) {
     const p = path.join(ROOT, extra);
-    if (!fs.existsSync(p)) continue;
-    const m = fs.statSync(p).mtimeMs;
-    if (m > newestSrc.t) newestSrc = { t: m, f: p };
+    if (fs.existsSync(p)) srcLike.push({ t: fs.statSync(p).mtimeMs, f: p });
   }
-  let newestCssMs = 0;
-  for (const f of built) {
-    const m = fs.statSync(path.join(assets, f)).mtimeMs;
-    if (m > newestCssMs) newestCssMs = m;
+  // 366: 훑는 확장자 목록이 src 에 **실제로 있는 것**을 다 덮는가(호출부 인자를 본검사가 검사한다)
+  for (const ext of extensionsUnder(SRC)) {
+    if (!SCANNED.includes(ext)) fail.push(`②-2 가 훑지 않는 확장자가 src 에 있습니다: ${ext} — 그 파일을 고치고 빌드하지 않으면 낡음을 못 봅니다`);
   }
-  const msg = staleMessage(newestSrc.t, newestCssMs, path.relative(ROOT, newestSrc.f).replace(/\\/g, '/'));
+  // 366: 추가 입력이 하나도 없으면 목록이 비어 버린 것이다(팔레트 설정·틀 문서가 빠지면 낡음을 못 본다)
+  if (srcLike.length < 2) fail.push('②-2 의 추가 입력(tailwind·postcss·vite·index.html)이 하나도 없습니다 — 목록이 비었는지 보세요');
+  const cssTimes = built.map(f => fs.statSync(path.join(assets, f)).mtimeMs);
+  const msg = staleCheck(
+    srcLike.map(x => ({ t: x.t, f: path.relative(ROOT, x.f).replace(/\\/g, '/') })),
+    cssTimes,
+  );
+  // 366: **무엇을 봤는지 찍는다** — 배선을 지우면 이 줄이 사라져 로그에서 보인다(셀프테스트로는 막을 수 없다)
+  process.stdout.write(`[check-focus] ②-2 입력 ${srcLike.length}개 · 빌드 CSS ${cssTimes.length}개 — ${msg === null ? '낡지 않음' : '낡음'}\n`);
   if (msg !== null) fail.push(msg);
 }
 

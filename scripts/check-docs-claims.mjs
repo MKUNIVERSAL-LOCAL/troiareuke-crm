@@ -689,6 +689,20 @@ function selftest() {
       // 363: 따옴표로 **인용한** 자기 지칭 문장은 그 줄의 주장이 아니다
       const quoted = '- [x] 363 — **가**(11-28 10:30): 360 의 "**[자기 정정]** 이 줄의 시각을 처음에 09:42 로 적었다 — 커밋은 09:37" 을 되돌렸다. 커밋 c39e445.';
       trap('인용한 자기 지칭 문장은 보지 않는다', selfTimeClaims(quoted).length === 0);
+      // 366(리뷰 L-3): "이 줄의" 뒤에 처음 오는 시각만 묶는다 — 줄 뒤쪽의 **다른 묶음** 커밋 시각은 아니다
+      const withOther = '- [x] 363 — **가**(11-28 10:30): **[자기 정정]** 이 줄의 시각을 09:42 로 적었다 — 커밋은 10:31 이다. 그리고 362 의 커밋은 09:54 다. 커밋 c39e445.';
+      const got = selfTimeClaims(withOther);
+      trap('자기 지칭 뒤의 첫 시각만 본다', got.length === 1 && got[0].hm === '10:31');
+      // 한글 따옴표로 인용한 자기 지칭도 면제한다
+      const hangul = '- [x] 363 — **가**(11-28 10:30): 360 의 “이 줄의 시각을 처음에 09:42 로 적었다 — 커밋은 09:37” 을 되돌렸다. 커밋 c39e445.';
+      trap('한글 따옴표 인용도 면제', selfTimeClaims(hangul).length === 0);
+      // 366: ⑳ — 따옴표 안의 덫 수는 인용이다(만든 날 바로 이 거짓 경보가 났다)
+      const roadTrap = [
+        '- [x] 366 — **가**(11-28 11:50): 리뷰가 "덫 31종 통과" 가 찍히는 것을 보였다. 덫 57종 · 덫 43종. 커밋 abc1234.',
+      ].join('\n');
+      const tc = newestTrapClaims(roadTrap);
+      trap('인용한 덫 수는 보지 않는다', !tc.claims.includes(31));
+      trap('인용 밖의 덫 수는 본다', tc.claims.includes(57) && tc.claims.includes(43));
     }
     // 356: ⑮ 의 asar 시각도 같은 결함이었다 — 서울 기준으로 못 박았는지 고정된 순간으로 확인한다
     {
@@ -1037,7 +1051,10 @@ problems.push(...releaseStepProblems());
   if (commits === null) {
     console.log('[check-docs-claims] ⑱ 건너뜀 — git log 를 읽을 수 없습니다');
   } else {
-    for (const r of timeClaimRows(read(ROADMAP))) {
+    const rows18 = timeClaimRows(read(ROADMAP));
+    // 366(리뷰 L-8): 자기가 본 줄 수를 찍는다 — 354 가 적은 "이제 세어서 찍는다" 를 사실로 만든다
+    console.log(`[check-docs-claims] ⑱ 시각을 대조한 줄 ${rows18.length}개(묶음 ${rows18.filter(r => r.kind === '묶음').length} + 재검증 ${rows18.filter(r => r.kind === '재검증').length})`);
+    for (const r of rows18) {
       const c = commits.find(x => x.h.startsWith(r.hash));
       if (!c) continue; // 해시 실재는 ① 이 본다
       const d = timeGap(r.md, r.hm, c.md, c.hm, c.y);
@@ -1050,11 +1067,27 @@ problems.push(...releaseStepProblems());
   }
 }
 
+// ⑳ 가장 새 묶음 줄의 "덫 N종" 이 가드가 찍는 수인가 (366)
+{
+  const { no, claims } = newestTrapClaims(read(ROADMAP));
+  if (claims.length > 0) {
+    const printed = trapCountsPrinted();
+    console.log(`[check-docs-claims] ⑳ 가드가 찍는 덫 수 ${[...printed].sort((a, b) => a - b).join('·')} / 묶음 ${no} 줄의 주장 ${claims.join('·')}`);
+    for (const c of claims) {
+      if (!printed.has(c)) {
+        problems.push(`${ROADMAP}: 묶음 ${no} 줄이 "덫 ${c}종" 이라고 적었는데 **어느 가드도 그 수를 찍지 않는다** — 가드의 \`--selftest\` 출력을 그대로 옮기세요(지금 찍히는 수: ${[...printed].sort((a, b) => a - b).join('·')})`);
+      }
+    }
+  }
+}
+
 // ⑲ 자기를 가리키는 문장이 자기 커밋을 말하는가 (363)
 {
   const commits = commitTimes();
   if (commits !== null) {
-    for (const r of selfTimeClaims(read(ROADMAP))) {
+    const selfClaims = selfTimeClaims(read(ROADMAP));
+    console.log(`[check-docs-claims] ⑲ 자기를 가리킨 시각 주장 ${selfClaims.length}개`);
+    for (const r of selfClaims) {
       const c = commits.find(x => x.h.startsWith(r.hash));
       if (!c) continue; // 해시 실재는 ① 이 본다
       if (c.hm !== r.hm) {
@@ -1169,17 +1202,74 @@ function selfTimeClaims(text) {
   const out = [];
   for (const line of text.split(/\r?\n/)) {
     if (!/이 줄의/.test(line)) continue;
-    const m = /커밋은 (\d{2}):(\d{2})/.exec(line);
-    if (!m) continue;
-    // 363: 따옴표 안이면 **다른 줄의 문장을 인용**한 것이다 — 만든 날 바로 이 거짓 경보가 났다
-    // (363 줄이 360 의 "[자기 정정] … 커밋은 09:37" 을 인용했다). ⑮ 와 같은 인용 면제를 쓴다.
-    if ((line.slice(0, m.index).match(/"/g) || []).length % 2 === 1) continue;
     const b = /^- \[x\] (\d{3,4}) — /.exec(line);
     const h = hashOf(line);
     if (!b || !h || Number(b[1]) >= 2000) continue;
-    out.push({ no: Number(b[1]), hm: m[1] + ':' + m[2], hash: h });
+    // 366(363~365 리뷰 L-3): 전에는 **줄의 첫 매치**만 보고 ASCII 따옴표만 셌다. 모든 매치로 넓히니
+    // **거짓 경보**가 났다 — 363 줄의 "(362 의 커밋은 09:54)" 를 자기 주장으로 읽었다. "이 줄의" 와
+    // 어느 시각이 묶이는지는 **말의 관계**라 줄 단위로는 알 수 없으므로 **위치로** 묶는다:
+    // 각 "이 줄의" **뒤에 처음 오는** 커밋 시각 하나만 그 자기 지칭의 주장으로 본다(다음 "이 줄의" 전까지).
+    // 그러면 리뷰가 걱정한 "인용이 먼저, 진짜가 나중" 도 자기 지칭마다 따로 보므로 함께 덮인다.
+    const selfPos = [...line.matchAll(/이 줄의/g)].map(x => x.index);
+    for (let k = 0; k < selfPos.length; k += 1) {
+      const from = selfPos[k];
+      const until = k + 1 < selfPos.length ? selfPos[k + 1] : line.length;
+      const m = /커밋은 (\d{2}):(\d{2})/.exec(line.slice(from, until));
+      if (!m) continue;
+      const before = line.slice(0, from + m.index);
+      const ascii = (before.match(/"/g) || []).length;
+      const open = (before.match(/[“‘]/g) || []).length;
+      const close = (before.match(/[”’]/g) || []).length;
+      // ASCII 는 홀짝으로, 한글 따옴표는 **열린 것이 더 많으면** 인용 안이다
+      if (ascii % 2 === 1 || open > close) continue;
+      out.push({ no: Number(b[1]), hm: m[1] + ':' + m[2], hash: h });
+    }
   }
   return out;
+}
+
+/**
+ * ⑳ **기록이 적은 "덫 N종" 이 어느 가드도 찍지 않는 수인가** (366, 363~365 리뷰 H-3)
+ *
+ * 왜: 363 의 기록이 삽입기 덫을 **6종**으로 적었는데 가드는 **7종**을 찍고 있었다. 하필 그 묶음이
+ * "이 수는 세어서 찍는다 — 손으로 적지 말 것" 을 가드 안에 박아 둔 묶음이다. 가드 출력이 정본인
+ * 비교이므로 352 의 경계선 안이다.
+ *
+ * 범위: **가장 새 묶음 줄 하나**만 본다 — 지난 줄의 수는 그때의 사실이다(역사 조작 금지, 350).
+ * 한계: 다른 가드의 수와 **우연히 같은** 틀린 수는 통과한다.
+ */
+function trapCountsPrinted() {
+  const guards = [
+    'check-docs-claims', 'check-focus-visible', 'check-flex-inputs',
+    'check-contrast-classes', 'check-invisible-chars', 'check-e2e-conventions',
+    'check-release-notes', 'check-gap-claims',
+  ];
+  const seen = new Set();
+  for (const g of guards) {
+    const r = spawnSync('node', [path.join('scripts', g + '.mjs'), '--selftest'], { cwd: ROOT, encoding: 'utf8' });
+    const out = (r.stdout || '') + (r.stderr || '');
+    for (const m of out.matchAll(/덫 (\d+)종/g)) seen.add(Number(m[1]));
+  }
+  return seen;
+}
+/** 가장 새 묶음 줄이 적은 "덫 N종" 들 */
+function newestTrapClaims(text) {
+  const lines = batchLines(text);
+  if (lines.length === 0) return { no: null, claims: [] };
+  const newest = lines.reduce((a, b) => (b.no > a.no ? b : a), lines[0]);
+  // 366: 따옴표 안의 수는 **인용**이다(옛 수를 그대로 적은 자리) — ⑮·⑲ 와 같은 면제.
+  //      만든 날 바로 이 거짓 경보가 났다: 이 묶음이 리뷰의 "덫 31종 통과" 를 인용했다.
+  const claims = [];
+  // 366: 굵게 표시(덫 **57종**)도 읽는다 — 안 읽으면 ⑳ 이 조용히 잠든다(만들며 겪었다)
+  for (const m of newest.line.matchAll(/덫 \*{0,2}(\d+)종/g)) {
+    const before = newest.line.slice(0, m.index);
+    const ascii = (before.match(/"/g) || []).length;
+    const open = (before.match(/[“‘]/g) || []).length;
+    const close = (before.match(/[”’]/g) || []).length;
+    if (ascii % 2 === 1 || open > close) continue;
+    claims.push(Number(m[1]));
+  }
+  return { no: newest.no, claims };
 }
 
 /** 이 브랜치의 커밋 시각 표 — git 을 한 번만 부른다 */

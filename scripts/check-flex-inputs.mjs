@@ -36,6 +36,7 @@ const TAGS = ['input', 'select', 'textarea'];
 /** 여는 태그들을 돌려준다 — 중괄호 깊이를 세어 `>` 를 찾는다 */
 export function openTags(text) {
   const out = [];
+  const unbalanced = []; // 366: 문자열 밖에서 짝이 안 맞는 `}` 를 만난 줄 — 호출부가 신고한다
   for (const tag of TAGS) {
     let from = 0;
     for (;;) {
@@ -58,19 +59,33 @@ export function openTags(text) {
         }
         if (c === '"' || c === "'" || c === '`') { quote = c; continue; }
         if (c === '{') depth += 1;
-        else if (c === '}') { depth -= 1; if (depth < 0) { depth = 0; } } // 짝이 안 맞으면 0 으로 되돌린다 — 다음 태그를 삼키지 않는다
+        // 366(리뷰 M-3): 전에는 음수 깊이를 0 으로 **되돌렸다**. 그 보정은 실제 src 에서 **한 번도
+        // 발동하지 않고**(리뷰가 계수기로 확인) 덫도 따옴표 추적 덕에 통과했다 — 발동하지 않고 덫도 없는
+        // 방어 코드는 데드코드다(CLAUDE.md §2). 이제 **그 자리에서 멈춘다** — 짝이 안 맞는 중괄호는
+        // 이 파서가 다룰 수 없는 모양이고, 조용히 넘어가면 다음 태그를 삼킨다.
+        else if (c === '}') { depth -= 1; if (depth < 0) { unbalanced.push(text.slice(0, i).split('\n').length); break; } }
         else if (c === '>' && depth === 0) break;
       }
       out.push({ tag, start, open: text.slice(start, i) });
       from = i;
     }
   }
+  out.unbalanced = unbalanced;
   return out;
 }
 
-/** 그 태그가 가진 `min-w-…` 클래스들 */
+/**
+ * 그 태그가 가진 `min-w-…` 클래스들 (366, 리뷰 L-9 로 좁혔다)
+ *
+ * **변형 접두는 세지 않는다**(`sm:min-w-[320px]` 은 기본값과 겨루지 않는다 — 전에는 겨룸으로 거짓 신고).
+ * **줄어들 수 있는 값만** 최소 너비를 "정했다" 로 인정한다 — `min-w-full|min|fit|max` 는 오히려
+ * 줄어들지 못하게 만들어 358 의 넘침을 그대로 재현하므로, 있어도 "정하지 않은" 것으로 본다.
+ */
+const SHRINKABLE = /^min-w-(0|\[[^\]]+\]|\d+(\.\d+)?|px)$/;
 function minWidths(open) {
-  return [...open.matchAll(/\bmin-w-(\[[^\]]+\]|[\w.]+)/g)].map(m => m[0]);
+  return [...open.matchAll(/(?:^|[\s"'`{])(min-w-(?:\[[^\]]+\]|[\w.]+))/g)]
+    .map(m => m[1])
+    .filter(c => SHRINKABLE.test(c));
 }
 /** `flex-1` 인데 최소 너비가 없거나, 서로 겨루는 최소 너비가 둘 이상인 자리 */
 export function violations(text) {
@@ -122,7 +137,11 @@ function selftest() {
   ok('블록 주석 안은 세지 않는다', violations('/* <input className="flex-1" /> */\n<input className="flex-1 min-w-0" />').length === 0);
   // `flex-1` 과 비슷한 다른 낱말에 속지 않는다
   ok('flex-10 같은 말에 속지 않는다', violations('<input className="flex-100 px-3" />').length === 0);
-  ok('min-w-full 도 최소 너비로 본다', violations('<input className="flex-1 min-w-full" />').length === 0);
+  // 366(리뷰 L-9): min-w-full|min|fit|max 는 오히려 **줄어들지 못하게** 만든다 — 정한 것으로 보지 않는다
+  ok('min-w-full 은 줄어들 수 있는 값이 아니다', violations('<input className="flex-1 min-w-full" />').length === 1);
+  ok('min-w-fit 도 아니다', violations('<input className="flex-1 min-w-fit" />').length === 1);
+  ok('min-w-px 는 줄어들 수 있다', violations('<input className="flex-1 min-w-px" />').length === 0);
+  ok('변형 접두는 겨룸으로 세지 않는다', violations('<input className="flex-1 min-w-0 sm:min-w-[320px]" />').length === 0);
   ok('min-w 가 없으면 잡는다(비슷한 말에 속지 않는다)', violations('<input className="flex-1 w-min max-w-0" />').length === 1);
   // 줄 번호를 사실대로 돌려준다
   ok('줄 번호', violations('첫 줄\n둘째 줄\n<input className="flex-1" />')[0].line === 3);
@@ -136,12 +155,16 @@ selftest();
 const problems = [];
 for (const full of listFiles(path.join(ROOT, 'src'))) {
   const rel = path.relative(ROOT, full).replace(/\\/g, '/');
+  // 366(리뷰 M-3): 문자열 밖에서 짝이 안 맞는 `}` 는 이 파서가 다룰 수 없는 모양이다 — 조용히 넘기지 않는다
+  for (const line of openTags(fs.readFileSync(full, 'utf8')).unbalanced || []) {
+    problems.push(`${rel}:${line} 여는 태그 안에서 짝이 안 맞는 \`}\` 를 만났습니다 — 이 파서가 태그 끝을 찾을 수 없습니다(모양을 단순하게 하거나 가드를 고치세요)`);
+  }
   for (const v of violations(fs.readFileSync(full, 'utf8'))) {
     if (v.why === 'conflict') {
       problems.push(`${rel}:${v.line} <${v.tag}> 에 최소 너비가 둘이다(${v.mins.join(' · ')}) — 같은 속성이라 뒤에 오는 쪽이 이기고 앞쪽은 데드코드다. 하나만 두세요`);
       continue;
     }
-    problems.push(`${rel}:${v.line} <${v.tag}> 에 \`flex-1\` 은 있고 최소 너비(\`min-w-*\`)가 없다 — 글꼴이 넓어지면 줄어들지 못해 창 밖으로 넘친다(358 에서 실제로 420 > 412)`);
+    problems.push(`${rel}:${v.line} <${v.tag}> 에 \`flex-1\` 은 있고 **줄어들 수 있는** 최소 너비가 없다 — 글꼴이 넓어지면 줄어들지 못해 창 밖으로 넘친다(358 에서 실제로 420 > 412). \`min-w-0\` 이나 \`min-w-[Nrem]\` 을 주세요(\`min-w-full|min|fit|max\` 는 반대로 못 줄어들게 합니다)`);
   }
 }
 
