@@ -226,7 +226,12 @@ const MODAL_COUNT_PAIR = /\*{0,2}(\d+)\*{0,2}개 중 (?:게이트가 여는 것 
 //      나도 재현했다). 복합어만 인정하는 쪽으로 좁혀 보니 **GAP 표의 살아 있는 주장**
 //      ("어드민 창 열한 개 … 지금 56자리 중 55자리")이 주제 밖으로 떨어졌다 — 이 글에서
 //      홀로 선 `창` 은 진짜 주제어다. 그래서 **뒤에 붙어 다른 낱말이 되는 자리**만 뺀다.
-const MODAL_TOPIC = /창(?![고구가문업])|모달|modal-a11y/g;
+// 378(375~377 리뷰 M-1): 375 의 `창(?![고구가문업])` 는 **리뷰가 심어 보인 다섯 음절만 뺀**
+//      금지 목록이었다. 그래서 창작·창립·창출·창틀·창원·창조·창의·창살·창단·창간이 모두
+//      "창 주제" 로 읽혀, 같은 칸에 자리 수가 있으면 **머지 관문이 거짓 실패**한다(리뷰가 재현).
+//      금지 목록을 늘리는 쪽은 끝이 없으므로 **단독 토큰**일 때만 주제어로 본다 —
+//      `어드민 창 열한 개`·`창 접근성`·`창 자리` 는 통과하고 복합어 열다섯 개는 전부 떨어진다(재서 확인).
+const MODAL_TOPIC = /(?<![가-힣])창(?![가-힣])|모달|modal-a11y/g;
 const OTHER_TOPIC = /키보드|대비|초점|keyboard|contrast|focus/g;
 /** 표 행이면 그 수가 든 칸의 끝(다음 `|`), 아니면 줄 끝 */
 function cellEnd(text, at) {
@@ -990,6 +995,10 @@ function selftest() {
       trap('같은 칸에서 창이 더 가까우면 주제', topicAt('키보드 이야기였지만 창 자리 지금 99자리 중 98자리') === true);
       trap('창고는 주제 낱말이 아니다', topicAt('지금 99자리 중 98자리를 치우고 창고로 옮겼다.') === false);
       trap('창구도 주제 낱말이 아니다', topicAt('| 예약 창구 수용 | 지금 99자리 중 98자리 |') === false);
+      // 378(리뷰 M-1): 금지 목록이 아니라 **단독 토큰**이어야 한다 — 창작·창의·창출로 고정한다
+      trap('창작은 주제 낱말이 아니다', topicAt('신규 창작 과제: 지금 99자리 중 98자리') === false);
+      trap('창의도 아니다', topicAt('창의적인 개선을 모아 지금 99자리 중 98자리를 적었다') === false);
+      trap('창출도 아니다', topicAt('| 신규 가치 창출 과제 | 지금 99자리 중 98자리 |') === false);
       trap('홀로 선 창은 주제 낱말이다', topicAt('어드민 창 열한 개를 덮어 지금 56자리 중 55자리') === true);
       trap('대비 문장도 대조하지 않는다', modalSlotClaims('글자 대비: 지금 18자리 중 18자리가 기준을 넘는다', 'x.md').every(c => c.kind === 'offtopic'));
       trap('개-자리 모양도 주제 표시를 요구한다', modalSlotClaims('초점 표시: 지금 200개 중 199자리가 덮였다', 'x.md').every(c => c.kind === 'offtopic'));
@@ -1263,7 +1272,6 @@ const familyCounts = {
     return to === -1 ? text.slice(from) : text.slice(from, to);
   };
   let verSeen = 0;
-  let brSeen = 0;
   let brAll = 0;
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
@@ -1276,7 +1284,6 @@ const familyCounts = {
     for (const m of text.matchAll(/feat\/[A-Za-z0-9_\/-]+(?:\.[A-Za-z0-9_\/-]+)*/g)) {
       if (!branch || branch === 'HEAD' || m[0] === branch) continue;
       if (/릴리스 완료|머지\(/.test(lineOf(text, m.index))) continue; // 지난 릴리스 기록 = 역사
-      brSeen += 1;
       problems.push(`${rel}: 브랜치 "${m[0]}" 가 지금 브랜치와 다르다 — ${branch}`);
     }
     brAll += [...text.matchAll(/feat\/[A-Za-z0-9_\/-]+/g)].length;
@@ -1483,10 +1490,15 @@ problems.push(...releaseStepProblems());
     console.log('[check-docs-claims] ⑱ 건너뜀 — git log 를 읽을 수 없습니다');
   } else {
     const rows18 = timeClaimRows(read(ROADMAP));
+    let compared18 = 0;
     // 366(리뷰 L-8): 자기가 본 줄 수를 찍는다 — 354 가 적은 "이제 세어서 찍는다" 를 사실로 만든다
-    console.log(`[check-docs-claims] ⑱ 시각을 대조한 줄 ${rows18.length}개(묶음 ${rows18.filter(r => r.kind === '묶음').length} + 재검증 ${rows18.filter(r => r.kind === '재검증').length})`);
+    // 378(375~377 리뷰 H-1, **열 번째**): 372~374 리뷰 M-7 이 이름까지 적은 여섯 중 ③(376)·
+    //      ④⑤⑦(377)·⑲(376, 바닥 없는 이유를 적음)는 처리됐는데 **⑱ 만 아무것도 받지 못했고**,
+    //      그런데도 377 기록은 "반영하지 않은 것은 없다" 고 적었다. 더해 찍던 수가 **읽은 줄 수**라
+    //      커밋 찾기를 끊어도 수가 그대로였다 — 이제 **대조에 성공한 줄**을 따로 세어 함께 찍는다.
     for (const r of rows18) {
       const c = commits.find(x => x.h.startsWith(r.hash));
+      if (c) compared18 += 1;
       if (!c) continue; // 해시 실재는 ① 이 본다
       const d = timeGap(r.md, r.hm, c.md, c.hm, c.y);
       // 361(리뷰 L-1): 이제 timeGap 은 **없는 날짜**에 null 을 돌려준다(356 에서 죽은 가지로 지웠던 자리가
@@ -1495,6 +1507,9 @@ problems.push(...releaseStepProblems());
       if (d < -TIME_BEFORE) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 는 커밋(${c.md} ${c.hm})보다 ${-d}분 뒤다 — 아직 오지 않은 시각을 적었다(시계를 읽어 적으세요)`);
       else if (d > TIME_AFTER) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 가 커밋(${c.md} ${c.hm})보다 ${d}분 앞이다 — 시각을 사실대로 적으세요`);
     }
+    console.log(`[check-docs-claims] ⑱ 시각 주장 ${rows18.length}줄(묶음 ${rows18.filter(r => r.kind === '묶음').length} + 재검증 ${rows18.filter(r => r.kind === '재검증').length}) 중 ${compared18}줄을 커밋과 대조`);
+    if (rows18.length === 0) problems.push('⑱ 이 시각 주장을 한 줄도 읽지 못했다 — 배선이 끊겼다(378)');
+    if (rows18.length > 0 && compared18 === 0) problems.push('⑱ 이 읽은 줄의 커밋을 하나도 찾지 못했다 — 해시가 전부 틀렸거나 배선이 끊겼다(378)');
   }
 }
 

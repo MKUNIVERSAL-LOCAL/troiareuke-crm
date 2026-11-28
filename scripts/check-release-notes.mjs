@@ -58,13 +58,29 @@ const VERSION_HEAD_RE = /^v(\d+\.\d+\.\d+) 업데이트 내용\s*$/gm;
 const soft = t => t.replace(/\s+/g, ' ').trim();
 const LABEL_EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu;
 /** 화면 이름이 아닌 대괄호 글 — 단축키·날짜·설명문 */
+/**
+ * 화면 이름이 아닌 대괄호 글 — 단축키·날짜·설명문·버전·홀로 선 키 이름.
+ * 378(375~377 리뷰 M-4): 375 의 세 규칙으로는 평범한 글 48개 중 **8개**가 "없는 단추" 로
+ *      신고됐다(`[v1.0.64]`·`[14일분]`·`[마우스 오른쪽]`·`[11-28]`·`[2026년]`·`[미정]`·`[Space]`·`[TODO]`).
+ *      `check:notes` 는 머지 관문이므로 그 하나하나가 **지점 안내를 고치다 머지를 막는** 자리다.
+ */
 function notAScreenName(label) {
   if (/^[A-Za-z]+\s*\+/.test(label)) return '단축키';
+  if (/^(?:Enter|Esc|ESC|Escape|Tab|Space|Shift|Ctrl|Alt|Del|Delete|Backspace|F\d{1,2})$/i.test(label)) return '키 이름';
   if (/^\d{4}-\d{2}-\d{2}/.test(label)) return '날짜';
+  if (/^\d{1,2}-\d{1,2}$/.test(label)) return '날짜';
+  if (/^v?\d+\.\d+/.test(label)) return '버전';
+  if (/^\d+(?:일|개월|년|주|시간|분|일분|건|명|원)/.test(label)) return '수량';
+  if (/^\d+\s*\/\s*\d+$/.test(label)) return '쪽수';
+  if (/^[A-Z]{3,}$/.test(label)) return '약어';
   if (label.includes(':')) return '설명문';
   return null;
 }
 /** 노트 맨 위 절의 대괄호 글들 */
+/** 24자가 넘어 추출되지 않는 대괄호 글 — 조용히 사라지지 않게 센다 (378, 리뷰 M-4) */
+function longLabels(text) {
+  return [...new Set([...text.matchAll(/\[([^\]\n]{25,200})\]/g)].map(m => m[1].trim()))];
+}
 function noteLabels(text) {
   return [...new Set([...text.matchAll(/\[([^\]\n]{2,24})\]/g)].map(m => m[1].trim()))];
 }
@@ -102,7 +118,9 @@ function missingNoteLabels(text, files) {
     if (flats.some(flat => parts.every(p => flat.includes(p)))) continue;
     missing.push(label);
   }
-  return { missing, skipped, total: noteLabels(text).length };
+  // 378(리뷰 M-4): 25자 이상 이름은 `{2,24}` 때문에 **추출조차 되지 않아** 조용히 지나갔다.
+  for (const l of longLabels(text)) skipped.push(`${l.slice(0, 20)}…(24자 초과)`);
+  return { missing, skipped, total: noteLabels(text).length + longLabels(text).length };
 }
 function checkReleaseNotes(text, pkgVersion) {
   const problems = [];
@@ -229,34 +247,40 @@ if (process.argv.includes('--selftest')) {
                    { path: 'c.tsx', text: '월 마감 배지' }];
     const t = (label) => missingNoteLabels(`v1.0.0 업데이트 내용\n\n■ 가\n• [${label}] 를 누르세요\n`, files);
     const bad = [];
-    if (t('재고 실사').missing.length !== 0) bad.push('있는 이름을 못 찾았다');
-    if (t('없는 단추 이름').missing.length !== 1) bad.push('없는 이름을 잡지 못했다');
-    if (t('+N개 더 보기').missing.length !== 0) bad.push('N 자리를 다루지 못했다');
-    if (t('N종 실사 반영').missing.length !== 0) bad.push('앞이 N 인 이름을 다루지 못했다');
-    if (t('🔒 마감됨').missing.length !== 0) bad.push('아이콘이 섞인 이름을 다루지 못했다');
-    if (t('재고  실사').missing.length !== 0) bad.push('띄어쓰기 차이를 다루지 못했다');
+    let traps = 0;
+    const probe = (cond, why) => { traps += 1; if (!cond) bad.push(why); };
+    probe(!(t('재고 실사').missing.length !== 0), '있는 이름을 못 찾았다');
+    probe(!(t('없는 단추 이름').missing.length !== 1), '없는 이름을 잡지 못했다');
+    probe(!(t('+N개 더 보기').missing.length !== 0), 'N 자리를 다루지 못했다');
+    probe(!(t('N종 실사 반영').missing.length !== 0), '앞이 N 인 이름을 다루지 못했다');
+    probe(!(t('🔒 마감됨').missing.length !== 0), '아이콘이 섞인 이름을 다루지 못했다');
+    probe(!(t('재고  실사').missing.length !== 0), '띄어쓰기 차이를 다루지 못했다');
     // 375(리뷰 M-2): 평범한 대괄호 글은 **신고하지 않고 건너뛴다**(머지 관문을 막지 않는다)
-    if (t('Ctrl+S').missing.length !== 0 || !t('Ctrl+S').skipped.join().includes('단축키')) bad.push('단축키를 신고했다');
-    if (t('2026-11-28').missing.length !== 0 || !t('2026-11-28').skipped.join().includes('날짜')) bad.push('날짜를 신고했다');
-    if (t('주의: 꼭 읽어 주세요').missing.length !== 0 || !t('주의: 꼭 읽어 주세요').skipped.join().includes('설명문')) bad.push('설명문을 신고했다');
-    if (t('N건').skipped.join().indexOf('수·기호') < 0) bad.push('수만 적은 이름을 건너뛰지 않았다');
+    probe(!(t('Ctrl+S').missing.length !== 0 || !t('Ctrl+S').skipped.join().includes('단축키')), '단축키를 신고했다');
+    probe(!(t('2026-11-28').missing.length !== 0 || !t('2026-11-28').skipped.join().includes('날짜')), '날짜를 신고했다');
+    probe(!(t('주의: 꼭 읽어 주세요').missing.length !== 0 || !t('주의: 꼭 읽어 주세요').skipped.join().includes('설명문')), '설명문을 신고했다');
+    probe(!(t('N건').skipped.join().indexOf('수·기호') < 0), '수만 적은 이름을 건너뛰지 않았다');
     // 375(리뷰 M-3): 조각은 3자 이상이고 **같은 파일**에 모두 있어야 한다
     // 375: 조각이 다 짧은 N 이름은 **판단하지 않고 건너뛴다**(우연히 맞을 수 있다)
-    if (t('마감 N 완료').skipped.join().indexOf('수·기호') < 0) bad.push('짧은 조각 이름을 건너뛰지 않았다');
-    if (t('확인 N').skipped.join().indexOf('수·기호') < 0) bad.push('두 글자 조각 이름을 건너뛰지 않았다');
-    if (t('월 마감 배지').missing.length !== 0) bad.push('한 파일에 다 있는 이름을 못 찾았다');
+    probe(!(t('마감 N 완료').skipped.join().indexOf('수·기호') < 0), '짧은 조각 이름을 건너뛰지 않았다');
+    probe(!(t('확인 N').skipped.join().indexOf('수·기호') < 0), '두 글자 조각 이름을 건너뛰지 않았다');
+    probe(!(t('월 마감 배지').missing.length !== 0), '한 파일에 다 있는 이름을 못 찾았다');
     // 375: 두 글자 이름은 쪼개지 않으므로 그대로 본다
-    if (t('마감됨').missing.length !== 0) bad.push('세 글자 이름을 못 찾았다');
-    if (t('없음').missing.length !== 1) bad.push('두 글자인데 없는 이름을 잡지 못했다');
+    probe(!(t('마감됨').missing.length !== 0), '세 글자 이름을 못 찾았다');
+    probe(!(t('없음').missing.length !== 1), '두 글자인데 없는 이름을 잡지 못했다');
     // 375(리뷰 M-3): 조각이 **다른 파일**에 흩어지면 통과시키지 않는다
-    if (missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [재고 실사 N 마감됨] 를 누르세요\n', files).missing.length !== 1) bad.push('흩어진 조각을 통과시켰다');
+    probe(!(missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [재고 실사 N 마감됨] 를 누르세요\n', files).missing.length !== 1), '흩어진 조각을 통과시켰다');
     // 375: 공백을 **지우면** 붙은 글자가 우연히 맞는다 — 하나로 모으기만 한다
     const sp = [{ path: 'd.tsx', text: 'const t = "없는 기능을 숨긴다"; const u = `재고\n      실사`;' }];
-    if (missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [없는기능 N 열기]\n', sp).missing.length !== 1) bad.push('붙은 글자가 우연히 맞았다');
-    if (missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [재고 실사]\n', sp).missing.length !== 0) bad.push('줄바꿈으로 갈라진 이름을 못 찾았다');
+    probe(!(missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [없는기능 N 열기]\n', sp).missing.length !== 1), '붙은 글자가 우연히 맞았다');
+    probe(!(missingNoteLabels('v1.0.0 업데이트 내용\n\n■ 가\n• [재고 실사]\n', sp).missing.length !== 0), '줄바꿈으로 갈라진 이름을 못 찾았다');
     if (bad.length > 0) { console.error('[selftest] ⑧ 덫 실패: ' + bad.join(' / ')); process.exit(1); }
-    console.log('[check-release-notes] selftest ⑧ 덫 17종 통과(있는 이름·없는 이름·N 자리 2종·아이콘·띄어쓰기·단축키·날짜·설명문·수만·짧은 조각 2종·한 파일·두 글자 2종·흩어진 조각·붙은 글자·갈라진 이름)');
-  }  const pad = n => '\n'.repeat(n);
+    // 378(375~377 리뷰 M-2): 375 는 이 수를 **손으로 박았고 실제보다 하나 적었다**(18개인데 17).
+    //      331 H-3·335 ③ 이 금지한 그 모양이다 — 세어서 찍는다.
+    console.log(`[check-release-notes] selftest ⑧ 덫 ${traps}종 통과(있는 이름·없는 이름·N 자리·아이콘·띄어쓰기·단축키·날짜·설명문·수만·짧은 조각·한 파일·두 글자·흩어진 조각·붙은 글자·갈라진 이름 — **이 수는 세어서 찍는다**)`);
+  }
+
+  const pad = n => '\n'.repeat(n);
   const cases = [
     ['정상(새 섹션이 배너를 채움 + 구분선)', 'v1.0.63 업데이트 내용\n\n■ 문자\n• 새 항목\n' + pad(2100) + '— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
     ['정상(짧은 새 섹션 + 구분선)', 'v1.0.63 업데이트 내용\n\n• 새 항목\n\n— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
@@ -309,7 +333,12 @@ const problems = checkReleaseNotes(text, pkg.version);
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name);
       if (fs.statSync(full).isDirectory()) walk(full);
-      else if (/\.(ts|tsx)$/.test(name)) files.push({ path: full, text: fs.readFileSync(full, 'utf8') });
+      else if (/\.(ts|tsx)$/.test(name)) {
+        // 378(리뷰 M-4): `src/assets/fonts/nanumGothicBase64.ts`(2.7MB base64)가 건초에 섞여
+        //      `[ESC]`·`[F5]` 같은 짧은 라틴 이름이 **잡음에서 우연히** 맞았다 — 자산은 뺀다.
+        if (/[\\/]assets[\\/]/.test(full)) continue;
+        files.push({ path: full, text: fs.readFileSync(full, 'utf8') });
+      }
     }
   };
   walk(srcDir);

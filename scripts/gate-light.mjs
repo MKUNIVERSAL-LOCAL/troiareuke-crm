@@ -16,7 +16,9 @@
  *   node scripts/gate-light.mjs 277 --base <sha>  # 코어 잠금 검사의 기준점(기본: origin/main 과의 merge-base)
  *   node scripts/gate-light.mjs --out <dir>    # 로그를 둘 폴더(기본: .gate/)
  *
- * 끝에 한 줄로 결과를 적는다: `T=0 T2=0 B=0 E=0 P=SKIP D=0 R=0 C=0 V=0 W=0 A=0 K=0 U=0 O=0 M=0 L=0`
+ * 끝에 한 줄로 결과를 적는다: `T=0 T2=0 B=0 E=0 P=SKIP D=0 R=0 C=0 V=0 W=0 G=0 J=0 Y=0 X=0 A=0 N=0 I=0 Z=0 S=0 H=0 F=0 Q=0 K=0 U=0 O=0 M=0 L=0`
+ * (378, 375~377 리뷰 L-5: 이 예시가 G·J·Y·X·N·I·Z·S·F·Q·H 가 빠진 채 낡아 있었다 —
+ *  지금은 코드의 `flags.X` 순서를 그대로 옮겼다. 플래그를 더하면 이 줄도 함께 고칠 것.)
  * 0 이 아닌 칸이 하나라도 있으면 exit 1 — 그 칸의 이름으로 로그를 찾아 보면 된다.
  */
 import { spawnSync } from 'node:child_process';
