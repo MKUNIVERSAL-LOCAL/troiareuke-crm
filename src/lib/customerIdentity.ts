@@ -2,12 +2,16 @@
 // 예약·시술 기록·회차권·결제·상담은 고객 이름(예약은 전화번호도)을 복사해 들고 있다. 익명화(retentionPolicy)·병합(customerMerge)·고객 정보 수정·삭제가
 // 모두 이 전파를 쓴다 — 한 곳만 빠지면 개명한 고객이 다른 화면 검색에서 사라지거나 공유 캘린더에 실명이 남는다 (114~116 리뷰 #H4).
 import { CustomerStore, ReservationStore, TreatmentLogStore, CustomerProgramStore, PaymentStore } from './store';
+import type { PrefLanded } from './prefLandedRule'; // 설정 저장 판정 (304)
 import { ConsultationStore } from './consultationStore';
+import { clearHistoryOfCustomer } from './reservationHistory';
+import { clearCustomerHistory } from './customerHistory';
 import { clearPhotos } from './photoStore';
 import { getPreference, setPreference } from './shopPreferences';
 import { resyncGcalEvents } from './gcalEventMap';
 import { todayISO } from './format';
 import type { ProductSale } from '../types';
+import { clearFreeTextReasonsOfCustomer } from './cancelReasons';
 
 /** 삭제된 고객의 기록에 남기는 이름 — 실명을 남기지 않되 '탈퇴고객'(익명화)과 구분한다 */
 export const DELETED_CUSTOMER_NAME = '삭제된 고객';
@@ -53,15 +57,20 @@ export function upcomingReservationsOf(customerIds: string[]) {
 
 const MERGED_MAP_MAX = 500;
 
-/** 병합으로 사라진 고객 id 를 기록 — 옮길 수 없는 제품 판매 행(코어)을 읽을 때 되짚는다 (11차 #M10). 사슬은 기록 시점에 평탄화하고, 오래된 항목부터 500개까지만 */
-export function recordMergedCustomer(sourceId: string, targetId: string): void {
+/** 병합으로 사라진 고객 id 를 기록 — 옮길 수 없는 제품 판매 행(코어)을 읽을 때 되짚는다 (11차 #M10). 사슬은 기록 시점에 평탄화하고, 오래된 항목부터 500개까지만.
+ *  304: 저장 판정을 돌려준다 — 이 표가 안 남으면 그 고객의 제품 판매가 "삭제된 고객" 으로 보인다(`saleCustomerNameResolver`). */
+export function recordMergedCustomer(sourceId: string, targetId: string): { landed: PrefLanded; rechained: number } {
   const map = mergedCustomerIds();
   const next: Record<string, string> = {};
-  for (const [k, v] of Object.entries(map)) next[k] = v === sourceId ? targetId : v; // 이전에 source 로 합쳐진 것도 target 으로
+  let rechained = 0; // 311(303~308 리뷰 M-4): 이번 저장이 **다시 가리키게 만든 옛 id 수**
+  for (const [k, v] of Object.entries(map)) {
+    if (v === sourceId) rechained += 1;
+    next[k] = v === sourceId ? targetId : v; // 이전에 source 로 합쳐진 것도 target 으로
+  }
   next[sourceId] = targetId;
   const keys = Object.keys(next);
   for (const k of keys.slice(0, Math.max(0, keys.length - MERGED_MAP_MAX))) delete next[k];
-  setPreference('mergedCustomerIds', next);
+  return { landed: setPreference('mergedCustomerIds', next), rechained };
 }
 
 function mergedCustomerIds(): Record<string, string> {
@@ -70,11 +79,21 @@ function mergedCustomerIds(): Record<string, string> {
 }
 
 /** 고객 삭제 직전 정리 — 시술·상담의 얼굴 사진을 지우고(개별 삭제·익명화와 같은 규칙) 남는 기록의 이름·전화를 '삭제된 고객'으로. 기록 자체는 매출 통계를 위해 남는다.
- *  사진 건수는 돌려주지 않는다 — 동기 getPhotos 는 캐시 미적재면 []라 "0장"으로 거짓 안내가 됐다(삭제 자체는 tombstone 으로 정상) (리뷰 #M7). @returns 이름을 바꾼 기록 수 */
-export function scrubCustomerBeforeDelete(customerId: string): number {
+ *  사진 건수는 돌려주지 않는다 — 동기 getPhotos 는 캐시 미적재면 []라 "0장"으로 거짓 안내가 됐다(삭제 자체는 tombstone 으로 정상) (리뷰 #M7).
+ *
+ *  **324(321~323 리뷰 H-1)**: 여기서 **직접 입력 취소 사유를 지우지 않고 있었다**. `cancelReasons.ts` 의
+ *  그 함수 주석은 "고객 익명화·**삭제** 때 지운다" 고 적었는데 호출자는 익명화 하나뿐이었다 —
+ *  고객이 "제 정보를 지워주세요" 라고 해서 **삭제**를 누르면 "○○ 임신으로 중단" 같은 개인 사정이
+ *  지점 **설정 행**에 남고, 그 행은 NAS 로 동기돼 그 지점 모든 PC 에 퍼진다(예약이 남아 있으면 최대 1년).
+ *  삭제 확인창은 사진·이름까지 나열하면서 이 기록은 한 마디도 하지 않았다. 이제 지우고, **지웠는지**를 돌려준다.
+ *  @returns 이름을 바꾼 기록 수와, 직접 입력 사유 삭제가 이 기기에 남았는지 */
+export function scrubCustomerBeforeDelete(customerId: string): { renamed: number; reasonsLanded: PrefLanded } {
   for (const t of TreatmentLogStore.getByCustomer(customerId)) clearPhotos(`treatment:${t.id}`);
   for (const c of ConsultationStore.getByCustomer(customerId)) clearPhotos(`consult:${c.id}`);
-  return propagateCustomerIdentity(customerId, { name: DELETED_CUSTOMER_NAME, phone: '' });
+  clearHistoryOfCustomer(customerId); // 예약 변경 이력에 남은 실명도 지운다 (250 리뷰 H-4)
+  clearCustomerHistory(customerId);   // 고객 정보 변경 이력도 지운다 (252)
+  const reasons = clearFreeTextReasonsOfCustomer(customerId); // 324: 익명화와 같은 규칙으로
+  return { renamed: propagateCustomerIdentity(customerId, { name: DELETED_CUSTOMER_NAME, phone: '' }), reasonsLanded: reasons.landed };
 }
 
 /** 제품 판매 행의 고객 이름을 돌려주는 함수 — 판매 행은 수정 API 가 없어(코어) 저장 사본 대신 고객 레코드를 읽는다(개명·익명화 즉시 반영).

@@ -1,5 +1,7 @@
 // SegmentEditorModal — 저장 세그먼트(조건 조합) 만들기·수정 (비코어, 166, GAP C-6·M-2). 규칙 segmentFilterRule, 보관 savedSegments
 import { useMemo, useState } from 'react';
+import { describePrefLoss, describePrefRemovalLoss } from '../lib/prefLandedRule'; // 저장이 정말 남았는지 (296·297)
+import { prefSaveMode } from '../lib/prefSaveMode';
 import Modal from './ui/Modal';
 import { notify } from '../lib/notify';
 import { askConfirm } from '../lib/confirmDialog';
@@ -27,14 +29,19 @@ export default function SegmentEditorModal({ segment, facts, tagOptions, onClose
   const submit = () => {
     const errs = validateSegment(name, c);
     if (errs.length) { notify.error(errs[0]); return; }
-    saveSegment(name, c, segment?.id);
-    notify.success(segment ? '세그먼트를 수정했습니다.' : `세그먼트를 저장했습니다. 지금 ${count}명이 해당됩니다.`);
+    const { landed } = saveSegment(name, c, segment?.id);
+    // 296: 세그먼트는 발송 대상이다 — 안 남았는데 "저장했습니다" 라고 말하면 다음 발송이 0명이 된다
+    const lost = describePrefLoss(landed, '세그먼트', prefSaveMode());
+    if (lost) notify.error(lost);
+    else notify.success(segment ? '세그먼트를 수정했습니다.' : `세그먼트를 저장했습니다. 지금 ${count}명이 해당됩니다.`);
     onSaved();
   };
   const remove = async () => {
     if (!segment) return;
     if (!(await askConfirm({ title: '세그먼트 삭제', message: `"${segment.name}" 세그먼트를 삭제할까요? 고객 자료는 그대로입니다.`, confirmLabel: '삭제', danger: true }))) return;
-    deleteSegment(segment.id); notify.success('세그먼트를 삭제했습니다.'); onSaved();
+    const lostDelete = describePrefRemovalLoss(deleteSegment(segment.id), '세그먼트', prefSaveMode()); // 296·297(리뷰 M-3)
+    if (lostDelete) notify.error(lostDelete); else notify.success('세그먼트를 삭제했습니다.');
+    onSaved();
   };
   const chip = (on: boolean) => `text-xs px-2.5 py-1 rounded-full border ${on ? 'bg-[#1a3a8f] text-white border-[#1a3a8f]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`;
   const input = 'w-28 px-2 py-1.5 text-sm border border-gray-200 rounded-lg';
@@ -61,7 +68,7 @@ export default function SegmentEditorModal({ segment, facts, tagOptions, onClose
         <fieldset><legend className="text-xs font-medium text-gray-600 mb-1">이탈 위험</legend><div className="flex flex-wrap gap-1.5">{CHURN.map(x => <button key={x.v} type="button" aria-pressed={!!c.churnLevels?.includes(x.v)} onClick={() => toggle('churnLevels', x.v)} className={chip(!!c.churnLevels?.includes(x.v))}>{x.label}</button>)}</div></fieldset>
         <p className="text-xs text-gray-700 bg-gray-50 rounded-xl px-3 py-2">{describeSegment(c)} · 지금 <b data-testid="segment-count">{count}</b>명 (조건은 모두 "그리고")</p>
         <div className="flex gap-2 pt-1">
-          {segment && <button type="button" onClick={() => void remove()} className="px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100">삭제</button>}
+          {segment && <button type="button" onClick={() => void remove()} className="px-4 py-2.5 text-sm font-medium text-red-700 bg-red-50 rounded-xl hover:bg-red-100">삭제</button>}
           <button type="button" onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200">취소</button>
           <button type="button" onClick={submit} className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#15306e]" data-testid="segment-save">{segment ? '저장' : '만들기'}</button>
         </div>

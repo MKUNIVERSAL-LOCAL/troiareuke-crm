@@ -5,8 +5,8 @@
 
 const api = (window as unknown as { electronAPI?: { isElectron?: boolean; isAdminBuild?: boolean } }).electronAPI;
 
-export const IS_ELECTRON_APP = Boolean(api?.isElectron);
-export const IS_ADMIN_BUILD = Boolean(api?.isAdminBuild);
+const IS_ELECTRON_APP = Boolean(api?.isElectron);
+const IS_ADMIN_BUILD = Boolean(api?.isAdminBuild);
 
 /** 일반(지점용) exe에서 관리자 화면 차단 */
 export const BLOCK_ADMIN_UI = IS_ELECTRON_APP && !IS_ADMIN_BUILD;

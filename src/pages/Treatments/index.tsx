@@ -1,3 +1,6 @@
+import { logReservationStatus } from '../../lib/reservationHistory'; // 시술 기록이 예약을 완료로 바꾼 것도 이력에 (250 리뷰 H-3)
+// 자주 쓰는 메모 문구 (251 → 255 공용 컴포넌트) — 같은 문장을 하루 수십 번 다시 쓰던 것
+import MemoPresetChips from '../../components/MemoPresetChips';
 import { notify } from '../../lib/notify';
 import { matchesSearch, todayISO, toISODate, parseISODate, formatDate, formatPrice } from '../../lib/format';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -8,6 +11,7 @@ import Header from '../../components/layout/Header';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import CustomerAlertLine from '../../components/CustomerAlertLine'; // 현장 주의사항 경고 (232, GAP C-11)
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
@@ -308,6 +312,7 @@ export default function Treatments() {
               const r = ReservationStore.getAll().find(x => x.id === reservationId);
               if (r && (r.status === 'confirmed' || r.status === 'pending') && (!savedDate || r.date === savedDate)) {
                 ReservationStore.updateStatus(reservationId, 'completed');
+                logReservationStatus(reservationId, r.status, 'completed'); // 시술 기록이 바꾼 상태도 이력에 (250 리뷰 H-3)
                 healCustomerStatsWhenReady(r.customerId); // 완료 +1이 같은 날 시술 기록과 겹쳐 두 번 세지지 않게 — 하이드레이션 뒤 (리뷰 2026-11-19)
               }
             }
@@ -576,6 +581,7 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
             <CustomerCombobox customers={customers} value={customerId} onChange={id => { setCustomerId(id); setCustomerProgramId(onlyActiveProgram(id, treatmentDate)); }} maskRole={authUser?.role ?? 'staff'} />
             {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
+            <CustomerAlertLine customerId={customerId} className="mt-2" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1.5">담당 직원</label>
@@ -698,6 +704,8 @@ function AddTreatmentModal({ treatment: editing, prefill, onClose, onSave }: { t
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="시술 특이사항, 다음 방문 시 주의사항 등"
           />
+          {/* 자주 쓰는 문구 — 공용 컴포넌트(시술 기록·상담·예약·고객 메모가 같은 문구를 쓴다) (255) */}
+          <MemoPresetChips value={staffNotes} onChange={setStaffNotes} manage />
         </div>
 
         <div>
@@ -921,7 +929,7 @@ function TreatmentDetailModal({
               <button
                 type="button"
                 onClick={() => { onClose(); navigate(`/reservations?new=1&customer=${encodeURIComponent(t.customerId)}&date=${encodeURIComponent(t.nextAppointment!)}`); }}
-                className="flex-shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700 whitespace-nowrap"
+                className="flex-shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-green-700 text-white hover:bg-green-800 whitespace-nowrap"
               >
                 이 날짜로 예약
               </button>

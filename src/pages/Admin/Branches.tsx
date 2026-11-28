@@ -3,7 +3,7 @@ import { readJson } from '../../lib/safeJson';
 import { notify } from '../../lib/notify';
 import { Plus, Pencil, Trash2, CheckCircle, XCircle, Building2, Info, Search } from 'lucide-react';
 import type { Branch } from '../../lib/supabase';
-import { createBranchAdmin, adminDeleteBranch, type AdminApiResult } from '../../lib/adminApi';
+import { createBranchAdmin, adminDeleteBranch, resetBranchAppLock, type AdminApiResult } from '../../lib/adminApi';
 import DangerConfirmModal from '../../components/admin/DangerConfirmModal';
 import AdminDialog from '../../components/admin/AdminDialog';
 import { isAuthApiConfigured, adminListUsers, adminUpdateUser, type AuthApiUser } from '../../lib/authApi';
@@ -83,6 +83,23 @@ export default function Branches() {
   }
 
   /** 지점의 실행 버전 — 대시보드와 같은 규칙(adminBranches.branchVersionInfo): 가장 낮은 버전이 경고 대상, 접속 시각은 가장 최근 */
+  // 화면 PIN 초기화 (219, 승인 20) — 매장이 PIN 을 잊었을 때. 서버에는 "초기화 시각" 만 올라가고 지점 앱이 다음 조회에서 자기 기기 PIN 설정을 지운다
+  const [pinResetBusy, setPinResetBusy] = useState<string | null>(null);
+  const [pinResetDone, setPinResetDone] = useState<Set<string>>(new Set());
+  async function handleResetPin(b: { id: string; name: string }) {
+    if (!window.confirm(`'${b.name}' 지점의 화면 잠금 PIN을 초기화할까요?\n그 지점 프로그램이 다음에 서버와 통신할 때 PIN 설정이 지워지고, 매장은 설정에서 새 PIN을 정하면 됩니다.`)) return;
+    setPinResetBusy(b.id);
+    try {
+      await resetBranchAppLock(b.id);
+      setPinResetDone(prev => new Set(prev).add(b.id));
+      notify.success(`'${b.name}' 지점 PIN 초기화를 요청했습니다. 해당 지점 프로그램이 서버와 통신하면 적용됩니다.`);
+    } catch (e: unknown) {
+      notify.error(`PIN 초기화에 실패했습니다: ${(e as Error)?.message || '서버 오류'}`);
+    } finally {
+      setPinResetBusy(null);
+    }
+  }
+
   function branchVersionInfo(branchId: string) {
     return branchVersionOf(nasUsersByBranch[branchId] || []);
   }
@@ -321,7 +338,7 @@ export default function Branches() {
         </div>
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors"
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
         >
           <Plus size={16} />
           지점 추가
@@ -459,10 +476,22 @@ export default function Branches() {
                         <button
                           onClick={() => openEdit(b)}
                           aria-label={`${b.name} 지점 정보 수정`}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
                         >
                           <Pencil size={13} />
                         </button>
+                        {NAS_MODE && (
+                          <button
+                            onClick={() => void handleResetPin(b)}
+                            disabled={pinResetBusy === b.id}
+                            aria-label={`${b.name} 지점 화면 잠금 PIN 초기화`}
+                            title="매장이 화면 잠금 PIN을 잊었을 때 — 지점 앱이 다음 통신에서 PIN 설정을 지웁니다"
+                            data-testid="branch-pin-reset"
+                            className="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                          >
+                            {pinResetBusy === b.id ? '초기화 중…' : pinResetDone.has(b.id) ? 'PIN 초기화됨' : 'PIN 초기화'}
+                          </button>
+                        )}
                         <button
                           onClick={() => handleToggleActive(b)}
                           className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
@@ -615,7 +644,7 @@ export default function Branches() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
               >
                 {saving ? '저장 중...' : '저장하기'}
               </button>

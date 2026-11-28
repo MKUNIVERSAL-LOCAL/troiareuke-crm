@@ -1,5 +1,7 @@
 # NAS 서버 재배포 런북 — 2026-07-20 어드민 데이터 API 반영
 
+> 2026-11-25(220): 릴리스 전체는 `npm run release:run` 으로 묶였다(단계·옵션은 `docs/DISTRIBUTION-POLICY.md` "릴리스 실행"). 이 문서의 수동 절차는 그 스크립트의 `server` 단계가 NO_SUDO 로 끝났을 때 쓰는 백업 경로다.
+
 > 대상: `https://crm-api.mkcorp.familyds.com` (DSM 역방향프록시 → 127.0.0.1:8787)
 > 설치 위치: `/volume1/docker/troiareuke-crm-server`
 > 이번 배포로 추가되는 것: 슈퍼어드민 전 데이터 조회 API 4종(`/api/admin/overview`,

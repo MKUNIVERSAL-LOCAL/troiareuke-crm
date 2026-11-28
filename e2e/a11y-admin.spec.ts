@@ -10,7 +10,7 @@ import { scan, assertNoBlocking, makeStep, type Row } from './a11y-shared';
 
 const ADMIN_ROUTES = [
   '/admin/dashboard', '/admin/branches', '/admin/users', '/admin/subscriptions', '/admin/subscriptions?view=ai',
-  '/admin/announcements', '/admin/statistics', '/admin/features', '/admin/login-logs',
+  '/admin/announcements', '/admin/statistics', '/admin/statistics?view=data', '/admin/features', '/admin/login-logs',
 ];
 
 const acc = makeAccount('AA');
@@ -33,7 +33,8 @@ test('어드민 콘솔 화면 전부에 serious·critical 접근성 위반이 �
   }
 
   // 어드민 창(AdminDialog, 53): 지점 추가 창을 열어 놓고 분석 — role=dialog·이름·포커스 트랩에 더해 scan의 dialog-covered 검사도 받는다.
-  // 다른 어드민 창은 로컬 모드에서 열 길이 없다(관리자 초대=인증 API 필요, 공지 작성=백엔드 필요, 구독·사용기간·신청 검토=서버 행 필요) — 조용히 건너뛰는 대신 여기 기록.
+  // 다른 어드민 창은 **이 빌드(로컬 모드)에서는** 열 길이 없다(관리자 초대=인증 API 필요, 공지 작성=백엔드 필요, 구독·사용기간·신청 검토=서버 행 필요).
+  // 322: 그 창들은 `e2e/a11y-admin-nas.spec.ts` 가 **흉내 서버 빌드**로 열어 axe 를 돌린다 — 조용히 건너뛰는 자리가 아니다.
   const step = makeStep(page, rows);
   await page.goto('/admin/branches');
   await step('/admin/branches 지점 추가', async () => {

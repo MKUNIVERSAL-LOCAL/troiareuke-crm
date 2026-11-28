@@ -192,7 +192,7 @@ export default function AdminLogin() {
 
               <button
                 type="submit" disabled={loading}
-                className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2"
+                className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-60 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
@@ -230,7 +230,7 @@ export default function AdminLogin() {
                     <div className="flex gap-2">
                       <input
                         type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)}
-                        className="flex-1 px-3 py-2 text-xs bg-slate-900/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40"
+                        className="flex-1 min-w-0 px-3 py-2 text-xs bg-slate-900/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40"
                         placeholder="관리자 이메일"
                       />
                       <button

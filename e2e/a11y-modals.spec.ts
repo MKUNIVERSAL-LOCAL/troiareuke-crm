@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, becomeStaff } from './helpers';
 import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
+import { registerPayment } from './flows'; // 지표 근거 보기 창은 결제가 있어야 줄이 생긴다 (262)
 
 /**
  * 모달·상세 패널 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉜) — 라우트 게이트(a11y.spec)는 첫 화면만 보므로
@@ -47,6 +48,15 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await expect(dialog('고객 추가')).toBeVisible();
   });
   await closeDialog('고객 추가');
+  await step('/customers 태그 목록 관리', async () => { // 237·239 — 고객 추가 창 위에 겹쳐 열린다
+    await page.getByRole('button', { name: '고객 추가' }).filter({ visible: true }).first().click();
+    await page.getByTestId('tag-master-open').click();
+    await expect(page.getByRole('dialog', { name: '태그 목록 관리' })).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '태그 목록 관리' })).toHaveCount(0);
+  await closeDialog('고객 추가'); // 고객 추가 창은 Esc 로 닫지 않는다(입력 보호) — 닫기 버튼으로
+
   await step('/customers 세그먼트 만들기', async () => { // 저장 세그먼트 편집 창 (166)
     await page.getByRole('button', { name: '+ 세그먼트' }).filter({ visible: true }).first().click();
     await expect(dialog('세그먼트 만들기')).toBeVisible();
@@ -123,6 +133,7 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
   await page.goto('/products');
   await step('/products 제품 추가', async () => {
     await page.getByRole('button', { name: '제품 추가' }).first().click();
+    await expect(dialog('제품 추가')).toBeVisible(); // 창 이름으로도 확인 — 창 커버리지 가드가 이 자리를 센다 (293)
     await expect(page.getByPlaceholder('제품명 입력')).toBeVisible();
     await page.getByPlaceholder('제품명 입력').fill('접근성 세럼');
     await page.getByLabel('판매가').fill('30000');
@@ -135,6 +146,17 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await row.getByRole('button', { name: '판매', exact: true }).click();
     await expect(dialog('제품 판매 기록')).toBeVisible();
   });
+  await closeDialog('제품 판매 기록');
+  await step('/products 발주 제안 (248)', async () => {
+    await page.getByTestId('reorder-open').click();
+    await expect(dialog('발주 제안')).toBeVisible();
+  });
+  await closeDialog('발주 제안');
+  await step('/products 재고 실사 (245)', async () => {
+    await page.getByTestId('stock-count-open').click();
+    await expect(dialog('재고 실사')).toBeVisible();
+  });
+  await closeDialog('재고 실사');
 
   // ── 매출: 결제 등록 창, 지출 등록 창 ──
   await page.goto('/sales');
@@ -147,6 +169,15 @@ test('주요 모달·상세 창에 serious·critical 접근성 위반이 없다'
     await page.getByRole('button', { name: '지출 등록' }).first().click();
     await expect(dialog('지출(매입) 등록')).toBeVisible();
   });
+
+  // ── 매출 지표 "근거 보기" 창 — 260 에서 새로 생긴 창이 게이트에 닿지 않았다 (262, 리뷰 M-3) ──
+  await closeDialog('지출(매입) 등록');
+  await registerPayment(page, acc, 50000); // 줄이 없으면 "근거 보기" 를 걸지 않으므로(리뷰 L-2) 결제를 하나 만든다
+  await step('/sales 지표 근거 보기', async () => {
+    await page.getByTestId('metric-new-share-open').click();
+    await expect(page.getByTestId('metric-detail')).toBeVisible();
+  });
+  await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
 
   // ── 직원: 추가 창, 상세 창, 수정 창 ──
   await page.goto('/staff');

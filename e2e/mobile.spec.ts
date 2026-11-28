@@ -343,6 +343,15 @@ test('모바일 폭에서 가입·온보딩·핵심 화면이 가로 넘침 없�
   await expect(page.getByRole('heading', { name: '결제 등록' }).filter({ visible: true }).first()).toBeVisible();
   await expectNoHorizontalOverflow(page, '완료 결제 모달');
   await page.getByRole('button', { name: '결제 등록', exact: true }).click();
+  // 339: 앱은 같은 고객·같은 금액이 방금 들어온 것을 보고 **인앱 확인 창**을 띄운다(264, GAP P-4).
+  // `page.on('dialog')` 는 브라우저 기본 창만 받으므로 이 창은 눌러 줘야 한다 — 누르지 않으면
+  // 완료처리 결제가 조용히 저장되지 않는다(스펙이 그 사실을 모른 채 `결제 내역 (1)` 에서 실패했다).
+  // 341(리뷰 M-3): 처음엔 `isVisible({ timeout: 3_000 })` 로 적었는데 Playwright 는 이 timeout 을
+  // **무시한다**(types.d.ts: "This option is ignored") — 기다림이 없어 창이 한 틱 늦게 그려지면
+  // 조용히 건너뛰고 아래 `결제 내역 (2)` 에서 간헐 실패가 된다. 이제 진짜로 기다린다.
+  const dupConfirm = page.getByRole('button', { name: '그대로 등록' }).filter({ visible: true }).first();
+  await dupConfirm.waitFor({ state: 'visible', timeout: 3_000 }).catch(() => {});
+  if (await dupConfirm.isVisible()) await dupConfirm.click();
   await page.goto('/sales');
   await page.getByRole('button', { name: /결제 내역/ }).filter({ visible: true }).first().click();
   await expect(page.getByTestId('sales-mobile-list').getByText('50,000').first()).toBeVisible({ timeout: 10_000 });

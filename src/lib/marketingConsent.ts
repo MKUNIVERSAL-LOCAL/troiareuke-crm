@@ -1,9 +1,11 @@
 // marketingConsent — 광고 수신 동의·거부 저장(고객 태그)과 무료수신거부 080 번호(지점 설정) (비코어, 155, GAP C-8·M-4)
 // 규칙(태그 ↔ 상태)은 순수 consentRule.ts, 광고 표기·시간대는 adComplianceRule.ts.
 import { CustomerStore } from './store';
+import type { PrefLanded } from './prefLandedRule'; // 설정 저장 판정 (304)
 import { todayISO } from './format';
 import { getPreference, setPreference } from './shopPreferences';
 import { consentFromTags, tagsWithConsent } from './consentRule';
+import { logCustomerEdit } from './customerHistory'; // 동의 토글도 변경 이력에 (254 리뷰 H-2)
 import type { Customer } from '../types';
 import type { ConsentState } from './adComplianceRule';
 
@@ -14,13 +16,16 @@ export function consentOf(c: Pick<Customer, 'tags'>): ConsentState {
 interface ConsentPatch { ad?: 'consented' | 'optout' | 'unknown'; sms?: boolean; kakao?: boolean }
 
 /** 고객의 동의 상태를 바꿔 저장한다(태그 갱신 — 코어 CustomerStore.update, 고객 행 단위 동기) */
-export function setConsent(customerId: string, patch: ConsentPatch): ConsentState | null {
+export function setConsent(customerId: string, patch: ConsentPatch, actor?: string): ConsentState | null {
   const c = CustomerStore.getAll().find(x => x.id === customerId);
   if (!c) return null;
   const cur = consentOf(c);
   const ad = patch.ad ?? cur.ad;
   const next: ConsentState = { ad, sms: patch.sms ?? cur.sms, kakao: patch.kakao ?? cur.kakao, consentAt: ad === 'consented' ? (cur.ad === 'consented' ? cur.consentAt : todayISO()) : undefined };
-  CustomerStore.update(customerId, { tags: tagsWithConsent(c.tags, next, todayISO()) });
+  const nextTags = tagsWithConsent(c.tags, next, todayISO());
+  CustomerStore.update(customerId, { tags: nextTags });
+  // 광고 수신 동의는 법적으로 다툴 수 있는 항목이라 변경 사실을 남긴다 (254 리뷰 H-2)
+  logCustomerEdit(customerId, { tags: c.tags }, { tags: nextTags }, actor);
   return next;
 }
 
@@ -29,6 +34,16 @@ export function getOptOutNumber(): string {
   const v = getPreference('adsOptOutNumber');
   return typeof v === 'string' ? v : '';
 }
-export function setOptOutNumber(n: string): void {
-  setPreference('adsOptOutNumber', n.trim());
+/**
+ * 304: 저장 판정을 돌려준다 — 이 번호가 없으면 광고 발송이 막히고, 지운 것이 안 남으면 다시 열 때 번호가 **돌아온다**(법정 표기다).
+ * 311(303~308 리뷰 L-3): **번호가 애초에 없던 PC** 에서 빈 값을 저장하면 되읽은 값이 `undefined` 라
+ * 판정이 `lost` 가 되고 "다시 열면 그 항목이 돌아옵니다" 가 나갔다 — 돌아올 번호가 없으므로 거짓이다
+ * (297·300 이 마감 배지에서 막은 "주장이 비면 잃은 것도 없다" 와 같은 모양).
+ */
+export function setOptOutNumber(n: string): PrefLanded {
+  const value = n.trim();
+  const had = getOptOutNumber() !== '';
+  const landed = setPreference('adsOptOutNumber', value);
+  if (value === '' && !had && landed !== 'landed') return 'landed'; // 지울 것이 없었다
+  return landed;
 }

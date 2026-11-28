@@ -68,7 +68,7 @@ export default function PasswordChangeGate() {
         <button
           type="submit"
           disabled={saving}
-          className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+          className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
         >
           {saving ? '변경 중...' : '비밀번호 변경하고 시작하기'}
         </button>

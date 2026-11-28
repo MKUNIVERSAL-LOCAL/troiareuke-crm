@@ -64,7 +64,7 @@ export default function SetupChecklistCard({ refreshKey = 0 }: { refreshKey?: nu
               </div>
             ) : (
               <button type="button" onClick={() => navigate(i.to)} className="w-full flex items-center gap-3 px-5 py-3 text-left hover:bg-gray-50 active:bg-gray-50 min-h-[48px]">
-                <Circle size={18} className="text-gray-300 flex-shrink-0" />
+                <Circle size={18} className="text-gray-400 flex-shrink-0" />
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-medium text-gray-800">{i.label}</span>
                   <span className="block text-xs text-gray-400">{i.desc}</span>

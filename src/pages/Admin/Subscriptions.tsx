@@ -223,7 +223,7 @@ export default function Subscriptions() {
             key={s}
             onClick={() => setFilterStatus(s)}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              filterStatus === s ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+              filterStatus === s ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
             }`}
           >
             {s === 'all' ? '전체' : statusOptions.find(o => o.value === s)?.label || s}
@@ -279,7 +279,7 @@ export default function Subscriptions() {
                       <button
                         onClick={() => openEdit(s)}
                         aria-label={`${s.branch_name} 구독 수정`}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
                       >
                         <Pencil size={13} />
                       </button>
@@ -333,7 +333,7 @@ export default function Subscriptions() {
             </div>
             <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">취소</button>
-              <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl disabled:opacity-50">
+              <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50">
                 {saving ? '저장 중...' : '저장하기'}
               </button>
             </div>

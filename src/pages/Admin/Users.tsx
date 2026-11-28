@@ -378,11 +378,11 @@ export default function AdminUsers() {
                   readOnly
                   value={tempPwResult.password}
                   onFocus={e => e.currentTarget.select()}
-                  className="flex-1 px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-base font-mono text-emerald-300 tracking-wider outline-none"
+                  className="flex-1 min-w-0 px-3 py-2.5 bg-slate-950 border border-slate-600 rounded-xl text-base font-mono text-emerald-300 tracking-wider outline-none"
                 />
                 <button
                   onClick={copyTempPassword}
-                  className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-colors ${copied ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                  className={`px-4 py-2.5 text-sm font-semibold rounded-xl transition-colors ${copied ? 'bg-emerald-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
                 >
                   {copied ? '복사됨 ✓' : '복사'}
                 </button>
@@ -412,7 +412,8 @@ export default function AdminUsers() {
                 <h2 className="text-base font-bold text-white">지점 신청 검토</h2>
                 <p className="text-xs text-slate-400 mt-1">사업자등록증의 <span className="text-slate-200">업태·종목</span>이 피부미용업/에스테틱인지 확인하고 승인/거부하세요.</p>
               </div>
-              <button onClick={() => setReviewTarget(null)} disabled={reviewBusy} className="text-slate-400 hover:text-white disabled:opacity-50">
+              {/* 322: 아이콘만 있어 화면 읽기가 이름 없는 "버튼" 으로 읽었다(axe critical button-name) */}
+              <button type="button" onClick={() => setReviewTarget(null)} disabled={reviewBusy} aria-label="닫기" className="text-slate-400 hover:text-white disabled:opacity-50">
                 <XCircle size={20} />
               </button>
             </div>
@@ -483,7 +484,9 @@ export default function AdminUsers() {
                   <button
                     onClick={handleApprove}
                     disabled={reviewBusy}
-                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                    // 322: emerald-600(#059669) 에 흰 글자는 3.76:1 로 기준(4.5:1) 미달이었다 — 한 단 진하게
+                    // 324(321~323 리뷰 L-1): 호버에서 emerald-600 으로 돌아가면 다시 3.77:1 이다 — axe 는 호버를 하지 않아 못 본다
+                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white disabled:opacity-50"
                   >
                     <CheckCircle2 size={14} />
                     {reviewBusy ? '처리 중…' : '승인 (로그인 허용)'}
@@ -567,7 +570,7 @@ export default function AdminUsers() {
                 <button
                   onClick={() => savePeriod(false)}
                   disabled={periodBusy}
-                  className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50"
+                  className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
                 >
                   {periodBusy ? '저장 중…' : '저장'}
                 </button>
@@ -584,7 +587,7 @@ export default function AdminUsers() {
         {isAuthApiConfigured && (
           <button
             onClick={() => setInviteOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
           >
             <UserPlus size={16} />
             관리자 초대
@@ -660,7 +663,7 @@ export default function AdminUsers() {
               <button
                 onClick={handleInvite}
                 disabled={inviteBusy}
-                className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50"
+                className="px-5 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
               >
                 {inviteBusy ? '발급 중…' : '초대 (임시 비밀번호 발급)'}
               </button>
@@ -691,7 +694,7 @@ export default function AdminUsers() {
         <Building2 size={14} className="text-slate-400" />
         <button
           onClick={() => setBranchFilter('all')}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${branchFilter === 'all' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${branchFilter === 'all' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
         >
           전체
         </button>
@@ -699,7 +702,7 @@ export default function AdminUsers() {
           <button
             key={b.id}
             onClick={() => setBranchFilter(b.id)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${branchFilter === b.id ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${branchFilter === b.id ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}
           >
             {b.name}
           </button>
@@ -736,7 +739,7 @@ export default function AdminUsers() {
                 <button
                   onClick={() => openReview(u.id)}
                   disabled={reviewLoading !== null}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
                 >
                   {reviewLoading === u.id ? '로딩…' : '검토'}
                 </button>
@@ -793,7 +796,7 @@ export default function AdminUsers() {
                       {u.is_onboarded ? (
                         <span className="text-xs text-emerald-400">완료</span>
                       ) : (
-                        <span className="text-xs text-amber-700">미완료</span>
+                        <span className="text-xs text-amber-400">미완료</span>
                       )}
                     </td>
                     {isAuthApiConfigured && (
@@ -855,7 +858,7 @@ export default function AdminUsers() {
                             <button
                               onClick={() => openPeriodModal(u)}
                               disabled={actionBusy === u.id}
-                              className="px-2.5 py-1 text-xs font-medium rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+                              className="px-2.5 py-1 text-xs font-medium rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-700/10 transition-colors disabled:opacity-50"
                             >
                               사용기간
                             </button>

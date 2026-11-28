@@ -20,7 +20,7 @@ function classify(status: number): AiAdapterError['code'] {
 }
 
 /** Claude — 브라우저는 CORS 로 막혀 Electron IPC(코어 electron/main.cjs, 모델 고정)에서만 호출한다 */
-export const claudeAdapter: AiAdapter = {
+const claudeAdapter: AiAdapter = {
   id: 'claude', name: 'Claude (Anthropic)', browserCapable: false,
   async chat(req) {
     const systemPrompt = req.context ? `${req.system}\n\n${req.context}` : req.system;
@@ -41,7 +41,7 @@ export const claudeAdapter: AiAdapter = {
   },
 };
 
-export const openaiAdapter: AiAdapter = {
+const openaiAdapter: AiAdapter = {
   id: 'openai', name: 'ChatGPT (OpenAI)', browserCapable: true,
   async chat(req) {
     const system = req.context ? `${req.system}\n\n${req.context}` : req.system;
@@ -69,7 +69,7 @@ export const openaiAdapter: AiAdapter = {
   },
 };
 
-export const geminiAdapter: AiAdapter = {
+const geminiAdapter: AiAdapter = {
   id: 'gemini', name: 'Gemini (Google)', browserCapable: true,
   async chat(req) {
     const contents = req.messages.map((m, i) => ({

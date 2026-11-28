@@ -3,6 +3,7 @@ import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { askConfirm } from '../../lib/confirmDialog';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { createSubmitLock } from '../../lib/submitLock';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Plus, X, CheckCircle, DollarSign,
@@ -15,6 +16,8 @@ const PnlTrendChart = lazy(() => import('../../components/charts/PnlTrendChart')
 import { PaymentStore, CustomerStore, CustomerProgramStore, TreatmentLogStore, SettingsStore } from '../../lib/store';
 import RevenueMetricsCard from '../../components/RevenueMetricsCard';
 import { monthMetrics } from '../../lib/revenueMetricsRule';
+import { newCustomerRows, discountRows, unusedBalanceRows } from '../../lib/revenueDrilldownRule'; // 지표 근거 보기 (260)
+import { confirmIfDuplicatePayment } from '../../lib/duplicatePayment'; // 중복 결제 의심 경고 (264, GAP P-4)
 import { monthCloseBlock, isMonthClosed, monthlyTarget } from '../../lib/monthClose';
 import { isAdminRole } from '../../lib/permissions';
 import { getLastPaymentMethod, rememberPaymentMethod } from '../../lib/lastUsed';
@@ -37,6 +40,12 @@ import { growthPct } from '../../lib/growth';
 import { tagRefund, refundedOn, memoWithoutRefundTag } from '../../lib/refundDate';
 import { parseAmount, isISODate } from '../../lib/inputRules';
 import { getAllPaymentMethods } from '../../lib/paymentMethods';
+import { suggestRebookFor, type RebookTarget } from '../../lib/rebook'; // 결제 직후 다음 방문 예약 유도 (231, GAP R-11)
+import { exportReceiptPdf } from '../../lib/receiptPdf'; // 결제 영수증 PDF (235, GAP P-9)
+import { splitPaymentNote } from '../../lib/receiptRule'; // 분할 결제 요약 (238, 리뷰 M-1)
+import { logRebookShown, logRebookClicked, rebookStatsFor } from '../../lib/rebookLog'; // 재예약 안내 성과 기록 (243)
+import { describeRebookSummary, REBOOK_STATS_CAVEAT } from '../../lib/rebookStatsRule';
+import { CalendarPlus, ReceiptText } from 'lucide-react';
 // 로컬(KST) 기준 — toISOString()은 UTC라 매월 1일 오전에 지난달로 어긋남
 function getYearMonth(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
 
@@ -72,6 +81,11 @@ export default function Sales() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // 결제 직후 "다음 방문 예약" 추천 (231) — 이미 다가오는 예약이 있으면 null 이라 뜨지 않는다
+  const [rebook, setRebook] = useState<RebookTarget | null>(null);
+  // 그 추천이 예약으로 이어졌는지 세기 위한 기록 id (243) — 저장 실패면 null 이고 지표에 안 들어간다
+  const [rebookLogId, setRebookLogId] = useState<string | null>(null);
+  const [rebookTick, setRebookTick] = useState(0);
   const [viewMonth, setViewMonth] = useState(getYearMonth(new Date()));
   const [listSearch, setListSearch] = useState('');
   const [listType, setListType] = useState<'all' | Payment['type']>('all');
@@ -342,7 +356,9 @@ export default function Sales() {
 
   const resetForm = () => setForm({ customerId: '', customerName: '', type: 'single_treatment', amount: '', paymentMethod: (getLastPaymentMethod() ?? '카드') as PaymentMethod, paymentDate: today(), memo: '', discountAmount: '0', status: 'completed', referenceId: '' });
 
+  const saveLock = useRef(createSubmitLock());
   function closeModal() {
+    saveLock.current.release(); // 폼을 닫으면 다시 저장할 수 있게 (221)
     setShowModal(false);
     setEditingId(null);
     resetForm();
@@ -390,6 +406,40 @@ export default function Sales() {
   }
 
   // 결제 등록/수정
+  // 결제 1건 → 영수증 PDF (235). 실패하면 사유를 알린다(조용히 아무 일도 안 일어나는 버튼 금지)
+  const [receiptBusy, setReceiptBusy] = useState<string | null>(null);
+  async function handleReceipt(p: Payment & { typeLabel?: string }) {
+    setReceiptBusy(p.id);
+    try {
+      // 같은 건(같은 예약·회차권)에 결제가 나뉘어 있으면 합계를 함께 적는다 — 한 장만 보면 절반 금액만 보였다 (238, 리뷰 M-1)
+      const siblings = p.referenceId
+        ? PaymentStore.getAll().filter(q => q.referenceId === p.referenceId && q.type === p.type)
+        : [p];
+      const result = await exportReceiptPdf(
+        {
+          paymentDate: p.paymentDate,
+          amount: p.amount,
+          discountAmount: p.discountAmount,
+          paymentMethod: p.paymentMethod,
+          typeLabel: p.typeLabel,
+          status: p.status,
+          splitNote: splitPaymentNote(siblings) ?? undefined,
+        },
+        p.customerId ? (CustomerStore.getById(p.customerId)?.name ?? null) : null,
+      );
+      const docName = p.status === 'pending' ? '결제 예정 내역서' : p.status === 'refunded' ? '환불 영수증' : '영수증';
+      (result === 'cancelled' ? notify.info : notify)(
+        result === 'cancelled' ? `공유를 취소했습니다 — ${docName}는 저장되지 않았습니다.`
+          : result === 'shared' ? `${docName}를 공유 시트로 전달했습니다.` : `${docName} PDF를 저장했습니다.`,
+      );
+    } catch (err) {
+      // 글꼴·PDF 모듈 지연 로드 실패도 한글로 알린다(영문 오류 문구만 띄우지 않게) (238, 리뷰 LOW)
+      notify(`영수증을 만들지 못했습니다. 잠시 뒤 다시 시도해주세요.${err instanceof Error && err.message ? ` (${err.message})` : ''}`);
+    } finally {
+      setReceiptBusy(null);
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const customer = customers.find(c => c.id === form.customerId);
@@ -457,6 +507,15 @@ export default function Sales() {
     else if (form.status === 'refunded' && editingPayment && refundedOn(editingPayment)) payload.memo = tagRefund(payload.memo, refundedOn(editingPayment)!); // 폼에서 숨긴 기존 태그 재부착
     { const blocked = monthCloseBlock(form.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
     { const blocked = monthCloseBlock(editingPayment?.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    // 중복 결제 의심 — 새 등록에만(수정은 이미 있는 줄을 고치는 것이다). 막지 않고 사실을 보여 주고 사람이 고른다 (264, GAP P-4)
+    if (!editingId && !(await confirmIfDuplicatePayment({
+      customerId: payload.customerId, customerName: payload.customerName,
+      amount: payload.amount, paymentDate: payload.paymentDate, status: payload.status,
+      // 281(리뷰 M-2): 지금 등록할 결제도 창에 한 줄 적어 기존 결제와 비교하게 한다
+      typeLabel: payload.typeLabel, paymentMethod: payload.paymentMethod, discountAmount: payload.discountAmount,
+    }))) return;
+    // 이중 제출 — 검증을 모두 통과한 뒤에만 잠근다. 앞에서 잠그면 조기 반환마다 풀어야 해서 하나라도 빠지면 버튼이 조용히 죽는다 (224, 221 리뷰 H-2)
+    if (!saveLock.current.acquire()) return;
     if (editingId) {
       PaymentStore.update(editingId, payload);
       if (closeProgram) CustomerProgramStore.update(closeProgram.id, { isCompleted: true, notes: `${closeProgram.notes ? closeProgram.notes + '\n' : ''}[${today()}] 결제 환불로 종료` });
@@ -466,6 +525,16 @@ export default function Sales() {
       }
     } else {
       PaymentStore.save(payload);
+      // 체크아웃 재예약 유도 — 상용 CRM(Fresha·Boulevard)의 "다음 예약 잡기" 흐름 (231, GAP R-11).
+      // 환불·수정 건에는 띄우지 않고, 추천할 것이 없으면(다가오는 예약 있음·주기 모름) 조용히 지나간다.
+      if (payload.customerId && payload.status === 'completed') {
+        try {
+          const target = suggestRebookFor(payload.customerId, payload.paymentDate);
+          setRebook(target);
+          // 추천이 실제 예약으로 이어지는지 세기 위해 기록한다 (243) — 기록 실패는 안내를 막지 않는다
+          setRebookLogId(target ? logRebookShown({ customerId: target.customerId, suggestedDate: target.suggestion.date, basis: target.suggestion.basis }) : null);
+        } catch { setRebook(null); setRebookLogId(null); }
+      }
     }
     rememberPaymentMethod(form.paymentMethod);
 
@@ -541,7 +610,20 @@ export default function Sales() {
     const st = SettingsStore.get();
     return monthMetrics({ month: viewMonth, today: today(), payments, expenses, programs: CustomerProgramStore.getAll(), logs: TreatmentLogStore.getAll(), customers, target: monthlyTarget(viewMonth), businessHours: st.businessHours, holidays: st.holidays, cogsCategories: [...COGS_CATEGORIES] });
   }, [viewMonth, payments, expenses, customers, metricsTick]);
+  // 지표 근거 보기 — 카드 숫자를 만든 줄들(같은 입력·같은 정의라 합계가 카드와 같다) (260, GAP P-6)
+  const drills = useMemo(() => {
+    const programs = CustomerProgramStore.getAll();
+    const nameOf = new Map(customers.map(c => [c.id, c.name]));
+    const payRows = payments.map(p => ({ id: p.id, paymentDate: p.paymentDate, status: p.status, amount: p.amount, discountAmount: p.discountAmount, customerId: p.customerId, customerName: p.customerId ? nameOf.get(p.customerId) : undefined }));
+    return {
+      newCustomer: newCustomerRows(viewMonth, payRows, customers.map(c => ({ id: c.id, name: c.name, registeredAt: c.registeredAt }))),
+      discount: discountRows(viewMonth, payRows),
+      unused: unusedBalanceRows(today(), programs.map(p => ({ id: p.id, customerName: p.customerId ? nameOf.get(p.customerId) : undefined, programName: p.programName, pricePaid: p.pricePaid, totalSessions: p.totalSessions, usedSessions: p.usedSessions, isCompleted: p.isCompleted, expiryDate: p.expiryDate }))),
+    };
+  }, [viewMonth, payments, customers, metricsTick]);
   const monthClosed = useMemo(() => isMonthClosed(viewMonth), [viewMonth, metricsTick]);
+  // 체크아웃 재예약 안내 성과 (243, GAP R-11 후속) — 추천이 없었던 달에는 줄 자체를 보여 주지 않는다
+  const rebookStatsLine = useMemo(() => { const r = rebookStatsFor(viewMonth); return describeRebookSummary(r.summary, r.truncated); }, [viewMonth, payments, rebookTick]);
 
   const [viewDate] = viewMonth.split('-');
   const monthLabel = tab === 'pnl' ? pnl.label : `${viewDate}년 ${parseInt(viewMonth.split('-')[1])}월`;
@@ -604,6 +686,23 @@ export default function Sales() {
         </button>
       </div>
 
+      {rebook && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-2xl" data-testid="rebook-prompt">
+          <CalendarPlus size={16} className="text-[#1a3a8f]" />
+          {/* 라이브 영역에는 상태 문장만 둔다 — 버튼을 함께 넣으면 낭독이 어긋난다 (234, 리뷰 L-1) */}
+          <p className="text-sm text-blue-900" role="status" aria-live="polite">
+            <b>{rebook.customerName}</b> 님 다음 방문 추천 — <b data-testid="rebook-date">{formatDate(rebook.suggestion.date)}</b>
+            <span className="text-blue-700"> · {rebook.suggestion.reason}</span>
+          </p>
+          <div className="flex gap-2 ml-auto">
+            <button type="button" onClick={() => { const t = rebook; setRebook(null); logRebookClicked(rebookLogId); setRebookLogId(null); setRebookTick(n => n + 1); navigate(`/reservations?new=1&customer=${t.customerId}&date=${t.suggestion.date}`); }}
+              className="px-4 py-2 min-h-[40px] bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e]">예약 잡기</button>
+            <button type="button" onClick={() => setRebook(null)}
+              className="px-3 py-2 min-h-[40px] bg-white border border-blue-200 text-blue-800 text-sm rounded-xl hover:bg-blue-100">나중에</button>
+          </div>
+        </div>
+      )}
+
       {tab === 'overview' && (
         <div className="space-y-5">
           {/* 요약 카드 */}
@@ -650,7 +749,15 @@ export default function Sales() {
             </div>
           </div>
 
-          <RevenueMetricsCard key={viewMonth} m={metrics} closed={monthClosed} canLock={isAdminRole(authUser?.role)} onChanged={() => setMetricsTick(t => t + 1)} />
+          <RevenueMetricsCard key={viewMonth} m={metrics} closed={monthClosed} canLock={isAdminRole(authUser?.role)} onChanged={() => setMetricsTick(t => t + 1)} drills={drills} />
+
+          {rebookStatsLine && (
+            <div className="bg-white rounded-2xl border border-gray-100 p-5" data-testid="rebook-stats">
+              <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2"><CalendarPlus size={16} className="text-[#1a3a8f]" />체크아웃 재예약 안내</h3>
+              <p className="text-sm text-gray-900">{rebookStatsLine}</p>
+              <p className="text-xs text-gray-500 mt-2">{REBOOK_STATS_CAVEAT}</p>
+            </div>
+          )}
 
           {/* 일별 매출 차트 */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
@@ -783,6 +890,7 @@ export default function Sales() {
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
                         <span className="flex items-center gap-1">
+                          <button onClick={() => handleReceipt(p)} disabled={receiptBusy === p.id} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg disabled:opacity-40" aria-label={p.status === 'pending' ? '결제 예정 내역서 저장' : '영수증 저장'}><ReceiptText size={16} /></button>
                           <button onClick={() => openEdit(p)} className="p-2.5 text-gray-400 hover:text-[#1a3a8f] rounded-lg" aria-label="결제 수정"><Pencil size={16} /></button>
                           <button onClick={() => handleDelete(p)} className="p-2.5 text-gray-400 hover:text-red-600 rounded-lg" aria-label="결제 삭제"><Trash2 size={16} /></button>
                         </span>
@@ -793,7 +901,7 @@ export default function Sales() {
               </ul>
               <div className="hidden lg:block overflow-auto max-h-[65vh]">
                 <div className="min-w-[720px]">
-                  <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
+                  <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-500 font-medium px-4 py-3 border-b border-gray-100">
                     <span>날짜</span>
                     <span className="col-span-2">고객</span>
                     <span>구분</span>
@@ -818,10 +926,13 @@ export default function Sales() {
                       <span className="text-gray-500 text-xs">{p.paymentMethod}</span>
                       <span className="flex items-center justify-end gap-1.5">
                         <span className="font-bold text-gray-900">{formatPrice(p.amount)}</span>
-                        <button onClick={() => openEdit(p)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">
+                        <button onClick={() => handleReceipt(p)} disabled={receiptBusy === p.id} className="p-1 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded disabled:opacity-40 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label={p.status === 'pending' ? '결제 예정 내역서 저장' : '영수증 저장'}>
+                          <ReceiptText size={13} />
+                        </button>
+                        <button onClick={() => openEdit(p)} className="p-1 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 수정">
                           <Pencil size={13} />
                         </button>
-                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
+                        <button onClick={() => handleDelete(p)} className="p-1 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="결제 삭제">
                           <Trash2 size={13} />
                         </button>
                       </span>
@@ -926,7 +1037,7 @@ export default function Sales() {
                 </ul>
                 <div className="hidden lg:block overflow-auto max-h-[65vh]">
                   <div className="min-w-[720px]">
-                    <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-400 font-medium px-4 py-3 border-b border-gray-100">
+                    <div className="sticky top-0 z-10 bg-white grid grid-cols-6 text-xs text-gray-500 font-medium px-4 py-3 border-b border-gray-100">
                       <span>날짜</span>
                       <span>분류</span>
                       <span className="col-span-2">내용 / 거래처</span>
@@ -948,10 +1059,10 @@ export default function Sales() {
                         <span className="text-gray-500 text-xs">{x.paymentMethod}</span>
                         <span className="flex items-center justify-end gap-1.5">
                           <span className="font-bold text-gray-900">{formatPrice(x.amount)}</span>
-                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-300 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 수정">
+                          <button onClick={() => openExpenseEdit(x)} className="p-1 text-gray-400 hover:text-[#1a3a8f] hover:bg-gray-100 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 수정">
                             <Pencil size={13} />
                           </button>
-                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
+                          <button onClick={() => handleExpenseDelete(x)} className="p-1 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition" aria-label="지출 삭제">
                             <Trash2 size={13} />
                           </button>
                         </span>

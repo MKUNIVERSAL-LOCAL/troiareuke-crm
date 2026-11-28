@@ -3,12 +3,22 @@ import { sanitizeStorageSnapshot } from '../../lib/backupSanitize';
 import { markBackupSaved } from '../../lib/fullBackup';
 import { formatPhoneInput, todayISO, formatLocalDate } from '../../lib/format';
 import { notify } from '../../lib/notify';
+import { normalizeGreeting, MAX_GREETING } from '../../lib/receiptRule'; // 영수증 인사말 (256)
+import { getPreference, setPreference } from '../../lib/shopPreferences';
+import { describePrefLoss, describePrefRemovalLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (290·300)
+import { prefSaveMode } from '../../lib/prefSaveMode'; // 290
+import MemoPresetManager from '../../components/MemoPresetManager'; // 자주 쓰는 메모 문구 관리 (259)
+import { memoPresets } from '../../lib/memoPresets'; // 영수증 인쇄 정보 (235)
+// 고객 주의사항 키워드 — 매장이 쓰는 말을 더한다 (240, GAP C-11)
+import { getCautionKeywords, saveCautionKeywords } from '../../lib/cautionKeywords';
+import { CAUTION_KEYWORDS, sanitizeCautionKeywords } from '../../lib/customerAlertRule';
 import { useOverlayClose, useFocusTrap } from '../../lib/overlayStack';
 import { useState, useEffect, useCallback, useRef, useId, Children, isValidElement, cloneElement } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Link2, Bell, Store, Palette, Clock, Plus, X, Pencil, Trash2, CreditCard, CheckCircle, Crown, Zap, Star, Calendar, HardDrive, FolderOpen, AlertCircle, Download, Sparkles } from 'lucide-react';
 import { EXPORT_DATASETS, exportDatasetsToXlsx } from '../../lib/dataExport';
 import BackupRestoreCard from '../../components/settings/BackupRestoreCard';
+import PhotoBackupCard from '../../components/settings/PhotoBackupCard';
 import { sendMessages } from '../../lib/messagingGateway';
 import { isGoogleCalendarConnected, startGoogleOAuth, clearTokens as clearGoogleTokens } from '../../lib/googleCalendar';
 import Header from '../../components/layout/Header';
@@ -417,6 +427,48 @@ export default function Settings() {
   // ─── Shop Info ────────────────────────────────────────────
   // 서버 프로필 갱신(await)이 끝나기 전 연타로 두 번 저장되는 것 방지 (2026-11-18)
   const [shopSaving, setShopSaving] = useState(false);
+  // 영수증 인쇄 정보 — 설정 행(NAS 동기). 사업자등록번호는 코어 AuthUser 에 있어 화면에서 쓸 수 없다 (235, GAP P-9)
+  const [receiptInfo, setReceiptInfo] = useState<{ businessNumber?: string; ownerName?: string; greeting?: string }>(() => getPreference('receiptInfo') ?? {});
+  const [memoPresetList, setMemoPresetList] = useState<string[]>(() => memoPresets()); // 자주 쓰는 메모 문구 (259, 리뷰 L-4)
+  useDataRefreshed(() => setMemoPresetList(memoPresets())); // 시술 기록 창·다른 PC 변경을 따라간다 (262, 리뷰 L-6)
+  // 주의 키워드 — 추가·삭제는 누른 즉시 설정 행에 저장(결제수단과 같은 방식) (240)
+  const [cautionWords, setCautionWords] = useState<string[]>(() => getCautionKeywords());
+  const [cautionDraft, setCautionDraft] = useState('');
+  const addCautionWord = () => {
+    // 저장되는 형태로 먼저 정리한다 — 전에는 원문과 저장값(공백 축약)이 달라 "저장하지 못했습니다" 가 거짓으로 떴고
+    // 목록·입력칸이 저장값과 어긋났다 (242, 리뷰 M-2)
+    const word = sanitizeCautionKeywords([cautionDraft])[0] ?? '';
+    if (word.length < 2) { notify('키워드는 두 글자 이상으로 입력해주세요(한 글자는 아무 문장에나 걸립니다).'); return; }
+    if (CAUTION_KEYWORDS.includes(cautionDraft.trim())) { notify(`"${cautionDraft.trim()}" 는 기본 키워드라 이미 경고로 올라갑니다.`); return; }
+    if (cautionWords.includes(word)) { notify(`이미 있는 키워드입니다: ${word}`); return; }
+    const next = saveCautionKeywords([...cautionWords, word]);
+    if (!next.list.includes(word)) { notify('키워드를 저장하지 못했습니다. 글자 수·개수(20개)를 확인해주세요.'); return; } // 20개 상한에서 잘린 경우
+    setCautionWords(next.list);
+    setCautionDraft('');
+    // 296: 목록에는 들어갔지만 이 PC 에 남지 않았으면 그 사실을 적는다(다시 열면 경고가 안 뜬다)
+    const lostCaution = describePrefLoss(next.landed, '주의 키워드', prefSaveMode());
+    if (lostCaution) notify.error(lostCaution); else notify('주의 키워드를 추가했습니다.');
+  };
+  const dropCautionWord = (word: string) => {
+    const next = saveCautionKeywords(cautionWords.filter(w => w !== word));
+    setCautionWords(next.list);
+    const lost = describePrefRemovalLoss(next.landed, '주의 키워드', prefSaveMode()); // 296·300(리뷰 M-1)
+    if (lost) notify.error(lost);
+  };
+  const saveReceiptInfo = async () => {
+    const next = {
+      businessNumber: receiptInfo.businessNumber?.trim() || undefined,
+      ownerName: receiptInfo.ownerName?.trim() || undefined,
+      greeting: normalizeGreeting(receiptInfo.greeting) ?? undefined, // 공백 축약·60자 (256)
+    };
+    await syncBeforeSave(); // 설정은 행 전체 PUT — 다른 PC 가 바꾼 영업시간·휴일을 옛 캐시로 덮지 않게 (16차 #H1, 리뷰 M-4)
+    // 되읽어 확인 — 저장 공간이 꽉 찬 PC 에서 "저장했습니다" 가 거짓이 되지 않게 (254 리뷰 M-1).
+    // 286 부터 판정은 `setPreference` 한 곳에서 한다(전에는 칸마다 손으로 비교했다 — 칸이 늘면 빠뜨린다).
+    const lost = describePrefLoss(setPreference('receiptInfo', next), '영수증 인쇄 정보', prefSaveMode());
+    setReceiptInfo(next);
+    if (lost) notify.error(lost);
+    else notify.success('영수증 인쇄 정보를 저장했습니다.');
+  };
   const handleShopSave = async () => {
     if (shopSaving) return;
     setShopSaving(true);
@@ -718,6 +770,65 @@ export default function Settings() {
                       {shopSaving ? '저장 중...' : '저장하기'}
                     </button>
                   </div>
+                  {/* 고객 주의사항 키워드 — 메모에서 이 말이 든 줄이 예약·시술 창 경고로 올라간다 (240, GAP C-11) */}
+                  <div className="pt-6 border-t border-gray-100" data-testid="settings-caution-keywords">
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">고객 주의사항 키워드</h4>
+                    <p className="text-xs text-gray-400 mb-3">
+                      고객 메모에 이 말이 들어간 줄은 예약 추가·수정 창, 예약 상세, 시술 기록 창에서 경고로 보입니다.
+                      기본 키워드(임신·금기·시술 불가·알레르기·켈로이드·복용 중·민감 등 {CAUTION_KEYWORDS.length}개)는 이미 들어 있고, 매장에서 쓰는 말만 더하면 됩니다(두 글자 이상, 20개까지).
+                      "주의사항 없음" 처럼 없다고 적은 줄은 경고로 띄우지 않습니다.
+                    </p>
+                    <div className="flex gap-2">
+                      <input value={cautionDraft} onChange={e => setCautionDraft(e.target.value)} aria-label="새 주의 키워드"
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCautionWord(); } }}
+                        placeholder="예: 레이저 금지, 필러 이력" className="form-input flex-1 min-w-0" maxLength={40} />
+                      <button type="button" onClick={addCautionWord} className="px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl whitespace-nowrap">추가</button>
+                    </div>
+                    {cautionWords.length > 0 && (
+                      <ul className="mt-3 flex flex-wrap gap-1.5">
+                        {cautionWords.map(w => (
+                          <li key={w} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-amber-50 text-amber-800 border border-amber-200">
+                            {w}
+                            <button type="button" onClick={() => dropCautionWord(w)} aria-label={`${w} 키워드 지우기`} className="text-amber-700 hover:text-red-700">✕</button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  {/* 영수증 인쇄 정보 — 고객에게 주는 영수증에 찍힌다. 사업자등록번호는 가입 계정(코어)에 있어 여기서 따로 받는다 (235, GAP P-9) */}
+                  <div className="pt-6 border-t border-gray-100" data-testid="settings-receipt-info">
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">영수증 인쇄 정보</h4>
+                    <p className="text-xs text-gray-400 mb-3">매출 &gt; 결제 내역의 [영수증]으로 저장하는 PDF 에 찍힙니다. 사업자등록번호·대표자명은 머리말에, 인사말은 합계 아래 한 줄로 들어갑니다. 비워 두면 그 줄을 빼고 인쇄하고, 영수증에 안내가 함께 나옵니다. 세금계산서·현금영수증은 이 영수증으로 대체되지 않습니다.</p>
+                    <div className="space-y-4">
+                      <FormRow label="사업자등록번호">
+                        <input type="text" aria-label="사업자등록번호" value={receiptInfo.businessNumber ?? ''}
+                          onChange={e => setReceiptInfo(v => ({ ...v, businessNumber: e.target.value }))}
+                          className="form-input" placeholder="000-00-00000" maxLength={20} />
+                      </FormRow>
+                      <FormRow label="대표자명">
+                        <input type="text" aria-label="대표자명" value={receiptInfo.ownerName ?? ''}
+                          onChange={e => setReceiptInfo(v => ({ ...v, ownerName: e.target.value }))}
+                          className="form-input" placeholder="예: 홍길동" maxLength={30} />
+                      </FormRow>
+                      <FormRow label="인사말 (선택)">
+                        <div>
+                          <input type="text" aria-label="영수증 인사말" value={receiptInfo.greeting ?? ''}
+                            onChange={e => setReceiptInfo(v => ({ ...v, greeting: e.target.value }))}
+                            className="form-input" placeholder="예: 오늘도 찾아주셔서 감사합니다" maxLength={MAX_GREETING} />
+                          {/* 왜 환불 영수증에는 안 나오는지 미리 말해 둔다 — 고장으로 오해하던 것 (리뷰 M-2) */}
+                          <p className="mt-1 text-xs text-gray-400">결제 영수증 합계 아래에 한 줄로 찍힙니다({MAX_GREETING}자). 환불 영수증·결제 예정 내역서에는 찍지 않습니다.</p>
+                        </div>
+                      </FormRow>
+                      <button type="button" onClick={saveReceiptInfo}
+                        className="px-6 py-2.5 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl hover:bg-[#15306e] transition-colors">영수증 정보 저장</button>
+                    </div>
+                  </div>
+                  {/* 자주 쓰는 메모 문구 — 251~255 는 관리 패널이 시술 기록 창에만 있어 나머지 세 곳이 막다른 길이었다 (259, 리뷰 L-4) */}
+                  <div className="pt-6 border-t border-gray-100" data-testid="settings-memo-presets">
+                    <h4 className="text-sm font-bold text-gray-900 mb-1">자주 쓰는 메모 문구</h4>
+                    <p className="text-xs text-gray-400 mb-3">시술 기록 메모·상담 소견·예약 메모·고객 한 줄 메모에서 눌러 넣는 문장입니다. 시술 기록 창에서도 바로 관리할 수 있습니다.</p>
+                    <MemoPresetManager presets={memoPresetList} onChange={setMemoPresetList} beforeSave={syncBeforeSave} />
+                  </div>
                   {/* 결제수단 — 결제 창을 열지 않고도 미리 준비(PILOT-CHECKLIST 24). 추가·삭제는 누른 즉시 지점 설정에 저장돼 같은 지점 모든 PC 에 보인다 (210) */}
                   <div className="pt-6 border-t border-gray-100" data-testid="settings-payment-methods">
                     <h4 className="text-sm font-bold text-gray-900 mb-1">결제수단</h4>
@@ -780,9 +891,9 @@ export default function Settings() {
                     {(settings.holidays || []).length > 0 ? (
                       <ul className="flex flex-wrap gap-2">
                         {(settings.holidays || []).map(d => (
-                          <li key={d} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${d < todayISO() ? 'bg-gray-100 text-gray-500 border border-dashed border-gray-300' : 'bg-rose-50 text-rose-700'}`} title={d < todayISO() ? '지난 휴일' : undefined}>
+                          <li key={d} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${d < todayISO() ? 'bg-gray-100 text-gray-600 border border-dashed border-gray-300' : 'bg-rose-50 text-rose-700'}`} title={d < todayISO() ? '지난 휴일' : undefined}>
                             {d}
-                            <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="p-1.5 -m-1 rounded text-rose-400 hover:text-rose-600"><X size={14} /></button>
+                            <button type="button" onClick={() => removeHoliday(d)} aria-label={`${d} 휴일 삭제`} className="p-1.5 -m-1 rounded text-rose-700 hover:text-rose-900"><X size={14} /></button>
                           </li>
                         ))}
                       </ul>
@@ -838,7 +949,13 @@ export default function Settings() {
                         </p>
                       </div>
                       <button
-                        onClick={() => { const next = !beaconOn; setBeaconConsultationEnabled(next); setBeaconOn(next); }}
+                        onClick={() => {
+                          // 304: 안 남았는데 "사용 중" 으로 두지 않는다 — 다시 열면 토글이 되돌아간다
+                          const next = !beaconOn;
+                          const lost = describePrefLoss(setBeaconConsultationEnabled(next), '비컨 측정 수치·AI 피부분석 표시 설정', prefSaveMode());
+                          setBeaconOn(next);
+                          if (lost) notify.error(lost);
+                        }}
                         role="switch"
                         aria-checked={beaconOn}
                         aria-label="상담 화면에 비컨 점수·AI 피부 분석 표시"
@@ -863,7 +980,7 @@ export default function Settings() {
                 <SettingCard title="네이버 예약 연동">
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-500">
                         N
                       </div>
                       <div className="flex-1">
@@ -907,7 +1024,7 @@ export default function Settings() {
                 <SettingCard title="카카오 연동">
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-500">
                         K
                       </div>
                       <div className="flex-1">
@@ -922,7 +1039,7 @@ export default function Settings() {
                     </div>
 
                     <div className="flex items-center gap-3 p-4 rounded-xl border bg-gray-50 border-gray-200">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-300">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-lg font-bold bg-gray-500">
                         K
                       </div>
                       <div className="flex-1">
@@ -991,7 +1108,7 @@ export default function Settings() {
                         {googleConnected ? (
                           <p className="text-xs text-blue-600 mt-0.5">연결됨 - 예약이 캘린더에 표시됩니다</p>
                         ) : (
-                          <p className="text-xs text-gray-400 mt-0.5">연결되지 않음</p>
+                          <p className="text-xs text-gray-600 mt-0.5">연결되지 않음</p>
                         )}
                       </div>
                       {googleConnected ? (
@@ -1004,7 +1121,7 @@ export default function Settings() {
                       ) : GOOGLE_OAUTH_READY ? (
                         <button
                           onClick={() => startGoogleOAuth()}
-                          className="px-4 py-2 text-sm font-medium rounded-xl bg-blue-500 text-white hover:bg-blue-600"
+                          className="px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 text-white hover:bg-blue-700"
                         >
                           Google 캘린더 연결
                         </button>
@@ -1115,7 +1232,7 @@ export default function Settings() {
                               <button
                                 onClick={() => handleDeleteService(svc.id)}
                                 aria-label={`${svc.name} 삭제`}
-                                className="text-xs text-red-600 hover:text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
+                                className="text-xs text-red-700 flex items-center gap-0.5 px-2 py-2 rounded-lg hover:bg-red-50"
                               >
                                 <Trash2 size={12} /> 삭제
                               </button>
@@ -1149,7 +1266,7 @@ export default function Settings() {
                           <h3 className="text-base font-bold text-gray-900">
                             {PLANS.find(p => p.id === (currentSubscription?.plan || user?.plan))?.name || '무료 체험'}
                           </h3>
-                          <p className="text-xs text-gray-500 mt-0.5">
+                          <p className="text-xs text-gray-600 mt-0.5">
                             {currentSubscription?.plan === 'trial'
                               ? `무료 체험 중 (만료: ${currentSubscription.expiresAt ? formatLocalDate(String(currentSubscription.expiresAt)) : '알 수 없음'})`
                               : currentSubscription?.amount
@@ -1264,7 +1381,7 @@ export default function Settings() {
                   </div>
 
                   {planChangeError && (
-                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                       {planChangeError}
                     </div>
                   )}
@@ -1434,6 +1551,8 @@ export default function Settings() {
                 </SettingCard>
                 {/* 전체 백업 파일 저장·복원 — 로컬 모드 데이터 소실 방지, PC·모바일 공용 (2026-11-18) */}
                 <BackupRestoreCard />
+                {/* 전/후 사진은 용량 때문에 전체 백업에 들어가지 않는다 — 따로 내보내기·가져오기 (228, GAP C-3) */}
+                <PhotoBackupCard />
               </div>
             )}
           </div>

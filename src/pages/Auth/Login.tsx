@@ -99,7 +99,7 @@ export default function Login() {
             <p className="text-sm text-gray-400 mb-8">더마솔루션에 오신 것을 환영합니다</p>
 
             {error && (
-              <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>
+              <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">{error}</div>
             )}
             {resetComplete && (
               <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">

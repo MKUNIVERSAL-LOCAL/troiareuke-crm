@@ -4,7 +4,8 @@ import { makeAccount, signupAndOnboard, createCustomer, pickCustomer } from './h
 /**
  * 키보드 조작 흐름 E2E (PC 폭, 2026-11-19 ㉟) — 마우스 없이도 핵심 동선이 막히지 않는지.
  * 전역 검색 단축키(/·Ctrl+K)와 입력 중 무시, 예약표 단축키(← → T N)와 모달 열림 중 무시, 모달 포커스 트랩(Tab/Shift+Tab 순환)·
- * 닫힌 뒤 연 버튼으로 포커스 복원, Ctrl+Enter 폼 제출, 입력 폼 창은 Esc로 닫히지 않고(입력 유실 방지) [닫기]로만 닫힘, 사이드바 링크 Enter 이동.
+ * 닫힌 뒤 연 버튼으로 포커스 복원, Ctrl+Enter 폼 제출, 입력 폼 창은 Esc로 닫히지 않고(입력 유실 방지) [닫기]로만 닫힘,
+ * 직원 카드 Tab 도달·Enter 상세(318 — 그 전에는 마우스로만 열렸다), 사이드바 링크 Enter 이동.
  */
 
 const acc = makeAccount('KB');
@@ -130,6 +131,22 @@ test('전역 검색·예약표 단축키·모달 포커스 트랩·Ctrl+Enter �
   await page.keyboard.press('Escape');
   await expect(mergeDialog).toHaveCount(0);
   await expect.poll(async () => (await activeInfo(page)).label).toBe('더보기');
+
+  // ── 직원 카드(318): 마우스로만 열렸던 자리. 직원 검색칸에서 Tab 을 눌러 **닿을 수 있고**, Enter 로 상세가 열린다 ──
+  await page.goto('/staff');
+  const staffSearch = page.getByLabel('직원 검색');
+  await staffSearch.focus();
+  let reached = false;
+  for (let i = 0; i < 12 && !reached; i++) {
+    await page.keyboard.press('Tab');
+    reached = (await activeInfo(page)).label === '김테스트 직원 상세 보기';
+  }
+  expect(reached).toBe(true); // Tab 으로 닿지 않으면 카드가 다시 마우스 전용이 된 것이다
+  await page.keyboard.press('Enter');
+  const staffDialog = page.getByRole('dialog', { name: '직원 상세' });
+  await expect(staffDialog).toBeVisible();
+  await staffDialog.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(staffDialog).toHaveCount(0);
 
   // ── 사이드바 링크: 포커스 후 Enter로 이동 ──
   await page.getByRole('link', { name: /예약 관리/ }).first().focus();

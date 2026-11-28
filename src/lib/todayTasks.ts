@@ -13,6 +13,8 @@ import { getPendingCompletionReservations } from './pendingCompletion';
 import { getTomorrowReservations } from './reservationReminder';
 import { countNewRequests } from './bookingRequests';
 import { isLowStock } from './stockRule';
+// 연락을 미뤄 둔 고객은 할 일에서 뺀다 — 매일 같은 얼굴이 뜨면 목록을 믿지 않게 된다 (249)
+import { snoozedCustomerIds } from './followUp';
 import { buildCustomerStatsIndex, type CustomerStatsIndex } from './customerStats';
 import { monthlyKpis, noRebookIds, type KpiInput, type MonthlyKpis } from './kpiRule';
 import { toISO } from './revisitRule';
@@ -32,15 +34,16 @@ export interface TodayTaskOptions { customersOn: boolean; reservationsOn: boolea
 /** @param campaigns 이미 고른 캠페인 대상(브리핑처럼 같은 화면에서 또 쓰는 쪽이 넘긴다) — 없으면 여기서 1회 계산 (178 리뷰 M-3) */
 export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSelection[]): TodayTask[] {
   const out: TodayTask[] = [];
+  const snoozed = snoozedCustomerIds(); // 고객 연락 할 일 4종이 같은 집합을 쓴다(숫자와 목록이 어긋나지 않게)
   const stats = opts.customersOn ? buildCustomerStatsIndex() : null; // 이탈 위험·재방문 권장·재예약 권유가 같은 인덱스를 쓴다 (139 #M8, 187 L-2)
   if (opts.customersOn && stats) {
     const seg = buildSegmentIndex(stats);
     let churn = 0, atRisk = 0;
-    for (const v of seg.values()) if (v.churn?.level === 'high') { churn++; atRisk += v.atRisk90; }
+    for (const [id, v] of seg.entries()) if (v.churn?.level === 'high' && !snoozed.has(id)) { churn++; atRisk += v.atRisk90; }
     if (churn > 0) out.push({ key: 'churn', label: '이탈 위험 고객 연락', count: churn, detail: opts.salesOn && atRisk > 0 ? `90일 위험 매출 약 ${atRisk.toLocaleString('ko-KR')}원(예측)` : undefined, href: '/customers?churn=1', tone: 'urgent' });
-    const revisit = getRevisitDueCustomers(0, stats).length;
+    const revisit = getRevisitDueCustomers(0, stats).filter(d => !snoozed.has(d.customer.id)).length;
     if (revisit > 0) out.push({ key: 'revisit', label: '재방문 권장일 지난 고객 안내', count: revisit, href: '/customers?revisit=1', tone: 'normal' });
-    const alerts = getProgramAlerts();
+    const alerts = getProgramAlerts().filter(a => !snoozed.has(a.customer.id));
     if (alerts.length > 0) out.push({ key: 'program', label: '회차권 소진·만료 임박 재등록 상담', count: alerts.length, href: '/customers?programAlert=1', tone: 'normal' });
     // 발송 화면의 생일 세그먼트(이번 달)와 같은 정의·같은 인원으로 — 7일 기준 숫자를 보여 주고 다른 인원이 걸리던 것 (139 #M2)
     if (opts.messagingOn) { // 발송 화면으로 가는 줄은 발송 모듈이 켜진 매장에만 (178 리뷰 L-3)
@@ -60,12 +63,13 @@ export function buildTodayTasks(opts: TodayTaskOptions, campaigns?: CampaignSele
   }
   if (opts.customersOn && opts.reservationsOn) {
     // 이달 방문했지만 다음 예약이 없는 고객 — 재예약률 타일의 "빠진 사람"에게 바로 연락 (184, GAP D-1)
-    const noRebook = getNoRebookCustomerIds(stats ?? undefined).size; // 위에서 만든 통계 인덱스 재사용 — 대시보드 새로고침당 전수 스캔 1회 감소 (187 리뷰 L-2)
+    const noRebook = [...getNoRebookCustomerIds(stats ?? undefined)].filter(id => !snoozed.has(id)).length; // 위에서 만든 통계 인덱스 재사용 — 대시보드 새로고침당 전수 스캔 1회 감소 (187 리뷰 L-2)
     if (noRebook > 0) out.push({ key: 'norebook', label: '이달 방문 뒤 다음 예약 없는 고객 재예약 권유', count: noRebook, href: '/customers?norebook=1', tone: 'normal' });
   }
   if (opts.productsOn) {
     const low = ProductStore.getAll().filter(isLowStock).length;
-    if (low > 0) out.push({ key: 'stock', label: '재고 부족 제품 입고', count: low, href: '/products', tone: 'normal' });
+    // 누르면 제품 화면에서 **발주 제안 창**이 바로 열린다 — 몇 개 주문할지까지 한 걸음에 (257)
+    if (low > 0) out.push({ key: 'stock', label: '재고 부족 제품 입고', count: low, detail: '발주 제안 창이 열립니다', href: '/products?reorder=1', tone: 'normal' });
   }
   if (opts.messagingOn && isAuthApiConfigured) { // 발송 경로가 붙은 매장만 — 서버 모드 백업을 로컬 모드 PC 에 복원해 성공 이력이 들어온 경우의 헛걸음 방지 (210, 208 리뷰 L-6)
     // 나가지 않은 문자(미연동·발송사 거절) — 그 뒤 성공 건이 생겨 발송 경로가 살아난 것이 확인된 매장에만, 수신 고객이 기록된 건(이 PC)만. 누르면 발송 이력이 실패·미연동만으로 열린다 (208, 207 다시 보내기)

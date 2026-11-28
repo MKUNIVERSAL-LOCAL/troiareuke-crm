@@ -220,6 +220,14 @@ export interface ShopPreferences {
   mergedCustomerIds?: Record<string, string>;
   /** 마지막 전체 백업 저장 시각(ISO, 매장 기준) — 첫 설정 체크리스트 "전체 백업 1회" 판정. 설정 행이라 NAS 동기·로그아웃 wipe 와 무관 (193·195) */
   lastBackupAt?: string;
+  /** 매장이 추가한 고객 주의 키워드 — 메모에서 이 말이 든 줄을 경고로 올린다 (240) */
+  cautionKeywords?: string[];
+  /** 자주 쓰는 태그 목록(태그 마스터) — 고객 창에서 눌러 넣는다 (237) */
+  tagMaster?: string[];
+  /** 영수증에 인쇄할 사업자 정보 (235) — 가입 계정의 사업자등록번호는 코어 AuthUser 에 없어 매장이 직접 적는다 */
+  receiptInfo?: { businessNumber?: string; ownerName?: string; greeting?: string };
+  /** 직원 인센티브(수당) 비율 — 매장 기본값 + 직원별 예외. 설정 행이라 NAS 동기, PC 교체와 무관 (233) */
+  staffCommission?: { serviceRate: number; productRate: number; perStaff?: Record<string, { serviceRate?: number; productRate?: number }> };
   /** 직원별 근무표·휴게·준비/정리 버퍼 staffId → 근무표 — 새 컬렉션(서버 화이트리스트 승인 B-2) 대신 설정 행으로 동기화 (141) */
   staffSchedules?: Record<string, StaffSchedule>;
   /** 베드·룸·장비 자원 목록 (142) */
@@ -238,6 +246,12 @@ export interface ShopPreferences {
   savedSegments?: SavedSegment[];
   /** 예약 정책 — 겹침 하드 블록 등(기본 꺼짐) (173, GAP R-3) */
   reservationPolicy?: ReservationPolicy;
+  /** 자주 쓰는 메모 문구 — 시술 기록 메모에 눌러 넣는다. 20개·40자 (251) */
+  memoPresets?: string[];
+  /** 고객 id → 연락 결과·미루기 기한. 할 일 목록이 매일 같은 고객을 띄우던 것을 끊는다 (249) */
+  followUps?: Record<string, { at: string; result: string; until?: string; note?: string; actor?: string }>;
+  /** 예약 id → 취소·노쇼 사유. 코어 Reservation 에 사유 칸이 없어 설정 행에 둔다. 1년 보관 (244) */
+  reservationCancelReasons?: Record<string, { kind: 'cancelled' | 'noshow'; reason: string; at: string }>;
   /** 개인정보 보존기간 정책 — 켜면 마지막 활동 후 years년 지난 고객을 "보존기간 경과"로 모아 익명화 (P4, 2026-11-17) */
   retentionPolicy?: { enabled: boolean; years: number };
 }

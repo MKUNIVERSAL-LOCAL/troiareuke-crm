@@ -132,7 +132,7 @@ export default function Sidebar() {
         </div>
         <button
           onClick={() => { if (!confirmLogoutDespiteKeepLocal()) return; resetFeatureFlags(); clearLocalPhotoCacheForLogout(); logout(); }} // 이 기기 보관 사진이 있으면 사라진다고 먼저 묻는다 (리뷰 2026-11-19)
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-400 hover:bg-red-50 hover:text-red-700 transition-colors"
         >
           <LogOut size={14} />
           <span>로그아웃</span>

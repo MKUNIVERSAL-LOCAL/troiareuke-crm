@@ -323,7 +323,7 @@ export default function DataBrowser() {
                   onClick={() => changeTab('__backups')}
                   className={clsx(
                     'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1',
-                    tab === '__backups' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-amber-400/80 hover:text-amber-300'
+                    tab === '__backups' ? 'bg-amber-700 text-white' : 'bg-slate-800 text-amber-400/80 hover:text-amber-300'
                   )}
                 >
                   <RefreshCw size={11} /> 백업·복원

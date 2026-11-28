@@ -19,8 +19,8 @@ import { IS_MOBILE_APP } from './platform';
 import { SETTINGS_SECRET_FIELDS, isRecord, stripSettingsSecrets, backupTableShape, BACKUP_RAW_MARK } from './backupSanitize';
 import { containsKeyLike, scrubKeyLike } from './ai/keyLeak';
 
-export const BACKUP_FORMAT = 'troiareuke-crm-backup';
-export const BACKUP_VERSION = 1;
+const BACKUP_FORMAT = 'troiareuke-crm-backup';
+const BACKUP_VERSION = 1;
 /** 모바일 WebView localStorage 한도(대개 5MB) 아래 — 그보다 큰 파일은 쓰다가 터지므로 미리 거른다 */
 const MOBILE_MAX_BYTES = 4.5 * 1024 * 1024;
 const TABLE_NAME_RE = /^[a-z][a-z0-9_]{0,40}$/;

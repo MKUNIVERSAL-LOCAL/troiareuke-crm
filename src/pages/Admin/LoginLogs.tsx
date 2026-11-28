@@ -130,7 +130,7 @@ export default function LoginLogs() {
                   ? s === 'success' ? 'bg-emerald-500/20 text-emerald-400'
                   : s === 'failed' ? 'bg-red-500/20 text-red-400'
                   : 'bg-blue-500/20 text-blue-400'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
               }`}
             >
               {s === 'all' ? '전체' : s === 'success' ? '성공' : '실패'}
@@ -213,7 +213,7 @@ export default function LoginLogs() {
                   <button
                     onClick={() => setPage(p => Math.max(0, p - 1))}
                     disabled={page === 0}
-                    className="px-3 py-1.5 text-xs bg-slate-800 text-slate-400 rounded-lg disabled:opacity-40 hover:bg-slate-700 transition-colors"
+                    className="px-3 py-1.5 text-xs bg-slate-800 text-slate-400 rounded-lg disabled:opacity-40 hover:text-white hover:bg-slate-700 transition-colors"
                   >
                     이전
                   </button>
@@ -221,7 +221,7 @@ export default function LoginLogs() {
                   <button
                     onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
-                    className="px-3 py-1.5 text-xs bg-slate-800 text-slate-400 rounded-lg disabled:opacity-40 hover:bg-slate-700 transition-colors"
+                    className="px-3 py-1.5 text-xs bg-slate-800 text-slate-400 rounded-lg disabled:opacity-40 hover:text-white hover:bg-slate-700 transition-colors"
                   >
                     다음
                   </button>

@@ -2,6 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { writeFileSync } from 'node:fs';
 import { makeAccount, signupAndOnboard, createCustomer, BRANCH_ROUTES, expectNoHorizontalOverflow } from './helpers';
+import { addReservation } from './flows'; // 월간 보기는 칩이 있는 상태로 봐야 한다 (262)
 
 /**
  * 접근성 자동 점검 (axe-core, WCAG 2.1 A/AA) — 로그인 + 지점 화면 전부.
@@ -83,6 +84,21 @@ export function defineA11yGate(title: string, accountPrefix: string, opts: { ove
       await page.waitForLoadState('networkidle');
       if (opts.overflow) await expectNoHorizontalOverflow(page, route);
       await scan(page, route, rows);
+    }
+
+    // PC 월간 보기 — 라우트가 아니라 보기 전환이라 위 루프로는 닿지 않는다 (261, GAP R-1).
+    // 예약 1건을 만들어 **칩이 있는 상태**로 본다 — 빈 격자만 보면 칩 대비·이름을 못 잡고,
+    // 버튼이 없으면 조용히 건너뛰지 않고 실패한다 (262, 리뷰 M-3·L-9)
+    if (!opts.overflow) {
+      await page.goto('/reservations');
+      await page.waitForLoadState('networkidle');
+      await addReservation(page, acc, '10:00');
+      const monthBtn = page.getByRole('button', { name: '월간' });
+      if (await monthBtn.count() === 0) throw new Error('PC 월간 보기 버튼이 없습니다 — 보기 전환이 사라졌는지 확인하세요');
+      await monthBtn.first().click();
+      await page.getByTestId('month-view').waitFor({ state: 'visible' });
+      await page.getByTestId('month-chip').first().waitFor({ state: 'visible' });
+      await scan(page, '/reservations 월간', rows);
     }
 
     assertNoBlocking(rows);

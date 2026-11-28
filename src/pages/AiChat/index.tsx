@@ -21,6 +21,7 @@ import { copyText } from '../../lib/clipboard';
 import { notify } from '../../lib/notify';
 import { useFeature } from '../../hooks/useFeature';
 import { CustomerStore, PaymentStore, ProductStore, StaffStore, ReservationStore, ServiceStore, TreatmentLogStore } from '../../lib/store';
+import { isLowStock } from '../../lib/stockRule'; // 재고부족 공용 규칙 — 헤더·대시보드와 같은 수 (리뷰 L-6)
 // 외부 LLM으로 나가는 프롬프트에는 전화번호를 항상 마스킹한다(권한 무관) — 다른 화면과 개인정보 정책 일치
 // 본사 AI 키 중계 — 서버에 키가 있으면 지점 키 없이 동작 (없으면 아래 지점 키 경로)
 import { isAiProxyEnabled, getCachedAiProxyStatus, aiProxyChat, refreshAiProxyStatus, onAiProxyStatusChanged } from '../../lib/aiProxy';
@@ -75,7 +76,7 @@ function buildCrmContext(aliasNumbers: Map<string, number>, includeRevenue: bool
   const thisMonthRevenue = thisMonthPayments.reduce((sum, p) => sum + p.amount, 0);
   const newThisMonth = customers.filter(c => localISODate(c.registeredAt).startsWith(thisMonthStr)); // registeredAt 은 UTC ISO — 대시보드와 같은 로컬 월 (12차 #M2)
   const vipCustomers = customers.filter(c => c.grade === 'VIP');
-  const lowStock = products.filter(p => p.stock <= p.minStock);
+  const lowStock = products.filter(isLowStock); // 제품 화면 헤더·대시보드와 같은 규칙 — 단종 제품은 세지 않는다 (리뷰 L-6)
 
   const context = `
 === 더마솔루션 데이터 (${format(today, 'yyyy년 MM월 dd일', { locale: ko })} 기준) ===
@@ -111,7 +112,7 @@ ${staff.map((s: any) => `- ${s.name} (${s.role}) | 전문: ${Array.isArray(s.spe
 ${services.map((s: any) => `- ${s.name} | ${s.category} | ${s.duration}분 | ${s.price.toLocaleString()}원`).join('\n')}
 
 【제품/재고 현황】
-${products.map(p => `- ${p.name} | 재고:${p.stock}개 | 최소재고:${p.minStock}개 | ${p.stock <= p.minStock ? '⚠️재고부족' : '정상'}`).join('\n')}
+${products.map(p => `- ${p.name} | 재고:${p.stock}개 | 최소재고:${p.minStock}개 | ${isLowStock(p) ? '⚠️재고부족' : p.isActive === false ? '판매중지' : '정상'}`).join('\n')}
 
 【재고 부족 제품】
 ${lowStock.length === 0 ? '없음' : lowStock.map(p => `- ${p.name}: 현재 ${p.stock}개 (최소 ${p.minStock}개)`).join('\n')}
@@ -374,7 +375,7 @@ function AiChatInner() {
 
           <div className="flex-1" />
 
-          <button onClick={clearChat} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
+          <button onClick={clearChat} className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-all">
             <Trash2 size={14} /> 초기화
           </button>
 
@@ -494,7 +495,7 @@ function AiChatInner() {
                       </span>
                     )}
                     {msg.role === 'assistant' && msg.id !== '0' && (
-                      <button onClick={() => copyMessage(msg.id, msg.content)} className="text-gray-300 hover:text-gray-500 transition-colors">
+                      <button onClick={() => copyMessage(msg.id, msg.content)} className="text-gray-400 hover:text-gray-600 transition-colors">
                         {copiedId === msg.id ? <Check size={11} className="text-green-700" /> : <Copy size={11} />}
                       </button>
                     )}
@@ -527,7 +528,7 @@ function AiChatInner() {
                 placeholder={hasAnyKey ? '질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)' : '먼저 API 키를 설정해주세요 →'}
                 disabled={isLoading || !hasAnyKey}
                 rows={1}
-                className="flex-1 px-4 py-3 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:bg-gray-50 disabled:text-gray-400"
+                className="flex-1 min-w-0 px-4 py-3 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:bg-gray-50 disabled:text-gray-400"
                 style={{ maxHeight: '120px' }}
               />
               <button onClick={() => sendMessage()} disabled={isLoading || !input.trim() || !hasAnyKey}
@@ -546,7 +547,7 @@ function AiChatInner() {
           {[
             { label: '전체 고객', value: `${CustomerStore.getAll().length}명`, color: 'blue' },
             { label: '이탈 위험', value: `${CustomerStore.getAll().filter(c => { if (!c.lastVisitDate) return false; return differenceInDays(new Date(), parseISO(c.lastVisitDate)) > 90; }).length}명`, color: 'red' },
-            { label: '재고 부족', value: `${ProductStore.getAll().filter(p => p.stock <= p.minStock).length}개`, color: 'orange' },
+            { label: '재고 부족', value: `${ProductStore.getAll().filter(isLowStock).length}개`, color: 'orange' },
           ].map(item => (
             <div key={item.label} className="bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
               <p className="text-xs text-gray-400">{item.label}</p>

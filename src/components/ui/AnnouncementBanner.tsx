@@ -14,9 +14,11 @@ interface Announcement {
 }
 
 const typeStyles: Record<string, { bg: string; icon: React.ElementType; iconColor: string }> = {
+  // 325: 흰 글자 대비 실측 — blue-600 5.17 · emerald-600 **3.77** · amber-500 **2.15** · purple-600 5.38(기준 4.5:1).
+  // 본사 공지 띠는 **서버에 공지가 있어야** 뜨므로 로컬 모드 게이트가 한 번도 재지 않았다(어드민 창과 같은 사각지대).
   info:    { bg: 'bg-blue-600',   icon: Megaphone,      iconColor: 'text-blue-200' },
-  update:  { bg: 'bg-emerald-600', icon: RefreshCw,     iconColor: 'text-emerald-200' },
-  warning: { bg: 'bg-amber-500',  icon: AlertTriangle,  iconColor: 'text-amber-200' },
+  update:  { bg: 'bg-emerald-700', icon: RefreshCw,     iconColor: 'text-emerald-200' },
+  warning: { bg: 'bg-amber-700',  icon: AlertTriangle,  iconColor: 'text-amber-200' },
   event:   { bg: 'bg-purple-600', icon: Gift,           iconColor: 'text-purple-200' },
 };
 
@@ -78,14 +80,14 @@ export default function AnnouncementBanner() {
         title={expanded ? '접기' : '전체 보기'}
       >
         <span className="font-bold mr-2">{ann.title}</span>
-        <span className="text-white/80">{ann.content}</span>
+        <span className="text-white">{ann.content}</span>
       </button>
       {visible.length > 1 && (
         <button
           type="button"
           onClick={() => { setCurrent(c => (c + 1) % visible.length); setExpanded(false); }}
           aria-label={`다음 공지 (${current % visible.length + 1}/${visible.length})`}
-          className="text-xs text-white/70 hover:text-white shrink-0 px-2"
+          className="text-xs text-white shrink-0 px-2"
         >
           {current % visible.length + 1}/{visible.length}
         </button>
@@ -94,7 +96,7 @@ export default function AnnouncementBanner() {
         type="button"
         onClick={() => dismiss(ann.id)}
         aria-label="이 공지 닫기"
-        className="text-white/70 hover:text-white shrink-0 p-1"
+        className="text-white/80 hover:text-white shrink-0 p-1"
       >
         <X size={14} />
       </button>

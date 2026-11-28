@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer } from './helpers';
-import { addReservation, openCustomer } from './flows';
+import { makeAccount, signupAndOnboard, createCustomer, becomeStaff, dismissToasts } from './helpers';
+import { addReservation, openCustomer, registerPayment } from './flows';
 
 /**
  * 캠페인(자동 발송) — 정의·대상 산출·승인 발송·멱등키 (156, GAP M-3)
@@ -56,6 +56,7 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await expect(cand).toContainText(`${acc.customer}님, 내일`);
   await expect(cand).toContainText('14:00 예약을 기다리고 있어요');
   await expect(cand).not.toContainText('{');
+  await expect(run.getByTestId('campaign-candidates')).not.toContainText('오늘 보낼 대상이 없습니다'); // 277(리뷰 L-2)
   await run.getByTestId('campaign-approve').click();
   await expect(run.getByTestId('campaign-result')).toContainText('발송되지 않았습니다 (발송 서버 미연동)');
   await run.getByTestId('campaign-result').getByRole('button', { name: '닫기' }).click();
@@ -112,5 +113,64 @@ test('캠페인을 만들고 오늘 대상을 확인해 승인 발송하면 이�
   await card.getByTestId('campaign-row').filter({ hasText: '예약 당일 아침 안내' }).getByRole('button', { name: '대상 확인·발송' }).click();
   const todayRun = page.getByRole('dialog', { name: '캠페인 실행 — 예약 당일 아침 안내' });
   await expect(todayRun.getByTestId('campaign-ready-count')).toHaveText('0');
+  // 276·277(리뷰 L-3): 0명이면 빈 상자가 아니라 "없다" 고 말한다 — 왜 빠졌는지는 위의 제외 줄이 말한다.
+  // (대상이 1명이던 위 실행에서는 같은 상자가 이 문구를 담지 않는 것까지 아래에서 함께 본다)
+  await expect(todayRun.getByTestId('campaign-candidates')).toContainText('오늘 보낼 대상이 없습니다');
   await expect(todayRun.getByTestId('campaign-approve')).toBeDisabled();
+});
+
+test('캠페인 성과 근거 — 세어진 고객을 보여 주고, 직원 계정에는 금액을 보여 주지 않는다 (267·270)', async ({ page }) => {
+  test.slow();
+  page.on('dialog', d => d.accept());
+  const accPerf = makeAccount('CP');
+  await signupAndOnboard(page, accPerf);
+  await createCustomer(page, accPerf);
+  await registerPayment(page, accPerf, 120000); // 창 안 결제 — 성과로 세어진다
+  await page.goto('/messaging');
+  await page.getByTestId('campaign-presets').click(); // 기본 시나리오를 넣어 캠페인을 만든다
+  await dismissToasts(page);
+
+  // 이 PC 의 캠페인 발송 기록을 심는다 — e2e 환경은 발송사 미연동이라 실제 발송이 되지 않는다(그래서 성과 줄이 안 뜬다)
+  const customerId = await page.evaluate(() => {
+    const ck = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(ck) || '[]');
+    return list[0]?.id as string;
+  });
+  await page.evaluate((cid) => {
+    // 캠페인 정의는 **설정 행**(preferences.campaigns)에, 발송 기록은 기기 키(campaign_sends)에 있다
+    const shop = (Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k)) || '').replace(/^crm_|_customers$/g, '');
+    const settings = JSON.parse(localStorage.getItem(`crm_${shop}_settings`) || '{}');
+    const id = settings?.preferences?.campaigns?.[0]?.id;
+    if (!id) throw new Error('캠페인이 없습니다 — 기본 시나리오를 먼저 넣어야 합니다');
+    // 키 모양은 실제 규칙과 같게 — `캠페인|고객|버킷` (campaignRule.idempotencyKey). 버킷은 기존 픽스처와 같은 seed (277, 리뷰 L-6)
+    localStorage.setItem(`crm_${shop}_campaign_sends`, JSON.stringify([{ key: `${id}|${cid}|seed`, campaignId: id, customerId: cid, at: new Date().toISOString() }]));
+  }, customerId);
+  await page.reload();
+
+  const card = page.getByTestId('campaigns-card');
+  const row = card.getByTestId('campaign-row').first();
+  await expect(row.getByTestId('campaign-perf')).toContainText('[추정] 발송 1명');
+  await expect(row.getByTestId('campaign-perf')).toContainText('120,000원'); // 관리자는 금액까지
+
+  await row.getByTestId('campaign-perf-rows').click();
+  const detail = page.getByTestId('metric-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail.getByTestId('metric-detail-row')).toHaveCount(1);
+  await expect(detail.getByTestId('metric-detail-row')).toContainText(accPerf.customer);
+  await expect(detail.getByTestId('metric-detail-total')).toContainText('120,000원'); // 합계 = 요약 줄 금액
+  await expect(detail).toContainText('이 캠페인 때문이라는 뜻은 아닙니다');
+  await detail.getByRole('button', { name: '닫기' }).click();
+
+  // 270(리뷰 H-1): 직원 계정에는 금액을 **0원으로 보여 주지 않고** 아예 감춘다 — 요약 줄도 사람 수만
+  await becomeStaff(page);
+  await page.goto('/messaging');
+  const staffRow = page.getByTestId('campaigns-card').getByTestId('campaign-row').first();
+  await expect(staffRow.getByTestId('campaign-perf')).toContainText('결제 1명');
+  await expect(staffRow.getByTestId('campaign-perf')).not.toContainText('120,000');
+  await staffRow.getByTestId('campaign-perf-rows').click();
+  const staffDetail = page.getByTestId('metric-detail');
+  await expect(staffDetail).toBeVisible();
+  await expect(staffDetail.getByTestId('metric-detail-total')).toHaveCount(0); // 합계 칸 자체가 없다(0원이라고 쓰지 않는다)
+  await expect(staffDetail).not.toContainText('0원');
+  await expect(staffDetail).toContainText('매출 권한이 있는 계정에서만');
 });

@@ -1,5 +1,7 @@
 import { isImeKey } from '../../lib/ime';
-﻿import { useState, useEffect, useRef, useMemo } from 'react';
+import { describePrefLoss, describePrefRemovalLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296·300)
+import { prefSaveMode } from '../../lib/prefSaveMode';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { monthCloseBlock } from '../../lib/monthClose';
 import { createPortal } from 'react-dom';
 import { notify } from '../../lib/notify';
@@ -35,6 +37,13 @@ import { IS_MOBILE_APP } from '../../lib/platform';
 import PhotoLightbox, { type LightboxPhoto } from '../../components/PhotoLightbox';
 import CustomerMergeModal from '../../components/CustomerMergeModal';
 import CustomerTimeline from '../../components/CustomerTimeline';
+import FollowUpCard from '../../components/FollowUpCard'; // 연락 기록·미루기 (249)
+import CustomerHistoryCard from '../../components/CustomerHistoryCard'; // 정보 변경 이력 (252)
+import { confirmIfDuplicatePayment } from '../../lib/duplicatePayment'; // 중복 결제 의심 경고 (266, 리뷰 M-1)
+import MemoPresetChips from '../../components/MemoPresetChips'; // 자주 쓰는 메모 문구 (255)
+import { logCustomerEdit, logCustomerGrade, logCustomerGradeBatch, logCustomerEditBatch } from '../../lib/customerHistory';
+import { snoozedCustomerIds } from '../../lib/followUp';
+import { describeHidden } from '../../lib/followUpRule';
 import ProgramManageModal from '../../components/ProgramManageModal';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint, EXPIRED_LINK_BLOCKED } from '../../lib/customerPrograms';
 import { mergeBlockReason, findDuplicateCandidates, previewMerge } from '../../lib/customerMerge';
@@ -52,12 +61,19 @@ import { rememberRecipients } from '../../lib/messageRecipients';
 import { countAnonymizeResidue } from '../../lib/anonymizeResidueCount';
 import { describeAnonymizeResidue } from '../../lib/anonymizeResidue';
 import { buildSegmentIndex } from '../../lib/customerSegments';
-import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
+import { isCountableCustomer } from '../../lib/customerScope'; // 익명화·샘플 고객 제외 (236)
+// 태그 마스터 (237, GAP C-1) — 같은 뜻의 태그가 갈라지지 않게 목록에서 눌러 넣는다
+import { getTagMaster, saveTagMaster } from '../../lib/tagMaster';
+import { addMasterTag, removeMasterTag, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, normalizeTagName, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER } from '../../lib/tagMasterRule';
+// 등급 자동 제안 (236, GAP C-1) — 규칙은 순수 모듈, 적용은 사람이 고른 것만
+import { suggestGrade, GRADE_RULE_TEXT, GRADE_SUGGEST_NOTE, type SuggestGrade } from '../../lib/gradeSuggestRule';
+import { listSavedSegments, buildSegmentFacts, segmentIds, renameTagInSavedSegments, segmentsUsingTag } from '../../lib/savedSegments';
 import { describeSegment, type SavedSegment } from '../../lib/segmentFilterRule';
 import SegmentEditorModal from '../../components/SegmentEditorModal';
 import { CHURN_LABEL, CHURN_HIGH_RATIO } from '../../lib/churnRule';
 import { getCustomerValue } from '../../lib/customerValue';
-import { recordPrivacyAction } from '../../lib/privacyLog';
+import { recordPrivacyAction, PRIVACY_LOG_LOST, PRIVACY_LOG_UNKNOWN } from '../../lib/privacyLog';
+import { CANCEL_REASON_SCRUB_LOST, CANCEL_REASON_SCRUB_UNKNOWN } from '../../lib/cancelReasons';
 import { askConfirm } from '../../lib/confirmDialog';
 import { getRetentionPolicy, getExpiredCustomers, anonymizeCustomers, isAnonymized } from '../../lib/retentionPolicy';
 import { analyzeSkinPhoto, isSkinAnalysisAvailable, SKIN_LABELS, type SkinAnalysisResult } from '../../lib/skinAnalysis';
@@ -346,7 +362,9 @@ export default function Customers() {
     const text = quickMemo.trim();
     if (!text) return;
     const line = `[${today()}] ${text}`;
+    const beforeMemo = selected.memo;
     CustomerStore.update(selected.id, { memo: selected.memo ? `${selected.memo}\n${line}` : line });
+    logCustomerEdit(selected.id, { memo: beforeMemo }, { memo: selected.memo ? `${selected.memo}\n${line}` : line }, user?.name); // 빠른 메모도 기록 (254 리뷰 H-2)
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
     setQuickMemo('');
@@ -368,6 +386,8 @@ export default function Customers() {
       </button>
     </form>
   );
+  // 한 줄 메모에도 같은 문구를 쓴다 — 줄바꿈 대신 ' · ' 로 잇는다 (255)
+  const quickMemoPresets = () => <MemoPresetChips value={quickMemo} onChange={setQuickMemo} oneLine label="빠른 메모 문구" />;
   // 헤더 전역 검색(?q=)에서 넘어온 검색어를 초기값·변경 모두 반영
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -398,7 +418,7 @@ export default function Customers() {
   const [revisitOnly, setRevisitOnly] = useState(() => searchParams.get('revisit') === '1'); // 재방문 권장일 지남 (138)
   const [programAlertOnly, setProgramAlertOnly] = useState(() => searchParams.get('programAlert') === '1'); // 회차권 소진·만료 임박 (138)
   const revisitIds = useMemo(() => (revisitOnly ? new Set(getRevisitDueCustomers(0).map(d => d.customer.id)) : null), [revisitOnly, customers]);
-  const programAlertIds = useMemo(() => (programAlertOnly ? new Set(getProgramAlerts().map(a => a.customer.id)) : null), [programAlertOnly, customers]);
+  const programAlertIds = useMemo(() => (programAlertOnly ? new Set(getProgramAlerts().map(a => a.customer.id)) : null), [programAlertOnly, customers]); // 고객 단위 — 한 고객의 알림 2건을 2명으로 세지 않는다 (250 리뷰 L-8)
   const [norebookOnly, setNorebookOnly] = useState(() => searchParams.get('norebook') === '1'); // 이달 방문·다음 예약 없음 — 대시보드 재예약률 타일·오늘 할 일 딥링크 (184)
   const norebookIds = useMemo(() => (norebookOnly ? getNoRebookCustomerIds() : null), [norebookOnly, customers]);
   // 목록 정렬 — 최근 방문순(기본)·이름순·등록순·누적 결제순 (2026-11-18)
@@ -412,13 +432,194 @@ export default function Customers() {
   ];
   // 목록·정렬·행 표기는 기록 재계산값 — 저장 증분값은 상세를 열어 heal 하기 전까지 어긋나 보였다 (10차 숫자 점검 #H1). customers 가 바뀔 때(loadAll)마다 다시 센다
   const statsIndex = useMemo(() => buildCustomerStatsIndex(), [customers]);
+  const tagOptionsForChips = useMemo(() => topTags(customers, 24), [customers]); // 태그 칩(237) — 아래 필터 칩(상위 12)과 달리 더 많이 보여 준다
   const statsOf = (c: Customer) => statsFor(c, statsIndex);
   const segmentIndex = useMemo(() => buildSegmentIndex(statsIndex), [statsIndex]); // RFM 구분·이탈 위험(개인 주기 대비) — 전수 1회 (136)
   const segmentFacts = useMemo(() => buildSegmentFacts(), [customers, statsIndex]); // 저장 세그먼트 평가 사실 (166) // eslint-disable-line react-hooks/exhaustive-deps
   const activeSegment = savedSegments.find(sg => sg.id === segmentFilterId) ?? null;
   const segmentFilterIds = useMemo(() => (activeSegment ? segmentIds(activeSegment.condition, segmentFacts) : null), [activeSegment, segmentFacts]);
   const segmentCounts = useMemo(() => new Map(savedSegments.map(sg => [sg.id, segmentIds(sg.condition, segmentFacts).size])), [savedSegments, segmentFacts]); // 칩 인원은 검색 글자마다 다시 세지 않게 (170 리뷰 L-1)
-  const churnHighCount = useMemo(() => { let n = 0; for (const v of segmentIndex.values()) if (v.churn?.level === 'high') n++; return n; }, [segmentIndex]);
+  // 연락을 미뤄 둔 고객 — 할 일 딥링크 필터(이탈 위험·재방문·회차권·재예약 없음)에서만 숨긴다 (249)
+  const [followUpTick, setFollowUpTick] = useState(0); // 연락 기록 저장 뒤 숨김 집합·칩 숫자를 다시 센다 (249)
+  const snoozedIds = useMemo(() => snoozedCustomerIds(), [customers, followUpTick]);
+  // 칩 숫자도 목록·대시보드와 같은 기준(미루기 제외) — 세 숫자가 갈라지던 것 (250 리뷰 M-4)
+  const churnHighCount = useMemo(() => { let n = 0; for (const [id, v] of segmentIndex.entries()) if (v.churn?.level === 'high' && !snoozedIds.has(id)) n++; return n; }, [segmentIndex, snoozedIds]);
+  const chipCount = useCallback((ids: Set<string> | null) => (ids ? [...ids].filter(id => !snoozedIds.has(id)).length : 0), [snoozedIds]);
+  // 등급 올릴 후보 — 전수 1회(기록 재계산값 기준). 자동 적용은 하지 않는다 (236, GAP C-1)
+  const gradeSuggestions = useMemo(() => {
+    const out: { id: string; name: string; current: string; suggested: SuggestGrade; reason: string }[] = [];
+    for (const c of customers) {
+      if (!isCountableCustomer(c)) continue; // 익명화·삭제 고객은 대상이 아니다
+      const st = statsFor(c, statsIndex);
+      const sug = suggestGrade({ current: c.grade, visits: st.totalVisits, spent: st.totalSpent, segment: segmentIndex.get(c.id)?.rfm.segment });
+      if (sug) out.push({ id: c.id, name: c.name, current: c.grade, suggested: sug.grade, reason: sug.reason });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }, [customers, statsIndex, segmentIndex]);
+  // 태그 마스터 — 설정 행에서 읽고, 고객 창의 칩과 관리 패널이 같은 목록을 쓴다 (237)
+  const [tagMaster, setTagMaster] = useState<string[]>(() => getTagMaster());
+  const [tagPanel, setTagPanel] = useState(false);
+  // 설정 행이 아직 서버에서 안 왔을 때 빈 목록으로 덮어쓰지 않게, 패널을 열 때·다른 기기 변경 때 다시 읽는다 (238, 리뷰 M-6)
+  const openTagPanel = () => { setTagMaster(getTagMaster()); setTagPanel(true); };
+  const [tagDraft, setTagDraft] = useState('');
+  const tagChipChoices = useMemo(() => tagChoices(tagMaster, tagOptionsForChips), [tagMaster, tagOptionsForChips]);
+  /** 칩 클릭 — 상한·거부 사유가 있으면 알리고, 없으면 입력칸에 더한다 (238, 리뷰 M-5) */
+  function appendTagWith(current: string, tag: string, apply: (next: string) => void) {
+    const r = appendTagToInput(current, tag);
+    if (r.error) { notify(r.error); return; }
+    if (r.value !== current) apply(r.value);
+  }
+  function addToMaster() {
+    const r = addMasterTag(tagMaster, tagDraft);
+    if (r.error) { notify(r.error); return; }
+    const saved = saveTagMaster(r.list);
+    setTagMaster(saved.list);
+    setTagDraft('');
+    // 296: 저장이 안 남았는데 칩만 생기면 다시 열 때 사라진다 — 그 사실을 적는다
+    const lost = describePrefLoss(saved.landed, '태그 목록', prefSaveMode());
+    if (lost) notify.error(lost);
+  }
+  // 태그 이름 일괄 변경 (239) — 이미 갈라진 태그("민감"·"민감성피부")를 손으로 고치려면 고객을 하나씩 열어야 해서 아무도 안 한다
+  const [renameFrom, setRenameFrom] = useState<string | null>(null);
+  const [renameTo, setRenameTo] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  function startRename(tag: string) { setRenameFrom(tag); setRenameTo(tag); }
+  async function applyRename() {
+    if (!renameFrom || renaming) return;
+    setRenaming(true); // 확인창 앞에서 먼저 잠근다 — 더블클릭에 확인창이 두 번 열리지 않게 (242, 리뷰 L-2)
+    try {
+      const all = CustomerStore.getAll().filter(isCountableCustomer);
+      // 저장되는 이름으로 미리 정규화한다 — 전에는 확인창·토스트가 정규화 전 이름을 말해 저장값과 달랐다 (242, 리뷰 M-3)
+      const target = normalizeTagName(renameTo);
+      const preview = previewRename(all, renameFrom, renameTo);
+      if (preview.error || !target) { notify(preview.error ?? '바꿀 이름을 확인해주세요.'); return; }
+      const inactive = CustomerStore.getAll().filter(c => !isCountableCustomer(c) && renameTagOnCustomer(c.tags, renameFrom, target).changed).length;
+      const segments = segmentsUsingTag(renameFrom); // 세그먼트 조건도 함께 바꾼다 (242, 리뷰 H-1)
+      if (preview.affected === 0) {
+        // 고객에게 붙은 태그가 없으면 목록 이름만 바꾼다 — "바꿨습니다" 를 거짓으로 말하지 않게 그대로 알린다
+        const savedMaster = saveTagMaster(renameTagInList(getTagMaster(), renameFrom, target));
+        setTagMaster(savedMaster.list);
+        const moved = renameTagInSavedSegments(renameFrom, target);
+        const movedSegments = moved.affected;
+        if (movedSegments.length > 0) setSavedSegments(listSavedSegments());
+        notify(`목록의 태그 이름만 바꿨습니다(이 태그가 붙은 고객은 없습니다): ${renameFrom} → ${target}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개도 함께` : ''}`);
+        // 296: 목록·세그먼트 중 하나라도 이 PC 에 남지 않았으면 그 사실을 함께 적는다
+        // 301(297~299 리뷰 LOW-8): 둘 다 실패하면 **둘 다** 적는다(앞의 하나만 알리던 것)
+        const lostRename = [describePrefLoss(savedMaster.landed, '태그 목록', prefSaveMode()), describePrefLoss(moved.landed, '세그먼트 조건', prefSaveMode())].filter(Boolean).join(' ');
+        if (lostRename) notify.error(lostRename);
+        setRenameFrom(null);
+        return;
+      }
+      const lines = [
+        `"${renameFrom}" 을 "${target}" 으로 바꿀까요?`,
+        `고객 ${preview.affected}명의 태그가 바뀝니다${preview.merges > 0 ? `(그중 ${preview.merges}명은 이미 "${target}" 이 있어 하나로 합쳐집니다)` : ''}.`,
+        ...(segments.length > 0 ? [`저장 세그먼트 ${segments.length}개(${segments.slice(0, 2).join(', ')}${segments.length > 2 ? ' 외' : ''})의 조건도 함께 바뀝니다.`] : []),
+        ...(inactive > 0 ? [`탈퇴·익명화 고객 ${inactive}명은 그대로 둡니다(개인정보 보존 정책).`] : []),
+        preview.merges > 0 ? '합쳐진 고객은 반대로 바꿔도 원래대로 돌아가지 않습니다.' : '되돌리려면 반대로 한 번 더 바꿔야 합니다.',
+      ];
+      if (!(await askConfirm({ title: '태그 이름 바꾸기', message: lines.join('\n'), confirmLabel: '이름 바꾸기', cancelLabel: '닫기' }))) return;
+      const ids = all.filter(c => renameTagOnCustomer(c.tags, renameFrom, target).changed).map(c => c.id);
+      let done = 0;
+      let applied = 0;
+      const renameRows: { id: string; before: { tags?: string[] }; after: { tags?: string[] } }[] = []; // 이력은 끝에서 한 번에 (254 리뷰 H-2·H-3)
+      const step = () => {
+        try {
+          // 코어 update() 는 한 명마다 고객 표 전체를 저장한다 → 25명씩 (238 리뷰 H-3 과 같은 이유)
+          for (const id of ids.slice(done, done + 25)) {
+            const c = CustomerStore.getById(id);
+            if (!c) continue;
+            const r = renameTagOnCustomer(c.tags, renameFrom, target);
+            if (!r.changed) continue; // 그 사이 다른 기기가 태그를 지웠다
+            CustomerStore.update(id, { tags: r.tags });
+            renameRows.push({ id, before: { tags: c.tags }, after: { tags: r.tags } });
+            applied += 1;
+          }
+        } catch (e) {
+          setRenaming(false);
+          console.error('[customers] 태그 이름 변경 실패:', e);
+          notify(`태그 이름을 ${applied}명까지 바꾸고 저장이 실패했습니다. 저장 공간을 확인한 뒤 다시 시도해주세요.`);
+          loadAll();
+          return;
+        }
+        done += 25;
+        if (done < ids.length) { setTimeout(step, 0); return; }
+        const savedMaster2 = saveTagMaster(renameTagInList(getTagMaster(), renameFrom, target)); // 적용 중 추가된 태그를 덮지 않게 다시 읽는다 (242, 리뷰 L-4)
+        setTagMaster(savedMaster2.list);
+        const moved2 = renameTagInSavedSegments(renameFrom, target);
+        const movedSegments = moved2.affected;
+        if (movedSegments.length > 0) setSavedSegments(listSavedSegments());
+        setRenaming(false);
+        logCustomerEditBatch(renameRows, user?.name); // 태그 일괄 변경도 고객마다 이력에(저장은 한 번) (254 리뷰 H-2)
+        setRenameFrom(null);
+        // 297(293~296 리뷰 H-2): "붙은 고객이 없다" 갈래만 알리고 **본 경로는 판정을 버렸다** —
+        // 고객 태그는 코어 고객 표에 저장되지만 태그 목록·세그먼트 조건은 설정 행이라 따로 실패할 수 있다
+        const lostBulk = [describePrefLoss(savedMaster2.landed, '태그 목록', prefSaveMode()), describePrefLoss(moved2.landed, '세그먼트 조건', prefSaveMode())].filter(Boolean).join(' ');
+        const skipped = ids.length - applied;
+        notify(`고객 ${applied}명의 태그를 "${target}" 으로 바꿨습니다${preview.merges > 0 ? ` (${preview.merges}명은 기존 태그와 합쳐짐)` : ''}${skipped > 0 ? ` · ${skipped}명은 그 사이 바뀌어 건너뜀` : ''}${movedSegments.length > 0 ? ` · 세그먼트 ${movedSegments.length}개 조건도 함께 바꿈` : ''}.`);
+        if (lostBulk) notify.error(lostBulk); // 297(리뷰 H-2): 고객 태그는 바뀌었어도 목록·세그먼트 조건이 안 남았으면 그 사실을 적는다
+        loadAll();
+      };
+      setTimeout(step, 0);
+    } finally {
+      // 청크가 시작되면 step 이 끝낼 때 풀고, 그 전에 빠져나온 경우(거절·검증 실패)는 여기서 푼다
+      if (!renameFrom) setRenaming(false);
+    }
+  }
+  function dropFromMaster(tag: string) {
+    const dropped = saveTagMaster(removeMasterTag(tagMaster, tag));
+    setTagMaster(dropped.list);
+    // 300(297~299 리뷰 M-1): 삭제인데 저장형 문구("다시 저장해주세요 … 사라집니다")가 나갔다 — 지운 태그가 돌아온다
+    const lostDrop = describePrefRemovalLoss(dropped.landed, '태그', prefSaveMode());
+    if (lostDrop) notify.error(lostDrop);
+  }
+  const [gradePanel, setGradePanel] = useState(false);
+  const [gradePicked, setGradePicked] = useState<Set<string>>(new Set());
+  const openGradePanel = () => { setGradePicked(new Set(gradeSuggestions.map(g => g.id))); setGradePanel(true); };
+  const [gradeApplying, setGradeApplying] = useState(false);
+  /**
+   * 고른 고객만 등급을 올린다 — 되돌릴 수 없으니 먼저 확인하고,
+   * 코어 update() 가 한 명마다 고객 테이블 전체를 저장하므로 25명씩 끊어 돌린다(500명이면 4초 넘게 멈춘다, 성능 감사 2026-11-18) (238, 리뷰 H-3)
+   */
+  async function applyGradeSuggestions() {
+    const picked = gradeSuggestions.filter(g => gradePicked.has(g.id));
+    if (picked.length === 0) { notify('적용할 고객을 하나 이상 선택해주세요.'); return; }
+    if (gradeApplying) return;
+    const sample = picked.slice(0, 3).map(g => `${g.name} ${g.current}→${g.suggested}`).join(', ');
+    if (!(await askConfirm({
+      title: '등급 올리기',
+      message: `${picked.length}명의 등급을 올릴까요?\n${sample}${picked.length > 3 ? ` 외 ${picked.length - 3}명` : ''}\n되돌리려면 고객 상세에서 등급을 직접 바꿔야 합니다.`,
+      confirmLabel: '등급 올리기',
+      cancelLabel: '닫기',
+    }))) return;
+    setGradeApplying(true);
+    let done = 0;
+    let applied = 0;
+    const appliedRows: { id: string; from?: string; to: string }[] = [];
+    const step = () => {
+      try {
+        for (const g of picked.slice(done, done + 25)) {
+          if (CustomerStore.getById(g.id)?.grade !== g.current) continue; // 그 사이 직원이 바꿨으면 건드리지 않는다
+          CustomerStore.update(g.id, { grade: g.suggested });
+          appliedRows.push({ id: g.id, from: g.current, to: g.suggested }); // 이력은 루프 끝에서 한 번에 (254 리뷰 H-3)
+          applied += 1;
+        }
+      } catch (e) {
+        setGradeApplying(false);
+        console.error('[customers] 등급 일괄 적용 실패:', e);
+        notify(`등급을 ${applied}명까지 올리고 저장이 실패했습니다. 저장 공간을 확인한 뒤 남은 고객을 다시 시도해주세요.`);
+        loadAll();
+        return;
+      }
+      done += 25;
+      if (done < picked.length) { setTimeout(step, 0); return; }
+      setGradeApplying(false);
+      logCustomerGradeBatch(appliedRows, user?.name); // 저장 한 번 — 전에는 고객마다 전체 이력을 다시 썼다 (254 리뷰 H-3)
+      setGradePanel(false);
+      notify(`${applied}명의 등급을 올렸습니다.${picked.length - applied > 0 ? ` (${picked.length - applied}명은 그 사이 등급이 바뀌어 건너뜀)` : ''}`);
+      loadAll();
+    };
+    setTimeout(step, 0);
+  }
   const selectedSeg = selected ? segmentIndex.get(selected.id) ?? null : null; // RFM 구분·이탈 위험 (136)
   const compareCustomers = (a: Customer, b: Customer): number => {
     switch (sortKey) {
@@ -490,7 +691,8 @@ export default function Customers() {
   // 선택된 고객의 등급을 변경 (뱃지 클릭 → 드롭다운)
   function changeGrade(grade: CustomerGrade) {
     if (!selected || selected.grade === grade) { setShowGradeMenu(false); return; }
-    CustomerStore.update(selected.id, { grade });
+    const savedGrade = CustomerStore.update(selected.id, { grade });
+    if (savedGrade) logCustomerGrade(selected.id, selected.grade, grade, user?.name); // 등급을 누가 바꿨는지 남긴다 (252)
     loadAll();          // 목록 뱃지도 갱신
     const updated = CustomerStore.getById(selected.id);
     if (updated) setSelected(updated);
@@ -703,6 +905,13 @@ export default function Customers() {
   const treatmentModalRef = useRef<HTMLDivElement>(null);
   const consultModalRef = useRef<HTMLDivElement>(null);
   useFocusTrap(showAddModal, addModalRef);
+  // 새 창 2개도 오버레이 스택·포커스 트랩에 올린다 — 안 올리면 안드로이드 뒤로가기가 뒤의 고객 등록 폼을 닫는다 (238, 리뷰 M-4)
+  const tagPanelRef = useRef<HTMLDivElement>(null);
+  const gradePanelRef = useRef<HTMLDivElement>(null);
+  useOverlayClose(tagPanel, () => setTagPanel(false));
+  useFocusTrap(tagPanel, tagPanelRef);
+  useOverlayClose(gradePanel, () => { if (!gradeApplying) setGradePanel(false); });
+  useFocusTrap(gradePanel, gradePanelRef);
   useFocusTrap(showEditModal, editModalRef);
   useFocusTrap(showProgramModal, programModalRef);
   useFocusTrap(showTreatmentModal, treatmentModalRef);
@@ -873,6 +1082,7 @@ export default function Customers() {
     const isLatestRecord = !savedConsultId || consultations[0]?.id === savedConsultId;
     if (isLatestRecord && consultForm.skinTypeResult && consultForm.skinTypeResult !== selected.skinType) {
       CustomerStore.update(selected.id, { skinType: consultForm.skinTypeResult });
+      logCustomerEdit(selected.id, { skinType: selected.skinType }, { skinType: consultForm.skinTypeResult }, user?.name); // 상담 저장이 바꾼 피부 타입도 기록 (254 리뷰 H-2)
       const updated = CustomerStore.getById(selected.id);
       if (updated) setSelected(updated);
     }
@@ -998,10 +1208,11 @@ export default function Customers() {
     if (ids.length === 0) return;
     promoteRunning.current = true;
     let i = 0;
+    const promoted: { id: string; from?: string; to: string }[] = []; // 자동 승급도 이력에(저장은 한 번) (254 리뷰 H-2)
     const step = () => {
       try {
         // 그 사이 직원이 등급을 바꿨으면(VIP 등) 건드리지 않는다
-        for (const id of ids.slice(i, i + 25)) if (CustomerStore.getById(id)?.grade === '신규') CustomerStore.update(id, { grade: '일반' });
+        for (const id of ids.slice(i, i + 25)) if (CustomerStore.getById(id)?.grade === '신규') { CustomerStore.update(id, { grade: '일반' }); promoted.push({ id, from: '신규', to: '일반' }); }
       } catch (e) {
         promoteRunning.current = false; // 저장 실패(용량 등)로 가드가 잠기지 않게 — 다음 loadAll에서 재시도
         console.error('[customers] 자동 승급 저장 실패:', e);
@@ -1010,6 +1221,7 @@ export default function Customers() {
       i += 25;
       if (i < ids.length) { setTimeout(step, 0); return; }
       promoteRunning.current = false;
+      logCustomerGradeBatch(promoted, '자동 승급');
       setCustomers(CustomerStore.getAll()); // 승급 결과를 목록에 반영
     };
     setTimeout(step, 0);
@@ -1038,19 +1250,29 @@ export default function Customers() {
     [customers, retentionPolicy.enabled, retentionPolicy.years],
   );
   // 필터링 — 입력·정렬·목록이 바뀔 때만 (3,000명 × 초성 검색 + 한글 정렬을 매 렌더마다 하지 않게, 성능 감사 2026-11-18)
-  const filtered = useMemo(() => customers.filter(c => {
-    const matchSearch = matchesSearch(search, [c.name, c.phone, c.email]);
-    const matchGrade = gradeFilter === '전체' || c.grade === gradeFilter;
-    const matchTag = !tagFilter || (c.tags || []).includes(tagFilter);
-    const matchRetention = !retentionOnly || expiredIds.has(c.id);
-    const matchChurn = !churnOnly || segmentIndex.get(c.id)?.churn?.level === 'high';
-    const matchRevisit = !revisitIds || revisitIds.has(c.id);
-    const matchProgram = !programAlertIds || programAlertIds.has(c.id);
-    const matchSegment = !segmentFilterIds || segmentFilterIds.has(c.id); // 저장 세그먼트 (166)
-    const matchNoRebook = !norebookIds || norebookIds.has(c.id); // (184)
-    return matchSearch && matchGrade && matchTag && matchRetention && matchChurn && matchRevisit && matchProgram && matchSegment && matchNoRebook;
-  }).sort(compareCustomers),
-  [customers, search, gradeFilter, tagFilter, retentionOnly, expiredIds, sortKey, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds, norebookIds]);
+  const contactFilterOn = churnOnly || revisitOnly || programAlertOnly || norebookOnly;
+  // 필터 술어 — filtered 와 "숨긴 인원" 이 **같은 조건**을 쓴다(미루기만 토글). 전에는 검색·등급·태그를
+  // 빼먹어 숨긴 인원이 과대로 나왔다 (250 리뷰 M-7)
+  const matchesFilters = useCallback((c: Customer, withFollowUp: boolean) => {
+    if (!matchesSearch(search, [c.name, c.phone, c.email])) return false;
+    if (!(gradeFilter === '전체' || c.grade === gradeFilter)) return false;
+    if (tagFilter && !(c.tags || []).includes(tagFilter)) return false;
+    if (retentionOnly && !expiredIds.has(c.id)) return false;
+    if (churnOnly && segmentIndex.get(c.id)?.churn?.level !== 'high') return false;
+    if (revisitIds && !revisitIds.has(c.id)) return false;
+    if (programAlertIds && !programAlertIds.has(c.id)) return false;
+    if (segmentFilterIds && !segmentFilterIds.has(c.id)) return false; // 저장 세그먼트 (166)
+    if (norebookIds && !norebookIds.has(c.id)) return false; // (184)
+    if (withFollowUp && contactFilterOn && snoozedIds.has(c.id)) return false; // 미뤄 둔 고객은 그 기한까지 숨긴다 (249)
+    return true;
+  }, [search, gradeFilter, tagFilter, retentionOnly, expiredIds, churnOnly, segmentIndex, revisitIds, programAlertIds, segmentFilterIds, norebookIds, contactFilterOn, snoozedIds]);
+  const filtered = useMemo(() => customers.filter(c => matchesFilters(c, true)).sort(compareCustomers),
+  [customers, matchesFilters, sortKey]);
+  // 숨긴 인원 — 조용히 줄어든 숫자는 거짓말이다 (249). 같은 술어에서 미루기만 끄고 센다
+  const hiddenByFollowUp = useMemo(() => {
+    if (!contactFilterOn) return 0;
+    return customers.filter(c => snoozedIds.has(c.id) && matchesFilters(c, false)).length;
+  }, [customers, snoozedIds, contactFilterOn, matchesFilters]);
   // 고객별 활성 프로그램 수 — 행마다 전체 테이블을 훑지 않고 목록이 바뀔 때 한 번만 집계
   const activeProgCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -1089,7 +1311,7 @@ export default function Customers() {
     setTreatForm(f => ({ ...f, treatmentDate: today(), customerProgramId: active.length === 1 ? active[0].id : '' }));
     setShowTreatmentModal(true);
   };
-  const tagOptions = useMemo(() => topTags(customers, 12), [customers]);
+  const tagOptions = useMemo(() => tagOptionsForChips.slice(0, 12), [tagOptionsForChips]); // 전수 스캔은 한 번만 (238, 리뷰 LOW)
   // 걸러 둔 태그가 사라지면(마지막 고객에서 지움·병합·익명화·상위 12 밖) 빈 목록에 갇히지 않게 자동 해제
   useEffect(() => {
     if (tagFilter && !tagOptions.some(t => t.tag === tagFilter)) setTagFilter('');
@@ -1101,7 +1323,7 @@ export default function Customers() {
       <div className="flex flex-nowrap overflow-x-auto no-scrollbar lg:flex-wrap lg:overflow-visible gap-1.5 py-1 -my-1 -mx-1 px-1" role="group" aria-label="태그 필터" data-testid="tag-filter">{/* 폰: 한 줄 가로 스크롤, PC: 줄바꿈 (186) */}
         {tags.map(({ tag, count }) => (
           <button key={tag} type="button" aria-pressed={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-            className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
+            className={`flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium border transition-colors ${tagFilter === tag ? 'bg-amber-700 text-white border-amber-700' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50'}`}>
             #{tag} <span className="font-normal">{count}</span>
           </button>
         ))}
@@ -1124,6 +1346,12 @@ export default function Customers() {
       {activeSegment && <button type="button" onClick={() => navigate(`/messaging?segment=saved:${activeSegment.id}`)} className="flex-shrink-0 px-2 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label={`${activeSegment.name} 세그먼트에 발송`}>이 세그먼트에 발송</button>}{/* 발송 창 딥링크 saved:<id> 의 생산자 (170 리뷰 L-2) */}
       {activeSegment && canManage && <button type="button" onClick={() => setSegmentEditor(activeSegment)} className="flex-shrink-0 px-2 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs text-gray-600 border border-gray-200 bg-white hover:bg-gray-50" aria-label={`${activeSegment.name} 세그먼트 편집`}>편집</button>}
       {canManage && <button type="button" onClick={() => setSegmentEditor('new')} className="flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium text-gray-700 border border-dashed border-gray-300 bg-white hover:bg-gray-50">+ 세그먼트</button>}
+      {canManage && gradeSuggestions.length > 0 && (
+        <button type="button" onClick={openGradePanel} data-testid="grade-suggest-open"
+          className="flex-shrink-0 px-2.5 py-1 min-h-[36px] lg:min-h-0 rounded-full text-xs font-medium text-emerald-800 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100">
+          등급 올릴 후보 {gradeSuggestions.length}명
+        </button>
+      )}
     </div>
   ) : null;
   const tagChips = selected && (selected.tags || []).length > 0 ? (
@@ -1138,9 +1366,15 @@ export default function Customers() {
     if (targets.length === 0) return;
     const residueBulk = describeAnonymizeResidue(countAnonymizeResidue(targets.map(c => c.id))); // 발송 이력 본문·제품 판매 이름은 코어 수정 수단이 없어 남는다 — 사실대로 (216)
     if (!(await askConfirm({ title: '보존기간 경과 고객 익명화', message: `보존기간이 지난 고객 ${targets.length}명을 익명화할까요?\n고객 정보와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다. 방문·결제 통계는 남습니다.${residueBulk ? `\n${residueBulk}` : ''}`, confirmLabel: `${targets.length}명 익명화`, danger: true }))) return;
-    const n = anonymizeCustomers(targets.map(c => c.id));
-    recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' }); // 파기 대장 (9차 점검 #29)
+    const { count: n, reasonsLanded } = anonymizeCustomers(targets.map(c => c.id));
+    // 파기 대장(설정 > 알림 설정)에 남긴다 — 누가·몇 명을 (P4). 296: 기록이 안 남았으면 그 사실도 말한다
+    const logLanded = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '보존기간 경과 일괄' });
     notify(`고객 ${n}명을 익명화했습니다.`);
+    // 321(318~320 리뷰 H-1): 취소·노쇼에 직접 적은 사유는 개인 사정이 적힐 수 있는 기록이다 — 안 지워졌으면 말한다
+    if (reasonsLanded === 'lost') notify.error(CANCEL_REASON_SCRUB_LOST);
+    else if (reasonsLanded === 'unknown') notify.error(CANCEL_REASON_SCRUB_UNKNOWN);
+    if (logLanded === 'lost') notify.error(PRIVACY_LOG_LOST);
+    else if (logLanded === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN); // 297(리뷰 LOW-1)
     setSelected(null);
     loadAll();
   }
@@ -1425,7 +1659,11 @@ export default function Customers() {
       const before = (base as unknown as Record<string, unknown>)[k];
       return JSON.stringify(v ?? '') !== JSON.stringify(before ?? (Array.isArray(v) ? [] : '')); // 비운 값 '' 과 저장 안 된 undefined 는 같은 뜻
     })) as Partial<Customer>;
-    if (Object.keys(changed).length > 0) CustomerStore.update(selected.id, changed);
+    if (Object.keys(changed).length > 0) {
+      const saved = CustomerStore.update(selected.id, changed);
+      // 누가 언제 무엇을 바꿨는지 남긴다 — 저장이 안 됐으면 이력도 남기지 않는다 (252, 250 리뷰 L-4 와 같은 규칙)
+      if (saved) logCustomerEdit(selected.id, base, { ...base, ...changed }, user?.name);
+    }
     notify.success('고객 정보를 저장했습니다.'); // 전파 토스트보다 먼저 — 저장 자체를 알린다 (15차 #L10)
     if (identityChanged) {
       // 예약·시술·회차권·결제·상담에 복사된 이름(예약은 전화번호도) — 빠뜨리면 개명한 고객이 다른 화면 검색에서 사라지고 예약 카드가 옛 번호로 전화한다 (11차 #H1·H2)
@@ -1453,10 +1691,15 @@ export default function Customers() {
     if (!canManage) { notify(ADMIN_REQUIRED_MESSAGE); return; }
     const residueOne = describeAnonymizeResidue(countAnonymizeResidue([selected.id])); // (216)
     if (!(await askConfirm({ title: '고객 익명화', message: `'${selected.name}' 고객을 익명화할까요?\n이름·전화·이메일·주소·생년월일·메모·태그와 예약·시술·결제·상담 기록의 이름·전화, 시술·상담 사진이 지워지며 되돌릴 수 없습니다.\n방문·결제 통계와 기록 연결은 남습니다.${residueOne ? `\n${residueOne}` : ''}`, confirmLabel: '익명화', danger: true, returnFocusTo: menuAnchor() }))) return;
-    const n = anonymizeCustomers([selected.id]);
+    const { count: n, reasonsLanded: reasonsLandedOne } = anonymizeCustomers([selected.id]);
     if (n === 0) { notify('익명화하지 못했습니다.'); return; }
-    recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
+    const logLandedOne = recordPrivacyAction({ type: 'anonymize', count: n, actor: user?.name || user?.email || '알 수 없음', detail: '개별 처리(고객 요청 등)' });
     notify('고객을 익명화했습니다.');
+    // 321(318~320 리뷰 H-1): 개별 익명화도 같은 사실을 말한다
+    if (reasonsLandedOne === 'lost') notify.error(CANCEL_REASON_SCRUB_LOST);
+    else if (reasonsLandedOne === 'unknown') notify.error(CANCEL_REASON_SCRUB_UNKNOWN);
+    if (logLandedOne === 'lost') notify.error(PRIVACY_LOG_LOST); // 296
+    else if (logLandedOne === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN); // 297(리뷰 LOW-1)
     const updated = CustomerStore.getById(selected.id);
     setSelected(updated ?? null);
     loadAll();
@@ -1481,15 +1724,18 @@ export default function Customers() {
       return;
     }
     if (!(await askConfirm({ title: '고객 삭제', message: `'${selected.name}' 고객을 삭제할까요?${detail}\n고객 정보는 복구할 수 없습니다.`, confirmLabel: '삭제', danger: true, returnFocusTo: menuAnchor() }))) return;
-    const scrubbed = scrubCustomerBeforeDelete(selected.id); // 얼굴 사진이 접근 불가 상태로 영구 잔류하고 상담 기록이 실명으로 엑셀에 나가던 것 (11차 #H3·H6)
+    const { renamed: scrubbed, reasonsLanded: deletedReasonsLanded } = scrubCustomerBeforeDelete(selected.id); // 얼굴 사진이 접근 불가 상태로 영구 잔류하고 상담 기록이 실명으로 엑셀에 나가던 것 (11차 #H3·H6)
     CustomerStore.delete(selected.id);
     notify(scrubbed > 0 ? `고객을 삭제했습니다 — 기록 ${scrubbed}건의 이름·연락처를 정리하고 시술·상담 사진을 삭제했습니다.` : '고객을 삭제했습니다.');
+    // 324(321~323 리뷰 H-1): 익명화와 같은 말을 삭제에서도 한다 — 개인 사정이 적힐 수 있는 기록이다
+    if (deletedReasonsLanded === 'lost') notify.error(CANCEL_REASON_SCRUB_LOST);
+    else if (deletedReasonsLanded === 'unknown') notify.error(CANCEL_REASON_SCRUB_UNKNOWN);
     setSelected(null);
     loadAll();
   }
 
   // 프로그램 등록
-  function handleRegisterProgram(e: React.FormEvent) {
+  async function handleRegisterProgram(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) return;
     const prog = programs.find(p => p.id === progForm.programId);
@@ -1510,6 +1756,13 @@ export default function Customers() {
       pricePaid = parsed;
     }
 
+    // 중복 결제 의심 — 회차권 등록은 코어가 결제까지 함께 만든다(가장 금액이 큰 경로) (266, 리뷰 M-1)
+    if (pricePaid > 0 && !(await confirmIfDuplicatePayment({
+      customerId: selected.id, customerName: selected.name,
+      amount: pricePaid, paymentDate: progForm.purchaseDate, status: 'completed',
+      // 281(리뷰 M-2): 회차권 등록은 코어가 할인 0 으로 적는다 — 유형·수단으로 구별하게 한다
+      typeLabel: `회차권 · ${prog.name}`, paymentMethod: progForm.paymentMethod,
+    }))) return;
     CustomerProgramStore.save({
       customerId: selected.id,
       customerName: selected.name,
@@ -1575,6 +1828,82 @@ export default function Customers() {
   return (
     <div className="flex flex-col h-full">
       {/* 저장 세그먼트 편집 창 — 데스크톱(hidden lg:flex)·모바일(lg:hidden) 블록 어느 쪽에 두어도 반대 폭에서 숨겨진다(Modal 은 포털이 아님) → 루트 바로 아래 (166·168) */}
+      {tagPanel && (
+        <div className="modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setTagPanel(false)}>
+          <div ref={tagPanelRef} role="dialog" aria-modal="true" aria-label="태그 목록 관리" onClick={e => e.stopPropagation()} tabIndex={-1}
+            className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col" data-testid="tag-master-panel">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">태그 목록 관리</h2>
+              <p className="mt-1 text-xs text-gray-500">매장이 쓰는 태그를 미리 정해 두면 고객 창에서 눌러 넣을 수 있습니다. 같은 뜻의 태그가 "민감성·민감·민감성피부" 처럼 갈라지면 태그 필터·발송 대상이 조용히 나뉩니다. 목록에서 지워도 고객에 붙은 태그는 그대로 남습니다({MAX_MASTER_TAGS}개까지).</p>
+            </div>
+            <div className="px-5 py-3 flex gap-2">
+              <input value={tagDraft} onChange={e => setTagDraft(e.target.value)} aria-label="새 태그" placeholder="예: 민감성"
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addToMaster(); } }}
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+              <button type="button" onClick={addToMaster} className="px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl">추가</button>
+            </div>
+            <ul className="flex-1 overflow-y-auto px-5 pb-3 flex flex-wrap gap-1.5 content-start">
+              {tagMaster.length === 0 && <li className="text-xs text-gray-400 py-2">아직 등록한 태그가 없습니다. 위에서 추가해 주세요.</li>}
+              {tagMaster.map(t => (
+                <li key={t} className="flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-blue-50 text-[#1a3a8f] border border-blue-200">
+                  #{t}
+                  <button type="button" onClick={() => startRename(t)} aria-label={`${t} 태그 이름 바꾸기`} className="text-blue-700 hover:text-[#1a3a8f]" title="이름 바꾸기(고객 태그도 함께 바뀝니다)">✎</button>
+                  <button type="button" onClick={() => dropFromMaster(t)} aria-label={`${t} 태그 목록에서 지우기`} className="text-blue-700 hover:text-red-700">✕</button>
+                </li>
+              ))}
+            </ul>
+            {renameFrom && (
+              <div className="px-5 py-3 border-t border-gray-100 space-y-2" data-testid="tag-rename">
+                <p className="text-xs text-gray-600"><b>#{renameFrom}</b> 이름 바꾸기 — 이 태그가 붙은 고객의 태그도 함께 바뀌고, 바꾼 이름이 이미 있으면 하나로 합쳐집니다.</p>
+                <div className="flex gap-2">
+                  <input value={renameTo} onChange={e => setRenameTo(e.target.value)} aria-label="바꿀 태그 이름"
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void applyRename(); } }}
+                    className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+                  <button type="button" onClick={() => void applyRename()} disabled={renaming}
+                    className="px-4 py-2 bg-[#1a3a8f] text-white text-sm font-medium rounded-xl disabled:opacity-60">{renaming ? '바꾸는 중...' : '바꾸기'}</button>
+                  <button type="button" onClick={() => setRenameFrom(null)} disabled={renaming}
+                    className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 disabled:opacity-60">취소</button>
+                </div>
+              </div>
+            )}
+            <div className="px-5 py-4 border-t border-gray-100">
+              <button type="button" onClick={() => setTagPanel(false)} className="w-full py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {gradePanel && (
+        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!gradeApplying) setGradePanel(false); }}>
+          <div ref={gradePanelRef} role="dialog" aria-modal="true" aria-label="등급 올릴 후보" onClick={e => e.stopPropagation()} tabIndex={-1}
+            className="modal-card bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" data-testid="grade-suggest-panel">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">등급 올릴 후보 {gradeSuggestions.length}명</h2>
+              <p className="mt-1 text-xs text-gray-500">{GRADE_RULE_TEXT}</p>
+              <p className="mt-1 text-xs text-gray-400">{GRADE_SUGGEST_NOTE}</p>
+            </div>
+            <ul className="flex-1 overflow-y-auto divide-y divide-gray-50">
+              {gradeSuggestions.map(g => (
+                <li key={g.id} className="px-5 py-3 flex items-center gap-3">
+                  <input type="checkbox" checked={gradePicked.has(g.id)} aria-label={`${g.name} 등급 올리기`}
+                    onChange={e => setGradePicked(prev => { const next = new Set(prev); if (e.target.checked) next.add(g.id); else next.delete(g.id); return next; })}
+                    className="w-4 h-4 accent-[#1a3a8f]" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">{g.name}</p>
+                    <p className="text-xs text-gray-500">{g.reason}</p>
+                  </div>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{g.current} → <b className="text-emerald-700">{g.suggested}</b></span>
+                </li>
+              ))}
+            </ul>
+            <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
+              <button type="button" onClick={() => setGradePanel(false)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600">닫기</button>
+              <button type="button" onClick={applyGradeSuggestions} disabled={gradeApplying} className="flex-1 py-2.5 bg-[#1a3a8f] text-white text-sm font-semibold rounded-xl hover:bg-[#15306e] disabled:opacity-60">
+                {gradeApplying ? '적용 중...' : `선택한 ${gradePicked.size}명 등급 올리기`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {segmentEditor !== null && <SegmentEditorModal segment={segmentEditor === 'new' ? null : segmentEditor} facts={segmentFacts} tagOptions={[...new Set([...tagOptions.map(t => t.tag), ...((segmentEditor !== 'new' && segmentEditor?.condition.tagsAny) || [])])]} onClose={() => setSegmentEditor(null)} onSaved={() => { setSegmentEditor(null); const next = listSavedSegments(); setSavedSegments(next); if (!next.some(sg => sg.id === segmentFilterId)) setSegmentFilterId(''); }} />}
 
       {/* ── 모바일 뷰 (< lg) ── 카드 리스트 */}
@@ -1624,16 +1953,20 @@ export default function Customers() {
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
             {revisitOnly && (
-              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {chipCount(revisitIds)} ✕</button>
             )}
             {programAlertOnly && (
-              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {chipCount(programAlertIds)} ✕</button>
             )}
             {norebookOnly && (
-              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {norebookIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {chipCount(norebookIds)} ✕</button>
             )}
             {norebookOnly && (norebookIds?.size ?? 0) > 0 && ( /* 재예약 권유 문자까지 한 흐름 — 발송 창 딥링크 norebook 의 생산자 (202) */
               <button type="button" onClick={() => navigate('/messaging?segment=norebook')} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label="재예약 없음 고객에게 발송" data-testid="norebook-send">이 고객들에게 발송</button>
+            )}
+            {/* 연락을 미뤄 둔 고객은 숨겼다는 사실을 적는다 — 조용히 줄어든 숫자는 거짓말이다 (249) */}
+            {hiddenByFollowUp > 0 && (
+              <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-600 bg-gray-100" data-testid="follow-up-hidden" title={describeHidden(hiddenByFollowUp) ?? ''}>미룬 {hiddenByFollowUp}명 숨김</span>
             )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
@@ -1646,7 +1979,7 @@ export default function Customers() {
               <button
                 type="button"
                 onClick={() => setRetentionOnly(!retentionOnly)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-700 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
                 title={`마지막 방문 후 ${retentionPolicy.years}년이 지난 고객`}
               >
                 보존기간 경과 {expiredIds.size}
@@ -1660,7 +1993,7 @@ export default function Customers() {
                 type="button"
                 onClick={handleAnonymizeExpired}
                 disabled={filtered.length === 0}
-                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
               >
                 {filtered.length}명 익명화
               </button>
@@ -1783,7 +2116,7 @@ export default function Customers() {
                       )}
                       {canManage && (
                       <button type="button" role="menuitem" onClick={() => { setShowMobileMore(false); handleDeleteCustomer(); }} aria-label="고객 삭제"
-                        className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                        className="w-full text-left px-4 py-3 text-sm text-red-700 hover:bg-red-50 flex items-center gap-2">
                         <Trash2 size={15} />고객 삭제
                       </button>
                       )}
@@ -1913,6 +2246,7 @@ export default function Customers() {
                   <p className="text-xs text-gray-500 mb-1">메모</p>
                   {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                   {quickMemoRow(true)}
+                  {quickMemoPresets()}
                 </div>
               </div>
 
@@ -1940,7 +2274,7 @@ export default function Customers() {
                           <p className="text-xs font-semibold text-gray-800">{formatDate(c.consultDate)}{c.staffName ? <span className="font-normal text-gray-400"> · {c.staffName}</span> : null}</p>
                           <span className="flex items-center gap-1.5">
                             {c.skinTypeResult && <span className="text-xs px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{c.skinTypeResult}</span>}
-                            <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-2.5 -m-2 text-gray-300 active:text-red-600"><X size={16} /></button>
+                            <button type="button" onClick={() => handleConsultDelete(c)} aria-label={`${formatDate(c.consultDate)} 상담 삭제`} className="p-2.5 -m-2 text-gray-400 active:text-red-700"><X size={16} /></button>
                           </span>
                         </div>
                         {c.concerns.length > 0 && <p className="text-xs text-gray-600 mt-0.5">{c.concerns.join(', ')}</p>}
@@ -2044,6 +2378,8 @@ export default function Customers() {
 
               <CustomerPaymentHistory compact customerId={selected.id} onAdd={() => (canSales ? leaveDetailTo(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
+              <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => { setDetailTick(t => t + 1); setFollowUpTick(t => t + 1); }} />
+              <CustomerHistoryCard key={`ch-${selected.id}`} customerId={selected.id} tick={detailTick} />
               <CustomerTimeline key={selected.id} customerId={selected.id} compact tick={detailTick} />
 
             </div>
@@ -2156,16 +2492,20 @@ export default function Customers() {
               {SORT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
             {revisitOnly && (
-              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {revisitIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setRevisitOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="재방문 권장 필터 해제">재방문 권장 {chipCount(revisitIds)} ✕</button>
             )}
             {programAlertOnly && (
-              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {programAlertIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setProgramAlertOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="대시보드 오늘 할 일에서 연 필터 — 누르면 해제" aria-label="회차권 알림 필터 해제">회차권 알림 {chipCount(programAlertIds)} ✕</button>
             )}
             {norebookOnly && (
-              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {norebookIds?.size ?? 0} ✕</button>
+              <button type="button" onClick={() => setNorebookOnly(false)} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#1a3a8f] text-white" title="이달 방문했지만 다음 예약이 없는 고객 — 대시보드 재예약률에서 연 필터, 누르면 해제" aria-label="재예약 없음 필터 해제" data-testid="norebook-chip">재예약 없음 {chipCount(norebookIds)} ✕</button>
             )}
             {norebookOnly && (norebookIds?.size ?? 0) > 0 && ( /* 재예약 권유 문자까지 한 흐름 — 발송 창 딥링크 norebook 의 생산자 (202) */
               <button type="button" onClick={() => navigate('/messaging?segment=norebook')} className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-[#1a3a8f] border border-blue-200 bg-white hover:bg-blue-50" aria-label="재예약 없음 고객에게 발송" data-testid="norebook-send">이 고객들에게 발송</button>
+            )}
+            {/* 연락을 미뤄 둔 고객은 숨겼다는 사실을 적는다 — 조용히 줄어든 숫자는 거짓말이다 (249) */}
+            {hiddenByFollowUp > 0 && (
+              <span className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs text-gray-600 bg-gray-100" data-testid="follow-up-hidden" title={describeHidden(hiddenByFollowUp) ?? ''}>미룬 {hiddenByFollowUp}명 숨김</span>
             )}
             {(churnHighCount > 0 || churnOnly) && (
               <button type="button" aria-pressed={churnOnly} onClick={() => setChurnOnly(v => !v)}
@@ -2178,7 +2518,7 @@ export default function Customers() {
               <button
                 type="button"
                 onClick={() => setRetentionOnly(!retentionOnly)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${retentionOnly ? 'bg-amber-700 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}
                 title={`마지막 방문 후 ${retentionPolicy.years}년이 지난 고객`}
               >
                 보존기간 경과 {expiredIds.size}
@@ -2192,7 +2532,7 @@ export default function Customers() {
                 type="button"
                 onClick={handleAnonymizeExpired}
                 disabled={filtered.length === 0}
-                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+                className="flex-shrink-0 min-h-[44px] px-3 inline-flex items-center bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
               >
                 {filtered.length}명 익명화
               </button>
@@ -2379,7 +2719,7 @@ export default function Customers() {
                           )}
                           {canManage && (
                           <button type="button" role="menuitem" onClick={() => { setShowMoreMenu(false); handleDeleteCustomer(); }} aria-label="고객 삭제"
-                            className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
+                            className="w-full text-left px-3 py-2 text-xs text-red-700 hover:bg-red-50 flex items-center gap-2">
                             <Trash2 size={13} />고객 삭제
                           </button>
                           )}
@@ -2419,21 +2759,21 @@ export default function Customers() {
               {(selectedSeg || selectedCycle || selectedValue) && (
                 <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-gray-50" data-testid="customer-analytics">
                   {selectedSeg && (
-                    <div>
+                    <div data-testid="rfm-segment">{/* (269) */}
                       <p className="text-xs text-gray-500">고객 구분</p>
                       <p className="text-sm font-semibold text-gray-900">{selectedSeg.rfm.segment}{selectedSeg.churn && <span className={`ml-1 text-xs font-medium ${selectedSeg.churn.level === 'high' ? 'text-rose-700' : selectedSeg.churn.level === 'medium' ? 'text-amber-700' : 'text-gray-500'}`}>· 이탈 위험 {CHURN_LABEL[selectedSeg.churn.level]}</span>}</p>
                       <p className="text-xs text-gray-500">최근성 {selectedSeg.rfm.r}·빈도 {selectedSeg.rfm.f}·금액 {selectedSeg.rfm.m} (최근 1년, 매장 내 5분위)</p>
                     </div>
                   )}
                   {selectedCycle && (
-                    <div>
+                    <div data-testid="visit-cycle">{/* 테스트 훅 — 모바일 상세에만 있어 PC 스펙이 닿지 못했다 (269) */}
                       <p className="text-xs text-gray-500">방문 주기</p>
                       <p className="text-sm font-semibold text-gray-900 tabular-nums">{selectedCycle.days}일 <span className="text-xs font-normal text-gray-500">{selectedCycle.basis === 'personal' ? '이 고객 기준' : '매장 기준'}</span></p>
                       <p className="text-xs text-gray-500">{selectedCycle.basis === 'personal' ? `방문 간격 ${selectedCycle.intervals}개의 중앙값` : '방문 3회 미만이라 매장 기본 주기'}</p>
                     </div>
                   )}
                   {selectedValue && (
-                    <div>
+                    <div data-testid="realized-revenue">{/* (269) */}
                       <p className="text-xs text-gray-500">실현 매출</p>
                       <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatPrice(selectedValue.realizedRevenue)}</p>
                       <p className="text-xs text-gray-500">회차권은 사용한 회차만큼(기간제 전액)</p>
@@ -2451,6 +2791,7 @@ export default function Customers() {
               <div className="mt-3 p-3 bg-gray-50 rounded-xl">
                 {selected.memo ? <p className="text-xs text-gray-700 whitespace-pre-line break-words max-h-64 overflow-y-auto">{selected.memo}</p> : <p className="text-xs text-gray-500">메모 없음</p>}
                 {quickMemoRow(false)}
+                {quickMemoPresets()}
               </div>
             </div>
 
@@ -2496,7 +2837,7 @@ export default function Customers() {
                           </div>
                           <button
                             onClick={() => handleConsultDelete(c)}
-                            className="text-gray-300 hover:text-red-600"
+                            className="text-gray-400 hover:text-red-700"
                             aria-label={`${formatDate(c.consultDate)} 상담 삭제`}
                           >
                             <X size={14} />
@@ -2683,6 +3024,8 @@ export default function Customers() {
 
             <CustomerPaymentHistory customerId={selected.id} onAdd={() => (canSales ? navigate(`/sales?new=1&customer=${selected.id}`) : notify.info('결제 등록은 매장 관리자 계정에서 매출 화면으로 해주세요.'))} />
 
+            <FollowUpCard key={`fu-${selected.id}`} customerId={selected.id} actor={user?.name} onSaved={() => { setDetailTick(t => t + 1); setFollowUpTick(t => t + 1); }} />
+            <CustomerHistoryCard key={`ch-${selected.id}`} customerId={selected.id} tick={detailTick} />
             <CustomerTimeline key={selected.id} customerId={selected.id} tick={detailTick} />
           </div>
         </div>
@@ -2811,6 +3154,20 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">태그 <span className="text-gray-400 font-normal">(쉼표로 구분)</span></label>
                 <input value={addForm.tags} onChange={e => setAddForm(f => ({ ...f, tags: e.target.value }))} aria-label="태그" placeholder="예: 민감성, 재구매, 단골"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                <div className="mt-1.5 flex flex-wrap gap-1" data-testid="tag-chips">
+                  {tagChipChoices.map(c => (
+                    <button key={c.tag} type="button" onClick={() => appendTagWith(addForm.tags, c.tag, next => setAddForm(fm => ({ ...fm, tags: next })))}
+                      disabled={countInputTags(addForm.tags) >= MAX_TAGS_PER_CUSTOMER && !addForm.tags.includes(c.tag)}
+                      className={`px-2 py-0.5 rounded-full text-xs border disabled:opacity-40 ${c.registered ? 'bg-blue-50 text-[#1a3a8f] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                      title={c.registered ? `${c.count}명 사용 중` : `목록에 없는 태그 · ${c.count}명 사용 중`}>
+                      #{c.tag}{c.registered ? '' : ' (미등록)'}
+                    </button>
+                  ))}
+                  {canManage && (
+                    <button type="button" onClick={openTagPanel} data-testid="tag-master-open"
+                      className="px-2 py-0.5 rounded-full text-xs border border-dashed border-gray-300 text-gray-600">태그 목록 관리</button>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">알레르기·주의사항</label>
@@ -2927,6 +3284,20 @@ export default function Customers() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">태그 <span className="text-gray-400 font-normal">(쉼표로 구분)</span></label>
                 <input value={editForm.tags} onChange={e => setEditForm(f => ({ ...f, tags: e.target.value }))} aria-label="태그" placeholder="예: 민감성, 재구매, 단골"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300" />
+                <div className="mt-1.5 flex flex-wrap gap-1" data-testid="tag-chips">
+                  {tagChipChoices.map(c => (
+                    <button key={c.tag} type="button" onClick={() => appendTagWith(editForm.tags, c.tag, next => setEditForm(fm => ({ ...fm, tags: next })))}
+                      disabled={countInputTags(editForm.tags) >= MAX_TAGS_PER_CUSTOMER && !editForm.tags.includes(c.tag)}
+                      className={`px-2 py-0.5 rounded-full text-xs border disabled:opacity-40 ${c.registered ? 'bg-blue-50 text-[#1a3a8f] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                      title={c.registered ? `${c.count}명 사용 중` : `목록에 없는 태그 · ${c.count}명 사용 중`}>
+                      #{c.tag}{c.registered ? '' : ' (미등록)'}
+                    </button>
+                  ))}
+                  {canManage && (
+                    <button type="button" onClick={openTagPanel} data-testid="tag-master-open"
+                      className="px-2 py-0.5 rounded-full text-xs border border-dashed border-gray-300 text-gray-600">태그 목록 관리</button>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">알레르기·주의사항</label>
@@ -2960,7 +3331,7 @@ export default function Customers() {
               </div>
               <button onClick={() => setShowProgramModal(false)} aria-label="닫기"><X size={18} className="text-gray-400" /></button>
             </div>
-            <form onSubmit={handleRegisterProgram} className="p-5 space-y-4">
+            <form onSubmit={e => void handleRegisterProgram(e)} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">프로그램 선택 *</label>
                 <select aria-label="프로그램 선택"
@@ -3185,7 +3556,7 @@ export default function Customers() {
                 <div className="flex items-center gap-1.5 mb-2">
                   <Sparkles size={14} className="text-primary-600" />
                   <label className="text-xs font-semibold text-primary-800">AI 피부 분석 (사진)</label>
-                  <span className="text-2xs text-gray-400">· 관리 참고용 (의학적 진단 아님)</span>
+                  <span className="text-2xs text-gray-600">· 관리 참고용 (의학적 진단 아님)</span>
                 </div>
                 <input ref={consultPhotoRef} type="file" accept="image/*" onChange={handleConsultPhoto} className="hidden" />
                 <div className="flex gap-3">
@@ -3193,7 +3564,7 @@ export default function Customers() {
                     <img src={aiPhoto} alt="분석 사진" className="w-20 h-20 rounded-xl object-cover border border-indigo-100 flex-shrink-0" />
                   ) : (
                     <button type="button" onClick={() => consultPhotoRef.current?.click()}
-                      className="w-20 h-20 rounded-xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center gap-1 text-indigo-400 hover:border-indigo-400 transition-colors flex-shrink-0">
+                      className="w-20 h-20 rounded-xl border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center gap-1 text-indigo-600 hover:border-indigo-400 transition-colors flex-shrink-0">
                       <Camera size={18} />
                       <span className="text-2xs">사진</span>
                     </button>
@@ -3210,7 +3581,7 @@ export default function Customers() {
                       </div>
                     )}
                     {!aiPhoto && (
-                      <p className="text-xs text-gray-500 leading-relaxed">
+                      <p className="text-xs text-gray-600 leading-relaxed">
                         고객 얼굴 사진을 올리면 AI가 수분·유분·색소·모공·주름을 분석해 아래 지표와 소견에 자동 반영합니다. 사진은 상담 기록에 함께 저장됩니다.
                         {!skinAiAvailable && ' (본사 AI 미설정 — 설정 > 연동 설정 > AI 피부분석에서 OpenAI/Gemini 키 입력 필요)'}
                       </p>
@@ -3433,6 +3804,8 @@ export default function Customers() {
                 <textarea aria-label="관리사 소견" value={consultForm.managerNote} onChange={e => setConsultForm(f => ({ ...f, managerNote: e.target.value }))}
                   rows={2} placeholder="고객 피부 상태 관찰 소견을 기록하세요"
                   className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
+                {/* 칩은 입력칸 아래 — 시술 기록·예약·빠른 메모와 같은 자리 (리뷰 L-2) */}
+                <MemoPresetChips value={consultForm.managerNote} onChange={next => setConsultForm(fm => ({ ...fm, managerNote: next }))} />
               </div>
 
               <p className="text-xs text-gray-400">

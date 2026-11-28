@@ -361,11 +361,11 @@ export default function Onboarding() {
             </div>
             <div className="text-left">
               <p className="text-sm font-bold tracking-wider text-[#1a3a8f] leading-tight">DERMASOLUTION</p>
-              <p className="text-xs text-gray-400">에스테틱 전용 CRM</p>
+              <p className="text-xs text-gray-600">에스테틱 전용 CRM</p>
             </div>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-gray-900">안녕하세요, {user?.name}님!</h1>
-          <p className="text-sm text-gray-400 mt-1">매장 정보를 설정하고 CRM을 시작해보세요</p>
+          <p className="text-sm text-gray-600 mt-1">매장 정보를 설정하고 CRM을 시작해보세요</p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-full">
             <Sparkles size={12} className="text-[#1a3a8f]" />
             <span className="text-xs font-semibold text-[#1a3a8f]">에스테틱 전용 CRM 솔루션</span>
@@ -377,7 +377,7 @@ export default function Onboarding() {
           {steps.map((s, i) => (
             <div key={s.label} className="flex items-center">
               <div className="flex flex-col items-center gap-1">
-                <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-400'}`}>
+                <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all ${i < step ? 'bg-green-700 text-white' : i === step ? 'bg-[#1a3a8f] text-white' : 'bg-gray-100 text-gray-600'}`}>
                   {i < step ? <CheckCircle size={18} /> : s.icon}
                 </div>
                 <p className={`text-xs font-medium whitespace-nowrap ${i === step ? 'text-[#1a3a8f]' : 'text-gray-400 hidden sm:block'}`}>{s.label}</p>
@@ -431,7 +431,7 @@ export default function Onboarding() {
                 {staffList.map((s, i) => (
                   <div key={i} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
                     <input value={s.name} onChange={e => updateStaff(i, 'name', e.target.value)}
-                      className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+                      className="flex-1 min-w-0 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                       placeholder={`직원 ${i + 1} 이름`} />
                     <select value={s.role} onChange={e => updateStaff(i, 'role', e.target.value)}
                       className="px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300">
@@ -461,7 +461,7 @@ export default function Onboarding() {
                     {customServices.map((s, i) => (
                       <div key={i} className="flex gap-2 items-center">
                         <input value={s.name} onChange={e => updateCustomService(i, 'name', e.target.value)}
-                          className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+                          className="flex-1 min-w-0 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
                           placeholder="시술명" />
                         <input value={s.duration} onChange={e => updateCustomService(i, 'duration', e.target.value)}
                           className="w-20 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 text-center"
@@ -573,9 +573,9 @@ export default function Onboarding() {
             <StepWrapper title="외부 서비스 연동" subtitle="나중에 설정 > 연동 설정에서도 할 수 있습니다">
               <div className="space-y-3">
                 {[
-                  { name: '네이버 예약', desc: '스마트플레이스 예약을 자동으로 받아옵니다', color: 'bg-green-500' },
-                  { name: '카카오 채널', desc: '카카오톡으로 예약 확인·마케팅 메시지를 보냅니다', color: 'bg-yellow-400' },
-                  { name: '엔포+ SMS', desc: 'SMS·LMS 문자 발송에 필요합니다', color: 'bg-blue-500' },
+                  { name: '네이버 예약', desc: '스마트플레이스 예약을 자동으로 받아옵니다', color: 'bg-green-700' },
+                  { name: '카카오 채널', desc: '카카오톡으로 예약 확인·마케팅 메시지를 보냅니다', color: 'bg-yellow-700' },
+                  { name: '엔포+ SMS', desc: 'SMS·LMS 문자 발송에 필요합니다', color: 'bg-blue-600' },
                 ].map(item => (
                   <div key={item.name} className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
                     <div className={`w-10 h-10 rounded-xl ${item.color} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
@@ -611,7 +611,7 @@ export default function Onboarding() {
                         <h3 className="text-sm font-bold text-gray-900">14일 무료 체험</h3>
                         <p className="text-sm font-bold text-[#1a3a8f]">무료</p>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">모든 기능 체험 가능 · 신용카드 불필요</p>
+                      <p className="text-xs text-gray-600 mt-0.5">모든 기능 체험 가능 · 신용카드 불필요</p>
                     </div>
                   </div>
                 </div>
@@ -631,7 +631,7 @@ export default function Onboarding() {
                           <p className="text-sm font-bold text-gray-400">{plan.price.toLocaleString()}원/월</p>
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">{plan.description}</p>
-                        <span className="inline-block mt-1.5 text-xs px-2 py-0.5 bg-gray-200 text-gray-500 rounded-full">결제 기능 준비 중</span>
+                        <span className="inline-block mt-1.5 text-xs px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full">결제 기능 준비 중</span>
                       </div>
                     </div>
                   </div>

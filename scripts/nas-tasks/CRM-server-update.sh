@@ -17,7 +17,8 @@ tar xzf crm-src.tar.gz
 SRC=/tmp/troiareuke-crm-$VER/server
 [ -d "$SRC" ] || { echo "src dir missing - abort"; exit 1; }
 cp -a /volume1/docker/troiareuke-crm-server /volume1/docker/troiareuke-crm-server.bak-$(date +%m%d%H%M)
-rsync -a --exclude='.env' "$SRC"/ /volume1/docker/troiareuke-crm-server/
+# 단위 테스트는 배포본에 넣지 않는다 (229, 리뷰 M-4) — /health 코드 지문도 테스트를 세지 않는다
+rsync -a --exclude='.env' --exclude='*.test.js' "$SRC"/ /volume1/docker/troiareuke-crm-server/
 cd /volume1/docker/troiareuke-crm-server
 /usr/local/bin/docker-compose -p troiareuke-crm up -d --build auth-api
 sleep 8

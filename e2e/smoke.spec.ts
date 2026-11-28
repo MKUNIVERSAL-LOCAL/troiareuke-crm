@@ -129,6 +129,13 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   const payForm2 = page.locator('form').filter({ hasText: '구분 (매출/환불)' });
   await expect(payForm2.getByPlaceholder('0').first()).toHaveValue('50,000');
   await payForm2.getByRole('button', { name: '결제 등록' }).click();
+  // 264: 같은 고객·같은 금액(50,000)을 30분 안에 또 등록하므로 중복 경고가 뜬다 — 시술 기록에서 넘어온
+  // 의도한 등록이니 [그대로 등록] 을 고른다(막지 않고 묻는다는 것을 이 흐름이 보여 준다)
+  const dupDialog = page.getByRole('dialog', { name: '같은 금액 결제가 이미 있습니다' });
+  // 277(리뷰 L-5): 두 결제가 몇 초 차이라 이 문구는 항상 "방금" 이다 — 창 길이(30분)와는 묶이지 않는다.
+  // 창 설정은 lib-units 가 29분·31분 전 결제로 직접 고정한다. 여기서는 창이 **무엇을 말하는지**만 본다.
+  await expect(dupDialog.getByTestId('confirm-dialog')).toContainText('방금');
+  await dupDialog.getByRole('button', { name: '그대로 등록' }).click();
   await expect(page.getByText(/결제 내역 \(2\)/)).toBeVisible({ timeout: 10_000 });
 
   // ── 6. 데이터가 새로고침 후에도 남는다 (로컬 저장 회귀) ──
@@ -287,6 +294,24 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
     return { status, linked: linked.length, amount: linked[0]?.amount };
   }, pendingId);
   expect(pendingAfter).toEqual({ status: 'completed', linked: 1, amount: 30000 }); // 예약 id로 연결된 결제 1건
+  // 281(리뷰 M-1): 277 의 교차검증은 **타일 ↔ 그 카드의 분모·분자** 자기 일관성만 본다 — 이 흐름의 자료는
+  // 전부 오늘·어제라 `returning=0`·`visitors=1` → `0/1명`·`0%` 로 통과했고, 그것이 바로 277 주석이
+  // "옛 증상" 이라 지목한 값이었다. **지난달 완료 예약 1건**을 심어 재방문율이 100% 여야 하게 만든다.
+  await page.evaluate(() => {
+    const ck = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const cust = JSON.parse(localStorage.getItem(ck) || '[]') as { id: string; name: string; phone?: string }[];
+    const c = cust[0];
+    const last = new Date(); last.setDate(1); last.setMonth(last.getMonth() - 1);
+    const day = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-15`;
+    const rk = ck.replace(/_customers$/, '_reservations');
+    const resv = JSON.parse(localStorage.getItem(rk) || '[]');
+    resv.push({
+      id: `seed-last-month-${Date.now()}`, customerId: c.id, customerName: c.name, customerPhone: c.phone || '',
+      staffId: '', staffName: '', services: [], date: day, startTime: '10:00', endTime: '11:00',
+      status: 'completed', source: 'walk-in', totalPrice: 0,
+    });
+    localStorage.setItem(rk, JSON.stringify(resv));
+  });
   await page.goto('/');
   await expect(page.getByTestId('pending-completion-card')).toHaveCount(0);
   // 가동률 (180): 이달 완료·확정 예약 시간 ÷ 직원 근무 가용 시간 — 오늘 완료 예약이 있으니 "이달 운영 지표"에 %로 뜬다
@@ -296,6 +321,25 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('가동률 = 이달 오늘까지 확정·완료 예약 시간 ÷ 활성 직원 근무 가용 시간');
   await expect(kpiCard.getByTestId('kpi-formulas')).toContainText('재방문율 =');
+  // 273·277·281: 타일이 그 카드의 분모·분자와 어긋나지 않는지 본다(값 자체는 픽스처가 고정한다 — 아래 100%).
+  // 두 값은 같은 `monthlyKpis()` 결과에서 나오므로 교차검증만으로는 분자가 틀린 것을 잡지 못한다 (리뷰 M-1).
+  const expectRatio = async (valueId: string, subId: string) => {
+    const sub = (await kpiCard.getByTestId(subId).innerText()).trim();
+    const m = sub.match(/^(\d+)\/(\d+)명$/);
+    expect(m, `${subId} 가 "분자/분모명" 이 아니다: ${sub}`).not.toBeNull();
+    const [, num, den] = m!;
+    expect(Number(den)).toBeGreaterThan(0);
+    await expect(kpiCard.getByTestId(valueId)).toHaveText(`${Math.round((Number(num) / Number(den)) * 100)}%`);
+  };
+  await expectRatio('kpi-revisit', 'kpi-revisit-sub');
+  await expectRatio('kpi-rebook', 'kpi-rebook-sub');
+  // 값 고정 — 이달 방문 1명이 지난달에도 왔으므로 재방문율은 100% 여야 한다(0% 로는 통과할 수 없다)
+  await expect(kpiCard.getByTestId('kpi-revisit-sub')).toHaveText('1/1명');
+  await expect(kpiCard.getByTestId('kpi-revisit')).toHaveText('100%');
+  // 객단가는 이 카드에 분자(이달 결제 합)가 없다 — 방문 수가 1 이상이고 이달 완료 결제가 있으므로 **0원은 아니어야** 한다
+  await expect(kpiCard.getByTestId('kpi-ticket-sub')).toHaveText(/^방문 [1-9]\d*명$/);
+  await expect(kpiCard.getByTestId('kpi-ticket')).toHaveText(/^[\d,]+원$/);
+  await expect(kpiCard.getByTestId('kpi-ticket')).not.toHaveText('0원');
   await kpiCard.getByTestId('kpi-formula-toggle').click();
   await expect(kpiCard.getByTestId('kpi-formulas')).toHaveCount(0);
   // 드릴다운 (184): 재예약률 타일 → 다음 예약 없는 이달 방문 고객 목록(필터 칩), 가동률 타일 → 예약 화면
@@ -692,12 +736,34 @@ test('가입 → 온보딩 → 고객 → 예약 → 결제가 끊기지 않는�
   await anonConfirm.getByRole('button', { name: '1명 익명화' }).click();
   await expect(page.getByText('고객 1명을 익명화했습니다.').first()).toBeVisible();
   await expect(bar).toContainText('경과 0명');
+  // 272: 익명화는 되돌릴 수 없으므로 **누가 언제 몇 명** 했는지가 설정에 남아야 한다(개인정보 처리 기록)
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '알림 설정', exact: true }).filter({ visible: true }).first().click();
+  const privacyLog = page.getByTestId('retention-policy-card').getByTestId('privacy-action-log');
+  await expect(privacyLog).toBeVisible();
+  // 274: 줄 하나가 **언제·무엇·누가** 를 다 적는지 본다(라벨만 보면 빈 기록도 통과한다) (리뷰 LOW)
+  await expect(privacyLog.getByRole('listitem').first()).toHaveText(/^\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}\s*익명화 1명\s*\S+/);
+  await expect(privacyLog).toContainText('지점 설정에 보관');
   await page.goto('/customers');
   await expect(page.getByText('탈퇴고객').filter({ visible: true }).first()).toBeVisible();
   // 익명화 고객 상세에는 [예약 추가]·[메시지]가 없다 — 발송·예약 대상이 아니므로 (2026-11-18)
   await page.getByText('탈퇴고객').filter({ visible: true }).first().click();
   await expect(desk.getByText('익명화됨')).toBeVisible();
   await expect(desk.getByRole('button', { name: '메시지', exact: true })).toHaveCount(0);
+  // 273: 버튼이 없어도 **딥링크**로는 발송 창을 열 수 있다 — 그때 조용히 보내지 않고 대상이 아니라고 말한다
+  const anonId = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find(k => /^crm_.*_customers$/.test(k))!;
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    return (list.find((c: { isActive?: boolean }) => c.isActive === false)?.id ?? '') as string;
+  });
+  expect(anonId).not.toBe('');
+  await page.goto(`/messaging?customer=${anonId}`);
+  await expect(page.getByTestId('recipient-blocked')).toContainText('발송 대상이 아닙니다');
+  // 274: 글로만 막는 화면일 수도 있다 — 발송 버튼이 실제로 눌리지 않는지까지 본다 (리뷰 LOW)
+  await expect(page.getByTestId('send-submit')).toBeDisabled();
+  // 딥링크 확인 뒤 다시 그 고객 상세로 돌아온다(이어지는 단계가 상세 화면을 본다)
+  await page.goto('/customers');
+  await page.getByText('탈퇴고객').filter({ visible: true }).first().click();
   await expect(desk.getByRole('button', { name: '예약 추가' })).toHaveCount(0);
   await expect(desk.getByRole('button', { name: '고객 익명화' })).toHaveCount(0); // 이미 익명화된 고객에는 [익명화] 없음
   // PC 상세의 병합·익명화·삭제는 [⋯ 더보기] 메뉴 안에 있다 (2026-11-18) — 열면 role=menu, 익명화 고객에는 [익명화] 항목이 없고 [고객 삭제]만, Esc로 닫힘

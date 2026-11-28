@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, visibleButton } from './helpers';
+import { makeAccount, signupAndOnboard, createCustomer, visibleButton, isNearMidnightSeoul } from './helpers';
 import { addProgram, sellProgramToCustomer, refundFirstPayment, expectSales, openCustomer, expectProgramBadge, expectTreatmentLinkState, openProgramManage, logTreatment } from './flows';
 
 /**
@@ -21,6 +21,7 @@ async function readTable<T>(page: import('@playwright/test').Page, table: string
 
 test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료되고 매출·차감 경로에서 사라진다', async ({ page }) => {
   test.slow();
+  test.skip(isNearMidnightSeoul(), '자정·월말 경계 — 277 이 더한 metric-program 은 이달 범위라 결제일과 보는 달이 달라지면 0원이 된다 (281, 리뷰 L-6)');
   page.on('dialog', d => d.accept()); // 남은 질문형 confirm 수락 — 파괴적 확인은 앱 창이라 아래에서 직접 단언
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
@@ -30,6 +31,20 @@ test('쓰지 않은 회차권 결제를 환불하면 회차권이 함께 종료�
 
   await page.goto('/sales');
   await expectSales(page, { total: '300,000원', count: 1 });
+
+  // 277(리뷰 M-2): 회원권 판매·미사용 잔액 두 칸과 **미사용 잔액의 근거 창**은 어떤 스펙도 보지 않았다.
+  // 미사용 잔액은 "고객이 이미 냈지만 아직 서비스하지 않은 돈" 이라 비거나 틀리면 그대로 분쟁이 된다.
+  const metrics = page.getByTestId('revenue-metrics');
+  await expect(metrics.getByTestId('metric-program')).toHaveText('300,000원');  // 회차권 결제(현금 유입)
+  await expect(metrics.getByTestId('metric-unused')).toHaveText('300,000원');   // 10회 전부 남았으니 전액이 미사용
+  await metrics.getByTestId('metric-unused-open').click();
+  const drill = page.getByTestId('metric-detail');
+  await expect(drill.getByTestId('metric-detail-row')).toHaveCount(1);
+  await expect(drill.getByTestId('metric-detail-row')).toContainText(acc.customer);
+  await expect(drill.getByTestId('metric-detail-total')).toHaveText('300,000원'); // 목록 합계 = 카드 숫자
+  await drill.getByRole('button', { name: '닫기' }).click();
+  await expect(page.getByTestId('metric-detail')).toHaveCount(0);
+
   await refundFirstPayment(page, { remaining: 10 }); // "회차권 함께 종료" 앱 확인창이 잔여 10회를 말하는지 flows 가 단언
   await visibleButton(page, '매출 현황').click(); // 결제 내역 보기에서 현황 카드로 돌아와서 확인
   await expectSales(page, { total: '0원', count: 1 }); // 환불 행은 남고 매출만 0

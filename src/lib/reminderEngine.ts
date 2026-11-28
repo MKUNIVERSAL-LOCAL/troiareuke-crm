@@ -12,6 +12,7 @@
 import { CustomerStore, TreatmentLogStore, ReservationStore, SettingsStore } from './store';
 import type { Customer, TreatmentLog } from '../types';
 import { getPreference, setPreference, migrateLegacyPreference } from './shopPreferences';
+import type { PrefLanded } from './prefLandedRule';
 import { toISO, daysBetween, computeRevisitDue } from './revisitRule';
 import { computeCustomerStats, buildCustomerStatsIndex, statsFor, collectVisitDates } from './customerStats';
 import { resolveVisitCycle, type VisitCycle } from './visitCycleRule';
@@ -34,11 +35,14 @@ export function getRevisitCycleDays(): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= MIN_CYCLE_DAYS && v <= MAX_CYCLE_DAYS ? v : DEFAULT_CYCLE_DAYS;
 }
 
-/** 재방문 권장 주기 저장(7~365일). 범위 밖이면 false. 서버 리마인더도 같은 값을 읽는다. */
-export function setRevisitCycleDays(days: number): boolean {
-  if (!Number.isInteger(days) || days < MIN_CYCLE_DAYS || days > MAX_CYCLE_DAYS) return false;
-  setPreference('revisitCycleDays', days);
-  return true;
+/**
+ * 재방문 권장 주기 저장(7~365일). 범위 밖이면 `'invalid'`. 서버 리마인더도 같은 값을 읽는다.
+ * 294(288~292 리뷰 M-7): 전에는 `boolean` 이라 **저장이 남았는지를 버렸다** — 290 이 보존기간에서
+ * HIGH 급으로 고친 것과 같은 모양이고, 같은 설정 탭 바로 옆 카드였다.
+ */
+export function setRevisitCycleDays(days: number): PrefLanded {
+  if (!Number.isInteger(days) || days < MIN_CYCLE_DAYS || days > MAX_CYCLE_DAYS) return 'invalid';
+  return setPreference('revisitCycleDays', days);
 }
 
 export interface DueCustomer {

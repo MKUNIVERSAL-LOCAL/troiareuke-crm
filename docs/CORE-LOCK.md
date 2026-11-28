@@ -5,7 +5,7 @@
 
 ## 보호 대상 (코어)
 
-`scripts/core-lock.mjs` 의 `CORE_FILES` / `CORE_DIRS` 가 **단일 소스**다. 현재 목록:
+`scripts/core-lock.mjs` 의 `CORE_FILES` / `CORE_DIRS` 가 **단일 소스**다. 현재 목록(350 에서 정본과 대조 — 그때까지 **배포 관련 세 파일이 이 표에만 빠져** 있었다. CLAUDE.md 6절은 적고 있었지만 상세로 가리키는 이 문서에 없어서, 이 문서만 본 세션은 "잠금이 아니다" 라고 믿을 수 있었다):
 
 | 파일 | 역할 |
 |---|---|
@@ -19,9 +19,14 @@
 | `src/App.tsx` | 라우팅 + 권한 가드 |
 | `src/main.tsx` | 부트스트랩 + OAuth 콜백 |
 | `electron/main.cjs`, `electron/preload.cjs` | Electron 코어(백업·IPC·autoUpdater) |
+| `electron/portable-updater.cjs` | 포터블 exe 무인 업데이트(내려받기 → 종료 시 적용) — 재다운로드 금지 원칙의 핵심 |
+| `scripts/prepare-portable-update.mjs` | 포터블·폴더형 업데이트 꾸러미 생성(하위호환 브리지) |
+| `src/lib/updateChannel.ts` | 설치 안내 주소(`INSTALL_SITE_URL`·`INSTALL_GUIDE_MESSAGE` — 6절 "신규 설치는 배포 사이트로만" 의 유일한 출처)·채널 매니페스트 주소·버전 비교(`compareVersions`·`isOutdated`·`isStale`) |
 | `supabase/**` | RLS·마이그레이션 SQL 전체 |
 
-## 2중 차단 구조
+> **여기 없는 것**: 모바일 **필수 업데이트**(최소 지원 버전) 판정은 `src/lib/mobileUpdate.ts`·`src/components/ui/MobileUpdateBanner.tsx` 에 있고 **잠금이 아니다**. 352 에서 이 표가 그 기능을 `updateChannel.ts` 의 것으로 잘못 적어 두었던 것을 고쳤다(349~351 리뷰 M-3).
+
+## 차단 구조 — 코어 2중 + 기록 1중
 
 1. **Claude Code 훅** (`.claude/settings.json` → `scripts/claude-core-guard.mjs`)
    - Claude Code 가 코어 파일을 Edit/Write/MultiEdit 하려 하면 **그 자리에서 거부**.
@@ -30,6 +35,15 @@
 2. **git pre-commit 훅** (`.githooks/pre-commit` → `scripts/core-lock.mjs`)
    - 코어 파일이 스테이징되면 **커밋 거부**. (Claude 외 다른 에디터·도구로 고쳐도 커밋 단계에서 차단)
    - 활성화: `git config core.hooksPath .githooks` (clone 직후 1회. 아래 setup 참조)
+
+3. **git pre-push 훅 — 기록 관문** (`.githooks/pre-push`, 383 신설, 같은 `core.hooksPath` 로 함께 켜진다)
+   - 푸시 **앞에서** 기록 가드 셋(`check:docs`·`check:gap`·`check:notes`)을 돌리고, 실패하면 푸시를 막는다(약 25초).
+   - 왜: 11-28 에 **두 번** 기록 한 줄을 가드 결과보다 먼저 올려 머지 관문이 빨갰다(`2eef320`·`c2e0838`).
+     두 번째는 가드를 **돌리고도** 출력을 파이프로 흘려 종료 코드를 잃은 것이었다 — 사람 규칙이 두 번 실패했다.
+   - 우회: `SKIP_RECORD_CHECK=1 git push ...`(그러면 머지 관문이 본다). 브랜치 삭제 푸시는 건너뛴다.
+   - **경계**(386, 381~383 리뷰 L-1): `git push --no-verify` 는 훅을 통째로 건너뛴다. 기록만 바꾼 커밋은
+     푸시 이벤트로는 client-ci 도 돌지 않는다(PR 이벤트로는 매번 돈다) — 이 훅은 **실수**를 막고, 작정한 우회는 막지 못한다.
+   - 이 훅이 실물에 있고 그 가드 셋을 부르는지는 `check:docs` 의 검사 ㉓ 가 지킨다(386, 리뷰 M-3 — 훅 자신이 무보호였다).
 
 ## 최초 설정 (clone 직후 1회)
 
@@ -50,3 +64,4 @@ git config core.hooksPath .githooks
 ## 목록 변경
 
 보호 대상을 추가/제거하려면 `scripts/core-lock.mjs` 의 `CORE_FILES`/`CORE_DIRS` 만 수정하면 양쪽 훅에 동시 반영된다.
+

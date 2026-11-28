@@ -84,18 +84,18 @@ export default function AdminAiService() {
               <div key={c.label} data-testid={`ai-stat-${c.label}`} className="bg-slate-900 border border-slate-700/50 rounded-2xl px-5 py-4">
                 <p className="text-xl font-bold text-white break-all">{c.value}</p>
                 <p className="text-xs text-slate-400 mt-1">{c.label}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{c.sub}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{c.sub}</p>
               </div>
             ))}
           </div>
 
           <div className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden mb-6">
-            <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between"><h2 className="text-sm font-bold text-white">지점별 사용·크레딧</h2><span className="text-xs text-slate-500">{branches.length}곳</span></div>
+            <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between"><h2 className="text-sm font-bold text-white">지점별 사용·크레딧</h2><span className="text-xs text-slate-400">{branches.length}곳</span></div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs text-slate-400"><tr><th className="text-left px-5 py-2">지점</th><th className="text-left px-3 py-2">플랜</th><th className="text-right px-3 py-2">호출</th><th className="text-right px-3 py-2">토큰</th><th className="text-right px-3 py-2">원가</th><th className="text-right px-3 py-2">크레딧 사용/잔액</th><th className="text-left px-3 py-2">마지막 호출</th><th className="px-3 py-2"></th></tr></thead>
                 <tbody>
-                  {branches.length === 0 && <tr><td colSpan={8} className="px-5 py-6 text-center text-slate-500">이달 AI 를 쓴 지점이 없습니다.</td></tr>}
+                  {branches.length === 0 && <tr><td colSpan={8} className="px-5 py-6 text-center text-slate-400">이달 AI 를 쓴 지점이 없습니다.</td></tr>}
                   {branches.map(b => (
                     <tr key={b.branchId} className="border-t border-slate-800 text-slate-200" data-testid="ai-branch-row">
                       <td className="px-5 py-2.5 font-medium">{b.branchName || b.branchId}</td>
@@ -125,7 +125,7 @@ export default function AdminAiService() {
           )}
         </>
       )}
-      {NAS_MODE && loading && !summary && <p className="text-sm text-slate-500 mb-6">불러오는 중…</p>}
+      {NAS_MODE && loading && !summary && <p className="text-sm text-slate-400 mb-6">불러오는 중…</p>}
 
       {grantFor && <GrantDialog row={grantFor} onClose={() => setGrantFor(null)} onDone={() => { setGrantFor(null); void load(); }} />}
     </div>
@@ -158,7 +158,7 @@ function GrantDialog({ row, onClose, onDone }: { row: AdminAiBranchRow; onClose:
         <div><label htmlFor="grant-note" className="block text-xs text-slate-400 mb-1">사유</label><input id="grant-note" value={note} onChange={e => setNote(e.target.value)} placeholder="예: 파일럿 보상, 장애 보상" className="w-full bg-slate-800 border border-slate-700 text-slate-100 text-sm rounded-xl px-3 py-2" /></div>
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="flex-1 py-2 text-sm text-slate-300 bg-slate-800 rounded-xl">취소</button>
-          <button type="button" onClick={() => void submit()} disabled={busy} className="flex-1 py-2 text-sm font-medium text-white bg-amber-600 rounded-xl disabled:opacity-50" data-testid="grant-submit">{busy ? '지급 중…' : '지급'}</button>
+          <button type="button" onClick={() => void submit()} disabled={busy} className="flex-1 py-2 text-sm font-medium text-white bg-amber-700 rounded-xl disabled:opacity-50" data-testid="grant-submit">{busy ? '지급 중…' : '지급'}</button>
         </div>
       </div>
     </AdminDialog>

@@ -4,7 +4,7 @@ import { dialog, addReservation } from './flows';
 
 /**
  * 직원 근무표·휴게·정리 버퍼 (141, GAP R-4·R-2) — 직원 수정에서 근무 11:00~18:00·휴게 13:00~14:00·정리 15분을 저장하면
- * (1) 직원 상세 요약, (2) 예약표 일간 "직원별 열" 머리글·음영, (3) 예약 폼 경고(휴게·근무 밖·정리 버퍼)와 빈 시간 제안에 반영된다.
+ * (1) 직원 상세 요약, (2) 예약표 일간 "직원별 열" 머리글의 근무·휴게 **글자**(347 리뷰 L-10: 음영 색은 이 스펙이 보지 않는다), (3) 예약 폼 경고(휴게·근무 밖·정리 버퍼)와 빈 시간 제안에 반영된다.
  * 경고는 막지 않고 confirm 으로 묻는다 — 스펙은 근무·휴게·정리 경고만 거절하고 나머지(매장 휴무일 등)는 수락한다.
  */
 
@@ -30,14 +30,18 @@ test('직원 근무표·휴게·정리 버퍼가 직원 상세·직원별 열·�
   const edit = dialog(page, '직원 수정');
   await expect(edit).toBeVisible();
   await edit.getByPlaceholder('010-0000-0000').fill('010-2222-3333'); // 온보딩 직원은 전화가 비어 있어 저장 검증에 걸린다
-  await edit.getByLabel('매장 영업시간과 같음').uncheck();
-  await edit.getByLabel('월요일 시작').selectOption('11:00');
-  await edit.getByLabel('월요일 끝').selectOption('18:00');
-  await edit.getByLabel('월요일 휴게 시작').selectOption('13:00');
-  await edit.getByLabel('월요일 휴게 끝').selectOption('14:00');
-  await edit.getByRole('button', { name: '월요일과 같게 모두 채우기' }).click();
-  await expect(edit.getByLabel('금요일 휴게 끝')).toHaveValue('14:00');
-  await edit.getByLabel('시술 뒤 정리').selectOption('15');
+  // 278(GAP Q-3): 근무 칸을 **근무표 영역 안에서만** 집는다 — 같은 창에 색상·역할 같은 다른 입력이 있고,
+  // 화면 칸 커버리지 가드는 이 영역(staff-schedule-editor)을 아무 스펙도 참조하지 않는다고 세고 있었다.
+  const sched = edit.getByTestId('staff-schedule-editor');
+  await expect(sched).toContainText('근무표');
+  await sched.getByLabel('매장 영업시간과 같음').uncheck();
+  await sched.getByLabel('월요일 시작').selectOption('11:00');
+  await sched.getByLabel('월요일 끝').selectOption('18:00');
+  await sched.getByLabel('월요일 휴게 시작').selectOption('13:00');
+  await sched.getByLabel('월요일 휴게 끝').selectOption('14:00');
+  await sched.getByRole('button', { name: '월요일과 같게 모두 채우기' }).click();
+  await expect(sched.getByLabel('금요일 휴게 끝')).toHaveValue('14:00');
+  await sched.getByLabel('시술 뒤 정리').selectOption('15');
   await edit.getByRole('button', { name: '저장', exact: true }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);

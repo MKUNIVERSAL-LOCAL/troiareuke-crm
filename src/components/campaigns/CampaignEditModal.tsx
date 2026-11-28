@@ -1,5 +1,7 @@
 // CampaignEditModal — 캠페인 추가·수정 (비코어, 156, GAP M-3)
 import { useState } from 'react';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (296)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 import Modal from '../ui/Modal';
 import { notify } from '../../lib/notify';
 import { saveCampaign, newCampaignDraft, type CampaignInput } from '../../lib/campaignStore';
@@ -28,8 +30,11 @@ export default function CampaignEditModal({ campaign, onClose, onSaved }: { camp
   const submit = () => {
     const errs = validateCampaign(draft);
     if (errs.length) { notify.error(errs[0]); return; }
-    saveCampaign({ ...draft, name: draft.name.trim(), content: draft.content.trim() }, campaign?.id);
-    notify.success(campaign ? '캠페인을 수정했습니다.' : '캠페인을 추가했습니다. 실행은 "대상 확인·발송"에서 직원이 확인한 뒤 나갑니다.');
+    const { landed } = saveCampaign({ ...draft, name: draft.name.trim(), content: draft.content.trim() }, campaign?.id);
+    // 296: 캠페인은 자동 발송 정의다 — 안 남았는데 "추가했습니다" 라고 말하면 아무것도 나가지 않는다
+    const lost = describePrefLoss(landed, '캠페인', prefSaveMode());
+    if (lost) notify.error(lost);
+    else notify.success(campaign ? '캠페인을 수정했습니다.' : '캠페인을 추가했습니다. 실행은 "대상 확인·발송"에서 직원이 확인한 뒤 나갑니다.');
     onSaved();
   };
   return (

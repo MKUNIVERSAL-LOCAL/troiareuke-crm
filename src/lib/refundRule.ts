@@ -7,7 +7,7 @@
 export interface RefundablePayment { id: string; paymentDate: string; type: 'program' | 'product' | 'single_treatment' | 'other'; typeLabel: string; amount: number; status: 'completed' | 'refunded' | 'pending'; customerId?: string; customerName?: string; referenceId?: string; paymentMethod: string; memo?: string }
 export interface RefundRequest { amount: number; date: string; reason?: string; actor?: string; paymentMethod?: string }
 
-export const REFUND_ROW_TAG = /^\[환불 (\d{4}-\d{2}-\d{2}) ← (\d{4}-\d{2}-\d{2}) ([^\]]+)\]/;
+const REFUND_ROW_TAG = /^\[환불 (\d{4}-\d{2}-\d{2}) ← (\d{4}-\d{2}-\d{2}) ([^\]]+)\]/;
 
 /** B 모델의 환불 행 memo 태그 — "[환불 처리일 ← 원결제일 원결제id]" 로 원 결제를 되짚는다(코어 Payment 에 환불 전용 필드가 없다) */
 export function refundMemo(original: Pick<RefundablePayment, 'id' | 'paymentDate'>, date: string, reason?: string, actor?: string): string {

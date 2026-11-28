@@ -1,15 +1,28 @@
 ﻿import { useState, useCallback, useEffect, useMemo, type CSSProperties, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { askConfirm } from '../../lib/confirmDialog';
+import { askConfirm, askConfirmWithChoice } from '../../lib/confirmDialog';
+// 취소·노쇼 사유 (244, GAP R-10 후속) — 규칙은 순수 cancelReasonRule, 저장은 설정 행(cancelReasons)
+import { reasonOptions, labelFor, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend } from '../../lib/cancelReasonRule';
+import { previousMonth } from '../../lib/format';
+import { saveReason, reasonOf, monthCancelFacts } from '../../lib/cancelReasons';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 사유가 정말 남았는지 (290, 리뷰 M-3)
+import { prefSaveMode } from '../../lib/prefSaveMode';
+// 예약 변경 이력 (247) — 코어 Reservation 에 수정 시각·수정자 칸이 없어 이 기기 기록으로 남긴다
+import { logReservationEdit, logReservationStatus, logReservationCreate, logReservationDelete, reservationHistory } from '../../lib/reservationHistory';
+import { describeChange, describeEntryHead, HISTORY_CAVEAT, HISTORY_EMPTY } from '../../lib/reservationHistoryRule';
+import MemoPresetChips from '../../components/MemoPresetChips'; // 자주 쓰는 메모 문구 (255)
+import { confirmIfDuplicatePayment } from '../../lib/duplicatePayment'; // 중복 결제 의심 경고 (264, GAP P-4)
+import { createSubmitLock } from '../../lib/submitLock';
 import { notify } from '../../lib/notify';
-import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, Search, Scissors } from 'lucide-react';
-import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, isSameDay, addMinutes } from 'date-fns';
+import { ChevronLeft, ChevronRight, LayoutGrid, List, Clock, Trash2, Calendar, CalendarDays, Search, Scissors } from 'lucide-react';
+import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addWeeks, subWeeks, addMonths, subMonths, isSameDay, isSameMonth, addMinutes } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import Header from '../../components/layout/Header';
 import { StatusBadge, SourceBadge } from '../../components/ui/Badge';
 import Modal from '../../components/ui/Modal';
 import PrereqHint from '../../components/ui/PrereqHint';
 import CustomerCombobox from '../../components/ui/CustomerCombobox';
+import CustomerAlertLine from '../../components/CustomerAlertLine'; // 현장 주의사항 경고 (232, GAP C-11)
 import PhoneLink from '../../components/ui/PhoneLink';
 import DateQuickChips from '../../components/ui/DateQuickChips';
 import PullToRefreshIndicator from '../../components/ui/PullToRefreshIndicator';
@@ -44,7 +57,7 @@ import {
 import { registeredPaymentsFor } from '../../lib/pendingCompletion';
 import { readableTextOn } from '../../lib/color';
 import { getGcalMap, rememberGcalEvent, cleanupGcalEvent, localizeGcalEventDates } from '../../lib/gcalEventMap'; // 예약 ↔ 캘린더 이벤트 매핑 (대시보드 노쇼 처리와 공유)
-import { todayISO, formatDate, formatPrice } from '../../lib/format';
+import { todayISO, formatDate, formatPrice, formatDateTime } from '../../lib/format';
 import { josa } from '../../lib/josa';
 import { isProgramExpired, getUsablePrograms, getExpiredPrograms, expiredProgramsHint } from '../../lib/customerPrograms';
 import clsx from 'clsx';
@@ -168,7 +181,7 @@ function eventBlockStyle(ev: ScheduleEvent<unknown>, slotStartMin: number, rowH:
 }
 
 // ── Google Calendar 이벤트 매핑 (reservationId → eventId) ─────────────────
-type ViewMode = 'week' | 'day' | 'list';
+type ViewMode = 'month' | 'week' | 'day' | 'list'; // 월간은 261(GAP R-1) — 모바일에만 있던 한 달 흐름을 PC 에도
 
 interface GoogleEventLike {
   id: string;
@@ -233,8 +246,8 @@ export default function Reservations() {
     if (!googleConnected) { setGoogleEvents([]); return; }
     try {
       const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-      const pcStart = viewMode === 'day' ? new Date(currentDate) : weekStart;
-      const pcEnd = viewMode === 'day' ? addDays(currentDate, 1) : addDays(weekStart, 7);
+      const pcStart = viewMode === 'day' ? new Date(currentDate) : viewMode === 'month' ? startOfMonth(currentDate) : weekStart; // 월간은 그 달 전체 (261)
+      const pcEnd = viewMode === 'day' ? addDays(currentDate, 1) : viewMode === 'month' ? endOfMonth(currentDate) : addDays(weekStart, 7);
       const mDate = new Date(); mDate.setDate(1); mDate.setMonth(mDate.getMonth() + mobileMonthOffset);
       const mStart = mobileTab === 'today' ? new Date() : mobileTab === 'week' ? startOfWeek(new Date(), { weekStartsOn: 1 }) : startOfMonth(mDate);
       const mEnd = mobileTab === 'today' ? new Date() : mobileTab === 'week' ? endOfWeek(new Date(), { weekStartsOn: 1 }) : endOfMonth(mDate);
@@ -275,7 +288,9 @@ export default function Reservations() {
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const navigate = (dir: 'prev' | 'next') => {
-    if (viewMode === 'week') {
+    if (viewMode === 'month') {
+      setCurrentDate(dir === 'prev' ? subMonths(currentDate, 1) : addMonths(currentDate, 1)); // 261
+    } else if (viewMode === 'week') {
       setCurrentDate(dir === 'prev' ? subWeeks(currentDate, 1) : addWeeks(currentDate, 1));
     } else {
       setCurrentDate(dir === 'prev' ? subDays(currentDate, 1) : addDays(currentDate, 1));
@@ -328,6 +343,26 @@ export default function Reservations() {
   // 모바일 전용 상태
   // (mobileTab·mobileMonthOffset 선언은 위 Google 로드 앞으로 옮김)
   const mobileMonthDate = (() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + mobileMonthOffset); return d; })();
+  // 보고 있는 달의 취소·노쇼 사유 한 줄 (244, GAP R-10 후속) — 사유를 적지 않은 건수까지 함께 말한다.
+  // PC 는 주간·일간 머리글의 달, 모바일은 '이번달' 탭이 보고 있는 달 기준.
+  const cancelLines = useMemo(() => {
+    const line = (month: string) => {
+      const facts = monthCancelFacts(month);
+      // "이달" 대신 보고 있는 달을 적는다 — 주간 보기가 달을 넘나들면 어느 달인지 알 수 없었다 (246 리뷰 L-10)
+      const label = `${Number(month.slice(5, 7))}월`;
+      const summary = summarizeReasons(facts.totals, facts.records);
+      const head = describeReasonSummary(summary, label);
+      if (!head) return null;
+      // 숫자 하나로는 많은 건지 알 수 없다 — 지난달과 비교해 꼬리말로 붙인다(지난달 자료가 없으면 비교하지 않는다) (253)
+      const prevFacts = monthCancelFacts(previousMonth(month));
+      const trend = describeReasonTrend(compareReasonMonths(summary, summarizeReasons(prevFacts.totals, prevFacts.records)));
+      return trend ? `${head} · ${trend}` : head;
+    };
+    return {
+      pc: line(format(viewMode === 'week' ? startOfWeek(currentDate, { weekStartsOn: 1 }) : currentDate, 'yyyy-MM')),
+      mobile: line(format(mobileMonthDate, 'yyyy-MM')),
+    };
+  }, [currentDate, viewMode, mobileMonthOffset, reservations]);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const normalizedSearch = search.trim().toLowerCase();
@@ -349,6 +384,21 @@ export default function Reservations() {
   const weekReservations = useMemo(() => filteredReservations.filter(r => r.date >= weekRange[0] && r.date <= weekRange[1]), [filteredReservations, weekRange[0], weekRange[1]]);
   const dayKey = format(currentDate, 'yyyy-MM-dd');
   const dayReservations = useMemo(() => filteredReservations.filter(r => r.date === dayKey), [filteredReservations, dayKey]);
+  // 월간 보기 — 주/일과 같은 필터(직원·상태·검색)를 쓴다 (261, GAP R-1)
+  const monthKey = format(currentDate, 'yyyy-MM');
+  const monthReservations = useMemo(() => filteredReservations.filter(r => r.date.startsWith(monthKey)), [filteredReservations, monthKey]);
+  // 격자는 월~일로 채우느라 앞뒤 주(지난달 말·다음달 초)까지 그린다 — 그 칸 자료도 넘겨야 한다.
+  // 261 은 그 달만 넘겨, 10/26~10/31·12/1~12/6 처럼 **예약이 있는데 빈 칸으로 보이는 날**이 매달 10칸 넘게 생겼다 (259~261 리뷰 H-1)
+  const monthGridRange: readonly [string, string] = [
+    format(startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+    format(endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+  ];
+  const monthGridReservations = useMemo(
+    () => filteredReservations.filter(r => r.date >= monthGridRange[0] && r.date <= monthGridRange[1]),
+    [filteredReservations, monthGridRange[0], monthGridRange[1]],
+  );
+  // 머리글 건수는 그 달 기준 — 취소·노쇼가 섞여 "바쁜 달" 로 읽히지 않게 따로 적는다 (리뷰 L-11)
+  const monthOffCount = useMemo(() => monthReservations.filter(r => r.status === 'cancelled' || r.status === 'noshow').length, [monthReservations]);
   const mobileRange: readonly [string, string] = (() => {
     if (mobileTab === 'today') return [todayStr, todayStr];
     if (mobileTab === 'week') return [format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'), format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')];
@@ -377,7 +427,7 @@ export default function Reservations() {
             className={clsx('inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl border transition-colors', requestCount > 0 ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50')}
             title="전화·카톡·네이버로 받은 예약 요청을 적어 두고 확인 뒤 예약으로 등록"
           >
-            예약 요청함{requestCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-xs font-bold">{requestCount}</span>}
+            예약 요청함{requestCount > 0 && <span className="px-1.5 py-0.5 rounded-full bg-amber-700 text-white text-xs font-bold">{requestCount}</span>}
           </button>
         )}
       />
@@ -412,6 +462,12 @@ export default function Reservations() {
               <button type="button" onClick={() => setMobileMonthOffset(0)} data-testid="mobile-month-label" className="text-sm font-semibold text-gray-800">{format(mobileMonthDate, 'yyyy년 M월')}{mobileMonthOffset !== 0 && <span className="ml-1 text-xs font-normal text-[#1a3a8f]">(이번달로)</span>}</button>
               <button type="button" onClick={() => setMobileMonthOffset(o => o + 1)} aria-label="다음 달" className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ChevronRight size={16} /></button>
             </div>
+          )}
+          {/* 이달 취소·노쇼 사유 — '이번달' 탭에서만(오늘·이번주 탭의 달과 어긋나지 않게) (244) */}
+          {mobileTab === 'month' && cancelLines.mobile && (
+            <p className="mt-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs text-gray-600" data-testid="cancel-reason-summary">
+              {cancelLines.mobile}
+            </p>
           )}
           <div className="flex gap-2 mt-2">
             <label className="relative flex-1">
@@ -538,9 +594,11 @@ export default function Reservations() {
             <h3 className="text-base font-bold text-gray-900">
               {viewMode === 'list'
                 ? `전체 예약 ${filteredReservations.length}건 · 날짜순`
-                : viewMode === 'week'
-                  ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
-                  : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
+                : viewMode === 'month'
+                  ? `${format(currentDate, 'yyyy년 M월', { locale: ko })} · 예약 ${monthReservations.length}건${monthOffCount > 0 ? ` (취소·노쇼 ${monthOffCount}건 포함)` : ''}`
+                  : viewMode === 'week'
+                    ? `${format(weekStart, 'yyyy년 M월', { locale: ko })} ${format(weekStart, 'd')}일 ~ ${format(addDays(weekStart, 6), 'd')}일`
+                    : format(currentDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })
               }
             </h3>
           </div>
@@ -554,14 +612,14 @@ export default function Reservations() {
               </div>
             )}
             {/* Naver sync badge — 실제 연동 전까지 '준비 중' 표기 (오해 방지) */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-400" title="네이버 예약 연동은 준비 중입니다">
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-500" title="네이버 예약 연동은 준비 중입니다">
               <span className="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
               네이버 예약 (준비 중)
             </div>
             <div className="flex bg-gray-100 rounded-xl p-1">
-              {(['week', 'day', 'list'] as ViewMode[]).map(m => {
-                const labels = { week: '주간', day: '일간', list: '목록' };
-                const icons = { week: <LayoutGrid size={14} />, day: <Clock size={14} />, list: <List size={14} /> };
+              {(['month', 'week', 'day', 'list'] as ViewMode[]).map(m => {
+                const labels = { month: '월간', week: '주간', day: '일간', list: '목록' };
+                const icons = { month: <CalendarDays size={14} />, week: <LayoutGrid size={14} />, day: <Clock size={14} />, list: <List size={14} /> };
                 return (
                   <button
                     key={m}
@@ -646,7 +704,25 @@ export default function Reservations() {
           })}
         </div>
 
+        {/* 이달 취소·노쇼 사유 — 취소가 없으면 줄 자체가 없다 (244, GAP R-10 후속) */}
+        {cancelLines.pc && viewMode !== 'list' && (
+          <p className="mb-4 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs text-gray-600" data-testid="cancel-reason-summary">
+            {cancelLines.pc}
+          </p>
+        )}
+
         {/* Calendar Views */}
+        {viewMode === 'month' && (
+          <MonthView
+            month={currentDate}
+            reservations={monthGridReservations}
+            staffList={staffList}
+            googleEvents={googleEvents}
+            onSelect={setSelectedReservation}
+            onPickDay={d => { setCurrentDate(d); setViewMode('day'); }}
+            onAdd={d => { setNewDate(format(d, 'yyyy-MM-dd')); setShowAddModal(true); }}
+          />
+        )}
         {viewMode === 'week' && (
           <WeekView weekDays={weekDays} reservations={weekReservations} staffList={staffList} onSelect={setSelectedReservation} googleEvents={googleEvents} />
         )}
@@ -689,6 +765,107 @@ export default function Reservations() {
           onDelete={handleDeleteReservation}
           onEdit={() => { setEditReservation(selectedReservation); setSelectedReservation(null); }}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 월간 보기 (261, GAP R-1) — 모바일에는 '이번달' 탭이 있는데 PC 에는 한 달을 한눈에 보는 화면이 없었다.
+ * 격자는 월~일로 채우므로 **앞뒤 주(지난달 말·다음달 초) 예약도 함께** 받는다(262 — 그 칸이 비어 보이던 결함).
+ * 주간·일간과 **같은 필터**(직원·상태·검색)를 쓰고, 칸이 좁아 하루 3건까지만 보여 준 뒤 나머지는
+ * "+N건" 으로 밝힌다(숨기지 않는다 — 누르면 그 날 일간 보기로 간다).
+ * 취소·노쇼는 취소선과 흐린 색으로 구분해, 바쁜 날이 실제로 바빴는지 착각하지 않게 한다.
+ */
+function MonthView({ month, reservations, staffList, googleEvents = [], onSelect, onPickDay, onAdd }: {
+  month: Date;
+  reservations: Reservation[];
+  staffList: Staff[];
+  googleEvents?: GoogleEventLike[];
+  onSelect: (r: Reservation) => void;
+  onPickDay: (d: Date) => void;
+  onAdd: (d: Date) => void;
+}) {
+  const MAX_CHIPS = 3;
+  const dayNames = ['월', '화', '수', '목', '금', '토', '일'];
+  const today = new Date();
+  const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
+  const gridEnd = endOfWeek(endOfMonth(month), { weekStartsOn: 1 });
+  const days: Date[] = [];
+  for (let d = gridStart; d <= gridEnd; d = addDays(d, 1)) days.push(d);
+
+  const byDay = new Map<string, Reservation[]>();
+  for (const r of reservations) {
+    const list = byDay.get(r.date) ?? [];
+    list.push(r);
+    byDay.set(r.date, list);
+  }
+  // 칸에 3건만 보여 주므로 **살아 있는 예약이 먼저** 와야 한다 — 261 은 시작 시간 순이라 취소·노쇼가 확정 예약을 밀어냈다 (리뷰 M-2)
+  const isOff = (r: Reservation) => r.status === 'cancelled' || r.status === 'noshow';
+  for (const list of byDay.values()) {
+    list.sort((a, b) => Number(isOff(a)) - Number(isOff(b)) || a.startTime.localeCompare(b.startTime) || a.customerName.localeCompare(b.customerName));
+  }
+  const googleByDay = new Map<string, number>();
+  for (const ge of googleEvents) {
+    const key = (ge.date || '').slice(0, 10);
+    if (!key) continue;
+    googleByDay.set(key, (googleByDay.get(key) ?? 0) + 1);
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden" data-testid="month-view">
+      <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+        {dayNames.map(n => (
+          <div key={n} className={clsx('py-2 text-center text-xs font-semibold', n === '일' ? 'text-red-500' : n === '토' ? 'text-blue-500' : 'text-gray-500')}>{n}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {days.map(day => {
+          const key = format(day, 'yyyy-MM-dd');
+          const list = byDay.get(key) ?? [];
+          const gcount = googleByDay.get(key) ?? 0;
+          const inMonth = isSameMonth(day, month);
+          const isToday = isSameDay(day, today);
+          return (
+            <div key={key} className={clsx('min-h-[108px] border-r border-b border-gray-50 p-1.5 flex flex-col gap-1', !inMonth && 'bg-gray-50/60')} data-testid="month-cell" data-date={key}>
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => onPickDay(day)}
+                  className={clsx('min-w-[24px] px-1.5 py-0.5 rounded-lg text-xs font-bold hover:bg-gray-100',
+                    isToday ? 'bg-[#1a3a8f] text-white hover:bg-[#15306e]' : inMonth ? 'text-gray-700' : 'text-gray-400')}
+                  title={`${format(day, 'M월 d일')} 일간 보기`}>
+                  {format(day, 'd')}
+                </button>
+                {/* 달 밖 칸도 그 날 예약을 보여 주고 바로 넣을 수 있어야 한다(리뷰 H-1). 글자 대비는 AA 기준 (리뷰 M-4) */}
+                <button type="button" onClick={() => onAdd(day)} aria-label={`${format(day, 'M월 d일')} 예약 추가`}
+                  className="px-1.5 py-0.5 rounded-lg text-xs text-gray-500 hover:text-[#1a3a8f] hover:bg-blue-50">＋</button>
+              </div>
+              {list.slice(0, MAX_CHIPS).map(r => {
+                const staff = staffList.find(s2 => s2.id === r.staffId);
+                const off = r.status === 'cancelled' || r.status === 'noshow';
+                return (
+                  <button key={r.id} type="button" onClick={() => onSelect(r)} data-testid="month-chip"
+                    title={`${r.startTime} ${r.customerName} · ${r.services[0]?.serviceName ?? ''} ${off ? '(취소·노쇼)' : ''}`}
+                    className={clsx('text-left px-1.5 py-1 rounded-md text-xs font-medium truncate hover:opacity-80', off && 'line-through')}
+                    style={off ? { backgroundColor: '#F1F5F9', color: '#475569' } : { backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6') }}>
+                    {r.startTime} {r.customerName}
+                  </button>
+                );
+              })}
+              {list.length > MAX_CHIPS && (
+                <button type="button" onClick={() => onPickDay(day)} data-testid="month-more"
+                  className="text-left px-1.5 text-xs font-medium text-[#1a3a8f] hover:underline">
+                  +{list.length - MAX_CHIPS}건 더 보기
+                </button>
+              )}
+              {gcount > 0 && <span className="px-1.5 text-xs text-gray-500">Google 일정 {gcount}건</span>}
+            </div>
+          );
+        })}
+      </div>
+      {reservations.length === 0 && (
+        <p className="py-6 text-center text-sm text-gray-500" data-testid="month-empty">
+          {format(month, 'yyyy년 M월', { locale: ko })} 앞뒤 주까지 (지금 필터로) 예약이 없습니다. 날짜의 ＋ 를 눌러 바로 넣을 수 있습니다.
+        </p>
       )}
     </div>
   );
@@ -754,7 +931,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
           const slotStartMin = timeToMin(time);
           return (
             <div key={time} className="grid grid-cols-8 border-b border-gray-50 h-14">
-              <div className="py-2 px-3 text-xs text-gray-400 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
+              <div className="py-2 px-3 text-xs text-gray-500 text-right border-r border-gray-100 pt-2 sticky left-0 bg-white">
                 {time}
               </div>
               {weekDays.map((day, di) => {
@@ -803,7 +980,7 @@ function WeekView({ weekDays, reservations, staffList, onSelect, googleEvents = 
                           target="_blank"
                           rel="noopener noreferrer"
                           className={clsx(
-                            'absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-500 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
+                            'absolute z-10 text-left rounded-lg p-1.5 text-xs font-medium text-white bg-blue-600 transition-opacity hover:opacity-80 shadow-sm overflow-hidden block',
                             !ge.htmlLink && 'pointer-events-none', // 링크 없으면 클릭 무반응 앵커 방지
                           )}
                           style={eventBlockStyle(ev, slotStartMin, ROW_H)}
@@ -877,7 +1054,7 @@ function StaffColumnsDay({ date, dayReservations, dayGoogleEvents, staffList, gr
         const slotStartMin = timeToMin(time);
         return (
           <div key={time} className="grid border-b border-gray-50 h-[60px] min-w-max" style={gridStyle}>
-            <div className="py-3 px-4 text-xs text-gray-400 border-r border-gray-100 font-medium sticky left-0 bg-white">{time}</div>
+            <div className="py-3 px-4 text-xs text-gray-500 border-r border-gray-100 font-medium sticky left-0 bg-white">{time}</div>
             {columns.map(c => (
               <div key={c.staff.id} className="relative border-r border-gray-100 last:border-r-0">
                 {shadeIn(c.shade, slotStartMin)}
@@ -1003,6 +1180,9 @@ function DayView({ date, reservations, staffList, onSelect, googleEvents = [] }:
                     return (
                       <button
                         key={r.id}
+                        type="button"
+                        data-testid="reservation-block"
+                        data-start={r.startTime}
                         onClick={() => onSelect(r)}
                         className="absolute z-10 text-left rounded-xl px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80 shadow-sm overflow-hidden"
                         style={{ backgroundColor: staff?.color || '#8B5CF6', color: readableTextOn(staff?.color || '#8B5CF6'), ...eventBlockStyle(ev, slotStartMin, ROW_H) }}
@@ -1107,7 +1287,7 @@ function ListView({ reservations, onSelect, googleEvents = [], filterKey }: { re
               <p className="text-xs font-medium text-gray-500">{ge.date.slice(5).replace('-', '/')}</p>
               <p className="text-sm font-bold text-blue-600 mt-0.5">{ge.startTime}</p>
             </div>
-            <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
               <Calendar size={16} className="text-white" />
             </div>
             <div className="flex-1 min-w-0">
@@ -1276,6 +1456,8 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       ...(overlap ? [`${staff.name} 담당자가 그 시간(${overlap.startTime}~${overlap.endTime}, ${overlap.customerName})에 이미 예약이 있습니다.`] : []),
       ...(bufferOverlap ? [`${staff.name} 담당자의 준비·정리 시간(앞 ${pad.b}분·뒤 ${pad.a}분)을 넣으면 ${bufferOverlap.startTime}~${bufferOverlap.endTime} 예약과 겹칩니다.`] : []),
       ...staffWarnings,
+      // 지난 날짜 예약은 실수로 들어가면 "완료 처리 안 된 지난 예약" 으로 쌓여 실적·수당까지 흐린다 (234, 리뷰 H-2)
+      ...(!isEdit && date < todayISO() ? [`${formatDate(date)}는 지난 날짜입니다. 과거 예약으로 저장하면 완료 처리가 필요한 지난 예약으로 남습니다.`] : []),
       ...(freeHint ? [freeHint] : []),
       ...hoursWarnings.map(w => w.message),
     ];
@@ -1332,8 +1514,15 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
     }
     if (isEdit && editing) {
       // 수정: 기존 예약 갱신 — status 는 보내지 않는다. 폰에서 완료/노쇼 처리한 예약을 PC 의 옛 수정 창이 '확정'으로 되돌렸다 (16차 #H1)
-      ReservationStore.update(editing.id, reservation);
-      if (resources.length > 0) assignResource(editing.id, resourceId); // 자원 배정은 설정 행에 (142). 자원이 없으면 기존 배정은 그대로 (144 리뷰 M-1)
+      const savedEdit = ReservationStore.update(editing.id, reservation);
+      // 무엇이 바뀌었는지 남긴다 — "나는 3시로 바꿨는데" 를 매장이 확인할 수 있게 (247).
+      // 저장이 안 됐으면(다른 기기가 지운 예약) 이력도 남기지 않는다 (250 리뷰 L-4)
+      if (savedEdit) logReservationEdit(editing.id, editing, reservation, authUser?.name);
+      // 자원 배정은 설정 행에 (142). 안 남으면 그 예약은 자원 없이 남아 같은 시간 중복을 못 막는다 (292, 리뷰 M-3)
+      if (resources.length > 0) {
+        const lostRes = describePrefLoss(assignResource(editing.id, resourceId), '자원 배정', prefSaveMode());
+        if (lostRes) notify.error(lostRes);
+      } // 자원이 없으면 기존 배정은 그대로 (144 리뷰 M-1)
       // Google 캘린더에 옛 정보가 남지 않도록 기존 이벤트 삭제 후 재생성
       const oldEventId = getGcalMap()[editing.id];
       if (oldEventId && isGoogleCalendarConnected()) {
@@ -1344,7 +1533,11 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
       }
     } else {
       const saved = ReservationStore.save({ ...reservation, status: 'confirmed' });
-      if (saved && resourceId) assignResource(saved.id, resourceId); // 자원 배정은 설정 행에 (142)
+      logReservationCreate(saved.id, reservation, authUser?.name);
+      if (saved && resourceId) {
+        const lostRes = describePrefLoss(assignResource(saved.id, resourceId), '자원 배정', prefSaveMode());
+        if (lostRes) notify.error(lostRes);
+      }
       if (saved) onSaved?.(saved.id);
       // Google Calendar에도 추가 — 이벤트 id를 기억해 취소/삭제 시 정리 가능하게
       if (addToGoogle && googleAvailable && saved) {
@@ -1364,6 +1557,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             <label className="block text-xs font-medium text-gray-600 mb-1.5">고객 *</label>
             <CustomerCombobox customers={customers} value={customerId} onChange={setCustomerId} maskRole={authUser?.role ?? 'staff'} />
             {customers.length === 0 && <PrereqHint text="등록된 고객이 없습니다" action="고객 등록" onGo={() => { onClose(); goTo('/customers?new=1'); }} />}
+            <CustomerAlertLine customerId={customerId} className="mt-2" />
             <ProgramBalance customerId={customerId} />
           </div>
           <div>
@@ -1456,6 +1650,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
             className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
             placeholder="특이사항"
           />
+          <MemoPresetChips value={memo} onChange={setMemo} />
         </div>
         {googleAvailable && !isEdit && (
           <label className="flex items-center gap-2 cursor-pointer">
@@ -1470,7 +1665,7 @@ function AddReservationModal({ reservation: editing, initialCustomerId, initialD
           </label>
         )}
         {formError && (
-          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
             {formError}
           </div>
         )}
@@ -1519,8 +1714,15 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     const warn = r.status === 'completed' && paidForThis.length > 0
       ? `\n\n이 예약은 완료 처리됐고 등록된 결제 ${formatPrice(paidAmount)}은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.`
       : '';
-    if (!(await askConfirm({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기' }))) return; // 앱 확인창 (15차 #H3)
-    ReservationStore.updateStatus(r.id, 'cancelled');
+    const answer = await askConfirmWithChoice({ title: '예약 취소 처리', message: `이 예약을 취소 처리할까요?${warn}${logsWarn}`, confirmLabel: '취소 처리', cancelLabel: '닫기', choices: reasonOptions('cancelled'), choiceTitle: '취소 사유 (선택 — 이달 집계에 쌓입니다)' }); // 앱 확인창 (15차 #H3)
+    if (!answer.ok) return;
+    const okCancel = ReservationStore.updateStatus(r.id, 'cancelled');
+    if (okCancel) logReservationStatus(r.id, r.status, 'cancelled', user?.name); // 저장 실패면 이력도 남기지 않는다 (250 리뷰 L-4)
+    // 사유 저장 실패는 취소 처리를 되돌리지 않는다(244) — 다만 남지 않은 사유를 남았다고 두지 않는다(290, 리뷰 M-3)
+    if (answer.choice) {
+      const lost = describePrefLoss(saveReason(r.id, 'cancelled', answer.choice), '취소 사유', prefSaveMode());
+      if (lost) notify.error(lost);
+    }
     cleanupGcalEvent(r.id); // 취소된 예약은 Google 캘린더에서도 제거
     // 빈 자리를 원한 대기 요청이 있으면 바로 안내 — 요청함을 열어 보지 않아도 알 수 있게 (185, GAP R-10)
     if (r.date >= todayISO()) void newRequests().then(list => { const msg = describeWaitlist(waitlistFor(list, r.date, r.startTime), formatDate(r.date)); if (msg) notify.info(msg); }).catch(() => undefined); // 지난 날짜 자리는 안내하지 않는다 (187 리뷰 L-4)
@@ -1531,10 +1733,19 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const canNoShow = r.date <= todayISO() && r.status !== 'cancelled' && r.status !== 'noshow' && r.status !== 'completed';
   // 잘못 취소·노쇼 처리한 예약을 되돌리는 길 — 상태만 '예약확정'으로, 취소 때 지운 Google 캘린더 일정은 다시 만든다 (리뷰 2026-11-19)
   const isClosed = r.status === 'cancelled' || r.status === 'noshow';
+  const savedReason = isClosed ? reasonOf(r.id) : null; // 취소·노쇼가 아닌 예약에는 사유를 보여 주지 않는다 (244)
+  // 이 예약의 변경 이력 — 상세를 열 때 한 번 읽는다(저장은 창을 닫고 다시 열어야 보이므로 충분하다) (247)
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const history = useMemo(() => reservationHistory(r.id), [r.id]);
+  const shownHistory = showAllHistory ? history : history.slice(0, 3);
   const handleRestore = async () => {
     const google = isGoogleCalendarConnected();
     if (!(await askConfirm({ title: '예약 복구', confirmLabel: '복구', message: `이 예약을 다시 '예약확정'으로 되돌릴까요?${r.date <= todayISO() ? '\n고객이 실제로 방문했던 예약이면 대신 [완료처리]를 눌러주세요.' : ''}${google ? '\n\nGoogle 캘린더 일정도 다시 만듭니다.' : ''}${logsWarn}` }))) return;
-    ReservationStore.updateStatus(r.id, 'confirmed');
+    const okRestore = ReservationStore.updateStatus(r.id, 'confirmed');
+    if (okRestore) logReservationStatus(r.id, r.status, 'confirmed', user?.name);
+    // 취소·노쇼가 아니게 됐으니 사유도 지운다 (244). 정리가 안 남아도 알리지 않는다 — 301(리뷰 LOW-9)에서 확인:
+    // `monthCancelFacts` 가 **예약 상태로 먼저 걸러** 세므로 고아 사유가 집계를 틀리게 하지 않고, 다음 저장에서 걷힌다.
+    saveReason(r.id, 'cancelled', '');
     if (google) {
       createCalendarEvent({ ...r, status: 'confirmed' })
         .then(ev => rememberGcalEvent(r.id, ev.id))
@@ -1544,8 +1755,14 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     onUpdate();
   };
   const handleNoShow = async () => {
-    if (!(await askConfirm({ title: '노쇼 처리', message: `${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`, confirmLabel: '노쇼 기록', cancelLabel: '닫기' }))) return;
-    ReservationStore.updateStatus(r.id, 'noshow');
+    const answer = await askConfirmWithChoice({ title: '노쇼 처리', message: `${r.customerName} 고객이 ${formatDate(r.date)} ${r.startTime} 예약에 오지 않았나요? 노쇼로 기록합니다.`, confirmLabel: '노쇼 기록', cancelLabel: '닫기', choices: reasonOptions('noshow'), choiceTitle: '노쇼 사유 (선택 — 이달 집계에 쌓입니다)' });
+    if (!answer.ok) return;
+    const okNoShow = ReservationStore.updateStatus(r.id, 'noshow');
+    if (okNoShow) logReservationStatus(r.id, r.status, 'noshow', user?.name);
+    if (answer.choice) {
+      const lost = describePrefLoss(saveReason(r.id, 'noshow', answer.choice), '노쇼 사유', prefSaveMode());
+      if (lost) notify.error(lost);
+    }
     cleanupGcalEvent(r.id);
     notify.info('노쇼로 기록했습니다. 고객 상세에 노쇼 횟수가 표시됩니다.');
     onUpdate();
@@ -1554,7 +1771,9 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
   const [showPayModal, setShowPayModal] = useState(false);
 
   const handleComplete = () => {
-    ReservationStore.updateStatus(r.id, 'completed');
+    const okComplete = ReservationStore.updateStatus(r.id, 'completed');
+    if (okComplete) logReservationStatus(r.id, r.status, 'completed', user?.name);
+    saveReason(r.id, 'cancelled', ''); // 완료된 예약에 취소·노쇼 사유가 남으면 집계·상세가 서로 다른 말을 한다 (246 리뷰 M-3)
     healProgramSessionsWhenReady(r.customerId); // 회차권 사용 회차도 기록 기준으로 (16차 #H2)
     healCustomerStatsWhenReady(r.customerId); // 코어 +1이 같은 날 시술 기록과 겹치면 두 번 세진다 — 기록(다녀간 날 수)으로 바로 맞춤, 하이드레이션 뒤 (리뷰 2026-11-19)
     // 완료 → 결제 브리지: 기존엔 상태만 바뀌고 매출에 잡히지 않아 Sales에서 수기 재입력이 필요했음
@@ -1576,8 +1795,12 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
     const payWarn = paidForThis.length > 0 ? `\n\n등록된 결제 ${formatPrice(paidAmount)}은 그대로 남습니다. 환불은 매출 화면에서 처리하세요.` : '';
     const cancelTip = isClosed ? '' : ' 고객이 취소한 예약이면 대신 [취소처리]를 써주세요.';
     if (await askConfirm({ title: '예약 삭제', message: `이 예약을 삭제할까요?\n취소처리와 달리 예약 기록이 남지 않고 되돌릴 수 없습니다.${cancelTip}${payWarn}${logsWarn}`, confirmLabel: '삭제', danger: true })) {
+      logReservationDelete(r.id, r, user?.name); // "그 예약 받은 적 없다" 분쟁의 핵심 경로 — 흔적을 남긴다 (250 리뷰 H-3)
       ReservationStore.delete(r.id);
-      assignResource(r.id, null); // 자원 배정도 함께 정리 (142)
+      // 자원 배정도 함께 정리 (142). 정리 실패는 알리지 않는다 — 예약이 사라졌으므로 남은 배정은
+      // `pruned` 가 다음 저장에서 걷어내고, 화면에 거짓을 만들지 않는다 (294, 리뷰 LOW-1)
+      assignResource(r.id, null);
+      saveReason(r.id, 'cancelled', ''); // 취소·노쇼 사유도 함께 정리 — 삭제된 예약의 사유가 설정 행에 영구히 남았다 (246 리뷰 M-4)
       cleanupGcalEvent(r.id); // 삭제된 예약은 Google 캘린더에서도 제거
       onDelete();
     }
@@ -1609,6 +1832,7 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
               <span data-testid="reservation-status"><StatusBadge status={r.status} /></span>
             </div>
           </div>
+          <CustomerAlertLine customerId={r.customerId} />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -1636,6 +1860,37 @@ function ReservationDetailModal({ reservation: r, onClose, onUpdate, onDelete, o
             <span className="text-xs text-green-700 font-medium">네이버 예약 ID: {r.naverBookingId}</span>
           </div>
         )}
+
+        {savedReason && (
+          <div data-testid="reservation-reason">
+            <p className="text-xs font-medium text-gray-500 mb-1">{savedReason.kind === 'noshow' ? '노쇼 사유' : '취소 사유'}</p>
+            <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">{labelFor(savedReason.kind, savedReason.reason)}</p>
+          </div>
+        )}
+
+        <div data-testid="reservation-history">
+          <p className="text-xs font-medium text-gray-500 mb-1">변경 이력</p>
+          {history.length === 0 ? (
+            <p className="text-sm text-gray-500 bg-gray-50 rounded-xl p-3">{HISTORY_EMPTY}</p>
+          ) : (
+          <>
+            <ul className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 space-y-2">
+              {shownHistory.map(e => (
+                <li key={e.id}>
+                  <p className="text-xs text-gray-500">{describeEntryHead(e, iso => formatDateTime(iso))}</p>
+                  {e.changes.map((c, idx) => <p key={idx} className="text-sm">{describeChange(c)}</p>)}
+                </li>
+              ))}
+            </ul>
+            {history.length > 3 && (
+              <button type="button" onClick={() => setShowAllHistory(v => !v)} className="mt-1 text-xs text-[#1a3a8f] hover:underline">
+                {showAllHistory ? '최근 3건만 보기' : `전체 ${history.length}건 보기`}
+              </button>
+            )}
+          </>
+          )}
+          <p className="text-2xs text-gray-400 mt-1">{HISTORY_CAVEAT}</p>
+        </div>
 
         {r.memo && (
           <div>
@@ -1754,11 +2009,14 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
     status: 'completed' as const,
   };
 
-  const handleSave = () => {
+  const saveLock = useRef(createSubmitLock());
+  const handleSave = async () => {
     { const blocked = monthCloseBlock(basePayment.paymentDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    // 저장할 줄을 먼저 만든다 — 264 전에는 검증보다 **먼저** 잠가서, 분할 합계·수단 검증에 걸리면
+    // 잠금이 풀리지 않아 [결제 등록] 버튼이 조용히 죽었다(모달을 다시 열어야 했다. 224 리뷰 H-2 와 같은 결함)
+    const toSave: { amount: number; paymentMethod: string; memo: string }[] = [];
     if (mode === 'single') {
-      PaymentStore.save({ ...basePayment, amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
-      rememberPaymentMethod(method);
+      toSave.push({ amount: r.totalPrice, paymentMethod: method, memo: '예약 완료 처리에서 자동 등록' });
     } else {
       const a = Math.max(0, Number(amountA.replace(/\D/g, '')) || 0);
       const b = Math.max(0, Number(amountB.replace(/\D/g, '')) || 0);
@@ -1771,9 +2029,46 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
         return;
       }
       const splitMemo = `복합결제 (${methodA} ${formatPrice(a)} + ${methodB} ${formatPrice(b)})`;
-      if (a > 0) PaymentStore.save({ ...basePayment, amount: a, paymentMethod: methodA, memo: splitMemo });
-      if (b > 0) PaymentStore.save({ ...basePayment, amount: b, paymentMethod: methodB, memo: splitMemo });
+      if (a > 0) toSave.push({ amount: a, paymentMethod: methodA, memo: splitMemo });
+      if (b > 0) toSave.push({ amount: b, paymentMethod: methodB, memo: splitMemo });
     }
+    // ① 이 예약에 이미 결제가 있나 — 금액과 무관하게 정확히 잡는다. 복합(분할) 결제는 두 줄로 저장돼
+    //    합계 비교로는 절대 걸리지 않았다 (266, 리뷰 M-2)
+    const already = PaymentStore.getAll().filter(p => p.referenceId === r.id && p.status === 'completed');
+    if (already.length > 0) {
+      const sum = already.reduce((a, p) => a + p.amount, 0);
+      const ok = await askConfirm({
+        title: '이 예약에 결제가 이미 있습니다',
+        message: [
+          `${r.customerName} 고객의 이 예약에 등록된 결제가 ${already.length}건(합계 ${formatPrice(sum)}) 있습니다.`,
+          ...already.slice(0, 3).map(p => `· ${p.paymentDate} ${formatPrice(p.amount)} (${p.paymentMethod})`),
+          '',
+          '한 번 더 받은 돈이면 그대로 등록하세요. 아니면 취소하고 매출 > 결제 내역에서 확인해주세요.',
+        ].join('\n'),
+        confirmLabel: '그대로 등록',
+        cancelLabel: '취소하고 확인',
+        danger: true,
+      });
+      if (!ok) return;
+    } else if (!(await confirmIfDuplicatePayment({
+      // ② 다른 예약·단건으로 같은 금액이 방금 들어왔는지 (264, GAP P-4)
+      customerId: basePayment.customerId, customerName: basePayment.customerName,
+      amount: r.totalPrice, paymentDate: basePayment.paymentDate, status: basePayment.status,
+      // 281(리뷰 M-2): 예약 완료 결제는 코어가 할인을 0 으로 적는다 — 유형·수단만 비교에 쓴다
+      typeLabel: basePayment.typeLabel, discountAmount: basePayment.discountAmount,
+    }))) return;
+    // 이중 제출 — 검증을 모두 지난 뒤에만 잠근다 (224, 221 리뷰 M-1)
+    if (!saveLock.current.acquire()) return;
+    try {
+      for (const line of toSave) PaymentStore.save({ ...basePayment, ...line });
+    } catch (e) {
+      // 저장이 끊기면 잠금을 풀어 다시 시도할 수 있게 한다 — 안 풀면 버튼이 죽는다 (266, 리뷰 L-5)
+      saveLock.current.release();
+      console.error('[complete-payment] 결제 저장 실패:', e);
+      notify('결제를 저장하지 못했습니다. 저장 공간을 확인한 뒤 다시 시도해주세요.');
+      return;
+    }
+    if (mode === 'single') rememberPaymentMethod(method);
     onDone();
   };
 
@@ -1837,7 +2132,7 @@ function CompletePaymentModal({ reservation: r, onDone, onTreatmentLog, expiredN
           <button type="button" onClick={onDone} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">
             결제 등록 없이 닫기
           </button>
-          <button type="button" onClick={handleSave} className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium hover:bg-green-800">
+          <button type="button" onClick={() => void handleSave()} className="flex-1 py-2.5 bg-green-700 text-white rounded-xl text-sm font-medium hover:bg-green-800">
             결제 등록
           </button>
         </div>

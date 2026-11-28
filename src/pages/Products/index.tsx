@@ -1,4 +1,5 @@
-﻿import { useState, useCallback, useEffect, useMemo } from 'react';
+﻿import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { createSubmitLock } from '../../lib/submitLock';
 import { tagRefund } from '../../lib/refundDate';
 import { canceledSaleIds } from '../../lib/saleCancel';
 import { saleCustomerNameResolver } from '../../lib/customerIdentity';
@@ -14,6 +15,10 @@ import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { Search, AlertTriangle, Package, ShoppingCart, Plus, TrendingUp, Pencil, Trash2, PackagePlus, History } from 'lucide-react';
 import StockAdjustModal from '../../components/StockAdjustModal';
 import StockLedgerModal from '../../components/StockLedgerModal';
+import StockCountModal from '../../components/StockCountModal'; // 전 제품 재고 실사 (245, GAP P-5 후속)
+import ReorderModal from '../../components/ReorderModal';
+import { DEFAULT_COVER_DAYS } from '../../lib/reorderRule'; // 며칠분 기본값 (262)
+import { confirmIfDuplicatePayment } from '../../lib/duplicatePayment'; // 중복 결제 의심 경고 (266, 리뷰 M-1) // 발주 제안 (248, GAP P-5 계열)
 import { recordStockMovement, removeStockEntries } from '../../lib/stockLedger';
 import { monthCloseBlock } from '../../lib/monthClose';
 import Header from '../../components/layout/Header';
@@ -47,13 +52,19 @@ export default function Products() {
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [stockProduct, setStockProduct] = useState<Product | null>(null); // 재고 입고·조정 (2026-11-18)
   const [ledgerProduct, setLedgerProduct] = useState<Product | null>(null); // 재고 이동 이력·대조 (145)
+  const [showCount, setShowCount] = useState(false); // 전 제품 실사 (245)
+  const [showReorder, setShowReorder] = useState(false); // 발주 제안 (248)
+  const [reorderCover, setReorderCover] = useState(DEFAULT_COVER_DAYS); // 며칠분 — 입고 창을 다녀와도 유지 (262, 리뷰 M-6)
+  const [backToReorder, setBackToReorder] = useState(false);            // 입고 창을 닫으면 발주 제안으로 돌아간다 (262, 리뷰 M-6)
   // 대시보드 재고 부족 알림(?stock=<id>) → 입고 모달 바로 열기. 1회 캡처 후 URL 비움(프리필 관례)
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const id = searchParams.get('stock');
     const tabParam = searchParams.get('tab'); // 고객 타임라인 제품 판매 → 판매 기록 탭 (139 #M9 — 링크만 있고 탭이 안 바뀌던 것)
-    if (!id && tabParam !== 'sales') return;
+    const wantReorder = searchParams.get('reorder') === '1'; // 대시보드 "재고 부족 제품 입고" 딥링크 (257)
+    if (!id && tabParam !== 'sales' && !wantReorder) return;
     if (tabParam === 'sales') setTab('sales');
+    if (wantReorder) { setTab('inventory'); setShowReorder(true); }
     if (id) {
       const p = ProductStore.getAll().find(x => x.id === id);
       if (p) setStockProduct(p); else notify('제품을 찾을 수 없습니다. 삭제됐거나 다른 매장의 제품입니다.');
@@ -168,6 +179,22 @@ export default function Products() {
           </button>
         )}
 
+        {/* 전 제품 실사 — 제품이 없으면 버튼도 없다 (245, GAP P-5 후속) */}
+        {tab === 'inventory' && products.some(p => !p.id.startsWith('sample_')) && (
+          <div className="flex justify-end mb-3">
+            <button type="button" onClick={() => setShowReorder(true)} data-testid="reorder-open"
+              className="px-4 py-2 min-h-[40px] text-sm font-medium text-[#1a3a8f] bg-white border border-[#1a3a8f]/30 rounded-xl hover:bg-blue-50"
+              title="최근 판매 속도와 안전재고로 주문할 수량을 제안합니다">
+              발주 제안
+            </button>
+            <button type="button" onClick={() => setShowCount(true)} data-testid="stock-count-open"
+              className="px-4 py-2 min-h-[40px] text-sm font-medium text-[#1a3a8f] bg-white border border-[#1a3a8f]/30 rounded-xl hover:bg-blue-50"
+              title="제품을 직접 세어 재고를 한 번에 맞춥니다(원장에 실사 행이 남습니다)">
+              재고 실사
+            </button>
+          </div>
+        )}
+
         {/* Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 [&:has(>:last-child:nth-child(3))]:lg:grid-cols-3 [&>:last-child:nth-child(odd)]:col-span-2 lg:[&>:last-child:nth-child(odd)]:col-span-1"> {/* 직원은 매출 카드가 빠져 3장 — 빈 칸 대신 3열·전폭 (15차 #M13) */}
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
@@ -272,7 +299,7 @@ export default function Products() {
                 {/* 모바일(lg 미만): 카드 목록 — 표는 900px 폭 (2026-11-17) */}
                 <ul className="lg:hidden divide-y divide-gray-50 max-h-[65vh] overflow-y-auto" data-testid="products-mobile-list">
                   {filtered.map(p => {
-                    const isLow = p.stock <= p.minStock;
+                    const isLow = isLowStock(p); // 헤더 수·'재고 부족만 보기' 와 같은 규칙 — 단종 제품에 부족 색을 입히지 않는다 (257)
                     const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
                     return (
                       <li key={p.id} data-testid="product-row" className={clsx('px-4 py-3', isLow && 'bg-orange-50/40')}>
@@ -321,7 +348,7 @@ export default function Products() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {filtered.map(p => {
-                      const isLow = p.stock <= p.minStock;
+                      const isLow = isLowStock(p); // (257) PC 표도 같은 규칙
                       const margin = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
 
                       return (
@@ -358,7 +385,10 @@ export default function Products() {
                             <p className="text-xs text-gray-400">최소 {p.minStock}{p.unit}</p>
                           </td>
                           <td className="px-4 py-4 text-center">
-                            {isLow ? (
+                            {/* 단종(판매 중지) 제품은 재고가 0 이어도 "정상" 도 "부족" 도 아니다 — 그대로 말한다 (리뷰 M-1) */}
+                            {p.isActive === false ? (
+                              <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">판매중지</span>
+                            ) : isLow ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
                                 <AlertTriangle size={10} /> 부족
                               </span>
@@ -412,7 +442,7 @@ export default function Products() {
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(p)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                                 aria-label="제품 삭제"
                               >
                                 <Trash2 size={14} />
@@ -511,7 +541,7 @@ export default function Products() {
                         {isCanceled(sale) ? <span className="text-xs px-2 py-0.5 bg-red-50 text-red-700 rounded-full">취소(환불)</span> : (
                         <button
                           onClick={() => handleDeleteSale(sale)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                          className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg"
                           aria-label="판매 취소"
                           title="판매 취소 및 재고 복구"
                         >
@@ -546,10 +576,35 @@ export default function Products() {
         />
       )}
       {stockProduct && (
-        <StockAdjustModal product={stockProduct} actor={user?.name} onClose={() => setStockProduct(null)} onDone={() => { setStockProduct(null); refresh(); }} />
+        <StockAdjustModal
+          product={stockProduct}
+          actor={user?.name}
+          onClose={() => { setStockProduct(null); if (backToReorder) { setBackToReorder(false); setShowReorder(true); } }}
+          onDone={() => { setStockProduct(null); refresh(); if (backToReorder) { setBackToReorder(false); setShowReorder(true); } }}
+        />
       )}
       {ledgerProduct && (
         <StockLedgerModal product={ledgerProduct} actor={user?.name} onClose={() => setLedgerProduct(null)} onChanged={refresh} />
+      )}
+      {showReorder && (
+        <ReorderModal
+          products={products}
+          coverDays={reorderCover}
+          onCoverDaysChange={setReorderCover}
+          onClose={() => setShowReorder(false)}
+          onReceive={id => {
+            // 제안을 보고 바로 입고까지 — 창을 닫고 그 제품의 입고·조정 창을 연다 (259, 리뷰 L-5).
+            // 입고 창을 닫으면 발주 제안으로 **돌아온다** — 3종을 넣으려고 창을 세 번 다시 열던 것 (262, 리뷰 M-6)
+            const p = ProductStore.getAll().find(x => x.id === id);
+            if (!p) { notify('제품을 찾을 수 없습니다. 그 사이 삭제됐을 수 있습니다.'); return; }
+            setShowReorder(false);
+            setBackToReorder(true);
+            setStockProduct(p);
+          }}
+        />
+      )}
+      {showCount && (
+        <StockCountModal products={products} actor={user?.name} onClose={() => setShowCount(false)} onDone={() => { setShowCount(false); refresh(); }} />
       )}
       {editProduct && (
         <AddProductModal
@@ -776,6 +831,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
     notes: '',
   });
   const [saving, setSaving] = useState(false);
+  const saleLock = useRef(createSubmitLock()); // 이중 제출 가드 (221, GAP P-4)
 
   const set = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
 
@@ -785,7 +841,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
 
   const selectedCustomer = customers.find(c => c.id === form.customerId);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!isISODate(form.saleDate)) { notify('판매일을 선택해주세요(YYYY-MM-DD).'); return; } // 빈 판매일은 월 매출·목록에서 사라지는 유령 판매 (120~122 리뷰 #M8)
     if (!form.unitPrice || !form.quantity) {
       notify('수량과 단가를 입력해주세요.');
@@ -805,6 +861,14 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
       return;
     }
     { const blocked = monthCloseBlock(form.saleDate); if (blocked) { notify.error(blocked); return; } } // 월 마감 잠금 (147, GAP P-7)
+    // 중복 결제 의심 — 판매는 코어가 결제까지 함께 만든다 (266, 리뷰 M-1)
+    if (form.customerId && totalPrice > 0 && !(await confirmIfDuplicatePayment({
+      customerId: form.customerId, customerName: selectedCustomer?.name,
+      amount: totalPrice, paymentDate: form.saleDate, status: 'completed',
+      // 281(리뷰 M-2): 제품 판매도 코어가 할인 0 으로 적는다 — 유형·수단으로 구별하게 한다
+      typeLabel: `제품 · ${product.name}`, paymentMethod: form.paymentMethod,
+    }))) return;
+    if (!saleLock.current.acquire()) return; // 이중 제출 — 같은 판매가 두 건 기록되지 않게 (221, GAP P-4)
     setSaving(true);
     const sale = ProductSaleStore.save({
       customerId: form.customerId || undefined,
@@ -835,11 +899,11 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-gray-900 truncate">{product.name}</p>
             <div className="flex items-center gap-2 mt-0.5">
-              {product.brand && <span className="text-xs text-gray-500">{product.brand}</span>}
-              <span className="text-xs text-gray-400">·</span>
+              {product.brand && <span className="text-xs text-gray-600">{product.brand}</span>}
+              <span className="text-xs text-gray-600">·</span>
               <span className="text-xs font-medium text-[#1a3a8f]">정가 {formatPrice(product.price)}</span>
-              <span className="text-xs text-gray-400">·</span>
-              <span className={clsx('text-xs font-medium', product.stock <= product.minStock ? 'text-red-700' : 'text-gray-600')}>
+              <span className="text-xs text-gray-600">·</span>
+              <span className={clsx('text-xs font-medium', isLowStock(product) ? 'text-red-700' : 'text-gray-600')}>
                 재고 {product.stock}{product.unit}
               </span>
             </div>
@@ -867,7 +931,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
                 min="1"
                 value={form.quantity}
                 onChange={e => set('quantity', e.target.value)}
-                className="flex-1 py-2.5 text-sm text-center focus:outline-none"
+                className="flex-1 min-w-0 py-2.5 text-sm text-center focus:outline-none"
               />
               <button
                 onClick={() => set('quantity', String(qty + 1))}
@@ -944,7 +1008,7 @@ function SaleModal({ product, onClose, onSaved }: { product: Product; onClose: (
             취소
           </button>
           <button
-            onClick={handleSubmit}
+            onClick={() => void handleSubmit()}
             disabled={saving}
             className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl hover:bg-[#152d6e] shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
           >

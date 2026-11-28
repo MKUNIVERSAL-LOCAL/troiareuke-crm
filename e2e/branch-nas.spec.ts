@@ -4,7 +4,8 @@ import { solidPng } from './helpers';
 /**
  * 지점 앱 — NAS(중앙 서버) 응답을 흉내 낸 E2E (9차 점검 3/3, 2026-11-20)
  * admin-nas 와 같은 빌드(dist-e2e-nas)·같은 가로채기 규칙: crm-api·crm-update 포괄 404 라우트 위에 시나리오 응답. 실제 NAS 요청 0.
- * 로컬 모드 빌드로는 닿지 못하던 흐름 — 가입 신청(심사 대기), 재설정 안내 화면, AI 챗 본사 중계 배지·사용량, 결제 요청 PG 준비 중/활성.
+ * 로컬 모드 빌드로는 닿지 못하던 흐름 — 가입 신청(심사 대기), 재설정 안내 화면, AI 챗 본사 중계 배지·사용량, 결제 요청 PG 준비 중/활성,
+ * 서버가 저장분을 영구 거부했을 때의 띠(320 — 면제 사유가 "흉내 서버로는 못 만든다" 였지만 `/api/data/**` 를 가로채면 만들 수 있었다).
  */
 
 const API = 'https://crm-api.mkcorp.familyds.com';
@@ -21,7 +22,7 @@ const BRANCH_STAFF = { ...BRANCH_ADMIN, id: 'u-br-2', email: 'staff@example.test
 
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-const INITIAL = { pgEnabled: false };
+const INITIAL = { pgEnabled: false, appLockResetAt: null as string | null };
 const state = { ...INITIAL };
 const unmocked: string[] = [];
 const created: Record<string, unknown>[] = [];
@@ -39,7 +40,7 @@ async function mockNas(page: Page, user: typeof BRANCH_ADMIN = BRANCH_ADMIN) {
   await page.route(`${API}/api/auth/signup`, route => json(route, { user: { ...BRANCH_ADMIN, id: 'u-new', status: 'pending', isOnboarded: false }, pending: true }));
   await page.route(`${API}/api/data/**`, route => (route.request().method() === 'GET' ? json(route, { rows: [] }) : json(route, { ok: true })));
   await page.route(`${API}/api/data/customers`, route => (route.request().method() === 'GET' ? json(route, { rows: serverCustomers }) : json(route, { ok: true }))); // 나중 등록이 우선 매칭
-  await page.route(`${API}/api/feature-flags**`, route => json(route, { global: { 'module.aiChat': true } })); // AI 챗은 본사가 켜 주는 모듈(기본 준비 중) — 서버 응답 모양 { global, branch }
+  await page.route(`${API}/api/feature-flags**`, route => json(route, { global: { 'module.aiChat': true }, appLockResetAt: state.appLockResetAt })); // AI 챗은 본사가 켜 주는 모듈(기본 준비 중) — 서버 응답 모양 { global, branch }
   await page.route(`${API}/api/announcements**`, route => json(route, { announcements: [] }));
   await page.route(`${API}/api/ai/status**`, route => json(route, { enabled: true, providers: ['claude'], monthlyLimit: 100, usedThisMonth: 3, remaining: 97 }));
   // 본사 중계 호출 — 요청 본문을 모아 둔다(자료 블록·키 미전송 검사, 154 리뷰 H-1)
@@ -190,4 +191,60 @@ test('지점 앱(NAS 흉내) 직원 계정: 설정·직원 관리·매출 메뉴
   await expect(edit.getByRole('textbox', { name: '전화번호' })).toHaveCount(0);
   await expect(edit.getByRole('textbox', { name: '이메일' })).toHaveCount(0);
   await expect(edit.getByRole('textbox', { name: '주소' })).toHaveCount(0);
+});
+
+test('지점 앱(NAS 흉내): 본사가 화면 PIN을 초기화하면 다음 통신에서 이 기기의 PIN 설정이 지워진다', async ({ page }) => {
+  // 219(승인 20) — PIN 해시는 기기에만 있어 서버가 모른다. 본사는 "초기화 시각" 만 올리고, 지점 앱이 그 값을 보면 스스로 지운다.
+  await mockNas(page);
+  await page.goto('/login');
+  await page.getByLabel('이메일', { exact: true }).fill(BRANCH_ADMIN.email);
+  await page.getByLabel('비밀번호', { exact: true }).fill('test-password-only-for-mock'); // '비밀번호 보기' 버튼과 겹치지 않게 exact
+  await page.locator('form button[type="submit"]').first().click();
+  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+
+  // 매장이 PIN 을 켠 상태를 만든다(설정 화면과 같은 저장 형태)
+  await page.evaluate(() => localStorage.setItem('crm_app_lock', JSON.stringify({ hash: 'x'.repeat(64), timeoutMin: 15, screens: ['sales'], awayLock: false })));
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '백업·보안', exact: true }).filter({ visible: true }).first().click();
+  await expect(page.getByTestId('app-lock-card').getByText(/사용 중/)).toBeVisible();
+
+  // 본사가 초기화를 누른 뒤(서버 응답에 시각이 실린다) 지점 앱이 다시 통신하면 PIN 설정이 사라진다
+  state.appLockResetAt = new Date().toISOString();
+  await page.reload();
+  await expect(page.getByText('본사에서 화면 잠금 PIN을 초기화했습니다. 설정 > 백업·보안에서 새 PIN을 정해주세요.')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('crm_app_lock'))).toBeNull();
+
+  // 같은 초기화를 두 번 처리하지 않는다 — 다시 PIN 을 켜고 새로 고쳐도 그대로 남는다
+  await page.evaluate(() => localStorage.setItem('crm_app_lock', JSON.stringify({ hash: 'y'.repeat(64), timeoutMin: 15, screens: [], awayLock: false })));
+  await page.reload();
+  expect(await page.evaluate(() => localStorage.getItem('crm_app_lock'))).not.toBeNull();
+});
+
+test('지점 앱(NAS 흉내): 서버가 저장분을 영구 거부하면 그 사실을 띠로 알리고 기록은 이 기기에 남는다 (320)', async ({ page }) => {
+  // 320: 이 띠(`nas-rejected-banner`)는 `check:testids` 면제 목록에 "서버가 실제로 거부해야 뜬다 — 흉내 서버로는
+  // 그 상태를 못 만든다" 는 사유로 들어 있었다. 사실이 아니다 — 이 스펙은 `/api/data/**` 를 가로채므로
+  // 400(구버전 서버가 모르는 컬렉션 등)을 그대로 돌려줄 수 있고, 큐는 그것을 **영구 실패**로 보아 거부 목록에 옮긴다.
+  // 화면에는 이미 "저장됐다" 고 보인 뒤이므로 이 띠가 유일한 알림이다(돈·기록이 걸린 자리라 스펙이 지킨다).
+  await mockNas(page);
+  await page.route(`${API}/api/data/customers`, route => (route.request().method() === 'GET'
+    ? json(route, { rows: [] })
+    : json(route, { error: '알 수 없는 컬렉션' }, 400)));
+  await page.goto('/login');
+  await page.getByLabel('이메일', { exact: true }).fill(BRANCH_ADMIN.email);
+  await page.getByLabel('비밀번호', { exact: true }).fill('test-password-only-for-mock');
+  await page.locator('form button[type="submit"]').first().click();
+  await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+
+  await page.goto('/customers');
+  await page.getByRole('button', { name: '고객 추가' }).click();
+  await page.getByPlaceholder('홍길동').fill('거부테스트');
+  await page.getByPlaceholder('010-0000-0000').fill('010-7777-8888');
+  await page.getByText('[필수] 개인정보 수집·이용 동의').click();
+  await page.getByRole('button', { name: '등록', exact: true }).click();
+
+  const banner = page.getByTestId('nas-rejected-banner');
+  await expect(banner).toContainText('서버가 저장분', { timeout: 20_000 });
+  await expect(banner).toContainText('이 기기에는 남아 있습니다');
+  // 거부됐어도 이 기기에서는 사라지지 않는다 — 띠가 말하는 것과 화면이 같아야 한다
+  await expect(page.getByText('거부테스트').filter({ visible: true }).first()).toBeVisible();
 });

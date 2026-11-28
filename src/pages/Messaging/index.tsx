@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { canDo } from '../../lib/permissions'; // 성과 근거 금액 노출 기준 (266)
 import { askConfirm } from '../../lib/confirmDialog';
 import { maskPhone } from '../../lib/pii';
 import { normalizePhone } from '../../lib/inputRules';
@@ -9,13 +10,16 @@ import { smsBytes, SMS_BYTE_LIMIT, LMS_BYTE_LIMIT, MESSAGE_UNIT_COST } from '../
 import { formatDateTime, parseISODate, todayISO, formatPrice } from '../../lib/format';
 import { daysBetween } from '../../lib/revisitRule';
 import { useSearchParams } from 'react-router-dom';
+import { snoozedCustomerIds } from '../../lib/followUp';
 import { getRevisitDueCustomers } from '../../lib/reminderEngine';
 import { segmentIdSets } from '../../lib/customerSegments';
 import { buildCustomerStatsIndex } from '../../lib/customerStats';
 import { getNoRebookCustomerIds } from '../../lib/todayTasks';
 import { rememberRecipients, recipientIndex, recipientsOf } from '../../lib/messageRecipients';
 import { isGatewayPendingHistory } from '../../lib/messageHistoryRule';
-import { estimateHistoryPerformance, describeHistoryPerformance } from '../../lib/messagePerformance';
+import { estimateHistoryPerformance, describeHistoryPerformance, historyPerformanceDrill } from '../../lib/messagePerformance';
+import MetricDetailModal from '../../components/MetricDetailModal'; // 성과 근거 목록 (263)
+import type { DrillResult } from '../../lib/revenueDrilldownRule';
 import { listSavedSegments, buildSegmentFacts, segmentIds } from '../../lib/savedSegments';
 import type { SavedSegment } from '../../lib/segmentFilterRule';
 import { Send, Users, FileText, CheckCircle, AlertCircle, Clock, Plus, Trash2, HelpCircle, Pencil, Search, Share2 } from 'lucide-react';
@@ -64,10 +68,19 @@ function savedSegmentSets(): { list: SavedSegment[]; sets: Map<string, Set<strin
 }
 /** 세그먼트 → 고객 필터. 태그 세그먼트는 tags 포함 여부 */
 /** 재방문 권장 대상 id 집합 — 고객·예약·시술 전수 스캔이라 호출하는 쪽에서 useMemo로 한 번만 만들어 넘긴다 (리뷰 63) */
-function revisitIdSet(): Set<string> { return new Set(getRevisitDueCustomers().map(d => d.customer.id)); }
+function revisitIdSet(): Set<string> {
+  const snoozed = snoozedCustomerIds(); // 미뤄 둔 고객 제외 (250 리뷰 M-5)
+  return new Set(getRevisitDueCustomers().map(d => d.customer.id).filter(id => !snoozed.has(id)));
+}
 type SegmentIdSets = { churn: Set<string>; loyal: Set<string>; norebook: Set<string> };
 /** 이탈 위험·충성(136) + 재예약 없음(202) id 집합 — 전수 스캔이라 호출하는 쪽에서 useMemo 로 한 번만. 통계 인덱스는 한 번 만들어 둘이 공유 (203) */
-function allSegmentIdSets(): SegmentIdSets { const stats = buildCustomerStatsIndex(); return { ...segmentIdSets(stats), norebook: getNoRebookCustomerIds(stats) }; }
+function allSegmentIdSets(): SegmentIdSets {
+  const stats = buildCustomerStatsIndex();
+  const snoozed = snoozedCustomerIds(); // 연락을 미뤄 둔 고객은 발송 대상에서도 뺀다 — "당분간 안 받겠다" 고객에게 문자가 갔다 (250 리뷰 M-5)
+  const without = (ids: Set<string>) => new Set([...ids].filter(id => !snoozed.has(id)));
+  const base = segmentIdSets(stats);
+  return { churn: without(base.churn), loyal: base.loyal, norebook: without(getNoRebookCustomerIds(stats)) };
+}
 function segmentFilter(seg: Segment, revisitIds: Set<string> | undefined, segIds: SegmentIdSets, savedSets?: Map<string, Set<string>>, resendIds?: Set<string>): (c: Customer) => boolean { // segIds 는 호출자 2곳이 모두 넘긴다 — 폴백 전수 스캔 분기 제거 (203)
   if (seg.startsWith('resend:')) return resendIds ? c => resendIds.has(c.id) : () => false; // 이력의 수신 고객 집합 — 없으면 아무에게도 (207)
   if (seg.startsWith('saved:')) { const ids = savedSets?.get(seg.slice(6)); return ids ? c => ids.has(c.id) : () => false; } // 삭제된 세그먼트는 아무에게도 (166)
@@ -406,7 +419,7 @@ function TemplatesPanel({ onSelect, reloadKey, onReload }: { onSelect: (id: stri
                 </button>
                 <button
                   onClick={() => handleDelete(t.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                   title="삭제"
                 >
                   <Trash2 size={14} />
@@ -635,7 +648,7 @@ function ScheduledMessagesCard({ reloadKey }: { reloadKey: number }) {
               {item.status === 'pending' && (
                 <button
                   onClick={() => handleCancel(item.id)}
-                  className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
+                  className="px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 rounded-lg border border-red-100 shrink-0"
                 >
                   취소
                 </button>
@@ -655,6 +668,7 @@ function formatSentAt(value: string): string {
 }
 
 function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialStatus = 'all', onResend }: { reloadKey: number; onSend: () => void; customerId: string | null; onClearCustomer: () => void; initialStatus?: 'all' | 'failed'; onResend: (h: MessageHistory) => void }) {
+  const { user: histUser } = useAuth(); // 성과 근거 목록의 금액 노출 기준 — 문자 화면은 직원도 쓴다 (266, 리뷰 M-4)
   const [history, setHistory] = useState<MessageHistory[]>(MessageHistoryStore.getAll());
   const customerName = customerId ? (CustomerStore.getById(customerId)?.name ?? '삭제된 고객') : null; // 고객 발송만 보기 칩 (205)
   const recipients = useMemo(() => recipientIndex(), [history]); // 이력 id → 수신 고객(이 PC 사이드맵) — 목록당 1회 (206)
@@ -670,6 +684,7 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
     return names.length === 1 ? names[0] : `${names[0]} 외 ${names.length - 1}명`;
   };
   const [perf, setPerf] = useState<Record<string, string>>({}); // 누른 행만 성과 추정 — 행마다 예약·결제 전수 스캔을 하지 않게 (211)
+  const [perfDrill, setPerfDrill] = useState<{ title: string; result: DrillResult } | null>(null); // 성과 근거 목록 (263, GAP M-6)
   useEffect(() => { setPerf({}); }, [reloadKey]); // 발송이 생기면 옛 추정치를 지운다
   const customerOnlyCount = customerId ? history.filter(h => recipients.get(h.id)?.includes(customerId)).length : 0; // 칩 건수는 고객 필터만 적용한 수 — 상태·검색과 섞이지 않게 (리뷰 L-2)
   const [search, setSearch] = useState('');
@@ -808,18 +823,38 @@ function HistoryPanel({ reloadKey, onSend, customerId, onClearCustomer, initialS
                 <div className="mt-2 ml-11 flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => onResend(h)} className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" aria-label={`${h.templateName || '직접 작성'} 같은 대상에게 다시 보내기`} data-testid="history-resend">같은 대상에게 다시 보내기</button>
                   {h.status === 'sent' && ( /* 실제로 나간 건만 — 미연동·실패 건은 성과를 물을 대상이 아니다 (211). 계산 뒤에도 버튼을 남겨 예약·결제가 생긴 뒤 다시 볼 수 있게 (215, 리뷰 L-1) */
-                    <button type="button" onClick={() => { const p = estimateHistoryPerformance(h.id, h.sentAt, recipients.get(h.id)); const line = p && describeHistoryPerformance(p, h, formatPrice); if (line) setPerf(prev => ({ ...prev, [h.id]: line })); }} className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" aria-label={`${h.templateName || '직접 작성'} 성과 추정 ${perf[h.id] ? '다시 보기' : '보기'}`} data-testid="history-perf">{perf[h.id] ? '성과 다시 보기' : '성과 보기'}</button>
+                    <button type="button" onClick={() => { const p = estimateHistoryPerformance(h.id, h.sentAt, recipients.get(h.id)); const line = p && describeHistoryPerformance(p, h, formatPrice, canDo(histUser?.role, 'sales.view')); if (line) setPerf(prev => ({ ...prev, [h.id]: line })); }} className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50" aria-label={`${h.templateName || '직접 작성'} 성과 추정 ${perf[h.id] ? '다시 보기' : '보기'}`} data-testid="history-perf">{perf[h.id] ? '성과 다시 보기' : '성과 보기'}</button>
                   )}
                 </div>
               )}
               {perf[h.id] && ( /* 발송 뒤 14일 창 예약·결제 — 추정이지 인과가 아니라 [추정] 라벨을 붙인 그대로 보여 준다 (211, GAP M-6, ANALYTICS-DEFINITIONS) */
-                <p className="mt-2 ml-11 text-xs text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" data-testid="history-perf-line">{perf[h.id]}</p>
+                <div className="mt-2 ml-11 flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-gray-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2" data-testid="history-perf-line">{perf[h.id]}</p>
+                  {/* 숫자만 주면 "그 문자 덕" 인지 확인할 수 없다 — 세어진 고객을 그대로 보여 준다 (263, GAP M-6) */}
+                  <button type="button" data-testid="history-perf-rows"
+                    onClick={() => {
+                      const d = historyPerformanceDrill(h.id, h.sentAt, recipients.get(h.id), { showMoney: canDo(histUser?.role, 'sales.view') });
+                      if (!d) { notify('이 발송의 수신 고객 기록이 없어 근거를 보여 줄 수 없습니다.'); return; }
+                      setPerfDrill({ title: `${h.templateName || '직접 작성'} 성과 근거`, result: d });
+                    }}
+                    className="px-3 py-1.5 min-h-[36px] lg:min-h-0 rounded-xl text-xs font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50">
+                    누가 세어졌나
+                  </button>
+                </div>
               )}
             </div>
           );
         })}
       </div>
     </div>
+    {perfDrill && (
+      <MetricDetailModal
+        title={perfDrill.title}
+        note="이 발송의 수신 고객 전원입니다 — 예약·결제가 없던 분도 함께 보여 줍니다(금액은 창 안 결제 합)."
+        result={perfDrill.result}
+        onClose={() => setPerfDrill(null)}
+      />
+    )}
     </div>
   );
 }
@@ -1047,7 +1082,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             본사 서버에 문자·알림톡 발송사가 아직 연동되지 않았습니다.<br />
             연동되면 이 화면 그대로 실제 발송됩니다 — 지점에서 따로 설정할 것은 없습니다.
           </p>
-          <p className="text-xs text-gray-400 mt-3 bg-gray-50 rounded-lg px-3 py-2">{resultMessage}</p>
+          <p className="text-xs text-gray-600 mt-3 bg-gray-50 rounded-lg px-3 py-2">{resultMessage}</p>
           <p className="text-xs text-gray-400 mt-2">발송 이력에 '미연동' 사유로 기록되었습니다.</p>
           <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
         </div>
@@ -1055,7 +1090,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
           <AlertCircle size={48} className="text-red-600 mb-3" />
           <p className="text-lg font-bold text-gray-900">발송 실패</p>
-          <p className="text-xs mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-600">{resultMessage}</p>
+          <p className="text-xs mt-3 bg-red-50 rounded-lg px-3 py-2 text-red-700">{resultMessage}</p>
           <button onClick={onClose} className="mt-6 px-6 py-2.5 text-sm font-medium text-white bg-gray-500 rounded-xl hover:bg-gray-600">닫기</button>
         </div>
       ) : (
@@ -1276,6 +1311,7 @@ function SendMessageModal({ onClose, initialTemplate, initialSegment, initialCus
             )}
             <button
               onClick={handleSend}
+              data-testid="send-submit"
               disabled={sending || !content.trim() || recipientCount === 0 || recipientPhones.length === 0}
               className="flex-1 py-2.5 text-sm font-medium text-white bg-[#1a3a8f] rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >

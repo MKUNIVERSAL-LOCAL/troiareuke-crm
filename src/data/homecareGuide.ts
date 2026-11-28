@@ -10,7 +10,7 @@ export interface HomecareSet {
   steps: string[];     // Step 1~6 제품 구성
 }
 
-export const HOMECARE_SETS: HomecareSet[] = [
+const HOMECARE_SETS: HomecareSet[] = [
   {
     id: 'set1',
     name: '탄력/주름/노화 세트',

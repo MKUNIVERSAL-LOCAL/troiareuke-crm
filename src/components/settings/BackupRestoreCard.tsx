@@ -111,7 +111,7 @@ export default function BackupRestoreCard() {
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={() => setPending(null)} disabled={restoring} className="px-4 py-2 text-sm border border-gray-200 rounded-xl text-gray-600 bg-white disabled:opacity-50">취소</button>
               <button type="button" onClick={handleRestore} disabled={restoring}
-                className="px-4 py-2 text-sm font-semibold rounded-xl bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50">
+                className="px-4 py-2 text-sm font-semibold rounded-xl bg-amber-700 text-white hover:bg-amber-800 disabled:opacity-50">
                 {restoring ? '복원 중...' : '복원 실행'}
               </button>
             </div>

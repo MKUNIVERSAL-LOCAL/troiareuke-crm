@@ -39,8 +39,9 @@ const INITIAL = { manifestDown: true, flagsDown: true, announcementsDown: true, 
 const state = { ...INITIAL };
 const unmocked: string[] = [];
 const aiGrants: { branchId: string; amount: number; note: string }[] = [];
+const pinResets: string[] = []; // 320: 지점 PIN 초기화가 어느 지점으로 나갔는지
 // 재시도(CI retries 1)는 새 테스트처럼 시작해야 한다 — 테스트 중간에 바꾼 스위치가 남으면 첫 실패 원인이 가려진다 (리뷰 2026-11-20)
-test.beforeEach(() => { Object.assign(state, INITIAL); unmocked.length = 0; aiGrants.length = 0; });
+test.beforeEach(() => { Object.assign(state, INITIAL); unmocked.length = 0; aiGrants.length = 0; pinResets.length = 0; });
 
 async function mockNas(page: Page) {
   // 포괄: 두 호스트로 가는 모든 요청 — 아래 라우트가 받지 않으면 404 (실제 서버로는 절대 나가지 않는다)
@@ -78,6 +79,12 @@ async function mockNas(page: Page) {
     aiGrants.push(body);
     state.aiGranted += body.amount;
     return json(route, { balance: 200 + state.aiGranted });
+  });
+  // 320: 지점 화면 잠금 PIN 초기화(219) — 포괄 `feature-flags**` 라우트보다 뒤에 등록해야 이쪽이 받는다(나중 등록이 이긴다)
+  await page.route(`${API}/api/admin/feature-flags/*/app-lock-reset`, route => {
+    const scope = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[4]);
+    pinResets.push(scope);
+    return json(route, { scope, appLockResetAt: new Date().toISOString() });
   });
   await page.route(`${UPDATE}/portable/latest.json**`, route => state.manifestDown ? route.abort('connectionfailed') : json(route, { version: '1.0.60', releaseDate: '2026-11-20' }));
 }
@@ -141,6 +148,14 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
   await expect(page.getByRole('cell', { name: '강남점' }).first()).toBeVisible();
   await expect(page.getByRole('cell', { name: '판교점' })).toHaveCount(0);
   await page.getByRole('button', { name: '전체', exact: true }).click();
+  // 320: 화면 잠금 PIN 초기화(219) — 이 칸은 "본사 권한 + 서버 호출이 필요해 덮을 수 없다" 는 사유로
+  // `check:testids` 면제 목록에 있었다. 흉내 서버를 쓰는 이 스펙에서는 **누를 수 있다**(사유가 사실이 아니었다).
+  const pinBtn = page.getByRole('button', { name: '강남점 지점 화면 잠금 PIN 초기화' });
+  await expect(pinBtn).toHaveAttribute('data-testid', 'branch-pin-reset');
+  page.once('dialog', d => d.accept()); // 확인 창을 거절하면 아무 요청도 나가지 않는다(기본 동작이 거절이다)
+  await pinBtn.click();
+  await expect(pinBtn).toHaveText('PIN 초기화됨', { timeout: 15_000 });
+  expect(pinResets).toEqual(['b-gn']);
 
   // ── 사용자 관리: "승인된 계정" 탭 = 승인+거부(대기 제외), 대기 배지 1 ──
   await page.goto('/admin/users');
@@ -171,6 +186,7 @@ test('어드민 콘솔(NAS 흉내): 승인된 지점만 집계, 최신 버전 �
 
   // ── AI 서비스 관리(162): 서버 모듈 미배포(404)는 "미배포" 안내 — 숫자를 만들지 않는다; 배포 뒤 요약·지점 표·크레딧 지급 계약 ──
   await page.goto('/admin/subscriptions?view=ai');
+  await expect(page.getByTestId('admin-ai-service')).toBeVisible({ timeout: 15_000 }); // 320: 면제 사유가 "승인 대기" 였지만 이 스펙이 이미 이 화면을 쓴다
   await expect(page.getByTestId('ai-not-deployed')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('ai-stat-이달 호출')).toHaveCount(0);
   state.aiDeployed = true;

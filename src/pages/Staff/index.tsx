@@ -1,6 +1,8 @@
 ﻿import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { notify } from '../../lib/notify';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (292)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 import { useDataRefreshed } from '../../hooks/useDataRefreshed';
 import { readableTextOn } from '../../lib/color';
 import { Phone, Mail, Plus, Trash2, Edit3, Search, Users } from 'lucide-react';
@@ -129,7 +131,7 @@ export default function StaffPage() {
               <div
                 key={staff.id}
                 onClick={() => setSelected(staff)}
-                className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md cursor-pointer transition-all hover:-translate-y-0.5"
+                className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md focus-within:shadow-md cursor-pointer transition-all hover:-translate-y-0.5"
               >
                 <div className="text-center mb-5">
                   <div
@@ -138,7 +140,12 @@ export default function StaffPage() {
                   >
                     {staff.name[0]}
                   </div>
-                  <h3 className="text-base font-bold text-gray-900">{staff.name}{!staff.isActive && <span className="ml-1.5 align-middle text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">퇴사</span>}</h3>
+                  <h3 className="text-base font-bold text-gray-900">
+                    {/* 318: 카드가 마우스로만 열렸다. 카드 전체에 role=button 을 주면 보조기기가 아래 통계·연락처를 한 덩어리로 삼켜 잃는다 —
+                        진짜 단추는 이름 칸에 둔다(어드민 표가 2026-11-20 리뷰에서 고른 것과 같은 방식). */}
+                    <button type="button" onClick={e => { e.stopPropagation(); setSelected(staff); }} aria-label={`${staff.name} 직원 상세 보기`}
+                      className="hover:underline focus-visible:underline">{staff.name}</button>
+                    {!staff.isActive && <span className="ml-1.5 align-middle text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">퇴사</span>}</h3>
                   <p className="text-xs text-slate-600 mt-0.5">{staff.role}</p>
                 </div>
 
@@ -197,7 +204,7 @@ export default function StaffPage() {
           {/* Add Staff Card */}
           <button
             onClick={() => setShowAddModal(true)}
-            className="hidden lg:flex bg-white rounded-2xl p-5 border-2 border-dashed border-gray-200 hover:border-primary-300 transition-colors flex-col items-center justify-center gap-3 text-gray-400 hover:text-primary-500 min-h-[120px] md:min-h-[280px]"
+            className="hidden lg:flex bg-white rounded-2xl p-5 border-2 border-dashed border-gray-200 hover:border-primary-300 transition-colors flex-col items-center justify-center gap-3 text-gray-600 hover:text-primary-500 min-h-[120px] md:min-h-[280px]"
           >
             <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
               <Plus size={20} />
@@ -519,7 +526,11 @@ function StaffDetailModal({
       hireDate,
     });
     // 근무표를 실제로 바꿨을 때만 저장 — 전화·색만 고쳐도 기본값 행이 생겨 체크리스트가 "직원 근무표 ✓" 로 보이던 것 (191 리뷰 M-2)
-    if (!sameSchedule(schedule, getStaffSchedule(staff.id) ?? defaultSchedule(staff.id))) saveStaffSchedule(schedule);
+    // 근무표가 안 남으면 예약 화면의 빈 시간·경고가 옛 근무표로 계산된다 — 조용히 두지 않는다 (292, 리뷰 M-3)
+    if (!sameSchedule(schedule, getStaffSchedule(staff.id) ?? defaultSchedule(staff.id))) {
+      const lostSchedule = describePrefLoss(saveStaffSchedule(schedule), '근무표', prefSaveMode());
+      if (lostSchedule) notify.error(lostSchedule);
+    }
     onUpdate();
   };
 
@@ -548,7 +559,9 @@ function StaffDetailModal({
       : '';
     if (!(await askConfirm({ title: '직원 삭제', message: `'${staff.name}' 직원을 삭제할까요?${detail}\n복구할 수 없습니다.`, confirmLabel: '삭제', danger: true }))) return;
     StaffStore.delete(staff.id);
-    removeStaffSchedule(staff.id); // 설정 행에 고아 근무표를 남기지 않게 (141)
+    // 설정 행에 고아 근무표를 남기지 않게 (141). 정리 실패는 알리지 않는다 — 직원 삭제 자체는 끝났고,
+    // 남은 고아 근무표는 다음 저장에서 다시 지워지며 화면에 거짓을 만들지 않는다 (294, 리뷰 LOW-1)
+    removeStaffSchedule(staff.id);
     onDelete();
   };
 

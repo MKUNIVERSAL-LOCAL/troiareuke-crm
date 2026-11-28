@@ -268,7 +268,7 @@ export default function Programs() {
                     <button onClick={() => openEdit(program)} aria-label={`${program.name} 수정`} className="p-2.5 text-gray-400 hover:text-primary-600 hover:bg-blue-50 rounded-lg transition-colors">
                       <Edit2 size={16} />
                     </button>
-                    <button onClick={() => setDeleteConfirm(program.id)} aria-label={`${program.name} 삭제`} className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                    <button onClick={() => setDeleteConfirm(program.id)} aria-label={`${program.name} 삭제`} className="p-2.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
                       <Trash2 size={16} />
                     </button>
                   </div>

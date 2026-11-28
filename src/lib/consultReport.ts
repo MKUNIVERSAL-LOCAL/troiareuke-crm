@@ -28,7 +28,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export function consultReportFileName(customerName: string, consultDate: string): string {
+function consultReportFileName(customerName: string, consultDate: string): string {
   const shop = (SettingsStore.get().name || 'CRM').replace(/[\\/:*?"<>|]/g, '');
   const who = (customerName || '고객').replace(/[\\/:*?"<>|\s]/g, '');
   return `${shop}_${who}_상담결과지_${consultDate}.pdf`;

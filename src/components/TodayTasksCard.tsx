@@ -74,19 +74,20 @@ export default function TodayTasksCard({ compact = false, data }: { compact?: bo
           <div title={KPI_FORMULA.revisit} className="text-center">
             <p className="text-xs text-gray-500">재방문율</p>
             <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-revisit">{pct(kpi.revisitRate)}</p>
-            <p className="text-xs text-gray-500">{kpi.returning}/{kpi.visitors}명</p>
+            {/* 분모·분자를 스펙이 함께 읽어 비율이 맞는지 보게 한다 — 비율만 보면 0% 가 찍혀도 통과한다 (277, 리뷰 M-1) */}
+            <p className="text-xs text-gray-500" data-testid="kpi-revisit-sub">{kpi.returning}/{kpi.visitors}명</p>
           </div>
           <button type="button" onClick={() => navigate('/customers?norebook=1')} title={`${KPI_FORMULA.rebook} — 누르면 다음 예약이 없는 이달 방문 고객 목록`} className="text-center rounded-lg hover:bg-gray-50 min-h-[44px] px-1" data-testid="kpi-rebook-link">{/* 숫자에서 바로 "빠진 사람"에게 (184, GAP D-1). 접근 이름 = 내용(값 포함) + sr-only 설명, button 안은 phrasing 요소만 (187 리뷰 M-2·L-1) */}
             <span className="block text-xs text-gray-500">재예약률 <span aria-hidden="true" className="text-gray-400">›</span></span>
             <span className="block text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-rebook">{pct(kpi.rebookRate)}</span>
-            <span className="block text-xs text-gray-500">{kpi.rebooked}/{kpi.visitors}명</span>
+            <span className="block text-xs text-gray-500" data-testid="kpi-rebook-sub">{kpi.rebooked}/{kpi.visitors}명</span>
             <span className="sr-only">— 누르면 다음 예약이 없는 이달 방문 고객 목록</span>
           </button>
           {salesOn && (
             <div title={KPI_FORMULA.ticket} className="text-center">
               <p className="text-xs text-gray-500">객단가 <span className="text-gray-400">(현금)</span></p>
               <p className="text-base font-bold text-gray-900 tabular-nums" data-testid="kpi-ticket">{kpi.avgTicket === null ? '-' : `${kpi.avgTicket.toLocaleString('ko-KR')}원`}</p>
-              <p className="text-xs text-gray-500">방문 {kpi.visitors}명</p>
+              <p className="text-xs text-gray-500" data-testid="kpi-ticket-sub">방문 {kpi.visitors}명</p>
             </div>
           )}
           </>)}

@@ -1,12 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate } from '../src/lib/format';
+import { formatPrice, formatWon, formatPhoneInput, matchesSearch, parseISODate, formatDateTime, formatLocalDate, localISODate, formatDate, toManwon, toISODate, previousMonth } from '../src/lib/format';
 import { splitPercent } from '../src/lib/percent';
+import { renameTagInSegments } from '../src/lib/segmentFilterRule';
+import { summarizeRebook, describeRebookSummary, entriesInMonth, sanitizeRebookLog, trimRebookLog, rebookKey, MAX_REBOOK_LOG, type RebookLogEntry, entryDay } from '../src/lib/rebookStatsRule';
+import { reasonOptions, labelFor, isPresetReason, normalizeReasonText, summarizeReasons, describeReasonSummary, compareReasonMonths, describeReasonTrend, MAX_REASON_TEXT } from '../src/lib/cancelReasonRule';
+import { parseCountedQty, buildCountRows, countSummary, rowsToSave, describeCountSummary, countNote, zeroingRows, describeStockDrift, describeStockSkips } from '../src/lib/stockCountRule';
+import { diffReservation, statusChange, describeChange, describeEntryHead, sanitizeHistory, trimHistory, historyFor, statusLabel, MAX_PER_RESERVATION, type HistoryEntry } from '../src/lib/reservationHistoryRule';
+import { reorderSuggestions, reorderListText, describeReorderRow, REORDER_EMPTY } from '../src/lib/reorderRule';
+import { resultLabel, defaultSnoozeDays, addDays as addDaysFollowUp, isSnoozed, sanitizeFollowUps, pruneFollowUps, snoozedIdSet, describeFollowUp, describeHidden } from '../src/lib/followUpRule';
+import { normalizePreset, sanitizePresets, addPreset, removePreset, appendPreset, removePresetLine, presetInMemo, splitOneLine, oneLineHas, toggleOneLine, MAX_PRESET_LEN, MAX_PRESETS } from '../src/lib/memoPresetRule';
+import { diffCustomer, gradeChange, describeCustomerChange, describeCustomerEntryHead, sanitizeCustomerHistory, trimCustomerHistory, customerHistoryFor, maskPhone, maskEmail, MAX_PER_CUSTOMER } from '../src/lib/customerHistoryRule';
 import { countPaymentUnits } from '../src/lib/paymentCount';
 import { parseTags } from '../src/lib/customerTags';
 import { readableTextOn } from '../src/lib/color';
 import { smsBytes, SMS_BYTE_LIMIT } from '../src/lib/smsBytes';
 import { sanitizeStorageSnapshot, backupTableShape } from '../src/lib/backupSanitize';
-import { computeRevisitDue, daysBetween, addDays } from '../src/lib/revisitRule';
+import { computeRevisitDue, daysBetween, addDays, toISO } from '../src/lib/revisitRule';
 import { nextBirthday } from '../src/lib/birthdayRule';
 import { summarizeDailyClose, formatDailyCloseMessage } from '../src/lib/dailyCloseSummary';
 import { tagRefund, refundedOn, memoWithoutRefundTag } from '../src/lib/refundDate';
@@ -27,16 +36,29 @@ import { utilization, formatHours } from '../src/lib/utilizationRule';
 import { isUpcomingReservation } from '../src/lib/upcomingRule';
 import { toMinutes as schedToMinutes, toInterval, overlaps, findConflicts, fromMinutes as schedFromMinutes } from '../src/lib/schedulingRule';
 import { availableStarts, nextAvailable } from '../src/lib/availabilityRule';
-import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule } from '../src/lib/staffScheduleRule';
+import { dayWindow, checkStaffWindow, offRanges, describeWindow, defaultSchedule, defaultShift, dayKeyOf, sameSchedule, DAY_KEYS } from '../src/lib/staffScheduleRule';
 import { resourceConflicts, freeResources } from '../src/lib/resourceRule';
 import { publicSlots } from '../src/lib/publicSlotsRule';
 import { ledgerStock, reconcile, summarize, entriesOf } from '../src/lib/stockLedgerRule';
 import { buildProgramLedger, ledgerRemaining, parseNoteLine } from '../src/lib/programLedgerRule';
 import { monthMetrics, openHoursInMonth, localMonthOf } from '../src/lib/revenueMetricsRule';
+import { newCustomerRows, discountRows, unusedBalanceRows, sortRowsByLabel, describeDrillFooter, describeDrillTruncation, DRILL_MAX_ROWS } from '../src/lib/revenueDrilldownRule';
+import { prefLanded, prefLandedMember, sameValue, describePrefLoss, describePrefRemovalLoss, prefLossNote } from '../src/lib/prefLandedRule';
+import { describeMergedMapLoss } from '../src/lib/mergeNoticeRule';
+import { performanceRows } from '../src/lib/campaignPerformanceRule';
+import { findDuplicateSuspects, describeDuplicateWarning, DUP_WINDOW_MINUTES } from '../src/lib/duplicatePaymentRule';
 import { foldOldest } from '../src/lib/stockLedgerRule';
-import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue } from '../src/lib/refundRule';
+import { buildRefundRow, validateRefund, refundedSoFar, isRefundRow, refundOriginalId, suggestedProgramRefund, netRevenue, refundMemo } from '../src/lib/refundRule';
 import { DEFAULT_CATALOG, catalog, defaultModel, findModel, modelsOf, setCatalogOverride, isAiModel } from '../src/lib/ai/catalog';
 import { estimateTokens, estimateUsage, estimateCostUsd } from '../src/lib/ai/usage';
+import { summarizeAiUsage, describeAiUsageDelta } from '../src/lib/ai/usageSummaryRule';
+import { planPhotoChunks, mergePhotoEntries, parsePhotoBackup, photoBytes, sumInventory, formatBytes, PHOTO_BACKUP_FORMAT } from '../src/lib/photoBackupRule';
+import { suggestRebook, describeRebook } from '../src/lib/rebookRule';
+import { buildCustomerAlert, memoCautionLines, hasCustomerAlert, isNegatedCaution, sanitizeCautionKeywords, CAUTION_KEYWORDS, MAX_ALERT_LINES, MAX_ALERT_LINE_LENGTH, NOSHOW_ALERT_MIN } from '../src/lib/customerAlertRule';
+import { parseRate, isBlankRate, hasOwnRates, clampRate, ratesFor, computeCommission, commissionConfigured, describeCommissionBasis, MAX_COMMISSION_RATE } from '../src/lib/commissionRule';
+import { buildReceipt, receiptFileName, splitPaymentNote , normalizeGreeting, MAX_GREETING } from '../src/lib/receiptRule';
+import { suggestGrade, VIP_VISITS, VIP_SPENT, GOLD_VISITS, GOLD_SPENT, VIP_RFM_MIN_VISITS, VIP_RFM_MIN_SPENT, GOLD_RFM_MIN_VISITS } from '../src/lib/gradeSuggestRule';
+import { normalizeTagName, addMasterTag, removeMasterTag, sanitizeMaster, tagChoices, appendTagToInput, countInputTags, renameTagOnCustomer, renameTagInList, previewRename, MAX_TAG_NAME, MAX_MASTER_TAGS, MAX_TAGS_PER_CUSTOMER, CHIP_LIMIT } from '../src/lib/tagMasterRule';
 import { selectProvider, fallbackOrder } from '../src/lib/ai/chat';
 import { maskAiKey, looksLikeKey } from '../src/lib/ai/keys';
 import { containsKeyLike, scrubKeyLike, findKeyLikeEntries } from '../src/lib/ai/keyLeak';
@@ -45,20 +67,22 @@ import { DEFAULT_CATALOG as GW_CATALOG } from '../src/lib/ai/catalog';
 import type { AiProvider as GwProvider } from '../src/lib/ai/types';
 import { routeModel, tierFor } from '../src/lib/ai/modelRouterRule';
 import { applyEntry, ledgerState, creditsForCost, expireEntry, MONTHLY_GRANT, type LedgerEntry } from '../src/lib/ai/creditLedgerRule';
-import { costPerCall, simulatePlan, simulate, priceForMargin, budgetCapKrw, allocateShops, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
+import { costPerCall, simulatePlan, simulate, scenarios, priceForMargin, budgetCapKrw, allocateShops, DEFAULT_USAGE, DEFAULT_TOKENS, DEFAULT_PLAN_PRICE_KRW, DEFAULT_PLAN_MIX, type SimAssumptions } from '../src/lib/ai/costSimulatorRule';
 import { setupChecks, setupCompletionPct, utilizationPct, activityLevel, pilotSummary, type BranchCounts } from '../src/lib/pilotMetricsRule';
 import { matchesSegment, validateSegment, describeSegment, isEmptyCondition, type CustomerFacts } from '../src/lib/segmentFilterRule';
 import { requestOtp, verifyOtp, isValidOtpCode, portalSummaryOf, EMPTY_OTP, OTP_TTL_MS, OTP_RESEND_GAP_MS, OTP_LOCK_MS, PORTAL_SESSION_MS, type OtpState } from '../src/lib/portalRule';
 import { duplicateCandidates, normalizeName, type DupInput } from '../src/lib/duplicateRule';
 import { decideOverlap } from '../src/lib/reservationPolicyRule';
 import { isQuietHours, nextAllowedTime, isValidOptOutNumber, decorateAdMessage, canReceiveAd, checkAdSend, type ConsentState } from '../src/lib/adComplianceRule';
-import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags } from '../src/lib/consentRule';
+import { consentFromTags, tagsWithConsent, isConsentTag, mergeGeneralTags, isConsentDateTag } from '../src/lib/consentRule';
 import { idempotencyKey, renderCampaignContent, selectCandidates, validateCampaign, describeTrigger, TRIGGER_LABELS } from '../src/lib/campaignRule';
 import { CAMPAIGN_PRESETS, missingPresets } from '../src/lib/campaignPresets';
 import { CAMPAIGN_SAMPLE_VARS } from '../src/lib/campaignRule';
 import { isGatewayPendingHistory, countResendable } from '../src/lib/messageHistoryRule';
 import { looksLikeAdMessage, undecorateAdMessage } from '../src/lib/adComplianceRule';
 import { anonymizeResidue, describeAnonymizeResidue } from '../src/lib/anonymizeResidue';
+import { shouldResetAppLock } from '../src/lib/appLockResetRule';
+import { createSubmitLock } from '../src/lib/submitLock';
 import { estimatePerformance, describePerformance } from '../src/lib/campaignPerformanceRule';
 import { buildStatsIndex } from '../src/lib/customerStatsRule';
 import { buildUsedSessionsIndex, derivedUsedSessions, remainingSessions, sessionsDrift } from '../src/lib/programSessionsRule';
@@ -771,6 +795,61 @@ test('AI 어댑터 계층 — 카탈로그·원격 갱신 검증·토큰/비용 
   expect(estimateUsage('가나다', 'abcd')).toEqual({ input: 2, output: 1, estimated: true });
   expect(estimateCostUsd('openai', 'gpt-4o-mini', { input: 1_000_000, output: 1_000_000, estimated: false })).toBe(0.75);
   expect(estimateCostUsd('gemini', 'gemini-1.5-flash', { input: 0, output: 0, estimated: true })).toBe(0);
+  // 사용량 요약(319, GAP A-4) — 150 부터 쌓아 온 날짜별 기록을 읽을 수 있는 모양으로
+  const uDays = [
+    { date: '2026-11-03', calls: 2, input: 100, output: 20, usd: 0.0012, byProvider: { claude: 2 } },
+    { date: '2026-11-25', calls: 1, input: 50, output: 10, usd: 0.0004, byProvider: { openai: 1 } },
+    { date: '2026-11-25', calls: 3, input: 10, output: 5, usd: 0.0001, byProvider: { claude: 1, gemini: 2 } },
+    { date: '2026-10-30', calls: 5, input: 500, output: 50, usd: 0.0100, byProvider: { claude: 5 } },
+  ];
+  const uSum = summarizeAiUsage(uDays, '2026-11');
+  expect(uSum.calls).toBe(6);                              // 11월 세 줄만
+  expect(uSum.input).toBe(160);
+  expect(uSum.usd).toBe(0.0017);
+  expect(uSum.recordedDays).toBe(3);
+  expect(uSum.byProvider).toEqual([{ provider: 'claude', calls: 3 }, { provider: 'gemini', calls: 2 }, { provider: 'openai', calls: 1 }]); // 많은 순
+  expect(uSum.daily.map(d => d.date)).toEqual(['2026-11-25', '2026-11-25', '2026-11-03']); // 최신부터
+  expect(uSum.prevMonthUsd).toBe(0.01);
+  expect(uSum.deltaUsd).toBe(-0.0083);
+  expect(describeAiUsageDelta(uSum)).toContain('적습니다');
+  // 지난달 기록이 없으면 비교를 **만들지 않는다** — 0 과 "없음" 을 섞으면 거짓 추세가 된다(253·254 에서 겪은 종류)
+  const uAlone = summarizeAiUsage([uDays[1]], '2026-11');
+  expect(uAlone.prevMonthUsd).toBeNull();
+  expect(uAlone.deltaUsd).toBeNull();
+  expect(describeAiUsageDelta(uAlone)).toBeNull();
+  // 기록이 아예 없는 달도 거짓말하지 않는다(전부 0, 줄 0개)
+  const uEmpty = summarizeAiUsage([], '2026-11');
+  expect(uEmpty).toMatchObject({ calls: 0, usd: 0, recordedDays: 0, prevMonthUsd: null, deltaUsd: null });
+  expect(uEmpty.byProvider).toEqual([]);
+  expect(uEmpty.daily).toEqual([]);
+  // 0건으로 적힌 제공사는 줄을 만들지 않는다 — 쓰지 않은 제공사를 "썼다" 로 보이게 하지 않는다
+  expect(summarizeAiUsage([{ date: '2026-11-01', calls: 0, input: 0, output: 0, usd: 0, byProvider: { openai: 0 } }], '2026-11').byProvider).toEqual([]);
+  // 같은 금액이면 "같습니다" — 줄었다고 말하지 않는다
+  expect(describeAiUsageDelta(summarizeAiUsage([
+    { date: '2026-11-01', calls: 1, input: 1, output: 1, usd: 0.5, byProvider: { claude: 1 } },
+    { date: '2026-10-01', calls: 1, input: 1, output: 1, usd: 0.5, byProvider: { claude: 1 } },
+  ], '2026-11'))).toContain('지난달과 같습니다');
+  // 줄 수 상한(화면 사정)과 달 경계 계산
+  expect(summarizeAiUsage(uDays, '2026-11', 1).daily).toHaveLength(1); // 줄 수 상한(화면 사정)
+  // 321(318~320 리뷰 M-7·L-3·L-4·L-5): 기록은 `JSON.parse` 만 거쳐 오므로 모양을 믿을 수 없다
+  // 모르는 제공사 키는 세지 않는다 — 세면 화면이 라벨 표를 찾다가 **예외로 카드를 못 그린다**
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.1, byProvider: { claude: 1, grok: 4 } as never }], '2026-11').byProvider)
+    .toEqual([{ provider: 'claude', calls: 1 }]);
+  // 음수 건수도 줄을 만들지 않는다(전에는 `!n` 이 음수를 통과시켜 "claude -5건" 이 나갔다)
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.1, byProvider: { claude: -5 } }], '2026-11').byProvider).toEqual([]);
+  // 324(321~323 리뷰 L-5): 합계도 음수를 받지 않는다 — byProvider 만 막아 총계는 음수를 그대로 더하고 있었다
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: -3, input: -10, output: 5, usd: -1.5, byProvider: { claude: 1 } }], '2026-11'))
+    .toMatchObject({ calls: 0, input: 0, output: 5, usd: 0 });
+  // 문자열 금액도 합을 NaN 으로 만들지 않는다(화면에 "약 $NaN" 이 나갔다)
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: '0.5' as never, byProvider: { claude: 1 } }], '2026-11').usd).toBe(0.5);
+  // 보여 주는 합과 차이가 **서로 맞는다**(반올림 전 합에서 빼면 usd - prev ≠ delta 가 됐다)
+  const uRound = summarizeAiUsage([
+    { date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.000051, byProvider: { claude: 1 } },
+    { date: '2026-10-02', calls: 1, input: 1, output: 1, usd: 0.000049, byProvider: { claude: 1 } },
+  ], '2026-11');
+  expect(uRound.usd - (uRound.prevMonthUsd ?? 0)).toBeCloseTo(uRound.deltaUsd ?? 0, 10);
+  // 줄 수 상한이 음수여도 **맨 최신 줄을 빼고** 돌려주지 않는다(slice(0,-1) 함정)
+  expect(summarizeAiUsage([{ date: '2026-11-02', calls: 1, input: 1, output: 1, usd: 0.1, byProvider: { claude: 1 } }], '2026-11', -1).daily).toEqual([]);
   // 선택·폴백: Claude 우선, 키 있는 것만
   expect(selectProvider({ claude: '', openai: 'k', gemini: 'k' })).toBe('openai');
   expect(selectProvider({ claude: 'k', openai: 'k', gemini: '' })).toBe('claude');
@@ -1247,4 +1326,1879 @@ test('익명화 잔존 안내 — 남는 것만 세고, 없으면 문장을 만�
   expect(both.map(i => i.count)).toEqual([2, 1]);
   expect(describeAnonymizeResidue(both)).toBe('다만 문자·카카오 발송 이력의 본문·제목 2건, 제품 판매 기록의 이름 1건에 적힌 이름은 이번에 지워지지 않습니다(프로그램 보관 기록).');
   expect(describeAnonymizeResidue(anonymizeResidue({ messageHistory: 0, productSales: 3 }))).toBe('다만 제품 판매 기록의 이름 3건에 적힌 이름은 이번에 지워지지 않습니다(프로그램 보관 기록).');
+});
+
+test('화면 PIN 초기화 판정 — 처음 본 초기화는 적용, 이미 처리한 것은 무시, 깨진 값은 PIN 을 지우지 않는다 (219)', () => {
+  const t1 = '2026-11-25T09:00:00.000Z';
+  const t2 = '2026-11-25T10:00:00.000Z';
+  expect(shouldResetAppLock(t1, null)).toBe(true);        // 처음 보는 초기화
+  expect(shouldResetAppLock(t1, t1)).toBe(false);          // 같은 초기화를 두 번 처리하지 않는다
+  expect(shouldResetAppLock(t2, t1)).toBe(true);           // 본사가 다시 눌렀다
+  expect(shouldResetAppLock(t1, t2)).toBe(false);          // 서버 값이 더 오래됐으면 무시
+  expect(shouldResetAppLock(null, t1)).toBe(false);        // 초기화한 적 없음
+  expect(shouldResetAppLock(undefined, null)).toBe(false);
+  expect(shouldResetAppLock('어제', null)).toBe(false);     // 깨진 값으로 PIN 을 지우지 않는다
+  expect(shouldResetAppLock(t1, '깨짐')).toBe(true);        // 기기 기록이 깨졌으면 서버를 따른다
+});
+
+test('이중 제출 잠금 — 한 번만 통과하고, 풀면 다시 통과한다 (221, GAP P-4)', () => {
+  const lock = createSubmitLock();
+  expect(lock.locked).toBe(false);
+  expect(lock.acquire()).toBe(true);   // 첫 저장
+  expect(lock.locked).toBe(true);
+  expect(lock.acquire()).toBe(false);  // 두 번째 클릭은 막힌다
+  expect(lock.acquire()).toBe(false);
+  lock.release();                       // 폼을 닫으면
+  expect(lock.acquire()).toBe(true);    // 다시 저장할 수 있다
+  const other = createSubmitLock();     // 잠금은 폼마다 따로
+  expect(other.acquire()).toBe(true);
+});
+
+// ── 사진 백업 순수 규칙 (228, GAP C-3) ───────────────────────────
+// 사진은 전체 백업에 들어가지 않아 로컬 모드 매장에서는 이 파일이 유일한 보관본이 된다 — 분할·병합이 틀리면 사진이 사라진다.
+
+test('사진 파일 분할 — 기록 하나는 쪼개지 않고, 상한을 넘는 기록은 혼자 한 파일로 (228)', () => {
+  const inv = [
+    { entityKey: 'treatment:a', count: 2, bytes: 60 },
+    { entityKey: 'treatment:b', count: 1, bytes: 50 },
+    { entityKey: 'treatment:c', count: 1, bytes: 30 },
+  ];
+  expect(planPhotoChunks(inv, 100)).toEqual([['treatment:a'], ['treatment:b', 'treatment:c']]);
+  expect(planPhotoChunks(inv, 1000)).toEqual([['treatment:a', 'treatment:b', 'treatment:c']]); // 넉넉하면 한 파일
+  // 상한보다 큰 기록도 빠뜨리지 않는다(혼자 한 파일)
+  expect(planPhotoChunks([{ entityKey: 'treatment:big', count: 1, bytes: 500 }], 100)).toEqual([['treatment:big']]);
+  expect(planPhotoChunks([], 100)).toEqual([]);
+  // 묶음 수가 달라져도 모든 기록이 정확히 한 번 들어간다
+  const keys = planPhotoChunks(inv, 90).flat();
+  expect(keys.slice().sort()).toEqual(['treatment:a', 'treatment:b', 'treatment:c']);
+});
+
+test('사진 용량·합계·표기 — 글자 수 합, 빈 목록 0, 사람이 읽는 단위 (228)', () => {
+  expect(photoBytes([{ id: 'p1', dataUrl: 'data:' + 'x'.repeat(95), takenAt: '2026-11-25' }])).toBe(100);
+  expect(photoBytes([])).toBe(0);
+  expect(sumInventory([{ entityKey: 'a:1', count: 2, bytes: 10 }, { entityKey: 'b:1', count: 3, bytes: 20 }]))
+    .toEqual({ entities: 2, photos: 5, bytes: 30 });
+  expect(formatBytes(500)).toBe('500B');
+  expect(formatBytes(2048)).toBe('2KB');
+  expect(formatBytes(1.5 * 1024 * 1024)).toBe('1.5MB');
+  expect(formatBytes(42 * 1024 * 1024)).toBe('42MB');
+});
+
+test('사진 병합 — 같은 id 는 이 기기 값 유지, 없는 것만 더하고 촬영 순으로 (228)', () => {
+  const mine = [{ id: 'p1', dataUrl: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', takenAt: '2026-11-01' }];
+  const incoming = [{ id: 'p1', dataUrl: 'data:image/jpeg;base64,DIFFERENT', takenAt: '2026-11-01' }, { id: 'p2', dataUrl: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', takenAt: '2026-10-01' }];
+  const r = mergePhotoEntries(mine, incoming);
+  expect(r.added).toBe(1);
+  expect(r.duplicates).toBe(1);
+  expect(r.merged.map(p => p.id)).toEqual(['p2', 'p1']);          // 촬영 시각 순
+  expect(r.merged.find(p => p.id === 'p1')!.dataUrl).toBe(mine[0].dataUrl); // 내 사진을 덮지 않는다
+  // 깨진 항목(dataUrl 없음·data: 아님)은 조용히 버린다 — 복원 뒤 빈 썸네일이 생기지 않게
+  const bad = mergePhotoEntries([], [{ id: 'x', dataUrl: 'http://evil/x.png', takenAt: '2026-11-01' }, { id: 'y' } as never]);
+  expect(bad.added).toBe(0);
+  expect(bad.merged).toEqual([]);
+});
+
+test('사진 백업 파일 파싱 — 형식·버전·기록 키를 검사하고 사유를 돌려준다 (228)', () => {
+  const good = JSON.stringify({
+    format: PHOTO_BACKUP_FORMAT, version: 1, appVersion: '1.0.64', shopId: 's1', createdAt: '2026-11-25T10:00:00.000Z',
+    part: 1, parts: 2,
+    items: [
+      { entityKey: 'treatment:t1', photos: [{ id: 'p1', dataUrl: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', takenAt: '2026-11-01' }] },
+      { entityKey: '엉뚱한키', photos: [{ id: 'p2', dataUrl: 'data:image/jpeg;base64,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', takenAt: '2026-11-01' }] },   // 기록 키 규칙 위반 → 건너뜀
+      { entityKey: 'customer:c1', photos: [] },                            // 빈 묶음 → 건너뜀
+    ],
+  });
+  const f = parsePhotoBackup(good);
+  expect(f.items.map(i => i.entityKey)).toEqual(['treatment:t1']);
+  expect(f.parts).toBe(2);
+  expect(() => parsePhotoBackup('{')).toThrow(/JSON 형식/);
+  expect(() => parsePhotoBackup('{}')).toThrow(/사진 백업 파일이 아닙니다/);
+  expect(() => parsePhotoBackup(JSON.stringify({ format: PHOTO_BACKUP_FORMAT, version: 99, items: [] }))).toThrow(/더 새 버전/);
+  expect(() => parsePhotoBackup(JSON.stringify({ format: PHOTO_BACKUP_FORMAT, version: 1 }))).toThrow(/사진 목록이 없는/);
+  expect(() => parsePhotoBackup(JSON.stringify({ format: PHOTO_BACKUP_FORMAT, version: 1, items: [{ entityKey: 'treatment:t1', photos: [] }] }))).toThrow(/복원할 사진이 없습니다/);
+  // 전체 백업 파일을 잘못 고르면 분명히 말한다
+  expect(() => parsePhotoBackup(JSON.stringify({ format: 'troiareuke-crm-backup', version: 1, tables: {} }))).toThrow(/이 프로그램의 사진 백업 파일이 아닙니다/);
+});
+
+// ── 체크아웃 재예약 추천 (231, GAP R-11) ─────────────────────────
+// 결제한 자리에서 다음 예약을 잡게 하는 흐름. 틀리면 이미 예약이 있는 고객을 또 부르거나 과거 날짜를 권한다.
+
+test('재예약 추천 — 다가오는 예약이 있으면 추천하지 않는다(취소·노쇼는 예약으로 보지 않는다) (231)', () => {
+  const base = { paymentDate: '2026-11-25', today: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-11-25'] };
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-12-10', status: 'confirmed' }] })).toBeNull();
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-11-25', status: 'confirmed' }] })).toBeNull(); // 오늘 아직 안 끝난 예약
+  // 취소·노쇼·지난 예약·오늘 완료분은 "다음 예약" 이 아니다 → 추천한다
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-12-10', status: 'cancelled' }] })?.date).toBe('2026-12-23');
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-12-10', status: 'noshow' }] })?.date).toBe('2026-12-23');
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-11-25', status: 'completed' }] })?.date).toBe('2026-12-23');
+  expect(suggestRebook({ ...base, reservations: [{ date: '2026-11-01', status: 'confirmed' }] })?.date).toBe('2026-12-23');
+});
+
+test('재예약 추천 — 시술 기록의 다음 방문 권장일이 앞에 있으면 그 날짜 (231)', () => {
+  const r = suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', nextAppointment: '2026-12-09', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  expect(r).toEqual({ date: '2026-12-09', basis: 'recommended', days: 14, reason: '시술 기록의 다음 방문 권장일' });
+  // 지난 권장일은 쓰지 않는다(과거 날짜로 예약을 권하지 않게) → 주기로
+  const past = suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', nextAppointment: '2026-10-01', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  expect(past?.basis).toBe('shop');
+  expect(past?.date).toBe('2026-12-23');
+});
+
+test('재예약 추천 — 방문이 쌓이면 그 고객 평균 주기, 아니면 매장 기본 주기 (231)', () => {
+  // 3주 간격으로 네 번 다녀간 고객 → 개인 주기 21일
+  const personal = suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-09-30', '2026-10-21', '2026-11-11', '2026-11-25'] });
+  expect(personal?.basis).toBe('personal');
+  expect(personal?.days).toBe(21);          // 간격 21·21·14 의 중앙값
+  expect(personal?.date).toBe(addDaysISO('2026-11-25', personal!.days));
+  expect(personal?.reason).toMatch(/이 고객 방문 주기 21일\(방문 4회의 중간값\)/); // 평균이 아니라 중간값 (234, 리뷰 L-2)
+  // 첫 방문이라 간격이 모자라면 매장 기본
+  const shop = suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', shopCycleDays: 28, visitDays: ['2026-11-25'] });
+  expect(shop).toEqual({ date: '2026-12-23', basis: 'shop', days: 28, reason: '매장 기본 주기 28일' });
+  // 주기를 모르면(0) 추천하지 않는다 — 아무 날짜나 권하지 않는다
+  expect(suggestRebook({ paymentDate: '2026-11-25', today: '2026-11-25', shopCycleDays: 0, visitDays: [] })).toBeNull();
+  expect(suggestRebook({ paymentDate: '어제', today: '2026-11-25', shopCycleDays: 28, visitDays: [] })).toBeNull();
+});
+
+test('재예약 추천 — 마지막 방문이 결제일보다 뒤면(선결제) 그 방문일 기준 (231)', () => {
+  const r = suggestRebook({ paymentDate: '2026-11-01', today: '2026-11-01', lastVisitDate: '2026-11-20', shopCycleDays: 28, visitDays: ['2026-11-20'] });
+  expect(r?.date).toBe('2026-12-18'); // 11-20 + 28일
+  expect(describeRebook(r!, iso => iso)).toBe('2026-12-18 · 매장 기본 주기 28일');
+});
+
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ── 현장 주의사항 경고 (232, GAP C-11) ───────────────────────────
+// 예약·시술 자리에서 금기를 못 보면 사람이 다친다. 반대로 메모 전문을 띄우면 아무도 읽지 않는다.
+
+test('메모 주의 줄 — 키워드가 든 줄만, 중복 제거, 80자에서 자른다 (232)', () => {
+  expect(memoCautionLines('레티놀 주의\n커피 좋아함\n임신 중')).toEqual(['임신 중', '레티놀 주의']); // 234: 위험한 줄 먼저
+  expect(memoCautionLines('커피 좋아함\n친구 소개')).toEqual([]);      // 경고가 없으면 만들지 않는다
+  expect(memoCautionLines('')).toEqual([]);
+  expect(memoCautionLines(null)).toEqual([]);
+  expect(memoCautionLines('주의 사항\n주의 사항')).toEqual(['주의 사항']); // 중복
+  const long = memoCautionLines('주의 ' + '가'.repeat(200))[0];
+  expect(long.length).toBe(MAX_ALERT_LINE_LENGTH);
+  expect(long.endsWith('…')).toBe(true);
+  // 여러 줄 공백·탭은 한 칸으로
+  expect(memoCautionLines('  켈로이드   체질  ')).toEqual(['켈로이드 체질']);
+});
+
+test('현장 경고 — 알레르기 먼저, 메모 주의 줄, 노쇼는 2회부터 (232)', () => {
+  const a = buildCustomerAlert({ allergies: '레티놀 자극', memo: '임신 중\n커피 좋아함', noshowCount: 3 });
+  expect(a.lines).toEqual(['알레르기·주의: 레티놀 자극', '임신 중', '노쇼 3회 — 예약 확인 전화를 권합니다']);
+  expect(a.hiddenCount).toBe(0);
+  expect(a.allergies).toBe('레티놀 자극');
+  expect(a.noshow).toBe(3);
+  expect(hasCustomerAlert(a)).toBe(true);
+  // 노쇼 1회는 흔하다 → 올리지 않는다
+  expect(buildCustomerAlert({ noshowCount: NOSHOW_ALERT_MIN - 1 }).lines).toEqual([]);
+  expect(buildCustomerAlert({ noshowCount: NOSHOW_ALERT_MIN }).lines).toEqual(['노쇼 2회 — 예약 확인 전화를 권합니다']);
+});
+
+test('현장 경고 — 올릴 것이 없으면 아무 줄도 만들지 않는다 (232)', () => {
+  expect(buildCustomerAlert({}).lines).toEqual([]);
+  expect(buildCustomerAlert({ allergies: '   ', memo: '커피 좋아함' }).lines).toEqual([]);
+  expect(hasCustomerAlert(buildCustomerAlert({}))).toBe(false);
+  expect(hasCustomerAlert(null)).toBe(false);
+});
+
+test('현장 경고 — 한 번에 3줄, 넘친 줄은 수를 알려 주고 사라지지 않는다 (232·234 리뷰 H-1)', () => {
+  const many = buildCustomerAlert({ allergies: '견과류', memo: '주의1\n주의2\n주의3\n주의4', noshowCount: 5 });
+  expect(many.lines.length).toBe(MAX_ALERT_LINES);
+  expect(many.lines[0]).toBe('알레르기·주의: 견과류');
+  expect(many.hiddenCount).toBe(many.allLines.length - MAX_ALERT_LINES);
+  expect(many.allLines.length).toBe(6); // 알레르기 + 메모 4 + 노쇼 — 하나도 버리지 않는다
+  const dup = buildCustomerAlert({ allergies: '견과류 알레르기', memo: '견과류 알레르기' });
+  expect(dup.lines).toEqual(['알레르기·주의: 견과류 알레르기']);
+});
+
+// ── 직원 인센티브(수당) (233, GAP S-1) ──────────────────────────
+// 급여에 쓰는 숫자라 경계와 반올림을 못으로 박는다. 틀리면 사람에게 돈이 덜 간다.
+
+test('수당 비율 입력 — 0~50%, 소수점 한 자리, 잘못된 값은 null (233)', () => {
+  expect(parseRate('10')).toBe(10);
+  expect(parseRate('12.5')).toBe(12.5);
+  expect(parseRate('12.5%')).toBe(12.5);
+  expect(parseRate(' 7 ')).toBe(7);
+  expect(parseRate('')).toBeNull();  // 234: 빈 칸은 "예외 해제" 라 값이 아니다
+  expect(parseRate('0')).toBe(0);
+  expect(parseRate(String(MAX_COMMISSION_RATE))).toBe(MAX_COMMISSION_RATE);
+  expect(parseRate('50.1')).toBeNull();      // 상한 밖
+  expect(parseRate('-5')).toBeNull();
+  expect(parseRate('12.55')).toBeNull();     // 소수점 둘째 자리가 살아 있는 값
+  expect(parseRate('12.50')).toBe(12.5);     // 끝의 0 은 사람이 흔히 쓴다 (234, 리뷰 L-8)
+  expect(parseRate('열 퍼센트')).toBeNull();
+  expect(parseRate('1e2')).toBeNull();
+  expect(parseRate(null)).toBeNull();
+  expect(parseRate(12.5)).toBe(12.5);
+});
+
+test('수당 비율 — 직원별 예외가 있으면 그것, 없으면 매장 기본 (233)', () => {
+  const config = { serviceRate: 10, productRate: 5, perStaff: { s2: { serviceRate: 15 }, s3: { productRate: 0 } } };
+  expect(ratesFor('s1', config)).toEqual({ serviceRate: 10, productRate: 5 });
+  expect(ratesFor('s2', config)).toEqual({ serviceRate: 15, productRate: 5 }); // 시술만 예외
+  expect(ratesFor('s3', config)).toEqual({ serviceRate: 10, productRate: 0 }); // 0 도 뜻이 있는 값
+  expect(ratesFor('s1')).toEqual({ serviceRate: 0, productRate: 0 });          // 설정 없음
+  // 범위를 벗어난 저장값은 읽을 때 막는다(옛 설정·수동 편집 방어)
+  expect(ratesFor('s1', { serviceRate: 999, productRate: -5 })).toEqual({ serviceRate: MAX_COMMISSION_RATE, productRate: 0 });
+});
+
+test('수당 금액 — 실결제액·제품 판매액 기준, 원 단위 내림 (233)', () => {
+  expect(computeCommission({ paidAmount: 1_000_000, productAmount: 200_000 }, { serviceRate: 10, productRate: 5 }))
+    .toEqual({ service: 100_000, product: 10_000, total: 110_000 });
+  // 내림 — 12.5% × 70,007 = 8,750.875 → 8,750
+  expect(computeCommission({ paidAmount: 70_007 }, { serviceRate: 12.5, productRate: 0 }).service).toBe(8_750);
+  expect(computeCommission({}, { serviceRate: 10, productRate: 10 })).toEqual({ service: 0, product: 0, total: 0 });
+  expect(computeCommission({ paidAmount: -50_000 }, { serviceRate: 10, productRate: 0 }).service).toBe(0); // 음수(환불 과다)는 0
+  expect(computeCommission({ paidAmount: 50_000 }, { serviceRate: 0, productRate: 0 }).total).toBe(0);
+});
+
+test('수당 표시 여부·기준 문구 — 전부 0이면 열을 띄우지 않는다 (233)', () => {
+  expect(commissionConfigured()).toBe(false);
+  expect(commissionConfigured({ serviceRate: 0, productRate: 0 })).toBe(false);
+  expect(commissionConfigured({ serviceRate: 0, productRate: 0, perStaff: { s1: { serviceRate: 3 } } })).toBe(true);
+  expect(commissionConfigured({ serviceRate: 10, productRate: 0 })).toBe(true);
+  expect(describeCommissionBasis({ serviceRate: 10, productRate: 5 }))
+    .toBe('시술 10% × 실결제액 + 제품 5% × 제품 판매액 (원 단위 내림)');
+});
+
+// ── 234 리뷰 반영: 경고 위험도·부정 표현, 추천일 오늘 기준, 수당 비율 상속·검증 ──
+
+test('현장 경고 — "시술 불가" 같은 금기가 상한 때문에 밀려나지 않는다 (234, 리뷰 H-1)', () => {
+  const a = buildCustomerAlert({
+    allergies: '레티놀',
+    memo: '민감한 편\n켈로이드 체질\n항생제 복용 중\n시술 불가 부위: 눈가',
+  });
+  // 위험한 줄부터 3줄 — 전에는 메모 원문 순서라 '시술 불가' 가 아무 표시 없이 사라졌다
+  expect(a.lines).toEqual(['알레르기·주의: 레티놀', '시술 불가 부위: 눈가', '켈로이드 체질']);
+  expect(a.allLines).toContain('항생제 복용 중');
+  expect(a.allLines).toContain('민감한 편');
+  expect(a.hiddenCount).toBe(2);
+});
+
+test('현장 경고 — "없음·아님" 이 붙은 줄은 경고로 올리지 않는다 (234, 리뷰 M-5)', () => {
+  expect(isNegatedCaution('특별한 주의사항 없음')).toBe(true);
+  expect(isNegatedCaution('임신 계획 없음')).toBe(true);
+  expect(isNegatedCaution('민감하지 않은 편')).toBe(true);
+  expect(isNegatedCaution('임신 중')).toBe(false);
+  const a = buildCustomerAlert({ memo: '특별한 주의사항 없음\n임신 계획 없음\n민감하지 않은 편' });
+  expect(a.allLines).toEqual([]);          // 늑대 소년 금지 — 전에는 3줄 전부 경고로 떴다
+  expect(hasCustomerAlert(a)).toBe(false);
+  // 부정 표현 줄이 상한을 차지해 진짜 금기를 밀어내지도 않는다
+  const b = buildCustomerAlert({ memo: '주의사항 없음\n임신 중' });
+  expect(b.lines).toEqual(['임신 중']);
+});
+
+test('재예약 추천 — 지난 결제를 뒤늦게 입력해도 추천일은 오늘 뒤 (234, 리뷰 H-2)', () => {
+  const today = '2026-11-25';
+  // 9월 결제를 지금 입력 → 9월 29일을 권하면 과거 예약이 생긴다
+  const late = suggestRebook({ paymentDate: '2026-09-01', today, shopCycleDays: 28, visitDays: ['2026-09-01'] });
+  expect(late?.date).toBe('2026-12-23'); // 오늘 + 28일
+  expect(late!.date > today).toBe(true);
+  // 지난 권장일도 쓰지 않는다
+  const pastRecommended = suggestRebook({ paymentDate: '2026-09-01', today, nextAppointment: '2026-09-20', shopCycleDays: 28, visitDays: ['2026-09-01'] });
+  expect(pastRecommended?.basis).toBe('shop');
+  expect(pastRecommended!.date > today).toBe(true);
+  // 앞으로 남은 권장일은 그대로 쓴다
+  expect(suggestRebook({ paymentDate: '2026-11-25', today, nextAppointment: '2026-12-09', shopCycleDays: 28, visitDays: ['2026-11-25'] })?.date).toBe('2026-12-09');
+  // 오늘 이후 예약이 이미 있으면(결제일 기준이 아니라 오늘 기준) 추천하지 않는다
+  expect(suggestRebook({ paymentDate: '2026-09-01', today, shopCycleDays: 28, visitDays: ['2026-09-01'], reservations: [{ date: '2026-12-01', status: 'confirmed' }] })).toBeNull();
+});
+
+test('수당 비율 — 빈 칸은 "기본값 상속", 0은 "그 직원만 0%" (234, 리뷰 M-3)', () => {
+  expect(parseRate('')).toBeNull();      // 빈 칸은 값이 아니다
+  expect(isBlankRate('')).toBe(true);
+  expect(isBlankRate('  %  ')).toBe(true);
+  expect(isBlankRate('0')).toBe(false);
+  expect(parseRate('0')).toBe(0);
+  expect(parseRate('12.50')).toBe(12.5); // 사람이 쓰는 표기 (리뷰 L-8)
+  expect(parseRate('12.5 %')).toBe(12.5);
+  expect(parseRate('12.55')).toBeNull();
+  // 예외가 걸렸는지 화면이 구분할 수 있다
+  const config = { serviceRate: 10, productRate: 5, perStaff: { s2: { serviceRate: 20 } } };
+  expect(hasOwnRates('s2', config)).toBe(true);
+  expect(hasOwnRates('s1', config)).toBe(false);
+});
+
+test('수당 비율 — 숫자가 아닌 예외 값은 기본값으로 돌아간다(조용한 0원 금지) (234, 리뷰 M-1)', () => {
+  const broken = { serviceRate: 10, productRate: 5, perStaff: { s9: { serviceRate: '15' as unknown as number } } };
+  expect(ratesFor('s9', broken)).toEqual({ serviceRate: 10, productRate: 5 });
+  expect(clampRate('15')).toBe(0);        // 문자열은 비율로 쓰지 않는다
+  expect(clampRate(999)).toBe(MAX_COMMISSION_RATE);
+  // 금액과 근거가 같은 값을 말한다 (리뷰 M-2)
+  expect(describeCommissionBasis({ serviceRate: 999, productRate: -5 }))
+    .toBe('시술 50% × 실결제액 + 제품 0% × 제품 판매액 (원 단위 내림)');
+  expect(computeCommission({ paidAmount: 1_000_000 }, { serviceRate: 999, productRate: 0 }).service).toBe(500_000);
+});
+
+// ── 결제 영수증 (235, GAP P-9) ───────────────────────────────────
+// 고객 손에 가는 돈 문서라 과장·누락이 바로 문제가 된다. 세금계산서가 아니라는 사실을 숨기면 안 된다.
+
+const SHOP = { name: '아르케스파', phone: '02-123-4567', address: '서울 강남구 1', businessNumber: '123-45-67890', ownerName: '홍길동' };
+
+test('영수증 — 머리말·내역·합계, 세금계산서가 아니라고 분명히 적는다 (235)', () => {
+  const r = buildReceipt({
+    payment: { paymentDate: '2026-11-25', amount: 90_000, paymentMethod: '카드', typeLabel: '단건 시술', status: 'completed' },
+    customerName: '김고객',
+    shop: SHOP,
+    issuedOn: '2026-11-25',
+  });
+  expect(r.title).toBe('영수증');
+  expect(r.isRefund).toBe(false);
+  expect(r.shopLines).toEqual(['아르케스파', '사업자등록번호 123-45-67890 · 대표 홍길동', '02-123-4567 · 서울 강남구 1']);
+  expect(r.customerLine).toBe('김고객 고객님');
+  expect(r.totalLabel).toBe('결제 금액');
+  expect(r.totalValue).toBe('90,000원');
+  expect(r.rows.map(x => x.label)).toEqual(['결제일', '구분', '결제 수단']);
+  expect(r.rows.find(x => x.label === '결제 수단')!.value).toBe('카드');
+  expect(r.notes[0]).toMatch(/세금계산서·현금영수증은 포함되지 않으며/);
+  expect(r.notes).toHaveLength(1); // 사업자 정보가 있으면 보완 안내를 띄우지 않는다
+});
+
+test('영수증 — 할인은 정가·할인 줄로 나누고, 발행일이 다르면 함께 적는다 (235)', () => {
+  const r = buildReceipt({
+    payment: { paymentDate: '2026-11-20', amount: 80_000, discountAmount: 20_000, paymentMethod: '현금', typeLabel: '프로그램', status: 'completed', memo: '원장 지인 할인(내부 메모)' },
+    customerName: '김고객', shop: SHOP, issuedOn: '2026-11-25',
+  });
+  const by = (label: string) => r.rows.find(x => x.label === label)?.value;
+  expect(by('정가')).toBe('100,000원');   // 할인 전 금액을 되살려 적는다
+  expect(by('할인')).toBe('-20,000원');
+  expect(by('발행일')).toBeTruthy();       // 결제일과 다른 날 뽑으면 발행일을 밝힌다
+  expect(r.totalValue).toBe('80,000원');
+  // 직원용 메모는 고객 영수증에 인쇄하지 않는다 (238, 리뷰 M-2)
+  expect(by('메모')).toBeUndefined();
+  expect(JSON.stringify(r)).not.toContain('내부 메모');
+});
+
+test('영수증 — 환불 건은 환불 영수증, 대기 건은 예정 내역서 (235)', () => {
+  const refund = buildReceipt({ payment: { paymentDate: '2026-11-25', amount: 50_000, status: 'refunded', paymentMethod: '카드', typeLabel: '단건 시술' }, customerName: '김고객', shop: SHOP });
+  expect(refund.title).toBe('환불 영수증');
+  expect(refund.isRefund).toBe(true);
+  expect(refund.totalLabel).toBe('환불 처리된 원 결제 금액'); // 부분 환불 금액을 기록할 자리가 없다 (238, 리뷰 M-3)
+  expect(refund.totalValue).toBe('-50,000원');   // 결제 영수증처럼 보이지 않게
+  expect(refund.notes.some(n => n.includes('부분 환불이라면 실제 환불액은 매장 기록'))).toBe(true);
+
+  const pending = buildReceipt({ payment: { paymentDate: '2026-11-25', amount: 50_000, status: 'pending' }, customerName: '김고객', shop: SHOP });
+  expect(pending.title).toBe('결제 예정 내역서');
+  expect(pending.isPending).toBe(true);
+  expect(pending.totalLabel).toBe('결제 예정 금액');
+  expect(pending.notes.some(n => n.includes('아직 입금이 확인되지 않은'))).toBe(true);
+});
+
+test('영수증 — 빈 매장 정보는 줄을 빼고 설정 안내를 붙인다, 고객 미지정도 말한다 (235)', () => {
+  const r = buildReceipt({
+    payment: { paymentDate: '2026-11-25', amount: 30_000, status: 'completed' },
+    shop: { name: '아르케스파' }, // 전화·주소·사업자번호 없음
+  });
+  expect(r.shopLines).toEqual(['아르케스파']);          // 빈 줄을 인쇄하지 않는다
+  expect(r.customerLine).toBe('고객 미지정');
+  expect(r.rows.find(x => x.label === '결제 수단')!.value).toBe('미지정');
+  expect(r.rows.find(x => x.label === '구분')!.value).toBe('기타');
+  expect(r.notes.some(n => n.includes('사업자등록번호가 설정되어 있지 않아'))).toBe(true);
+});
+
+test('영수증 파일 이름 — 매장·고객·날짜, 경로 금지 문자 제거 (235)', () => {
+  expect(receiptFileName('아르케스파', '김고객', '2026-11-25')).toBe('아르케스파_김고객_영수증_2026-11-25.pdf');
+  expect(receiptFileName('아르케 / 스파', '김 고객', '2026-11-25', true)).toBe('아르케  스파_김고객_환불영수증_2026-11-25.pdf');
+  expect(receiptFileName(undefined, undefined, '2026-11-25')).toBe('CRM_고객_영수증_2026-11-25.pdf');
+});
+
+// ── 고객 등급 자동 제안 (236, GAP C-1) ───────────────────────────
+// 등급은 매장이 고객에게 약속한 것이라 조용히 바뀌면 안 된다 → 올릴 후보만 제안하고 적용은 사람이 한다.
+
+test('등급 제안 — VIP·골드 기준(방문·누적) 경계 (236)', () => {
+  expect(suggestGrade({ current: '일반', visits: VIP_VISITS, spent: VIP_SPENT })).toEqual({ grade: 'VIP', reason: `방문 ${VIP_VISITS}회 · 누적 200만원` });
+  expect(suggestGrade({ current: '일반', visits: VIP_VISITS - 1, spent: VIP_SPENT })?.grade).toBe('골드');   // 방문 한 번 모자라면 골드
+  expect(suggestGrade({ current: '일반', visits: VIP_VISITS, spent: VIP_SPENT - 1 })?.grade).toBe('골드');   // 금액 1원 모자라면 골드
+  expect(suggestGrade({ current: '신규', visits: GOLD_VISITS, spent: GOLD_SPENT })?.grade).toBe('골드');
+  expect(suggestGrade({ current: '신규', visits: GOLD_VISITS - 1, spent: GOLD_SPENT })?.grade).toBe('일반');  // 방문 2회 이상이면 신규는 지났다
+  expect(suggestGrade({ current: '신규', visits: 1, spent: 50_000 })).toBeNull();                             // 첫 방문은 그대로 신규
+});
+
+test('등급 제안 — RFM(매장 내 상대 순위)에도 절대 하한을 함께 본다 (236·238 리뷰 H-1)', () => {
+  // RFM 은 매장 안 백분위라 전원이 방문 1~2회인 매장에서는 방문 2회도 '충성' 이 된다 → 하한을 못 넘으면 VIP 로 올리지 않는다
+  expect(suggestGrade({ current: '신규', visits: 2, spent: 50_000, segment: '충성' })?.grade).toBe('일반');
+  expect(suggestGrade({ current: '신규', visits: 1, spent: 300_000, segment: '우수' })).toBeNull();           // 방문 1회는 아직 신규
+  expect(suggestGrade({ current: '일반', visits: VIP_RFM_MIN_VISITS, spent: VIP_RFM_MIN_SPENT, segment: '충성' })?.grade).toBe('VIP');
+  expect(suggestGrade({ current: '일반', visits: VIP_RFM_MIN_VISITS, spent: VIP_RFM_MIN_SPENT, segment: '충성' })?.reason).toMatch(/매장 내 상위 고객\(RFM 충성\)/);
+  expect(suggestGrade({ current: '일반', visits: VIP_RFM_MIN_VISITS - 1, spent: VIP_RFM_MIN_SPENT, segment: '충성' })).toBeNull(); // 방문 하한 미달 → 이미 '일반' 이라 올릴 것이 없다
+  expect(suggestGrade({ current: '신규', visits: GOLD_RFM_MIN_VISITS, spent: 100_000, segment: '우수' })?.grade).toBe('골드');
+  expect(suggestGrade({ current: '신규', visits: 2, spent: 10_000, segment: '휴면' })?.grade).toBe('일반');   // 구분이 낮아도 방문 2회는 일반
+});
+
+test('등급 제안 — 내리는 제안은 하지 않는다(휴면 VIP 를 강등하지 않는다) (236)', () => {
+  expect(suggestGrade({ current: 'VIP', visits: 2, spent: 50_000 })).toBeNull();
+  expect(suggestGrade({ current: '골드', visits: 2, spent: 50_000 })).toBeNull();
+  expect(suggestGrade({ current: 'VIP', visits: VIP_VISITS, spent: VIP_SPENT })).toBeNull();                 // 이미 최고 등급이면 제안 없음
+  expect(suggestGrade({ current: '골드', visits: VIP_VISITS, spent: VIP_SPENT })?.grade).toBe('VIP');        // 올리는 것만
+});
+
+test('등급 제안 — 방문 기록이 없거나 값이 깨지면 제안하지 않는다 (236)', () => {
+  expect(suggestGrade({ current: '신규', visits: 0, spent: 5_000_000 })).toBeNull();   // 결제만 있고 방문 기록이 없으면 근거가 없다
+  expect(suggestGrade({ current: '신규', visits: NaN as unknown as number, spent: 0 })).toBeNull();
+  // 모르는 등급 값(옛 데이터)은 가장 낮게 보고 제안이 막히지 않게 한다
+  expect(suggestGrade({ current: '브론즈', visits: GOLD_VISITS, spent: GOLD_SPENT })?.grade).toBe('골드');
+});
+
+// ── 태그 마스터 (237, GAP C-1) ───────────────────────────────────
+// 같은 뜻의 태그가 갈라지면(민감성·민감·민감성피부) 태그 필터·발송 대상이 조용히 나뉜다.
+
+test('태그 이름 정리 — #·공백·쉼표·길이, 동의 태그는 거부 (237)', () => {
+  expect(normalizeTagName(' #민감성 ')).toBe('민감성');
+  expect(normalizeTagName('재구매  고객')).toBe('재구매 고객');   // 연속 공백은 한 칸
+  expect(normalizeTagName('a'.repeat(MAX_TAG_NAME + 5))).toHaveLength(MAX_TAG_NAME);
+  expect(normalizeTagName('민감성, 재구매')).toBeNull();          // 쉼표는 구분자
+  expect(normalizeTagName('광고동의:2026-11-25')).toBeNull();     // 동의 태그는 동의 컨트롤이 관리한다
+  // 상태 태그 4종도 막는다 — 전에는 접두만 봐서 통과했고, 칩으로 넣어도 저장 때 조용히 버려졌다 (238, 리뷰 H-2)
+  for (const t of ['광고수신동의', '광고수신거부', '문자수신거부', '카카오수신거부']) expect(normalizeTagName(t)).toBeNull();
+  expect(normalizeTagName('  ')).toBeNull();
+  expect(normalizeTagName(42)).toBeNull();
+});
+
+test('태그 목록 추가·삭제 — 중복·한도는 사유를 돌려준다 (237)', () => {
+  const one = addMasterTag([], '민감성');
+  expect(one.list).toEqual(['민감성']);
+  expect(one.error).toBeUndefined();
+  expect(addMasterTag(['민감성'], ' #민감성 ').error).toMatch(/이미 있는 태그/);
+  expect(addMasterTag(['민감성'], '광고동의').error).toMatch(/동의 설정에서만/);
+  const full = Array.from({ length: MAX_MASTER_TAGS }, (_, i) => 't' + i);
+  expect(addMasterTag(full, '하나더').error).toMatch(new RegExp(String(MAX_MASTER_TAGS)));
+  expect(removeMasterTag(['민감성', '재구매'], '민감성')).toEqual(['재구매']);
+  expect(removeMasterTag(['민감성'], '없는태그')).toEqual(['민감성']);   // 없는 것을 지워도 조용히 통과
+});
+
+test('태그 목록 저장값 정리 — 배열이 아니거나 깨진 값 방어 (237)', () => {
+  expect(sanitizeMaster(['민감성', ' #민감성 ', '', 7, '광고동의:x', '재구매'])).toEqual(['민감성', '재구매']);
+  expect(sanitizeMaster('민감성')).toEqual([]);
+  expect(sanitizeMaster(undefined)).toEqual([]);
+  expect(sanitizeMaster(Array.from({ length: MAX_MASTER_TAGS + 10 }, (_, i) => 't' + i))).toHaveLength(MAX_MASTER_TAGS);
+});
+
+test('태그 칩 — 등록 태그 먼저(등록 순서), 쓰고 있지만 미등록인 태그도 보여 준다 (237·238 리뷰 M-7)', () => {
+  const choices = tagChoices(['민감성', '재구매'], [{ tag: '단골', count: 5 }, { tag: '재구매', count: 3 }, { tag: '민감성', count: 1 }]);
+  expect(choices.map(c => c.tag)).toEqual(['민감성', '재구매', '단골']); // 등록 순서 → 미등록은 뒤
+  expect(choices.find(c => c.tag === '단골')!.registered).toBe(false); // 미등록이라고 밝힌다(숨기지 않는다)
+  expect(choices.find(c => c.tag === '재구매')!.count).toBe(3);
+  expect(tagChoices([], [])).toEqual([]);
+  expect(tagChoices(['a', 'b', 'c'], [], 2)).toHaveLength(2);          // 상한
+});
+
+test('태그 입력칸에 칩 더하기 — 중복은 그대로, 쉼표로 이어 붙인다 (237)', () => {
+  expect(appendTagToInput('', '민감성').value).toBe('민감성');
+  expect(appendTagToInput('민감성', '재구매').value).toBe('민감성, 재구매');
+  expect(appendTagToInput('민감성, 재구매', '민감성').value).toBe('민감성, 재구매'); // 두 번 넣지 않는다
+  expect(appendTagToInput('민감성, 재구매', '민감성').error).toBeUndefined();
+  expect(appendTagToInput(' #민감성 ,', '재구매').value).toBe('민감성, 재구매');     // 손으로 적은 표기도 정리
+  const consent = appendTagToInput('민감성', '광고수신동의');
+  expect(consent.value).toBe('민감성');
+  expect(consent.error).toMatch(/동의 설정/);                                        // 왜 안 들어가는지 알려 준다
+  // 고객당 10개 상한 — 전에는 11개째가 저장 때 조용히 잘렸다 (238, 리뷰 M-5)
+  const ten = Array.from({ length: MAX_TAGS_PER_CUSTOMER }, (_, i) => 't' + i).join(', ');
+  expect(countInputTags(ten)).toBe(MAX_TAGS_PER_CUSTOMER);
+  const over = appendTagToInput(ten, '하나더');
+  expect(over.value).toBe(ten);
+  expect(over.error).toMatch(new RegExp(String(MAX_TAGS_PER_CUSTOMER)));
+});
+
+// ── 238 리뷰 반영: 칩 자리 배분, 분할 결제 요약 ──
+
+test('태그 칩 — 등록 태그가 많아도 미등록 태그 자리가 남는다, 동의 태그는 칩에 없다 (238, 리뷰 H-2·M-7)', () => {
+  const master = Array.from({ length: 30 }, (_, i) => '등록' + i);
+  const usage = [{ tag: '쓰는태그', count: 9 }, { tag: '광고수신동의', count: 50 }, { tag: '광고동의:2026-11-26', count: 50 }];
+  const choices = tagChoices(master, usage, 24);
+  expect(choices).toHaveLength(24);
+  expect(choices.some(c => c.tag === '쓰는태그' && !c.registered)).toBe(true);   // 미등록 몫이 남는다
+  expect(choices.some(c => c.tag.startsWith('광고'))).toBe(false);               // 동의 태그는 칩에 올리지 않는다
+  // 등록 순서를 지킨다 — 사용 0건인 새 태그가 꼬리로 밀려 안 보이던 문제 (리뷰 M-7)
+  const fresh = tagChoices(['오래된', '방금추가'], [{ tag: '오래된', count: 7 }], 24);
+  expect(fresh.map(c => c.tag)).toEqual(['오래된', '방금추가']);
+});
+
+test('분할 결제 요약 — 받은 돈만 합치고, 미입금은 따로 말한다 (238·242 리뷰 H-2)', () => {
+  expect(splitPaymentNote([{ amount: 100_000, paymentMethod: '카드' }])).toBeNull(); // 1건이면 안내하지 않는다
+  expect(splitPaymentNote([])).toBeNull();
+  const note = splitPaymentNote([{ amount: 50_000, paymentMethod: '카드' }, { amount: 50_000, paymentMethod: '현금' }]);
+  expect(note).toBe('이 건은 2건으로 나눠 결제했습니다: 카드 50,000원 + 현금 50,000원 · 합계 100,000원');
+  // 환불된 행은 합계에서 뺀다(남은 1건이면 안내 자체를 안 한다)
+  expect(splitPaymentNote([{ amount: 50_000, paymentMethod: '카드' }, { amount: 50_000, paymentMethod: '현금', status: 'refunded' }])).toBeNull();
+  expect(splitPaymentNote([{ amount: 30_000 }, { amount: 20_000 }])).toContain('미지정 30,000원 + 미지정 20,000원');
+  // 대기(미입금)는 합계에 넣지 않는다 — 전에는 고객 영수증이 받지 않은 돈을 받은 것처럼 적었다 (242, 리뷰 H-2)
+  const withPending = splitPaymentNote([
+    { amount: 500_000, paymentMethod: '카드', status: 'completed' },
+    { amount: 500_000, paymentMethod: '현금', status: 'pending' },
+  ]);
+  expect(withPending).toBe('이 건에는 아직 받지 않은 금액 500,000원 이 남아 있습니다(이 영수증 금액에 포함되지 않습니다).');
+  const twoPaidOnePending = splitPaymentNote([
+    { amount: 300_000, paymentMethod: '카드', status: 'completed' },
+    { amount: 200_000, paymentMethod: '현금', status: 'completed' },
+    { amount: 500_000, paymentMethod: '계좌이체', status: 'pending' },
+  ]);
+  expect(twoPaidOnePending).toContain('합계 500,000원');
+  expect(twoPaidOnePending).toContain('아직 받지 않은 500,000원 은 합계에서 뺐습니다');
+  expect(twoPaidOnePending).not.toContain('1,000,000원');
+});
+
+// ── 태그 이름 일괄 변경 (239, GAP C-1) ───────────────────────────
+// 목록을 정해도 이미 갈라진 태그는 남는다. 고객 수백 명의 태그를 바꾸는 일이라 틀리면 되돌리기 어렵다.
+
+test('태그 이름 바꾸기 — 고객 태그를 바꾸고, 이미 있으면 합친다 (239)', () => {
+  expect(renameTagOnCustomer(['민감', '재구매'], '민감', '민감성')).toEqual({ tags: ['민감성', '재구매'], changed: true, merged: false });
+  // 바꾼 이름이 이미 있으면 두 번 넣지 않고 하나로
+  expect(renameTagOnCustomer(['민감', '민감성'], '민감', '민감성')).toEqual({ tags: ['민감성'], changed: true, merged: true });
+  // 대상 태그가 없으면 손대지 않는다
+  expect(renameTagOnCustomer(['재구매'], '민감', '민감성')).toEqual({ tags: ['재구매'], changed: false, merged: false });
+  expect(renameTagOnCustomer(null, '민감', '민감성')).toEqual({ tags: [], changed: false, merged: false });
+  // 동의 태그는 그대로 남는다(일반 태그만 바꾼다)
+  expect(renameTagOnCustomer(['민감', '광고수신동의'], '민감', '민감성').tags).toEqual(['민감성', '광고수신동의']);
+  // 쓸 수 없는 이름·같은 이름이면 아무 일도 하지 않는다
+  expect(renameTagOnCustomer(['민감'], '민감', '광고수신동의').changed).toBe(false);
+  expect(renameTagOnCustomer(['민감'], '민감', '  ').changed).toBe(false);
+  expect(renameTagOnCustomer(['민감'], '민감', '민감').changed).toBe(false);
+});
+
+test('태그 목록 이름 바꾸기 — 목록에서도 합쳐지고 순서는 유지된다 (239)', () => {
+  expect(renameTagInList(['민감', '재구매'], '민감', '민감성')).toEqual(['민감성', '재구매']);
+  expect(renameTagInList(['민감성', '민감'], '민감', '민감성')).toEqual(['민감성']); // 중복 제거
+  expect(renameTagInList(['재구매'], '민감', '민감성')).toEqual(['재구매']);
+  expect(renameTagInList(['민감'], '민감', '광고동의')).toEqual(['민감']);           // 거부된 이름이면 그대로
+});
+
+test('태그 이름 바꾸기 미리보기 — 바뀌는 수·합쳐지는 수·사유 (239)', () => {
+  const customers = [
+    { tags: ['민감', '재구매'] },
+    { tags: ['민감', '민감성'] },
+    { tags: ['단골'] },
+    { tags: null },
+  ];
+  expect(previewRename(customers, '민감', '민감성')).toEqual({ affected: 2, merges: 1 });
+  expect(previewRename(customers, '민감', '민감')).toEqual({ affected: 0, merges: 0, error: '같은 이름입니다.' });
+  expect(previewRename(customers, '민감', '광고수신거부').error).toMatch(/동의 설정/);
+  expect(previewRename(customers, '없는태그', '새이름')).toEqual({ affected: 0, merges: 0 }); // 대상 0명이면 조용히 0
+});
+
+// ── 매장이 추가한 주의 키워드 (240, GAP C-11) ────────────────────
+// 기본 목록에 없는 말("레이저 금지")을 놓치면 경고가 있는데도 안 뜬다.
+
+test('매장 주의 키워드 — 기본 목록에 없는 말도 경고로 올린다, 위험 순서는 금기 먼저 (240)', () => {
+  const memo = '레이저 금지 부위 있음\n임신 중\n커피 좋아함';
+  expect(memoCautionLines(memo)).toEqual(['임신 중']);                       // 매장 키워드를 안 주면 못 잡는다
+  expect(memoCautionLines(memo, ['레이저 금지'])).toEqual(['임신 중', '레이저 금지 부위 있음']); // 금기가 먼저, 매장 키워드는 3순위
+  const a = buildCustomerAlert({ memo, extraKeywords: ['레이저 금지'] });
+  expect(a.allLines).toEqual(['임신 중', '레이저 금지 부위 있음']);
+  // 부정 표현은 매장 키워드에도 그대로 적용된다
+  expect(memoCautionLines('레이저 금지 아님', ['레이저 금지'])).toEqual([]);
+});
+
+test('매장 주의 키워드 정리 — 한 글자·중복·기본 키워드·개수 상한 (240)', () => {
+  expect(sanitizeCautionKeywords(['레이저 금지', '필러 이력'])).toEqual(['레이저 금지', '필러 이력']);
+  expect(sanitizeCautionKeywords(['  레이저  금지 '])).toEqual(['레이저 금지']);  // 공백 정리
+  expect(sanitizeCautionKeywords(['약'])).toEqual([]);                            // 한 글자는 아무 문장에나 걸린다
+  expect(sanitizeCautionKeywords(['레이저 금지', '레이저 금지'])).toEqual(['레이저 금지']);
+  expect(sanitizeCautionKeywords([CAUTION_KEYWORDS[0]])).toEqual([]);             // 기본 키워드는 다시 넣지 않는다
+  expect(sanitizeCautionKeywords(['필러 이력', 7, null, ''])).toEqual(['필러 이력']);
+  expect(sanitizeCautionKeywords('레이저')).toEqual([]);                          // 배열이 아니면 빈 목록
+  expect(sanitizeCautionKeywords(Array.from({ length: 30 }, (_, i) => 'k' + i))).toHaveLength(20);
+});
+
+// ── 242 리뷰 반영: 세그먼트 조건 치환, 매장 키워드 순위, 칩 자리 ──
+
+test('태그 이름 바꾸기 — 저장 세그먼트의 태그 조건도 함께 바꾼다 (242, 리뷰 H-1)', () => {
+  const segs = [
+    { id: 's1', name: '민감 고객', condition: { tagsAny: ['민감'] }, createdAt: '', updatedAt: '' },
+    { id: 's2', name: '민감·단골', condition: { tagsAny: ['민감', '민감성'] }, createdAt: '', updatedAt: '' },
+    { id: 's3', name: '등급 VIP', condition: { grades: ['VIP' as const] }, createdAt: '', updatedAt: '' },
+  ];
+  const r = renameTagInSegments(segs, '민감', '민감성');
+  expect(r.affected).toEqual(['민감 고객', '민감·단골']);
+  expect(r.segments[0].condition.tagsAny).toEqual(['민감성']);
+  expect(r.segments[1].condition.tagsAny).toEqual(['민감성']);        // 이미 있던 이름과 합친다
+  expect(r.segments[2]).toBe(segs[2]);                                 // 관계없는 세그먼트는 그대로(같은 객체)
+  // 쓰는 세그먼트가 없으면 아무것도 바꾸지 않는다
+  expect(renameTagInSegments(segs, '없는태그', '새이름').affected).toEqual([]);
+});
+
+test('매장 주의 키워드 — 흔한 말을 넣어도 진짜 경고를 3줄 밖으로 밀지 않는다 (242, 리뷰 M-1)', () => {
+  const memo = ['고객 요청으로 10분 늦게 시작', '고객이 주차 문의', '고객 동반 1인', '켈로이드 체질 — 레이저 강도 낮춤'].join('\n');
+  const a = buildCustomerAlert({ memo, extraKeywords: ['고객'] });
+  expect(a.lines[0]).toContain('켈로이드');   // 몸 상태(2순위)가 매장 키워드(3순위)보다 먼저
+  expect(a.allLines).toHaveLength(4);
+  expect(a.hiddenCount).toBe(1);
+});
+
+test('태그 칩 — 상한이 작아도 등록 태그가 사라지지 않는다 (242, 리뷰 L-1·M-6)', () => {
+  expect(CHIP_LIMIT).toBeGreaterThanOrEqual(40); // 마스터 50개를 거의 다 눌러 넣을 수 있어야 한다
+  const small = tagChoices(['a', 'b', 'c'], Array.from({ length: 10 }, (_, i) => ({ tag: 'u' + i, count: 10 - i })), 6);
+  expect(small.filter(c => c.registered).map(c => c.tag)).toEqual(['a', 'b', 'c']); // 등록 태그가 먼저 자리를 받는다
+  expect(small.filter(c => !c.registered)).toHaveLength(3);
+  // 등록 태그가 많아도 기본 상한에서는 대부분 보인다(19번째부터 안 보이던 문제)
+  const many = tagChoices(Array.from({ length: 30 }, (_, i) => 'r' + i), [{ tag: 'u1', count: 3 }], CHIP_LIMIT);
+  expect(many.filter(c => c.registered)).toHaveLength(30);
+  expect(many.some(c => c.tag === 'u1')).toBe(true);
+});
+
+// ── 243: 체크아웃 재예약 안내 성과 (GAP R-11 후속) ──
+
+const shown = (id: string, customerId: string, suggestedDate: string, shownAt: string, clickedAt?: string): RebookLogEntry =>
+  ({ id, customerId, suggestedDate, shownAt, ...(clickedAt ? { clickedAt } : {}) });
+
+test('재예약 성과 — 추천·누름·추천일 예약을 따로 센다 (243)', () => {
+  const entries = [
+    shown('1', 'c1', '2026-12-10', '2026-11-12T10:00:00.000Z', '2026-11-12T10:00:30.000Z'),
+    shown('2', 'c2', '2026-12-11', '2026-11-13T10:00:00.000Z', '2026-11-13T10:01:00.000Z'),
+    shown('3', 'c3', '2026-12-12', '2026-11-14T10:00:00.000Z'), // 나중에 한 건
+    shown('4', 'c4', '2026-12-13', '2026-11-15T10:00:00.000Z'),
+  ];
+  const r = summarizeRebook(entries, [
+    { customerId: 'c1', date: '2026-12-10', status: 'scheduled' },  // 추천일에 잡혔다
+    { customerId: 'c2', date: '2026-12-20', status: 'scheduled' },  // 잡긴 했지만 다른 날짜 → 세지 않는다
+    { customerId: 'c3', date: '2026-12-12', status: 'cancelled' },  // 취소는 성과가 아니다
+    { customerId: 'c4', date: '2026-12-13', status: 'noshow' },     // 노쇼도 아니다
+  ]);
+  expect(r).toEqual({ shown: 4, clicked: 2, booked: 1, clickRate: 50, bookRate: 25 });
+  expect(describeRebookSummary(r)).toBe('다음 방문 추천 4건 · [예약 잡기] 2건(50%) · 추천일에 예약이 잡힌 건 1건(25%)');
+});
+
+test('재예약 성과 — 지난 날짜의 완료 예약은 성과로 센다(그날 실제로 왔다) (243)', () => {
+  const r = summarizeRebook([shown('1', 'c1', '2026-11-20', '2026-11-01T01:00:00.000Z', '2026-11-01T01:00:10.000Z')],
+    [{ customerId: 'c1', date: '2026-11-20', status: 'completed' }]);
+  expect(r.booked).toBe(1);
+  expect(r.bookRate).toBe(100);
+});
+
+test('재예약 성과 — 추천이 없었던 달에는 0%가 아니라 아무것도 말하지 않는다 (243)', () => {
+  const r = summarizeRebook([], [{ customerId: 'c1', date: '2026-12-10', status: 'scheduled' }]);
+  expect(r).toEqual({ shown: 0, clicked: 0, booked: 0, clickRate: null, bookRate: null });
+  expect(describeRebookSummary(r)).toBeNull();
+});
+
+test('재예약 기록 — 달로 자르고, 모양이 깨진 기록은 버린다 (243)', () => {
+  const entries = sanitizeRebookLog([
+    shown('1', 'c1', '2026-11-10', '2026-11-10T00:00:00.000Z'),
+    shown('2', 'c2', '2026-12-01', '2026-12-01T00:00:00.000Z'),
+    { id: '3', customerId: 'c3', suggestedDate: '엉망', shownAt: '2026-11-11T00:00:00.000Z' }, // 날짜 모양이 아니다
+    { id: '4', customerId: '', suggestedDate: '2026-11-12', shownAt: '2026-11-12T00:00:00.000Z' }, // 고객이 없다
+    null,
+  ]);
+  expect(entries.map(e => e.id)).toEqual(['1', '2']);
+  expect(entriesInMonth(entries, '2026-11').map(e => e.id)).toEqual(['1']);
+  // 같은 고객·같은 추천일은 한 건으로 합치고 [예약 잡기] 기록을 살린다 (246 리뷰 L-3 — 전에는 눌림이 덮여 사라졌다)
+  const merged = sanitizeRebookLog([
+    shown('1', 'c1', '2026-11-10', '2026-11-10T00:00:00.000Z', '2026-11-10T00:01:00.000Z'),
+    shown('2', 'c1', '2026-11-10', '2026-11-10T02:00:00.000Z'),
+  ]);
+  expect(merged).toHaveLength(1);
+  expect(merged[0].id).toBe('1');             // 먼저 뜬 안내가 기준
+  expect(merged[0].clickedAt).toBeTruthy();   // 눌림 기록은 살아남는다
+  expect(rebookKey(merged[0])).toBe('c1|2026-11-10');
+  expect(sanitizeRebookLog(undefined)).toEqual([]);
+});
+
+test('재예약 기록 — 무한정 쌓이지 않고, 잘린 달을 알려 준다 (243·246 리뷰 M-2)', () => {
+  const many = Array.from({ length: MAX_REBOOK_LOG + 30 }, (_, i) => shown(String(i), 'c' + i, '2026-12-10', `2026-11-20T00:${String(i % 60).padStart(2, '0')}:00.000Z`));
+  const trimmed = trimRebookLog(many, '2026-06-01');
+  expect(trimmed.entries).toHaveLength(MAX_REBOOK_LOG);
+  expect(trimmed.entries[trimmed.entries.length - 1].id).toBe(String(MAX_REBOOK_LOG + 29)); // 최근 것이 남는다
+  expect(trimmed.droppedMonths).toEqual(['2026-11']); // 그 달 숫자가 실제보다 작다는 사실이 남는다
+  // 보관 기간이 지난 기록은 건수와 무관하게 버린다
+  const old = trimRebookLog([shown('old', 'c1', '2026-12-10', '2026-01-02T00:00:00.000Z')], '2026-06-01');
+  expect(old.entries).toEqual([]);
+  expect(old.droppedMonths).toEqual(['2026-01']);
+  // 잘린 달에는 화면이 "실제보다 적게 나온다" 고 적는다
+  const line = describeRebookSummary({ shown: 3, clicked: 1, booked: 1, clickRate: 33.3, bookRate: 33.3 }, true);
+  expect(line).toContain('기록 보관 한도로 이 달 일부가 빠져 실제보다 적게 나옵니다');
+});
+
+// ── 244: 취소·노쇼 사유 (GAP R-10 후속) ──
+
+test('취소 사유 — 목록 id 는 라벨로, 직접 입력은 정리해서 보여 준다 (244)', () => {
+  expect(labelFor('cancelled', 'shop-schedule')).toBe('매장 사정(직원·설비)');
+  expect(labelFor('noshow', 'no-contact')).toBe('연락 없이 오지 않음');
+  expect(labelFor('cancelled', '  차가   고장났다 ')).toBe('차가 고장났다'); // 직접 입력
+  expect(normalizeReasonText('  ')).toBe('');
+  expect(normalizeReasonText(null)).toBe('');
+  expect(normalizeReasonText('가'.repeat(50))).toHaveLength(MAX_REASON_TEXT);
+  // 취소·노쇼 보기는 서로 다르다(같은 id 를 쓰지 않는다)
+  const ids = new Set(reasonOptions('cancelled').map(o => o.id));
+  expect(reasonOptions('noshow').some(o => ids.has(o.id))).toBe(false);
+});
+
+test('취소 사유 집계 — 사유를 적지 않은 건수를 숨기지 않는다 (244)', () => {
+  const s = summarizeReasons({ cancelled: 5, noshow: 2 }, [
+    { kind: 'cancelled', reason: 'customer-schedule' },
+    { kind: 'cancelled', reason: 'customer-schedule' },
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'noshow', reason: 'no-contact' },
+    { kind: 'noshow', reason: '직접 쓴 사유' },
+  ]);
+  expect(s.cancelled).toBe(5);
+  expect(s.noshow).toBe(2);
+  expect(s.recorded).toBe(5);
+  expect(s.missing).toBe(2);           // 7건 중 5건만 사유가 있다
+  expect(s.shopSide).toBe(1);          // 매장 쪽 사유(직원·설비)
+  expect(s.top[0]).toEqual({ label: '고객 일정 변경', count: 2, by: 'customer' });
+  const line = describeReasonSummary(s);
+  expect(line).toContain('이달 취소 5건 · 노쇼 2건');
+  expect(line).toContain('고객 일정 변경 2건');
+  expect(line).toContain('사유 미기록 2건');
+});
+
+test('취소 사유 집계 — 취소가 없으면 아무 말도 하지 않고, 기록이 예약보다 많으면 예약을 믿는다 (244)', () => {
+  expect(describeReasonSummary(summarizeReasons({ cancelled: 0, noshow: 0 }, []))).toBeNull();
+  // 지워진 예약의 사유가 남아 있어도 집계 건수는 예약 쪽을 따른다(미기록이 음수가 되지 않는다)
+  const s = summarizeReasons({ cancelled: 1, noshow: 0 }, [
+    { kind: 'cancelled', reason: 'duplicate' },
+    { kind: 'cancelled', reason: 'duplicate' },
+    { kind: 'cancelled', reason: 'duplicate' },
+  ]);
+  expect(s.recorded).toBe(1);
+  expect(s.missing).toBe(0);
+  // 사유가 하나도 안 적힌 달은 "사유 미기록" 만 말한다
+  const none = summarizeReasons({ cancelled: 3, noshow: 1 }, []);
+  expect(describeReasonSummary(none)).toBe('이달 취소 3건 · 노쇼 1건 — 사유 미기록 4건');
+});
+
+// ── 245: 전 제품 재고 실사 (GAP P-5 후속) ──
+
+const countItems = [
+  { id: 'p1', name: '앰플', unit: '개', stock: 10 },
+  { id: 'p2', name: '마스크팩', unit: '장', stock: 40 },
+  { id: 'p3', name: '토너', unit: '개', stock: 5 },
+  { id: 'p4', name: '크림', unit: '개', stock: 7 },
+];
+
+test('재고 실사 — 빈칸은 세지 않은 제품으로 두고 건드리지 않는다 (245)', () => {
+  expect(parseCountedQty('')).toBeNull();
+  expect(parseCountedQty('  ')).toBeNull();
+  expect(parseCountedQty('12')).toBe(12);
+  expect(parseCountedQty('1,200')).toBe(1200);
+  expect(parseCountedQty('0')).toBe(0);
+  expect(parseCountedQty('-3')).toBeUndefined();   // 음수는 거절 — "0 으로 맞췄다" 가 되지 않게
+  expect(parseCountedQty('3.5')).toBeUndefined();
+  expect(parseCountedQty('열개')).toBeUndefined();
+
+  const rows = buildCountRows(countItems, { p1: '8', p2: '40', p3: '세 개' });
+  expect(rows[0]).toMatchObject({ counted: 8, diff: -2 });
+  expect(rows[1]).toMatchObject({ counted: 40, diff: 0 });    // 일치
+  expect(rows[2].error).toBeTruthy();                          // 잘못 적은 칸
+  expect(rows[3]).toMatchObject({ counted: null, diff: 0 });   // 빈칸 — 세지 않음
+  expect(rowsToSave(rows).map(r => r.id)).toEqual(['p1']);     // 차이 있고 올바른 것만 저장
+});
+
+test('재고 실사 요약 — 일치·미입력·오류·증감 합을 숨기지 않는다 (245)', () => {
+  const rows = buildCountRows(countItems, { p1: '12', p2: '38', p3: '5', p4: '' });
+  const s = countSummary(rows);
+  expect(s).toEqual({ entered: 3, matched: 1, changed: 2, untouched: 1, invalid: 0, removed: 0, plus: 2, minus: -2 }); // removed 는 277 에서 추가(삭제된 제품은 반영 대상이 아니다)
+  const line = describeCountSummary(s);
+  expect(line).toContain('맞출 제품 2종');
+  expect(line).toContain('일치 1종');
+  expect(line).toContain('아직 안 센 제품 1종');
+  expect(line).toContain('+2');
+  expect(line).toContain('-2');
+  // 아무것도 적지 않은 상태
+  const empty = countSummary(buildCountRows(countItems, {}));
+  expect(empty).toMatchObject({ entered: 0, changed: 0, untouched: 4 });
+  expect(rowsToSave(buildCountRows(countItems, {}))).toEqual([]);
+  // 잘못 적은 칸은 따로 센다
+  expect(countSummary(buildCountRows(countItems, { p1: 'x' })).invalid).toBe(1);
+  expect(describeCountSummary(countSummary(buildCountRows(countItems, { p1: 'x' })))).toContain('잘못 적은 칸 1개');
+});
+
+test('재고 실사 원장 설명 — 실제 수량·날짜·메모가 남는다 (245)', () => {
+  expect(countNote({ counted: 8, unit: '개' }, '2026-11-26')).toBe('실사 8개 (2026-11-26)');
+  expect(countNote({ counted: 0, unit: '장' }, '2026-11-26', '  월말   실사 ')).toBe('실사 0장 (2026-11-26) · 월말 실사');
+});
+
+// ── 246: 243~245 리뷰 반영 ──
+
+test('재예약 성과 — 같은 방문에 안내가 두 번 떠도 한 건으로 센다 (246 리뷰 M-1)', () => {
+  // 시술 결제 + 제품 결제를 따로 등록하면 같은 고객·같은 추천일 안내가 두 번 뜬다
+  const entries = [
+    shown('a', 'c1', '2026-12-10', '2026-11-26T01:00:00.000Z'),
+    shown('b', 'c1', '2026-12-10', '2026-11-26T01:05:00.000Z', '2026-11-26T01:06:00.000Z'),
+    shown('c', 'c2', '2026-12-11', '2026-11-26T02:00:00.000Z'),
+  ];
+  const r = summarizeRebook(entries, [{ customerId: 'c1', date: '2026-12-10', status: 'confirmed' }]);
+  expect(r.shown).toBe(2);        // 기록 3건이지만 고객·추천일 기준 2건
+  expect(r.clicked).toBe(1);      // 둘 중 하나라도 눌렀으면 누른 것
+  expect(r.booked).toBe(1);       // 예약 1건을 2건으로 세지 않는다
+  expect(r.clickRate).toBe(50);
+  expect(r.bookRate).toBe(50);
+});
+
+test('취소 사유 — 상태와 기록의 kind 가 어긋나도 내부 id 를 화면에 내보내지 않는다 (246 리뷰 M-3)', () => {
+  expect(labelFor('cancelled', 'no-contact')).toBe('연락 없이 오지 않음');   // 노쇼 보기지만 라벨을 찾는다
+  expect(labelFor('noshow', 'customer-schedule')).toBe('고객 일정 변경');
+  expect(labelFor('cancelled', '직접 적은 사유')).toBe('직접 적은 사유');
+  expect(isPresetReason('shop-schedule')).toBe(true);
+  expect(isPresetReason('no-contact')).toBe(true);
+  expect(isPresetReason('직접 적은 사유')).toBe(false);  // 개인 사정이 적힐 수 있는 쪽 — 익명화 때 지운다
+});
+
+test('취소 사유 집계 — 매장 쪽 건수를 화면에 적고 총건수를 넘기지 않는다 (246 리뷰 M-5)', () => {
+  const s = summarizeReasons({ cancelled: 4, noshow: 1 }, [
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'cancelled', reason: 'duplicate' },
+    { kind: 'noshow', reason: 'reminder-missed' },
+  ]);
+  expect(s.shopSide).toBe(3);
+  const line = describeReasonSummary(s, '11월');
+  expect(line).toContain('11월 취소 4건 · 노쇼 1건');   // "이달" 대신 보고 있는 달
+  expect(line).toContain('그중 매장 쪽 사유 3건');
+  // 지워진 예약의 기록이 남아도 총건수를 넘기지 않는다
+  const over = summarizeReasons({ cancelled: 1, noshow: 0 }, [
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'cancelled', reason: 'duplicate' },
+  ]);
+  expect(over.shopSide).toBe(1);
+  expect(over.missing).toBe(0);
+});
+
+test('재고 실사 — 0 으로 내려가는 제품을 따로 셀 수 있다 (246 리뷰 M-6)', () => {
+  const rows = buildCountRows(countItems, { p1: '0', p2: '0', p3: '5', p4: '' });
+  expect(zeroingRows(rows).map(r => r.id)).toEqual(['p1', 'p2']); // p3 는 현재고와 같아 저장 대상이 아니다
+  expect(zeroingRows(buildCountRows(countItems, {}))).toEqual([]);
+  expect(countNote({ counted: 0, unit: '개' }, '2026-11-26')).toBe('실사 0개 (2026-11-26)');
+});
+
+// ── 247: 예약 변경 이력 ──
+
+const baseResv = { date: '2026-11-26', startTime: '14:00', staffName: '김실장', customerName: '홍길동', services: [{ serviceName: '아쿠아필' }], totalPrice: 90_000, memo: '', status: 'confirmed' };
+
+test('예약 변경 이력 — 바뀐 항목만, 사람이 읽을 수 있는 줄로 (247)', () => {
+  expect(diffReservation(baseResv, baseResv)).toEqual([]); // 바뀐 것이 없으면 이력을 만들지 않는다
+  const moved = diffReservation(baseResv, { ...baseResv, date: '2026-11-27', startTime: '15:00' });
+  expect(moved).toHaveLength(1); // 날짜와 시간은 함께 읽어야 뜻이 통한다
+  expect(describeChange(moved[0])).toBe('날짜·시간 2026-11-26 14:00 → 2026-11-27 15:00');
+  const many = diffReservation(baseResv, { ...baseResv, staffName: '박원장', services: [{ serviceName: '진정관리' }], totalPrice: 120_000 });
+  expect(many.map(c => c.label)).toEqual(['담당 직원', '시술', '금액']);
+  expect(describeChange(many[2])).toBe('금액 90,000원 → 120,000원');
+  // 메모는 전문을 남기지 않는다 — 길고 개인 사정이 적힐 수 있다
+  const memo = diffReservation(baseResv, { ...baseResv, memo: '임신 중이라 레이저 제외' });
+  expect(memo).toEqual([{ label: '메모', from: '없음', to: '있음' }]);
+});
+
+test('예약 변경 이력 — 상태 변경은 한글 라벨로, 같은 상태면 남기지 않는다 (247)', () => {
+  expect(statusLabel('noshow')).toBe('노쇼');
+  expect(statusChange('confirmed', 'cancelled')).toEqual([{ label: '상태', from: '예약확정', to: '취소' }]);
+  expect(statusChange('completed', 'completed')).toEqual([]);
+  expect(describeChange(statusChange('confirmed', 'noshow')[0])).toBe('상태 예약확정 → 노쇼');
+});
+
+test('예약 변경 이력 — 모양이 깨진 기록은 버리고, 예약당·전체 상한을 지킨다 (247)', () => {
+  const entry = (id: string, rid: string, at: string): HistoryEntry =>
+    ({ id, reservationId: rid, at, kind: 'edit', changes: [{ label: '날짜·시간', from: 'a', to: 'b' }] });
+  const clean = sanitizeHistory([
+    entry('1', 'r1', '2026-11-26T01:00:00.000Z'),
+    { id: '2', reservationId: '', at: '2026-11-26T02:00:00.000Z', kind: 'edit', changes: [] },   // 예약 id 가 없다
+    { id: '3', reservationId: 'r1', at: '2026-11-26T03:00:00.000Z', kind: 'edit', changes: [] }, // 바뀐 것이 없다
+    null,
+  ]);
+  expect(clean.map(e => e.id)).toEqual(['1']);
+  // 한 예약에 상한을 넘겨 쌓이면 최근 것만 남는다
+  const lots = Array.from({ length: MAX_PER_RESERVATION + 5 }, (_, i) => entry('e' + i, 'r1', `2026-11-26T${String(i % 24).padStart(2, '0')}:00:00.000Z`));
+  const trimmed = trimHistory(lots, '2026-06-01');
+  expect(trimmed.filter(e => e.reservationId === 'r1')).toHaveLength(MAX_PER_RESERVATION);
+  // 보관 기간이 지난 기록은 버린다
+  expect(trimHistory([entry('old', 'r1', '2026-01-02T00:00:00.000Z')], '2026-06-01')).toEqual([]);
+  // 그 예약 것만, 최근 것이 위로
+  const mixed = [entry('a', 'r1', '2026-11-26T01:00:00.000Z'), entry('b', 'r2', '2026-11-26T02:00:00.000Z'), entry('c', 'r1', '2026-11-26T03:00:00.000Z')];
+  expect(historyFor(mixed, 'r1').map(e => e.id)).toEqual(['c', 'a']);
+});
+
+// ── 248: 발주 제안 (GAP P-5 계열) ──
+
+const reorderProducts = [
+  { id: 'r1', name: '앰플', unit: '개', stock: 2, minStock: 3 },
+  { id: 'r2', name: '마스크팩', unit: '장', stock: 100, minStock: 10 },
+  { id: 'r3', name: '신제품', unit: '개', stock: 1, minStock: 5 },   // 판매 기록 없음
+  { id: 'r4', name: '넉넉한제품', unit: '개', stock: 50, minStock: 5 }, // 판매도 없고 재고도 넉넉
+];
+
+test('발주 제안 — 판매 속도로 수량·남은 일수를 내고, 급한 것부터 (248)', () => {
+  const sales = [
+    // 기간 밖 판매 1건 — 이 제품을 30일 전부터 팔고 있었다는 뜻(센 날수 = 30). 짧은 기록은 따로 테스트한다(250 M-8)
+    { id: 'seed', productId: 'r1', quantity: 1, saleDate: '2026-10-01' },
+    ...Array.from({ length: 18 }, (_, i) => ({ id: 's' + i, productId: 'r1', quantity: 1, saleDate: '2026-11-10' })),
+    { id: 'm1', productId: 'r2', quantity: 10, saleDate: '2026-11-20' },
+    { id: 'm0', productId: 'r2', quantity: 1, saleDate: '2026-10-01' },
+  ];
+  const rows = reorderSuggestions({ products: reorderProducts, sales, today: '2026-11-26' });
+  const ampoule = rows.find(r => r.id === 'r1');
+  expect(ampoule?.sold).toBe(18);
+  expect(ampoule?.dailyRate).toBeCloseTo(0.6, 5); // 18 ÷ 30 — 계산은 원값(250 리뷰 M-1)
+  expect(ampoule?.dailyRateText).toBe('0.6');     // 화면에만 소수 한 자리
+  expect(ampoule?.daysLeft).toBe(3);              // 2 ÷ 0.6 = 3.33 → 3일분
+  expect(ampoule?.suggestQty).toBe(19);           // 0.6×30 + 3 − 2 = 19
+  expect(ampoule?.reason).toContain('최근 30일 18개 판매');
+  // 재고가 넉넉하면 줄을 만들지 않는다(0건 줄 금지)
+  expect(rows.some(r => r.id === 'r2')).toBe(false);
+  expect(rows.some(r => r.id === 'r4')).toBe(false);
+  // 판매 기록이 없으면 속도를 지어내지 않고 안전재고까지만
+  const fresh = rows.find(r => r.id === 'r3');
+  expect(fresh?.suggestQty).toBe(4);
+  expect(fresh?.daysLeft).toBeNull();
+  expect(fresh?.reason).toContain('판매 기록 없음');
+  // 급한 것(남은 일수 적은 것)이 먼저, 모르는 것은 뒤로
+  expect(rows.map(r => r.id)).toEqual(['r1', 'r3']);
+});
+
+test('발주 제안 — 취소된 판매·기간 밖·미래 날짜는 세지 않는다 (248)', () => {
+  const sales = [
+    { id: 'ok', productId: 'r1', quantity: 10, saleDate: '2026-11-20' },
+    { id: 'cancelled', productId: 'r1', quantity: 10, saleDate: '2026-11-21' },
+    { id: 'old', productId: 'r1', quantity: 50, saleDate: '2026-09-01' },   // 기간 밖
+    { id: 'future', productId: 'r1', quantity: 50, saleDate: '2026-12-31' }, // 미래
+    { id: 'noProduct', productName: '연결없음', quantity: 30, saleDate: '2026-11-22' },
+  ];
+  const rows = reorderSuggestions({
+    products: [reorderProducts[0]], sales, canceledSaleIds: new Set(['cancelled']), today: '2026-11-26', coverDays: 30,
+  });
+  expect(rows[0].sold).toBe(10);
+  expect(rows[0].dailyRate).toBeCloseTo(10 / 30, 5); // 원값 0.3333… (반올림 0.3 으로 계산하면 수량이 어긋난다)
+  expect(rows[0].suggestQty).toBe(11); // ceil(0.3333×30) + 3 − 2 = 11
+});
+
+test('발주 제안 — 복사 글은 수량 중심이고 추정이라고 적는다 (248)', () => {
+  const rows = reorderSuggestions({
+    products: [reorderProducts[0], reorderProducts[2]],
+    sales: [
+      { id: 'seed', productId: 'r1', quantity: 1, saleDate: '2026-10-01' }, // 센 날수 30 (기간 밖은 수량에 안 들어간다)
+      { id: 's', productId: 'r1', quantity: 30, saleDate: '2026-11-20' },
+    ],
+    today: '2026-11-26',
+  });
+  const text = reorderListText(rows, '2026-11-26');
+  expect(text).toContain('[발주 요청] 2026-11-26');
+  expect(text).toContain('- 앰플 31개 (현재고 2개, 약 2일분)');
+  expect(text).toContain('- 신제품 4개 (현재고 1개)');
+  expect(text).toContain('수량은 매장이 확인 후 확정합니다');
+  expect(describeReorderRow(rows[0])).toContain('앰플 31개 주문 권장');
+  expect(reorderListText([], '2026-11-26')).toBe(''); // 제안이 없으면 복사할 글도 없다
+});
+
+// ── 249: 고객 연락 기록·미루기 ──
+
+test('연락 기록 — 결과마다 기본 미루기 기간이 다르고, 기한이 지나면 스스로 풀린다 (249)', () => {
+  expect(resultLabel('no-answer')).toBe('부재·연결 안 됨');
+  expect(defaultSnoozeDays('booked')).toBe(30);
+  expect(defaultSnoozeDays('no-answer')).toBe(3);
+  expect(defaultSnoozeDays('직접 입력한 결과')).toBe(0); // 모르는 결과는 미루지 않는다
+  expect(addDaysFollowUp('2026-11-26', 7)).toBe('2026-12-03');
+  // 기한 당일까지는 숨기고, 다음 날부터 다시 보인다
+  // until 은 "다시 보이기 시작하는 날" — 7일을 고르면 그 날 다시 보인다 (250 리뷰 L-1)
+  const rec = { at: '2026-11-26', result: 'later', until: '2026-12-03' };
+  expect(isSnoozed(rec, '2026-12-02')).toBe(true);
+  expect(isSnoozed(rec, '2026-12-03')).toBe(false);
+  expect(isSnoozed({ at: '2026-11-26', result: 'later' }, '2026-11-26')).toBe(false); // 미루지 않은 기록
+  expect(isSnoozed(undefined, '2026-11-26')).toBe(false);
+});
+
+test('연락 기록 — 저장값 정리·보관 상한·숨긴 고객 집합 (249)', () => {
+  const clean = sanitizeFollowUps({
+    c1: { at: '2026-11-26', result: 'booked', until: '2026-12-26', note: '  다음 달   초 ', actor: '김실장' },
+    c2: { at: '엉망', result: 'booked' },                       // 날짜가 아니다
+    c3: { at: '2026-11-26', result: '   ' },                    // 결과가 비었다
+    c4: { at: '2026-11-26', result: 'later', until: '엉망' },    // 기한이 날짜가 아니다 → 미루기 없이 기록만
+  });
+  expect(Object.keys(clean)).toEqual(['c1', 'c4']);
+  expect(clean.c1.note).toBe('다음 달 초');
+  expect(clean.c4.until).toBeUndefined();
+  // 숨긴 고객 집합 — 기한이 남은 것만
+  const set = snoozedIdSet({ ...clean, c5: { at: '2026-01-01', result: 'later', until: '2026-01-08' } }, '2026-11-26');
+  expect([...set]).toEqual(['c1']);
+  // 오래된 기록은 버린다(기한도 지난 것)
+  const pruned = pruneFollowUps({ old: { at: '2025-01-01', result: 'later', until: '2025-01-08' }, keep: clean.c1 }, '2026-06-01');
+  expect(Object.keys(pruned)).toEqual(['keep']);
+});
+
+test('연락 기록 — 화면 문구는 결과·기한·메모를 그대로, 숨긴 인원은 숨기지 않는다 (249)', () => {
+  expect(describeFollowUp({ at: '2026-11-26', result: 'no-answer', until: '2026-11-29', note: '오후에 다시', actor: '김실장' }))
+    .toBe('2026-11-26 부재·연결 안 됨 · 2026-11-29 까지 미룸 · 오후에 다시 (김실장)');
+  expect(describeFollowUp({ at: '2026-11-26', result: 'messaged' })).toBe('2026-11-26 문자·카톡 보냄');
+  expect(describeHidden(3)).toBe('연락을 미룬 고객 3명은 목록에서 숨겼습니다(기한이 지나면 다시 나옵니다).');
+  expect(describeHidden(0)).toBeNull();
+});
+
+// ── 250: 247~249 리뷰 반영 ──
+
+test('발주 제안 — 재고부족(재고 = 안전재고)이면 반드시 줄을 만든다 (250 리뷰 H-1)', () => {
+  // 매장 공용 규칙 isLowStock 은 stock <= minStock 인데, 전에는 stock < minStock 만 봐서
+  // 헤더가 "재고부족" 이라는 제품을 발주 제안이 "주문할 것 없음" 이라고 말했다
+  const same = reorderSuggestions({ products: [{ id: 'p', name: '앰플', unit: '개', stock: 5, minStock: 5 }], sales: [], today: '2026-11-26' });
+  expect(same).toHaveLength(1);
+  expect(same[0].suggestQty).toBeGreaterThanOrEqual(1);
+  // 안전재고 0 + 재고 0 도 재고부족이다
+  const zero = reorderSuggestions({ products: [{ id: 'p', name: '앰플', unit: '개', stock: 0, minStock: 0 }], sales: [], today: '2026-11-26' });
+  expect(zero).toHaveLength(1);
+  expect(zero[0].suggestQty).toBe(1);
+  // 단종(비활성) 제품은 발주 대상이 아니다
+  expect(reorderSuggestions({ products: [{ id: 'p', name: '단종', unit: '개', stock: 0, minStock: 5, isActive: false }], sales: [], today: '2026-11-26' })).toEqual([]);
+  expect(REORDER_EMPTY).toContain('안전재고를 넘고');
+});
+
+test('발주 제안 — 한 달에 1개 팔린 제품을 "판매 기록 없음" 이라고 적지 않는다 (250 리뷰 H-2)', () => {
+  const rows = reorderSuggestions({
+    products: [{ id: 'p', name: '고가앰플', unit: '개', stock: 1, minStock: 5 }],
+    sales: [{ id: 's', productId: 'p', quantity: 1, saleDate: '2026-11-10' }],
+    today: '2026-11-26',
+  });
+  expect(rows[0].sold).toBe(1);
+  expect(rows[0].reason).not.toContain('판매 기록 없음');
+  expect(rows[0].reason).toContain('1개 판매');
+  expect(rows[0].daysLeft).not.toBeNull();     // 속도를 알므로 남은 일수도 안다
+  expect(rows[0].dailyRate).toBeGreaterThan(0);
+  // 판매가 정말 0건일 때만 그 문구를 쓴다
+  const none = reorderSuggestions({ products: [{ id: 'p', name: '신제품', unit: '개', stock: 1, minStock: 5 }], sales: [], today: '2026-11-26' });
+  expect(none[0].reason).toContain('판매 기록 없음');
+});
+
+test('발주 제안 — 판매 기록이 짧으면 센 날수로 계산하고 그 사실을 적는다 (250 리뷰 M-8)', () => {
+  // 영업 3일 된 매장: 3일에 3개 → 하루 1개(전에는 3÷30 = 0.1개로 깎여 "30일분 남음" 이라고 했다)
+  const rows = reorderSuggestions({
+    products: [{ id: 'p', name: '앰플', unit: '개', stock: 3, minStock: 2 }],
+    sales: [
+      { id: 'a', productId: 'p', quantity: 1, saleDate: '2026-11-24' },
+      { id: 'b', productId: 'p', quantity: 1, saleDate: '2026-11-25' },
+      { id: 'c', productId: 'p', quantity: 1, saleDate: '2026-11-26' },
+    ],
+    today: '2026-11-26',
+  });
+  expect(rows[0].countedDays).toBe(3);
+  expect(rows[0].dailyRate).toBeCloseTo(1, 5);
+  expect(rows[0].daysLeft).toBe(3);
+  expect(rows[0].reason).toContain('판매 기록이 3일치뿐이라 추정이 거칠다');
+});
+
+test('발주 제안 — 음수 재고를 0 으로 꾸미지 않는다 (250 리뷰 L-9)', () => {
+  const rows = reorderSuggestions({ products: [{ id: 'p', name: '앰플', unit: '개', stock: -5, minStock: 10 }], sales: [], today: '2026-11-26' });
+  expect(rows[0].stock).toBe(-5);
+  expect(rows[0].suggestQty).toBe(15); // 안전재고 10 − (−5) = 15
+  expect(rows[0].reason).toContain('현재고 -5개');
+});
+
+test('연락 기록 — 진행 중인 미루기는 건수 상한보다 먼저 보호한다 (250 리뷰 M-6)', () => {
+  const today = '2026-11-26';
+  const map: Record<string, { at: string; result: string; until?: string }> = {};
+  // 상한을 넘는 활성 미루기 + 오래된 기록
+  for (let i = 0; i < 510; i += 1) map['act' + i] = { at: '2026-11-01', result: 'declined', until: '2027-02-01' };
+  for (let i = 0; i < 50; i += 1) map['old' + i] = { at: '2026-11-20', result: 'messaged' };
+  const pruned = pruneFollowUps(map, '2026-01-01', 500, today);
+  const kept = Object.keys(pruned);
+  expect(kept).toHaveLength(500);
+  expect(kept.every(k => k.startsWith('act'))).toBe(true); // 활성 미루기가 자리를 먼저 받는다
+  // 활성 미루기가 적으면 나머지 기록도 남는다
+  const small = pruneFollowUps({ a: { at: '2026-11-01', result: 'declined', until: '2027-02-01' }, b: { at: '2026-11-20', result: 'messaged' } }, '2026-01-01', 500, today);
+  expect(Object.keys(small).sort()).toEqual(['a', 'b']);
+});
+
+test('예약 변경 이력 — 삭제도 남고, 등록 줄은 "등록" 을 두 번 말하지 않는다 (250 리뷰 H-3·L-5)', () => {
+  const del: HistoryEntry = { id: 'd', reservationId: 'r1', at: '2026-11-26T01:00:00.000Z', kind: 'delete', changes: [{ label: '삭제', from: '2026-11-26 14:00', to: '' }] };
+  expect(sanitizeHistory([del])).toHaveLength(1);
+  expect(describeEntryHead(del, () => '11-26 10:00')).toBe('11-26 10:00 · 삭제');
+  expect(describeChange(del.changes[0])).toBe('삭제 2026-11-26 14:00 지움');
+  // 등록 줄은 머리말이 "등록" 이므로 항목 이름은 날짜·시간
+  const create: HistoryEntry = { id: 'c', reservationId: 'r1', at: '2026-11-26T00:00:00.000Z', kind: 'create', changes: [{ label: '날짜·시간', from: '', to: '2026-11-26 14:00' }] };
+  expect(describeEntryHead(create, () => '11-26 09:00')).toBe('11-26 09:00 · 등록');
+  expect(describeChange(create.changes[0])).toBe('날짜·시간 2026-11-26 14:00 로 입력');
+});
+
+// ── 251: 자주 쓰는 메모 문구 ──
+
+test('메모 문구 — 정리·중복·상한과 거절 사유 (251)', () => {
+  expect(normalizePreset('  자극   없음 · 홈케어 안내 ')).toBe('자극 없음 · 홈케어 안내');
+  expect(normalizePreset('줄\n바꿈')).toBe('줄 바꿈');
+  expect(normalizePreset('가'.repeat(60))).toHaveLength(MAX_PRESET_LEN);
+  expect(normalizePreset(null)).toBe('');
+  expect(sanitizePresets(['a b', 'a  b', '', null, '다른 문구'])).toEqual(['a b', '다른 문구']); // 중복·빈 값 제거
+  // 거절 사유를 조용히 버리지 않는다
+  expect(addPreset([], ' ').error).toBe('문구를 입력해주세요.');
+  expect(addPreset([], '가').error).toBe('두 글자 이상 적어주세요.');
+  expect(addPreset(['자극 없음'], '자극  없음').error).toBe('이미 있는 문구입니다.');
+  const full = Array.from({ length: MAX_PRESETS }, (_, i) => '문구' + i);
+  expect(addPreset(full, '하나 더').error).toContain(`${MAX_PRESETS}개까지`);
+  expect(addPreset(['자극 없음'], '강도 낮춤').list).toEqual(['자극 없음', '강도 낮춤']);
+  expect(removePreset(['자극 없음', '강도 낮춤'], '자극 없음')).toEqual(['강도 낮춤']);
+});
+
+test('메모 문구 — 메모에 덧붙이고 같은 줄을 두 번 넣지 않는다 (251)', () => {
+  expect(appendPreset('', '자극 없음')).toBe('자극 없음');                       // 빈 메모에는 줄바꿈을 만들지 않는다
+  expect(appendPreset('홈케어 안내', '자극 없음')).toBe('홈케어 안내\n자극 없음');
+  expect(appendPreset('자극 없음', '자극 없음')).toBe('자극 없음');              // 이미 있으면 그대로
+  expect(appendPreset('홈케어 안내\n', '자극 없음')).toBe('홈케어 안내\n자극 없음'); // 끝 빈 줄 정리
+  expect(appendPreset('메모', '  ')).toBe('메모');
+  expect(presetInMemo('홈케어 안내\n자극 없음', '자극 없음')).toBe(true);
+  expect(presetInMemo('자극 없음이 있었다', '자극 없음')).toBe(false);           // 줄 단위로만 본다
+});
+
+// ── 252: 고객 정보 변경 이력 ──
+
+const custBefore = { name: '홍길동', phone: '010-1234-5678', email: 'hong@test.com', grade: '일반', tags: ['민감성'], memo: '', allergies: '' };
+
+test('고객 변경 이력 — 개인정보는 적게 남긴다(연락처 일부·메모는 사실만) (252)', () => {
+  const changes = diffCustomer(custBefore, { ...custBefore, phone: '010-9999-0000', email: 'new@test.com', memo: '임신 중', allergies: '복숭아' });
+  const byLabel = new Map(changes.map(c => [c.label, c]));
+  expect(byLabel.get('연락처')).toEqual({ label: '연락처', from: '···5678', to: '···0000' }); // 뒤 4자리만
+  expect(byLabel.get('이메일')?.to).toBe('ne···@test.com');
+  expect(byLabel.get('메모')).toEqual({ label: '메모', from: '없음', to: '있음' });            // 내용은 남기지 않는다
+  expect(byLabel.get('알레르기')).toEqual({ label: '알레르기', from: '없음', to: '있음' });
+  expect(maskPhone('')).toBe('없음');
+  expect(maskEmail(undefined)).toBe('없음');
+  // 생일·주소는 적었는지만
+  const privacy = diffCustomer(custBefore, { ...custBefore, birthDate: '1990-01-01', address: '서울시 강남구 …' });
+  expect(privacy.map(c => [c.label, c.to])).toEqual([['생일', '적음'], ['주소', '적음']]);
+});
+
+test('고객 변경 이력 — 등급·태그·이름은 그대로, 바뀐 것이 없으면 기록하지 않는다 (252)', () => {
+  expect(diffCustomer(custBefore, custBefore)).toEqual([]);
+  const changes = diffCustomer(custBefore, { ...custBefore, name: '김길동', grade: 'VIP', tags: ['민감성', '임산부'] });
+  expect(changes.map(c => describeCustomerChange(c))).toEqual([
+    '이름 홍길동 → 김길동',
+    '등급 일반 → VIP',
+    '태그 민감성 → 민감성, 임산부',
+  ]);
+  expect(gradeChange('일반', 'VIP')).toEqual([{ label: '등급', from: '일반', to: 'VIP' }]);
+  expect(gradeChange('VIP', 'VIP')).toEqual([]);
+  expect(describeCustomerEntryHead({ id: 'x', customerId: 'c1', at: '2026-11-26T01:00:00.000Z', kind: 'grade', actor: '김실장', changes: [] }, () => '11-26 10:00'))
+    .toBe('11-26 10:00 · 김실장 · 등급 변경');
+});
+
+test('고객 변경 이력 — 모양이 깨진 기록·상한·고객별 조회 (252)', () => {
+  const entry = (id: string, cid: string, at: string) => ({ id, customerId: cid, at, kind: 'edit' as const, changes: [{ label: '등급', from: '일반', to: 'VIP' }] });
+  const clean = sanitizeCustomerHistory([entry('1', 'c1', '2026-11-26T01:00:00.000Z'), { id: '2', customerId: '', at: 'x', kind: 'edit', changes: [] }, null]);
+  expect(clean.map(e => e.id)).toEqual(['1']);
+  const lots = Array.from({ length: MAX_PER_CUSTOMER + 5 }, (_, i) => entry('e' + i, 'c1', `2026-11-26T${String(i % 24).padStart(2, '0')}:00:00.000Z`));
+  expect(trimCustomerHistory(lots, '2026-06-01').filter(e => e.customerId === 'c1')).toHaveLength(MAX_PER_CUSTOMER);
+  expect(trimCustomerHistory([entry('old', 'c1', '2026-01-02T00:00:00.000Z')], '2026-06-01')).toEqual([]);
+  const mixed = [entry('a', 'c1', '2026-11-26T01:00:00.000Z'), entry('b', 'c2', '2026-11-26T02:00:00.000Z'), entry('c', 'c1', '2026-11-26T03:00:00.000Z')];
+  expect(customerHistoryFor(mixed, 'c1').map(e => e.id)).toEqual(['c', 'a']);
+});
+
+// ── 253: 취소·노쇼 사유 지난달 비교 ──
+
+test('취소 사유 추세 — 지난달 자료가 없으면 비교하지 않는다 (253)', () => {
+  const cur = summarizeReasons({ cancelled: 5, noshow: 2 }, [{ kind: 'cancelled', reason: 'shop-schedule' }]);
+  const emptyPrev = summarizeReasons({ cancelled: 0, noshow: 0 }, []);
+  const t0 = compareReasonMonths(cur, emptyPrev);
+  expect(t0.comparable).toBe(false);
+  expect(describeReasonTrend(t0)).toBeNull(); // 0 에서 늘었다고 말하지 않는다
+  // 지난달 자료가 있으면 변화만 적는다
+  const prev = summarizeReasons({ cancelled: 3, noshow: 2 }, [{ kind: 'cancelled', reason: 'customer-schedule' }]);
+  const t1 = compareReasonMonths(cur, prev);
+  expect(t1).toMatchObject({ comparable: true, shopComparable: true, cancelDelta: 2, noshowDelta: 0, shopSideDelta: 1 });
+  expect(describeReasonTrend(t1)).toBe('지난달 대비 취소 +2 · 매장 쪽 사유 +1 (지난달 사유 기록 1건 기준)');
+  // 줄어든 것도 그대로
+  const t2 = compareReasonMonths(prev, cur);
+  expect(describeReasonTrend(t2)).toBe('지난달 대비 취소 -2 · 매장 쪽 사유 -1 (지난달 사유 기록 1건 기준)');
+  // 변화가 없으면 그 사실을 말한다
+  expect(describeReasonTrend(compareReasonMonths(prev, prev))).toBe('지난달과 취소·노쇼 건수가 같습니다');
+});
+
+test('지난달 계산 — 연말 경계 (253)', () => {
+  expect(previousMonth('2026-11')).toBe('2026-10');
+  expect(previousMonth('2026-01')).toBe('2025-12');
+  expect(previousMonth('엉망')).toBe('엉망');
+});
+
+// ── 254: 251~253 리뷰 반영 ──
+
+test('취소 사유 추세 — 지난달에 사유를 아무도 적지 않았으면 "매장 쪽 +N" 을 말하지 않는다 (254 리뷰 H-1)', () => {
+  // 244(사유 입력)가 나간 첫 달의 모든 매장이 보던 거짓 악화
+  const prevNoReasons = summarizeReasons({ cancelled: 8, noshow: 3 }, []);               // 지난달: 취소는 있었지만 사유 0건
+  const curWithReasons = summarizeReasons({ cancelled: 8, noshow: 3 }, [
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'cancelled', reason: 'shop-schedule' },
+    { kind: 'cancelled', reason: 'duplicate' },
+  ]);
+  const t = compareReasonMonths(curWithReasons, prevNoReasons);
+  expect(t.comparable).toBe(true);        // 건수는 비교할 수 있다
+  expect(t.shopComparable).toBe(false);   // 매장 쪽 사유는 비교할 수 없다
+  const line = describeReasonTrend(t);
+  expect(line).not.toContain('매장 쪽');  // 취소 건수가 같으니 변화 없음만 말한다
+  expect(line).toBe('지난달과 취소·노쇼 건수가 같습니다');
+  // 거꾸로 이번 달에 사유를 안 적었을 때도 "개선" 으로 말하지 않는다
+  const back = compareReasonMonths(prevNoReasons, curWithReasons);
+  expect(describeReasonTrend(back)).not.toContain('매장 쪽');
+});
+
+test('메모 문구 — 칩을 다시 누르면 그 줄이 빠진다(실제 토글) (254 리뷰 M-4)', () => {
+  const memo = appendPreset(appendPreset('', '자극 없음'), '강도 낮춤');
+  expect(memo).toBe('자극 없음\n강도 낮춤');
+  expect(removePresetLine(memo, '자극 없음')).toBe('강도 낮춤');
+  expect(removePresetLine(memo, '강도 낮춤')).toBe('자극 없음');
+  expect(removePresetLine('자극 없음', '자극 없음')).toBe('');
+  // 없던 문구면 메모를 건드리지 않는다(타이핑 중인 끝 공백도 그대로)
+  expect(removePresetLine('직접 쓴 메모   ', '자극 없음')).toBe('직접 쓴 메모   ');
+  // 사이 빈 줄이 겹치지 않게 정리한다
+  expect(removePresetLine('A\n자극 없음\nB', '자극 없음')).toBe('A\nB');
+});
+
+test('고객 변경 이력 — 형식만 바뀐 연락처·순서만 바뀐 태그는 기록하지 않는다 (254 리뷰 M-6)', () => {
+  const before = { phone: '010-1234-5678', email: 'hong@test.com', tags: ['a', 'b'] };
+  expect(diffCustomer(before, { ...before, phone: '01012345678' })).toEqual([]);  // 하이픈만 지웠다
+  expect(diffCustomer(before, { ...before, tags: ['b', 'a'] })).toEqual([]);      // 순서만 바뀜
+  expect(diffCustomer(before, { ...before, tags: ['b', 'a', 'c'] })).toHaveLength(1);
+  // 실제로 다른 번호는 기록한다
+  expect(diffCustomer(before, { ...before, phone: '010-1234-9999' })).toHaveLength(1);
+  // @ 가 여러 개인 이메일도 도메인을 잘라 먹지 않는다
+  expect(maskEmail('a@b@c.com')).toBe('a···@b@c.com');
+});
+
+test('고객 변경 이력 — 날짜 모양이 아닌 기록은 버린다(영구 잔류 방지) (254 리뷰 L-3)', () => {
+  const broken = [{ id: 'x', customerId: 'c1', at: 'not-a-date', kind: 'edit' as const, changes: [{ label: '등급', from: '일반', to: 'VIP' }] }];
+  expect(sanitizeCustomerHistory(broken)).toEqual([]);
+  expect(trimCustomerHistory(sanitizeCustomerHistory(broken), '2026-06-01')).toEqual([]);
+});
+
+// ── 256: 영수증 인사말 ──
+
+test('영수증 인사말 — 정리하고, 환불·예정 내역서에는 붙이지 않는다 (256)', () => {
+  expect(normalizeGreeting('  오늘도  찾아주셔서' + String.fromCharCode(10) + '감사합니다 ')).toBe('오늘도 찾아주셔서 감사합니다');
+  expect(normalizeGreeting('   ')).toBeNull();
+  expect(normalizeGreeting(undefined)).toBeNull();
+  expect(normalizeGreeting('가'.repeat(80))).toHaveLength(MAX_GREETING);
+  const shop = { name: '테스트샵', phone: '02-0000-0000', businessNumber: '000-00-00000', greeting: '오늘도 감사합니다' };
+  const paid = buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 90_000, paymentMethod: '카드', status: 'completed' }, shop, customerName: '홍길동' });
+  expect(paid.greeting).toBe('오늘도 감사합니다');
+  // 환불 영수증·예정 내역서에는 붙지 않는다("감사합니다" 가 환불 문서에 찍히지 않게)
+  const refund = buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 90_000, paymentMethod: '카드', status: 'refunded' }, shop });
+  expect(refund.greeting).toBeNull();
+  const pending = buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 90_000, paymentMethod: '카드', status: 'pending' }, shop });
+  expect(pending.greeting).toBeNull();
+  // 설정에 인사말이 없으면 null — 빈 줄을 만들지 않는다
+  expect(buildReceipt({ payment: { paymentDate: '2026-11-26', amount: 1000, paymentMethod: '현금', status: 'completed' }, shop: { name: '샵' } }).greeting).toBeNull();
+});
+
+// ── 258: 한 줄 칸(빠른 메모) 문구 토글 — 255~257 리뷰 H-2 회귀 ──
+
+test('한 줄 메모 문구 — 문구에 구분자가 들어 있어도 실제로 토글되고 중복되지 않는다 (258, 리뷰 H-2)', () => {
+  // 기본 예시 문구가 그 자체로 ' · ' 를 품고 있다 — 255 는 구분자로 쪼개 비교해 칩이 꺼진 채 계속 덧붙었다
+  const presets = ['자극 없음 · 홈케어 안내', '다음에 10분 추가'];
+  const one = toggleOneLine('', presets[0], presets);
+  expect(one).toBe('자극 없음 · 홈케어 안내');
+  expect(oneLineHas(one, presets[0], presets)).toBe(true);          // 255 에서는 false 였다(거짓 토글)
+  expect(splitOneLine(one, presets)).toEqual(['자극 없음 · 홈케어 안내']);
+  // 다시 누르면 빠진다 — 255 에서는 같은 문구가 두 번 들어갔다
+  expect(toggleOneLine(one, presets[0], presets)).toBe('');
+  // 두 문구를 넣으면 구분자로 잇고, 한쪽만 빼도 다른 쪽은 남는다
+  const two = toggleOneLine(one, presets[1], presets);
+  expect(two).toBe('자극 없음 · 홈케어 안내 · 다음에 10분 추가');
+  expect(splitOneLine(two, presets)).toEqual(presets);
+  expect(toggleOneLine(two, presets[1], presets)).toBe('자극 없음 · 홈케어 안내');
+  // 손으로 적은 글은 그대로 두고 뒤에 붙인다
+  const typed = toggleOneLine('컨디션 좋음', presets[1], presets);
+  expect(typed).toBe('컨디션 좋음 · 다음에 10분 추가');
+  expect(oneLineHas(typed, presets[1], presets)).toBe(true);
+  expect(oneLineHas(typed, presets[0], presets)).toBe(false);
+  // 긴 문구를 먼저 맞춰 본다 — 짧은 문구가 긴 문구의 앞머리와 같아도 섞이지 않는다
+  const both = ['자극 없음 · 홈케어 안내', '자극 없음'];
+  expect(splitOneLine('자극 없음 · 홈케어 안내', both)).toEqual(['자극 없음 · 홈케어 안내']);
+  expect(oneLineHas('자극 없음 · 홈케어 안내', '자극 없음', both)).toBe(false);
+  expect(toggleOneLine('자극 없음 · 홈케어 안내', '자극 없음', both)).toBe('자극 없음 · 홈케어 안내 · 자극 없음');
+  expect(toggleOneLine('자극 없음 · 홈케어 안내 · 자극 없음', '자극 없음', both)).toBe('자극 없음 · 홈케어 안내');
+});
+
+// ── 260: 매출 지표 근거 보기(드릴다운) — 목록 합이 카드 숫자와 같아야 한다 ──
+
+test('매출 지표 근거 — 목록 합계가 카드 숫자와 1원도 어긋나지 않는다 (260, GAP P-6)', () => {
+  const payments = [
+    { id: 'pay1', paymentDate: '2026-11-03', type: 'program' as const, status: 'completed' as const, amount: 300000, discountAmount: 20000, customerId: 'c-new', customerName: '김신규' },
+    { id: 'pay2', paymentDate: '2026-11-09', type: 'product' as const, status: 'completed' as const, amount: 50000, customerId: 'c-new', customerName: '김신규' },
+    { id: 'pay3', paymentDate: '2026-11-10', type: 'single_treatment' as const, status: 'completed' as const, amount: 100000, discountAmount: 5000, customerId: 'c-old', customerName: '박기존' },
+    { id: 'pay4', paymentDate: '2026-11-12', type: 'product' as const, status: 'refunded' as const, amount: 70000, discountAmount: 7000, customerId: 'c-old', customerName: '박기존' }, // 환불은 어느 목록에도 없다
+    { id: 'pay5', paymentDate: '2026-11-15', type: 'other' as const, status: 'completed' as const, amount: 40000 },                                                                  // 고객 미연결 — 신규가 아니다
+    { id: 'pay6', paymentDate: '2026-10-20', type: 'single_treatment' as const, status: 'completed' as const, amount: 200000, customerId: 'c-new', customerName: '김신규' },          // 다른 달
+  ];
+  const customers = [
+    { id: 'c-new', name: '김신규', registeredAt: '2026-11-02T00:00:00.000Z' },
+    { id: 'c-old', name: '박기존', registeredAt: '2026-05-01T00:00:00.000Z' },
+  ];
+  const programs = [
+    { id: 'g1', customerName: '김신규', programName: '등 관리 10회', pricePaid: 300000, totalSessions: 10, usedSessions: 2 },
+    { id: 'g2', customerName: '박기존', programName: '완료권', pricePaid: 100000, totalSessions: 4, usedSessions: 4, isCompleted: true },  // 완료 제외
+    { id: 'g3', customerName: '박기존', programName: '기간제', pricePaid: 90000, totalSessions: null, usedSessions: 0 },                   // 회차 없음 제외
+    { id: 'g4', customerName: '최만료', programName: '만료권', pricePaid: 90000, totalSessions: 3, usedSessions: 0, expiryDate: '2026-11-01' }, // 만료 제외
+    { id: 'g5', customerName: '이잔여', programName: '7회권', pricePaid: 100000, totalSessions: 3, usedSessions: 1 },                      // 회당 33,333.33… 반올림
+  ];
+  const m = monthMetrics({ month: '2026-11', today: '2026-11-20', payments, expenses: [], programs, logs: [], customers, target: null });
+
+  // 신규 고객 매출 — 고객별로 묶고, 합은 카드와 같다
+  const nc = newCustomerRows('2026-11', payments, customers);
+  expect(nc.total).toBe(m.newCustomerRevenue);
+  expect(nc.rows).toHaveLength(1);
+  expect(nc.rows[0].label).toBe('김신규');
+  expect(nc.rows[0].amount).toBe(350000);        // 30만 + 5만(10월 결제·환불은 제외)
+  expect(nc.rows[0].detail).toContain('결제 2건');
+  expect(nc.caveat).toContain('기존 고객 매출');  // 고객 미연결 결제가 어디 있는지 밝힌다
+  expect(nc.rows.reduce((s2, r) => s2 + r.amount, 0)).toBe(nc.total);
+
+  // 할인 합계 — 완료 결제만, 줄 합 = 카드
+  const dc = discountRows('2026-11', payments);
+  expect(dc.total).toBe(m.discount);
+  expect(dc.rows).toHaveLength(2);
+  expect(dc.rows.map(r => r.key)).toEqual(['pay1', 'pay3']); // 금액 큰 순
+  expect(dc.rows.reduce((s2, r) => s2 + r.amount, 0)).toBe(dc.total);
+
+  // 미사용 잔액 — 완료·기간제·만료를 빼고, 반올림까지 카드와 같다
+  const ub = unusedBalanceRows('2026-11-20', programs);
+  expect(ub.total).toBe(m.unusedBalance);
+  expect(ub.rows.map(r => r.key)).toEqual(['g1', 'g5']);
+  expect(ub.rows.reduce((s2, r) => s2 + r.amount, 0)).toBe(ub.total);
+  expect(ub.rows[1].detail).toContain('잔여 2회');
+  expect(ub.caveat).toContain('만료');
+
+  // 빈 상태는 "없다" 를 말한다(0원이라고 꾸미지 않는다)
+  const empty = newCustomerRows('2026-12', payments, customers);
+  expect(empty.rows).toHaveLength(0);
+  expect(empty.total).toBe(0);
+  expect(empty.empty).toContain('없습니다');
+
+  // 줄이 많으면 상위 DRILL_MAX_ROWS 줄만 보여 주고 합계는 전체 기준
+  const many = Array.from({ length: DRILL_MAX_ROWS + 5 }, (_, i) => ({
+    id: `big${i}`, paymentDate: '2026-11-05', type: 'other' as const, status: 'completed' as const,
+    amount: 10000, discountAmount: 1000 + i, customerName: `고객${i}`,
+  }));
+  const big = discountRows('2026-11', many);
+  expect(big.rows).toHaveLength(DRILL_MAX_ROWS);
+  expect(big.truncatedFrom).toBe(DRILL_MAX_ROWS + 5);
+  expect(big.total).toBe(many.reduce((s2, r) => s2 + (r.discountAmount || 0), 0)); // 자른 줄도 합계에는 들어간다
+});
+
+// ── 263: 발송 성과 근거 목록(누가 세어졌나) ──
+
+test('발송 성과 근거 — 요약 숫자와 같은 창·같은 조건으로 고른다 (263, GAP M-6)', () => {
+  const sends = [
+    { customerId: 'c1', at: '2026-11-10T01:00:00.000Z' },
+    { customerId: 'c1', at: '2026-11-12T01:00:00.000Z' }, // 같은 고객 두 번 — 첫 발송부터 창을 연다
+    { customerId: 'c2', at: '2026-11-10T01:00:00.000Z' },
+    { customerId: 'c3', at: '2026-11-10T01:00:00.000Z' },
+  ];
+  const sentOn = (() => { const t = new Date('2026-11-10T01:00:00.000Z'); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; })();
+  const reservations = [
+    { customerId: 'c1', date: '2026-11-12', status: 'confirmed' },
+    { customerId: 'c2', date: '2026-11-11', status: 'cancelled' },   // 취소는 세지 않는다
+    { customerId: 'c3', date: '2026-12-20', status: 'confirmed' },   // 창(14일) 밖
+  ];
+  const payments = [
+    { customerId: 'c1', paymentDate: '2026-11-13', amount: 120000, status: 'completed' as const },
+    { customerId: 'c1', paymentDate: '2026-11-14', amount: 30000, status: 'completed' as const },
+    { customerId: 'c2', paymentDate: '2026-11-13', amount: 50000, status: 'refunded' as const }, // 환불은 세지 않는다
+  ];
+  const sum = estimatePerformance(sends, reservations, payments);
+  const rows = performanceRows(sends, reservations, payments);
+
+  expect(rows).toHaveLength(3);                       // 발송 고객 수(중복 제거) 와 같다
+  expect(rows.length).toBe(sum.sent);
+  expect(rows[0].customerId).toBe('c1');              // 결제 금액 큰 순
+  expect(rows[0].sentOn).toBe(sentOn);                // 첫 발송일 기준(로컬 날짜)
+  expect(rows[0].reservedOn).toBe('2026-11-12');
+  expect(rows[0].paidOn).toBe('2026-11-13');          // 창 안 첫 결제일
+  expect(rows[0].amount).toBe(150000);
+  // 요약과 목록이 같은 조건 — 합계·인원이 어긋나지 않는다
+  expect(rows.reduce((a, r) => a + r.amount, 0)).toBe(sum.revenue);
+  expect(rows.filter(r => r.reservedOn).length).toBe(sum.reserved);
+  expect(rows.filter(r => r.paidOn !== null).length).toBe(sum.paid); // 0원 완료 결제(이벤트)도 "결제한 사람" 이다 (266, 리뷰 L-3)
+  // 취소·창 밖만 있는 고객은 "없음" 으로 남는다(줄을 지우지 않는다 — 누가 안 움직였는지도 사실이다)
+  const c2 = rows.find(r => r.customerId === 'c2')!;
+  expect(c2.reservedOn).toBeNull();
+  expect(c2.paidOn).toBeNull();
+  expect(c2.amount).toBe(0);
+  const c3 = rows.find(r => r.customerId === 'c3')!;
+  expect(c3.reservedOn).toBeNull();
+  expect(c3.windowEnd > c3.sentOn).toBe(true);
+});
+
+// ── 264: 중복 결제 의심 판정 ──
+
+test('중복 결제 의심 — 같은 고객·같은 금액·같은 날짜의 최근 완료 결제만 집어낸다 (264, GAP P-4)', () => {
+  const now = '2026-11-26T05:00:00.000Z';
+  const base = { customerId: 'c1', amount: 90000, paymentDate: '2026-11-26', status: 'completed' as const };
+  const existing = [
+    { id: 'p1', ...base, createdAt: '2026-11-26T04:58:00.000Z', paymentMethod: '카드', typeLabel: '등 관리' },   // 2분 전 — 의심
+    { id: 'p2', ...base, createdAt: '2026-11-26T04:10:00.000Z', paymentMethod: '현금' },                        // 50분 전 — 창 밖
+    { id: 'p3', ...base, amount: 80000, createdAt: '2026-11-26T04:59:00.000Z' },                                // 금액 다름
+    { id: 'p4', ...base, customerId: 'c2', createdAt: '2026-11-26T04:59:00.000Z' },                             // 다른 고객
+    { id: 'p5', ...base, paymentDate: '2026-11-25', createdAt: '2026-11-26T04:59:00.000Z' },                    // 다른 업무 날짜 — 266 부터 이것도 의심(늦은 완료 처리)
+    { id: 'p6', ...base, status: 'refunded' as const, createdAt: '2026-11-26T04:59:00.000Z' },                  // 환불된 건
+    { id: 'p7', ...base, createdAt: '이상한값' },                                                                // 등록 시각 모름 — "몇 분 전" 을 지어내지 않는다
+  ];
+  const hits = findDuplicateSuspects(base, existing, now);
+  // 266(리뷰 M-3): 업무 날짜가 달라도 **등록 시각**이 창 안이면 의심한다 — 예약 완료 결제는 예약일로,
+  // 매출 화면은 오늘로 적혀, 늦은 완료 처리 날 두 직원이 각자 등록하면 서로 걸리지 않았다
+  expect(hits.map(h => h.id)).toEqual(['p5', 'p1']); // 1분 전(p5) → 2분 전(p1)
+  expect(hits[1].minutesAgo).toBe(2);
+  expect(hits[0].paymentDate).toBe('2026-11-25');    // 그 결제의 결제일을 함께 돌려준다(문구에 적는다)
+
+  // 환불·예정 건을 등록할 때는 묻지 않는다(중복 경고 대상이 아니다)
+  expect(findDuplicateSuspects({ ...base, status: 'refunded' }, existing, now)).toEqual([]);
+  expect(findDuplicateSuspects({ ...base, status: 'pending' }, existing, now)).toEqual([]);
+  // 고객을 연결하지 않은 결제는 같은 사람인지 알 수 없다 → 묻지 않는다
+  expect(findDuplicateSuspects({ ...base, customerId: undefined }, existing, now)).toEqual([]);
+  // 창을 넓히면 50분 전 건도 들어온다(기본 창은 30분)
+  expect(findDuplicateSuspects(base, existing, now, 60).map(h => h.id)).toEqual(['p5', 'p1', 'p2']);
+  expect(DUP_WINDOW_MINUTES).toBe(30);
+
+  // 문구 — 언제·무엇으로 들어온 결제인지 적고, 이 PC 한계도 밝힌다
+  const text = describeDuplicateWarning(hits, { amount: 90000, customerName: '홍길동' }, n => `${n.toLocaleString('ko-KR')}원`);
+  expect(text).toContain('홍길동 고객의 90,000원 결제가 이미 2건'); // 266: 다른 업무 날짜 건도 의심에 들어온다
+  expect(text).toContain('2분 전 등록');
+  expect(text).toContain('등 관리 · 카드');
+  expect(text).toContain('결제일 2026-11-26');
+  expect(text).toContain('이 PC 에 저장된 결제만');
+  expect(describeDuplicateWarning([], { amount: 1000 }, String)).toBe(''); // 의심이 없으면 빈 문구(창을 띄우지 않는다)
+});
+
+// ── 266: 0원 완료 결제가 섞여도 성과 인원이 어긋나지 않는다 (리뷰 L-3) ──
+
+test('발송 성과 근거 — 0원 완료 결제도 결제한 사람으로 센다 (266, 리뷰 L-3)', () => {
+  const sends = [{ customerId: 'z1', at: '2026-11-10T01:00:00.000Z' }];
+  const payments = [{ customerId: 'z1', paymentDate: '2026-11-12', amount: 0, status: 'completed' as const }]; // 0원 이벤트 결제
+  const sum = estimatePerformance(sends, [], payments);
+  const rows = performanceRows(sends, [], payments);
+  expect(sum.paid).toBe(1);
+  expect(sum.revenue).toBe(0);
+  expect(rows[0].paidOn).toBe('2026-11-12');
+  expect(rows[0].amount).toBe(0);
+  expect(rows.filter(r => r.paidOn !== null).length).toBe(sum.paid); // 금액으로 세면 0원 건이 빠진다
+});
+
+// ── 267: 기기 시계가 앞선 PC 에서도 중복을 놓치지 않는다 (리뷰 L-6) ──
+
+test('중복 결제 의심 — 등록 시각이 미래인 결제(시계 어긋남)도 창 안이면 잡는다 (267)', () => {
+  const now = '2026-11-26T05:00:00.000Z';
+  const base = { customerId: 'c9', amount: 70000, paymentDate: '2026-11-26', status: 'completed' as const };
+  const future = [{ id: 'f1', ...base, createdAt: '2026-11-26T05:10:00.000Z', paymentMethod: '카드' }]; // 10분 뒤로 적힌 결제
+  const hits = findDuplicateSuspects(base, future, now);
+  expect(hits.map(h => h.id)).toEqual(['f1']);
+  expect(hits[0].minutesAgo).toBe(0);
+  // 270(리뷰 M-5): "방금" 이라고 단정하지 않는다 — 몇 분 전인지 모르는 기록이므로 시계가 어긋났다는 사실을 적는다
+  expect(hits[0].futureSkewMinutes).toBe(10);
+  const skewText = describeDuplicateWarning(hits, { amount: 70000, customerName: '시계' }, n => `${n}원`);
+  expect(skewText).toContain('시각이 어긋난 기록(이 PC 보다 10분 뒤)');
+  expect(skewText).not.toContain('방금 등록');
+  // 창을 크게 벗어난 미래(시계가 하루 틀린 PC)는 넣지 않는다 — 엉뚱한 경고를 만들지 않는다
+  const farFuture = [{ id: 'f2', ...base, createdAt: '2026-11-27T05:00:00.000Z' }];
+  expect(findDuplicateSuspects(base, farFuture, now)).toEqual([]);
+});
+
+// ════════════════════════════════════════════════════════════════
+// 268 (GAP Q-3): 테스트가 한 번도 부르지 않던 순수 함수 9개 — 다른 규칙이 이 값들을 믿고 계산한다
+// ════════════════════════════════════════════════════════════════
+
+test('시간 변환 — HH:mm ↔ 분, 자정·잘못된 값 (268, schedulingRule)', () => {
+  expect(schedToMinutes('10:30')).toBe(630);
+  expect(schedToMinutes('9:05')).toBe(545);          // 한 자리 시
+  expect(schedToMinutes('00:00')).toBe(0);
+  expect(schedToMinutes('24:00')).toBe(1440);        // 마감 자정은 24:00 으로 받는다(영업시간 계산이 이 값을 쓴다)
+  expect(schedToMinutes('25:00')).toBeNull();
+  expect(schedToMinutes('10:75')).toBeNull();
+  expect(schedToMinutes('열시')).toBeNull();
+  expect(schedToMinutes('')).toBeNull();
+  expect(schedToMinutes(undefined)).toBeNull();
+  expect(schedToMinutes(null)).toBeNull();
+  // 되돌리기 — 하루를 넘거나 음수여도 24시간 안으로 감는다(자정 넘김 예약의 시작 시각 표기)
+  expect(schedFromMinutes(630)).toBe('10:30');
+  expect(schedFromMinutes(0)).toBe('00:00');
+  expect(schedFromMinutes(1440)).toBe('00:00');
+  expect(schedFromMinutes(1500)).toBe('01:00');
+  expect(schedFromMinutes(-30)).toBe('23:30');
+  expect(schedFromMinutes(schedToMinutes('19:05') as number)).toBe('19:05'); // 왕복
+});
+
+test('근무표 — 기본 근무·요일 판정·같은 근무표 비교 (268, staffScheduleRule)', () => {
+  expect(defaultShift()).toEqual({ off: false, start: '10:00', end: '19:00' });
+  // 요일 키는 Date.getDay() 순서를 그대로 따라야 한다(월요일 시작 배열과 섞이면 하루가 밀린다)
+  expect(dayKeyOf(new Date(2026, 10, 23))).toBe('월'); // 2026-11-23 은 월요일
+  expect(dayKeyOf(new Date(2026, 10, 29))).toBe('일');
+  expect(dayKeyOf(new Date(2026, 10, 28))).toBe('토');
+  expect(DAY_KEYS).toHaveLength(7);
+
+  // sameSchedule — 바뀌지 않은 근무표를 설정 행에 다시 쓰지 않으려고 쓴다(191 리뷰 M-2).
+  // updatedAt 은 비교에서 빠져야 한다(그 값만 다르면 "바뀌었다" 가 되어 매번 설정 행을 덮는다)
+  const a = defaultSchedule('s1');
+  const b = { ...defaultSchedule('s1'), updatedAt: '2026-11-26T00:00:00.000Z' };
+  expect(sameSchedule(a, b)).toBe(true);
+  expect(sameSchedule(a, { ...a, bufferBeforeMin: 10 })).toBe(false);
+  expect(sameSchedule(a, { ...a, useShopHours: false })).toBe(false);
+  const changedDay = { ...a, weekly: { ...a.weekly, 월: { ...a.weekly['월'], end: '20:00' } } };
+  expect(sameSchedule(a, changedDay)).toBe(false);
+  const withBreak = { ...a, weekly: { ...a.weekly, 화: { ...a.weekly['화'], breakStart: '13:00', breakEnd: '14:00' } } };
+  expect(sameSchedule(a, withBreak)).toBe(false);
+  // 다른 직원 id 는 비교 대상이 아니다(같은 근무 내용이면 같다고 본다 — 호출 쪽이 같은 직원끼리만 비교한다)
+  expect(sameSchedule(a, { ...a, staffId: 's2' })).toBe(true);
+});
+
+test('광고 동의 태그 — 날짜 태그만 가려낸다 (268, consentRule)', () => {
+  expect(isConsentDateTag('광고동의:2026-11-26')).toBe(true);
+  expect(isConsentDateTag('광고동의:2026-1-5')).toBe(false);   // 자리 수가 다르면 날짜 태그가 아니다
+  expect(isConsentDateTag('광고동의')).toBe(false);
+  expect(isConsentDateTag('광고거부')).toBe(false);
+  expect(isConsentDateTag('VIP')).toBe(false);
+  expect(isConsentDateTag('')).toBe(false);
+  expect(isConsentDateTag(' 광고동의:2026-11-26')).toBe(false); // 앞뒤 공백이 붙은 값은 태그 칩으로 셈하지 않는다
+});
+
+test('재예약 기록 — 매장 기준 날짜를 쓰고, 없으면 ISO 앞 10자 (268, rebookStatsRule)', () => {
+  const base = { id: 'r1', customerId: 'c1', suggestedDate: '2026-12-01', shownAt: '2026-11-30T16:00:00.000Z' };
+  expect(entryDay({ ...base, day: '2026-12-01' })).toBe('2026-12-01'); // 매장 기준 날(UTC 로 자르면 11-30 이 된다)
+  expect(entryDay(base)).toBe('2026-11-30');                            // 옛 기록(day 없음)은 ISO 앞 10자
+  expect(entryDay({ ...base, day: '이상한값' })).toBe('2026-11-30');     // 모양이 깨진 day 는 믿지 않는다
+  expect(entryDay({ ...base, day: '' })).toBe('2026-11-30');
+});
+
+test('환불 메모 — 원 결제를 되찾을 수 있게 적는다 (268, refundRule)', () => {
+  const original = { id: 'pay-1', paymentDate: '2026-11-20' };
+  expect(refundMemo(original, '2026-11-26')).toBe('[환불 2026-11-26 ← 2026-11-20 pay-1]');
+  expect(refundMemo(original, '2026-11-26', '고객 요청')).toBe('[환불 2026-11-26 ← 2026-11-20 pay-1] 고객 요청');
+  expect(refundMemo(original, '2026-11-26', '고객 요청', '김원장')).toBe('[환불 2026-11-26 ← 2026-11-20 pay-1] 고객 요청 · 처리 김원장');
+  expect(refundMemo(original, '2026-11-26', '  ', '  ')).toBe('[환불 2026-11-26 ← 2026-11-20 pay-1]'); // 공백만이면 꼬리를 붙이지 않는다
+  expect(refundMemo(original, '2026-11-26', undefined, '김원장')).toContain('처리 김원장');
+});
+
+test('날짜 문자열 — 로컬 기준으로 자른다(UTC 로 밀리지 않게) (268, revisitRule)', () => {
+  expect(toISO(new Date(2026, 10, 26))).toBe('2026-11-26');
+  expect(toISO(new Date(2026, 0, 5))).toBe('2026-01-05');   // 한 자리 월·일은 0 을 채운다
+  expect(toISO(new Date(2026, 11, 31, 23, 59))).toBe('2026-12-31');
+  // 자정 직전·직후가 같은 날로 뭉치지 않는다
+  expect(toISO(new Date(2026, 10, 26, 0, 0))).toBe('2026-11-26');
+  expect(toISO(new Date(2026, 10, 25, 23, 59))).toBe('2026-11-25');
+});
+
+// ── 270 (리뷰 M-7): 268 가드가 하위 폴더를 안 봐서 비어 있던 자리 — 요금 시나리오 표 ──
+
+test('AI 원가·요금 시나리오 표 — 매장 수마다 같은 계산을 쌓는다 (270, costSimulatorRule.scenarios)', () => {
+  const a: SimAssumptions = { usagePerShop: DEFAULT_USAGE, tokens: DEFAULT_TOKENS, fxKrwPerUsd: 1400, planPriceKrw: DEFAULT_PLAN_PRICE_KRW, catalog: GW_CATALOG, available: ['claude', 'openai', 'gemini'] };
+  const rows = scenarios([10, 100, 1000], DEFAULT_PLAN_MIX, a);
+  expect(rows.map(r => r.shops)).toEqual([10, 100, 1000]);
+  // 각 줄은 simulate 와 같은 값이어야 한다(표가 따로 계산하지 않는다)
+  for (const r of rows) {
+    const one = simulate(r.shops, DEFAULT_PLAN_MIX, a);
+    expect(r.totalCostKrw).toBe(one.totalCostKrw);
+    expect(r.totalRevenueKrw).toBe(one.totalRevenueKrw);
+    expect(r.marginPct).toBe(one.marginPct);
+  }
+  // 매장이 10배면 매출·원가도 10배(비례) — 표를 보고 요금을 정하므로 선형이 깨지면 안 된다
+  expect(rows[1].totalRevenueKrw).toBe(rows[0].totalRevenueKrw * 10);
+  expect(rows[2].totalCostKrw).toBeGreaterThan(rows[1].totalCostKrw);
+  expect(scenarios([], DEFAULT_PLAN_MIX, a)).toEqual([]); // 빈 입력은 빈 표
+});
+
+// ── 270 (리뷰 M-1): 성과 요약 줄도 매출 권한에 따라 금액을 뺀다 ──
+
+test('발송 성과 요약 — 매출 권한이 없으면 금액 없이 사람 수만 말한다 (270, 리뷰 M-1)', () => {
+  const sends = [{ customerId: 'm1', at: '2026-11-10T01:00:00.000Z' }, { customerId: 'm2', at: '2026-11-10T01:00:00.000Z' }];
+  const payments = [{ customerId: 'm1', paymentDate: '2026-11-12', amount: 120000, status: 'completed' as const }];
+  const p2 = estimatePerformance(sends, [], payments);
+  const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+  expect(describePerformance(p2, won)).toContain('120,000원');          // 관리자
+  expect(describePerformance(p2, won, false)).not.toContain('120,000');  // 직원 — 금액을 빼고
+  expect(describePerformance(p2, won, false)).toContain('결제 1명');      // 사람 수는 그대로
+  expect(describePerformance({ ...p2, sent: 0 }, won, false)).toBeNull(); // 발송이 없으면 줄 자체가 없다
+});
+
+// ── 275: 274 가 화면 안에 적어 둔 문장·정렬을 규칙으로 옮기고 여기서 고정한다 (GAP Q-3) ──
+
+test('실사 경고 — 센 제품·안 센 제품·삭제된 제품을 다른 말로 알린다 (275, 274 리뷰 M-4·L-2)', () => {
+  expect(describeStockDrift({ counted: 0, untouched: 0, removed: 0 })).toBeNull(); // 바뀐 것이 없으면 줄 자체가 없다
+
+  // 내가 센 제품만 — 반영에서 빠지므로 다시 세어야 한다
+  const a = describeStockDrift({ counted: 2, untouched: 0, removed: 0 })!;
+  expect(a).toContain('제품 2종의 재고가 다른 곳에서 바뀌었습니다');
+  expect(a).toContain('다시 세어주세요');
+
+  // 안 센 제품만 — 혼자 뜨면 "도" 가 허공에 걸린다(274, 리뷰 L-2)
+  const b = describeStockDrift({ counted: 0, untouched: 3, removed: 0 })!;
+  expect(b).toContain('아직 세지 않은 제품 3종은');
+  expect(b).not.toContain('3종도');
+  expect(b).not.toContain('다시 세어주세요');  // 빈칸은 애초에 반영 대상이 아니다
+  expect(describeStockDrift({ counted: 1, untouched: 3, removed: 0 })!).toContain('3종도'); // 앞 갈래가 있으면 "도"
+
+  // 삭제된 제품 — 다시 셀 곳이 없다. 274 전에는 이 제품에도 "다시 세어주세요" 라고 했다
+  const c = describeStockDrift({ counted: 0, untouched: 0, removed: 1 })!;
+  expect(c).toContain('삭제된 제품 1종');
+  expect(c).toContain('다시 세지 않아도 됩니다');
+  expect(c).not.toContain('다시 세어주세요.');
+
+  // 세 갈래가 함께 뜨면 한 문단으로 이어진다(한 번에 낭독된다)
+  const all = describeStockDrift({ counted: 1, untouched: 2, removed: 3 })!;
+  expect(all.indexOf('다른 곳에서')).toBeLessThan(all.indexOf('아직 세지 않은'));
+  expect(all.indexOf('아직 세지 않은')).toBeLessThan(all.indexOf('삭제된 제품'));
+});
+
+test('실사 결과 — 건너뛴 이유를 뭉개지 않는다 (275, 274 리뷰 M-4)', () => {
+  expect(describeStockSkips({ changed: 0, gone: 0, same: 0 })).toBe(''); // 건너뛴 제품이 없으면 덧말이 없다
+  expect(describeStockSkips({ changed: 2, gone: 0, same: 0 })).toContain('2종은 그 사이 재고가 바뀌어');
+  expect(describeStockSkips({ changed: 2, gone: 0, same: 0 })).toContain('다시 세어주세요');
+  // 삭제된 제품에는 "다시 세어주세요" 를 붙이지 않는다 — 없는 제품을 찾으러 가게 된다
+  const gone = describeStockSkips({ changed: 0, gone: 1, same: 0 });
+  expect(gone).toContain('1종은 그 사이 삭제돼');
+  expect(gone).not.toContain('다시 세어주세요');
+  // 이미 같던 제품은 "건너뛰었다" 가 아니라 "그대로 뒀다"
+  expect(describeStockSkips({ changed: 0, gone: 0, same: 4 })).toContain('4종은 이미 적은 수량과 같아');
+  const mixed = describeStockSkips({ changed: 1, gone: 2, same: 3 });
+  expect(mixed).toContain('1종은');
+  expect(mixed).toContain('2종은');
+  expect(mixed).toContain('3종은');
+});
+
+test('금액 숨김 정렬 — 화면에 보이는 이름 순이고, 입력을 건드리지 않는다 (275, 274 리뷰 M-2·L-8)', () => {
+  const rows = [
+    { key: 'zzz', label: '최영희', detail: '', amount: 300000 },
+    { key: 'aaa', label: '강민수', detail: '', amount: 0 },
+    { key: 'mmm', label: '박지현', detail: '', amount: 120000 },
+  ];
+  const sorted = sortRowsByLabel(rows);
+  expect(sorted.map(r => r.label)).toEqual(['강민수', '박지현', '최영희']); // 금액 순(최영희 먼저)이 아니다
+  expect(rows.map(r => r.key)).toEqual(['zzz', 'aaa', 'mmm']);             // 입력 배열은 그대로(합계를 같은 배열로 구한다)
+
+  // 같은 이름(동명이인·"삭제된 고객")이면 키로 가른다 — 같은 입력이면 항상 같은 순서여야 화면이 깜빡이지 않는다
+  const same = sortRowsByLabel([
+    { key: 'b', label: '삭제된 고객', detail: '', amount: 0 },
+    { key: 'a', label: '삭제된 고객', detail: '', amount: 0 },
+  ]);
+  expect(same.map(r => r.key)).toEqual(['a', 'b']);
+  expect(sortRowsByLabel([])).toEqual([]);
+});
+
+// ── 277: 274~276 리뷰 반영 — 화면에 남아 있던 문장과 판정을 규칙에서 고정한다 ──
+
+test('근거 창 문장 — 금액 공개·숨김 × 잘림·안잘림 네 조합 (277, 리뷰 M-5)', () => {
+  // 금액을 보는 화면: 줄 단위로 말하고, 잘랐으면 합계가 전체 기준이라고 밝힌다
+  expect(describeDrillFooter({ shown: 3 })).toBe('합계 (3줄)');
+  expect(describeDrillFooter({ shown: 100, truncatedFrom: 2000 })).toBe('합계 (전체 2000줄 기준)');
+  expect(describeDrillTruncation({ shown: 3 })).toBeNull();                       // 자르지 않았으면 띠가 없다
+  expect(describeDrillTruncation({ shown: 100, truncatedFrom: 2000 })).toContain('금액이 큰 100줄');
+  expect(describeDrillTruncation({ shown: 100, truncatedFrom: 2000 })).toContain('전체 2000줄 기준');
+
+  // 금액을 못 보는 화면: 합계 칸이 없으므로 **사람 수**로 말한다(270). 잘린 수만 적으면 "발송 2,000명" 과 충돌한다(274)
+  expect(describeDrillFooter({ shown: 3, hideAmount: true })).toBe('3명');
+  expect(describeDrillFooter({ shown: 100, truncatedFrom: 2000, hideAmount: true })).toBe('전체 2000명 중 100명');
+  const hidden = describeDrillTruncation({ shown: 100, truncatedFrom: 2000, hideAmount: true })!;
+  expect(hidden).toContain('이름 순으로 100줄');
+  expect(hidden).toContain('전체 2000명');
+  expect(hidden).not.toContain('금액이 큰');   // 금액 순으로 세우지 않으므로 거짓이 된다 (274 리뷰 H-1)
+  expect(hidden).not.toContain('위 합계');     // 그 화면에는 합계 칸이 없다
+  expect(hidden).not.toContain('매출 권한');   // 권한 안내는 같은 창의 caveat 한 곳에서만 (277, 리뷰 L-11)
+  expect(describeDrillTruncation({ shown: 3, hideAmount: true })).toBeNull();
+});
+
+test('실사 — 세는 동안 삭제된 제품은 반영 대상에서 빠지고 요약에도 따로 적힌다 (277, 리뷰 M-4)', () => {
+  const items = [
+    { id: 'a', name: '사라질앰플', unit: '개', stock: 10 },
+    { id: 'b', name: '남을팩', unit: '개', stock: 30 },
+  ];
+  const inputs = { a: '9', b: '29' };
+
+  // 삭제 전: 두 줄 모두 반영 대상
+  const before = buildCountRows(items, inputs);
+  expect(rowsToSave(before)).toHaveLength(2);
+  expect(countSummary(before).removed).toBe(0);
+
+  // 삭제 뒤: 그 줄은 removed 로 표시되고 반영 대상에서 빠진다 — 버튼 수가 실제 반영 수가 된다
+  const after = buildCountRows(items, inputs, new Set(['a']));
+  expect(after[0].removed).toBe(true);
+  expect(after[0].counted).toBeNull();        // 적어 둔 숫자를 들고 있지 않는다
+  expect(rowsToSave(after).map(r => r.id)).toEqual(['b']);
+  const sum = countSummary(after);
+  expect(sum.removed).toBe(1);
+  expect(sum.changed).toBe(1);
+  expect(sum.untouched).toBe(0);              // 삭제된 제품을 "안 센 제품" 으로도 세지 않는다
+  expect(describeCountSummary(sum)).toContain('맞출 제품 1종');
+  expect(describeCountSummary(sum)).toContain('삭제된 제품 1종');
+  expect(zeroingRows(after)).toHaveLength(0);
+  // 0 으로 맞추려던 제품이 삭제된 경우도 확인창 경고 대상이 아니다(반영되지 않으므로)
+  expect(zeroingRows(buildCountRows(items, { a: '0', b: '30' }, new Set(['a'])))).toHaveLength(0);
+});
+
+test('중복 결제 창 길이 — 30분이고, 29분 전은 잡고 31분 전은 놓아준다 (277, 리뷰 L-5)', () => {
+  expect(DUP_WINDOW_MINUTES).toBe(30); // smoke 의 "방금" 문구로는 창 길이가 묶이지 않는다
+  const now = '2026-11-26T12:00:00.000Z';
+  const candidate = { customerId: 'c1', amount: 50000, paymentDate: '2026-11-26', status: 'completed' as const };
+  const mk = (minutesAgo: number) => ({
+    id: `p${minutesAgo}`, customerId: 'c1', amount: 50000, status: 'completed' as const,
+    paymentDate: '2026-11-26', createdAt: new Date(Date.parse(now) - minutesAgo * 60_000).toISOString(),
+  });
+  expect(findDuplicateSuspects(candidate, [mk(29)], now).map(x => x.minutesAgo)).toEqual([29]);
+  expect(findDuplicateSuspects(candidate, [mk(31)], now)).toEqual([]);
+});
+
+// ── 279: 아무 시험도 가 보지 않은 갈래 두 묶음 ──
+// ① 이름·날짜가 비어 있는 자료에서 돈 목록이 **빈칸이나 undefined 를 적지 않는다**
+//    (규칙에 폴백 문자열이 있는데 `고객 정보 없음`·`이름 없음`·`회차권` 은 어느 시험도 확인하지 않았다)
+//    — `날짜 미상` 은 **도달할 수 없었다**(빈 registeredAt 은 그 달 고객으로 뽑히지 않는다) → 281 에서 분기를 지웠다 (리뷰 L-7)
+// ② 중복 결제 경고의 남은 갈래 — 고객명 없음·4건 이상·유형/수단 없음, 그리고 GAP P-4 의 판정 기준
+
+test('돈 목록 — 이름·날짜가 비어도 빈칸을 적지 않는다 (279, GAP P-6 갈래)', () => {
+  // 할인 목록: 고객을 연결하지 않은 결제(매출 화면에서 고객 없이 등록할 수 있다)
+  const dc = discountRows('2026-11', [
+    { id: 'p1', paymentDate: '2026-11-03', status: 'completed' as const, amount: 50000, discountAmount: 5000 },
+  ]);
+  expect(dc.rows).toHaveLength(1);
+  expect(dc.rows[0].label).toBe('고객 정보 없음'); // 연결하지 않았거나 그 뒤 삭제된 고객 — 둘을 구분할 자료가 없다
+  expect(dc.rows[0].label).not.toBe('');
+  // 할인이 음수로 적힌 자료는 할인으로 세지 않는다(마이너스 할인은 정의가 없다)
+  expect(discountRows('2026-11', [
+    { id: 'p2', paymentDate: '2026-11-03', status: 'completed' as const, amount: 50000, discountAmount: -3000 },
+  ]).rows).toHaveLength(0);
+
+  // 신규 고객 목록: 이름·등록일이 빈 고객(엑셀 가져오기로 들어온 줄)
+  const nc = newCustomerRows('2026-11', [
+    { id: 'pay1', paymentDate: '2026-11-05', status: 'completed' as const, amount: 10000, customerId: 'x1' },
+  ], [{ id: 'x1', name: '', registeredAt: '2026-11-01T00:00:00.000Z' }]);
+  expect(nc.rows[0].label).toBe('이름 없음');
+  expect(nc.rows[0].detail).toContain('등록 2026-11-01');
+
+  // 미사용 잔액 목록: 상품 이름이 빈 회차권
+  const ub = unusedBalanceRows('2026-11-20', [
+    { id: 'g1', customerName: '', programName: '', pricePaid: 100000, totalSessions: 4, usedSessions: 1 },
+  ]);
+  // 281(리뷰 L-8): 회차권은 고객에 붙어 있으므로 "고객 정보 없음" 이 아니라 **이름만** 비어 있다
+  expect(ub.rows[0].label).toBe('이름 없음');
+  expect(ub.rows[0].detail).toContain('회차권 · 잔여 3회');   // 상품 이름이 없으면 '회차권' 이라고만 적는다
+  expect(ub.rows[0].amount).toBe(75000);
+  // 쓴 회차가 음수로 적힌 자료도 잔여가 총 회차를 넘지 않는다(잔액이 부풀면 그대로 분쟁이다)
+  expect(unusedBalanceRows('2026-11-20', [
+    { id: 'g2', customerName: '최', programName: '5회권', pricePaid: 100000, totalSessions: 5, usedSessions: -3 },
+  ]).rows[0].amount).toBe(100000);
+});
+
+test('중복 결제 경고 — 고객명 없음·4건 이상·유형 없음, 그리고 유형·할인이 달라도 묻는다 (279, GAP P-4 마무리)', () => {
+  const now = '2026-11-26T05:00:00.000Z';
+  const won = (n: number) => `${n.toLocaleString('ko-KR')}원`;
+  const base = { customerId: 'c1', amount: 50000, paymentDate: '2026-11-26', status: 'completed' as const };
+
+  // 고객 이름을 모르면 "같은 고객" 으로 — 빈칸이 들어가지 않는다
+  const one = findDuplicateSuspects(base, [{ id: 'q1', ...base, createdAt: '2026-11-26T04:58:00.000Z' }], now);
+  const noName = describeDuplicateWarning(one, { amount: 50000 }, won);
+  expect(noName).toContain('같은 고객의 50,000원 결제가 이미 1건');
+  expect(noName).not.toContain('undefined');
+  // 유형·수단을 모르는 기록은 괄호를 만들지 않는다(빈 괄호를 적지 않는다)
+  expect(noName).toContain('· 2분 전 등록 · 결제일 2026-11-26');
+  expect(noName).not.toContain('()');
+
+  // 4건이면 세 줄만 적고 나머지는 "그 밖에 1건" — 창이 끝없이 길어지지 않게
+  const four = ['q1', 'q2', 'q3', 'q4'].map((id, i) => ({ id, ...base, createdAt: new Date(Date.parse(now) - (i + 1) * 60_000).toISOString() }));
+  const many = findDuplicateSuspects(base, four, now);
+  expect(many).toHaveLength(4);
+  const manyText = describeDuplicateWarning(many, { amount: 50000, customerName: '김' }, won);
+  expect(manyText).toContain('이미 4건 있습니다');
+  expect(manyText.split('\n').filter(l => l.startsWith('· ') && l.includes('등록'))).toHaveLength(3);
+  expect(manyText).toContain('그 밖에 1건');
+
+  // GAP P-4 의 남은 결정: **실결제액이 같으면 유형·할인이 달라도 묻는다**(좁히면 진짜 이중 등록을 놓친다).
+  // 대신 유형·수단·할인을 적어 직원이 "다른 결제" 와 "두 번 받은 돈" 을 눈으로 가른다.
+  const mixed = findDuplicateSuspects(
+    { ...base, amount: 50000 },
+    [{ id: 'r1', ...base, createdAt: '2026-11-26T04:59:00.000Z', typeLabel: '등 관리', paymentMethod: '카드', discountAmount: 10000 }],
+    now,
+  );
+  expect(mixed).toHaveLength(1);
+  const mixedText = describeDuplicateWarning(mixed, { amount: 50000, customerName: '김' }, won);
+  expect(mixedText).toContain('등 관리 · 카드 · 할인 10,000원'); // 같은 5만이라도 할인이 다르면 다른 결제일 수 있다
+});
+
+// ── 284: 설정 저장이 정말 남았는지 판정 — 저장 공간 초과를 safeSetItem 이 삼키므로 되읽어 비교한다 ──
+
+test('설정 저장 판정 — 남음·사라짐·확인 불가를 가린다 (284)', () => {
+  // 되읽은 값이 저장하려던 값과 같으면 남았다
+  expect(prefLanded(30, 30)).toBe('landed');
+  expect(prefLanded(['2026-11'], ['2026-11'])).toBe('landed');
+  expect(prefLanded({ serviceRate: 12.5, productRate: 5 }, { productRate: 5, serviceRate: 12.5 })).toBe('landed'); // 키 순서는 보지 않는다
+  // 다르면 사라졌다 — 화면이 "저장했습니다" 라고 말하면 거짓이 된다
+  // 285(리뷰 M-1): 설정 행은 읽혔는데 그 키가 없다 = **확인된 실패**(처음 저장하는 칸이 안 남은 경우가 이것이다)
+  expect(prefLanded(undefined, 30)).toBe('lost');
+  expect(prefLanded([], ['2026-11'])).toBe('lost');
+  expect(prefLanded({ serviceRate: 10 }, { serviceRate: 12.5 })).toBe('lost');
+  // 설정 행 자체를 읽을 수 없으면(프라이빗 모드 등) **실패로 단정하지 않는다** — 없는 실패를 알리면 그것도 거짓이다
+  expect(prefLanded(null, 30)).toBe('unknown');
+  // 285(리뷰 M-1): 행을 못 읽으면 **지웠는지도** 확인할 수 없다 — 284 는 이것을 'landed' 라고 했다
+  expect(prefLanded(null, null)).toBe('unknown');
+  expect(prefLanded(undefined, undefined)).toBe('landed'); // 지우려 했고 키가 없다 — 뜻대로 됐다
+
+  // undefined 칸은 비교에서 빼서 "있던 키가 사라진 것" 과 "애초에 없던 키" 를 섞지 않는다
+  expect(sameValue({ a: 1, b: undefined }, { a: 1 })).toBe(true);
+  expect(sameValue({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+  expect(sameValue([1, 2], [2, 1])).toBe(false); // 배열은 순서가 뜻이다(마감 월 목록)
+  expect(sameValue(NaN, NaN)).toBe(true);        // 285(리뷰 LOW): 되읽은 NaN 을 '사라짐' 으로 말하지 않는다
+
+  // 화면 문구 — 남았으면 아무 말도 하지 않고, 사라졌으면 **지금 값이 사라진다는 사실**까지 적는다
+  expect(describePrefLoss('landed', '월 마감', 'local-only')).toBeNull();
+  expect(describePrefLoss('lost', '월 마감', 'local-only')).toContain('저장되지 않았습니다');
+  expect(describePrefLoss('lost', '월 마감', 'local-only')).toContain('다시 열면 사라집니다');
+  expect(describePrefLoss('unknown', '인센티브 비율', 'local-only')).toContain('확인할 수 없었습니다');
+  expect(describePrefLoss('unknown', '인센티브 비율', 'local-only')).not.toContain('저장되지 않았습니다'); // 없는 실패를 단정하지 않는다
+
+  // 290(285~287 리뷰 H-1): 서버 모드에서는 이 PC 쓰기가 실패해도 **사라진다고 단정하지 않는다**
+  expect(describePrefLoss('lost', '월 마감', 'server-backed')).toContain('저장되지 않았습니다');
+  expect(describePrefLoss('lost', '월 마감', 'server-backed')).toContain('중앙 서버에는 올라갔을 수 있어');
+  expect(describePrefLoss('lost', '월 마감', 'server-backed')).not.toContain('다시 열면 사라집니다');
+  // 확인 불가는 저장 방식과 무관하다(이 PC 에서 읽을 수 없었다는 사실뿐이다)
+  expect(describePrefLoss('unknown', '월 마감', 'server-backed')).toBe(describePrefLoss('unknown', '월 마감', 'local-only'));
+
+  // 290(리뷰 M-1): 조사를 받침으로 고른다 — 290 전에는 "월 매출 목표이"·"월 매출 목표을" 로 나갔다
+  expect(describePrefLoss('lost', '월 매출 목표', 'local-only')).toContain('월 매출 목표가 이 PC 에');
+  expect(describePrefLoss('lost', '2026년 11월 마감', 'local-only')).toContain('2026년 11월 마감이 이 PC 에');
+  expect(describePrefLoss('unknown', '월 매출 목표', 'local-only')).toContain('월 매출 목표를 저장했지만');
+  expect(describePrefLoss('unknown', '영수증 인쇄 정보', 'local-only')).toContain('영수증 인쇄 정보를 저장했지만');
+
+  // 290(리뷰 LOW-7): 형식이 틀려 **아무것도 바꾸지 않은 것**을 "저장 공간" 탓으로 말하지 않는다
+  expect(describePrefLoss('invalid', '월 마감', 'local-only')).toContain('형식이 올바르지 않아');
+  expect(describePrefLoss('invalid', '월 마감', 'local-only')).not.toContain('저장 공간');
+
+  // 297(293~296 리뷰 H-1)·301(297~299 리뷰 M-2): **그 달만** 본다 — 294 는 목록 전체를 비교해
+  // 마감을 한 번도 하지 않은 매장에 "저장 안 됨" 배지를 띄웠고, 297 은 그것만 막아 **다른 달의 실패를
+  // 이 달 카드에 적는 일**이 남았다. 판정은 "그 달이 디스크 목록에 있는지" 와 "화면의 주장" 을 맞춘다.
+  expect(prefLandedMember(undefined, '2026-11', false)).toBe('landed'); // 칸이 아직 없고 주장도 없다 = 마감한 적 없다
+  expect(prefLandedMember(null, '2026-11', false)).toBe('landed');      // 행을 못 읽어도 주장이 없으면 잃은 것이 없다
+  expect(prefLandedMember(null, '2026-11', true)).toBe('unknown');      // 마감했다고 주장하는데 행을 못 읽었다
+  expect(prefLandedMember(undefined, '2026-11', true)).toBe('lost');    // 마감했는데 칸이 없다 = 안 남았다
+  expect(prefLandedMember(['2026-11'], '2026-11', true)).toBe('landed');
+  expect(prefLandedMember(['2026-11'], '2026-11', false)).toBe('lost'); // 마감 해제가 안 남았다
+  expect(prefLandedMember(['2026-10'], '2026-11', false)).toBe('landed'); // **다른 달**의 마감은 이 달 판정에 끼지 않는다
+  expect(prefLandedMember(['2026-10'], '2026-11', true)).toBe('lost');
+
+  // 297(리뷰 M-3): 삭제 자리에 "다시 저장해주세요 … 사라집니다" 가 나가던 것 — 할 일도, 결과도 반대다
+  expect(describePrefRemovalLoss('landed', '세그먼트', 'local-only')).toBeNull();
+  expect(describePrefRemovalLoss('lost', '세그먼트', 'local-only')).toContain('지운 것이 이 PC 에 저장되지 않았습니다');
+  expect(describePrefRemovalLoss('lost', '세그먼트', 'local-only')).toContain('다시 지워주세요');
+  expect(describePrefRemovalLoss('lost', '세그먼트', 'local-only')).toContain('그 항목이 돌아옵니다');
+  expect(describePrefRemovalLoss('lost', '세그먼트', 'local-only')).not.toContain('다시 저장해주세요');
+  expect(describePrefRemovalLoss('lost', '자원', 'server-backed')).toContain('중앙 서버에는 올라갔을 수 있어');
+  expect(describePrefRemovalLoss('unknown', '문구', 'local-only')).toContain('정말 지워졌는지 확인해주세요');
+  expect(describePrefRemovalLoss('lost', '결제수단', 'local-only')).toContain('결제수단을 지운 것이'); // 조사도 josa 로
+
+  // 290(리뷰 M-2): 토스트는 사라지므로 화면에 남겨 두는 짧은 표시 — 남았으면 아무것도 적지 않는다
+  expect(prefLossNote('landed', 'local-only')).toBeNull();
+  expect(prefLossNote('lost', 'local-only')).toBe('이 PC 에 저장 안 됨');
+  expect(prefLossNote('lost', 'server-backed')).toBe('이 PC 에 저장 안 됨(서버는 확인 필요)');
+  expect(prefLossNote('unknown', 'local-only')).toBe('이 PC 에서 확인 못 함');
+  expect(prefLossNote('invalid', 'local-only')).toBe('바뀌지 않음(형식 오류)');
+});
+
+test('고객 병합 뒤 되짚는 표가 안 남았을 때 할 말 — 제품 판매가 있을 때만 (304)', async () => {
+  // 병합은 되돌릴 수 없다. 그래서 "다시 저장해주세요" 가 아니라 **무엇이 달라 보이는지**를 적는다(296 의 파기 대장과 같은 원칙).
+  expect(describeMergedMapLoss('landed', 3)).toBeNull();
+  // 제품 판매가 없으면 표가 없어도 화면이 달라지지 않는다 — 없는 피해를 알리면 그것도 거짓이다
+  expect(describeMergedMapLoss('lost', 0)).toBeNull();
+  expect(describeMergedMapLoss('unknown', 0)).toBeNull();
+  // 형식 오류는 저장 공간 탓이 아니고 이 자리에서는 생기지 않는다 — 조용히 넘긴다
+  expect(describeMergedMapLoss('invalid', 2)).toBeNull();
+  const lost = describeMergedMapLoss('lost', 2);
+  expect(lost).toContain('병합은 끝났지만');
+  expect(lost).toContain('저장되지 않았습니다');
+  expect(lost).toContain('제품 판매 2건');
+  expect(lost).toContain('병합을 다시 할 필요는 없습니다');
+  const unknown = describeMergedMapLoss('unknown', 5);
+  expect(unknown).toContain('남았는지 확인할 수 없었습니다');
+  expect(unknown).toContain('제품 판매 5건');
+  expect(unknown).not.toContain('저장 공간이 모자랍니다'); // 확인 불가를 실패로 단정하지 않는다
+  // 311(303~308 리뷰 M-4): **사슬 병합** — source 의 판매가 0이어도, 다시 가리키게 된 옛 id 가 있으면 알린다
+  expect(describeMergedMapLoss('lost', 0, 0)).toBeNull();
+  const chained = describeMergedMapLoss('lost', 0, 2);
+  expect(chained).toContain('예전에 이 고객으로 합쳐 둔 고객 2명의 제품 판매');
+  expect(chained).toContain('병합을 다시 할 필요는 없습니다');
+  expect(describeMergedMapLoss('landed', 0, 3)).toBeNull(); // 남았으면 할 말이 없다
+  expect(describeMergedMapLoss('lost', 4, 2)).toContain('제품 판매 4건'); // 판매가 있으면 그 수를 먼저 말한다
 });

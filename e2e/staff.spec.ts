@@ -1,6 +1,7 @@
-import { test } from '@playwright/test';
-import { makeAccount, signupAndOnboard, createCustomer, isNearMidnightSeoul } from './helpers';
+import { test, expect } from '@playwright/test';
+import { makeAccount, signupAndOnboard, createCustomer, isNearMidnightSeoul, dismissToasts, visibleButton } from './helpers';
 import { staffScenario } from './scenarios';
+import { addReservation, completeReservation } from './flows';
 
 /**
  * 직원 흐름 E2E (PC 폭, 2026-11-19 ㉙) — 직원을 추가하면 예약 담당 선택지에 바로 뜨고, 완료 예약이 실적 표에 잡히며, 이름을 바꿔도(staffId 연결) 실적이 유지되고,
@@ -9,6 +10,8 @@ import { staffScenario } from './scenarios';
  */
 
 const acc = makeAccount('ST');
+const acc2 = makeAccount('ST2'); // 인센티브 비율 (233)
+const acc3 = makeAccount('ST3'); // 수당 금액 (234, 리뷰 M-6)
 
 test('직원 추가 → 예약 담당 → 실적 → 이름 변경 → 퇴사·복직이 맞게 반영된다', async ({ page }) => {
   test.slow();
@@ -17,4 +20,92 @@ test('직원 추가 → 예약 담당 → 실적 → 이름 변경 → 퇴사·�
   await signupAndOnboard(page, acc);
   await createCustomer(page, acc);
   await staffScenario(page, acc);
+});
+
+test('인센티브 비율을 정하면 직원별 수당 열이 생기고, 잘못된 비율은 하나도 저장하지 않는다 (233, GAP S-1)', async ({ page }) => {
+  page.on('dialog', d => d.accept());
+  await signupAndOnboard(page, acc2);
+
+  await page.goto('/staff');
+  const card = page.getByTestId('staff-performance');
+  await expect(card).toBeVisible();
+  await expect(card.getByText('수당(참고)')).toHaveCount(0); // 비율을 안 정했으면 0원 줄을 보여 주지 않는다
+
+  // ── 비율 패널: 범위를 벗어난 값은 거절하고 아무것도 저장하지 않는다 ──
+  await card.getByRole('button', { name: '인센티브 비율' }).click();
+  const panel = page.getByTestId('commission-panel');
+  await expect(panel).toBeVisible();
+  await panel.getByLabel('매장 기본 시술 비율').fill('60');
+  await panel.getByRole('button', { name: '비율 저장' }).click();
+  await expect(page.getByText(/비율은 0~50 사이 숫자로/)).toBeVisible();
+  await expect(card.getByText('수당(참고)')).toHaveCount(0);
+  await dismissToasts(page);
+
+  // ── 정상 비율 저장 → 표에 수당 열과 합계가 생긴다 ──
+  await panel.getByLabel('매장 기본 시술 비율').fill('12.5');
+  await panel.getByLabel('매장 기본 제품 비율').fill('5');
+  await panel.getByRole('button', { name: '비율 저장' }).click();
+  await expect(page.getByText('인센티브 비율을 저장했습니다.')).toBeVisible();
+  await dismissToasts(page);
+  await expect(card.getByText('수당(참고)')).toBeVisible();
+  await expect(card.getByTestId('commission-total')).toContainText('시술 12.5% × 실결제액 + 제품 5% × 제품 판매액');
+  await expect(card.getByText(/수당은 참고 계산입니다/)).toBeVisible(); // 한계를 함께 적는다
+
+  // ── 272: 직원별 예외 비율을 정하면 **그 사실을 한 줄로 적는다**(급여 근거라 숨기면 안 된다) ──
+  await expect(card.getByTestId('commission-exceptions')).toHaveCount(0); // 예외가 없으면 줄도 없다
+  await panel.getByLabel('김테스트 시술 비율').fill('20');
+  await panel.getByRole('button', { name: '비율 저장' }).click();
+  await dismissToasts(page);
+  await expect(card.getByTestId('commission-exceptions')).toContainText('직원별 예외');
+  await expect(card.getByTestId('commission-exceptions')).toContainText('김테스트 시술 20% × 실결제액'); // (274, 리뷰 LOW)
+
+  // ── 새로고침해도 비율이 남는다(설정 행 저장) ──
+  await page.reload();
+  await expect(page.getByTestId('staff-performance').getByText('수당(참고)')).toBeVisible();
+  await visibleButton(page, '인센티브 비율').click();
+  await expect(page.getByTestId('commission-panel').getByLabel('매장 기본 시술 비율')).toHaveValue('12.5');
+  await expect(page.getByTestId('commission-panel').getByLabel('김테스트 시술 비율')).toHaveValue('20'); // 예외도 남는다
+  await expect(page.getByTestId('staff-performance').getByTestId('commission-exceptions')).toContainText('김테스트 시술 20%');
+});
+
+test('실결제가 있는 직원의 수당 금액과 보고 문구가 비율대로 나온다 (234, 리뷰 M-6)', async ({ page }) => {
+  test.slow();
+  test.skip(isNearMidnightSeoul(), '자정 경계 — 예약을 만든 날과 실적의 이번 달이 달라질 수 있다');
+  page.on('dialog', d => d.accept());
+  await signupAndOnboard(page, acc3);
+  await createCustomer(page, acc3);
+
+  // 50,000원 시술 예약 → 완료 + 결제 등록 → 실결제 50,000원
+  await page.goto('/reservations');
+  await addReservation(page, acc3, '11:00');
+  await completeReservation(page, '11:00', true);
+
+  await page.goto('/staff');
+  const card = page.getByTestId('staff-performance');
+  const row = card.locator('tbody tr').first();
+  await expect(row.getByTestId('perf-paid')).toHaveText('50,000원');
+
+  // 시술 10% → 수당 5,000원 (원 단위 내림)
+  await card.getByRole('button', { name: '인센티브 비율' }).click();
+  const panel = page.getByTestId('commission-panel');
+  await panel.getByLabel('매장 기본 시술 비율').fill('10');
+  await panel.getByRole('button', { name: '비율 저장' }).click();
+  await expect(page.getByText('인센티브 비율을 저장했습니다.')).toBeVisible();
+  await dismissToasts(page);
+  await expect(row.getByTestId('perf-commission')).toContainText('5,000원');
+  await expect(row.getByTestId('perf-commission-rate')).toContainText('시술 10% · 제품 0%'); // 근거가 툴팁이 아니라 글자로 보인다 (리뷰 H-3)
+  await expect(card.getByTestId('commission-total')).toContainText('5,000원');
+
+  // 12.5% 로 바꾸면 6,250원 — 소수점 비율도 금액이 맞는다
+  await panel.getByLabel('매장 기본 시술 비율').fill('12.5');
+  await panel.getByRole('button', { name: '비율 저장' }).click();
+  await dismissToasts(page);
+  await expect(row.getByTestId('perf-commission')).toContainText('6,250원');
+
+  // 보고 문구에도 수당과 한계가 들어간다 (리뷰 H-3 — 표만 보고는 검증이 안 된다)
+  await card.getByRole('button', { name: '보고 문구' }).click();
+  const draft = card.locator('pre').first(); // 보고 문구는 pre 로 그린다(MessageDraftPanel)
+  await expect(draft).toContainText('수당(참고) 6,250원');
+  await expect(draft).toContainText('수당 합계(참고) 6,250원');
+  await expect(draft).toContainText('예약 없이 등록한 결제');
 });

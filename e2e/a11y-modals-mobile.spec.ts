@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { makeAccount, signupAndOnboard, createCustomer, pickCustomer, expectNoHorizontalOverflow } from './helpers';
 import { assertNoBlocking, makeStep, SETTINGS_TAB_READY, type Row } from './a11y-shared';
-import { addProgram } from './flows';
+import { addProgram, registerPayment } from './flows';
 
 /**
  * 모바일 폭 모달·상세 접근성 게이트 (axe-core, WCAG 2.1 A/AA, 2026-11-19 ㉞) — PC 모달 게이트(a11y-modals.spec)와 같은 창을
@@ -104,6 +104,7 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
   await page.goto('/products');
   await step('m/products 제품 추가', async () => {
     await vis('제품 추가').click();
+    await expect(dialog('제품 추가')).toBeVisible(); // 창 이름으로도 확인 (293)
     await expect(page.getByPlaceholder('제품명 입력')).toBeVisible();
     await page.getByPlaceholder('제품명 입력').fill('모바일세럼');
     await page.getByLabel('판매가').fill('30000');
@@ -115,6 +116,20 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     await page.getByRole('button', { name: '모바일세럼 입고·조정' }).click();
     await expect(page.getByLabel('입고 수량')).toBeVisible();
   });
+  await dialog('재고 입고·조정').getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(dialog('재고 입고·조정')).toHaveCount(0);
+  await step('m/products 발주 제안 (248)', async () => {
+    await page.getByTestId('reorder-open').click();
+    await expect(dialog('발주 제안')).toBeVisible();
+  });
+  await dialog('발주 제안').getByRole('button', { name: '닫기', exact: true }).first().click();
+  await expect(dialog('발주 제안')).toHaveCount(0);
+  await step('m/products 재고 실사 (245)', async () => {
+    await page.getByTestId('stock-count-open').click();
+    await expect(dialog('재고 실사')).toBeVisible();
+  });
+  await dialog('재고 실사').getByRole('button', { name: '닫기', exact: true }).first().click(); // X 버튼과 바닥 [닫기] 둘 다 있다
+  await expect(dialog('재고 실사')).toHaveCount(0);
 
   // ── 매출: 결제 등록·지출 등록 창 ──
   await page.goto('/sales');
@@ -128,9 +143,57 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
     await vis('지출 등록').click();
     await expect(dialog('지출(매입) 등록')).toBeVisible();
   });
+  await dialog('지출(매입) 등록').getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(dialog('지출(매입) 등록')).toHaveCount(0);
+
+  // ── 중복 결제 경고 창(264)·지표 근거 보기 창(260) — 폰 폭에서 글이 넘치지 않는지 ──
+  await registerPayment(page, acc, 90000);
+  await step('m/sales 중복 결제 경고 (264)', async () => {
+    await vis('결제 등록').click();
+    const pay = dialog('결제 등록');
+    await pickCustomer(page, acc.customer, pay);
+    await pay.getByLabel('결제 금액').fill('90000');
+    await pay.getByRole('button', { name: '결제 등록' }).click();
+    await expect(dialog('같은 금액 결제가 이미 있습니다')).toBeVisible();
+  });
+  await dialog('같은 금액 결제가 이미 있습니다').getByRole('button', { name: '취소하고 확인' }).click();
+  await dialog('결제 등록').getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(dialog('결제 등록')).toHaveCount(0);
+  await step('m/sales 지표 근거 보기 (260)', async () => {
+    await page.getByTestId('metric-new-share-open').click();
+    await expect(page.getByTestId('metric-detail')).toBeVisible();
+  });
+  await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
+  await expect(page.getByTestId('metric-detail')).toHaveCount(0);
+
+  // ── 발송 성과 근거 창 (263) — 폰 폭에서 줄이 넘치지 않는지 (266, 리뷰 L-8) ──
+  await page.goto('/messaging');
+  const perfBtn = page.getByTestId('history-perf').first();
+  if (await perfBtn.count() > 0) {
+    await perfBtn.click();
+    await page.getByTestId('history-perf-rows').first().click();
+    await step('m/messaging 성과 근거 (263)', async () => {
+      await expect(page.getByTestId('metric-detail')).toBeVisible();
+    });
+    await page.getByTestId('metric-detail').getByRole('button', { name: '닫기' }).click();
+  }
+
+  // ── 태그 목록 관리 창 (237·239) — 고객 추가 창 위에 겹쳐 열린다 ──
+  await page.goto('/customers');
+  await step('m/customers 태그 목록 관리', async () => {
+    await vis('고객 추가').click();
+    await page.getByTestId('tag-master-open').click();
+    await expect(dialog('태그 목록 관리')).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(dialog('태그 목록 관리')).toHaveCount(0);
 
   // ── 직원·문자 ──
   await page.goto('/staff');
+  await step('m/staff 인센티브 비율 패널', async () => { // 233·238 — 표 안쪽 입력칸이 폰 폭에서 넘치지 않아야 한다
+    await page.getByTestId('staff-performance').getByRole('button', { name: '인센티브 비율' }).click();
+    await expect(page.getByTestId('commission-panel')).toBeVisible();
+  });
   await step('m/staff 직원 추가', async () => {
     await vis('직원 추가').click();
     await expect(dialog('직원 추가')).toBeVisible();
@@ -162,6 +225,15 @@ test('모바일 폭에서도 주요 모달·상세 창에 serious·critical 접�
       await expect(SETTINGS_TAB_READY[tab](page)).toBeVisible();
     });
   }
+
+  // ── 289: 폰 아래 탭의 [더보기] 시트 — 어느 접근성 게이트도 열지 않던 창이다(폰에만 있다).
+  // 창이 열려 있는 자리에서는 누를 수 없다(아래 탭이 오버레이에 덮인다) — 그래서 설정 탭을 다 돈 뒤에 둔다.
+  await step('m 더보기 메뉴', async () => {
+    await page.getByRole('button', { name: '더보기 메뉴 열기' }).click({ timeout: 15_000 });
+    await expect(page.getByRole('dialog', { name: '더보기 메뉴' })).toBeVisible();
+  });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '더보기 메뉴' })).toHaveCount(0);
 
   assertNoBlocking(rows);
 });

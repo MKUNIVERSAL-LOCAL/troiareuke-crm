@@ -10,7 +10,8 @@ import { isNasDataConfigured } from '../lib/nasData';
 import { matchesSearch, formatPrice } from '../lib/format';
 import { maskPhone } from '../lib/masking';
 import { useAuth } from '../contexts/AuthContext';
-import { recordPrivacyAction, maskNameForLog } from '../lib/privacyLog';
+import { recordPrivacyAction, maskNameForLog, PRIVACY_LOG_LOST, PRIVACY_LOG_UNKNOWN } from '../lib/privacyLog';
+import { describeMergedMapLoss } from '../lib/mergeNoticeRule'; // 되짚는 표가 안 남았을 때 (304)
 import { askConfirm } from '../lib/confirmDialog';
 import { josa } from '../lib/josa';
 import { notify } from '../lib/notify';
@@ -80,7 +81,13 @@ export default function CustomerMergeModal({ target, onClose, onMerged }: { targ
     try {
       const moved = mergeCustomers(target.id, source.id);
       const n = moved.reservations + moved.treatments + moved.programs + moved.payments + moved.consultations;
-      recordPrivacyAction({ type: 'merge', count: 1, actor: user?.name || user?.email || '알 수 없음', detail: `${maskNameForLog(source.name)} → ${maskNameForLog(target.name)} (기록 ${n}건)` }); // 파기 대장 — 이름은 가려서 (9차 점검 #29, 리뷰)
+      const logLanded = recordPrivacyAction({ type: 'merge', count: 1, actor: user?.name || user?.email || '알 수 없음', detail: `${maskNameForLog(source.name)} → ${maskNameForLog(target.name)} (기록 ${n}건)` }); // 파기 대장 — 이름은 가려서 (9차 점검 #29, 리뷰)
+      // 296·297 — 병합은 되돌릴 수 없다. 기록만 없다는 사실을 적는다(톤도 error 로 고정, 리뷰 LOW-2)
+      if (logLanded === 'lost') notify.error(PRIVACY_LOG_LOST);
+      else if (logLanded === 'unknown') notify.error(PRIVACY_LOG_UNKNOWN);
+      // 304: 옮길 수 없는 제품 판매를 되짚는 표가 안 남으면 그 판매 행이 "삭제된 고객" 으로 보인다(판매 0건이면 말하지 않는다)
+      const mapLost = describeMergedMapLoss(moved.mergedMapLanded, moved.productSales, moved.mergedMapRechained);
+      if (mapLost) notify.error(mapLost);
       notify(`'${source.name}' 고객을 병합했습니다. 기록 ${n}건을 옮겼습니다.`);
       onMerged();
     } catch (e) {
@@ -141,7 +148,7 @@ export default function CustomerMergeModal({ target, onClose, onMerged }: { targ
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose} className="py-2.5 px-4 border border-gray-200 rounded-xl text-sm text-gray-600">취소</button>
             <button type="button" onClick={handleMerge} disabled={!source || busy || pendingRequests > 0 || serverCheckFailed || serverChecking}
-              className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5">
+              className="flex-1 py-2.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5">
               <GitMerge size={14} />병합 실행
             </button>
           </div>

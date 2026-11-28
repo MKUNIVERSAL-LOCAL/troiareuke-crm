@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import { isAuthApiConfigured } from '../../lib/authApi';
 import { getRevisitCycleDays, setRevisitCycleDays, DEFAULT_CYCLE_DAYS, MIN_CYCLE_DAYS, MAX_CYCLE_DAYS } from '../../lib/reminderEngine';
+import { describePrefLoss } from '../../lib/prefLandedRule'; // 저장이 정말 남았는지 (294, 리뷰 M-7)
+import { prefSaveMode } from '../../lib/prefSaveMode';
 
 /**
  * 설정 > 알림 설정 > 재방문 권장 주기
@@ -16,11 +18,15 @@ export default function RevisitCycleCard() {
 
   function save() {
     const value = parseInt(draft, 10);
-    if (!setRevisitCycleDays(value)) {
+    const landed = setRevisitCycleDays(value);
+    if (landed === 'invalid') {
       setMessage({ tone: 'warn', text: `${MIN_CYCLE_DAYS}~${MAX_CYCLE_DAYS} 사이의 일수를 입력해주세요.` });
       return;
     }
     setDays(value);
+    // 294(288~292 리뷰 M-7): 서버 리마인더가 읽는 값이다 — 안 남았는데 "저장했습니다" 라고 말하지 않는다
+    const lost = describePrefLoss(landed, '재방문 권장 주기', prefSaveMode());
+    if (lost) { setMessage({ tone: 'warn', text: lost }); return; }
     setMessage({ tone: 'ok', text: `재방문 권장 주기를 ${value}일로 저장했습니다.${isAuthApiConfigured ? ' 이 지점의 모든 PC에 적용됩니다.' : ''}` }); // 로컬 모드는 이 기기만 (UX 점검 2026-11-19)
   }
 

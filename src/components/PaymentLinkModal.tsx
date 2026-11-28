@@ -252,7 +252,7 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   readOnly
                   value={createdUrl}
                   onFocus={e => e.currentTarget.select()}
-                  className="flex-1 px-2.5 py-2 bg-white border border-blue-200 rounded-lg text-xs text-gray-600 outline-none"
+                  className="flex-1 min-w-0 px-2.5 py-2 bg-white border border-blue-200 rounded-lg text-xs text-gray-600 outline-none"
                 />
                 <button
                   onClick={() => copyLink(createdUrl, 'new')}
@@ -265,14 +265,14 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                   <button
                     onClick={() => sendLinkSms(createdUrl)}
                     disabled={busy}
-                    className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium flex items-center gap-1 disabled:opacity-50"
+                    className="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center gap-1 disabled:opacity-50"
                   >
                     <MessageSquare size={12} />문자
                   </button>
                 )}
               </div>
               {smsResult && <p className={`text-xs ${smsResult.startsWith('문자 발송 실패') ? 'text-rose-700' : 'text-primary-600'}`}>{smsResult}</p>}
-              <p className="text-xs text-blue-400">
+              <p className="text-xs text-blue-700">
                 카톡·문자로 링크를 보내면 고객이 휴대폰에서 바로 결제할 수 있습니다. 결제 완료 시 매출에 자동 기록됩니다.
               </p>
             </div>
@@ -308,10 +308,10 @@ export default function PaymentLinkModal({ open, onClose, customers }: Props) {
                       <span className="font-bold text-gray-900 whitespace-nowrap">{formatPrice(r.amount)}</span>
                       {(r.status === 'pending' || r.status === 'vbank_wait') && (
                         <>
-                          <button onClick={() => copyLink(r.url, r.id)} className="p-1 text-gray-300 hover:text-[#1a3a8f]" aria-label="링크 복사">
+                          <button onClick={() => copyLink(r.url, r.id)} className="p-1 text-gray-400 hover:text-[#1a3a8f]" aria-label="링크 복사">
                             {copiedId === r.id ? <CheckCircle size={13} className="text-emerald-700" /> : <Copy size={13} />}
                           </button>
-                          <button onClick={() => handleCancel(r)} className="p-1 text-gray-300 hover:text-red-600" aria-label="요청 취소">
+                          <button onClick={() => handleCancel(r)} className="p-1 text-gray-400 hover:text-red-700" aria-label="요청 취소">
                             <Ban size={13} />
                           </button>
                         </>

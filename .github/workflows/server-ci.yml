@@ -51,6 +51,9 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Syntax check
         run: node --check src/server.js
+      - name: Unit tests (validate·mappers·buildInfo)
+        working-directory: .
+        run: node scripts/run-server-tests.mjs
       - name: Start server
         run: |
           node src/server.js > server.log 2>&1 &

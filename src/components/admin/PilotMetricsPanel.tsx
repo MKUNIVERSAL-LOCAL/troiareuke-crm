@@ -46,12 +46,12 @@ export default function PilotMetricsPanel() {
       <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-sm font-bold text-white flex items-center gap-2"><ClipboardCheck size={15} className="text-emerald-400" /> 파일럿 지표</h2>
-          <p className="text-xs text-slate-500 mt-0.5">초기 설정 6단계 완료율 · 활용 7영역 비율 · 마지막 활동(7일/30일). 서버 집계 건수 기준 — 정의는 PILOT-CHECKLIST 7절</p>
+          <p className="text-xs text-slate-400 mt-0.5">초기 설정 6단계 완료율 · 활용 7영역 비율 · 마지막 활동(7일/30일). 서버 집계 건수 기준 — 정의는 PILOT-CHECKLIST 7절</p>
         </div>
         <button type="button" onClick={() => void load()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-200 bg-slate-800 rounded-lg hover:bg-slate-700"><RefreshCw size={12} /> 다시 불러오기</button>
       </div>
       {error && <p className="px-5 py-3 text-xs text-red-300">{error} <button type="button" onClick={() => void load()} className="underline ml-1">다시 시도</button></p>}
-      {loading && !summary && !error && <p className="px-5 py-4 text-xs text-slate-500">불러오는 중…</p>}
+      {loading && !summary && !error && <p className="px-5 py-4 text-xs text-slate-400">불러오는 중…</p>}
       {summary && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-5 py-4">
@@ -71,7 +71,7 @@ export default function PilotMetricsPanel() {
             <table className="w-full text-sm">
               <thead className="text-xs text-slate-400"><tr><th className="text-left px-5 py-2">지점</th><th className="text-right px-3 py-2">초기 설정</th><th className="text-left px-3 py-2">남은 단계</th><th className="text-right px-3 py-2">활용률</th><th className="text-left px-3 py-2">활동</th><th className="text-left px-3 py-2">마지막 활동</th></tr></thead>
               <tbody>
-                {summary.rows.length === 0 && <tr><td colSpan={6} className="px-5 py-5 text-center text-slate-500">승인된 지점이 없습니다.</td></tr>}
+                {summary.rows.length === 0 && <tr><td colSpan={6} className="px-5 py-5 text-center text-slate-400">승인된 지점이 없습니다.</td></tr>}
                 {summary.rows.map(r => (
                   <tr key={r.branchId} className="border-t border-slate-800 text-slate-200" data-testid="pilot-row">
                     <td className="px-5 py-2.5 font-medium">{r.name}</td>

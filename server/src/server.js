@@ -8,6 +8,14 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import helmet from 'helmet';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
+// 입력 검증·마스킹은 순수 모듈로 분리해 테스트한다 (225, GAP Q-3) — npm run test:server
+import {
+  maskEmail, normalizeEmail, isEmail, isStrongPassword, isUuid, isValidId, isValidBranchId, isValidText,
+  FLAG_SCOPE_RE, validateFlagsInput, APP_VERSION_RE, MAX_EMAIL_LENGTH,
+} from './validate.js';
+import { publicUser } from './mappers.js';
+// 재배포 확인용 코드 지문 (229, 리뷰 H-1) — /health 로 알려 배포 스크립트가 구 컨테이너를 구분한다
+import { CODE_HASH } from './buildInfo.js';
 
 const { Pool } = pg;
 
@@ -16,8 +24,6 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
 const SESSION_DAYS = envInteger('SESSION_DAYS', 30, 1, 365);
 const RESET_TOKEN_MINUTES = envInteger('RESET_TOKEN_MINUTES', 30, 5, 1440);
-const MAX_TEXT_LENGTH = 10_000;
-const MAX_ID_LENGTH = 200;
 // 상용 배포 기본값: 관리자 발급 계정만 허용 (공개 가입 차단)
 const BOOTSTRAP_ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 const BOOTSTRAP_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -159,7 +165,8 @@ const loginEmailLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: false,
   legacyHeaders: false,
-  keyGenerator: req => `email:${normalizeEmail(req.body?.email) || 'missing'}`,
+  // 라우트 검증보다 먼저 돌므로 길이를 여기서도 자른다 — 미인증 요청으로 수 KB 키를 메모리 스토어에 꽂지 못하게 (234, 리뷰 L-7)
+  keyGenerator: req => `email:${normalizeEmail(req.body?.email).slice(0, MAX_EMAIL_LENGTH) || 'missing'}`,
   handler: (req, res, _next, options) => {
     log('warn', 'rate_limit_email', { path: req.path, email: maskEmail(normalizeEmail(req.body?.email)), ip: req.ip });
     res.status(options.statusCode).json({ error: '로그인 시도가 너무 많습니다. 15분 후 다시 시도해주세요.' });
@@ -198,84 +205,14 @@ const dataLimiter = rateLimit({
   },
 });
 
-function maskEmail(value) {
-  if (!value || !value.includes('@')) return value || null;
-  const [local, domain] = value.split('@');
-  return `${local.slice(0, 2)}***@${domain}`;
-}
-
-function normalizeEmail(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function isEmail(value) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isStrongPassword(value) {
-  return typeof value === 'string' && value.length >= 8 && value.length <= 128;
-}
-
-function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
-}
-
-function isValidId(value) {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_ID_LENGTH;
-}
-
-function isValidBranchId(value) {
-  return isValidId(value) && /^[a-z0-9._:-]+$/i.test(value);
-}
-
-function isValidText(value, { required = false, max = MAX_TEXT_LENGTH } = {}) {
-  if (value === undefined || value === null) return !required;
-  if (typeof value !== 'string' || value.length > max) return false;
-  // U+FFFD(치환 문자)는 인코딩이 깨진 입력의 흔적 — 저장하면 어드민 화면에 '�'로 보인다 (2026-09-22 실측: CP949 터미널 curl).
-  // 정상 클라이언트(브라우저 fetch)는 항상 UTF-8이라 이 문자를 만들지 않는다.
-  if (value.includes('�')) return false;
-  return !required || value.trim().length > 0;
-}
 
 function tokenHash(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-function publicUser(row) {
-  return {
-    id: row.id,
-    email: row.email,
-    name: row.name,
-    phone: row.phone || undefined,
-    shopName: row.shop_name || '',
-    shopType: row.shop_type || '',
-    plan: row.plan || 'trial',
-    trialEndsAt: new Date(row.trial_ends_at).toISOString(),
-    isOnboarded: Boolean(row.is_onboarded),
-    role: row.role || 'staff',
-    branchId: row.branch_id || undefined,
-    branchName: row.branch_name || undefined,
-    shopPhone: row.shop_phone || undefined,
-    shopAddress: row.shop_address || undefined,
-    businessNumber: row.business_number || undefined,
-    isActive: row.is_active !== false,
-    serviceEndsAt: row.service_ends_at ? new Date(row.service_ends_at).toISOString() : null,
-    mustChangePassword: row.must_change_password === true,
-    // 신청/승인 흐름 (2026-09-18) — pending: 승인 대기, approved: 로그인 가능, rejected: 거부 (reject_reason 표시)
-    status: row.status || 'approved',
-    rejectReason: row.reject_reason || null,
-    // 프로그램 버전 텔레메트리 (배포 불변 원칙 — 구버전으로 남은 지점을 본사가 먼저 발견)
-    lastAppVersion: row.last_app_version || null,
-    lastAppMode: row.last_app_mode || null,
-    lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null,
-    createdAt: new Date(row.created_at).toISOString(),
-  };
-}
-
 // ── 프로그램 버전 헤더 기록 ─────────────────────────────────────────
 // 클라이언트(authApi.ts)가 매 요청에 X-App-Version / X-App-Mode를 실어 보낸다.
 // 값이 바뀌었거나 마지막 기록이 5분 이상 지났을 때만 UPDATE (요청마다 쓰지 않음).
-const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}([-.][0-9A-Za-z.-]{0,20})?$/;
 // android/ios: 스토어 앱(Capacitor) — 채널(latest.json) 버전 비교·구버전 경보 대상에서 제외하기 위해 모드를 보존한다
 const APP_MODES = new Set(['portable', 'folder', 'admin', 'web', 'android', 'ios']);
 const APP_SEEN_REFRESH_MS = 5 * 60 * 1000;
@@ -411,8 +348,11 @@ async function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS feature_flags (
       scope text PRIMARY KEY,
       flags jsonb NOT NULL DEFAULT '{}',
-      updated_at timestamptz NOT NULL DEFAULT now()
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      -- 본사가 지점 화면 PIN(앱 잠금)을 초기화한 시각. PIN 해시는 서버에 올리지 않고 이 시각만 둔다 (219, 승인 20)
+      app_lock_reset_at timestamptz
     );
+    ALTER TABLE feature_flags ADD COLUMN IF NOT EXISTS app_lock_reset_at timestamptz;
 
     -- 지점 → 고객 결제 요청 링크 (토스페이먼츠 카드/가상계좌 수납)
     CREATE TABLE IF NOT EXISTS payment_requests (
@@ -725,7 +665,7 @@ async function consumeResetToken(token, password) {
 app.get('/health', async (_req, res, next) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ ok: true, service: 'troiareuke-auth' });
+    res.json({ ok: true, service: 'troiareuke-auth', codeHash: CODE_HASH });
   } catch (error) {
     next(error);
   }
@@ -2053,37 +1993,22 @@ app.delete('/api/admin/announcements/:id', requireSession, requireSuperadmin, as
 });
 
 // ── 기능 플래그 (본사 → 전 지점 원격 기능 제어) ──────────────────
-const FLAG_SCOPE_RE = /^[A-Za-z0-9_:-]{1,64}$/; // 'global' 또는 branch_id
-const FLAG_KEY_RE = /^[A-Za-z0-9_.-]{1,64}$/;
-
-function validateFlagsInput(body) {
-  const flags = body?.flags;
-  if (!flags || typeof flags !== 'object' || Array.isArray(flags)) {
-    return { error: 'flags 객체가 필요합니다.' };
-  }
-  const entries = Object.entries(flags);
-  if (entries.length > 100) return { error: '기능 항목이 너무 많습니다. (100개 이하)' };
-  const out = {};
-  for (const [key, value] of entries) {
-    if (!FLAG_KEY_RE.test(key)) return { error: `기능 id 형식이 올바르지 않습니다: ${key.slice(0, 80)}` };
-    if (typeof value !== 'boolean') return { error: `기능 값은 true/false여야 합니다: ${key}` };
-    out[key] = value;
-  }
-  return { value: out };
-}
 
 // 지점: 자기 지점에 적용될 전역+지점 플래그 조회 (클라이언트가 기본값과 병합)
 app.get('/api/feature-flags', requireSession, async (req, res, next) => {
   try {
     const branchId = req.authUser.branch_id || '';
     const { rows } = await pool.query(
-      'SELECT scope, flags FROM feature_flags WHERE scope = $1 OR scope = $2',
+      'SELECT scope, flags, app_lock_reset_at FROM feature_flags WHERE scope = $1 OR scope = $2',
       ['global', branchId || 'global'],
     );
     const byScope = Object.fromEntries(rows.map((r) => [r.scope, r.flags || {}]));
+    const branchRow = branchId ? rows.find((r) => r.scope === branchId) : null;
     res.json({
       global: byScope.global || {},
       branch: (branchId && byScope[branchId]) || {},
+      // 화면 PIN 초기화 시각 — 지점 앱이 기기에 적어 둔 값보다 새로우면 로컬 PIN 설정을 지운다 (219)
+      appLockResetAt: branchRow?.app_lock_reset_at ? new Date(branchRow.app_lock_reset_at).toISOString() : null,
     });
   } catch (error) {
     next(error);
@@ -2114,6 +2039,24 @@ app.put('/api/admin/feature-flags/:scope', requireSession, requireSuperadmin, as
       RETURNING scope, flags
     `, [scope, JSON.stringify(parsed.value)]);
     res.json({ scope: rows[0].scope, flags: rows[0].flags });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// 어드민: 지점 화면 PIN(앱 잠금) 초기화 — 매장이 PIN 을 잊었을 때 전화 한 통으로 풀어 준다 (219, 승인 20).
+// PIN 해시는 기기에만 있어 서버가 알 수 없다 → "초기화 시각" 만 올려 두고, 지점 앱이 그 값을 보면 자기 기기의 PIN 설정을 지운다.
+app.post('/api/admin/feature-flags/:scope/app-lock-reset', requireSession, requireSuperadmin, async (req, res, next) => {
+  try {
+    const scope = String(req.params.scope || '');
+    if (!FLAG_SCOPE_RE.test(scope) || scope === 'global') return res.status(400).json({ error: '지점 스코프가 필요합니다.' });
+    const { rows } = await pool.query(`
+      INSERT INTO feature_flags (scope, flags, app_lock_reset_at, updated_at)
+      VALUES ($1, '{}'::jsonb, now(), now())
+      ON CONFLICT (scope) DO UPDATE SET app_lock_reset_at = now(), updated_at = now()
+      RETURNING scope, app_lock_reset_at
+    `, [scope]);
+    res.json({ scope: rows[0].scope, appLockResetAt: new Date(rows[0].app_lock_reset_at).toISOString() });
   } catch (error) {
     next(error);
   }

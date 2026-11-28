@@ -295,7 +295,7 @@ export default function AdminDashboard() {
                     <code className="flex-1 truncate text-xs text-blue-300 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2">{INSTALL_SITE_URL}</code>
                     <button
                       onClick={() => copyText('url', INSTALL_SITE_URL)}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-colors shrink-0"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shrink-0"
                     >
                       <Copy size={12} /> {copied === 'url' ? '복사됨' : '주소 복사'}
                     </button>

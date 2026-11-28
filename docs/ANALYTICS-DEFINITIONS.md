@@ -35,7 +35,7 @@
 | 할인 합계 | 완료 결제의 discountAmount 합 | payments | 월 | 음수는 0 | 확정 | monthMetrics.discount | 147 |
 | 회원권 판매 | type=program 완료 결제 합(현금 유입) | payments | 월 | — | 확정 | monthMetrics.programSold | 147 |
 | 회원권 실현(이달) | 그 달 시술 기록이 차감한 회차 × (결제액 ÷ 총 회차) | treatment_logs.customerProgramId·sessionsUsed, customer_programs | 월 | 기간제·총 회차 0 은 제외. 누적 실현은 customerValueRule(고객 가치) | 확정 | monthMetrics.programRealized | 147 |
-| 미사용 회원권 잔액 | 진행 중(미완료) 회차권의 잔여 회차 × 회당 가격 합 | customer_programs | 시점 | 기간제 제외, 달과 무관 | 확정(시점값) | monthMetrics.unusedBalance | 147 |
+| 미사용 회원권 잔액 | 진행 중(미완료) 회차권의 잔여 회차 × 회당 가격을 **회차권마다 반올림해** 더한 값(260 — 근거 목록 줄 합과 같게) | customer_programs | 시점 | 기간제·만료 제외, 달과 무관, 근거 목록은 `unusedBalanceRows` | 확정(시점값) | monthMetrics.unusedBalance | 147 |
 | 손익분기 매출 | 판관비 ÷ (1 − 매출원가율), 원가율 = 매출원가(제품·소모품 매입) ÷ 월 매출 | expenses | 월 | 원가율 ≥ 1 이면 —, 매출 0·원가 0 이면 판관비 | 확정 | monthMetrics.breakEven | 147 |
 | 영업시간·시간당 매출 | 휴무·지정 휴일이 아닌 날의 (마감 − 오픈) 합(이달은 오늘까지), 매출 ÷ 영업시간 | 설정 businessHours·holidays | 월 | 영업시간 설정 없으면 — | 확정 | revenueMetricsRule.openHoursInMonth, monthMetrics.perHour | 147 |
 | 월말 예상 | 이달 매출 ÷ 지난 일수 × 그 달 일수 | 월 매출 | 이달 | 과거 달·매출 0 이면 — | **예측** | monthMetrics.projected | 147 |
