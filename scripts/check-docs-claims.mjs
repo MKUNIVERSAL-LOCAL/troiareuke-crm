@@ -686,6 +686,9 @@ function selftest() {
       const claims = selfTimeClaims(road);
       trap('자기 시각 주장 둘만 모은다', claims.length === 2);
       trap('다른 묶음 커밋을 인용한 줄은 보지 않는다', !claims.some(c => c.no === 354));
+      // 363: 따옴표로 **인용한** 자기 지칭 문장은 그 줄의 주장이 아니다
+      const quoted = '- [x] 363 — **가**(11-28 10:30): 360 의 "**[자기 정정]** 이 줄의 시각을 처음에 09:42 로 적었다 — 커밋은 09:37" 을 되돌렸다. 커밋 c39e445.';
+      trap('인용한 자기 지칭 문장은 보지 않는다', selfTimeClaims(quoted).length === 0);
     }
     // 356: ⑮ 의 asar 시각도 같은 결함이었다 — 서울 기준으로 못 박았는지 고정된 순간으로 확인한다
     {
@@ -1168,6 +1171,9 @@ function selfTimeClaims(text) {
     if (!/이 줄의/.test(line)) continue;
     const m = /커밋은 (\d{2}):(\d{2})/.exec(line);
     if (!m) continue;
+    // 363: 따옴표 안이면 **다른 줄의 문장을 인용**한 것이다 — 만든 날 바로 이 거짓 경보가 났다
+    // (363 줄이 360 의 "[자기 정정] … 커밋은 09:37" 을 인용했다). ⑮ 와 같은 인용 면제를 쓴다.
+    if ((line.slice(0, m.index).match(/"/g) || []).length % 2 === 1) continue;
     const b = /^- \[x\] (\d{3,4}) — /.exec(line);
     const h = hashOf(line);
     if (!b || !h || Number(b[1]) >= 2000) continue;
