@@ -17,6 +17,7 @@
  * 실패하면 비 0 으로 끝난다. 자체 점검: node scripts/check-release-notes.mjs --selftest
  */
 import { readFile } from 'node:fs/promises';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,6 +27,37 @@ const HEAD_RE = /^v(\d+\.\d+\.\d+) 업데이트 내용\s*$/;
 const VERSION_HEAD_RE = /^v(\d+\.\d+\.\d+) 업데이트 내용\s*$/gm;
 
 /** 순수 검사 — 노트 본문과 package.json 버전을 받아 문제 목록을 돌려준다(빈 배열이면 통과) */
+/** 노트가 대괄호로 적은 화면 이름들 (374) */
+function noteLabels(text) {
+  return [...new Set([...text.matchAll(/\[([^\]\n]{2,24})\]/g)].map(m => m[1].trim()))];
+}
+
+/**
+ * ⑦ 노트가 약속한 화면 이름이 **앱에 없는** 것들 (374)
+ *
+ * 왜: 노트는 지점이 읽는 유일한 글이다. `[재고 실사]` 처럼 적은 단추가 앱에 없으면 지점은
+ *     없는 것을 찾아 헤맨다. 이 비교는 **글 ↔ 코드 문자열**이라 판단이 끼지 않는다.
+ *
+ * 모양 다루기: 노트는 수를 `N` 으로 적고(`[+N개 더 보기]`·`[N종 실사 반영]`) 코드는 그 자리에
+ *     값을 끼운다(`+${n}개 더 보기`). 그래서 `N` 으로 쪼갠 **조각마다** 찾는다.
+ *     아이콘이 섞인 이름(`[🔒 마감됨]`)은 코드에서 아이콘 컴포넌트로 들어가므로 그림 글자를 뺀다.
+ *     띄어쓰기는 양쪽 모두 지워서 비교한다(줄바꿈·들여쓰기로 갈라지는 자리가 있다).
+ *     조각이 하나도 남지 않는 이름(`[N건]` 처럼 수·기호만)은 **판단할 수 없어 건너뛴다**(세어 찍는다).
+ */
+const LABEL_EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu;
+function missingNoteLabels(text, haystack) {
+  const flat = haystack.replace(/\s+/g, '');
+  const missing = [];
+  let skipped = 0;
+  for (const label of noteLabels(text)) {
+    const parts = label.replace(LABEL_EMOJI, ' ').split('N').map(p => p.replace(/\s+/g, '')).filter(p => p.length >= 2);
+    if (parts.length === 0) { skipped += 1; continue; }
+    if (parts.every(p => flat.includes(p))) continue;
+    missing.push(label);
+  }
+  return { missing, skipped, total: noteLabels(text).length };
+}
+
 function checkReleaseNotes(text, pkgVersion) {
   const problems = [];
   const body = text.replace(/\r\n/g, '\n');
@@ -143,6 +175,22 @@ function checkReleaseNotes(text, pkgVersion) {
 }
 
 if (process.argv.includes('--selftest')) {
+  // 374: ⑦ 의 덫 — 평범한 이름·N 자리·아이콘·띄어쓰기·수만 적은 이름
+  {
+    const hay = 'const a = <button>재고 실사</button>; const b = `+${n}개 더 보기`; const c = `${k}종 실사 반영`; <Lock /> 마감됨';
+    const t = (label) => missingNoteLabels(`v1.0.0 업데이트 내용\n\n■ 가\n• [${label}] 를 누르세요\n`, hay);
+    const bad = [];
+    if (t('재고 실사').missing.length !== 0) bad.push('있는 이름을 못 찾았다');
+    if (t('없는 단추 이름').missing.length !== 1) bad.push('없는 이름을 잡지 못했다');
+    if (t('+N개 더 보기').missing.length !== 0) bad.push('N 자리를 다루지 못했다');
+    if (t('N종 실사 반영').missing.length !== 0) bad.push('앞이 N 인 이름을 다루지 못했다');
+    if (t('🔒 마감됨').missing.length !== 0) bad.push('아이콘이 섞인 이름을 다루지 못했다');
+    if (t('재고  실사').missing.length !== 0) bad.push('띄어쓰기 차이를 다루지 못했다');
+    if (t('N건').skipped !== 1) bad.push('수만 적은 이름을 건너뛰지 않았다');
+    if (t('N건').missing.length !== 0) bad.push('건너뛴 이름을 신고했다');
+    if (bad.length > 0) { console.error('[selftest] ⑦ 덫 실패: ' + bad.join(' / ')); process.exit(1); }
+    console.log(`[check-release-notes] selftest ⑦ 덫 8종 통과(있는 이름·없는 이름·N 자리 2종·아이콘·띄어쓰기·수만 2종)`);
+  }
   const pad = n => '\n'.repeat(n);
   const cases = [
     ['정상(새 섹션이 배너를 채움 + 구분선)', 'v1.0.63 업데이트 내용\n\n■ 문자\n• 새 항목\n' + pad(2100) + '— 아래는 이미 적용된 지난 업데이트 내용입니다 —\n\nv1.0.62 업데이트 내용\n• 옛 항목\n', '1.0.62', 0],
@@ -187,6 +235,24 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const text = await readFile(path.join(root, 'docs', 'RELEASE-NOTES-CURRENT.md'), 'utf8');
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const problems = checkReleaseNotes(text, pkg.version);
+
+// ⑦ 노트가 약속한 화면 이름이 앱에 있는가 (374)
+{
+  const srcDir = path.join(root, 'src');
+  const files = [];
+  const walk = dir => {
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      if (fs.statSync(full).isDirectory()) walk(full);
+      else if (/\.(ts|tsx)$/.test(name)) files.push(full);
+    }
+  };
+  walk(srcDir);
+  const hay = files.map(f => fs.readFileSync(f, 'utf8')).join('\n');
+  const res = missingNoteLabels(text, hay);
+  console.log(`[check-release-notes] ⑦ 노트가 적은 화면 이름 ${res.total}개 · 앱에서 확인 ${res.total - res.missing.length - res.skipped}개 · 수/기호만이라 건너뜀 ${res.skipped}개`);
+  for (const m of res.missing) problems.push(`노트가 적은 "[${m}]" 를 src 에서 찾지 못했다 — 지점이 없는 것을 찾으러 간다(없는 기능이면 노트에서 지우고, 이름이 바뀌었으면 노트를 고치세요)`);
+}
 if (problems.length > 0) {
   console.error('[check-release-notes] 릴리스 노트 문제:');
   for (const p of problems) console.error(' - ' + p);
