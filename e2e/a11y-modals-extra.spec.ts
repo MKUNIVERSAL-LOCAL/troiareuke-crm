@@ -34,8 +34,18 @@ test('게이트 밖에 있던 창들에 serious·critical 접근성 위반이 �
   const dialog = (name: string) => page.getByRole('dialog', { name });
   const closeDialog = async (name: string) => {
     const d = dialog(name);
-    const close = d.getByRole('button', { name: '닫기', exact: true });
-    if (await close.count()) await close.first().click(); else await page.keyboard.press('Escape');
+    // 359: 한 번만 누르고 끝냈더니 CI 에서 간헐로 '결제 등록' 창이 남았다(폴링 24회 모두 1개).
+    // 이 창은 `useOverlayClose(..., { escape: false })` 라 **Esc 로 닫히지 않으므로** 첫 클릭이
+    // 먹지 않으면 되돌릴 길이 없다 — 토스트가 단추를 덮거나(시술 저장 토스트) 창이 한 틱 늦게
+    // 다시 열리는 자리가 있다. 토스트를 먼저 걷고, 닫힘을 기다렸다가 남아 있으면 다시 누른다.
+    await dismissToasts(page);
+    for (let i = 0; i < 3; i += 1) {
+      if (!(await d.count())) break;
+      const close = d.getByRole('button', { name: '닫기', exact: true });
+      if (await close.count()) await close.first().click({ timeout: 5_000 }).catch(() => {});
+      else await page.keyboard.press('Escape');
+      if (await d.first().waitFor({ state: 'detached', timeout: 3_000 }).then(() => true, () => false)) break;
+    }
     await expect(d).toHaveCount(0);
   };
 
