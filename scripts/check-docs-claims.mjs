@@ -232,7 +232,19 @@ const MODAL_COUNT_PAIR = /\*{0,2}(\d+)\*{0,2}개 중 (?:게이트가 여는 것 
 //      "창 주제" 로 읽혀, 같은 칸에 자리 수가 있으면 **머지 관문이 거짓 실패**한다(리뷰가 재현).
 //      금지 목록을 늘리는 쪽은 끝이 없으므로 **단독 토큰**일 때만 주제어로 본다 —
 //      `어드민 창 열한 개`·`창 접근성`·`창 자리` 는 통과하고 복합어 열다섯 개는 전부 떨어진다(재서 확인).
-const MODAL_TOPIC = /(?<![가-힣])창(?![가-힣])|모달|modal-a11y/g;
+// 384(378~380 리뷰 M-1): 378 의 단독 토큰은 **한국어 조사를 전부 떨어뜨렸다** — `창을`·`창이`·
+//      `창은`·`창에서`·`창들` 이 주제어가 아니어서 ⑪-2 가 그 주장을 **대조하지 않았다**
+//      (신고가 아니라 조용한 분류라 눈에 띄지 않는다 — 리뷰가 문서 변이로 재현했다).
+//      거짓 경보를 줄이려다 **조용한 거짓 통과**를 만든 자리다. 그래서 금지 목록도 단독
+//      토큰도 아닌 **조사 허용 목록**으로 바꾼다: 복합어 열다섯(창고·창구·창가·창문·창업·창작·
+//      창립·창출·창틀·창원·창조·창살·창단·창간)은 둘째 음절이 조사가 아니라 그대로 떨어진다.
+//      남는 겹침은 `창의` 하나뿐이다 — 홀로 선 `창의`(창의성의 뜻)는 이 문서들에 없고,
+//      `창의적`·`창의성` 은 뒤에 한글이 더 붙어 떨어진다. 그 하나를 덫으로 적어 둔다.
+//      조사 목록에서 **가·와·로 는 뺀다** — `창` 은 자음으로 끝나므로 그 셋은 붙지 않고(이·과·으로
+//      가 붙는다), 넣어 두면 `창가`(창문 옆)·`창와`·`창로` 가 주제어로 읽힌다. 실제로 첫 판에서
+//      **내 덫이 창가를 잡았다** — 목록을 먼저 쓰고 재니 그 자리가 드러났다.
+const MODAL_PARTICLE = '을|이|은|는|에서|에|과|도|들|만|까지|의|으로|부터|마다|보다|처럼|조차|밖에';
+const MODAL_TOPIC = new RegExp(`(?<![가-힣])창(?:${MODAL_PARTICLE})?(?![가-힣])|모달|modal-a11y`, 'g');
 const OTHER_TOPIC = /키보드|대비|초점|keyboard|contrast|focus/g;
 /** 표 행이면 그 수가 든 칸의 끝(다음 `|`), 아니면 줄 끝 */
 function cellEnd(text, at) {
@@ -929,6 +941,24 @@ function selftest() {
       trap('문서별 바닥이 수 빠진 문서를 집는다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 0 }], '화면 칸').length === 1);
       trap('수가 있으면 조용하다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 2 }], '화면 칸').length === 0);
       trap('언급하지 않는 문서는 바닥 밖', perDocFloorProblems([{ rel: 'a.md', mentions: false, claims: 0 }], '화면 칸').length === 0);
+      // 384(378~380 리뷰 L-1): 숨은 표 행은 **있는 것이 아니다** — ⑭ 는 주석으로 감싼 §5 를
+      //      빈 절로 읽어야 하고, 펜스 안의 예시 행도 세지 않아야 한다.
+      const briefOn = ['## 5. 품질 장치', '', '| 장치 | 무엇 | 어디서 |', '|---|---|---|', '| `npm run check:a` | 가 | client-ci |', '', '## 6. 끝'].join('\n');
+      const gateSrcFake = "flags.A = step('A', '가', 'node', ['scripts/check-a.mjs'])";
+      // 384: 가드 이름은 **package.json 모양**으로 줘야 한다 — 처음엔 배열을 줘서 "빠진 가드 0개"
+      //      가 나왔고 내 덫 둘이 그 자리에서 실패했다(지그부터 재라는 교훈을 또 받았다).
+      const pkgA = { 'check:a': 'node scripts/check-a.mjs' };
+      trap('§5 의 가드 행을 읽는다', missingGuardRows(briefOn, gateSrcFake, pkgA).length === 0);
+      trap('주석으로 감싼 §5 는 빈 절이다', missingGuardRows(briefOn.replace('| `npm run check:a` | 가 | client-ci |', '<!-- | `npm run check:a` | 가 | client-ci | -->'), gateSrcFake, pkgA).includes('check:a'));
+      trap('펜스 안의 예시 행은 세지 않는다', missingGuardRows(['## 5. 품질 장치', '', '```', '| `npm run check:a` | 예시 | client-ci |', '```', '', '## 6. 끝'].join('\n'), gateSrcFake, pkgA).includes('check:a'));
+      // 384(378~380 리뷰 M-1): 조사가 붙은 `창` 도 주제어다 — 378 의 단독 토큰은 이것들을
+      //      조용히 주제 밖으로 보냈다. 복합어는 여전히 떨어진다.
+      for (const w of ['창을', '창이', '창은', '창에서', '창들', '창의', '창과', '창까지']) {
+        trap(`조사가 붙은 ${w} 도 주제어다`, new RegExp(MODAL_TOPIC.source).test(`어드민 ${w} 자리는`));
+      }
+      for (const w of ['창고', '창구', '창가', '창문', '창업', '창작', '창립', '창출', '창틀', '창원', '창조', '창살', '창단', '창간', '창의성', '창의적']) {
+        trap(`복합어 ${w} 는 주제어가 아니다`, !new RegExp(MODAL_TOPIC.source).test(`${w} 자리는`));
+      }
       // 383(열한 번째 조용한 자리): 누계 표기는 괄호 안에 **설명이 이어진다** — 닫는 괄호를
       //      요구하면 세션 시작 문서의 그 수가 어느 검사에도 걸리지 않는다(실제로 그랬다).
       const cum383 = claimedNumbers('- **묶음 155~382(227개 — 묶음 161 은 없다. 162 줄이 순서를 바꿨다)**. 전수 기록은 로드맵.');
@@ -1538,20 +1568,27 @@ problems.push(...releaseStepProblems());
     //      ④⑤⑦(377)·⑲(376, 바닥 없는 이유를 적음)는 처리됐는데 **⑱ 만 아무것도 받지 못했고**,
     //      그런데도 377 기록은 "반영하지 않은 것은 없다" 고 적었다. 더해 찍던 수가 **읽은 줄 수**라
     //      커밋 찾기를 끊어도 수가 그대로였다 — 이제 **대조에 성공한 줄**을 따로 세어 함께 찍는다.
+    const unmatched18 = [];
     for (const r of rows18) {
       const c = commits.find(x => x.h.startsWith(r.hash));
-      if (c) compared18 += 1;
+      if (c) compared18 += 1; else unmatched18.push(`${r.where}(${r.hash})`);
       if (!c) continue; // 해시 실재는 ① 이 본다
       const d = timeGap(r.md, r.hm, c.md, c.hm, c.y);
       // 361(리뷰 L-1): 이제 timeGap 은 **없는 날짜**에 null 을 돌려준다(356 에서 죽은 가지로 지웠던 자리가
       // 실은 막아야 할 구멍이었다 — `11-31` 같은 날을 적어도 가드가 "맞다" 고 말했다).
-      if (d === null) { problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 날짜 ${r.md} 는 **없는 날짜**다(커밋은 ${c.md} ${c.hm})`); continue; }
-      if (d < -TIME_BEFORE) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 는 커밋(${c.md} ${c.hm})보다 ${-d}분 뒤다 — 아직 오지 않은 시각을 적었다(시계를 읽어 적으세요)`);
-      else if (d > TIME_AFTER) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 가 커밋(${c.md} ${c.hm})보다 ${d}분 앞이다 — 시각을 사실대로 적으세요`);
+      if (d === null) { problems.push(`${ROADMAP}: ${r.where} 줄의 날짜 ${r.md} 는 **없는 날짜**다(커밋은 ${c.md} ${c.hm})`); continue; }
+      if (d < -TIME_BEFORE) problems.push(`${ROADMAP}: ${r.where} 줄의 시각 ${r.md} ${r.hm} 는 커밋(${c.md} ${c.hm})보다 ${-d}분 뒤다 — 아직 오지 않은 시각을 적었다(시계를 읽어 적으세요)`);
+      else if (d > TIME_AFTER) problems.push(`${ROADMAP}: ${r.where} 줄의 시각 ${r.md} ${r.hm} 가 커밋(${c.md} ${c.hm})보다 ${d}분 앞이다 — 시각을 사실대로 적으세요`);
     }
     console.log(`[check-docs-claims] ⑱ 시각 주장 ${rows18.length}줄(묶음 ${rows18.filter(r => r.kind === '묶음').length} + 재검증 ${rows18.filter(r => r.kind === '재검증').length}) 중 ${compared18}줄을 커밋과 대조`);
     if (rows18.length === 0) problems.push('⑱ 이 시각 주장을 한 줄도 읽지 못했다 — 배선이 끊겼다(378)');
     if (rows18.length > 0 && compared18 === 0) problems.push('⑱ 이 읽은 줄의 커밋을 하나도 찾지 못했다 — 해시가 전부 틀렸거나 배선이 끊겼다(378)');
+    // 384(378~380 리뷰 L-4): 378 의 바닥은 **0줄만** 봤다 — 가장 새 묶음 줄의 해시 하나를 깨면
+    //      대조 줄 수가 244 에서 242 로 줄 뿐 신고가 없었다(묶음 줄과 그 재검증 줄이 함께 빠진다).
+    //      ① 은 가장 새 묶음의 해시를 면제하므로(283 규약) 그 자리를 보지 않는다 — 기록을 적는
+    //      **그 순간**이 가장 틀리기 쉬운데 창이 비어 있었다. 해시를 아직 적지 않은 줄은 애초에
+    //      rows18 에 들어오지 않으니(해시 없는 줄은 건너뛴다) 이 규칙에 면제가 필요 없다 — 재서 확인했다.
+    else if (unmatched18.length > 0) problems.push(`⑱ 이 ${rows18.length}줄 중 ${unmatched18.length}줄의 커밋을 찾지 못해 **그 줄의 시각을 대조하지 않았다** — ${unmatched18.slice(0, 3).join(" · ")}${unmatched18.length > 3 ? " 등" : ""}(384)`);
   }
 }
 
@@ -1636,18 +1673,21 @@ function timeClaimRows(text) {
   const out = [];
   for (const line of lines) {
     const bm = /^- \[x\] (\d{3,4}) — /.exec(line);
-    const rm = /^- \d{4}-(\d{2})-(\d{2}) (\d{2}):(\d)([0-9x]) \d{3,4}차 재검증\((\d{3,4})[,)]/.exec(line);
+    const rm = /^- \d{4}-(\d{2})-(\d{2}) (\d{2}):(\d)([0-9x]) (\d{3,4})차 재검증\((\d{3,4})[,)]/.exec(line);
     let row = null;
     if (bm && Number(bm[1]) < 2000) {
       const t = /\((\d{2})-(\d{2}) (\d{2}):(\d)([0-9x])/.exec(line);
-      if (t) row = { no: Number(bm[1]), md: t[1] + '-' + t[2], hm: t[3] + ':' + t[4] + t[5], kind: '묶음' };
+      if (t) row = { no: Number(bm[1]), md: t[1] + '-' + t[2], hm: t[3] + ':' + t[4] + t[5], kind: '묶음', seq: null };
     } else if (rm) {
-      row = { no: Number(rm[6]), md: rm[1] + '-' + rm[2], hm: rm[3] + ':' + rm[4] + rm[5], kind: '재검증' };
+      // 384(378~380 리뷰 L-5): 차수를 버리지 않는다 — `재검증 380 줄` 이라고 부르면 실제로는
+      //      `381차` 줄이라 읽는 사람이 **엉뚱한 줄**을 고친다(두 줄이 같은 묶음을 가리킨다).
+      row = { no: Number(rm[7]), md: rm[1] + '-' + rm[2], hm: rm[3] + ':' + rm[4] + rm[5], kind: '재검증', seq: Number(rm[6]) };
     }
     if (row === null) continue;
     const hash = hashOfBatch.get(row.no);
     if (!hash) continue; // 243 번 이전 줄은 해시가 없다 — git 에 물을 것이 없다
-    out.push({ ...row, hash });
+    const where = row.kind === '재검증' ? `재검증 ${row.seq}차(묶음 ${row.no})` : `묶음 ${row.no}`;
+    out.push({ ...row, hash, where });
   }
   return out;
 }
@@ -2220,7 +2260,10 @@ function gateGuardNames(gateSrc, scripts) {
 }
 /** 브리핑 §5 에 빠진 가드 이름 */
 function missingGuardRows(briefText, gateSrc, scripts) {
-  const sec = briefText.split(/^## 5\./m)[1];
+  // 384(378~380 리뷰 L-1): 주석으로 감싼 행은 **오너에게 보이지 않는다** — 숨긴 표를 "있다" 고
+  //      읽으면 §5 전체를 주석으로 덮어도 ⑭ 가 조용하다(리뷰가 변이로 재현). 코드 펜스의 예시
+  //      행도 같은 이유로 비운다. ⑰ 이 356 리뷰 L-3 에서 이미 그렇게 한다.
+  const sec = hiddenBlanked(briefText).split(/^## 5\./m)[1];
   // 347(리뷰 L-5): 전에는 이 문장을 **가드 이름 자리**에 끼워 넣어 "npm run 브리핑에 …" 로 깨졌다.
   // 호출부가 구분할 수 있게 표시를 붙여 돌려준다.
   if (sec === undefined) return ['!없는 절'];
@@ -2481,13 +2524,19 @@ function serverTestClaims(text, rel) {
     const relAllText = String(pkgScripts['release:all'] || '');
     const relChecksText = String(pkgScripts['release:checks'] || '');
     const rows = [];
-    for (const line of read(briefForGate).split(/\r?\n/)) {
+    // 384(378~380 리뷰 L-1): 메시지는 "§5 가드 행" 이라고 말하는데 **문서 전체**를 읽고 있었다 —
+    //      코드 펜스의 예시 행을 세어 거짓 경보를 내고, §6 의 행까지 §5 의 것으로 신고했다.
+    //      숨은 행(주석·펜스)을 비운 뒤 §5 본문만 읽는다. 절이 사라지면 아래 바닥이 운다.
+    const gateSec = hiddenBlanked(read(briefForGate)).split(/^## 5\./m)[1];
+    const gateBody = gateSec === undefined ? '' : gateSec.split(/^## /m)[0];
+    for (const line of gateBody.split(/\r?\n/)) {
       const m = /^\| .npm run (check:[a-z0-9-]+)./.exec(line);
       if (!m) continue;
       const cells = line.split('|');
       rows.push({ name: m[1], cell: cells[cells.length - 2], facts: gateFacts(m[1], pkgScripts, ciText, gateText, relAllText, relChecksText) });
     }
     console.log(`[check-docs-claims] ㉒ §5 가드 행 ${rows.length}개의 게이트 칸을 실물과 대조(client-ci·릴리스·묶음 게이트)`);
+    if (gateSec === undefined) problems.push(`${briefForGate}: §5 절을 찾지 못했다 — ㉒ 가 게이트 칸을 한 개도 대조하지 않는다(384)`);
     if (rows.length === 0) problems.push(`${briefForGate}: §5 에서 가드 행을 한 개도 읽지 못했다 — ㉒ 가 아무것도 대조하지 않는다(379)`);
     if (ciText === '') problems.push(`${ciPath} 를 읽을 수 없다 — ㉒ 가 머지 관문을 확인할 수 없다(379)`);
     // 382(리뷰 L-2): 바닥은 **세 경로 전부**에 둔다 — 379 는 머지 관문만 봤다.

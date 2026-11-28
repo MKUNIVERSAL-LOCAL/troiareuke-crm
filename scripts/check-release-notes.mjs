@@ -64,13 +64,22 @@ const LABEL_EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu;
  *      신고됐다(`[v1.0.64]`·`[14일분]`·`[마우스 오른쪽]`·`[11-28]`·`[2026년]`·`[미정]`·`[Space]`·`[TODO]`).
  *      `check:notes` 는 머지 관문이므로 그 하나하나가 **지점 안내를 고치다 머지를 막는** 자리다.
  */
+/**
+ * 384(378~380 리뷰 M-3): 규칙을 **라벨 전체**로 묶는다.
+ *
+ * 전에는 날짜·버전·수량·단축키가 **접두 일치**였다 — 그래서 `[14일분 보기]`·`[v1.0 안내]`·
+ * `[2026-11-28 결산]`·`[Ctrl + S 로 저장]` 처럼 **그 꼴로 시작만** 하는 단추 이름이 통째로
+ * 건너뛰어졌다. 지점이 읽는 글에서 **없는 단추 이름**이 조용히 지나가는 길이다(지금 노트는
+ * 건너뜀 0개라 피해는 없었고, 그래서 더 좁혀도 멀쩡한 글을 막지 않는다 — 재서 확인했다).
+ * 키 이름·쪽수·약어 규칙은 처음부터 `$` 로 묶여 있었다.
+ */
 function notAScreenName(label) {
-  if (/^[A-Za-z]+\s*\+/.test(label)) return '단축키';
+  if (/^[A-Za-z]+\s*\+\s*[A-Za-z0-9]+$/.test(label)) return '단축키';
   if (/^(?:Enter|Esc|ESC|Escape|Tab|Space|Shift|Ctrl|Alt|Del|Delete|Backspace|F\d{1,2})$/i.test(label)) return '키 이름';
-  if (/^\d{4}-\d{2}-\d{2}/.test(label)) return '날짜';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(label)) return '날짜';
   if (/^\d{1,2}-\d{1,2}$/.test(label)) return '날짜';
-  if (/^v?\d+\.\d+/.test(label)) return '버전';
-  if (/^\d+(?:일|개월|년|주|시간|분|일분|건|명|원)/.test(label)) return '수량';
+  if (/^v?\d+(?:\.\d+)+$/.test(label)) return '버전';
+  if (/^\d+(?:일|개월|년|주|시간|분|일분|건|명|원)$/.test(label)) return '수량';
   if (/^\d+\s*\/\s*\d+$/.test(label)) return '쪽수';
   if (/^[A-Z]{3,}$/.test(label)) return '약어';
   if (label.includes(':')) return '설명문';
@@ -260,6 +269,15 @@ if (process.argv.includes('--selftest')) {
     probe(!(t('2026-11-28').missing.length !== 0 || !t('2026-11-28').skipped.join().includes('날짜')), '날짜를 신고했다');
     probe(!(t('주의: 꼭 읽어 주세요').missing.length !== 0 || !t('주의: 꼭 읽어 주세요').skipped.join().includes('설명문')), '설명문을 신고했다');
     probe(!(t('N건').skipped.join().indexOf('수·기호') < 0), '수만 적은 이름을 건너뛰지 않았다');
+    // 384(378~380 리뷰 M-3): 건너뜀 규칙은 **라벨 전체**에만 걸린다 — 그 꼴로 **시작만** 하는
+    //      이름은 검사한다(전에는 `[14일분 보기]`·`[v1.0 안내]` 가 통째로 건너뛰어졌다).
+    probe(!(t('14일분 보기').missing.length !== 1 || t('14일분 보기').skipped.join().includes('수량')), '수량으로 시작하는 이름을 건너뛰었다');
+    probe(!(t('14일분').skipped.join().indexOf('수량') < 0), '순수한 수량을 건너뛰지 않았다');
+    probe(!(t('v1.0 안내').missing.length !== 1 || t('v1.0 안내').skipped.join().includes('버전')), '버전으로 시작하는 이름을 건너뛰었다');
+    probe(!(t('v1.0.64').skipped.join().indexOf('버전') < 0), '순수한 버전을 건너뛰지 않았다');
+    probe(!(t('2026-11-28 결산').missing.length !== 1 || t('2026-11-28 결산').skipped.join().includes('날짜')), '날짜로 시작하는 이름을 건너뛰었다');
+    probe(!(t('Ctrl + S 로 저장').missing.length !== 1), '단축키로 시작하는 이름을 건너뛰었다');
+    probe(!(t('Ctrl + S').skipped.join().indexOf('단축키') < 0), '빈칸 있는 단축키를 건너뛰지 않았다');
     // 375(리뷰 M-3): 조각은 3자 이상이고 **같은 파일**에 모두 있어야 한다
     // 375: 조각이 다 짧은 N 이름은 **판단하지 않고 건너뛴다**(우연히 맞을 수 있다)
     probe(!(t('마감 N 완료').skipped.join().indexOf('수·기호') < 0), '짧은 조각 이름을 건너뛰지 않았다');
@@ -277,7 +295,7 @@ if (process.argv.includes('--selftest')) {
     if (bad.length > 0) { console.error('[selftest] ⑧ 덫 실패: ' + bad.join(' / ')); process.exit(1); }
     // 378(375~377 리뷰 M-2): 375 는 이 수를 **손으로 박았고 실제보다 하나 적었다**(18개인데 17).
     //      331 H-3·335 ③ 이 금지한 그 모양이다 — 세어서 찍는다.
-    console.log(`[check-release-notes] selftest ⑧ 덫 ${traps}종 통과(있는 이름·없는 이름·N 자리·아이콘·띄어쓰기·단축키·날짜·설명문·수만·짧은 조각·한 파일·두 글자·흩어진 조각·붙은 글자·갈라진 이름 — **이 수는 세어서 찍는다**)`);
+    console.log(`[check-release-notes] selftest ⑧ 덫 ${traps}종 통과(있는 이름·없는 이름·N 자리·아이콘·띄어쓰기·단축키·날짜·설명문·수만·섞인 라벨 7종·짧은 조각·한 파일·두 글자·흩어진 조각·붙은 글자·갈라진 이름 — **이 수는 세어서 찍는다**)`);
   }
 
   const pad = n => '\n'.repeat(n);
