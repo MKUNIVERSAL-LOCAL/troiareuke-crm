@@ -26,7 +26,7 @@
 
 > **여기 없는 것**: 모바일 **필수 업데이트**(최소 지원 버전) 판정은 `src/lib/mobileUpdate.ts`·`src/components/ui/MobileUpdateBanner.tsx` 에 있고 **잠금이 아니다**. 352 에서 이 표가 그 기능을 `updateChannel.ts` 의 것으로 잘못 적어 두었던 것을 고쳤다(349~351 리뷰 M-3).
 
-## 2중 차단 구조
+## 차단 구조 — 코어 2중 + 기록 1중
 
 1. **Claude Code 훅** (`.claude/settings.json` → `scripts/claude-core-guard.mjs`)
    - Claude Code 가 코어 파일을 Edit/Write/MultiEdit 하려 하면 **그 자리에서 거부**.
@@ -35,6 +35,15 @@
 2. **git pre-commit 훅** (`.githooks/pre-commit` → `scripts/core-lock.mjs`)
    - 코어 파일이 스테이징되면 **커밋 거부**. (Claude 외 다른 에디터·도구로 고쳐도 커밋 단계에서 차단)
    - 활성화: `git config core.hooksPath .githooks` (clone 직후 1회. 아래 setup 참조)
+
+3. **git pre-push 훅 — 기록 관문** (`.githooks/pre-push`, 383 신설, 같은 `core.hooksPath` 로 함께 켜진다)
+   - 푸시 **앞에서** 기록 가드 셋(`check:docs`·`check:gap`·`check:notes`)을 돌리고, 실패하면 푸시를 막는다(약 25초).
+   - 왜: 11-28 에 **두 번** 기록 한 줄을 가드 결과보다 먼저 올려 머지 관문이 빨갰다(`2eef320`·`c2e0838`).
+     두 번째는 가드를 **돌리고도** 출력을 파이프로 흘려 종료 코드를 잃은 것이었다 — 사람 규칙이 두 번 실패했다.
+   - 우회: `SKIP_RECORD_CHECK=1 git push ...`(그러면 머지 관문이 본다). 브랜치 삭제 푸시는 건너뛴다.
+   - **경계**(386, 381~383 리뷰 L-1): `git push --no-verify` 는 훅을 통째로 건너뛴다. 기록만 바꾼 커밋은
+     푸시 이벤트로는 client-ci 도 돌지 않는다(PR 이벤트로는 매번 돈다) — 이 훅은 **실수**를 막고, 작정한 우회는 막지 못한다.
+   - 이 훅이 실물에 있고 그 가드 셋을 부르는지는 `check:docs` 의 검사 ㉓ 가 지킨다(386, 리뷰 M-3 — 훅 자신이 무보호였다).
 
 ## 최초 설정 (clone 직후 1회)
 
@@ -56,8 +65,3 @@ git config core.hooksPath .githooks
 
 보호 대상을 추가/제거하려면 `scripts/core-lock.mjs` 의 `CORE_FILES`/`CORE_DIRS` 만 수정하면 양쪽 훅에 동시 반영된다.
 
-3. **git pre-push 훅 — 기록 관문** (`.githooks/pre-push`, 383 신설, 같은 `core.hooksPath` 로 함께 켜진다)
-   - 푸시 **앞에서** 기록 가드 셋(`check:docs`·`check:gap`·`check:notes`)을 돌리고, 실패하면 푸시를 막는다(약 25초).
-   - 왜: 11-28 에 **두 번** 기록 한 줄을 가드 결과보다 먼저 올려 머지 관문이 빨갰다(`2eef320`·`c2e0838`).
-     두 번째는 가드를 **돌리고도** 출력을 파이프로 흘려 종료 코드를 잃은 것이었다 — 사람 규칙이 두 번 실패했다.
-   - 우회: `SKIP_RECORD_CHECK=1 git push ...`(그러면 머지 관문이 본다). 브랜치 삭제 푸시는 건너뛴다.

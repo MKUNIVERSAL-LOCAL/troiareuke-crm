@@ -15,6 +15,11 @@
 #   (CLAUDE.md §2). 브랜치 삭제 푸시만 건너뛴다.
 #
 # 우회: SKIP_RECORD_CHECK=1 git push ...   (오너가 급히 올릴 때. 그러면 머지 관문이 본다)
+#
+# 경계(386, 381~383 리뷰 L-1): `git push --no-verify` 는 **훅을 통째로 건너뛴다** — 훅으로는
+#   막을 수 없다. 그리고 client-ci 의 `push` 경로 필터에는 문서·기록 가드가 없어서, 기록만
+#   바꾼 커밋은 **푸시 이벤트로는 머지 관문도 돌지 않는다**(PR 이벤트로는 매번 돈다 —
+#   378~380 리뷰 L-8). 즉 이 훅은 "실수" 를 막고, 작정한 우회를 막지는 못한다.
 
 if [ "$SKIP_RECORD_CHECK" = "1" ]; then
   exit 0
@@ -22,7 +27,10 @@ fi
 
 zero='0000000000000000000000000000000000000000'
 pushing=0
-while read -r local_ref local_sha remote_ref remote_sha; do
+# 386(381~383 리뷰 L-2): `|| [ -n "$local_ref" ]` 가 없으면 **마지막 줄에 개행이 없을 때**
+#   그 줄을 버리고 조용히 통과한다(실측: 개행 없으면 exit 0, 있으면 exit 1). git 은 늘 개행을
+#   붙이므로 지금 피해는 없지만, 조용히 꺼지는 길은 남기지 않는다.
+while read -r local_ref local_sha remote_ref remote_sha || [ -n "$local_ref" ]; do
   [ "$local_sha" = "$zero" ] && continue   # 브랜치 삭제 — 올리는 것이 없다
   pushing=1
 done

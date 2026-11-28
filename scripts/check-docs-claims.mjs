@@ -987,8 +987,34 @@ function selftest() {
       trap('job 을 끄면 그 단계 전부가 꺼진다', !enabledWorkflowText(['jobs:', '  build:', '    if: false', '    steps:', '      - run: npm run check:a'].join('\n')).includes('check:a'));
       trap('단계를 끈 것이 job 전부를 끄지 않는다', enabledWorkflowText(['jobs:', '  build:', '    steps:', '      - run: npm run check:a', '        if: false', '      - run: npm run check:b'].join('\n')).includes('check:b'));
       trap('if: failure() 같은 평범한 조건은 살려 둔다', enabledWorkflowText(wfOn + '\n        if: failure()').includes('check:a'));
-      trap('여러 줄 run 블록을 자르지 않는다', enabledWorkflowText(['      - name: 가', '        run: |', '          npm run check:a', '      - run: npm run check:b'].join('\n')).includes('check:a'));
-      trap('옆 단계를 함께 지우지 않는다', enabledWorkflowText(['      - name: 가', '        run: npm run check:a', '        if: false', '      - run: npm run check:b'].join('\n')).includes('check:b'));
+      trap('여러 줄 run 블록을 자르지 않는다', enabledWorkflowText(['jobs:', '  build:', '    steps:', '      - name: 가', '        run: |', '          npm run check:a', '      - run: npm run check:b'].join('\n')).includes('check:a'));
+      trap('옆 단계를 함께 지우지 않는다', enabledWorkflowText(['jobs:', '  build:', '    steps:', '      - name: 가', '        run: npm run check:a', '        if: false', '      - run: npm run check:b'].join('\n')).includes('check:b'));
+      // 386(381~383 리뷰 M-4): 게이트도 **실제 호출 줄만** 본다 — 돌지 않게 만든 대입은 밖이다.
+      const gateSrc = ["flags.T = step('T', '앱 타입', 'npx', ['tsc']);", "if (false) flags.W = step('W', '기록', 'node', ['scripts/check-docs-claims.mjs']);", "  flags.G = step('G', '갭', 'node', ['scripts/check-gap-claims.mjs']);", "// flags.H = step('H', '노트', 'node', ['scripts/check-release-notes.mjs']);"].join('\n');
+      trap('맨 왼쪽 열의 대입은 도는 것이다', gateStepText(gateSrc).includes('tsc'));
+      trap('조건 안으로 들어간 대입은 아니다', !gateStepText(gateSrc).includes('check-docs-claims'));
+      trap('들여쓴 대입도 아니다', !gateStepText(gateSrc).includes('check-gap-claims'));
+      trap('주석 처리한 대입도 아니다', !gateStepText(gateSrc).includes('check-release-notes'));
+      trap('호출이 없으면 빈 글이다', gateStepText('const x = 1;') === '');
+      // 386(381~383 리뷰 H-1): `jobs:` **밖**의 글은 도는 것이 아니다 — `on: … paths:` 목록에
+      //      이름이 적힌 가드가 **단계를 지워도** "돈다" 로 읽혔다(그 행은 만든 날부터 꺼져 있었다).
+      const wfPaths = ['on:', '  push:', '    paths:', "      - 'scripts/check-a.mjs'", 'jobs:', '  build:', '    steps:', '      - run: npm run check:b'].join('\n');
+      trap('경로 필터의 이름은 도는 것이 아니다', !enabledWorkflowText(wfPaths).includes('check-a.mjs'));
+      trap('같은 글의 진짜 단계는 남는다', enabledWorkflowText(wfPaths).includes('check:b'));
+      trap('jobs 가 없으면 빈 글이다', enabledWorkflowText(['on:', '  push:', '    paths:', "      - 'scripts/check-a.mjs'"].join('\n')) === '');
+      // 386(리뷰 H-2): **끄면서 왜 껐는지 적는** 모양이 전부 통과했다 — 모양마다 박는다.
+      const wfJob = (...extra) => ['jobs:', '  build:', '    steps:', '      - run: npm run check:a', ...extra].join('\n');
+      trap('줄 끝 주석이 붙은 if: false', !enabledWorkflowText(wfJob('        if: false # 11-29 임시로 끔')).includes('check:a'));
+      trap('줄 끝 주석이 붙은 continue-on-error', !enabledWorkflowText(wfJob('        continue-on-error: true  # 당분간')).includes('check:a'));
+      trap('블록 스칼라 if', !enabledWorkflowText(wfJob('        if: >-', '          false')).includes('check:a'));
+      trap('따옴표 친 식 ${{ \'false\' }}', !enabledWorkflowText(wfJob("        if: ${{ 'false' }}")).includes('check:a'));
+      trap('식으로 쓴 continue-on-error', !enabledWorkflowText(wfJob('        continue-on-error: ${{ true }}')).includes('check:a'));
+      trap('한 줄 플로우 매핑의 if: false', !enabledWorkflowText(['jobs:', '  build:', '    steps:', '      - { run: npm run check:a, if: false }'].join('\n')).includes('check:a'));
+      trap('job 이름에 줄 끝 주석이 있어도 job 이다', !enabledWorkflowText(['jobs:', '  build: # 주 작업', '    if: false', '    steps:', '      - run: npm run check:a'].join('\n')).includes('check:a'));
+      trap('네 칸 들여쓴 job 도 본다', !enabledWorkflowText(['jobs:', '    build:', '        if: false', '        steps:', '          - run: npm run check:a'].join('\n')).includes('check:a'));
+      trap('job 의 if 에 줄 끝 주석', !enabledWorkflowText(['jobs:', '  build:', '    if: false # 잠시', '    steps:', '      - run: npm run check:a'].join('\n')).includes('check:a'));
+      trap('run 본문의 \'if: false\' 글자는 조건이 아니다', enabledWorkflowText(['jobs:', '  build:', '    steps:', '      - run: |', '          echo "if: false"', '          npm run check:a'].join('\n')).includes('check:a'));
+      trap('평범한 조건은 살려 둔다(주석까지)', enabledWorkflowText(wfJob('        if: failure() # 실패 때만')).includes('check:a'));
       const gRow = gRowFixture;
       trap('적었는데 안 돌면 잡는다', gateCellProblems([gRow('check:a', 'client-ci · 묶음 게이트', { ci: false, relAll: false, relChecks: false, gate: true })]).some(p => /실물에 없다/.test(p)));
       trap('도는데 안 적었으면 잡는다', gateCellProblems([gRow('check:a', '묶음 게이트', { ci: true, relAll: false, relChecks: false, gate: true })]).some(p => /적혀 있지 않다/.test(p)));
@@ -1856,46 +1882,144 @@ function trapFloorProblems(no, line, pairs) {
  *     살려 둔다 — 그것은 끈 것이 아니라 실패 때 도는 단계다. 여러 줄 `run: |` 블록은 자르지
  *     않는다(들여쓰기가 더 깊은 줄은 그 단계의 몸이다).
  */
+/**
+ * 묶음 게이트에서 **실제로 도는 단계의 줄만** (386, 381~383 리뷰 M-4)
+ *
+ * 382 는 워크플로를 "실행되는 단계" 로 고치면서 게이트 쪽은 `blankComments` 로 **주석만**
+ * 비웠다 — 그래서 `if (false) flags.W = step(…)` 이나 그 줄을 안 도는 가지로 감싸는 변이가
+ * 전부 통과했다(리뷰가 셋을 재 보였다). 이 파일의 27칸은 모두 **맨 왼쪽 열의 대입**이므로
+ * 그 모양만 모은다 — 조건 안으로 들어가거나 들여써지면 그것은 "도는 것" 이 아니다.
+ *
+ * 남는 한계(적어 둔다): 호출은 그대로 두고 **인수로 무력화**하는 변이(`['scripts/check-x.mjs', '--help']`)는
+ * 이 검사가 보지 못한다. 가드 이름은 그대로 있기 때문이다 — 그것은 "부르지만 아무것도 안 하게
+ * 만드는" 다른 종류이고, 그 판정은 인수의 뜻을 알아야 하므로 사람이 본다(352 의 경계선).
+ */
+function gateStepText(src) {
+  return blankComments(src).split('\n').filter(l => /^flags\.[A-Za-z0-9]+\s*=\s*/.test(l)).join('\n');
+}
+/** YAML 의 참·거짓 — `${{ false }}`·`'false'`·줄 끝 주석까지 본다 (386, 381~383 리뷰 H-2) */
+function yamlBool(raw) {
+  let t = String(raw).replace(/#.*$/, '').trim();
+  // 386: **식을 먼저** 벗긴다 — 꼬리 괄호를 먼저 떼면 `${{ false }}` 가 `${{ false` 로 깨져
+  //      382 가 박아 둔 덫이 실패했다(덫이 그 자리에서 일했다). 식이 아닐 때만 플로우 매핑의
+  //      꼬리(`,`·`}`)를 떼고 다시 본다.
+  const exp = /^\$\{\{\s*(.*?)\s*\}\}$/.exec(t);
+  if (exp) t = exp[1].trim();
+  else {
+    t = t.replace(/[,}\]]+$/, '').trim();
+    const again = /^\$\{\{\s*(.*?)\s*\}\}$/.exec(t);
+    if (again) t = again[1].trim();
+  }
+  t = t.replace(/^['"]|['"]$/g, '').trim().toLowerCase();
+  if (t === 'false') return false;
+  if (t === 'true') return true;
+  return null; // `failure()` 같은 평범한 조건 — 끈 것이 아니다
+}
+/**
+ * 이 블록(단계 하나, 또는 job 자신의 열)이 **꺼져 있는가** (386, 381~383 리뷰 H-2)
+ *
+ * 382 의 첫 판은 `if:\s*false\s*$` 였다 — 현장에서 단계를 끌 때 가장 자연스러운 모양이
+ * **왜 껐는지 주석을 붙이는 것**인데(`if: false # 11-29 임시로 끔`) 그 모양이 전부 통과했다
+ * (리뷰가 함수 단위 22모양 중 10모양 오판을 재 보였다). 블록 스칼라(`if: >-` 다음 줄에 `false`)와
+ * 한 줄 플로우 매핑(`- { run: …, if: false }`), 따옴표 친 식 `${{ 'false' }}` 도 본다.
+ */
+function blockIsOff(lines) {
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    for (const m of line.matchAll(/[,{]\s*(if|continue-on-error)\s*:\s*([^,}]*)/g)) {
+      const v = yamlBool(m[2]);
+      if (m[1] === 'if' && v === false) return true;
+      if (m[1] === 'continue-on-error' && v === true) return true;
+    }
+    const km = /^(\s*)(?:-\s+)?(if|continue-on-error)\s*:\s*(.*)$/.exec(line);
+    if (!km) continue;
+    let raw = km[3].replace(/#.*$/, '').trim();
+    if (raw === '' || /^[|>][-+]?$/.test(raw)) {
+      const base = line.search(/\S/);
+      const parts = [];
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const ind = lines[j].search(/\S/);
+        if (ind === -1) continue;
+        if (ind <= base) break;
+        parts.push(lines[j].trim());
+      }
+      raw = parts.join(' ').trim();
+    }
+    const v = yamlBool(raw);
+    if (km[2] === 'if' && v === false) return true;
+    if (km[2] === 'continue-on-error' && v === true) return true;
+  }
+  return false;
+}
+/** 한 job 블록에서 **실행되는 단계들의 줄**만 (386) */
+function enabledStepLines(block) {
+  const out = [];
+  let step = null;
+  const flush = () => {
+    if (step !== null && !blockIsOff(step.lines)) out.push(...step.lines);
+    step = null;
+  };
+  for (const line of block) {
+    const m = /^(\s*)-\s/.exec(line);
+    if (m) { flush(); step = { indent: m[1].length, lines: [line] }; continue; }
+    if (step !== null) {
+      const ind = line.search(/\S/);
+      if (ind === -1 || ind > step.indent) { step.lines.push(line); continue; }
+      flush();
+    }
+  }
+  flush();
+  return out;
+}
+/**
+ * 워크플로에서 **실제로 실행되는 단계의 줄만** 돌려준다 (386, 381~383 리뷰 H-1·H-2)
+ *
+ * 382 는 "꺼진 것을 덜어 낸 원문" 을 돌려줬다 — 그래서 `jobs:` **밖**의 `on: … paths:` 목록이
+ * 그대로 남았고, 그 목록에 `scripts/check-routes.mjs` 가 적혀 있어 **그 단계를 통째로 지워도**
+ * 브리핑의 `check:routes` 행은 "돈다" 로 판정됐다. 리뷰가 변이 둘로 보였고, job 전체를 끄는
+ * 대조군에서 17행 중 **16행만** 신고된 것이 그 지문이었다 — 그 한 행에서 ㉒ 는 **만든 날부터
+ * 작동한 적이 없다**. 이제 **단계의 줄만** 모은다: 경로 필터·환경 변수·job 이름에 가드 이름이
+ * 적혀 있어도 그것은 "도는 것" 이 아니다.
+ *
+ * job 이름 줄은 줄 끝 주석을 허용하고(`build: # 주 작업`) 들여쓰기는 두 칸이든 네 칸이든 본다.
+ * 입력에 `jobs:` 가 없으면 **빈 글**이다 — 도는 단계가 없다는 뜻이고, 호출부의 바닥이 그것을 신고한다.
+ */
 function enabledWorkflowText(yaml) {
   const lines = String(yaml).split(/\r?\n/).filter(l => !/^\s*#/.test(l));
-  const OFF = /^\s*(?:if:\s*(?:false|\$\{\{\s*false\s*\}\})|continue-on-error:\s*true)\s*$/m;
-  // 382: job 단위는 **job 자신의 열(네 칸)** 만 본다. 처음엔 블록 글 전체를 봤는데, 그러면
-  //      단계 하나에 붙은 `if: false` 가 그 job 전부를 끈 것으로 읽혀 **신고가 17건으로 번졌다**
-  //      (변이를 재며 알았다 — 한 단계를 끈 변이의 답은 한 줄이어야 한다).
-  const OFF_JOB = /^ {4}(?:if:\s*(?:false|\$\{\{\s*false\s*\}\})|continue-on-error:\s*true)\s*$/m;
-  // ① job 단위 — `jobs:` 아래 두 칸 들여쓴 이름 하나가 job 이다(job 을 끄면 그 단계 전부가 꺼진다)
-  const kept = [];
-  let job = null;
-  let inJobs = false;
-  const flushJob = () => {
-    if (job !== null && !OFF_JOB.test(job.join('\n'))) kept.push(...job);
-    job = null;
-  };
-  for (const line of lines) {
-    if (/^jobs:\s*$/.test(line)) { flushJob(); inJobs = true; kept.push(line); continue; }
-    if (inJobs && /^ {2}[A-Za-z_][\w-]*:\s*$/.test(line)) { flushJob(); job = [line]; continue; }
-    if (inJobs && /^\S/.test(line)) { flushJob(); inJobs = false; }
-    if (job !== null) job.push(line); else kept.push(line);
-  }
-  flushJob();
-  // ② 단계 단위 — `- ` 로 시작하는 블록. 더 깊이 들여쓴 줄은 그 단계의 몸이다
+  let i = lines.findIndex(l => /^jobs\s*:\s*(?:#.*)?$/.test(l));
+  if (i < 0) return '';
+  i += 1;
   const out = [];
-  let block = null;
-  const flushStep = () => {
-    if (block !== null && !OFF.test(block.lines.join('\n'))) out.push(...block.lines);
-    block = null;
-  };
-  for (const line of kept) {
-    const m = /^(\s*)-\s/.exec(line);
-    if (m) { flushStep(); block = { indent: m[1].length, lines: [line] }; continue; }
-    if (block !== null) {
-      const indent = line.search(/\S/);
-      if (indent === -1 || indent > block.indent) { block.lines.push(line); continue; }
-      flushStep();
+  while (i < lines.length) {
+    if (/^\S/.test(lines[i])) break; // jobs 블록이 끝났다
+    const jm = /^(\s+)[A-Za-z_][\w-]*\s*:\s*(?:#.*)?$/.exec(lines[i]);
+    if (!jm) { i += 1; continue; }
+    const jobIndent = jm[1].length;
+    i += 1;
+    const block = [];
+    while (i < lines.length) {
+      const ind = lines[i].search(/\S/);
+      if (ind >= 0 && ind <= jobIndent) break;
+      block.push(lines[i]);
+      i += 1;
     }
-    out.push(line);
+    const indents = block.map(l => l.search(/\S/)).filter(n => n >= 0);
+    if (indents.length === 0) continue;
+    const keyIndent = Math.min(...indents);
+    const jobOwn = [];
+    for (let k = 0; k < block.length; k += 1) {
+      if (block[k].search(/\S/) !== keyIndent) continue;
+      if (/^\s*steps\s*:/.test(block[k])) continue;
+      jobOwn.push(block[k]);
+      for (let j = k + 1; j < block.length; j += 1) {
+        const d = block[j].search(/\S/);
+        if (d >= 0 && d <= keyIndent) break;
+        jobOwn.push(block[j]);
+      }
+    }
+    if (blockIsOff(jobOwn)) continue; // job 을 끄면 그 단계 전부가 꺼진다
+    out.push(...enabledStepLines(block));
   }
-  flushStep();
   return out.join('\n');
 }
 /**
@@ -2505,6 +2629,36 @@ function serverTestClaims(text, rel) {
   }
 }
 
+// ㉓ 푸시 관문(`.githooks/pre-push`) ↔ 문서의 약속 (386, 381~383 리뷰 M-3)
+//
+// 왜: 383 이 만든 그 훅은 **자신이 무보호**였다 — 파일을 지우거나 본문을 `exit 0` 으로 바꿔도
+//     가드가 한 건도 말하지 않았다(리뷰가 둘 다 재 보였다). 그런데 세 문서가 "실패하면 푸시가
+//     막힌다" 고 **단정**한다. 이 저장소가 반복해 닫아 온 종류(문서가 약속한 것이 실물에 있는가 —
+//     ⑦ 노트↔앱, ㉒ 칸↔실물)가 **새로 만든 장치에서 다시 열린** 자리다.
+{
+  const hookPath = '.githooks/pre-push';
+  // 386(리뷰 L-6): 훅은 스크립트 경로를 직접 부른다 — 이름을 여기 박아 두면 `package.json` 의
+  //      정의가 바뀔 때 훅과 머지 관문이 **조용히 갈라진다**. 정본에서 뽑는다.
+  const hookPkg = JSON.parse(read('package.json')).scripts || {};
+  const guards = ['check:docs', 'check:gap', 'check:notes'].map(n => (String(hookPkg[n] || '').match(/scripts\/([a-z0-9-]+)\.mjs/) || [])[1]).filter(Boolean);
+  const promised = CURRENT_DOCS.filter(d => fs.existsSync(path.join(ROOT, d)) && /pre-push/.test(read(d)));
+  const lockDoc = 'docs/CORE-LOCK.md';
+  if (fs.existsSync(path.join(ROOT, lockDoc)) && /pre-push/.test(read(lockDoc))) promised.push(lockDoc);
+  const hookThere = fs.existsSync(path.join(ROOT, hookPath));
+  console.log(`[check-docs-claims] ㉓ 푸시 관문 — 약속한 문서 ${promised.length}개 · 훅 ${hookThere ? '있음' : '없음'}`);
+  if (promised.length > 0 && !hookThere) {
+    problems.push(`${promised.join(" · ")}: 푸시 관문(${hookPath})을 약속했는데 **그 파일이 없다** — 약속을 지우거나 훅을 되살리세요(386)`);
+  } else if (promised.length > 0) {
+    const text = read(hookPath);
+    const missing = guards.filter(g => !text.includes(g));
+    if (guards.length < 3) problems.push(`package.json: check:docs·check:gap·check:notes 중 스크립트 경로를 읽지 못한 것이 있다 — ㉓ 가 훅을 제대로 대조할 수 없다(386)`);
+    if (missing.length > 0) problems.push(`${hookPath}: 문서가 약속한 기록 가드를 부르지 않는다 — 빠진 것: ${missing.join(" · ")}(386)`);
+    if (!/\bexit 1\b/.test(text)) problems.push(`${hookPath}: 실패할 때 \`exit 1\` 하는 자리가 없다 — "푸시가 막힌다" 는 약속이 거짓이 된다(386)`);
+  } else if (hookThere) {
+    problems.push(`${hookPath} 가 있는데 **지금 상태 문서 어디에도 적혀 있지 않다** — 아무도 모르는 장치는 다음 세션이 지운다(386)`);
+  }
+}
+
 // ㉒ 브리핑 §5 의 게이트 칸 ↔ 실물 (379)
 {
   const briefForGate = newestBriefing();
@@ -2518,7 +2672,7 @@ function serverTestClaims(text, rel) {
     const ciText = fs.existsSync(path.join(ROOT, ciPath)) ? enabledWorkflowText(read(ciPath)) : '';
     let gateText = '';
     if (fs.existsSync(path.join(ROOT, gatePath))) {
-      try { gateText = blankComments(read(gatePath)); }
+      try { gateText = gateStepText(read(gatePath)); } // 386(리뷰 M-4): 실제 호출 줄만
       catch (e) { problems.push(`${gatePath}: 주석을 비우다 멈췄다(${e.message}) — ㉒ 가 묶음 게이트를 확인할 수 없다(382)`); }
     }
     const relAllText = String(pkgScripts['release:all'] || '');
