@@ -75,6 +75,7 @@ import { fileURLToPath } from 'node:url';
 import { CORE_FILES, CORE_DIRS } from './core-lock.mjs';
 // 363: 묶음 줄 삽입기의 덫도 여기서 함께 돈다 — 그 lib 이 지키는 것이 바로 이 로드맵이다.
 import { selftest as insertSelftest } from './lib/insert-batch-line.mjs';
+import { blankComments } from './lib/blank-comments.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
@@ -926,17 +927,33 @@ function selftest() {
       // 379(375~377 리뷰 M-3 의 뿌리): 게이트 칸 ↔ 실물. **호출 모양 둘**을 모두 본다 —
       //      스크립트 경로로 부르는 가드를 못 보면 **내가 틀렸던 그 결론**이 나온다.
       const pkgFake = { 'check:a': 'node scripts/check-a.mjs --selftest && node scripts/check-a.mjs', 'check:b': 'node scripts/check-b.mjs' };
-      const fa = gateFacts('check:a', pkgFake, 'run: npm run check:a', "flags.A = step('A', '가', 'node', ['scripts/check-a.mjs'])", 'npm run check:a');
-      trap('npm 이름으로 불러도 본다', fa.ci === true && fa.gate === true && fa.rel === true);
-      const fb = gateFacts('check:b', pkgFake, 'run: node scripts/check-b.mjs', '', '');
-      trap('스크립트 경로로 불러도 본다', fb.ci === true && fb.gate === false && fb.rel === false);
-      trap('없는 가드는 전부 거짓', gateFacts('check:zz', pkgFake, '', '', '').ci === false);
-      const gRow = (name, cell, facts) => ({ name, cell, facts });
-      trap('적었는데 안 돌면 잡는다', gateCellProblems([gRow('check:a', 'client-ci · 묶음 게이트', { ci: false, rel: false, gate: true })]).some(p => /실물에 없다/.test(p)));
-      trap('도는데 안 적었으면 잡는다', gateCellProblems([gRow('check:a', '묶음 게이트', { ci: true, rel: false, gate: true })]).some(p => /적혀 있지 않다/.test(p)));
-      trap('맞으면 조용하다', gateCellProblems([gRow('check:a', 'client-ci · release:all · 묶음 게이트', { ci: true, rel: true, gate: true })]).length === 0);
-      trap('같음 칸은 위 줄을 물려받는다', gateCellProblems([gRow('check:a', 'client-ci · release:all · 묶음 게이트', { ci: true, rel: true, gate: true }), gRow('check:b', '같음', { ci: true, rel: true, gate: true })]).length === 0);
-      trap('물려받은 칸도 틀리면 잡는다', gateCellProblems([gRow('check:a', 'client-ci · release:all · 묶음 게이트', { ci: true, rel: true, gate: true }), gRow('check:b', '같음', { ci: false, rel: true, gate: true })]).length === 1);
+      const fa = gateFacts('check:a', pkgFake, 'run: npm run check:a', "flags.A = step('A', '가', 'node', ['scripts/check-a.mjs'])", 'npm run check:a', 'npm run check:a');
+      trap('npm 이름으로 불러도 본다', fa.ci === true && fa.gate === true && fa.relAll === true && fa.relChecks === true);
+      const fb = gateFacts('check:b', pkgFake, 'run: node scripts/check-b.mjs', '', '', '');
+      trap('스크립트 경로로 불러도 본다', fb.ci === true && fb.gate === false && fb.relAll === false);
+      trap('없는 가드는 전부 거짓', gateFacts('check:zz', pkgFake, '', '', '', '').ci === false);
+      // 382(리뷰 M-2): 릴리스 두 경로는 **따로** 본다 — 한쪽에만 있으면 한쪽만 참이다
+      const fr = gateFacts('check:a', pkgFake, '', '', 'npm run check:a', 'npm run check:b');
+      trap('release:all 과 release:checks 를 따로 본다', fr.relAll === true && fr.relChecks === false);
+      trap('한쪽에만 있는데 둘 다 적으면 잡는다', gateCellProblems([gRowFixture('check:a', 'release:all · release:checks', { ci: false, relAll: true, relChecks: false, gate: false })]).some(p => /release:checks/.test(p)));
+      // 382(리뷰 H-1): **꺼진 단계는 도는 것이 아니다**. 379 는 원문 글자만 봐서 셋 다 침묵했다.
+      const wfOn = ['jobs:', '  build:', '    steps:', '      - name: 가', '        run: npm run check:a'].join('\n');
+      trap('도는 단계는 남는다', enabledWorkflowText(wfOn).includes('check:a'));
+      trap('주석 처리한 단계는 도는 것이 아니다', !enabledWorkflowText(wfOn.replace('        run: npm run check:a', '        # run: npm run check:a')).includes('check:a'));
+      trap('if: false 단계는 도는 것이 아니다', !enabledWorkflowText(wfOn + '\n        if: false').includes('check:a'));
+      trap('if: ${{ false }} 도 마찬가지다', !enabledWorkflowText(wfOn + '\n        if: ${{ false }}').includes('check:a'));
+      trap('continue-on-error 단계는 막지 못한다', !enabledWorkflowText(wfOn + '\n        continue-on-error: true').includes('check:a'));
+      trap('job 을 끄면 그 단계 전부가 꺼진다', !enabledWorkflowText(['jobs:', '  build:', '    if: false', '    steps:', '      - run: npm run check:a'].join('\n')).includes('check:a'));
+      trap('단계를 끈 것이 job 전부를 끄지 않는다', enabledWorkflowText(['jobs:', '  build:', '    steps:', '      - run: npm run check:a', '        if: false', '      - run: npm run check:b'].join('\n')).includes('check:b'));
+      trap('if: failure() 같은 평범한 조건은 살려 둔다', enabledWorkflowText(wfOn + '\n        if: failure()').includes('check:a'));
+      trap('여러 줄 run 블록을 자르지 않는다', enabledWorkflowText(['      - name: 가', '        run: |', '          npm run check:a', '      - run: npm run check:b'].join('\n')).includes('check:a'));
+      trap('옆 단계를 함께 지우지 않는다', enabledWorkflowText(['      - name: 가', '        run: npm run check:a', '        if: false', '      - run: npm run check:b'].join('\n')).includes('check:b'));
+      const gRow = gRowFixture;
+      trap('적었는데 안 돌면 잡는다', gateCellProblems([gRow('check:a', 'client-ci · 묶음 게이트', { ci: false, relAll: false, relChecks: false, gate: true })]).some(p => /실물에 없다/.test(p)));
+      trap('도는데 안 적었으면 잡는다', gateCellProblems([gRow('check:a', '묶음 게이트', { ci: true, relAll: false, relChecks: false, gate: true })]).some(p => /적혀 있지 않다/.test(p)));
+      trap('맞으면 조용하다', gateCellProblems([gRow('check:a', 'client-ci · release:all · release:checks · 묶음 게이트', { ci: true, relAll: true, relChecks: true, gate: true })]).length === 0);
+      trap('같음 칸은 위 줄을 물려받는다', gateCellProblems([gRow('check:a', 'client-ci · release:all · release:checks · 묶음 게이트', { ci: true, relAll: true, relChecks: true, gate: true }), gRow('check:b', '같음', { ci: true, relAll: true, relChecks: true, gate: true })]).length === 0);
+      trap('물려받은 칸도 틀리면 잡는다', gateCellProblems([gRow('check:a', 'client-ci · release:all · release:checks · 묶음 게이트', { ci: true, relAll: true, relChecks: true, gate: true }), gRow('check:b', '같음', { ci: false, relAll: true, relChecks: true, gate: true })]).length === 1);
       trap('주장이 있는 계열은 조용하다', familyFloorProblems({ 모듈: 2, 화면칸: 5 }).length === 0);
       trap('주장 0개 계열을 신고한다', familyFloorProblems({ 모듈: 0, 화면칸: 5 }).length === 1);
       trap('어느 계열인지 말한다', familyFloorProblems({ libUnits: 0 })[0].includes('libUnits'));
@@ -1776,18 +1793,80 @@ function trapFloorProblems(no, line, pairs) {
  *
  * "같음" 칸은 **바로 위 줄의 칸을 물려받는다**(이 표의 표기 규약).
  */
-function gateFacts(npmName, pkgScripts, ciText, gateText, releaseText) {
+/**
+ * 워크플로에서 **실제로 실행되는 부분만** 남긴다 (382, 378~380 리뷰 H-1)
+ *
+ * 왜: 379 의 첫 판은 YAML **원문에 대한 부분 문자열 검사**였다. 단계를 **지우면** 잡았지만
+ *     **끄면** 못 잡았다 — 주석 처리·`if: false`·`continue-on-error: true` 는 현장에서 가장 흔한
+ *     끄기 방식이고, 그 상태에서 ㉒ 는 꺼진 단계를 "돈다" 고 **오너에게 보증**한다. 리뷰가 변이
+ *     세 개로 침묵을 전부 재현했다(브리핑 §5 는 오너가 1단계 판단에 쓰는 자리다).
+ *
+ * 전제(덫으로 고정한다): **주석은 도는 것이 아니다**. `if: failure()` 같은 평범한 조건은
+ *     살려 둔다 — 그것은 끈 것이 아니라 실패 때 도는 단계다. 여러 줄 `run: |` 블록은 자르지
+ *     않는다(들여쓰기가 더 깊은 줄은 그 단계의 몸이다).
+ */
+function enabledWorkflowText(yaml) {
+  const lines = String(yaml).split(/\r?\n/).filter(l => !/^\s*#/.test(l));
+  const OFF = /^\s*(?:if:\s*(?:false|\$\{\{\s*false\s*\}\})|continue-on-error:\s*true)\s*$/m;
+  // 382: job 단위는 **job 자신의 열(네 칸)** 만 본다. 처음엔 블록 글 전체를 봤는데, 그러면
+  //      단계 하나에 붙은 `if: false` 가 그 job 전부를 끈 것으로 읽혀 **신고가 17건으로 번졌다**
+  //      (변이를 재며 알았다 — 한 단계를 끈 변이의 답은 한 줄이어야 한다).
+  const OFF_JOB = /^ {4}(?:if:\s*(?:false|\$\{\{\s*false\s*\}\})|continue-on-error:\s*true)\s*$/m;
+  // ① job 단위 — `jobs:` 아래 두 칸 들여쓴 이름 하나가 job 이다(job 을 끄면 그 단계 전부가 꺼진다)
+  const kept = [];
+  let job = null;
+  let inJobs = false;
+  const flushJob = () => {
+    if (job !== null && !OFF_JOB.test(job.join('\n'))) kept.push(...job);
+    job = null;
+  };
+  for (const line of lines) {
+    if (/^jobs:\s*$/.test(line)) { flushJob(); inJobs = true; kept.push(line); continue; }
+    if (inJobs && /^ {2}[A-Za-z_][\w-]*:\s*$/.test(line)) { flushJob(); job = [line]; continue; }
+    if (inJobs && /^\S/.test(line)) { flushJob(); inJobs = false; }
+    if (job !== null) job.push(line); else kept.push(line);
+  }
+  flushJob();
+  // ② 단계 단위 — `- ` 로 시작하는 블록. 더 깊이 들여쓴 줄은 그 단계의 몸이다
+  const out = [];
+  let block = null;
+  const flushStep = () => {
+    if (block !== null && !OFF.test(block.lines.join('\n'))) out.push(...block.lines);
+    block = null;
+  };
+  for (const line of kept) {
+    const m = /^(\s*)-\s/.exec(line);
+    if (m) { flushStep(); block = { indent: m[1].length, lines: [line] }; continue; }
+    if (block !== null) {
+      const indent = line.search(/\S/);
+      if (indent === -1 || indent > block.indent) { block.lines.push(line); continue; }
+      flushStep();
+    }
+    out.push(line);
+  }
+  flushStep();
+  return out.join('\n');
+}
+/**
+ * `release:all` 과 `release:checks` 는 **두 사실**이다 (382, 리뷰 M-2)
+ *
+ * 379 는 둘을 이어 붙여 한 사실로 봤다 — 칸은 둘을 따로 적는데 한쪽에서만 빠져도 통과했다.
+ */
+function gateFacts(npmName, pkgScripts, ciText, gateText, relAllText, relChecksText) {
   const script = (String(pkgScripts[npmName] || '').match(/scripts\/([a-z0-9-]+)\.mjs/) || [])[1] || null;
   const hit = text => text.includes(npmName) || (script !== null && text.includes('scripts/' + script + '.mjs'));
-  return { ci: hit(ciText), gate: hit(gateText), rel: hit(releaseText), script };
+  return { ci: hit(ciText), gate: hit(gateText), relAll: hit(relAllText), relChecks: hit(relChecksText) };
 }
+/** 덫이 쓰는 한 줄 지그 — 선언 순서에 걸리지 않게 함수로 둔다(382) */
+function gRowFixture(name, cell, facts) { return { name, cell, facts }; }
 /** 칸이 적은 곳들 — "같음" 은 물려받는다 */
 function gateCellTokens(cell, inherited) {
   const text = cell.trim() === '같음' ? inherited : cell;
   return {
     text,
     ci: /client-ci/.test(text),
-    rel: /release:all|release:checks/.test(text),
+    relAll: /release:all/.test(text),
+    relChecks: /release:checks/.test(text),
     gate: /묶음 게이트/.test(text),
   };
 }
@@ -1798,7 +1877,7 @@ function gateCellProblems(rows) {
   for (const r of rows) {
     const claimed = gateCellTokens(r.cell, inherited);
     inherited = claimed.text;
-    for (const [key, label] of [['ci', 'client-ci(머지 관문)'], ['rel', 'release:all/checks'], ['gate', '묶음 게이트']]) {
+    for (const [key, label] of [['ci', 'client-ci(머지 관문)'], ['relAll', 'release:all'], ['relChecks', 'release:checks'], ['gate', '묶음 게이트']]) {
       if (claimed[key] && !r.facts[key]) out.push(`${r.name} 행이 "${label}" 에서 돈다고 적었는데 실물에 없다 — 게이트 칸을 사실대로 적으세요(379)`);
       if (!claimed[key] && r.facts[key]) out.push(`${r.name} 는 "${label}" 에서 도는데 게이트 칸에 적혀 있지 않다 — 오너가 읽는 자리다(379)`);
     }
@@ -2375,22 +2454,34 @@ function serverTestClaims(text, rel) {
 // ㉒ 브리핑 §5 의 게이트 칸 ↔ 실물 (379)
 {
   const briefForGate = newestBriefing();
+  if (briefForGate === null) problems.push('OWNER-BRIEFING-*.md 를 찾지 못했다 — ㉒ 가 게이트 칸을 한 개도 대조하지 않는다(382)');
   if (briefForGate !== null) {
     const pkgScripts = JSON.parse(read('package.json')).scripts || {};
     const ciPath = '.github/workflows/client-ci.yml';
-    const ciText = fs.existsSync(path.join(ROOT, ciPath)) ? read(ciPath) : '';
-    const gateText = fs.existsSync(path.join(ROOT, 'scripts/gate-light.mjs')) ? read('scripts/gate-light.mjs') : '';
-    const releaseText = String(pkgScripts['release:all'] || '') + ' ' + String(pkgScripts['release:checks'] || '');
+    const gatePath = 'scripts/gate-light.mjs';
+    // 382(리뷰 H-1): **실행되는 것**만 읽는다 — 워크플로는 꺼진 job·단계를 덜어 내고,
+    //      게이트는 주석을 비운다(소스 가드가 쓰는 하나뿐인 구현을 그대로 쓴다).
+    const ciText = fs.existsSync(path.join(ROOT, ciPath)) ? enabledWorkflowText(read(ciPath)) : '';
+    let gateText = '';
+    if (fs.existsSync(path.join(ROOT, gatePath))) {
+      try { gateText = blankComments(read(gatePath)); }
+      catch (e) { problems.push(`${gatePath}: 주석을 비우다 멈췄다(${e.message}) — ㉒ 가 묶음 게이트를 확인할 수 없다(382)`); }
+    }
+    const relAllText = String(pkgScripts['release:all'] || '');
+    const relChecksText = String(pkgScripts['release:checks'] || '');
     const rows = [];
     for (const line of read(briefForGate).split(/\r?\n/)) {
       const m = /^\| .npm run (check:[a-z0-9-]+)./.exec(line);
       if (!m) continue;
       const cells = line.split('|');
-      rows.push({ name: m[1], cell: cells[cells.length - 2], facts: gateFacts(m[1], pkgScripts, ciText, gateText, releaseText) });
+      rows.push({ name: m[1], cell: cells[cells.length - 2], facts: gateFacts(m[1], pkgScripts, ciText, gateText, relAllText, relChecksText) });
     }
     console.log(`[check-docs-claims] ㉒ §5 가드 행 ${rows.length}개의 게이트 칸을 실물과 대조(client-ci·릴리스·묶음 게이트)`);
     if (rows.length === 0) problems.push(`${briefForGate}: §5 에서 가드 행을 한 개도 읽지 못했다 — ㉒ 가 아무것도 대조하지 않는다(379)`);
     if (ciText === '') problems.push(`${ciPath} 를 읽을 수 없다 — ㉒ 가 머지 관문을 확인할 수 없다(379)`);
+    // 382(리뷰 L-2): 바닥은 **세 경로 전부**에 둔다 — 379 는 머지 관문만 봤다.
+    if (gateText === '') problems.push(`${gatePath} 를 읽을 수 없다 — ㉒ 가 묶음 게이트를 확인할 수 없다(382)`);
+    if (relAllText === '' || relChecksText === '') problems.push('package.json: release:all·release:checks 를 읽을 수 없다 — ㉒ 가 릴리스 경로를 확인할 수 없다(382)');
     for (const p of gateCellProblems(rows)) problems.push(`${briefForGate}: ${p}`);
   }
 }
