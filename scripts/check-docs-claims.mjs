@@ -190,38 +190,63 @@ function exemptionClaims(text, rel) {
 /**
  * 창 자리 커버리지 기준 수 주장(324, 리뷰 M-5) — ② 는 `칸` 쌍만 봐서 `56개 중 53자리` 는 검사 밖이었다.
  *
- * 368: 324 가 막은 것은 **한 모양**(`N개 중 M자리`)뿐이었다. GAP 표는 같은 수를 다른 모양으로 적는다 —
- *      "지금 **56자리 중 55자리**". 그 자리에 `99자리 중 98자리` 를 심어도 `check:docs`·`check:gap` 둘 다
- *      통과했다(심어 확인했다). 324 의 머리말이 "검사 밖이었다" 고 적어 둔 그 구멍이 **모양만 바꿔**
- *      44묶음 동안 남아 있던 것이다.
+ * 368: 324 가 막은 것은 **한 모양**(`N개 중 M자리`)뿐이었다. GAP 표는 같은 수를 "지금 **56자리 중 55자리**"
+ *      로 적고, 그 자리에 `99자리 중 98자리` 를 심어도 두 가드가 통과했다(심어 확인했다).
  *
- *      `N자리 중 M자리` 는 과거 서술에도 쓰인다(같은 칸의 "295 에서 … 56자리 중 42자리가 덮였고").
- *      그 둘을 가르는 것은 **문서가 스스로 적은 표시**다 — 바로 앞에 `지금` 이 있으면 지금 주장이다
- *      (⑲ 가 "이 줄의" 로 묶는 것과 같은 방식: 말의 뜻이 아니라 **위치**로 묶는다).
- *      표시가 없는 자리는 숨기지 않고 kind:'past' 로 함께 돌려주고 **몇 개를 지나쳤는지 찍는다** —
- *      안 본 것을 말하지 않으면 가드가 조용히 잠든다(364 에서 겪었다).
+ * 369(366~368 리뷰 H-2·M-2·M-3·H-3): 368 의 판이 **주제를 전혀 보지 않아** 거짓 경보를 냈다 —
+ *      이 문서들은 `자리` 를 네 가드에 쓴다(대비 18자리·초점 200자리·키보드 18자리·창 56자리).
+ *      리뷰가 "지금 18자리 중 17자리가 키보드로 닿는다" 를 심어 **창 가드의 낡은 수**로 신고되는 것을
+ *      보였고(재현했다), 324 가 리뷰 M-4 를 받아 좁혀 둔 것을 368 이 다시 넓힌 셈이다.
+ *      → 수 앞 60자(같은 칸 안)에 **창·모달·modal-a11y** 중 하나를 요구한다. 두 모양 모두에 건다.
+ *
+ *      인용 면제도 **표의 칸 단위**로 좁혔다. 전에는 줄 시작부터 `"` 홀짝을 셌는데 이 표의 Q-3 행은
+ *      한 줄이 1만 자가 넘어, 앞쪽 글의 따옴표 짝이 깨지면 뒤의 모든 주장이 **조용히** 면제됐다.
+ *      그리고 건너뛴 자리는 종류별로 **세어 찍는다**(과거·주제 밖·인용) — 조용한 건너뜀을 남기지 않는다.
+ *
+ *      `지금` 과 `당시` 가 함께 참일 수는 **없다**(당시 뒤에는 분리자만 와야 한다). 368 이 그 자리에
+ *      "가까운 쪽이 이긴다" 는 우선순위 규칙을 적어 두었는데 **사실이 아니고**, 그 줄은 도달 불가였다
+ *      (조합 전수로 동시 참 0회를 확인했다). 줄을 지우고 덫을 실제 갈림에 걸었다.
  */
 const MODAL_SLOT_PAIR = /\*{0,2}(\d+)\*{0,2}자리 중 \*{0,2}(\d+)\*{0,2}자리/g;
+const MODAL_COUNT_PAIR = /\*{0,2}(\d+)\*{0,2}개 중 (?:게이트가 여는 것 )?\*{0,2}(\d+)\*{0,2}자리/g;
+/** 창 가드 이야기라는 표시 — 낱말 근접이 아니라 **같은 칸의 수 앞 60자**만 본다 */
+const MODAL_TOPIC = /창|모달|modal-a11y/;
+/** 표 행이면 그 수가 든 **칸**의 시작, 아니면 줄 시작 (369, 리뷰 M-2) */
+function cellStart(text, at) {
+  const lineStart = text.lastIndexOf('\n', at) + 1;
+  if (text[lineStart] !== '|') return lineStart;
+  const bar = text.lastIndexOf('|', at);
+  return bar > lineStart ? bar + 1 : lineStart;
+}
 function modalSlotClaims(text, rel) {
   const out = [];
-  const quoted = at => {
-    const lineStart = text.lastIndexOf('\n', at) + 1;
-    return (text.slice(lineStart, at).match(/"/g) || []).length % 2 === 1;
-  };
   const taken = [];
-  for (const m of text.matchAll(/\*{0,2}(\d+)\*{0,2}개 중 (?:게이트가 여는 것 )?\*{0,2}(\d+)\*{0,2}자리/g)) {
-    if (markedPast(text, m.index)) continue;
-    if (quoted(m.index)) continue;
-    out.push({ rel, raw: m[0], total: Number(m[1]), covered: Number(m[2]), kind: 'now' });
+  const look = (at) => {
+    const from = cellStart(text, at);
+    const span = text.slice(from, at);
+    return {
+      quoted: (span.match(/"/g) || []).length % 2 === 1,
+      topic: MODAL_TOPIC.test(span.slice(-60)),
+    };
+  };
+  const add = (m, total, covered, kind) => out.push({ rel, raw: m[0], total, covered, kind });
+  for (const m of text.matchAll(MODAL_COUNT_PAIR)) {
     taken.push([m.index, m.index + m[0].length]);
+    const { quoted, topic } = look(m.index);
+    if (quoted) { add(m, Number(m[1]), Number(m[2]), 'quoted'); continue; }
+    if (markedPast(text, m.index)) { add(m, Number(m[1]), Number(m[2]), 'past'); continue; }
+    if (!topic) { add(m, Number(m[1]), Number(m[2]), 'offtopic'); continue; }
+    add(m, Number(m[1]), Number(m[2]), 'now');
   }
-  // 368: `N자리 중 M자리` — 앞에 `지금` 이 붙은 것만 지금 주장이다
   for (const m of text.matchAll(MODAL_SLOT_PAIR)) {
-    if (quoted(m.index)) continue;
     if (taken.some(([a, b]) => m.index >= a && m.index < b)) continue;
+    const { quoted, topic } = look(m.index);
+    if (quoted) { add(m, Number(m[1]), Number(m[2]), 'quoted'); continue; }
+    // 수 **바로 앞**의 `지금` 만 지금 주장이다 — `당시` 와 함께 참일 수는 없다(369 에서 전수 확인)
     const now = /지금[\s—–\-:,·*]{0,4}$/.test(text.slice(Math.max(0, m.index - 12), m.index));
-    if (now && markedPast(text, m.index)) continue;
-    out.push({ rel, raw: m[0], total: Number(m[1]), covered: Number(m[2]), kind: now ? 'now' : 'past' });
+    if (!now) { add(m, Number(m[1]), Number(m[2]), 'past'); continue; }
+    if (!topic) { add(m, Number(m[1]), Number(m[2]), 'offtopic'); continue; }
+    add(m, Number(m[1]), Number(m[2]), 'now');
   }
   return out;
 }
@@ -230,8 +255,40 @@ function modalSlotClaims(text, rel) {
  * 368: 대조할 주장만 고른다 — 비교부 안에 `filter(c => c.kind !== 'past')` 를 적어 두면
  *      셀프테스트가 그 줄을 볼 수 없다(364 H-1 에서 겪은 모양: 비교기만 찔러 배선이 덫 0종).
  */
-function nowSlotClaims(claims) { return claims.filter(c => c.kind !== 'past'); }
+function nowSlotClaims(claims) { return claims.filter(c => c.kind === 'now'); }
 function pastSlotClaims(claims) { return claims.filter(c => c.kind === 'past'); }
+const skippedSlotClaims = claims => claims.filter(c => c.kind === 'quoted' || c.kind === 'offtopic');
+
+/**
+ * 369(리뷰 H-1·M-3): **주장이 0개면 통과가 아니다.** 368 까지는 모양을 조금만 바꿔 적으면
+ * (`지금` 한 낱말을 지우는 것만으로도) 대조 대상이 0개가 되고 가드는 조용히 통과했다.
+ * 모양을 열거하는 쪽은 끝이 없으므로 **바닥**을 둔다 — 창 가드를 적은 문서에는 지금 주장이
+ * 하나 이상 있어야 하고, 전체가 0개면 ⑪-2 가 꺼진 것이다. 366 이 ②-2 에서 쓴 "본검사가
+ * 스스로 입력을 검사" 와 같은 장치다(그때도 리뷰가 "절반에 덫이 없다" 고 지적했다).
+ */
+const MODAL_GUARD_MENTION = /check:modal-a11y|창 자리/;
+/**
+ * 369(리뷰 M-3): **대조한 수가 지금 주장 수와 같아야 한다.** 비교부를 끄거나(`if (false)`),
+ * 과거 쪽을 대조하거나, 수집을 지워도 전에는 조용히 통과했다(리뷰가 변이 셋으로 보였다).
+ * 배선은 셀프테스트가 볼 수 없으므로 **본검사가 스스로 센다** — 366 의 ②-2 와 같은 장치.
+ */
+function comparedCountProblems(claimed, compared) {
+  if (claimed === compared) return [];
+  return [`창 자리 지금 주장 ${claimed}개 중 ${compared}개만 대조했다 — ⑪-2 의 배선이 끊겼다(369)`];
+}
+
+function slotFloorProblems(docs) {
+  const out = [];
+  let total = 0;
+  for (const { rel, text, claims } of docs) {
+    const now = claims.filter(c => c.kind === 'now');
+    total += now.length;
+    if (!MODAL_GUARD_MENTION.test(text)) continue;
+    if (now.length === 0) out.push(`${rel}: 창 접근성 가드를 적으면서 **지금 주장이 하나도 없다** — 표기를 바꿔 ⑪-2 를 끈 것일 수 있다(369)`);
+  }
+  if (docs.length > 0 && total === 0) out.push('창 자리 "지금" 주장이 어느 문서에도 없다 — ⑪-2 가 아무것도 대조하지 않는다(369)');
+  return out;
+}
 
 /** outbox 테스트 수 주장(321) */
 function outboxClaims(text, rel) {
@@ -336,7 +393,9 @@ function countTestDecls(text) {
   let total = 0; let indented = 0;
   for (const line of text.split(/\r?\n/)) {
     const t = line.trimStart();
-    if (t.startsWith('//') || t.startsWith('*')) continue;
+    // 369(리뷰 H-3): 전에는 여기서 `//`·`*` 로 시작하는 줄을 건너뛰었는데 **막는 것이 0이었다** —
+    //      아래 `^test` 가 이미 그 줄을 떨어뜨린다(주석 접두 7종으로 도달 0회 확인). 죽은 줄을 지웠다.
+    //      주석 줄을 세지 않는다는 성질은 그대로이고, 그것을 보는 덫은 아래 정규식에 걸려 있다.
     if (!/^test(\.\w+)?\s*\(/.test(t)) continue;
     total += 1;
     if (line !== t) indented += 1;
@@ -568,7 +627,9 @@ function selftest() {
   if (exBold.length !== 1 || exBold[0].guard.key !== 'modal') { console.error('[selftest] 굵은 기준 문구 덫 실패: ' + JSON.stringify(exBold.map(c => c.guard.key))); process.exit(1); }
   // 324(리뷰 M-5): 창 자리 **기준 수**도 주장이다(② 는 칸 쌍만 본다)
   const ms = modalSlotClaims('창 자리 56개 중 게이트가 여는 것 53자리\n창 자리 56개 중 **51자리** 덮임\n289 당시 — 56개 중 42자리', 'x.md');
-  if (ms.length !== 2 || ms[0].covered !== 53 || ms[1].covered !== 51) { console.error('[selftest] 창 자리 기준 수 덫 실패: ' + JSON.stringify(ms)); process.exit(1); }
+  // 369: 368 부터 과거 자리도 kind 로 **돌려준다**(세어 찍기 위해) — 대조 대상은 nowSlotClaims 가 고른다
+  const msNow = nowSlotClaims(ms);
+  if (msNow.length !== 2 || msNow[0].covered !== 53 || msNow[1].covered !== 51 || pastSlotClaims(ms).length !== 1) { console.error('[selftest] 창 자리 기준 수 덫 실패: ' + JSON.stringify(ms)); process.exit(1); }
   // 324(리뷰 M-1): `test:outbox 9` (슬래시 없음)도 주장이고, 명령 이름이 아닌 글은 아니다
   const ob2 = outboxClaims('· test:updater · test:outbox 9 · mobile:prepare\nSQL 계약 10건 + outbox ⑩~⑫ 로 고정했다\n24(outbox 합치기 키 — 246 리뷰)', 'x.md');
   if (ob2.length !== 1 || ob2[0].n !== 9) { console.error('[selftest] 맨 outbox 수 덫 실패: ' + JSON.stringify(ob2)); process.exit(1); }
@@ -766,24 +827,49 @@ function selftest() {
       const kst = seoulStamp(new Date(Date.UTC(2026, 10, 27, 16, 6)));
       trap('asar 시각은 서울 기준', kst.md === '11-28' && kst.hm === '01:06');
       // 368: ⑪-2 — GAP 표의 모양(`N자리 중 M자리`)을 44묶음 동안 아무 가드도 보지 않았다.
-      //      `지금` 이 붙은 것만 지금 주장이고, 과거 서술은 kind:'past' 로 **세어 찍는다**.
-      const slotNow = modalSlotClaims('지금 **56자리 중 55자리**이며 1개만 사유를 적어 둔다', 'x.md');
+      //      369: 덫 입력에 **주제 표시**(창)를 넣는다 — 368 의 덫 글은 주제가 없어 이제 'offtopic' 이다.
+      const slotNow = modalSlotClaims('창 접근성: 지금 **56자리 중 55자리**이며 1개만 사유를 적어 둔다', 'x.md');
       trap('지금 표시가 붙은 자리-자리 주장을 본다', slotNow.length === 1 && slotNow[0].kind === 'now' && slotNow[0].total === 56 && slotNow[0].covered === 55);
       const slotPast = modalSlotClaims('295 에서 미룬 창 다섯 개를 넣어 56자리 중 42자리가 덮였고', 'x.md');
       trap('지금 표시가 없으면 과거 서술로 센다', slotPast.length === 1 && slotPast[0].kind === 'past');
       trap('과거 서술은 대조 대상이 아니다', nowSlotClaims(slotPast).length === 0 && pastSlotClaims(slotPast).length === 1);
       trap('지금 주장은 대조 대상이다', nowSlotClaims(slotNow).length === 1 && pastSlotClaims(slotNow).length === 0);
-      const slotBoth = modalSlotClaims('창 자리 56개 중 게이트가 여는 것 55자리. 295 당시 — 56자리 중 42자리', 'x.md');
+      const slotBoth = modalSlotClaims('창 자리 56개 중 게이트가 여는 것 55자리. 295 당시 — 창 56자리 중 42자리', 'x.md');
       trap('개-자리 모양과 섞여도 각각 센다', nowSlotClaims(slotBoth).length === 1 && nowSlotClaims(slotBoth)[0].covered === 55);
-      trap('당시 표시가 붙으면 과거 서술', modalSlotClaims('289 당시 — 56자리 중 42자리', 'x.md').every(c => c.kind === 'past'));
-      // 368: 표시가 둘이면 **수에 가장 가까운 쪽**이 이긴다 — `지금` 은 수 앞 12자, `당시` 는 바로 앞만 본다.
-      //      덫을 쓰면서 이 뜻을 거꾸로 적었다가 틀렸다(코드가 맞았다). 뜻을 적어 둬야 다음에 또 헷갈리지 않는다.
-      trap('표시가 둘이면 가까운 쪽이 이긴다', modalSlotClaims('289 당시 지금 56자리 중 42자리', 'x.md')[0].kind === 'now');
-      trap('인용문 속 자리-자리는 주장이 아니다', modalSlotClaims('리뷰가 "지금 56자리 중 42자리" 라고 적었다', 'x.md').length === 0);
+      // 369(리뷰 H-3): 368 은 "표시가 둘이면 가까운 쪽이 이긴다" 는 **우선순위 규칙을 적어 두었지만**
+      //      `지금` 과 `당시` 는 함께 참일 수 없다(당시 뒤에는 분리자만 와야 한다 — 조합 전수로 동시 참 0회).
+      //      그래서 그 판정 줄은 도달 불가였고, 그것을 "지킨다" 던 덫은 다른 이유로 통과했다.
+      //      이제 **실제 갈림**을 본다: `당시` 뒤 수는 지금 표시가 없어 과거, `당시 … 지금 N` 은 지금이다.
+      trap('당시 표시만 있으면 과거 서술', modalSlotClaims('창 289 당시 — 56자리 중 42자리', 'x.md').every(c => c.kind === 'past'));
+      const slotMixed = modalSlotClaims('창 289 당시 지금 56자리 중 42자리', 'x.md');
+      trap('당시가 앞서도 수 바로 앞 지금이 이긴다', slotMixed.length === 1 && slotMixed[0].kind === 'now');
+      trap('개-자리 모양에 당시가 붙으면 과거', modalSlotClaims('창 자리 289 당시 56개 중 42자리', 'x.md').every(c => c.kind === 'past'));
+      // 369(리뷰 H-2): **주제 표시가 없으면 창 가드의 수가 아니다** — 이 문서들은 `자리` 를 네 가드에 쓴다.
+      //      리뷰가 "지금 18자리 중 17자리가 키보드로 닿는다" 를 심어 거짓 경보를 재현했다(나도 재현했다).
+      const offTopic = modalSlotClaims('키보드 경로 가드: 훑은 자리 중 지금 18자리 중 17자리가 키보드로 닿는다', 'x.md');
+      trap('주제 표시가 없으면 대조하지 않는다', offTopic.length === 1 && offTopic[0].kind === 'offtopic' && nowSlotClaims(offTopic).length === 0);
+      trap('대비 문장도 대조하지 않는다', modalSlotClaims('글자 대비: 지금 18자리 중 18자리가 기준을 넘는다', 'x.md').every(c => c.kind === 'offtopic'));
+      trap('개-자리 모양도 주제 표시를 요구한다', modalSlotClaims('초점 표시: 지금 200개 중 199자리가 덮였다', 'x.md').every(c => c.kind === 'offtopic'));
+      // 369(리뷰 M-2): 인용 면제는 **표의 칸 단위**다 — 전에는 줄 시작부터 따옴표를 세어, 1만 자가 넘는
+      //      Q-3 행의 앞쪽 따옴표 짝이 깨지면 그 뒤 모든 주장이 **조용히** 면제됐다(리뷰가 심어 확인).
+      const cellRow = '| 앞 칸에 짝 안 맞는 따옴표 " 가 있다 | 창 자리: 지금 56자리 중 55자리 |';
+      trap('다른 칸의 따옴표는 면제하지 않는다', nowSlotClaims(modalSlotClaims(cellRow, 'x.md')).length === 1);
+      const sameCell = '| 창 자리: 리뷰가 "지금 56자리 중 42자리 라고 적었다 |';
+      trap('같은 칸의 인용은 면제한다', modalSlotClaims(sameCell, 'x.md').every(c => c.kind === 'quoted'));
+      trap('건너뛴 자리는 종류별로 세어 돌려준다', skippedSlotClaims(modalSlotClaims(sameCell, 'x.md')).length === 1);
+      // 369(리뷰 H-1·M-3): **주장이 0개면 통과가 아니다** — `지금` 한 낱말을 지우면 꺼지던 길을 닫는다
+      const floorOff = slotFloorProblems([{ rel: 'a.md', text: '`npm run check:modal-a11y` 가 지킨다. 덮어 56자리 중 55자리.', claims: modalSlotClaims('`npm run check:modal-a11y` 가 지킨다. 덮어 56자리 중 55자리.', 'a.md') }]);
+      trap('가드를 적고 지금 주장이 없으면 신고', floorOff.length === 2 && floorOff.some(p => /지금 주장이 하나도 없다/.test(p)));
+      const floorOk = [{ rel: 'a.md', text: '`npm run check:modal-a11y`', claims: modalSlotClaims('창 자리: 지금 56자리 중 55자리', 'a.md') }];
+      trap('지금 주장이 있으면 조용하다', slotFloorProblems(floorOk).length === 0);
+      trap('주장이 전부 0개면 신고', slotFloorProblems([{ rel: 'a.md', text: '그냥 글', claims: [] }]).some(p => /아무것도 대조하지 않는다/.test(p)));
+      trap('대조한 수가 주장 수와 같으면 조용하다', comparedCountProblems(3, 3).length === 0);
+      trap('비교를 끄면 신고한다', comparedCountProblems(3, 0).length === 1);
+      trap('일부만 대조하면 신고한다', comparedCountProblems(3, 2)[0].includes('2개만 대조'));
+      trap('가드를 적지 않은 문서는 바닥 검사 밖', slotFloorProblems([{ rel: 'a.md', text: '그냥 글', claims: [] }, { rel: 'b.md', text: '창 자리: 지금 56자리 중 55자리', claims: modalSlotClaims('창 자리: 지금 56자리 중 55자리', 'b.md') }]).length === 0);
       // 368: 같은 수를 한 번만 센다 — 덮인 것의 **내역**을 적으면 두 모양이 겹친다
-      //      ("창 자리 56개 중 55자리 중 42자리는 PC 게이트"). 겹친 자리를 또 세면 55/42 를
-      //      창 가드의 수와 대조해 **거짓 경보**가 난다. 처음 쓴 덫은 두 모양에 걸리지 않는 글이라
-      //      변이를 놓쳤다 — 겹침이 실제로 일어나는 글로 바꿨다(그 전에는 이 덫이 아무것도 보지 않았다).
+      //      ("창 자리 56개 중 55자리 중 42자리는 PC 게이트"). 겹친 자리를 또 세면 거짓 경보가 난다.
+      //      처음 쓴 덫은 두 모양에 걸리지 않는 글이라 변이를 놓쳤다 — 겹침이 실제로 일어나는 글로 바꿨다.
       const slotNest = modalSlotClaims('창 자리 56개 중 55자리 중 42자리는 PC 게이트', 'x.md');
       trap('겹치는 자리를 두 번 세지 않는다', slotNest.length === 1 && slotNest[0].covered === 55);
       // 368: 기준 문구가 `자리 중 자리` 모양이어도 면제 수가 **창 가드**에 붙는다(BASE_PAIR)
@@ -1720,16 +1806,24 @@ function serverTestClaims(text, rel) {
 //     ② 는 `N칸 중 M칸` 모양만 보므로 `56개 중 53자리` 는 그대로 검사 밖이었고(리뷰가 51자리로
 //     바꿔 심어도 통과하는 것을 확인했다), 그 수는 오너 브리핑 가드 표와 상태 문서 양쪽에 적혀 있다.
 {
-  const claims = [];
+  const docs = [];
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
-    claims.push(...modalSlotClaims(read(rel), rel));
+    const text = read(rel);
+    docs.push({ rel, text, claims: modalSlotClaims(text, rel) });
   }
-  // 368: 과거 서술(`지금` 표시가 없는 `N자리 중 M자리`)은 대조하지 않지만 **몇 개인지 찍는다**
+  // 369(리뷰 M-12): 전에는 주장을 **따로 쌓았다** — 그 한 줄을 지우면 대조가 0개가 되고 조용했다.
+  //      docs 에서 파생시키면 지울 줄이 없다(변이 표적을 가드로 막기보다 **구조로 없앤다**).
+  const claims = docs.flatMap(d => d.claims);
+  // 369(리뷰 H-1·M-3): 주장이 0개면 통과가 아니다 — 모양을 바꿔 가드를 끄는 길을 닫는다
+  problems.push(...slotFloorProblems(docs));
+  // 368: 과거 서술은 대조하지 않지만 **몇 개인지 찍는다**. 369: 주제 밖·인용도 종류별로 찍는다
   const now = nowSlotClaims(claims);
   const past = pastSlotClaims(claims);
+  const skipped = skippedSlotClaims(claims);
+  let compared = 0;
   if (!process.argv.includes("--selftest")) {
-    console.log(`[check-docs-claims] ⑪-2 창 자리 주장 ${now.length}개 대조 · 과거 서술 ${past.length}개 지나침${past.length > 0 ? ` (${past.map(c => `${c.rel}: ${c.raw}`).join(", ")})` : ""}`);
+    console.log(`[check-docs-claims] ⑪-2 창 자리 주장 ${now.length}개 대조 · 과거 서술 ${past.length}개 · 주제 밖/인용 ${skipped.length}개 지나침${past.concat(skipped).length > 0 ? ` (${past.concat(skipped).map(c => `${c.rel}: ${c.raw}[${c.kind}]`).join(", ")})` : ""}`);
   }
   if (now.length > 0) {
     const r = spawnSync(process.execPath, ['scripts/check-modal-a11y.mjs'], { cwd: ROOT, encoding: 'utf8' });
@@ -1739,12 +1833,16 @@ function serverTestClaims(text, rel) {
       problems.push('창 접근성 가드의 출력에서 창 자리 수를 찾지 못했다 — npm run check:modal-a11y 를 먼저 보세요');
     } else {
       for (const c of now) {
+        compared += 1;
         if (c.total !== Number(m[1]) || c.covered !== Number(m[2])) {
           problems.push(`${c.rel}: "${c.raw}" 가 낡았다 — 지금은 ${m[1]}개 중 ${m[2]}자리(npm run check:modal-a11y)`);
         }
       }
     }
   }
+  // 369(리뷰 M-10): 이 줄이 `if (now.length > 0)` **안**에 있을 때는 블록째 끄면 조용했다 —
+  //      바닥 검사가 "지금 주장 1개 이상" 을 보장하므로 **밖에서** 센 수를 대조한다.
+  problems.push(...comparedCountProblems(now.length, compared));
 }
 
 // ⑫ **"outbox N/N" 은 그 테스트가 세는 수와 같아야 한다** (321, 318~320 리뷰 M-6)

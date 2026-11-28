@@ -145,6 +145,16 @@ function selftest() {
   ok('min-w 가 없으면 잡는다(비슷한 말에 속지 않는다)', violations('<input className="flex-1 w-min max-w-0" />').length === 1);
   // 줄 번호를 사실대로 돌려준다
   ok('줄 번호', violations('첫 줄\n둘째 줄\n<input className="flex-1" />')[0].line === 3);
+  // 369(366~368 리뷰 H-4): 366 은 "발동하지 않고 덫도 없는 방어 코드는 데드코드다" 라며 음수 깊이
+  //      보정을 지우고 **신고**로 바꿨는데, 그 새 경로도 덫이 0종이고 지금 src 에서 0번 발동한다 —
+  //      리뷰가 세 변이(옛 보정 되돌리기·수집 비우기·호출부 신고 삭제)로 전부 통과하는 것을 보였다.
+  //      경로 자체는 도달 가능하다(문자열 밖의 짝 없는 `}`) — 그래서 지우지 않고 덫을 박는다.
+  //      도달하는 글은 **여는 태그 안**의 짝 없는 `}` 다(깊이는 태그 안에서만 센다) — `className={x}}`
+  //      꼴의 오타이고, 조용히 넘어가면 깊이가 음수로 남아 **다음 태그까지 삼킨다**(363 이 겪은 피해).
+  ok('여는 태그 안의 짝 없는 } 를 모은다', (openTags('<input className={x}} />\n').unbalanced || []).length === 1);
+  ok('짝이 안 맞는 } 의 줄 번호를 적는다', (openTags('첫 줄\n<input className={x}} />\n').unbalanced || [])[0] === 2);
+  ok('짝이 맞으면 모으지 않는다', (openTags('<input className={x} />\n').unbalanced || []).length === 0);
+  ok('문자열 안의 } 는 짝으로 세지 않는다', (openTags('<input placeholder="}" />\n').unbalanced || []).length === 0);
 
   console.log(`[check-flex-inputs] selftest OK — 덫 ${trapCount}종 통과(flex-1·최소 너비 유무·겨루는 둘·화살표 함수·문자열 2종·세 태그·주석 2종·줄 번호 2종). **이 수는 세어서 찍는다** — 손으로 적지 말 것(352~354 리뷰 M-2)`);
 }
