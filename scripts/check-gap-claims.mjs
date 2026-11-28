@@ -198,7 +198,11 @@ function liveInputs() {
 
 function selftest() {
   const base = liveInputs();
-  const ok = (name, cond) => { if (!cond) { console.error(`[selftest] ${name} 덫 실패`); process.exit(1); } };
+  // 368: 덫 수를 **세어서 찍는다** — 전에는 라벨에 "13종" 을 손으로 적어 두었는데 실제로 도는 덫은
+  //      그보다 훨씬 많았다(366 의 H-3 과 같은 모양: 기록이 적은 수와 가드가 도는 수가 다르다).
+  //      ⑳(check:docs)이 이 수를 읽어 기록과 대조하므로, 찍는 모양은 `덫 N종` 이어야 한다.
+  let traps = 0;
+  const ok = (name, cond) => { traps += 1; if (!cond) { console.error(`[selftest] ${name} 덫 실패`); process.exit(1); } };
   // 340: 덫이 살아 있는 문서 글귀에 묶여 있으면, 그 글귀를 고친 날 치환이 헛돌고 덫은 조용히 약해진다
   //      (305 에서 같은 사고를 겪고 적어 두었는데 글귀로 치환하는 덫이 그대로 남아 있었다).
   //      sub() 는 **바꾼 것이 없으면 그 자리에서 멈춘다** — 면제 덫이 헛돌아 통과하는 길을 막는다.
@@ -258,7 +262,7 @@ function selftest() {
   const live = with_({});
   ok('지금 표는 통과', live.length === 0 || (console.error(live.join('\n')), false));
 
-  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건·확인 가능한 완료 기준 13종) 통과`);
+  console.log(`[check-gap-claims] selftest OK — 덫(코드 펜스·단위 붙은 숫자·밀린 칸·상태 기호·없는 묶음·위치 파일·제안 경로 면제·없는 명령·없는 스펙·0건 주장 2종·유령 항목·이스케이프 파이프·승인 번호·항목 이름 속 0건·확인 가능한 완료 기준) 통과 — 덫 ${traps}종(**이 수는 세어서 찍는다** — 손으로 적지 말 것, 366 리뷰 H-3)`);
 }
 
 const problems = (() => {
