@@ -923,6 +923,20 @@ function selftest() {
       trap('문서별 바닥이 수 빠진 문서를 집는다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 0 }], '화면 칸').length === 1);
       trap('수가 있으면 조용하다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 2 }], '화면 칸').length === 0);
       trap('언급하지 않는 문서는 바닥 밖', perDocFloorProblems([{ rel: 'a.md', mentions: false, claims: 0 }], '화면 칸').length === 0);
+      // 379(375~377 리뷰 M-3 의 뿌리): 게이트 칸 ↔ 실물. **호출 모양 둘**을 모두 본다 —
+      //      스크립트 경로로 부르는 가드를 못 보면 **내가 틀렸던 그 결론**이 나온다.
+      const pkgFake = { 'check:a': 'node scripts/check-a.mjs --selftest && node scripts/check-a.mjs', 'check:b': 'node scripts/check-b.mjs' };
+      const fa = gateFacts('check:a', pkgFake, 'run: npm run check:a', "flags.A = step('A', '가', 'node', ['scripts/check-a.mjs'])", 'npm run check:a');
+      trap('npm 이름으로 불러도 본다', fa.ci === true && fa.gate === true && fa.rel === true);
+      const fb = gateFacts('check:b', pkgFake, 'run: node scripts/check-b.mjs', '', '');
+      trap('스크립트 경로로 불러도 본다', fb.ci === true && fb.gate === false && fb.rel === false);
+      trap('없는 가드는 전부 거짓', gateFacts('check:zz', pkgFake, '', '', '').ci === false);
+      const gRow = (name, cell, facts) => ({ name, cell, facts });
+      trap('적었는데 안 돌면 잡는다', gateCellProblems([gRow('check:a', 'client-ci · 묶음 게이트', { ci: false, rel: false, gate: true })]).some(p => /실물에 없다/.test(p)));
+      trap('도는데 안 적었으면 잡는다', gateCellProblems([gRow('check:a', '묶음 게이트', { ci: true, rel: false, gate: true })]).some(p => /적혀 있지 않다/.test(p)));
+      trap('맞으면 조용하다', gateCellProblems([gRow('check:a', 'client-ci · release:all · 묶음 게이트', { ci: true, rel: true, gate: true })]).length === 0);
+      trap('같음 칸은 위 줄을 물려받는다', gateCellProblems([gRow('check:a', 'client-ci · release:all · 묶음 게이트', { ci: true, rel: true, gate: true }), gRow('check:b', '같음', { ci: true, rel: true, gate: true })]).length === 0);
+      trap('물려받은 칸도 틀리면 잡는다', gateCellProblems([gRow('check:a', 'client-ci · release:all · 묶음 게이트', { ci: true, rel: true, gate: true }), gRow('check:b', '같음', { ci: false, rel: true, gate: true })]).length === 1);
       trap('주장이 있는 계열은 조용하다', familyFloorProblems({ 모듈: 2, 화면칸: 5 }).length === 0);
       trap('주장 0개 계열을 신고한다', familyFloorProblems({ 모듈: 0, 화면칸: 5 }).length === 1);
       trap('어느 계열인지 말한다', familyFloorProblems({ libUnits: 0 })[0].includes('libUnits'));
@@ -1747,6 +1761,51 @@ function trapFloorProblems(no, line, pairs) {
  * `package.json` 의 `check:*` 가 부르는 스크립트 이름들 (373).
  * `--selftest` 를 받는 가드만 덫 수를 찍으므로, 그 스크립트 전부를 돌려 모은다.
  */
+/**
+ * ㉒ **브리핑 §5 의 게이트 칸 ↔ 실물**(379, 375~377 리뷰 M-3 의 뿌리)
+ *
+ * 왜: §5 는 오너가 "무엇이 기계로 막히나" 를 읽는 자리다. 375 가 노트 가드를 묶음 게이트에
+ *     넣고도 그 칸을 고치지 않아 그 줄이 거짓이 됐고, ⑭ 는 npm 명령 **글자만** 보므로 칸
+ *     내용은 아무도 보지 않았다. 칸이 적은 곳과 실제로 도는 곳은 **집합 비교**라 기계가
+ *     할 수 있다(352 의 경계선 안).
+ *
+ * 호출 모양 둘: 어떤 가드는 npm 이름이 아니라 **스크립트 경로**로 불린다(check:routes·
+ *     check:distribution 이 그렇다). 이 검사를 만들며 **내가 그 자리에서 틀렸다** — 처음
+ *     재 보니 그 둘이 머지 관문에 없는 것처럼 보여 "브리핑이 거짓" 이라고 판단했다.
+ *     두 모양을 모두 본다.
+ *
+ * "같음" 칸은 **바로 위 줄의 칸을 물려받는다**(이 표의 표기 규약).
+ */
+function gateFacts(npmName, pkgScripts, ciText, gateText, releaseText) {
+  const script = (String(pkgScripts[npmName] || '').match(/scripts\/([a-z0-9-]+)\.mjs/) || [])[1] || null;
+  const hit = text => text.includes(npmName) || (script !== null && text.includes('scripts/' + script + '.mjs'));
+  return { ci: hit(ciText), gate: hit(gateText), rel: hit(releaseText), script };
+}
+/** 칸이 적은 곳들 — "같음" 은 물려받는다 */
+function gateCellTokens(cell, inherited) {
+  const text = cell.trim() === '같음' ? inherited : cell;
+  return {
+    text,
+    ci: /client-ci/.test(text),
+    rel: /release:all|release:checks/.test(text),
+    gate: /묶음 게이트/.test(text),
+  };
+}
+/** 칸 ↔ 실물 비교 — 양쪽 다 본다(적고 안 도는 것·돌고 안 적은 것) */
+function gateCellProblems(rows) {
+  const out = [];
+  let inherited = '';
+  for (const r of rows) {
+    const claimed = gateCellTokens(r.cell, inherited);
+    inherited = claimed.text;
+    for (const [key, label] of [['ci', 'client-ci(머지 관문)'], ['rel', 'release:all/checks'], ['gate', '묶음 게이트']]) {
+      if (claimed[key] && !r.facts[key]) out.push(`${r.name} 행이 "${label}" 에서 돈다고 적었는데 실물에 없다 — 게이트 칸을 사실대로 적으세요(379)`);
+      if (!claimed[key] && r.facts[key]) out.push(`${r.name} 는 "${label}" 에서 도는데 게이트 칸에 적혀 있지 않다 — 오너가 읽는 자리다(379)`);
+    }
+  }
+  return out;
+}
+
 function guardScriptsFromPkg(pkgText) {
   let scripts = {};
   try { scripts = JSON.parse(pkgText).scripts || {}; } catch { return []; }
@@ -2310,6 +2369,29 @@ function serverTestClaims(text, rel) {
   const STATUS = 'docs/MASTER-DEVELOPMENT-STATUS.md';
   if (fs.existsSync(path.join(ROOT, STATUS)) && !/\(package\.json\)/.test(read(STATUS))) {
     problems.push(`${STATUS}: 코드 버전을 "vX.Y.Z(package.json)" 형태로 적은 자리가 없다 — 그러면 버전 검사가 아무것도 보지 않는다`);
+  }
+}
+
+// ㉒ 브리핑 §5 의 게이트 칸 ↔ 실물 (379)
+{
+  const briefForGate = newestBriefing();
+  if (briefForGate !== null) {
+    const pkgScripts = JSON.parse(read('package.json')).scripts || {};
+    const ciPath = '.github/workflows/client-ci.yml';
+    const ciText = fs.existsSync(path.join(ROOT, ciPath)) ? read(ciPath) : '';
+    const gateText = fs.existsSync(path.join(ROOT, 'scripts/gate-light.mjs')) ? read('scripts/gate-light.mjs') : '';
+    const releaseText = String(pkgScripts['release:all'] || '') + ' ' + String(pkgScripts['release:checks'] || '');
+    const rows = [];
+    for (const line of read(briefForGate).split(/\r?\n/)) {
+      const m = /^\| .npm run (check:[a-z0-9-]+)./.exec(line);
+      if (!m) continue;
+      const cells = line.split('|');
+      rows.push({ name: m[1], cell: cells[cells.length - 2], facts: gateFacts(m[1], pkgScripts, ciText, gateText, releaseText) });
+    }
+    console.log(`[check-docs-claims] ㉒ §5 가드 행 ${rows.length}개의 게이트 칸을 실물과 대조(client-ci·릴리스·묶음 게이트)`);
+    if (rows.length === 0) problems.push(`${briefForGate}: §5 에서 가드 행을 한 개도 읽지 못했다 — ㉒ 가 아무것도 대조하지 않는다(379)`);
+    if (ciText === '') problems.push(`${ciPath} 를 읽을 수 없다 — ㉒ 가 머지 관문을 확인할 수 없다(379)`);
+    for (const p of gateCellProblems(rows)) problems.push(`${briefForGate}: ${p}`);
   }
 }
 
