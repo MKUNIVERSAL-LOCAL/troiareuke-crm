@@ -50,6 +50,19 @@ if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(USAGE
   const known = new Set(['--no-smoke', '--base', '--out']);
   const bad = argv.filter(a => a.startsWith('-') && !known.has(a));
   if (bad.length > 0) { process.stderr.write(`모르는 인자: ${bad.join(', ')}\n${USAGE}\n`); process.exit(2); }
+  // 385(378~380 리뷰 L-6): 숫자가 아닌 라벨을 주면 전에는 **조용히 날짜 로그**로 흘러갔다.
+  //      380 에서 그 때문에 `gate380.log` 가 `--no-smoke` 실행이 되고 전체 실행은 날짜 로그로
+  //      갔다("380 의 로그" 를 찾는 다음 세션이 다른 실행을 본다). 384 에서 또 겪었다 —
+  //      `384b` 를 주고 돌렸더니 날짜 로그로 갔다. 이제 **그 자리에서 거절**한다.
+  const positional = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--base' || argv[i] === '--out') { i += 1; continue; }
+    if (argv[i].startsWith('-')) continue;
+    positional.push(argv[i]);
+  }
+  const badLabel = positional.filter(a => !/^\d+$/.test(a));
+  if (badLabel.length > 0) { process.stderr.write(`묶음 번호는 숫자여야 합니다(받은 값: ${badLabel.join(', ')}) — 숫자가 아니면 로그가 날짜 이름으로 흘러가 어느 실행인지 알 수 없습니다(385)\n${USAGE}\n`); process.exit(2); }
+  if (positional.length > 1) { process.stderr.write(`묶음 번호는 하나만 주세요(받은 값: ${positional.join(', ')})\n${USAGE}\n`); process.exit(2); }
 }
 const baseAt = argv.indexOf('--base');
 const baseArg = baseAt >= 0 ? argv[baseAt + 1] : null;

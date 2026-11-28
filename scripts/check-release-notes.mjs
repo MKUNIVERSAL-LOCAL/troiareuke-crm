@@ -73,6 +73,21 @@ const LABEL_EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu;
  * 건너뜀 0개라 피해는 없었고, 그래서 더 좁혀도 멀쩡한 글을 막지 않는다 — 재서 확인했다).
  * 키 이름·쪽수·약어 규칙은 처음부터 `$` 로 묶여 있었다.
  */
+/**
+ * 385(378~380 리뷰 L-10): 건초에서 자산을 가르는 기준.
+ *
+ * 378 은 **경로 이름**(`/assets/`)으로 뺐다 — 그러면 앞으로 `src/features/x/assets/Foo.tsx`
+ * 같은 진짜 화면 코드도 빠진다. 크기로 바꿔 보니(200KB) **진짜 화면 파일이 빠졌다** —
+ * `Customers/index.tsx` 가 265KB 라 `[태그 목록 관리]` 를 못 찾고 거짓 신고가 났다(재서 알았다).
+ * 뺄 것과 남길 것을 가르는 것은 크기가 아니라 **한 줄의 길이**다: 이 저장소 화면 코드의 최장
+ * 줄은 2,123자이고 base64 글꼴은 **한 줄이 2,739,679자**다. 20,000자로 가른다.
+ */
+const ASSET_MAX_LINE = 20000;
+function longestLine(text) {
+  let max = 0;
+  for (const line of text.split('\n')) if (line.length > max) max = line.length;
+  return max;
+}
 function notAScreenName(label) {
   if (/^[A-Za-z]+\s*\+\s*[A-Za-z0-9]+$/.test(label)) return '단축키';
   if (/^(?:Enter|Esc|ESC|Escape|Tab|Space|Shift|Ctrl|Alt|Del|Delete|Backspace|F\d{1,2})$/i.test(label)) return '키 이름';
@@ -87,8 +102,20 @@ function notAScreenName(label) {
 }
 /** 노트 맨 위 절의 대괄호 글들 */
 /** 24자가 넘어 추출되지 않는 대괄호 글 — 조용히 사라지지 않게 센다 (378, 리뷰 M-4) */
+/**
+ * 385(378~380 리뷰 L-9): 상한 200 을 뺀다. `{25,200}` 과 `{2,24}` 사이만 덮었으므로
+ * **201자 이상**은 어느 쪽도 세지 않아 "조용히 사라지지 않게 센다" 가 그 구간에서 거짓이었다.
+ * 대괄호 글은 줄을 넘지 않으므로(`[^\]\n]`) 상한 없이도 한 줄 안에서 끝난다.
+ */
 function longLabels(text) {
-  return [...new Set([...text.matchAll(/\[([^\]\n]{25,200})\]/g)].map(m => m[1].trim()))];
+  return [...new Set([...text.matchAll(/\[([^\]\n]{25,})\]/g)].map(m => m[1].trim()))];
+}
+/**
+ * 385(리뷰 L-9): **한 글자** 대괄호 글 — `{2,24}` 밖이라 역시 세어지지 않았다.
+ * 체크박스 표기(`- [x]`·`- [ ]`)와 구분할 수 없으므로 **판단하지 않고 세기만** 한다.
+ */
+function shortLabels(text) {
+  return [...new Set([...text.matchAll(/\[([^\]\n])\]/g)].map(m => m[1]).filter(c => !/[xX\s]/.test(c)))];
 }
 function noteLabels(text) {
   return [...new Set([...text.matchAll(/\[([^\]\n]{2,24})\]/g)].map(m => m[1].trim()))];
@@ -129,7 +156,9 @@ function missingNoteLabels(text, files) {
   }
   // 378(리뷰 M-4): 25자 이상 이름은 `{2,24}` 때문에 **추출조차 되지 않아** 조용히 지나갔다.
   for (const l of longLabels(text)) skipped.push(`${l.slice(0, 20)}…(24자 초과)`);
-  return { missing, skipped, total: noteLabels(text).length + longLabels(text).length };
+  // 385(리뷰 L-9): 한 글자 글도 **센다** — 전에는 두 추출 사이로 조용히 빠졌다
+  for (const l of shortLabels(text)) skipped.push(`${l}(한 글자)`);
+  return { missing, skipped, total: noteLabels(text).length + longLabels(text).length + shortLabels(text).length };
 }
 function checkReleaseNotes(text, pkgVersion) {
   const problems = [];
@@ -278,6 +307,17 @@ if (process.argv.includes('--selftest')) {
     probe(!(t('2026-11-28 결산').missing.length !== 1 || t('2026-11-28 결산').skipped.join().includes('날짜')), '날짜로 시작하는 이름을 건너뛰었다');
     probe(!(t('Ctrl + S 로 저장').missing.length !== 1), '단축키로 시작하는 이름을 건너뛰었다');
     probe(!(t('Ctrl + S').skipped.join().indexOf('단축키') < 0), '빈칸 있는 단축키를 건너뛰지 않았다');
+    // 385(378~380 리뷰 L-9): 길이 경계 — `{2,24}` 와 `{25,200}` 사이만 덮어 **한 글자·201자
+    //      이상**은 어느 쪽도 세지 않았다("조용히 사라지지 않게 센다" 가 그 구간에서 거짓).
+    probe(longLabels('[' + '가'.repeat(201) + ']').length === 1, '201자 이상 라벨을 세지 않았다');
+    probe(longLabels('[' + '가'.repeat(30) + ']').length === 1, '30자 라벨을 세지 않았다');
+    probe(shortLabels('[A] 를 누르세요').length === 1, '한 글자 라벨을 세지 않았다');
+    probe(shortLabels('- [x] 끝 · - [ ] 아직').length === 0, '체크박스를 라벨로 세었다');
+    probe(t('A').skipped.join().includes('한 글자'), '한 글자 라벨을 건너뜀에 적지 않았다');
+    // 385(리뷰 L-10): 자산을 가르는 기준은 경로 이름도 크기도 아니라 **한 줄의 길이**다
+    //      (200KB 상한은 265KB 짜리 진짜 화면 파일을 뺐다 — 재서 알았다).
+    probe(longestLine('가\n' + 'x'.repeat(ASSET_MAX_LINE + 1)) > ASSET_MAX_LINE, '긴 한 줄을 재지 못했다');
+    probe(longestLine('x'.repeat(2123) + '\n가') <= ASSET_MAX_LINE, '실제 화면 코드의 최장 줄을 자산으로 보았다');
     // 375(리뷰 M-3): 조각은 3자 이상이고 **같은 파일**에 모두 있어야 한다
     // 375: 조각이 다 짧은 N 이름은 **판단하지 않고 건너뛴다**(우연히 맞을 수 있다)
     probe(!(t('마감 N 완료').skipped.join().indexOf('수·기호') < 0), '짧은 조각 이름을 건너뛰지 않았다');
@@ -295,7 +335,7 @@ if (process.argv.includes('--selftest')) {
     if (bad.length > 0) { console.error('[selftest] ⑧ 덫 실패: ' + bad.join(' / ')); process.exit(1); }
     // 378(375~377 리뷰 M-2): 375 는 이 수를 **손으로 박았고 실제보다 하나 적었다**(18개인데 17).
     //      331 H-3·335 ③ 이 금지한 그 모양이다 — 세어서 찍는다.
-    console.log(`[check-release-notes] selftest ⑧ 덫 ${traps}종 통과(있는 이름·없는 이름·N 자리·아이콘·띄어쓰기·단축키·날짜·설명문·수만·섞인 라벨 7종·짧은 조각·한 파일·두 글자·흩어진 조각·붙은 글자·갈라진 이름 — **이 수는 세어서 찍는다**)`);
+    console.log(`[check-release-notes] selftest ⑧ 덫 ${traps}종 통과(있는 이름·없는 이름·N 자리·아이콘·띄어쓰기·단축키·날짜·설명문·수만·섞인 라벨 7종·길이 경계 5종·자산 기준 2종·짧은 조각·한 파일·두 글자·흩어진 조각·붙은 글자·갈라진 이름 — **이 수는 세어서 찍는다**)`);
   }
 
   const pad = n => '\n'.repeat(n);
@@ -347,6 +387,7 @@ const problems = checkReleaseNotes(text, pkg.version);
 {
   const srcDir = path.join(root, 'src');
   const files = [];
+  const excluded = [];
   const walk = dir => {
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name);
@@ -354,12 +395,19 @@ const problems = checkReleaseNotes(text, pkg.version);
       else if (/\.(ts|tsx)$/.test(name)) {
         // 378(리뷰 M-4): `src/assets/fonts/nanumGothicBase64.ts`(2.7MB base64)가 건초에 섞여
         //      `[ESC]`·`[F5]` 같은 짧은 라틴 이름이 **잡음에서 우연히** 맞았다 — 자산은 뺀다.
-        if (/[\\/]assets[\\/]/.test(full)) continue;
-        files.push({ path: full, text: fs.readFileSync(full, 'utf8') });
+        // 385(378~380 리뷰 L-10): 378 은 **경로 이름**(`/assets/`)으로 뺐다. 그러면 앞으로
+        //      `src/features/x/assets/Foo.tsx` 같은 **진짜 화면 코드**도 건초에서 빠진다 —
+        //      뺀 진짜 이유는 폴더 이름이 아니라 **크기**(2.7MB 한 줄 base64)였으므로 크기로
+        //      판단한다. 지금 걸리는 파일은 그 글꼴 하나뿐이고(재서 확인), 몇 개를 뺐는지 찍는다.
+        const text = fs.readFileSync(full, 'utf8');
+        const widest = longestLine(text);
+        if (widest > ASSET_MAX_LINE) { excluded.push(`${path.relative(root, full)}(한 줄 ${widest.toLocaleString()}자)`); continue; }
+        files.push({ path: full, text });
       }
     }
   };
   walk(srcDir);
+  if (excluded.length > 0) console.log(`[check-release-notes] ⑧ 건초에서 ${excluded.length}개 제외(한 줄 ${ASSET_MAX_LINE.toLocaleString()}자 초과 — 자산): ${excluded.join(' · ')}`);
   // 375(리뷰 M-4): **맨 위 절만** 본다 — 지난 업데이트 절은 그때의 기록이다(⑥ 과 같은 기준)
   const cut = text.indexOf(PAST_MARK);
   const current = cut === -1 ? text : text.slice(0, cut);
