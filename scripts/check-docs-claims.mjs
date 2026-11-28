@@ -882,6 +882,11 @@ function selftest() {
       const pairs = pairTrapClaims(pairLine);
       trap('덫 수에 붙은 가드 이름을 읽는다', pairs.length === 3 && pairs[0].npm === 'check:docs' && pairs[1].npm === 'check:gap' && pairs[2].npm === null);
       trap('굵게 적은 덫 수도 짝짓는다', pairTrapClaims('덫 **85종**(`check:docs`)')[0].npm === 'check:docs');
+      // 374: 괄호 안에 설명이 이어져도 짝을 읽는다
+      // 374: 괄호 안 설명이 **길게** 이어져도 짝을 읽는다 — 처음 덫은 짧은 글이라 통과했는데
+      //      실제 기록(설명 40자 이상)에서는 못 읽었다. 덫 입력을 실제 길이로 맞춘다.
+      trap('괄호 안 긴 설명이 이어져도 짝짓는다', pairTrapClaims('덫 8종(`check:notes`: 있는 이름·없는 이름·N 자리 2종·아이콘·띄어쓰기·수만 2종)')[0].npm === 'check:notes');
+      trap('이름이 괄호 뒤에 바로 오지 않으면 짝이 아니다', pairTrapClaims('덫 8종(앞에 설명이 먼저 오고 `check:notes`)')[0].npm === null);
       trap('인용한 덫 수는 짝짓지 않는다', pairTrapClaims('리뷰가 "덫 31종(`check:docs`)" 이라고 적었다').length === 0);
       // package.json 이 npm 이름 → 스크립트의 정본이다(표를 두면 낡는다)
       const pkgFix = JSON.stringify({ scripts: { 'check:docs': 'node scripts/check-docs-claims.mjs --selftest && node scripts/check-docs-claims.mjs', 'check:gap': 'node scripts/check-gap-claims.mjs' } });
@@ -1684,7 +1689,11 @@ function pairTrapClaims(line) {
     const after = line.slice(m.index + m[0].length, m.index + m[0].length + 30);
     // 370: 굵게 닫는 `**` 가 `종` 과 가드 이름 **사이**에 온다(`덫 **85종**(check:docs)`) —
     //      이 두 글자를 건너뛰지 않으면 짝짓기가 조용히 실패한다(덫을 쓰면서 그 자리를 봤다).
-    const g = /^\*{0,2}\s*\(`?(check:[a-z0-9-]+)`?\)/.exec(after);
+    // 374: 괄호 안에 설명이 이어지는 자연스러운 글도 읽는다(`덫 8종(`check:notes`: 있는 이름…)`).
+    //      전에는 괄호가 **가드 이름 바로 뒤에서 닫혀야** 했고, 넓힌 판도 괄호 안 설명이 40자를 넘으면
+    //      못 읽었다 — **내 덫 입력이 실제 글보다 짧아** 그 한계를 보여 주지 못했다(374 에서 겪었다).
+    //      이제 닫는 괄호를 요구하지 않고 **여는 괄호 바로 뒤의 이름**만 본다.
+    const g = /^\*{0,2}\s*\(`?(check:[a-z0-9-]+)`?/.exec(after);
     out.push({ n: Number(m[1]), npm: g ? g[1] : null });
   }
   return out;
