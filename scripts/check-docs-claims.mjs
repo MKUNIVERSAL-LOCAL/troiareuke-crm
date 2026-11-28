@@ -865,6 +865,12 @@ function selftest() {
       // 한글 따옴표로 인용한 자기 지칭도 면제한다
       const hangul = '- [x] 363 — **가**(11-28 10:30): 360 의 “이 줄의 시각을 처음에 09:42 로 적었다 — 커밋은 09:37” 을 되돌렸다. 커밋 c39e445.';
       trap('한글 따옴표 인용도 면제', selfTimeClaims(hangul).length === 0);
+      // 376(리뷰 M-8): 같은 뜻의 말투도 본다
+      const other = '- [x] 364 — **가**(11-28 10:30): **[자기 정정]** 이 기록 줄의 시각을 처음에 09:42 로 적었다 — 커밋은 09:37 이다. 커밋 c39e445.';
+      trap('이 기록 줄의 도 자기 지칭이다', selfTimeClaims(other).length === 1);
+      const other2 = other.replace('이 기록 줄의', '이 묶음 줄의');
+      trap('이 묶음 줄의 도 자기 지칭이다', selfTimeClaims(other2).length === 1);
+      trap('그냥 이 줄 은 아니다', selfTimeClaims(other.replace('이 기록 줄의', '이 줄 가까이의')).length === 0);
       // 366: ⑳ — 따옴표 안의 덫 수는 인용이다(만든 날 바로 이 거짓 경보가 났다)
       const roadTrap = [
         '- [x] 366 — **가**(11-28 11:50): 리뷰가 "덫 31종 통과" 가 찍히는 것을 보였다. 덫 57종 · 덫 43종. 커밋 abc1234.',
@@ -906,7 +912,7 @@ function selftest() {
       trap('짝이 없으면 합집합과 겨룬다', trapClaimProblems([{ n: 43, npm: null }], printedFix, scriptOf).problems.length === 0);
       trap('짝 없는 주장 수를 센다', trapClaimProblems([{ n: 43, npm: null }], printedFix, scriptOf).unpaired === 1);
       trap('아무도 안 찍는 수는 짝이 없어도 잡는다', trapClaimProblems([{ n: 99, npm: null }], printedFix, scriptOf).problems.length === 1);
-      // 370(리뷰 L-3): **새로 적는 재검증 차수는 직전+1** 이어야 한다(번호는 369 인데 줄은 360개였다)
+      // 370(리뷰 L-3): **새로 적는 재검증 차수는 직전+1** 이어야 한다(번호와 줄 수가 어긋나 있었다)
       // 371(366~368 리뷰 H-1 의 남은 몫): 계열 바닥 — 주장 0개는 통과가 아니다
       // 372(리뷰 H-2): 문서별 바닥 — 가드를 적은 문서가 수를 빼면 신고한다
       trap('문서별 바닥이 수 빠진 문서를 집는다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 0 }], '화면 칸').length === 1);
@@ -1102,6 +1108,14 @@ const familyCounts = {
   //      `장식 UI` 와 ⑪(면제·남은 수)를 빠뜨렸다. 둘 다 표기만 바꾸면 틀린 수가 통과했다
   //      (리뷰가 `단추 999개 · 입력칸 998개` 로 가운뎃점 앞뒤에 공백만 넣어 통과시켰고, 나도 재현했다).
   장식UI: 0, 면제: 0,
+  // 376(372~374 리뷰 H-1, **여덟 번째**): `claimedNumbers` 가 모으는 여덟 중 `reviewsFrom` 만
+  //      계열에 없었다 — 말투를 바꾸면 **오너가 가장 먼저 읽는 브리핑 §1 의 수**가 조용히 낡는다.
+  //      하필 ⑬ 자신이 335 에서 바로 그 자리의 낡음 때문에 생긴 검사다(리뷰가 심어 보였고 나도 확인했다).
+  부분집합리뷰: 0,
+  // 376(리뷰 H-2, **아홉 번째**): ⑮ 는 `테스트 exe` 라는 글자에만 걸려, `테스트용 exe`·
+  //      `테스트 실행 파일` 로 바꾸면 틀린 시각이 통과했다. 341 이 "세 묶음 연속 낡아 있었다" 는
+  //      피해 때문에 만든 검사다.
+  exe시각: 0,
 };
 
 // ② "지금 상태" 문서의 숫자가 지금 값과 같은가
@@ -1123,6 +1137,7 @@ const familyCounts = {
     familyCounts.libUnits += c.libUnits.length;
     familyCounts.리뷰기록 += c.reviews.length;
     familyCounts.리뷰회수 += c.reviewRuns.length;
+    familyCounts.부분집합리뷰 += c.reviewsFrom.length;
     familyCounts.묶음범위 += c.ranges.length;
     for (const t of c.testids) {
       if (t.total !== live.idTotal || t.covered !== live.idCovered) problems.push(`${rel}: "${t.raw}" 가 낡았다 — 지금은 ${live.idTotal}칸 중 ${live.idCovered}칸`);
@@ -1187,6 +1202,7 @@ const familyCounts = {
 // ③ 문서가 가리키는 파일이 실재하는가
 {
   const docs = fs.readdirSync(path.join(ROOT, 'docs')).filter(f => f.endsWith('.md'));
+  let pointerSeen = 0;
   for (const f of docs) {
     const text = read(`docs/${f}`);
     const seen = new Set();
@@ -1198,8 +1214,13 @@ const familyCounts = {
       if (seen.has(rel)) continue;
       seen.add(rel);
       if (!fs.existsSync(path.join(ROOT, rel))) problems.push(`docs/${f}: 가리키는 파일이 없다 — ${rel}`);
+      pointerSeen += 1;
     }
   }
+  // 376(372~374 리뷰 M-7): 배선을 끊어도(읽는 글을 빈 문자열로 바꾸면) 아무 덫도 물지 않았다 —
+  //      순수 함수에는 덫이 있지만 **부르는 줄**에는 없다. 본 수를 찍고 0이면 신고한다.
+  console.log(`[check-docs-claims] ③ 문서 ${docs.length}개에서 가리킨 파일 ${pointerSeen}개 확인`);
+  if (docs.length === 0 || pointerSeen === 0) problems.push('③ 이 문서 포인터를 한 개도 읽지 못했다 — 배선이 끊겼다(376)');
 }
 
 // ④ 리뷰 기록마다 반영 상태가 적혀 있는가
@@ -1382,15 +1403,23 @@ problems.push(...releaseStepProblems());
     console.log('[check-docs-claims] ⑮ 건너뜀 — release/·release-admin 의 app.asar 가 없습니다(이 검사는 exe 를 빌드한 PC 에서만 돕니다)');
   }
   if (branch && admin) {
+    let seen = 0;
     for (const rel of CURRENT_DOCS) {
       if (!fs.existsSync(path.join(ROOT, rel))) continue;
       for (const c of exeTimeClaims(read(rel))) {
+        seen += 1;
         const dateOff = c.md !== null && c.md !== branch.md;
         if (dateOff || c.branch !== branch.hm || c.admin !== admin.hm) {
           problems.push(`${rel}: "…${c.raw}" 가 낡았다 — 지금 빌드는 ${branch.md} ${branch.hm}/${admin.hm}(asar 수정 시각). 과거 기록이면 "테스트 exe" **앞**에 "당시" 를 적으세요(예: 11-25 당시 테스트 exe …)`);
         }
       }
     }
+    // 376(리뷰 H-2): 무엇을 봤는지 찍고, 계열 바닥이 세도록 넘긴다
+    console.log(`[check-docs-claims] ⑮ 테스트 exe 시각 주장 ${seen}개 대조(지금 빌드 ${branch.md} ${branch.hm}/${admin.hm})`);
+    familyCounts.exe시각 = seen;
+  } else {
+    // asar 이 없는 환경(CI)에서는 이 계열을 바닥에서 뺀다 — 셀 수 없는 것을 신고하지 않는다
+    delete familyCounts.exe시각;
   }
 }
 
@@ -1593,7 +1622,10 @@ function timeGapSameDay(hm, chm) {
 function selfTimeClaims(text) {
   const out = [];
   for (const line of text.split(/\r?\n/)) {
-    if (!/이 줄의/.test(line)) continue;
+    // 376(372~374 리뷰 M-8): `이 줄의` 다섯 글자에만 걸려 `이 기록 줄의`·`이 묶음 줄의` 로 적으면
+    //      자기 지칭 거짓이 통과했다(리뷰가 심어 보였다). 같은 뜻의 말투를 함께 받는다.
+    //      바닥은 두지 않는다 — 자기를 가리키는 문장은 **없을 수도 있는** 글이라 0개가 잘못은 아니다.
+    if (!/이 (?:기록 |묶음 )?줄의/.test(line)) continue;
     const b = /^- \[x\] (\d{3,4}) — /.exec(line);
     const h = hashOf(line);
     if (!b || !h || Number(b[1]) >= 2000) continue;
@@ -1602,7 +1634,7 @@ function selfTimeClaims(text) {
     // 어느 시각이 묶이는지는 **말의 관계**라 줄 단위로는 알 수 없으므로 **위치로** 묶는다:
     // 각 "이 줄의" **뒤에 처음 오는** 커밋 시각 하나만 그 자기 지칭의 주장으로 본다(다음 "이 줄의" 전까지).
     // 그러면 리뷰가 걱정한 "인용이 먼저, 진짜가 나중" 도 자기 지칭마다 따로 보므로 함께 덮인다.
-    const selfPos = [...line.matchAll(/이 줄의/g)].map(x => x.index);
+    const selfPos = [...line.matchAll(/이 (?:기록 |묶음 )?줄의/g)].map(x => x.index);
     for (let k = 0; k < selfPos.length; k += 1) {
       const from = selfPos[k];
       const until = k + 1 < selfPos.length ? selfPos[k + 1] : line.length;
@@ -1736,7 +1768,10 @@ function trapClaimProblems(pairs, printed, scriptOf) {
 }
 /**
  * 370(366~368 리뷰 L-3): **새로 적는 재검증 차수가 직전+1 인가.** 번호는 370 까지 올라갔는데
- * 엄격 형식 줄은 360개이고 246·298·299·301·302·311·312·325 가 없고 326 이 두 번 있다 —
+ * 엄격 형식 줄은 **270개**이고 246·298·299·301·302·311·312·325 가 없고 326 이 두 번 있다 —
+ * (376 정정: 370 이 적은 "360개" 는 틀렸다 — `차 재검증` 이 들어간 모든 줄 372곳과 섞어 센 수였다.
+ *  372~374 리뷰 L-3 이 세어 보였고 나도 셌다. 주석의 수도 기록이라 틀리면 다음 사람을 잘못된
+ *  전제로 보낸다.)
  * 어느 가드도 이 번호를 보지 않았다. 과거 줄은 고치지 않는 규칙이므로 **맨 위 두 줄만** 본다.
  */
 function recheckSequenceProblems(numbers) {
@@ -2242,9 +2277,15 @@ function serverTestClaims(text, rel) {
   // 372(369~371 리뷰 M-8): 전문에서 세면 **역사 줄 183개** 때문에 0 이 될 수 없어 바닥이 무의미했다.
   //      실제 대조는 **마지막 누계 하나**만 보므로, 세는 것도 **가장 새 묶음 줄**에서만 센다.
   familyCounts.누계 = (newestTrapClaims(read(ROADMAP)).line.match(/누계 155~\d+ 묶음 \d+개/g) || []).length;
-  const shown = Object.entries(familyCounts).map(([k, v]) => `${k} ${v}`).join(' · ');
-  if (!process.argv.includes('--selftest')) console.log(`[check-docs-claims] ㉑ 계열별 주장 수 — ${shown}`);
-  problems.push(...familyFloorProblems(familyCounts));
+  // 376(372~374 리뷰 H-3): 전에는 **한 줄**이 12계열 바닥을 모두 들고 있어, 그 줄을 지우면
+  //      바닥이 동시에 꺼졌다. 계열마다 찍고 계열마다 신고해 한 줄의 무게를 나눈다.
+  //      그래도 "신고하는 줄을 지우면 막을 수 없다" 는 한계는 남는다(366 부터 적어 온 그 종류).
+  const shown = [];
+  for (const [name, n] of Object.entries(familyCounts)) {
+    shown.push(`${name} ${n}`);
+    for (const p of familyFloorProblems({ [name]: n })) problems.push(p);
+  }
+  if (!process.argv.includes('--selftest')) console.log(`[check-docs-claims] ㉑ 계열별 주장 수(${shown.length}계열) — ${shown.join(' · ')}`);
 }
 if (problems.length > 0) {
   console.error(`[check-docs-claims] 확인할 수 없는 기록 ${problems.length}건:`);
