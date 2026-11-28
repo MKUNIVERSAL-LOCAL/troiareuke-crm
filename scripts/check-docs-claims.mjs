@@ -210,7 +210,52 @@ function exemptionClaims(text, rel) {
 const MODAL_SLOT_PAIR = /\*{0,2}(\d+)\*{0,2}자리 중 \*{0,2}(\d+)\*{0,2}자리/g;
 const MODAL_COUNT_PAIR = /\*{0,2}(\d+)\*{0,2}개 중 (?:게이트가 여는 것 )?\*{0,2}(\d+)\*{0,2}자리/g;
 /** 창 가드 이야기라는 표시 — 낱말 근접이 아니라 **같은 칸의 수 앞 60자**만 본다 */
-const MODAL_TOPIC = /창|모달|modal-a11y/;
+/**
+ * 창 가드 이야기인지 — **가장 가까운 주제 낱말이 이긴다** (372, 369~371 리뷰 M-5).
+ *
+ * 369 는 **수 앞 60자**만 봤다. 그래서 `지금 99자리 중 98자리가 창 접근성 게이트가 여는 자리입니다`
+ * 처럼 주제 낱말이 **뒤**에 오면, 또 표에서 라벨이 **다른 칸**에 있으면(`| 창 접근성 | 지금 … |`)
+ * 조용히 면제됐다. 넓히기만 하면 리뷰가 심은 "키보드 18자리" 류가 다시 걸리므로, 같은 `자리` 를
+ * 쓰는 **다른 가드 낱말**(키보드·대비·초점)을 겨루게 두고 **수에 더 가까운 쪽**을 택한다.
+ * 369 가 `지금`/`당시` 에 대해 "가까운 쪽이 이긴다" 고 **틀리게** 적어 둔 그 규칙을, 이번에는
+ * 실제로 구현하고 덫으로 고정한다.
+ */
+const MODAL_TOPIC = /창|모달|modal-a11y/g;
+const OTHER_TOPIC = /키보드|대비|초점|keyboard|contrast|focus/g;
+/** 표 행이면 그 수가 든 칸의 끝(다음 `|`), 아니면 줄 끝 */
+function cellEnd(text, at) {
+  const lineEnd = text.indexOf('\n', at) === -1 ? text.length : text.indexOf('\n', at);
+  const bar = text.indexOf('|', at);
+  return bar !== -1 && bar < lineEnd ? bar : lineEnd;
+}
+/** 표 행의 첫 칸(라벨) — 주제가 거기 적히는 모양이 흔하다 */
+function rowLabel(text, at) {
+  const lineStart = text.lastIndexOf('\n', at) + 1;
+  if (text[lineStart] !== '|') return null;
+  const second = text.indexOf('|', lineStart + 1);
+  if (second === -1 || second > at) return null;
+  return { from: lineStart + 1, to: second };
+}
+function modalTopicNear(text, at) {
+  const from = cellStart(text, at);
+  const to = cellEnd(text, at);
+  const hay = [{ from, to }];
+  const label = rowLabel(text, at);
+  if (label) hay.push(label);
+  let best = null;
+  for (const span of hay) {
+    const seg = text.slice(span.from, span.to);
+    for (const [re, kind] of [[MODAL_TOPIC, true], [OTHER_TOPIC, false]]) {
+      re.lastIndex = 0;
+      for (let m = re.exec(seg); m !== null; m = re.exec(seg)) {
+        const pos = span.from + m.index;
+        const dist = pos < at ? at - pos : pos - at;
+        if (best === null || dist < best.dist) best = { dist, modal: kind };
+      }
+    }
+  }
+  return best !== null && best.modal;
+}
 /** 표 행이면 그 수가 든 **칸**의 시작, 아니면 줄 시작 (369, 리뷰 M-2) */
 function cellStart(text, at) {
   const lineStart = text.lastIndexOf('\n', at) + 1;
@@ -226,7 +271,7 @@ function modalSlotClaims(text, rel) {
     const span = text.slice(from, at);
     return {
       quoted: (span.match(/"/g) || []).length % 2 === 1,
-      topic: MODAL_TOPIC.test(span.slice(-60)),
+      topic: modalTopicNear(text, at),
     };
   };
   const add = (m, total, covered, kind) => out.push({ rel, raw: m[0], total, covered, kind });
@@ -818,9 +863,19 @@ function selftest() {
       const roadTrap = [
         '- [x] 366 — **가**(11-28 11:50): 리뷰가 "덫 31종 통과" 가 찍히는 것을 보였다. 덫 57종 · 덫 43종. 커밋 abc1234.',
       ].join('\n');
+      // 372(리뷰 M-6): 판정은 이제 `pairTrapClaims` 한 곳에서 한다 — 덫도 그쪽을 본다.
+      //      전에는 `newestTrapClaims` 안의 복제된 판정을 보고 있었고, 프로덕션은 그 결과를 쓰지 않았다.
       const tc = newestTrapClaims(roadTrap);
-      trap('인용한 덫 수는 보지 않는다', !tc.claims.includes(31));
-      trap('인용 밖의 덫 수는 본다', tc.claims.includes(57) && tc.claims.includes(43));
+      const tcPairs = pairTrapClaims(tc.line).map(p => p.n);
+      trap('가장 새 묶음 줄을 고른다', tc.no === 366);
+      trap('인용한 덫 수는 보지 않는다', !tcPairs.includes(31));
+      trap('인용 밖의 덫 수는 본다', tcPairs.includes(57) && tcPairs.includes(43));
+      // 372(리뷰 H-1): ⑳ 바닥 — 주장이 없으면 신고하고, 단위만 다른 모양은 집어서 말한다
+      trap('덫 수 주장이 없으면 신고', trapFloorProblems(372, '- [x] 372 — **가**(11-28 15:00): 아무 수도 없다. 커밋 abc1234.', []).length === 1);
+      trap('덫 N개 는 단위를 집어 말한다', trapFloorProblems(372, '- [x] 372 — 덫 106개 통과', [])[0].includes('덫 106개'));
+      trap('덫은 N종 어순도 집어 말한다', trapFloorProblems(372, '- [x] 372 — 그 가드의 덫은 106종', [])[0].includes('덫은 106종'));
+      trap('주장이 있으면 조용하다', trapFloorProblems(372, '- [x] 372 — 덫 106종(`check:docs`)', [{ n: 106, npm: 'check:docs' }]).length === 0);
+      trap('줄을 못 찾으면 신고', trapFloorProblems(null, '', []).length === 1);
       // 370(366~368 리뷰 M-4): ⑳ 은 합집합과 비교해 **허용값이 7개**였다 — 기록은 이미 가드 이름을
       //      짝지어 적으니 그 짝을 읽어 **그 가드의 수와만** 겨룬다. 짝이 없으면 합집합으로 떨어진다.
       const pairLine = '- [x] 370 — **가**(11-28 14:00): 덫 85종(`check:docs`)·덫 29종(`check:gap`)·덫 7종. 커밋 abc1234.';
@@ -842,6 +897,10 @@ function selftest() {
       trap('아무도 안 찍는 수는 짝이 없어도 잡는다', trapClaimProblems([{ n: 99, npm: null }], printedFix, scriptOf).problems.length === 1);
       // 370(리뷰 L-3): **새로 적는 재검증 차수는 직전+1** 이어야 한다(번호는 369 인데 줄은 360개였다)
       // 371(366~368 리뷰 H-1 의 남은 몫): 계열 바닥 — 주장 0개는 통과가 아니다
+      // 372(리뷰 H-2): 문서별 바닥 — 가드를 적은 문서가 수를 빼면 신고한다
+      trap('문서별 바닥이 수 빠진 문서를 집는다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 0 }], '화면 칸').length === 1);
+      trap('수가 있으면 조용하다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 2 }], '화면 칸').length === 0);
+      trap('언급하지 않는 문서는 바닥 밖', perDocFloorProblems([{ rel: 'a.md', mentions: false, claims: 0 }], '화면 칸').length === 0);
       trap('주장이 있는 계열은 조용하다', familyFloorProblems({ 모듈: 2, 화면칸: 5 }).length === 0);
       trap('주장 0개 계열을 신고한다', familyFloorProblems({ 모듈: 0, 화면칸: 5 }).length === 1);
       trap('어느 계열인지 말한다', familyFloorProblems({ libUnits: 0 })[0].includes('libUnits'));
@@ -853,7 +912,12 @@ function selftest() {
       // 370: 이 문서는 **오름 블록**(옛 3차~247차)과 **내림 블록**(지금)을 함께 가진다 —
       //      첫 판은 "문서 순서의 첫 줄" 을 가장 새 것으로 보아 134차를 가장 새 차수로 찍었다.
       trap('오름 블록 뒤의 내림 블록 맨 위를 본다', recheckSequenceProblems([100, 101, 370, 369, 368]).length === 0);
-      trap('오름 블록만 있으면 보지 않는다', recheckSequenceProblems([100, 101, 102]).length === 0);
+      // 372(리뷰 M-1): 370 은 여기서 "오름 블록만 있으면 보지 않는다" 를 지켰는데, 그 면제가
+      //      **문서 끝에 새 줄을 붙이는 수법**을 그대로 통과시켰다(399차를 붙여도 조용했다).
+      //      이 저장소의 새 줄 규칙은 "내림 블록 맨 위" 이므로, 최댓값이 마지막 줄이면 신고한다.
+      trap('최댓값이 마지막 줄이면 신고한다', recheckSequenceProblems([100, 101, 102]).length === 1);
+      trap('문서 끝에 붙인 새 차수를 잡는다', recheckSequenceProblems([370, 369, 368, 399]).length === 1);
+      trap('재검증 줄이 하나도 없으면 신고한다', recheckSequenceProblems([]).length === 1);
       trap('내림 블록 맨 위가 어긋나면 잡는다', recheckSequenceProblems([100, 101, 375, 369, 368]).length === 1);
     }
     // 356: ⑮ 의 asar 시각도 같은 결함이었다 — 서울 기준으로 못 박았는지 고정된 순간으로 확인한다
@@ -967,6 +1031,23 @@ const problems = [];
  *     전부 바뀌면 그 자리에서 울린다. 한계: 한 문서만 표기를 바꾸고 다른 문서가 수를 그대로 적고
  *     있으면 그 한 자리는 여전히 검사 밖이다(그 한계를 숨기지 않고 적는다).
  */
+/**
+ * 계열의 **문서별 바닥** (372, 369~371 리뷰 H-2 의 남은 몫)
+ *
+ * 371 은 "문서별 바닥은 여덟 계열 중 다섯에서 면제가 필요하다" 며 전체 바닥만 뒀다. 그 측정은
+ * 맞았지만 **모든 계열이 그런 것은 아니다** — `화면 칸` 은 가드를 언급하는 다섯 문서가 **모두**
+ * 수를 적고 있어 면제 없이 문서별 바닥을 걸 수 있다(369 의 ⑪-2 와 같은 장치).
+ * `장식 UI` 는 GAP 표가 가드를 언급하면서 수는 적지 않으므로(정당한 산문) 전체 바닥만 둔다.
+ */
+function perDocFloorProblems(docs, label) {
+  const out = [];
+  for (const { rel, mentions, claims } of docs) {
+    if (!mentions) continue;
+    if (claims === 0) out.push(`${rel}: ${label} 가드를 적으면서 **그 수를 적지 않았다** — 표기를 바꿔 검사를 끈 것일 수 있다(372)`);
+  }
+  return out;
+}
+
 function familyFloorProblems(counts) {
   const out = [];
   for (const [name, n] of Object.entries(counts)) {
@@ -978,11 +1059,16 @@ function familyFloorProblems(counts) {
 /** ㉑ 집계 그릇 — 각 블록이 자기 계열 수를 여기에 더한다 */
 const familyCounts = {
   모듈: 0, 함수: 0, 화면칸: 0, libUnits: 0, 리뷰기록: 0, 리뷰회수: 0, 누계: 0, 묶음범위: 0, 서버테스트: 0, outbox: 0,
+  // 372(369~371 리뷰 H-2): 371 은 "리뷰 H-1 의 남은 몫" 을 했다고 적었지만 리뷰가 **이름까지 적어 준**
+  //      `장식 UI` 와 ⑪(면제·남은 수)를 빠뜨렸다. 둘 다 표기만 바꾸면 틀린 수가 통과했다
+  //      (리뷰가 `단추 999개 · 입력칸 998개` 로 가운뎃점 앞뒤에 공백만 넣어 통과시켰고, 나도 재현했다).
+  장식UI: 0, 면제: 0,
 };
 
 // ② "지금 상태" 문서의 숫자가 지금 값과 같은가
 {
   const live = liveNumbers();
+  const idDocs = [];
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) { problems.push(`${rel}: CURRENT_DOCS 목록에 있는데 파일이 없다`); continue; }
     const c = claimedNumbers(read(rel));
@@ -993,6 +1079,8 @@ const familyCounts = {
       if (r.fns !== null && r.fns !== live.fns) problems.push(`${rel}: "${r.raw}" 가 낡았다 — 지금은 ${live.fns}함수`);
     }
     familyCounts.화면칸 += c.testids.length;
+    // 372(리뷰 H-2): 화면 칸은 **문서별 바닥**도 걸 수 있다 — 언급 문서 다섯이 모두 수를 적는다
+    idDocs.push({ rel, mentions: /check:testids|화면\s*칸/.test(read(rel)), claims: c.testids.length });
     familyCounts.libUnits += c.libUnits.length;
     familyCounts.리뷰기록 += c.reviews.length;
     familyCounts.리뷰회수 += c.reviewRuns.length;
@@ -1051,6 +1139,8 @@ const familyCounts = {
       if (v.count !== real) problems.push(`${rel}: "${v.raw}…" 가 낡았다 — ${v.from} 번 이상을 다루는 리뷰 기록은 ${real}개`);
     }
   }
+  // 372(리뷰 H-2): 화면 칸은 문서별 바닥도 걸 수 있다 — 이 블록 안에서 모은 자료로 본다
+  problems.push(...perDocFloorProblems(idDocs, '화면 칸'));
 }
 
 // ③ 문서가 가리키는 파일이 실재하는가
@@ -1314,12 +1404,25 @@ problems.push(...releaseStepProblems());
 {
   const { no, line } = newestTrapClaims(read(ROADMAP));
   const pairs = line ? pairTrapClaims(line) : [];
+  // 372(369~371 리뷰 H-1): **⑳ 에는 바닥이 없었다.** `덫 106종` 을 `덫 106개` 로 한 글자만 바꾸면
+  //      `pairs` 가 비어 블록 전체가 no-op 이 되고, 370 이 더한 **죽은 가드 신고까지 함께 꺼졌다**
+  //      (리뷰가 심어 보였고 나도 재현했다). 369 가 ⑪-2 에서 비교를 `if` 밖으로 꺼낸 그 결함이
+  //      ⑳ 에 그대로 남아 있었다 — "내 덫이 아무것도 보지 않는다" 의 일곱 번째다.
+  //      묶음 줄은 **늘 덫 수를 적는다**(이 저장소의 규칙)이므로 면제가 필요 없다.
+  problems.push(...trapFloorProblems(no, line, pairs));
+  // 죽은 가드 신고는 주장이 없어도 해야 한다 — `if` 밖으로 꺼낸다
+  {
+    const printedAlways = pairs.length > 0 ? null : trapCountsPrinted();
+    if (printedAlways) for (const g of printedAlways.dead) problems.push(`scripts/${g}.mjs --selftest 가 실패했다 — ⑳ 이 그 가드의 덫 수를 알 수 없다(먼저 그 가드를 보세요)`);
+  }
   if (pairs.length > 0) {
     const printed = trapCountsPrinted();
     const pkg = read('package.json');
     const res = trapClaimProblems(pairs, printed, npm => guardScriptOf(pkg, npm));
     console.log(`[check-docs-claims] ⑳ 묶음 ${no} 줄의 덫 수 주장 ${pairs.length}개(가드 이름 짝 ${pairs.length - res.unpaired}개) / 가드가 찍는 수 ${[...printed.seen].sort((a, b) => a - b).join('·')}`);
     for (const p of res.problems) problems.push(`${ROADMAP}: ${p}`);
+    // 372(리뷰 M-2): 짝이 없으면 합집합과 겨루게 되고 허용값이 여럿이다 — **짝을 적으라고** 신고한다
+    if (res.unpaired > 0) problems.push(`${ROADMAP}: 묶음 ${no} 줄의 덫 수 ${res.unpaired}개에 **가드 이름이 붙어 있지 않다** — \`덫 N종(\\\`check:docs\\\`)\` 처럼 적으세요(짝이 없으면 다른 가드의 수로도 통과합니다)`);
     // 370(리뷰 M-4): 가드가 **죽으면** 그 수가 조용히 집합에서 빠진다 — 죽은 가드를 신고한다
     for (const g of printed.dead) problems.push(`scripts/${g}.mjs --selftest 가 실패했다 — ⑳ 이 그 가드의 덫 수를 알 수 없다(먼저 그 가드를 보세요)`);
   }
@@ -1512,6 +1615,19 @@ function trapCountsPrinted() {
   return { seen, byGuard, dead };
 }
 
+/**
+ * ⑳ 바닥 (372, 369~371 리뷰 H-1) — 가장 새 묶음 줄에 **덫 수 주장이 하나라도** 있어야 한다.
+ * `덫 N개`·`덫은 N종` 처럼 단위/어순을 바꾸면 ⑳ 이 통째로 꺼졌다. 단위만 다른 모양은
+ * **무엇이 잘못됐는지 집어서** 말한다(그냥 "없다" 보다 고치기 쉽다).
+ */
+function trapFloorProblems(no, line, pairs) {
+  if (pairs.length > 0) return [];
+  if (!line) return ['로드맵에서 묶음 줄을 찾지 못했다 — ⑳ 이 아무것도 대조하지 않는다(372)'];
+  const near = line.match(/덫 \*{0,2}\d+(개|가지|종류)|덫(?:은|이)\s*\*{0,2}\d+종/);
+  if (near) return [`묶음 ${no} 줄이 덫 수를 "${near[0]}" 로 적었다 — ⑳ 은 \`덫 N종\` 만 읽는다(단위/어순을 맞추세요). 지금은 ⑳ 이 꺼진 상태다(372)`];
+  return [`묶음 ${no} 줄에 **덫 수 주장이 없다** — ⑳ 이 아무것도 대조하지 않는다. 가드가 찍는 \`덫 N종(\\\`check:X\\\`)\` 를 그대로 옮기세요(372)`];
+}
+
 /** `check:docs` 같은 npm 이름 → 스크립트 파일. package.json 이 정본이다(표를 두지 않는다) */
 function guardScriptOf(pkgText, npmName) {
   let scripts = {};
@@ -1565,13 +1681,16 @@ function trapClaimProblems(pairs, printed, scriptOf) {
  * 어느 가드도 이 번호를 보지 않았다. 과거 줄은 고치지 않는 규칙이므로 **맨 위 두 줄만** 본다.
  */
 function recheckSequenceProblems(numbers) {
+  if (numbers.length === 0) return ['재검증 줄을 한 개도 읽지 못했다 — ⑳-2 가 아무것도 보지 않는다(372)'];
   if (numbers.length < 2) return [];
   const max = Math.max(...numbers);
   const at = numbers.indexOf(max);
   if (numbers.lastIndexOf(max) !== at) return [`재검증 차수 ${max} 가 두 번 적혀 있다 — 새 줄의 차수는 직전+1 이어야 한다(370)`];
   const below = numbers[at + 1];
-  // 오름 블록만 있는 글(가장 새 차수가 마지막 줄)은 보지 않는다 — 이 문서의 옛 블록이 그렇다
-  if (below === undefined) return [];
+  // 372(369~371 리뷰 M-1): 전에는 `below === undefined` 면 **조용히 통과**했다 — 그래서 새 줄을
+  //      **문서 맨 끝**에 붙이면 차수가 399 여도 아무 말이 없었다(리뷰가 심어 보였고 나도 재현했다).
+  //      가장 큰 차수가 마지막 줄에 있다는 것은 **내림 블록 맨 위가 아니라는 뜻**이므로 신고한다.
+  if (below === undefined) return [`가장 새 재검증 줄(${max}차)이 문서의 **마지막 재검증 줄**이다 — 새 줄은 내림 블록 **맨 위**에 와야 한다(372)`];
   if (below !== max - 1) return [`가장 새 재검증 줄이 ${max}차인데 그 아래 줄은 ${below}차다 — 새 줄은 직전+1(${below + 1}차)로 **내림 블록 맨 위**에 와야 한다(370)`];
   return [];
 }
@@ -1586,24 +1705,17 @@ function recheckNumbers(text) {
   return out;
 }
 
-/** 가장 새 묶음 줄이 적은 "덫 N종" 들 */
+/**
+ * 가장 새 묶음 줄 (366). 372(369~371 리뷰 M-6): 전에는 이 안에서 `덫 N종` 을 긁고 따옴표 홀짝까지
+ * 판정했는데, 370 이 짝짓기를 `pairTrapClaims` 로 옮긴 뒤로 **프로덕션은 그 결과를 쓰지 않았다** —
+ * 남은 사용처가 셀프테스트 두 덫뿐이라, 그 덫들은 **프로덕션이 보지 않는 코드**를 지키고 있었다.
+ * 줄만 돌려주고 판정은 `pairTrapClaims` 한 곳에서 한다(같은 논리가 두 군데 있던 것도 정리).
+ */
 function newestTrapClaims(text) {
   const lines = batchLines(text);
-  if (lines.length === 0) return { no: null, claims: [] };
+  if (lines.length === 0) return { no: null, line: '' };
   const newest = lines.reduce((a, b) => (b.no > a.no ? b : a), lines[0]);
-  // 366: 따옴표 안의 수는 **인용**이다(옛 수를 그대로 적은 자리) — ⑮·⑲ 와 같은 면제.
-  //      만든 날 바로 이 거짓 경보가 났다: 이 묶음이 리뷰의 "덫 31종 통과" 를 인용했다.
-  const claims = [];
-  // 366: 굵게 표시(덫 **57종**)도 읽는다 — 안 읽으면 ⑳ 이 조용히 잠든다(만들며 겪었다)
-  for (const m of newest.line.matchAll(/덫 \*{0,2}(\d+)종/g)) {
-    const before = newest.line.slice(0, m.index);
-    const ascii = (before.match(/"/g) || []).length;
-    const open = (before.match(/[“‘]/g) || []).length;
-    const close = (before.match(/[”’]/g) || []).length;
-    if (ascii % 2 === 1 || open > close) continue;
-    claims.push(Number(m[1]));
-  }
-  return { no: newest.no, claims, line: newest.line };
+  return { no: newest.no, line: newest.line };
 }
 
 /** 이 브랜치의 커밋 시각 표 — git 을 한 번만 부른다 */
@@ -1883,8 +1995,10 @@ function serverTestClaims(text, rel) {
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
     claims.push(...serverTestClaims(read(rel), rel));
-    familyCounts.서버테스트 = claims.length;
   }
+  // 372(리뷰 L-7): 전에는 **루프 안 대입**이었다 — 문서별로 claims 를 초기화하는 리팩터 한 번에
+  //      조용히 틀려지는 모양이다. 루프 **뒤에 한 번** 센다.
+  familyCounts.서버테스트 = claims.length;
   if (claims.length > 0) {
     const r = spawnSync(process.execPath, ['scripts/run-server-tests.mjs'], { cwd: ROOT, encoding: 'utf8' });
     const m = `${r.stdout || ''}${r.stderr || ''}`.match(/^# pass (\d+)/m) || `${r.stdout || ''}`.match(/pass (\d+)/);
@@ -1909,6 +2023,7 @@ function serverTestClaims(text, rel) {
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
     const text = read(rel);
+    familyCounts.장식UI += [...text.matchAll(/단추 (\d+)개·입력칸 (\d+)개/g)].length;
     for (const m of text.matchAll(/단추 (\d+)개·입력칸 (\d+)개/g)) {
       if (markedPast(text, m.index)) continue;
       claims.push({ rel, raw: m[0], buttons: Number(m[1]), inputs: Number(m[2]) });
@@ -1945,6 +2060,12 @@ function serverTestClaims(text, rel) {
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
     claims.push(...exemptionClaims(read(rel), rel));
+  }
+  familyCounts.면제 = claims.length;
+  // 372(리뷰 H-2): ⑪ 은 주장 수를 **찍지도 않았다** — 무엇을 봤는지 말하지 않으면 조용히 잠든다(364)
+  if (!process.argv.includes('--selftest')) {
+    const byGuard = claims.reduce((acc, c) => { acc[c.guard.key] = (acc[c.guard.key] || 0) + 1; return acc; }, {});
+    console.log(`[check-docs-claims] ⑪ 면제·남은 수 주장 ${claims.length}개 — ${Object.entries(byGuard).map(([k, v]) => `${k} ${v}`).join(' · ') || '(없음)'}`);
   }
   const counted = new Map();
   for (const c of claims) {
@@ -2017,8 +2138,8 @@ function serverTestClaims(text, rel) {
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
     claims.push(...outboxClaims(read(rel), rel));
-    familyCounts.outbox = claims.length;
   }
+  familyCounts.outbox = claims.length; // 372(리뷰 L-7): 루프 뒤에 한 번
   if (claims.length > 0) {
     const r = spawnSync(process.execPath, ['scripts/test-nas-outbox.mjs'], { cwd: ROOT, encoding: 'utf8' });
     const out = `${r.stdout || ''}${r.stderr || ''}`;
@@ -2047,7 +2168,9 @@ function serverTestClaims(text, rel) {
 {
   // 371: `누계 155~N 묶음 M개` 는 **로드맵 묶음 줄**에 적힌다(liveNumbers 가 거기서 읽어 대조한다).
   //      ② 의 문서들에서 세면 0 이 되어 첫 실행부터 거짓 경보였다 — 만든 자리에서 바로 보였다.
-  familyCounts.누계 = (read(ROADMAP).match(/누계 155~\d+ 묶음 \d+개/g) || []).length;
+  // 372(369~371 리뷰 M-8): 전문에서 세면 **역사 줄 183개** 때문에 0 이 될 수 없어 바닥이 무의미했다.
+  //      실제 대조는 **마지막 누계 하나**만 보므로, 세는 것도 **가장 새 묶음 줄**에서만 센다.
+  familyCounts.누계 = (newestTrapClaims(read(ROADMAP)).line.match(/누계 155~\d+ 묶음 \d+개/g) || []).length;
   const shown = Object.entries(familyCounts).map(([k, v]) => `${k} ${v}`).join(' · ');
   if (!process.argv.includes('--selftest')) console.log(`[check-docs-claims] ㉑ 계열별 주장 수 — ${shown}`);
   problems.push(...familyFloorProblems(familyCounts));

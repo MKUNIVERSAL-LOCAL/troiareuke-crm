@@ -34,7 +34,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TAGS = ['input', 'select', 'textarea'];
 
 /** 여는 태그들을 돌려준다 — 중괄호 깊이를 세어 `>` 를 찾는다 */
-export function openTags(text) {
+// 372(369~371 리뷰 M-7): 370·371 이 미사용 export 를 정리할 때 **리뷰가 이름까지 적어 준**
+//      `openTags` 를 빠뜨렸다(import 0건). 내부 함수로 돌린다 — 같은 파일의 셀프테스트만 쓴다.
+function openTags(text) {
   const out = [];
   const unbalanced = []; // 366: 문자열 밖에서 짝이 안 맞는 `}` 를 만난 줄 — 호출부가 신고한다
   for (const tag of TAGS) {
@@ -114,6 +116,16 @@ function listFiles(dir) {
   return out;
 }
 
+/**
+ * 짝이 안 맞는 `}` 가 있는 줄들 (372) — **주석을 지운 글**을 본다.
+ * 이 한 줄이 배선이라 덫이 보지 못했다: 변이로 원문을 넘기게 바꿔도 셀프테스트가 통과했다
+ * (지금 src 에 주석 처리한 JSX 가 없어 거짓 경보가 나지 않기 때문이다). 순수 함수로 떼어내
+ * 덫이 **그 결정 자체**를 찌르게 한다(364 에서 같은 모양을 같은 방법으로 고쳤다).
+ */
+function unbalancedLines(raw) {
+  return openTags(blankComments(raw)).unbalanced || [];
+}
+
 function selftest() {
   let trapCount = 0;
   const ok = (name, cond) => { trapCount += 1; if (!cond) { console.error(`[selftest] ${name} 덫 실패`); process.exit(1); } };
@@ -159,8 +171,12 @@ function selftest() {
   ok('짝이 안 맞는 } 의 줄 번호를 적는다', (openTags('첫 줄\n<input className={x}} />\n').unbalanced || [])[0] === 2);
   ok('짝이 맞으면 모으지 않는다', (openTags('<input className={x} />\n').unbalanced || []).length === 0);
   ok('문자열 안의 } 는 짝으로 세지 않는다', (openTags('<input placeholder="}" />\n').unbalanced || []).length === 0);
+  // 372(리뷰 L-3): 본검사가 주석을 지운 글을 넘기는지 — 주석 처리한 JSX 는 신고 대상이 아니다
+  ok('주석 처리한 태그의 } 는 신고하지 않는다', unbalancedLines('// <input className={x}} />\n').length === 0);
+  ok('블록 주석 안의 } 도 신고하지 않는다', unbalancedLines('/* <input className={x}} /> */\n').length === 0);
+  ok('주석 밖의 } 는 여전히 신고한다', unbalancedLines('// 설명\n<input className={x}} />\n').length === 1);
 
-  console.log(`[check-flex-inputs] selftest OK — 덫 ${trapCount}종 통과(flex-1·최소 너비 유무·겨루는 둘·화살표 함수·문자열 2종·세 태그·주석 2종·줄 번호 2종). **이 수는 세어서 찍는다** — 손으로 적지 말 것(352~354 리뷰 M-2)`);
+  console.log(`[check-flex-inputs] selftest OK — 덫 ${trapCount}종 통과(flex-1·최소 너비·겨룸·화살표 함수·문자열·세 태그·주석·줄 번호·줄어들 수 있는 값·짝 없는 중괄호 — **열거는 분류라 수와 달리 손으로 적는다. 372 에서 낡은 열거를 고쳤다**). **이 수는 세어서 찍는다** — 손으로 적지 말 것(352~354 리뷰 M-2)`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -170,7 +186,10 @@ const problems = [];
 for (const full of listFiles(path.join(ROOT, 'src'))) {
   const rel = path.relative(ROOT, full).replace(/\\/g, '/');
   // 366(리뷰 M-3): 문자열 밖에서 짝이 안 맞는 `}` 는 이 파서가 다룰 수 없는 모양이다 — 조용히 넘기지 않는다
-  for (const line of openTags(fs.readFileSync(full, 'utf8')).unbalanced || []) {
+  // 372(369~371 리뷰 L-3): 이 경로만 **원문**을 넘겨, 주석 처리한 JSX 한 줄이 짝 없는 `}` 로
+  //      신고될 수 있었다(`// <input className={x}} />` 로 확인). `violations()` 는 이미
+  //      `blankComments` 를 지나므로 **같은 입력**으로 통일한다 — 거짓을 말하는 가드는 금지다(303).
+  for (const line of unbalancedLines(fs.readFileSync(full, 'utf8'))) {
     problems.push(`${rel}:${line} 여는 태그 안에서 짝이 안 맞는 \`}\` 를 만났습니다 — 이 파서가 태그 끝을 찾을 수 없습니다(모양을 단순하게 하거나 가드를 고치세요)`);
   }
   for (const v of violations(fs.readFileSync(full, 'utf8'))) {
