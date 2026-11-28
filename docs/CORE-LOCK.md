@@ -55,3 +55,9 @@ git config core.hooksPath .githooks
 ## 목록 변경
 
 보호 대상을 추가/제거하려면 `scripts/core-lock.mjs` 의 `CORE_FILES`/`CORE_DIRS` 만 수정하면 양쪽 훅에 동시 반영된다.
+
+3. **git pre-push 훅 — 기록 관문** (`.githooks/pre-push`, 383 신설, 같은 `core.hooksPath` 로 함께 켜진다)
+   - 푸시 **앞에서** 기록 가드 셋(`check:docs`·`check:gap`·`check:notes`)을 돌리고, 실패하면 푸시를 막는다(약 25초).
+   - 왜: 11-28 에 **두 번** 기록 한 줄을 가드 결과보다 먼저 올려 머지 관문이 빨갰다(`2eef320`·`c2e0838`).
+     두 번째는 가드를 **돌리고도** 출력을 파이프로 흘려 종료 코드를 잃은 것이었다 — 사람 규칙이 두 번 실패했다.
+   - 우회: `SKIP_RECORD_CHECK=1 git push ...`(그러면 머지 관문이 본다). 브랜치 삭제 푸시는 건너뛴다.

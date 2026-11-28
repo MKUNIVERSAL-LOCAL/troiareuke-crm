@@ -379,7 +379,12 @@ function claimedNumbers(text) {
     out.testids.push({ total, covered, raw: m[0] });
   }
   // 291(리뷰 M-4): 묶음 범위·누계·리뷰 건수 — 묶음마다 바뀌어 가장 빨리 낡는다
-  for (const m of text.matchAll(/누계 155~(\d+) 묶음 (\d+)개|묶음 155~(\d+)\s*\((\d+)개\)/g)) {
+  // 383(열한 번째 조용한 자리): 전에는 `묶음 155~N(M개)` 처럼 **닫는 괄호까지** 요구했다. 그런데
+  //      세션 시작 문서의 실제 표기는 `묶음 155~382(227개 — 묶음 161 은 없다…)` 로 괄호 안에
+  //      설명이 이어진다 → **개수가 어느 검사에도 걸리지 않았다**(227 을 999 로 바꿔도 조용했다.
+  //      pre-push 훅을 시험하려고 그 수를 망가뜨렸는데 가드가 통과해서 알았다). 범위 끝 번호만
+  //      ② 의 ranges 쪽에서 검사되고 있었다. 이제 `개` 뒤에 숫자만 오지 않으면 누계로 읽는다.
+  for (const m of text.matchAll(/누계 155~(\d+) 묶음 (\d+)개|묶음 155~(\d+)\s*\((\d+)개(?!\d)/g)) {
     if (fresh(m)) out.cumulative.push({ end: Number(m[1] ?? m[3]), count: Number(m[2] ?? m[4]), raw: m[0] });
   }
   // 294(리뷰 M-4): 전에는 `묶음 NNN~MMM` 어순만 봐서 **"출장 기간에 218~290 묶음 73개"** 가 비켜 갔다.
@@ -924,6 +929,12 @@ function selftest() {
       trap('문서별 바닥이 수 빠진 문서를 집는다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 0 }], '화면 칸').length === 1);
       trap('수가 있으면 조용하다', perDocFloorProblems([{ rel: 'a.md', mentions: true, claims: 2 }], '화면 칸').length === 0);
       trap('언급하지 않는 문서는 바닥 밖', perDocFloorProblems([{ rel: 'a.md', mentions: false, claims: 0 }], '화면 칸').length === 0);
+      // 383(열한 번째 조용한 자리): 누계 표기는 괄호 안에 **설명이 이어진다** — 닫는 괄호를
+      //      요구하면 세션 시작 문서의 그 수가 어느 검사에도 걸리지 않는다(실제로 그랬다).
+      const cum383 = claimedNumbers('- **묶음 155~382(227개 — 묶음 161 은 없다. 162 줄이 순서를 바꿨다)**. 전수 기록은 로드맵.');
+      trap('괄호 안에 설명이 이어지는 누계도 읽는다', cum383.cumulative.length === 1 && cum383.cumulative[0].count === 227 && cum383.cumulative[0].end === 382);
+      trap('그 표기도 당시 면제는 지킨다', claimedNumbers('11-24 당시 묶음 155~285(131개 — 그때 수다) 였다.').cumulative.length === 0);
+      trap('개 뒤에 숫자가 붙으면 누계가 아니다', claimedNumbers('묶음 155~382(227개2 — 오타)').cumulative.length === 0);
       // 379(375~377 리뷰 M-3 의 뿌리): 게이트 칸 ↔ 실물. **호출 모양 둘**을 모두 본다 —
       //      스크립트 경로로 부르는 가드를 못 보면 **내가 틀렸던 그 결론**이 나온다.
       const pkgFake = { 'check:a': 'node scripts/check-a.mjs --selftest && node scripts/check-a.mjs', 'check:b': 'node scripts/check-b.mjs' };

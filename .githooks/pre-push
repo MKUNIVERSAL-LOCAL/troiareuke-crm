@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# 📒 기록 관문 — 푸시 **앞에서** 기록 가드 셋을 돌린다 (383)
+#
+# 왜: 11-28 에 **두 번**, 기록 한 줄을 가드 결과보다 먼저 올려 머지 관문이 빨갰다.
+#   ① `2eef320` — 커밋 뒤에 가드를 돌렸다(⑳ 바닥·② 가 그 줄을 거부했다).
+#   ② `c2e0838` — 가드를 **돌리고도** 출력을 `| tail` 로 흘려 **종료 코드를 잃었다**
+#      (⑱ 이 "아직 오지 않은 시각" 두 건을 말하고 있었는데 명령줄이 읽지 못했다).
+#   381 에서 "가드 결과를 읽고 커밋한다" 를 **사람 규칙**으로 적었는데 한 묶음 뒤에 같은 자리에서
+#   다시 틀렸다. 사람 규칙이 두 번 실패했으므로 **기계가 막는다** — CLAUDE.md §3("검증 없이 완료
+#   보고 금지")을 푸시 경로에 둔 것이다.
+#
+# 범위: **모든 푸시**에서 돌린다(약 25초). 처음에는 `docs/` 가 섞인 푸시만 돌리려 했는데,
+#   최근 150개 커밋을 재 보니 **문서를 건드리지 않은 커밋이 0개**였다(묶음마다 기록을 남기는
+#   규약 때문이다) — 걸러 내는 가지가 실제로는 한 번도 쓰이지 않는 **죽은 분기**라 지웠다
+#   (CLAUDE.md §2). 브랜치 삭제 푸시만 건너뛴다.
+#
+# 우회: SKIP_RECORD_CHECK=1 git push ...   (오너가 급히 올릴 때. 그러면 머지 관문이 본다)
+
+if [ "$SKIP_RECORD_CHECK" = "1" ]; then
+  exit 0
+fi
+
+zero='0000000000000000000000000000000000000000'
+pushing=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue   # 브랜치 삭제 — 올리는 것이 없다
+  pushing=1
+done
+[ "$pushing" -ne 1 ] && exit 0
+
+echo "📒 기록 가드 셋을 돌립니다(check:docs·check:gap·check:notes — 약 25초)…" >&2
+
+fail=0
+for pair in "scripts/check-docs-claims.mjs:기록 검증" "scripts/check-gap-claims.mjs:GAP 표 검증" "scripts/check-release-notes.mjs:릴리스 노트 검증"; do
+  script="${pair%%:*}"
+  label="${pair##*:}"
+  out="$(node "$script" --selftest 2>&1)" && out="$(node "$script" 2>&1)"
+  if [ $? -ne 0 ]; then
+    echo "" >&2
+    echo "❌ $label 실패 — 아래 신고를 고친 뒤 다시 올리세요." >&2
+    printf '%s\n' "$out" | tail -20 >&2
+    fail=1
+  fi
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo "" >&2
+  echo "   푸시가 차단되었습니다. 기록을 사실로 고치고 다시 'git push' 하세요." >&2
+  echo "   급하면  SKIP_RECORD_CHECK=1 git push ...  (그러면 머지 관문이 봅니다)" >&2
+  exit 1
+fi
+
+echo "✅ 기록 가드 셋 통과" >&2
+exit 0
