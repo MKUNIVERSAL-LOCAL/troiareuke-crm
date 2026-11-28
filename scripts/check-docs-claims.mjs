@@ -79,7 +79,11 @@ const ROADMAP = 'docs/COMMERCIALIZATION-ROADMAP-2026-11-17.md';
 /** 해시 규약이 시작된 묶음 — 그 앞은 기록 당시 규약이 없었다 */
 const HASH_FROM = 243;
 // ⑱ 시각 대조의 허용 몫 (354) — 검사 블록이 최상위에서 바로 도므로 선언이 위에 있어야 한다
-const TIME_BEFORE = 5;   // 적은 시각이 커밋보다 뒤여도 되는 몫(반올림·HH:Mx 창)
+// 361(355~359 리뷰 L-5): 5분은 **잘못 적힌 창 셋을 덮고 있었다**(묶음 258·340·재검증 340 — 창이
+// 커밋 시각을 아예 포함하지 않았다). 그 셋을 실측으로 고치고 몫을 2로 줄였다. 실측 분포는
+// -4~+5분이고 -1(34줄)·-2(13줄)은 "커밋한 뒤 1~2분 안에 시각을 적은" 자리라 남긴다 —
+// 지어낸 시각은 그보다 멀다(360 에서 내가 낸 것이 -5분이었다).
+const TIME_BEFORE = 2;   // 적은 시각이 커밋보다 뒤여도 되는 몫(적는 순서·반올림)
 const TIME_AFTER = 20;   // 커밋이 적은 시각보다 뒤일 수 있는 몫(검사·푸시가 사이에 든다)
 /** "지금 상태" 를 말하는 문서 — 숫자가 낡으면 읽는 사람이 틀린 상태를 믿는다 */
 /** 일부러 비운 칸 — 이유가 사실이어야 한다 */
@@ -522,6 +526,7 @@ function selftest() {
   //    353·354 는 손으로 "12종"·"10종" 이라고 적었고 둘 다 틀렸다(실제 13·11).
   //    이 저장소의 다른 가드 넷은 이미 trapCount 를 쓴다(check-contrast-classes.mjs:803 의 교훈).
   let newTraps = 0;
+  let skippedTraps = 0; // 361(리뷰 L-2): git 이 없으면 오프셋 덫이 돌지 않는다 — 수가 환경에 따라 달라지는 것을 **드러낸다**
   const trap = (name, cond) => { newTraps += 1; if (!cond) { console.error('[selftest] ' + name + ' 덫 실패'); process.exit(1); } };
 
   // ⑯ 코어 잠금 표 — 정본이 집합이므로 양방향 모두 본다 (353)
@@ -614,8 +619,37 @@ function selftest() {
       const m = r.status === 0 ? /^([0-9a-f]{40}) (\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec((r.stdout || '').trim()) : null;
       const ct = m ? commitTimes() : null;
       const row = ct ? ct.find(x => x.h === m[1]) : null;
-      if (m === null || ct === null) console.log('[check-docs-claims] ⑱ 오프셋 덫 건너뜀 — git 을 읽을 수 없습니다');
+      if (m === null || ct === null) { skippedTraps += 1; console.log('[check-docs-claims] ⑱ 오프셋 덫 건너뜀 — git 을 읽을 수 없습니다'); }
       else trap('커밋 시각은 커밋 자신의 오프셋으로 읽는다', !!row && row.y === Number(m[2]) && row.md === m[3] + '-' + m[4] && row.hm === m[5] + ':' + m[6]);
+    }
+// 361(리뷰 L-1): 없는 날짜를 굴리지 않는다 — 전에는 11-31·02-30·04-31 등 20개 조합이 gap 0 으로 통과했다
+    trap('없는 날짜는 null', timeGap('11-31', '07:30', '12-01', '07:30', 2026) === null);
+    trap('없는 2월 말도 null', timeGap('02-30', '07:30', '03-02', '07:30', 2026) === null);
+    trap('있는 날짜는 null 이 아니다', timeGap('11-30', '07:30', '12-01', '07:30', 2026) !== null);
+    // 361(리뷰 L-3): 펜스·주석의 세 구멍
+    {
+      const doc = rows => '# x\n\n## 보호 대상 (코어)\n\n| 파일 | 역할 |\n|---|---|\n' + rows + '\n\n## 끝\n';
+      const real = ['a/b.ts'];
+      // 덫은 **절 안쪽**에 둬야 한다 — lockDocPaths 는 "## 보호 대상" 과 다음 "## " 사이만 본다.
+      // (가) 인라인 코드 안의 <!-- 가 뒤의 진짜 --> 와 짝지으면 **가운데 진짜 행이 지워진다**
+      const inline = doc('주의: `<!--` 로 감싸면 숨는다\n| `a/b.ts` | 가 |\n설명 끝 -->');
+      trap('인라인 코드 안의 주석 시작은 주석이 아니다', lockDocProblems(inline, real).length === 0);
+      // (나) 네 겹 펜스 안의 세 겹 줄이 토글을 뒤집으면 **안쪽 예시 행이 살아나** 정본에 없다고 신고된다
+      const nested = doc('| `a/b.ts` | 가 |\n````\n```\n| `x/y.ts` | 예시 |\n```\n````');
+      trap('네 겹 펜스 안은 전부 숨는다', lockDocProblems(nested, real).length === 0);
+      // (다) 물결 펜스를 보지 않으면 그 안의 예시 행이 살아난다
+      const tilde = doc('| `a/b.ts` | 가 |\n~~~\n| `x/y.ts` | 예시 |\n~~~');
+      trap('물결 펜스 안도 숨는다', lockDocProblems(tilde, real).length === 0);
+    }
+    // 361(리뷰 L-4): §4 첫 칸이 묶음 번호 목록이 아니면 숫자를 묶음으로 읽지 않는다
+    {
+      const nos4 = [218, 219, 220, 221, 222];
+      const sec = (rows) => '## 4. 지점이 보는 변화 (218~222, 기능군별)\n\n| 묶음 | 것 |\n|---|---|\n' + rows + '\n| **위 행에 없는 나머지 전부**(218~222 중) | 품질 |\n\n## 5. 끝\n';
+      trap('분 단위 숫자를 묶음으로 읽지 않는다', section4Problems(sec('| 1455분 어긋남 | 가 |'), nos4).length === 0);
+      trap('픽셀 숫자를 묶음으로 읽지 않는다', section4Problems(sec('| 412px 폭 | 가 |'), nos4).length === 0);
+      trap('run 번호를 묶음으로 읽지 않는다', section4Problems(sec('| run 46083001984 | 가 |'), nos4).length === 0);
+      trap('번호 목록은 그대로 읽는다', section4Problems(sec('| **218·219** | 가 |'), nos4).length === 0);
+      trap('번호 목록의 범위 밖은 잡는다', section4Problems(sec('| 999 | 가 |'), nos4).some(p => /범위\(218~222\) 밖/.test(p)));
     }
     // 356: ⑮ 의 asar 시각도 같은 결함이었다 — 서울 기준으로 못 박았는지 고정된 순간으로 확인한다
     {
@@ -623,7 +657,7 @@ function selftest() {
       trap('asar 시각은 서울 기준', kst.md === '11-28' && kst.hm === '01:06');
     }
   }
-  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과 + 새 검사 덫 ${newTraps}종(코어 잠금 표·§4 범위·기록 시각 — **이 수는 세어서 찍는다**, 352~354 리뷰 M-2)`);
+  console.log(`[check-docs-claims] selftest OK — 덫(코드 펜스·화면 칸 개수형 2종·줄표 끼운 당시 3종·표시 없는 개수형·중간 빈 칸 2종·릴리스 단계 3종·서버 테스트 주장·표 열 수·모자란 칸·이스케이프 파이프·표 아닌 글·넓힌 자기 범위 말·숫자 3종·넓은 표현 2종·묶음 해시·범위·누계·리뷰 건수·당시 면제 3종·날짜만 면제 금지·브랜치 마침표·어순 반대 범위·범위 개수·묶음 없는 줄·당시 범위·참조 면제·자기 범위·한 줄에 섞인 참조·표시 없는 범위는 ② 밖·표시된 범위·네 자리 묶음·면제 수 6종·outbox 수·기준 문구 없는 수·굵은 기준 문구·창 자리 기준 수·맨 outbox 수·넓힌 서버 테스트 수·러너만 적힌 수·리뷰 회수 2종·exe 시각 8종·느슨한 묶음 번호 2종·빠진 가드 줄 2종·부분 집합 리뷰 수 3종) 통과 + 새 검사 덫 ${newTraps}종${skippedTraps > 0 ? ' (+ 건너뜀 ' + skippedTraps + '종 — git 을 읽을 수 없는 환경)' : ''}(코어 잠금 표·§4 범위·기록 시각 — **이 수는 세어서 찍는다**, 352~354 리뷰 M-2)`);
 }
 
 if (process.argv.includes('--selftest')) { selftest(); process.exit(0); }
@@ -962,8 +996,10 @@ problems.push(...releaseStepProblems());
     for (const r of timeClaimRows(read(ROADMAP))) {
       const c = commits.find(x => x.h.startsWith(r.hash));
       if (!c) continue; // 해시 실재는 ① 이 본다
-      // 356(리뷰 L-1): `if (d === null) continue` 가 있었는데 timeGap 은 null 을 돌려주지 않는다 — 죽은 가지였다.
       const d = timeGap(r.md, r.hm, c.md, c.hm, c.y);
+      // 361(리뷰 L-1): 이제 timeGap 은 **없는 날짜**에 null 을 돌려준다(356 에서 죽은 가지로 지웠던 자리가
+      // 실은 막아야 할 구멍이었다 — `11-31` 같은 날을 적어도 가드가 "맞다" 고 말했다).
+      if (d === null) { problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 날짜 ${r.md} 는 **없는 날짜**다(커밋은 ${c.md} ${c.hm})`); continue; }
       if (d < -TIME_BEFORE) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 는 커밋(${c.md} ${c.hm})보다 ${-d}분 뒤다 — 아직 오지 않은 시각을 적었다(시계를 읽어 적으세요)`);
       else if (d > TIME_AFTER) problems.push(`${ROADMAP}: ${r.kind} ${r.no} 줄의 시각 ${r.md} ${r.hm} 가 커밋(${c.md} ${c.hm})보다 ${d}분 앞이다 — 시각을 사실대로 적으세요`);
     }
@@ -1025,15 +1061,27 @@ function timeGap(md, hm, cmd, chm, cYear = 2026) {
   // 이틀**로 계산돼 1455분 어긋남을 신고했고(릴리스 경로가 이틀 뒤 막힐 자리였다), 12-31 → 01-01 은
   // -535665 분이 나왔다. 달력으로 센다. 기록은 MM-DD 만 적으므로 **연도는 커밋 연도 전후에서
   // 가장 가까운 해**를 고른다 — 그래야 해를 넘기는 자리(12-31 ↔ 01-01)가 맞는다.
-  const dayIndex = (x, y) => Math.floor(Date.UTC(y, Number(x.slice(0, 2)) - 1, Number(x.slice(3))) / 86400000);
+  // 361(리뷰 L-1): `Date.UTC` 는 **없는 날짜를 다음 달로 굴린다** — 그래서 `11-31`·`02-30`·`04-31` 처럼
+  // 존재하지 않는 날을 적어도 가드가 "맞다"(gap 0) 고 말했다(전수 탐색에서 20개 조합). 되읽어 월·일이
+  // 보존되는지 확인하고, 어느 해에도 성립하지 않으면 **null** 을 돌려 호출부가 신고하게 한다.
+  const dayIndex = (x, y) => {
+    const mm = Number(x.slice(0, 2)), dd = Number(x.slice(3));
+    const t = Date.UTC(y, mm - 1, dd);
+    const d = new Date(t);
+    if (d.getUTCMonth() + 1 !== mm || d.getUTCDate() !== dd) return null; // 없는 날짜
+    return Math.floor(t / 86400000);
+  };
   const ci = dayIndex(cmd, cYear);
+  if (ci === null) return null;
   const within = timeGapSameDay(hm, chm);
   let best = null;
   for (const y of [cYear - 1, cYear, cYear + 1]) {
-    const g = (ci - dayIndex(md, y)) * 1440 + within;
+    const si = dayIndex(md, y);
+    if (si === null) continue;
+    const g = (ci - si) * 1440 + within;
     if (best === null || Math.abs(g) < Math.abs(best)) best = g;
   }
-  return best;
+  return best; // 전부 없는 날짜면 null
 }
 function timeGapSameDay(hm, chm) {
   const toMin = x => Number(x.slice(0, 2)) * 60 + Number(x.slice(3));
@@ -1071,13 +1119,50 @@ function newestBriefing() {
  * 줄 수를 지키려 공백으로 바꾼다(소스 가드의 `scripts/lib/blank-comments.mjs` 와 같은 원칙).
  */
 function hiddenBlanked(md) {
+  // 361(리뷰 L-3): 세 구멍을 메웠다 — (가) 여는 펜스보다 **짧은** 줄로는 닫히지 않는다(네 겹 펜스 안의
+  // 세 겹 줄이 토글을 뒤집어 예시 행이 살아남았다), (나) `~~~` 펜스도 본다, (다) HTML 주석은
+  // **인라인 코드 바깥**에서만 짝짓는다(전에는 코드 조각 안의 `<!--` 가 뒤의 진짜 `-->` 와 짝지어
+  // 가운데의 진짜 표 행을 지웠다). 닫히지 않은 주석은 **그대로 둔다** — 조용히 지우는 쪽이 더 위험하다.
   const out = [];
-  let inFence = false;
+  let fence = null; // { ch, len }
   for (const line of md.split('\n')) {
-    if (/^\s*```/.test(line)) { inFence = !inFence; out.push(''); continue; }
-    out.push(inFence ? '' : line);
+    const m = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (m) {
+      const ch = m[1][0], len = m[1].length;
+      if (fence === null) fence = { ch, len };
+      else if (ch === fence.ch && len >= fence.len) fence = null;
+      out.push('');
+      continue;
+    }
+    out.push(fence === null ? line : '');
   }
-  return out.join('\n').replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+  return blankHtmlComments(out.join('\n'));
+}
+/** 인라인 코드 바깥의 `<!-- … -->` 만 공백으로 (361) */
+function blankHtmlComments(text) {
+  const res = text.split('');
+  let i = 0, codeLen = 0, start = -1;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '\n') { codeLen = 0; i += 1; continue; } // 인라인 코드는 줄을 넘지 않는다
+    if (c === '`') {
+      let n = 0;
+      while (text[i + n] === '`') n += 1;
+      if (codeLen === 0) codeLen = n;
+      else if (n === codeLen) codeLen = 0;
+      i += n;
+      continue;
+    }
+    if (codeLen === 0 && start < 0 && text.startsWith('<!--', i)) { start = i; i += 4; continue; }
+    if (codeLen === 0 && start >= 0 && text.startsWith('-->', i)) {
+      for (let k = start; k < i + 3; k += 1) if (res[k] !== '\n') res[k] = ' ';
+      start = -1;
+      i += 3;
+      continue;
+    }
+    i += 1;
+  }
+  return res.join('');
 }
 
 /** 표 첫 칸만 돌려준다 — 구분 줄·머리 줄은 건너뛴다 */
@@ -1137,8 +1222,13 @@ function section4Scope(briefText) {
       catchAlls.push(r ? { start: Number(r[1]), end: Number(r[2]) } : { start: null, end: null });
       continue;
     }
-    let rest = first;
-    for (const m of first.matchAll(/(\d{3,4})~(\d{3,4})/g)) {
+    // 361(리뷰 L-4): 전에는 첫 칸의 **모든** 3~4자리를 번호로 읽어 `1455분`·`412px`·`run 46083001984`
+    // 같은 글에서 거짓 경보를 냈다. §4 의 첫 칸은 **묶음 번호 목록**(숫자와 ·~, 그리고 굵게 표시)이
+    // 아니면 묶음을 적는 칸이 아니므로, 그 모양일 때만 센다. 모양이 아니면 그 칸은 건너뛴다(사람이 읽는다).
+    const bare = first.replace(/\*\*/g, '').trim();
+    if (!/^[\d·~,\s]+$/.test(bare)) continue;
+    let rest = bare;
+    for (const m of bare.matchAll(/(\d{3,4})~(\d{3,4})/g)) {
       const a = Number(m[1]), b = Number(m[2]);
       if (a < 2000 && b < 2000) for (let i = a; i <= b; i++) listed.add(i);
     }
