@@ -915,6 +915,21 @@ function selftest() {
       // 372(리뷰 M-1): 370 은 여기서 "오름 블록만 있으면 보지 않는다" 를 지켰는데, 그 면제가
       //      **문서 끝에 새 줄을 붙이는 수법**을 그대로 통과시켰다(399차를 붙여도 조용했다).
       //      이 저장소의 새 줄 규칙은 "내림 블록 맨 위" 이므로, 최댓값이 마지막 줄이면 신고한다.
+      // 373(리뷰 L-1): 최댓값 아래 창 안의 중복·건너뜀·뒤바뀜
+      trap('창 안의 잇따른 중복을 잡는다', recheckSequenceProblems([373, 372, 372, 371])[0].includes('372'));
+      trap('창 안의 건너뜀을 잡는다', recheckSequenceProblems([373, 372, 370, 369])[0].includes('370'));
+      trap('창 안의 뒤바뀜을 잡는다', recheckSequenceProblems([373, 372, 369, 370, 368]).length === 1);
+      trap('창 밖(11번째 아래)의 불규칙은 보지 않는다', recheckSequenceProblems([383, 382, 381, 380, 379, 378, 377, 376, 375, 374, 326, 326, 324]).length === 0);
+      trap('멀쩡한 내림 블록은 조용하다', recheckSequenceProblems([373, 372, 371, 370, 369]).length === 0);
+      // 373(리뷰 M-2 의 뿌리): 가드 목록은 package.json 에서 뽑는다
+      const pkgList = guardScriptsFromPkg(JSON.stringify({ scripts: {
+        'check:docs': 'node scripts/check-docs-claims.mjs --selftest && node scripts/check-docs-claims.mjs',
+        'check:gap': 'node scripts/check-gap-claims.mjs', 'build': 'vite build', 'check:e2e-types': 'tsc -p e2e --noEmit',
+      } }));
+      trap('check:* 의 스크립트만 모은다', pkgList.join(',') === 'check-docs-claims,check-gap-claims');
+      trap('스크립트가 없는 check:* 는 건너뛴다', !guardScriptsFromPkg(JSON.stringify({ scripts: { 'check:e2e-types': 'tsc -p e2e --noEmit' } })).length);
+      trap('망가진 package.json 은 빈 목록', guardScriptsFromPkg('{{{').length === 0);
+      trap('지금 package.json 에서 여덟 개 이상 뽑힌다', guardScriptsFromPkg(read('package.json')).length >= 8);
       trap('최댓값이 마지막 줄이면 신고한다', recheckSequenceProblems([100, 101, 102]).length === 1);
       trap('문서 끝에 붙인 새 차수를 잡는다', recheckSequenceProblems([370, 369, 368, 399]).length === 1);
       trap('재검증 줄이 하나도 없으면 신고한다', recheckSequenceProblems([]).length === 1);
@@ -1103,7 +1118,9 @@ const familyCounts = {
     for (const u of c.cumulative) {
       if (u.end !== live.newestBatch || (live.cumCount !== null && u.count !== live.cumCount)) {
         const miss = live.missingNos.length > 0 ? ` (빠진 번호: ${live.missingNos.join('·')} — 산수로 적지 마세요)` : '';
-        problems.push(`${rel}: "${u.raw}" 가 실측과 다르다 — 로드맵의 묶음 줄을 세면 155~${live.newestBatch} 는 ${live.cumCount}개${miss}`);
+        // 373(369~371 리뷰 L-2): 전에는 실측 번호와 다른 줄의 값을 **합성해** 따옴표로 적어,
+        //      문서에서 검색해도 찾을 수 없는 문구를 인용했다. 읽은 **원문**을 그대로 인용한다.
+        problems.push(`${rel}: 적힌 "${u.raw}" 가 실측과 다르다 — 로드맵의 묶음 줄을 세면 155~${live.newestBatch} 는 ${live.cumCount}개다${miss}`);
       }
     }
     for (const v of c.reviews) {
@@ -1596,11 +1613,10 @@ function selfTimeClaims(text) {
  * (리뷰의 사본에서 실제로 69 가 사라졌다) — 이제 죽은 가드를 신고한다.
  */
 function trapCountsPrinted() {
-  const guards = [
-    'check-docs-claims', 'check-focus-visible', 'check-flex-inputs',
-    'check-contrast-classes', 'check-invisible-chars', 'check-e2e-conventions',
-    'check-release-notes', 'check-gap-claims',
-  ];
+  // 373(369~371 리뷰 M-2 의 뿌리): 전에는 **여덟 개를 박아** 두었다. 기록이 그 밖의 가드를 짝으로
+  //      적으면 짝을 찾지 못해 합집합으로 떨어졌다(372 가 "짝을 적어라" 로 막았지만, 목록 자체가
+  //      낡는 것은 그대로였다). `package.json` 의 `check:*` 가 정본이다 — 가드를 늘리면 함께 늘어난다.
+  const guards = guardScriptsFromPkg(read('package.json'));
   const byGuard = new Map();
   const dead = [];
   const seen = new Set();
@@ -1626,6 +1642,21 @@ function trapFloorProblems(no, line, pairs) {
   const near = line.match(/덫 \*{0,2}\d+(개|가지|종류)|덫(?:은|이)\s*\*{0,2}\d+종/);
   if (near) return [`묶음 ${no} 줄이 덫 수를 "${near[0]}" 로 적었다 — ⑳ 은 \`덫 N종\` 만 읽는다(단위/어순을 맞추세요). 지금은 ⑳ 이 꺼진 상태다(372)`];
   return [`묶음 ${no} 줄에 **덫 수 주장이 없다** — ⑳ 이 아무것도 대조하지 않는다. 가드가 찍는 \`덫 N종(\\\`check:X\\\`)\` 를 그대로 옮기세요(372)`];
+}
+
+/**
+ * `package.json` 의 `check:*` 가 부르는 스크립트 이름들 (373).
+ * `--selftest` 를 받는 가드만 덫 수를 찍으므로, 그 스크립트 전부를 돌려 모은다.
+ */
+function guardScriptsFromPkg(pkgText) {
+  let scripts = {};
+  try { scripts = JSON.parse(pkgText).scripts || {}; } catch { return []; }
+  const out = new Set();
+  for (const [name, cmd] of Object.entries(scripts)) {
+    if (!name.startsWith('check:')) continue;
+    for (const m of String(cmd).matchAll(/scripts\/([a-z0-9-]+)\.mjs/g)) out.add(m[1]);
+  }
+  return [...out].sort();
 }
 
 /** `check:docs` 같은 npm 이름 → 스크립트 파일. package.json 이 정본이다(표를 두지 않는다) */
@@ -1692,6 +1723,18 @@ function recheckSequenceProblems(numbers) {
   //      가장 큰 차수가 마지막 줄에 있다는 것은 **내림 블록 맨 위가 아니라는 뜻**이므로 신고한다.
   if (below === undefined) return [`가장 새 재검증 줄(${max}차)이 문서의 **마지막 재검증 줄**이다 — 새 줄은 내림 블록 **맨 위**에 와야 한다(372)`];
   if (below !== max - 1) return [`가장 새 재검증 줄이 ${max}차인데 그 아래 줄은 ${below}차다 — 새 줄은 직전+1(${below + 1}차)로 **내림 블록 맨 위**에 와야 한다(370)`];
+  // 373(369~371 리뷰 L-1): 370·372 는 **최댓값과 그 아래 한 줄**만 봤다. 그래서 최댓값이 아닌 자리에
+  //      같은 차수를 한 번 더 적어도 조용했다(리뷰가 심어 보였다). 전수 중복 검사는 **역사 줄의**
+  //      **326 중복**을 건드리게 되므로(과거는 고치지 않는다) **최댓값 아래 창**만 본다 —
+  //      지금 1씩 줄어드는 구간은 **48줄**(373→326)이라 창 10줄은 그 안에 넉넉히 들어간다.
+  //      한계: 창보다 깊은 불규칙(326 중복·빠진 246·298~302·311·312·325)은 설계상 보지 않는다.
+  const WINDOW = 10;
+  for (let i = at; i < Math.min(at + WINDOW, numbers.length) - 1; i += 1) {
+    const a = numbers[i];
+    const b = numbers[i + 1];
+    if (b === a) return [`재검증 차수 ${a} 가 잇따라 두 번 적혀 있다 — 새 줄의 차수는 직전+1 이어야 한다(373)`];
+    if (b !== a - 1) return [`재검증 차수가 ${a} 다음에 ${b} 다 — 맨 위 ${WINDOW}줄은 1씩 줄어들어야 한다(373, 창보다 깊은 역사 줄은 보지 않는다)`];
+  }
   return [];
 }
 
