@@ -1151,7 +1151,9 @@ const familyCounts = {
       // 294(리뷰 M-4): 범위와 묶음 수를 같은 줄에 적었으면 **그 범위의 실제 묶음 수**와 같아야 한다
       if (g.count !== null) {
         const real = live.countInRange(g.start, g.end);
-        if (g.count !== real) problems.push(`${rel}: "${g.raw} … ${g.countRaw}" 가 맞지 않는다 — 로드맵에 ${g.start}~${g.end} 묶음은 ${real}개`);
+        // 377(372~374 리뷰 L-2): 전에는 두 원문을 " … " 로 이어 붙여 **문서에 없는 문구**를 인용했다
+        //      — 그 문구로 검색해도 찾을 수 없다. 읽은 원문을 **각각** 인용한다(373 이 누계에서 고친 것과 같은 이유).
+        if (g.count !== real) problems.push(`${rel}: 범위 "${g.raw}" 와 개수 "${g.countRaw}" 가 맞지 않는다 — 로드맵에 ${g.start}~${g.end} 묶음은 ${real}개`);
       }
     }
     for (const u of c.cumulative) {
@@ -1226,7 +1228,8 @@ const familyCounts = {
 // ④ 리뷰 기록마다 반영 상태가 적혀 있는가
 {
   const doneBatches = new Set(batchLines(read(ROADMAP)).map(l => l.no));
-  for (const f of fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-.*\.md$/.test(x))) {
+  const reviewFiles = fs.readdirSync(path.join(ROOT, 'docs')).filter(x => /^REVIEW-.*\.md$/.test(x));
+  for (const f of reviewFiles) {
     const head = read(`docs/${f}`).split(/\r?\n/).slice(0, 3).join('\n');
     // '반영' 글자만 있으면 통과하던 것 → **상태를 읽을 수 있는 형태**를 요구한다 (285, 리뷰 LOW).
     // 옛 규약 "반영 165"(= 그 묶음에서 반영했다)도 상태를 말하므로 받아들인다.
@@ -1239,6 +1242,10 @@ const familyCounts = {
       problems.push(`docs/${f}: "반영 ${planned[1]} 예정" 인데 묶음 ${planned[1]} 은 이미 끝났다 — 반영 결과로 바꾸세요`);
     }
   }
+  // 377(372~374 리뷰 M-7): 목록을 빈 배열로 바꿔도 아무 덫이 물지 않았다 — 본 수를 찍고 0이면 신고한다.
+  console.log(`[check-docs-claims] ④ 리뷰 기록 ${reviewFiles.length}건의 반영 표시 확인(끝난 묶음 ${doneBatches.size}개 기준)`);
+  if (reviewFiles.length === 0) problems.push('④ 가 리뷰 기록을 한 건도 읽지 못했다 — 배선이 끊겼다(377)');
+  if (doneBatches.size === 0) problems.push('④ 가 끝난 묶음을 한 개도 읽지 못했다 — "반영 N 예정" 검사가 비어 있다(377)');
 }
 
 // ⑤ "지금 상태" 문서의 버전·브랜치가 실물과 같은가 (286)
@@ -1255,19 +1262,31 @@ const familyCounts = {
     const to = text.indexOf('\n', at);
     return to === -1 ? text.slice(from) : text.slice(from, to);
   };
+  let verSeen = 0;
+  let brSeen = 0;
+  let brAll = 0;
   for (const rel of CURRENT_DOCS) {
     if (!fs.existsSync(path.join(ROOT, rel))) continue;
     const text = read(rel);
     for (const m of text.matchAll(/v(\d+\.\d+\.\d+)\*{0,2}\(package\.json\)/g)) {
+      verSeen += 1;
       if (m[1] !== pkgVersion) problems.push(`${rel}: "${m[0]}" 가 실물과 다르다 — package.json 은 v${pkgVersion}`);
     }
     // `.` 를 문자 집합에 두면 문장 끝 마침표까지 먹어 "브랜치가 다르다" 는 거짓 실패가 난다 (291, 리뷰 M-5)
     for (const m of text.matchAll(/feat\/[A-Za-z0-9_\/-]+(?:\.[A-Za-z0-9_\/-]+)*/g)) {
       if (!branch || branch === 'HEAD' || m[0] === branch) continue;
       if (/릴리스 완료|머지\(/.test(lineOf(text, m.index))) continue; // 지난 릴리스 기록 = 역사
+      brSeen += 1;
       problems.push(`${rel}: 브랜치 "${m[0]}" 가 지금 브랜치와 다르다 — ${branch}`);
     }
+    brAll += [...text.matchAll(/feat\/[A-Za-z0-9_\/-]+/g)].length;
   }
+  // 377(리뷰 M-7): 버전·브랜치 주장을 몇 개 봤는지 찍고, 둘 다 0이면 신고한다.
+  //      ⑤-2 는 **버전 마커**만 보므로 브랜치 쪽은 지금까지 아무도 세지 않았다.
+  console.log(`[check-docs-claims] ⑤ 버전 주장 ${verSeen}개 · 브랜치 주장 ${brAll}개(지금 ${branch || '(git 없음)'})`);
+  // 377: 처음에는 **둘 다 0일 때만** 신고해서 버전 세기만 끊으면 조용했다(변이를 놓쳐서 알았다).
+  if (verSeen === 0) problems.push('⑤ 가 버전 주장(`v… (package.json)`)을 한 개도 읽지 못했다 — 배선이 끊겼다(377). ⑤-2 는 문서에 마커가 있는지만 보므로 이 자리를 덮지 못한다');
+  if (brAll === 0) problems.push('⑤ 가 브랜치 주장(`feat/…`)을 한 개도 읽지 못했다 — 배선이 끊겼다(377)');
 }
 
 // ⑥ 자기 범위를 말하는 문서는 **표시된 범위**를 하나 이상 가져야 한다 (298, 293~296 리뷰 M-4)
@@ -1343,7 +1362,16 @@ function tableProblems(text, rel) {
       return name.endsWith('.md') ? [path.relative(ROOT, full).replace(/\\/g, '/')] : [];
     });
   })(path.join(ROOT, 'docs'));
-  for (const rel of mdFiles) problems.push(...tableProblems(read(rel), rel));
+  let tableRows = 0;
+  for (const rel of mdFiles) {
+    const text = read(rel);
+    tableRows += text.split(/\r?\n/).filter(l => /^\|/.test(l)).length;
+    problems.push(...tableProblems(text, rel));
+  }
+  // 377(372~374 리뷰 M-7): 읽는 글을 빈 문자열로 바꿔도 아무 덫이 물지 않았다 —
+  //      본 파일·표 줄 수를 찍고 0이면 신고한다(이 문서들에는 늘 표가 있다).
+  console.log(`[check-docs-claims] ⑦ 문서 ${mdFiles.length}개의 표 줄 ${tableRows}개에서 열 수 확인`);
+  if (mdFiles.length === 0 || tableRows === 0) problems.push('⑦ 이 표 줄을 한 개도 읽지 못했다 — 배선이 끊겼다(377)');
 }
 
 
